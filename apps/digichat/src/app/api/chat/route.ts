@@ -3,6 +3,7 @@ import {
   streamText,
   smoothStream,
   toUIMessageStream,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
@@ -23,20 +24,33 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import {
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
   resolveDigigraphUpstreamAuth,
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
+import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
+import { admitChatTurn, projectedGuardrails } from "@/lib/limits/admit";
+import { loadCatalogPrices } from "@/lib/limits/prices";
 import { resolveLanguageCode } from "@/lib/languages";
+import { deploymentRateLimitEnabled, premiumModelsHeader } from "@/lib/deploy-config/schema";
+import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
+import {
+  applyPremiumBudget,
+  premiumSpendIdentity,
+  premiumUserKey,
+} from "@/lib/premium-budget/budget";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
   checkEmbedIpRateLimit,
+  clientIpForEmbedLimit,
   clientIpForRateLimit,
 } from "@/lib/embed-ip-rate-limit";
 import {
@@ -56,13 +70,9 @@ import {
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied, normalizeEmbedHost } from "@/lib/embed-tenants";
+import { isPlanTierSatisfied } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
-import {
-  inspectTrialProof,
-  TRIAL_PROOF_EXPIRED_HEADER,
-} from "@/lib/trial-proof";
 import {
   acquireChatRunLock,
   releaseChatRunLockOnResponseEnd,
@@ -102,93 +112,7 @@ function jsonError(
   });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  const trialProof = inspectRequestTrialProof(req);
-  const res = await handleChat(req, trialProof);
-  if (!trialProof.expired) return res;
-  // The signal rides on the Response the route returns: the chat response is
-  // a stream, so there is no error path to hang it on, and the client reads
-  // the header off whatever response it actually receives.
-  return withExpiredTrialProofHeader(res);
-}
-
-/**
- * Add the expired-proof signal to a response the route is about to return.
- * The header is set on the response itself where that is allowed, and on a
- * copy otherwise (a response whose headers are immutable).
- */
-function withExpiredTrialProofHeader(res: Response): Response {
-  try {
-    res.headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return res;
-  } catch {
-    const headers = new Headers(res.headers);
-    headers.set(TRIAL_PROOF_EXPIRED_HEADER, "1");
-    return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers,
-    });
-  }
-}
-
-/**
- * The trial proof the client presented, resolved once per request.
- *
- * Both flags are host-scoped: a proof only counts for the embed host it
- * names. A valid proof for another host buys nothing (the same trust chain
- * as before), and an expired proof for another host is not this client's
- * proof to drop.
- */
-type RequestTrialProof = {
-  /** The host an authentic presented proof binds; null when there is none. */
-  host: string | null;
-  /** Authentic, unexpired, and for this request's embed host. */
-  accepted: boolean;
-  /** Authentic, expired, and for this request's embed host. */
-  expired: boolean;
-};
-
-function inspectRequestTrialProof(req: Request): RequestTrialProof {
-  const token = req.headers.get("x-embed-trial-proof")?.trim();
-  const secret = process.env.DIGICHAT_TRIAL_PROOF_SECRET?.trim();
-  if (!token || !secret) {
-    return { host: null, accepted: false, expired: false };
-  }
-
-  const inspection = inspectTrialProof(token, secret);
-  if (inspection.ok) {
-    return {
-      host: inspection.host,
-      accepted: matchesEmbedHost(req, inspection.host),
-      expired: false,
-    };
-  }
-  if (inspection.reason === "expired") {
-    return {
-      host: inspection.host,
-      accepted: false,
-      expired: matchesEmbedHost(req, inspection.host),
-    };
-  }
-  // Malformed or wrongly signed: invalid, not expired. The client must not
-  // treat these as re-mintable.
-  return { host: null, accepted: false, expired: false };
-}
-
-/** True when the proof's host is the embed host this request came from. */
-function matchesEmbedHost(req: Request, proofHost: string): boolean {
-  const embedHost = normalizeEmbedHost(req.headers.get("x-embed-host"));
-  const normalizedProofHost = normalizeEmbedHost(proofHost);
-  return Boolean(
-    embedHost && normalizedProofHost && normalizedProofHost === embedHost,
-  );
-}
-
-async function handleChat(
-  req: Request,
-  trialProof: RequestTrialProof,
-): Promise<Response> {
+export async function POST(req: Request) {
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
@@ -204,11 +128,48 @@ async function handleChat(
     return tenantCtx;
   }
   const { tenantSlug, ownerUserSub } = tenantCtx;
+  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
+  const embedConfig = embedConfigOf(tenantCtx);
+
+  // Resolve the deployment before the request limiter. The limiter is
+  // per deployment (`guardrails.rateLimit`), and an own key skips it.
+  let dep: DigichatDeployment | null = null;
+  // A config read error must keep failing closed for an explicit model, so
+  // track it separately from "no deployment matched this host".
+  let configFailed = false;
+  try {
+    const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
+      await import("@/lib/deploy-config/loader");
+    try {
+      const config = getDigichatConfig();
+      // Host selection is never authorization. On the embed surface the host
+      // has already been verified (token / first-party origin) before we get
+      // here, so X-Embed-Host is safe to consult. On the authenticated session
+      // path it is just a client-supplied header — use the config's own
+      // deployment block instead of letting a caller name another host.
+      dep = embedConfig
+        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
+        : (config.deployment ?? null);
+    } catch {
+      configFailed = true;
+      dep = null;
+    }
+    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+  } catch {
+    // Unreadable loader must never 500 a request that used to work.
+    configFailed = true;
+    dep = null;
+  }
+
+  const spendGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
+  // Own key: not our inference budget. OCC sets rateLimit false for everyone.
+  const skipOurRequestLimit =
+    byokKey.length > 0 || !deploymentRateLimitEnabled(spendGuardrails);
 
   // Anonymous embed requests all share one bucket below (tenantSlug=embed,
   // ownerUserSub=embed:anonymous) — gate per-IP first so one visitor can't
   // exhaust it for everyone (#1251).
-  if (ownerUserSub === "embed:anonymous") {
+  if (!skipOurRequestLimit && ownerUserSub === "embed:anonymous") {
     const ipRate = checkEmbedIpRateLimit(req);
     if (!ipRate.allowed) {
       return rateLimitResponse(
@@ -218,10 +179,12 @@ async function handleChat(
     }
   }
 
-  const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
-  const rate = checkBffRateLimit(rateKey);
-  if (!rate.allowed) {
-    return rateLimitResponse("Too many chat requests. Try again shortly.", rate.retryAfterSec);
+  if (!skipOurRequestLimit) {
+    const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
+    const rate = checkBffRateLimit(rateKey);
+    if (!rate.allowed) {
+      return rateLimitResponse("Too many chat requests. Try again shortly.", rate.retryAfterSec);
+    }
   }
 
   let body: { messages?: UIMessage[] };
@@ -242,7 +205,6 @@ async function handleChat(
     });
   }
 
-  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const byokProvider = (req.headers.get("x-byok-provider")?.trim() ?? "").toLowerCase();
   const byokModel = normalizeOpenRouterModel(
     req.headers.get("x-byok-model")?.trim() ?? ""
@@ -275,49 +237,27 @@ async function handleChat(
   const turnMode = turnModeParsed;
   const runId = req.headers.get("x-digi-run-id")?.trim() || null;
 
-  const responseHeaders = {
+  const responseHeaders: Record<string, string> = {
     "X-Digichat-Session": sessionId,
     "X-Request-Id": rid,
   };
 
-  const embedConfig = embedConfigOf(tenantCtx);
-
-  // Resolve the deployment once for the whole handler. `embedConfig` only
-  // exists on the embed surface, so every gate below (plan tier, activity
-  // detail, backend type, corpus index) used to apply only there — an
-  // authenticated session ignored its own deployment config entirely.
-  // Fall back to the embed tenant, and never let a config read throw 500 a
-  // request that used to work.
-  let dep: DigichatDeployment | null = null;
-  // A config read error must keep failing closed for an explicit model, so
-  // track it separately from "no deployment matched this host".
-  let configFailed = false;
-  try {
-    const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
-      await import("@/lib/deploy-config/loader");
-    try {
-      const config = getDigichatConfig();
-      // Host selection is never authorization. On the embed surface the host
-      // has already been verified (token / first-party origin) before we get
-      // here, so X-Embed-Host is safe to consult. On the authenticated session
-      // path it is just a client-supplied header — use the config's own
-      // deployment block instead of letting a caller name another host.
-      dep = embedConfig
-        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
-        : (config.deployment ?? null);
-    } catch {
-      configFailed = true;
-      dep = null;
-    }
-    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-  } catch {
-    // Unreadable loader must never 500 a request that used to work.
-    configFailed = true;
-    dep = null;
-  }
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
+  const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
+  // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
+  const guard = createTurnGuard({
+    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
+    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    ip: clientIpForRateLimit(req),
+    omitUserTpm: byokKey.length > 0,
+  });
+  const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
+  const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
+  const limitConfig = embedConfig?.limits ?? dep?.limits;
   // The registry describes the backend once (#4522): the streaming path is
   // chosen from `adapter.protocol`, never from a `backend.type` comparison.
   const adapter = backendAdapterFor(backend?.type);
@@ -367,18 +307,7 @@ async function handleChat(
   // error in the per-IP quota check so an infra hiccup never blocks a legitimate
   // visitor; the monitor-allowlist check below is the exception and fails closed.
   // When the tenant configures gate.consumeUrl and the client presents a chat
-  // token, the server-side quota replaces the IP quota entirely.
-  //
-  // WHAT THIS QUOTA IS: a per-client-IP counter of free turns (3 by default),
-  // held in memory for 24h. It is best-effort anti-abuse, not a boundary — a
-  // cleared localStorage, a fresh incognito window or a shared egress IP
-  // defeats it, and it resets on deploy.
-  // WHAT THIS QUOTA IS NOT: an authorization decision, and never a client-
-  // asserted one. A value the browser can set is not an entitlement, so no
-  // header the caller sends raises this cap. The only ways past it are the
-  // server's own verdicts — the tenant's quota service (consumeUrl), a
-  // server-signed trial proof, an allowlisted internal monitor, and the
-  // degraded server-side bound — each decided by the server (DIG-4525).
+  // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
   // Set when the tenant's quota service could not answer (5xx, timeout, transport
   // error). The visitor is still admitted — a tenant outage must not 402 someone who
@@ -389,9 +318,8 @@ async function handleChat(
   if (embedConfig?.gateMode === "trial_form") {
     const chatToken = req.headers.get("x-embed-chat-token");
     if (embedConfig.gate && chatToken) {
-      // The server-side quota is the only verdict for this request, and it
-      // replaces the IP quota entirely — a token-bearing visitor must not be
-      // gated twice.
+      // Server-side quota supersedes the client-asserted unlock header for this request, and
+      // replaces the IP quota entirely — a token-bearing visitor must not be gated twice.
       const verdict = await consumeChatAccess(embedConfig.gate.consumeUrl, chatToken);
       if (verdict === "deny") {
         return new Response(
@@ -447,53 +375,31 @@ async function handleChat(
     }
 
     if (!quotaSatisfied) {
-      // A trial proof is a server-signed token (lib/trial-proof.ts) that this
-      // server mints for an embed host, so a visitor who has completed the
-      // trial form can be let through the free-turn cap without a client-
-      // asserted header. A proof cannot be forged: the signature
-      // covers host|exp and only this server holds DIGICHAT_TRIAL_PROOF_SECRET,
-      // so only it can produce a token that verifies. A raw client-asserted
-      // X-Embed-Trial-Proof value is NEVER trusted.
-      // The proof binds host|exp|sig only — no tenant, no nonce — so the gate
-      // compares the VERIFIED host itself and a valid proof for another host
-      // buys nothing. The proof's host is the canonical bare registry host
-      // while the browser sends the embed origin as a URL, so compare the
-      // canonical forms. A sanctioned bypass must not spend the visitor's
-      // budget, so once a proof is accepted the per-IP quota below is not
-      // consulted at all. No proof, no bypass: an absent, malformed, expired,
-      // wrongly-signed or wrong-host proof leaves the gate exactly as it was.
-      // The verdict itself - verified host, expiry, and the host comparison -
-      // is resolved once per request in inspectRequestTrialProof, so the gate
-      // and the expiry signal can never disagree.
-      if (trialProof.accepted) {
-        quotaSatisfied = true;
-      }
-    }
-
-    if (!quotaSatisfied) {
       try {
-        const ip = clientIpForRateLimit(req);
-        // "unknown" is what clientIpForRateLimit returns when the ingress fails
-        // to set cf-connecting-ip/x-forwarded-for — it is not an identity (see
-        // that module's own doc comment). Treating it as one would collapse
-        // every visitor behind a broken/missing IP header into a single shared
-        // quota bucket, permanently gating everyone after the first 3 turns
-        // total. Skip the quota entirely in that case and fail open, consistent
-        // with this module's "best-effort, not an authorization boundary"
-        // philosophy (embed-turn-quota.ts).
+        const ip = clientIpForEmbedLimit(req);
+        // "unknown" is develop's key when no visitor header is present. The
+        // trial quota skips it and admits the visitor uncounted, so
+        // header-less traffic does not share one trial bucket. The embed
+        // limiter still records embed_ip:unknown, which is develop's
+        // collapse for that case. With DIGICHAT_TRUSTED_PROXIES unset the
+        // key is the raw trimmed cf-connecting-ip, then the raw trimmed
+        // first X-Forwarded-For hop, and the stamp is ignored. A non-IP
+        // value stays the key (embed-turn-quota.ts).
         if (ip !== "unknown") {
           if (quotaServiceUnavailable) {
             // Degraded path: the tenant's quota service could not answer, so the
             // entitlement is unverified. Bound it server-side at the trial cap (100
             // turns per IP per 24h) instead of skipping the budget, which is what an
             // outage used to do — that granted unbounded free turns to anyone
-            // presenting a chat token. The raise is the server's own decision on
-            // the server's own counter: it happens on this degraded path and
-            // nowhere else. A client-asserted header can no longer raise it
-            // (DIG-4525 deleted that header), so a forger buys nothing the server
-            // did not grant.
+            // presenting a chat token.
             unlockEmbedTrial(ip);
           }
+          // No client-asserted unlock. The route used to raise this IP's cap
+          // when the caller sent the client-asserted unlock header, but a value
+          // the browser can set is not an entitlement: the client counter sent
+          // it and anyone could forge it (DIG-4525). Relief comes only from the
+          // server's own verdicts — the tenant's quota service, an allowlisted
+          // monitor, or the degraded bound above.
           if (isOverEmbedTrialLimit(ip)) {
             return new Response(
               JSON.stringify({
@@ -548,33 +454,46 @@ async function handleChat(
   // keeps the first turn on the same model the visitor sees (v4.1-flash for
   // OCC) instead of the digigraph operator default. Only a slug the tenant
   // actually offers is trusted; anything else falls back.
-  const curatedDefault = dep?.models?.default?.trim();
+  // ONE artefact decides the session lock and the model allowlist (DIG-4589).
+  // On the embed surface that artefact is the request's tenant: in production
+  // it is the projection of the MERGED host deployment, so it carries the
+  // deployment's lock and model list together with the registry tenant's own.
+  // The lock is an embed control (DIG-1210), so it never reaches the
+  // authenticated session surface, where the deployment config alone decides
+  // the allowlist.
+  const policyModels = embedConfig?.models ?? dep?.models;
+  const policyAvailable = policyModels?.available ?? [];
+  const policyLocked = embedConfig?.lockSessionControls === true;
+  const curatedDefault = policyModels?.default?.trim();
   const tenantDefaultModel =
     curatedDefault &&
-    ((dep?.models?.available?.length ?? 0) === 0 ||
-      dep!.models!.available!.includes(curatedDefault))
+    (policyAvailable.length === 0 || policyAvailable.includes(curatedDefault))
       ? curatedDefault
       : undefined;
   let modelId = tenantDefaultModel || digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
+  // The lock and the allowlist below come from the same artefact, so the two
+  // sources can never disagree: the merge keeps a lock set in the deployment
+  // config AND a lock set in the tenant registry (a lock is a restriction,
+  // so a merge never drops one), and it folds the registry's model list into
+  // the deployment the tenant is projected from.
   // Exception: a locked tenant that curates its own `models.available` list
   // lets the visitor pick from exactly that list (allowlist enforced below).
-  const lockedWithoutModelList =
-    embedConfig?.lockSessionControls === true &&
-    (embedConfig.models?.available?.length ?? 0) === 0;
+  const lockedWithoutModelList = policyLocked && policyAvailable.length === 0;
   const requestedModel = lockedWithoutModelList
     ? undefined
     : req.headers.get("x-digi-model")?.trim() || undefined;
   // House-path session model (non-BYOK, allowlisted). digigraph only binds it
   // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
   let houseSessionModel: string | undefined;
+  let routerModels: string | undefined;
   try {
-    const { allowlistModelId } = await import("@/lib/deploy-config");
+    const { resolveHouseModelSelection, routerModelsHeader } = await import("@/lib/deploy-config");
     if (byokKey) {
       if (requestedModel) modelId = requestedModel;
-    } else if (dep?.models && (dep.models.available?.length ?? 0) > 0) {
-      const allowed = allowlistModelId(dep.models, requestedModel);
+    } else if (policyModels && policyAvailable.length > 0) {
+      const allowed = resolveHouseModelSelection(policyModels, requestedModel);
       if (requestedModel && allowed === undefined) {
         runLock.release();
         return new Response(
@@ -586,7 +505,10 @@ async function handleChat(
         );
       }
       if (allowed) modelId = allowed;
-      if (requestedModel && allowed) houseSessionModel = allowed;
+      if (requestedModel && allowed) {
+        houseSessionModel = allowed;
+        routerModels = routerModelsHeader(policyModels, allowed);
+      }
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -615,6 +537,88 @@ async function handleChat(
     }
   }
 
+  // Pin the curated default on the house header. digigraph ignores the body
+  // model, and the header was set only when the client sent X-Digi-Model.
+  if (!byokKey && !houseSessionModel && dep?.models?.available?.includes(modelId)) {
+    houseSessionModel = modelId;
+  }
+
+  let premiumNotice: string | undefined;
+  let chargePremium: ((usage?: { inputTokens: number; outputTokens: number }) => void) | undefined;
+  if (!byokKey && dep?.models) {
+    const premiumIds = premiumIdsFromGroups(dep.models.picker?.groups);
+    const applied = applyPremiumBudget({
+      modelId,
+      defaultModel: tenantDefaultModel,
+      premium: premiumIds.includes(modelId),
+      premiumIds,
+      rate: catalogModelRate(modelId),
+      budget: dep.models.costPerWindow,
+      userKey: premiumUserKey(
+        tenantSlug,
+        premiumSpendIdentity({
+          userId: ownerUserSub,
+          ip: clientIpForRateLimit(req),
+        }),
+      ),
+    });
+    if (applied.notice) {
+      modelId = applied.modelId;
+      houseSessionModel = applied.modelId;
+      routerModels = undefined;
+      premiumNotice = applied.notice;
+      responseHeaders["X-Digi-Premium-Fallback"] = "auto";
+    } else {
+      chargePremium = applied.charge;
+    }
+  }
+
+  // The chat's /effort choice (low/medium/high), or undefined for the model's
+  // own default. digigraph gets it as X-Digi-Effort; Foundry as reasoning.effort.
+  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
+  const reasoningEffort =
+    effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
+  // models.costPerWindow stays on the premium budget above. The limits block
+  // is the other gates (tokens, turns, sessions, tool calls, model tiers).
+  const clientIp = clientIpForRateLimit(req);
+  const admission = admitChatTurn({
+    limits: limitConfig,
+    guardrails: limitGuardrails,
+    slug: limitSlug,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIp,
+    conversationId: externalConversation,
+    modelId,
+    explicitModel: Boolean(requestedModel),
+    autoModel: tenantDefaultModel || dep?.models?.default,
+    outputCapUsdPerMillion: dep?.models?.priceCapUsdPerMillion,
+    prices: loadCatalogPrices(),
+  });
+  if (admission.decision.action === "block") {
+    runLock.release();
+    return jsonError(429, "limit_exceeded", admission.decision.message, responseHeaders);
+  }
+  if (admission.model && !premiumNotice) {
+    modelId = admission.model;
+    houseSessionModel = undefined;
+  }
+  const guard = createTurnGuard({
+    slug: limitSlug,
+    guardrails: projectedGuardrails(limitConfig, limitGuardrails),
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIp,
+    ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
+  });
+  const recordLimitUsage = guard.recordUsage.bind(guard);
+  guard.recordUsage = (usage) => {
+    recordLimitUsage(usage);
+    admission.record(usage, modelId);
+  };
+
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;
     let foundryRes: Response;
@@ -629,6 +633,9 @@ async function handleChat(
         signal: req.signal,
         responseLanguage: languageCode,
         turnMode,
+        maxToolCalls: guard.toolCap ?? foundryBackend.maxToolCalls,
+        reasoningEffort,
+        guard,
       });
     } catch (err) {
       runLock.release();
@@ -656,6 +663,7 @@ async function handleChat(
           responseHeaders,
           activityDetail,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -707,6 +715,7 @@ async function handleChat(
           responseHeaders,
           webSearch: webSearchEnabled,
           signal: req.signal,
+          guard,
         }),
       );
     } catch (err) {
@@ -735,7 +744,27 @@ async function handleChat(
     upstreamBearer = up.bearer;
     litellmProxyApiKey = up.litellmProxyApiKey;
   } catch (e) {
-    runLock.release();
+    // The upstream exchange failed before any turn was produced, so the run id
+    // must not refuse the retry: the client replays the same X-Digi-Run-Id
+    // when it repeats the send, and the cold case is answered with a
+    // Retry-After (DIG-4424).
+    runLock.release({ forgetRunId: true });
+    if (e instanceof DigigraphUpstreamUnavailableError) {
+      // digikey was cold, asleep or down: the request is retryable, so it is
+      // answered 503 with a Retry-After and NOT as an upstream_auth failure.
+      // A 502 upstream_auth here told the operator to check the token for a
+      // dependency that was only asleep (DIG-4424).
+      return new Response(
+        JSON.stringify({ error: "upstream_unavailable", message: e.message }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS),
+          },
+        }
+      );
+    }
     const msg =
       e instanceof DigigraphUpstreamAuthError
         ? e.message
@@ -776,9 +805,8 @@ async function handleChat(
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
-  const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
-  if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
-    upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  if (reasoningEffort) {
+    upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
   }
   // Search engine choice for digisearch web_search (#4724): allowlisted names
   // only, unknown/blank dropped. "auto" is the hub default, so it is omitted
@@ -866,6 +894,11 @@ async function handleChat(
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (!byokKey && houseSessionModel) {
     upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+    if (routerModels) upstreamHeaders["X-Digi-Router-Models"] = routerModels;
+  }
+  if (!byokKey && dep?.models) {
+    const premiumHeader = premiumModelsHeader(dep.models);
+    if (premiumHeader) upstreamHeaders["X-Digi-Premium-Models"] = premiumHeader;
   }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
@@ -899,12 +932,77 @@ async function handleChat(
           // tenant curates a list) or the curated default.
           model: byokKey ? undefined : modelId,
           signal: req.signal,
+          preface: premiumNotice,
+          onUsage: chargePremium,
+          guard,
         }),
       );
     } catch (err) {
       runLock.release();
       throw err;
     }
+  }
+
+  if (chargePremium) chargePremium();
+
+  if (guard.active) {
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        try {
+          if (premiumNotice) {
+            const textId = "premium-fallback";
+            writer.write({ type: "text-start", id: textId });
+            writer.write({
+              type: "text-delta",
+              id: textId,
+              delta: `${premiumNotice}\n\n`,
+            });
+            writer.write({ type: "text-end", id: textId });
+          }
+          const result = streamText({
+            model,
+            messages: coreMessages,
+            headers: upstreamHeaders,
+            abortSignal: req.signal,
+            experimental_transform: smoothStream({ chunking: "word" }),
+            prepareStep: (step) =>
+              guardrailPrepareStep({
+                guard,
+                writer,
+                signal: req.signal,
+                steps: step.steps,
+                messages: step.messages,
+                initialInstructions:
+                  typeof step.initialInstructions === "string"
+                    ? step.initialInstructions
+                    : undefined,
+              }),
+            onFinish: (event) => {
+              guard.recordUsage(event.usage);
+            },
+          });
+          writer.merge(
+            toUIMessageStream({
+              stream: result.stream,
+              sendSources: true,
+              sendReasoning: true,
+            }),
+          );
+        } catch (err) {
+          guard.release();
+          throw err;
+        }
+      },
+      onFinish: () => {
+        guard.release();
+      },
+    });
+    return finish(
+      createUIMessageStreamResponse({
+        stream,
+        headers: responseHeaders,
+      }),
+    );
   }
 
   const result = streamText({
@@ -915,13 +1013,30 @@ async function handleChat(
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 
+  const modelStream = toUIMessageStream({
+    stream: result.stream,
+    sendSources: true,
+    sendReasoning: true,
+  });
+  const stream = premiumNotice
+    ? createUIMessageStream({
+        execute({ writer }) {
+          const textId = "premium-fallback";
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `${premiumNotice}\n\n`,
+          });
+          writer.write({ type: "text-end", id: textId });
+          writer.merge(modelStream);
+        },
+      })
+    : modelStream;
+
   return finish(
     createUIMessageStreamResponse({
-      stream: toUIMessageStream({
-        stream: result.stream,
-        sendSources: true,
-        sendReasoning: true,
-      }),
+      stream,
       headers: responseHeaders,
     }),
   );

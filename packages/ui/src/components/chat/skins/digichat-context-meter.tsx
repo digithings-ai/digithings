@@ -24,13 +24,25 @@ import {
  * above 100 and the three always describe the same turn.
  */
 
-const CONTEXT_WINDOWS: Record<string, number> = {
+export const CONTEXT_WINDOWS: Record<string, number> = {
+  "deepseek/deepseek-v4.1-flash-1017": 1_048_576,
   "deepseek/deepseek-v4.1-flash": 1_048_576,
+  "openai/gpt-oss-120b": 128_000,
+  "openai/gpt-6-luna": 1_050_000,
+  "google/gemini-3.5-flash-lite": 1_000_000,
   "z-ai/glm-5.3-flash": 1_048_576,
+  "z-ai/glm-5.3": 1_000_000,
   "qwen/qwen3.8-flash": 1_000_000,
+  "qwen/qwen3.8-27b": 262_144,
   "google/gemma-4-31b-it": 262_144,
-  "xiaomi/mimo-v2.6-flash": 1_050_000,
+  "google/gemini-3.8-flash": 1_048_576,
+  "xiaomi/mimo-v2.6-flash": 1_048_576,
+  "xiaomi/mimo-v2.6-pro": 1_048_576,
+  "minimax/minimax-m3": 200_000,
   "z-ai/glm-4.7-flash": 200_000,
+  // models.dev context_window for gpt-5.6-terra (bare Foundry id and the openai/ slug).
+  "gpt-5.6-terra": 1_050_000,
+  "openai/gpt-5.6-terra": 1_050_000,
   // The OpenAI models an Azure AI Foundry agent is usually deployed on. A
   // deployment whose id is not listed here gets no bar at all (see the
   // unknown-window rule below).
@@ -43,6 +55,16 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   "o3-mini": 200_000,
   "o4-mini": 200_000,
 };
+
+/**
+ * Tokens for a model id that has its own window. A built-in key such as
+ * `constructor` is not one.
+ */
+export function contextWindowFor(modelId: string): number | undefined {
+  const id = modelId.trim();
+  if (!id || !Object.hasOwn(CONTEXT_WINDOWS, id)) return undefined;
+  return CONTEXT_WINDOWS[id];
+}
 
 const format = (n: number): string =>
   n >= 1_000_000
@@ -122,11 +144,14 @@ export function DigichatContextMeter({
     return total;
   });
 
-  // The window must be known: a bar drawn against a guessed window is a lie
-  // about how full the context is, so an unknown model gets no bar at all.
-  const window =
-    CONTEXT_WINDOWS[model] ??
-    (reportedModel ? CONTEXT_WINDOWS[reportedModel] : undefined);
+  // A report with its own window is the model that served the turn.
+  // A report with no window leaves the session model, so OCC keeps the
+  // bar. The house session is empty until digigraph reports an id.
+  const reported = reportedModel?.trim() || "";
+  const session = model.trim();
+  const activeModel =
+    reported && contextWindowFor(reported) !== undefined ? reported : session;
+  const window = contextWindowFor(activeModel);
   // No bar without a known window: the fill is a fraction of it.
   if (window === undefined) return null;
 

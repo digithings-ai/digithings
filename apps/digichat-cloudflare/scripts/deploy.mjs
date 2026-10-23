@@ -35,15 +35,14 @@
  *     Worker is read back and must report the id this commit implies. That
  *     catches a deploy that landed somewhere else and — the case that matters —
  *     a bypassing deploy that produced the legacy fallback.
- *  3. DISTINGUISH "DID NOT DEPLOY" FROM "DEPLOYED BUT UNPROVEN". This Worker has
- *     no `[[routes]]` and no `workers_dev` today: the zone routes moved to
- *     digithings-stack, so this worker is deployable for rollback only and is
- *     not publicly reachable (see the note in wrangler.toml). A rollback
- *     deploy therefore cannot be verified over HTTP. Rather than print a
- *     confident "verified" it cannot support, this script exits **2** — distinct
- *     from wrangler's own non-zero exit, which means the deploy itself failed.
- *     An operator (or a wrapper) can tell the two apart, and neither is allowed
- *     to pass for a verified deploy.
+ *  3. DISTINGUISH "DID NOT DEPLOY" FROM "DEPLOYED BUT UNPROVEN". This Worker is
+ *     routable: `wrangler.toml` re-asserts the live route set (the ROUTE HOLD
+ *     note of 2026-10-18 — the zone routes moved to digithings-stack in code,
+ *     but that cutover was never deployed), so `/_digichat/meta` answers and a
+ *     deploy CAN be verified over HTTP. When the read-back does not prove the
+ *     id this script exits **2** — distinct from wrangler's own non-zero exit,
+ *     which means the deploy itself failed. An operator (or a wrapper) can tell
+ *     the two apart, and neither is allowed to pass for a verified deploy.
  *
  * WHY A WORKER VAR AND NOT A BUILD-TIME DEFINE. The natural instrument is
  * `wrangler deploy --define KEY=VALUE`, measured broken in the pinned wrangler
@@ -58,10 +57,11 @@
  * it never becomes a hand-maintained key that the config-contract and
  * self-host parity gates would pin.
  *
- * There is no CI deploy lane for this Worker (deleted 2026-10-01 by f54af7052,
- * #4919 Human Gate), so `npm run deploy` is the deploy path. Keep it that way:
- * the container id is a function of the commit only for as long as every deploy
- * carries the rev.
+ * The CI deploy lane for this Worker is `deploy-digichat-cloudflare-container.yml`
+ * (re-derived on `develop` on 2026-10-22, DIG-5120). It deploys through this
+ * script — `npm run deploy --workspace digichat-cloudflare` — never through a
+ * bare `npx wrangler deploy`: the container id is a function of the commit only
+ * for as long as every deploy carries the rev.
  *
  * `scripts/occ_invite_key_rollout.sh` also deploys this Worker. It does NOT call
  * this script, and that is deliberate: it pins wrangler with
@@ -77,7 +77,8 @@
  * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml still applies to whatever
  * environment this is launched from: unset it for wrangler's own process (see
  * the README) — it is a Vectorize/D1 token and makes every deploy fail with
- * code 10000.
+ * code 10000. CI never sees that token: the deploy lane exports the repo secret
+ * of the same name, which carries Workers Scripts:Edit.
  */
 import { spawnSync } from "node:child_process";
 import { dirname, resolve as resolvePath } from "node:path";
@@ -95,10 +96,10 @@ export const REV_LEN = 12;
 /**
  * Where to read the deployed id back from.
  *
- * This Worker has no zone route today (see the header), so this URL will not
- * answer while it stays routeless. That is exactly why `main` exits 2 rather
- * than claiming a verification it could not perform. Point `--meta-url` at the
- * worker once a route is re-added during a rollback, and the check becomes real.
+ * This Worker is routable today — `wrangler.toml` re-asserts the live route set
+ * (the ROUTE HOLD note of 2026-10-18) — so this URL answers and the check is
+ * real. Exit 2 then means the read-back did not prove this rev, not that the
+ * read-back was impossible.
  */
 export const META_URL = "https://digithings.ai/_digichat/meta";
 
@@ -210,10 +211,13 @@ export function verdictFor({ meta, expected, metaUrl, readError, field = "contai
         ? "  A legacy id here means the bundle reached production without the rev, " +
           "so the running Container may still be the previous instance. Redeploy with " +
           "`npm run deploy` from a checkout (not a bare `npx wrangler deploy`).\n"
-        : "  This Worker carries no zone route (the routes live on digithings-stack), " +
-          "so there is nothing to read the id back from. The deploy DID run; what it did " +
-          "not prove is that this rev is the id serving traffic. Confirm on the fold, " +
-          "which shares the same derivation: curl -s https://graph.digithings.ai/_stack/meta\n"),
+        : "  The read-back could not be performed, so this rev is unproven: the " +
+          `Worker declares the route (${metaUrl} is in its wrangler.toml), so a failed ` +
+          "read is one of three things: the Worker answered with an error, the route " +
+          "is missing, or the request never reached the edge. The deploy DID run; " +
+          "what it did not prove is that this rev is the id serving traffic. Confirm " +
+          "on the fold, which shares the same derivation: curl -s " +
+          "https://graph.digithings.ai/_stack/meta\n"),
   };
 }
 

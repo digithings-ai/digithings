@@ -12,7 +12,6 @@ import { toDigichatClientConfig, toChromeClientConfig } from "./client-projectio
 import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
-import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -228,6 +227,42 @@ hosts:
     expect(cfg.hosts?.["digiquant.io"]?.token).toBe("yaml-tok");
   });
 
+  it("merges registry model policy onto a YAML host that already exists", () => {
+    const tenants = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings",
+        token: "reg-tok",
+        backend: { type: "digigraph" },
+        gateMode: "ungated",
+        models: {
+          catalog: true,
+          costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
+        },
+      },
+    });
+    const cfg = loadDigichatConfig({
+      fileContents: `
+version: 1
+hosts:
+  digithings.ai:
+    slug: digithings
+    token: yaml-tok
+    backend:
+      type: digigraph
+    chrome:
+      theme: light
+`,
+      env: { DIGICHAT_EMBED_TENANTS: tenants },
+    });
+    const host = cfg.hosts?.["digithings.ai"];
+    expect(host?.token).toBe("yaml-tok");
+    expect(host?.chrome.theme).toBe("light");
+    expect(host?.models.catalog).toBe(true);
+    expect((host?.models.available ?? []).length).toBeGreaterThan(0);
+    expect(host?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
+    expect(host?.models.picker?.presets[0]?.id).toBe("auto");
+  });
+
   it("overlays DIGICHAT_EMBED_TOKEN onto deployment", () => {
     const cfg = loadDigichatConfig({
       fileContents: `
@@ -367,24 +402,34 @@ deployment:
     ).toThrow(/DIGICHAT_CHROME_SKIN/);
   });
 
-  it("uses the unconfigured container default when no file and no tenants", () => {
+  it("loads house defaults when no file and no tenants", () => {
     const cfg = loadDigichatConfig({ fileContents: null, env: {} });
-    expect(cfg.deployment?.slug).toBe("local");
+    expect(cfg.deployment?.slug).toBe("digithings-ai");
+    expect(cfg.hosts?.["digithings.ai"]?.slug).toBe("digithings-ai");
     expect(cfg.deployment?.chrome.mode).toBe("embed");
     expect(cfg.deployment?.chrome.skin).toBe("digichat");
     expect(cfg.deployment?.chrome.theme).toBe("dark");
-    expect(cfg.deployment?.features.attachments).toBe(true);
-    expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
-    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash");
-    expect(cfg.deployment?.models.available).toHaveLength(14);
+    expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.tools?.catalog.map((tool) => tool.id)).toEqual([
+      "digisearch",
+      "digivault",
+    ]);
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(cfg.deployment?.models.available).toHaveLength(13);
     expect(cfg.deployment?.models.allowPicker).toBe(true);
-    expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
-    // Least-privilege fallback: an unconfigured container must not expose BYOK,
-    // user MCP servers, or web search to anonymous visitors (regression #3852).
+    expect(cfg.deployment?.chrome.suggestions).toHaveLength(8);
     expect(cfg.deployment?.mcp?.allowUserServers).toBe(false);
     expect(cfg.deployment?.mcp?.allowAddForm).toBe(false);
-    expect(cfg.deployment?.gate.webSearch).toBe(false);
-    expect(cfg.deployment?.gate.showByok).toBe(false);
+    expect(cfg.deployment?.gate.webSearch).toBe(true);
+    expect(cfg.deployment?.gate.showByok).toBe(true);
+    expect(cfg.deployment?.gate.showContextMeter).toBe(true);
+    expect(cfg.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: true,
+      tokensPerMinute: { user: 80000 },
+    });
   });
 
   it("keeps BYOK, user MCP servers, and web search when a deployment explicitly enables them", () => {
@@ -503,6 +548,25 @@ describe("force-tool allowlist", () => {
     expect(filterForceToolHeader(dep, "digisearch")).toBe("digisearch");
     expect(filterForceToolHeader(dep, "digivault")).toBe("digivault");
     expect(filterForceToolHeader(dep, "not-a-tool")).toBeUndefined();
+  });
+
+  it("keeps a resolved tenant's picker so preset picks still resolve", () => {
+    const picker = {
+      showFullList: true,
+      groups: [],
+      presets: [{ id: "reasoning", label: "Reasoning", description: "", model: "m/reason" }],
+    };
+    const dep = embedTenantToDeployment({
+      slug: "x",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      attribution: false,
+      activityDetail: "labels",
+      models: { default: "m/reason", available: ["m/reason"], catalog: true, picker },
+    });
+    expect(dep.models?.picker).toEqual(picker);
   });
 
   it("denies digisearch/digivault when catalog empty (fail-closed, #3806)", () => {
@@ -745,7 +809,7 @@ describe("getAnonymousClientInstall", () => {
     resetDigichatConfigForTests();
   });
 
-  it("ignores the synthetic no-file default", () => {
+  it("does not treat the built-in house defaults as an anonymous embed", () => {
     setDigichatConfigForTests(loadDigichatConfig({ fileContents: null, env: {} }));
     expect(getAnonymousClientInstall({})).toBeNull();
   });
@@ -828,5 +892,221 @@ describe("compat web_search default-on (#3871)", () => {
     expect(dep.tools?.catalog.some((t) => t.id === "web_search") ?? false).toBe(false);
     expect(toDigichatClientConfig(dep).gate.webSearch).toBe(false);
     expect(filterForceToolHeader(dep, "web_search")).toBeUndefined();
+  });
+});
+
+describe("tenants merge: one source for the session lock and the model allowlist (DIG-4589)", () => {
+  const OCC_HOST = "occ.digithings.ai";
+
+  function occYaml(gate: string[] = []): string {
+    return [
+      "version: 1",
+      "hosts:",
+      `  ${OCC_HOST}:`,
+      "    slug: occ",
+      "    backend:",
+      "      type: digigraph",
+      ...gate,
+      "",
+    ].join("\n");
+  }
+
+  function mergedHost(
+    yaml: string,
+    tenant: Record<string, unknown>,
+  ): NonNullable<ReturnType<typeof loadDigichatConfig>["hosts"]>[string] {
+    const config = loadDigichatConfig({
+      fileContents: yaml,
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({ [OCC_HOST]: tenant }),
+      },
+    });
+    const host = config.hosts?.[OCC_HOST];
+    expect(host).toBeDefined();
+    return host!;
+  }
+
+  it("keeps a deployment lock and takes the tenant model offer", () => {
+    // The two sources disagree: the lock is set in the deployment config,
+    // the model offer is curated in the tenant registry. The merged host
+    // must carry both, because the route reads one artefact.
+    const host = mergedHost(occYaml(["    gate:", "      mode: ungated", "      lockSessionControls: true"]), {
+      slug: "occ",
+      token: "occ-secret",
+      gateMode: "ungated",
+      backend: { type: "digigraph" },
+      models: { default: "only-this-model", available: ["only-this-model"] },
+    });
+
+    expect(host.gate.lockSessionControls).toBe(true);
+    expect(host.models?.available).toEqual(["only-this-model"]);
+    expect(host.models?.default).toBe("only-this-model");
+  });
+
+  it("keeps the deployment model list when the tenant curates none", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+    expect(host.gate.lockSessionControls).toBeUndefined();
+  });
+
+  it("never drops a tenant lock the deployment config does not set", () => {
+    const host = mergedHost(occYaml(), {
+      slug: "occ",
+      token: "occ-secret",
+      gateMode: "ungated",
+      backend: { type: "digigraph" },
+      lockSessionControls: true,
+    });
+
+    expect(host.gate.lockSessionControls).toBe(true);
+  });
+
+  it("merges a registry tenant into an origin-form deployment host key", () => {
+    // The deployment config keys the host as an origin, the registry keys it
+    // as a bare host. `matchHostDeployment` normalises both, so the merge has
+    // to normalise too — otherwise the host ends up with two entries and the
+    // lookup returns the registry-only duplicate, dropping the deployment's
+    // own gate and model list.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        `  "https://${OCC_HOST}":`,
+        "    slug: occ",
+        "    token: occ-secret",
+        "    backend:",
+        "      type: digigraph",
+        "    gate:",
+        "      mode: ungated",
+        "      lockSessionControls: true",
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [OCC_HOST]: {
+            slug: "occ",
+            token: "occ-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { default: "tenant-model", available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    // One entry for the host, under the key the deployment config used.
+    expect(Object.keys(config.hosts ?? {})).toEqual([`https://${OCC_HOST}`]);
+    const host = matchHostDeployment(OCC_HOST, config);
+    expect(host).toBeDefined();
+    expect(host!.gate.lockSessionControls).toBe(true);
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+  });
+
+  it("keeps the deployment model list when the tenant curates an empty list", () => {
+    // An empty tenant list is "no curation", not "no models": the
+    // deployment's own list stays binding.
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: [] },
+      },
+    );
+
+    expect(host.models?.available).toEqual(["deployment-model"]);
+  });
+
+  it("takes the tenant allowPicker over the deployment's", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { available: ["tenant-model"], allowPicker: true },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(true);
+  });
+
+  it("keeps the deployment allowPicker when the tenant sets none", () => {
+    const host = mergedHost(
+      occYaml([
+        "    models:",
+        "      available:",
+        "        - deployment-model",
+        "      allowPicker: false",
+      ]),
+      {
+        slug: "occ",
+        token: "occ-secret",
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+      },
+    );
+
+    expect(host.models?.allowPicker).toBe(false);
+  });
+
+  it("hydrates a registry-only host", () => {
+    // No deployment entry for this host: the registry entry is the whole
+    // deployment, exactly as before the merge.
+    const config = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "hosts:",
+        "  other.digithings.ai:",
+        "    slug: other",
+        "    backend:",
+        "      type: digigraph",
+        "",
+      ].join("\n"),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [OCC_HOST]: {
+            slug: "occ",
+            token: "occ-secret",
+            gateMode: "ungated",
+            backend: { type: "digigraph" },
+            models: { available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+
+    const host = config.hosts?.[OCC_HOST];
+    expect(host).toBeDefined();
+    expect(host!.models?.available).toEqual(["tenant-model"]);
+    expect(matchHostDeployment(OCC_HOST, config)).toBe(host);
   });
 });

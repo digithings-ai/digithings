@@ -467,6 +467,14 @@ services:
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      # The MCP server binds every interface INSIDE the container. The host
+      # publish is 127.0.0.1:8765, and a server listening on the container's
+      # own loopback is unreachable through a published port: the host curl
+      # answers nothing at all, and the other containers cannot reach it by
+      # service name (the OCC embed config uses
+      # http://digisearch-mcp:8765/mcp). The host side stays on loopback.
+      # Override in the root .env; the value here is the default.
+      - DIGISEARCH_MCP_HOST=${DIGISEARCH_MCP_HOST:-0.0.0.0}
       # Monitor store home: the same store the digisearch service uses, on the
       # same volume. The MCP server creates watches in it, and a store of its
       # own would lose every watch on the next recreate.
@@ -495,7 +503,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
-      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+      # The MCP server binds every interface INSIDE the container, so the
+      # published port 127.0.0.1:8769 answers and the other containers can
+      # reach it by service name (http://digivault-mcp:8769/mcp). The host
+      # side stays on loopback. Override in the root .env; the value here is
+      # the default.
+      - DIGIVAULT_MCP_HOST=${DIGIVAULT_MCP_HOST:-0.0.0.0}
     volumes:
       - digivault_data:/data/vault
 
@@ -623,8 +636,8 @@ services:
   heartbeat:
     build:
       context: .
-      dockerfile: digiclaw/Dockerfile
-    image: digi-digiclaw:latest
+      dockerfile: digibot/Dockerfile
+    image: digi-digibot:latest
     container_name: digi-heartbeat
     profiles:
       - heartbeat
@@ -636,26 +649,26 @@ services:
       - DIGIQUANT_URL=http://digiquant:8001
       - DIGISEARCH_URL=http://digisearch:8002
       - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
-      - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
+      - DIGIBOT_DIGIKEY_API_KEY=${DIGIBOT_DIGIKEY_API_KEY:-}
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
       # Phase C tick (#4065): agents come from the mounted repo, scheduler state
-      # from the digiclaw_state volume (DIGI_WORKSPACE itself is read-only).
-      - DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents
-      - DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json
+      # from the digibot_state volume (DIGI_WORKSPACE itself is read-only).
+      - DIGIBOT_AGENTS_DIR=/workspace/digibot/agents
+      - DIGIBOT_SCHEDULER_STATE=/state/scheduler_state.json
     volumes:
       - ./digiquant/results/audit:/audit
       - ./:/workspace:ro
-      - digiclaw_state:/state
+      - digibot_state:/state
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         # `schedule start` is idempotent when the agent is already running (exit 0,
         # re-arms it), so `|| exit 1` turns only real bootstrap failures into a loud exit.
-        digiclaw schedule start web-watch-tick || exit 1
-        while true; do python -m digiclaw; sleep 1800; done &
-        while true; do digiclaw schedule tick; sleep 60; done
+        digibot schedule start web-watch-tick || exit 1
+        while true; do python -m digibot; sleep 1800; done &
+        while true; do digibot schedule tick; sleep 60; done
     depends_on:
       digigraph:
         condition: service_healthy
@@ -731,7 +744,7 @@ services:
       - DIGICHAT_AUTO_MIGRATE=1
       # Catalog template: DIGICHAT_CHROME_SKIN=claude
       # or DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml (baked in image)
-      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-/app/config/digichat.yaml}
+      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-/app/config/overrides/docker.yaml}
       - DIGICHAT_CHROME_SKIN=${DIGICHAT_CHROME_SKIN:-}
     # Mounts the source config dir (so the baked examples stay reachable).
     # Drop a digichat.yaml here and point DIGICHAT_CONFIG_PATH at it to drive
@@ -858,7 +871,7 @@ volumes:
   digisearch_chroma:
   digisearch_monitors:
   digivault_data:
-  digiclaw_state:
+  digibot_state:
   prometheus_data:
   grafana_data:
   caddy_data:

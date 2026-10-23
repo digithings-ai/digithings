@@ -14,15 +14,33 @@ import type {
 } from "./schema";
 import type { ThinkingMode, ViewMode } from "@/lib/view-modes";
 import { welcomeBodyLines, welcomeTitle } from "./schema";
-import {
-  BASELINE_EMBED_PLACEHOLDER,
-  BASELINE_EMBED_SKIN,
-  BASELINE_EMBED_SUGGESTIONS,
-  BASELINE_EMBED_WELCOME,
-  BASELINE_EMBED_WELCOME_BODY,
-} from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
+import { resolveModelCatalog, type ModelPickerView } from "@/lib/model-picker-catalog";
+
+const HOUSE_WELCOME = "Ask about digithings";
+const HOUSE_WELCOME_BODY = "Explore the documentation, dig into the stack, or search the vault.";
+const HOUSE_SUGGESTIONS = [
+  "What is digigraph?",
+  "How do embeds work?",
+  "What components are in the stack?",
+  "How do I run the stack locally?",
+  "What models does digichat support?",
+  "How does digiquant handle backtests?",
+  "What is digivault?",
+  "How do I create an embed?",
+] as const;
+
+/** Same catalog resolution defaults.yaml asks for. OpenRouter stays off until a key is set. */
+const HOUSE_CATALOG = resolveModelCatalog(
+  {
+    default: DEPLOY_DEFAULT_MODELS.default,
+    priceCapUsdPerMillion: 2,
+    presets: ["auto", "reasoning", "fast", "light"],
+    showFullList: true,
+  },
+  { openRouterConfigured: false },
+);
 
 /** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
 export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -45,6 +63,8 @@ export type DigichatClientFeatures = {
   speech: boolean;
   view: ViewMode;
   thinking: ThinkingMode;
+  density: "compact" | "default" | "airy";
+  effort: "low" | "medium" | "high";
   sources: boolean;
   modelPicker: boolean;
   branchPicker: boolean;
@@ -54,6 +74,10 @@ export type DigichatClientFeatures = {
 export type DigichatClientChrome = {
   mode: ChromeMode;
   theme: "dark" | "light";
+  /** Named palette. Absent means the skin palette. */
+  palette?: string;
+  toolbar: boolean;
+  scrollbars: "always" | "auto";
   skin: ThreadSkin;
   title?: string;
   /** Headline. Legacy YAML `welcome: "…"` still lands here. */
@@ -79,9 +103,12 @@ export type DigichatClientModels = {
   default?: string;
   available: string[];
   allowPicker: boolean;
+  /** Presets and provider groups. Present when the deployment uses the catalog. */
+  picker?: ModelPickerView;
 };
 
-export type DigichatClientSubTool = { id: string; label?: string };
+/** `group` files the tool under a sub-header in `/tools`. */
+export type DigichatClientSubTool = { id: string; label?: string; group?: string };
 
 export type DigichatClientTool = {
   id: string;
@@ -134,54 +161,86 @@ export type DigichatClientConfig = {
     lockedContact?: string;
     showByok?: boolean;
     showLanguageSelector?: boolean;
+    showContextMeter?: boolean;
     webSearch?: boolean;
     searchEngine?: string;
+    /** Present only when the host locks session tool/MCP toggles. */
+    lockSessionControls?: boolean;
   };
   /** Discriminator only — never project endpoints / agent names */
   backendType: DigichatDeployment["backend"]["type"];
 };
 
 export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
-  slug: "embed",
+  slug: "digithings-ai",
   chrome: {
     mode: "embed",
     theme: "dark",
-    skin: BASELINE_EMBED_SKIN,
-    welcome: BASELINE_EMBED_WELCOME,
-    welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
-    placeholder: BASELINE_EMBED_PLACEHOLDER,
-    suggestions: [...BASELINE_EMBED_SUGGESTIONS],
+    skin: "digichat",
+    toolbar: true,
+    scrollbars: "always",
+    title: "ask digichat",
+    welcome: HOUSE_WELCOME,
+    welcomeBody: [HOUSE_WELCOME_BODY],
+    placeholder: "Ask a question",
+    suggestions: [...HOUSE_SUGGESTIONS],
     accent: null,
     attribution: true,
     defaultLanguage: DEFAULT_LANGUAGE_CODE,
     transcript: { userAlign: "right" },
+    launcher: {
+      mode: "bar",
+      label: "ask digichat",
+      closeLabel: "close",
+      mobileFullscreen: true,
+    },
   },
   persistence: "none",
   auth: "anonymous",
   features: {
-    attachments: true,
+    attachments: false,
     dictation: false,
     speech: false,
-    view: "balanced",
-    thinking: "auto",
+    // House YAML still sets the legacy reasoning/toolCalls booleans. Those
+    // fold to quiet + collapsed when view and thinking are omitted.
+    view: "quiet",
+    thinking: "collapsed",
+    density: "default",
+    effort: "medium",
     sources: true,
-    modelPicker: false,
+    modelPicker: true,
     branchPicker: true,
     pageContext: "visible",
   },
-  // Table lives in config/digichat-deploy-models.json (#5029) — the same source
-  // the server-side dev default reads, so the two cannot diverge.
-  models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
+  models: {
+    default: HOUSE_CATALOG.default,
+    available: HOUSE_CATALOG.available,
+    allowPicker: true,
+    picker: HOUSE_CATALOG.picker,
+  },
   cli: { enabled: false },
-  tools: { allowUserToggle: true, catalog: [] },
-  // Least-privilege fallback: an unconfigured container must not expose BYOK,
-  // user MCP servers, or web search. A resolved deployment opts in explicitly.
-  mcp: { servers: [], allowUserServers: false, allowAddForm: false },
+  tools: {
+    allowUserToggle: true,
+    catalog: [
+      { id: "digisearch", default: true, label: "Search" },
+      { id: "digivault", default: true, label: "Vault" },
+    ],
+  },
+  mcp: {
+    servers: [
+      { id: "digisearch", label: "Search", default: true },
+      { id: "digivault", label: "Vault", default: true },
+    ],
+    allowUserServers: false,
+    allowAddForm: false,
+  },
   gate: {
-    mode: "turn_limited",
-    showByok: false,
-    showLanguageSelector: false,
-    webSearch: false,
+    mode: "ungated",
+    llmAccess: "free_then_byok",
+    showByok: true,
+    showLanguageSelector: true,
+    showContextMeter: true,
+    webSearch: true,
   },
   backendType: "digigraph",
 };
@@ -217,6 +276,9 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
     chrome: {
       mode: dep.chrome.mode,
       theme: dep.chrome.theme,
+      ...(dep.chrome.palette ? { palette: dep.chrome.palette } : {}),
+      toolbar: dep.chrome.toolbar !== false,
+      scrollbars: dep.chrome.scrollbars ?? "always",
       skin: dep.chrome.skin ?? DEFAULT_THREAD_SKIN,
       title: dep.chrome.title,
       welcome: welcomeTitle(dep.chrome.welcome),
@@ -248,6 +310,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(models?.default ? { default: models.default } : {}),
       available: [...(models?.available ?? [])],
       allowPicker,
+      ...(models?.picker ? { picker: models.picker } : {}),
     },
     cli: { enabled: dep.cli?.enabled === true },
     tools: {
@@ -273,8 +336,12 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       lockedContact: dep.gate.lockedContact,
       showByok: dep.gate.showByok,
       showLanguageSelector: dep.gate.showLanguageSelector,
+      ...(typeof dep.gate.showContextMeter === "boolean"
+        ? { showContextMeter: dep.gate.showContextMeter }
+        : {}),
       webSearch,
       ...(searchEngine ? { searchEngine } : {}),
+      ...(dep.gate.lockSessionControls === true ? { lockSessionControls: true } : {}),
     },
     backendType: dep.backend.type,
   };

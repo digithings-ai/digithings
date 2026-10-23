@@ -1,9 +1,10 @@
 /**
  * digithings digichat — Worker fronting one Cloudflare Container.
- * Proxies /embed, digichat APIs, and /_dtchat assets to the digichat Node image.
+ * Proxies /chat (the app), /embed, digichat APIs, and /_dtchat assets to the
+ * digichat Node image.
  *
  * Website paths (different chats, same Container):
- *   digithings.ai/chat      → Pages iframe → /embed?host=digithings.ai
+ *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
  *   digithings.ai/chat/occ  → Pages iframe → /embed?host=occ.digithings.ai
  */
 import { Container, getContainer } from "@cloudflare/containers";
@@ -11,26 +12,30 @@ import { env } from "cloudflare:workers";
 import {
   DIGICHAT_CONTAINER_REV_VAR,
   digichatContainerRev,
+  isContainerInternalPath,
   sharedDigichatContainerId,
   shouldProxyToDigiChat,
+  withContainerPath,
 } from "./paths";
+import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
-import { isOccShellPath, occGate } from "./occ-gate";
+import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
+import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
-import { fetchContainerWithRetry } from "./container-retry";
+import {
+  CONTAINER_UNAVAILABLE_BODY,
+  describeValue,
+  fetchContainerWithRetry,
+  NO_INSTANCE_STATUS,
+  RETRY_AFTER_SECONDS,
+} from "./container-retry";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
  * `worker-configuration.d.ts`; the local `Env` interface is the intended shape.
  */
 const workerVars = env as unknown as Env;
-
-/**
- * OCC helpdesk MCP: the secret-gated edge path served by the in-container
- * zammad-mcp (python) through the trusted proxy, not by Next.
- */
-const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
 
 /**
  * Worker-owned, secret-gated recovery lever for the shared Container. Handled
@@ -40,6 +45,21 @@ const ZAMMAD_MCP_PREFIX = "/api/mcp/zammad";
  * every cold start on its own).
  */
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
+
+/**
+ * True when a thrown value is an Error, asked in a way that cannot throw.
+ *
+ * `instanceof` walks the prototype chain, and a value that cannot be
+ * inspected throws there. A guard that throws would turn a caught failure back
+ * into an uncaught one, which is the failure this Worker exists to stop.
+ */
+function isRealError(value: unknown): boolean {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -72,10 +92,6 @@ export class DigiChatContainer extends Container {
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
-    // Trial-proof mint/verify secret (DIG-4530); must reach the container process.
-    DIGICHAT_TRIAL_PROOF_SECRET: workerVars.DIGICHAT_TRIAL_PROOF_SECRET ?? "",
-    // Tenant mint credentials (DIG-4530); must reach the container process.
-    DIGICHAT_TENANT_MINT_CREDENTIALS: workerVars.DIGICHAT_TENANT_MINT_CREDENTIALS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
@@ -110,7 +126,30 @@ export class DigiChatContainer extends Container {
       }
       this.tenantsResolved = true;
     }
-    return super.fetch(request);
+    try {
+      return await super.fetch(request);
+    } catch (cause) {
+      // The hop to the container rejected with a value that is not an Error.
+      // The @cloudflare/containers package rethrows such a value verbatim, so
+      // it would leave this Durable Object as an uncaught exception and the
+      // Worker's own guard would never see it (run-watch DIG-4928). The client
+      // is told to come back instead.
+      //
+      // A real error is rethrown unchanged: it carries a message, a stack and
+      // a type, and the caller has to see it. A non-Error carries none of
+      // them, so it is described in the log — the platform renders such a
+      // value as it stands, so a thrown Date would leave nothing but a bare
+      // date — and the answer says what happened instead.
+      if (isRealError(cause)) throw cause;
+      console.error(
+        "digichat: container could not be reached: the container hop rejected with a value that is not an Error:",
+        describeValue(cause),
+      );
+      return new Response(CONTAINER_UNAVAILABLE_BODY, {
+        status: NO_INSTANCE_STATUS,
+        headers: { "Retry-After": String(RETRY_AFTER_SECONDS) },
+      });
+    }
   }
 
   /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
@@ -149,10 +188,6 @@ export interface Env {
   DIGIKEY_BFF_TOKEN?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
   DIGICHAT_MONITOR_TOKENS?: string;
-  /** HMAC secret backing the trial-proof mint/verify path (DIG-4530). */
-  DIGICHAT_TRIAL_PROOF_SECRET?: string;
-  /** Per-tenant credentials used by the mint path (DIG-4530). */
-  DIGICHAT_TENANT_MINT_CREDENTIALS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
   /** Read-only Zammad helpdesk MCP: base URL + API token, forwarded to the container. */
@@ -173,6 +208,10 @@ export default {
     if (isOccShellPath(url.pathname)) {
       return occGate(request, workerEnv.OCC_INVITE_KEY);
     }
+    // The /embed?host=<invite-only tenant> form without its key: the site 404,
+    // byte-for-byte, before the container is ever asked.
+    const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
+    if (embedGate) return embedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
     // it destroys is the same derived id the proxy below addresses, computed
@@ -207,27 +246,62 @@ export default {
     // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
     // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
     // edge key this Worker holds; the container never sees the key. Fail closed.
-    const isZammadMcp = url.pathname.startsWith(ZAMMAD_MCP_PREFIX);
-    if (isZammadMcp) {
-      const expected = workerEnv.ZAMMAD_EDGE_KEY?.trim();
-      const provided = request.headers.get("x-digi-mcp-key")?.trim();
-      if (!expected || !provided || provided !== expected) {
-        return new Response("digithings-digichat: unauthorized", { status: 401 });
+    //
+    // Both spellings are gated: the container-local one (/api/mcp/zammad/…) and
+    // the base-path one (/chat/api/mcp/zammad/…), which the app's own Next
+    // route would otherwise answer with no auth of its own (the in-image
+    // trusted proxy only intercepts the container-local spelling). The helper
+    // that recognises them also maps the base-path spelling back onto the
+    // container-local one, so the unauthenticated copy is never reached.
+    //
+    // The verdict comes from the gate module (src/mcp-gate.ts), not from an
+    // inline comparison: a gate that can only be READ cannot be proven
+    // fail-closed, and the contract test executes this one.
+    const mcpGate = evaluateMcpGate(
+      url.pathname,
+      request.headers.get(MCP_KEY_HEADER),
+      workerEnv.ZAMMAD_EDGE_KEY,
+    );
+    if (mcpGate.kind === "unauthorized") {
+      return new Response("digithings-digichat: unauthorized", { status: 401 });
+    }
+    if (mcpGate.kind === "not-mcp") {
+      if (isContainerInternalPath(url.pathname)) {
+        // Container-internal (dev-only) surface the app itself refuses in
+        // production. Serving the app under /chat makes the whole /chat tree
+        // reachable, so the edge refuses these too instead of relying on the
+        // app's own guard alone.
+        return new Response("digichat Worker: path not available.", { status: 404 });
       }
-    } else if (!shouldProxyToDigiChat(url.pathname)) {
-      return new Response(
-        "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
-        { status: 404 },
-      );
+      if (!shouldProxyToDigiChat(url.pathname)) {
+        return new Response(
+          "digichat Worker: path not routed. The digichat app is at /chat; marketing is on Pages.",
+          { status: 404 },
+        );
+      }
     }
     // One shared instance — digithings, OCC, and future tenants via embed registry.
     // The id is derived from the deploying commit, never hand-pinned: a warm
     // instance keeps its boot env, so a forgotten bump silently serves the old
     // image. See paths.ts. Same `containerId` the reset lever above destroys.
     const container = getContainer(workerEnv.DIGICHAT, containerId);
-    // The container slot is shared, and a rollout can leave the previous
+    // The Container slot is shared, and a rollout can leave the previous
     // instance draining while this one starts. A busy slot comes back as a
     // retryable 503 instead of a hard failure (DIG-4487).
-    return fetchContainerWithRetry(request, (req) => container.fetch(req));
+    // A failed page/frame load is always served as inline HTML (never a
+    // download on phones); API callers keep the original answer.
+    //
+    // The path the Container sees carries the app's base path (DIG-5121): the
+    // image is built with `basePath: /chat`, so the legacy compatibility
+    // routes are moved under it and the canonical /chat paths are passed
+    // through unchanged.
+    const containerRequest = withContainerPath(request, url.pathname);
+    // The edge key stops at the edge: the container never sees it. The header
+    // is dropped from the COPY, so the original request still carries it.
+    containerRequest.headers.delete(MCP_KEY_HEADER);
+    return frameSafeErrorResponse(
+      containerRequest,
+      await fetchContainerWithRetry(containerRequest, (req) => container.fetch(req)),
+    );
   },
 };

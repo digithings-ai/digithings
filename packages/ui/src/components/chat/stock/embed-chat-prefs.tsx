@@ -6,7 +6,15 @@
  * balanced, thinking auto. Not localStorage.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  matchesMobileDensityViewport,
+  readStoredDensity,
+  resolveTraceDensity,
+  writeStoredDensity,
+  type TraceDensity,
+} from "../trace-spacing";
+import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
   type ThinkingMode,
@@ -35,6 +43,8 @@ export type EmbedChatPrefs = {
   toolbar: boolean;
   /** `always` keeps scrollbars in their reserved gutter; `auto` shows them on scroll. */
   scrollbars: "always" | "auto";
+  /** Worked-chain rhythm. A stored user choice wins over the deployment default. */
+  density: TraceDensity;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -54,7 +64,79 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   searchEngine: "",
   toolbar: true,
   scrollbars: "always",
+  density: "default",
 };
+
+/**
+ * Session chrome seeded from a deployment. Density re-reads storage so a
+ * user's palette choice survives `/new`; the rest return to the deployment.
+ */
+export function chromePrefsFromDeploy(
+  input: {
+    density?: string | null;
+    effort?: string | null;
+    searchEngine?: string | null;
+    toolbar?: boolean | null;
+    scrollbars?: "always" | "auto" | null;
+  } = {},
+  storage?: { getItem(key: string): string | null } | null,
+  context: { mobile?: boolean } = {},
+): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
+  const effort = input.effort?.trim().toLowerCase();
+  return {
+    density: resolveTraceDensity(
+      storage === undefined ? readStoredDensity() : readStoredDensity(storage),
+      input.density,
+      context,
+    ),
+    effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
+    searchEngine: input.searchEngine?.trim() ?? "",
+    toolbar: input.toolbar !== false,
+    scrollbars: input.scrollbars === "auto" ? "auto" : "always",
+  };
+}
+
+/**
+ * The reset paths (`/new`, `/clear`, `/compact`, the thread's new-thread
+ * button) rebuild chrome from the deployment. Density must resolve exactly the
+ * way the mount effect does — a stored choice first, then the phone default —
+ * or a phone drops back to the deployment rhythm on the first reset and never
+ * returns, because the embed client does not remount. Other chrome still
+ * returns to the deployment.
+ */
+export function resetChromePrefsFromDeploy(
+  input: Parameters<typeof chromePrefsFromDeploy>[0] = {},
+): ReturnType<typeof chromePrefsFromDeploy> {
+  return chromePrefsFromDeploy(input, undefined, {
+    mobile: matchesMobileDensityViewport(),
+  });
+}
+
+/**
+ * Apply a stored `dt-density` after hydration, and the mobile default when the
+ * user has never chosen one. The first render uses the deployment density on
+ * both server and client, so `data-density` matches; afterwards a stored choice
+ * (or an airy mobile default) re-renders once.
+ *
+ * Order is stored user choice > mobile default (airy) > deployment default >
+ * "default" — see `resolveTraceDensity`.
+ */
+export function useStoredDensityAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    const mobile = matchesMobileDensityViewport();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage and matchMedia are client-only; reading them during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const next = resolveTraceDensity(readStoredDensity(), prev.density, { mobile });
+      return prev.density === next ? prev : { ...prev, density: next };
+    });
+  }, [setPrefs]);
+}
+
+export function persistDensity(density: TraceDensity): void {
+  writeStoredDensity(density);
+}
 
 /**
  * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
@@ -77,7 +159,7 @@ export type CatalogToolRow = {
   label?: string;
   default?: boolean;
   /** Individual tools under this entry (per-tool session toggles). */
-  tools?: Array<{ id: string; label?: string }>;
+  tools?: Array<{ id: string; label?: string; group?: string }>;
 };
 
 export type EmbedChatPrefsApi = {
@@ -97,6 +179,7 @@ export type EmbedChatPrefsApi = {
   setSearchEngine: (engine: string) => void;
   setToolbar: (visible: boolean) => void;
   setScrollbars: (mode: "always" | "auto") => void;
+  setDensity: (density: TraceDensity) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
@@ -108,6 +191,17 @@ export type EmbedChatPrefsApi = {
    */
   providerLabel?: string;
   showModels: boolean;
+  /**
+   * Model id the turn sends, including a bring-your-own-key binding.
+   * Sizes the context meter only. An empty session still sends no
+   * X-Digi-Model.
+   */
+  meterModel?: string;
+  /**
+   * Render gate for the context meter. The toolbar draws the bar only
+   * when this is true.
+   */
+  showContextMeter?: boolean;
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
@@ -129,6 +223,24 @@ export type EmbedChatPrefsApi = {
   openEffort: () => void;
   openSearchEngine: () => void;
   openView: () => void;
+  openDensity: () => void;
+  /**
+   * Hide `/theme` and ignore a typed one. No host sets this today: tenant
+   * embeds offer `/theme` through `themeState` / `setTheme` (2.6.6). The full
+   * app leaves this unset.
+   */
+  themeLocked?: boolean;
+  /** Open the mode + palette picker. No-op when the host does not provide it. */
+  openTheme?: () => void;
+  /**
+   * Host-owned theme (tenant embeds). When set, `/theme` and its picker read
+   * this instead of the document-wide `dt-theme` / `dt-palette` keys, and a
+   * pick goes through `setTheme` rather than `applyDocumentTheme`, so it is
+   * not written to localStorage. `auto` drops the pick (back to the host's
+   * default). The full app leaves both unset.
+   */
+  themeState?: { preference: ThemePreference; palette: PaletteName; resolved: ResolvedTheme };
+  setTheme?: (preference: ThemePreference, palette: PaletteName) => void;
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
@@ -137,6 +249,29 @@ export type EmbedChatPrefsApi = {
   compactThread: () => void | Promise<void>;
   undo: () => void;
   redo: () => void;
+  /**
+   * Who may flip a tool. `agent` (Foundry) and `locked` (OCC session lock,
+   * or allowUserToggle false) list every tool and MCP server with no toggle.
+   * Omit means the host still toggles.
+   */
+  toolControl?: "toggle" | "locked" | "agent";
+  /** Text after the pane command. The open pane filters on it. */
+  paletteQuery?: string;
+  /** Composer writer used by menu rows. The skin binds it to `setText`. */
+  setComposerDraft?: (text: string) => void;
+  /**
+   * True only after a skin called `bindComposerDraft`. The writer exists on
+   * every host, and until a skin binds it the sink is a no-op, so the menu
+   * must close and change pages itself.
+   */
+  composerDraftBound?: boolean;
+  bindComposerDraft?: (setText: (text: string) => void) => void;
+  /** One palette frame. `keep` leaves a button-opened menu alone. */
+  syncPalette?: (next: {
+    kind: "closed" | "commands" | "pane";
+    menu: "close" | "keep" | string;
+    filter: string;
+  }) => void;
 };
 
 const EmbedChatPrefsContext = createContext<EmbedChatPrefsApi | null>(null);

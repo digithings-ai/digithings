@@ -45,7 +45,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar, Token, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of
@@ -774,17 +774,121 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
+# DeepSeek flash: the house flash slugs and the ``*-release`` names route to
+# the V4.1 Flash 1017 checkpoint (2026-10-21). Chris decided 1017 replaces
+# the older flash checkpoints. The 0731 fast row is its own markets id, with
+# its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
-    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
-    "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
+    "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
+    "deepseek/deepseek-v3.1": "deepseek-v3.1",
+    "deepseek/deepseek-v3.2": "deepseek-v3.2",
+    "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
+    "deepseek/deepseek-r1": "deepseek-r1",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
     "openai/gpt-oss-120b": "gpt-oss-120b",
+    "openai/gpt-6-luna": "gpt-6-luna",
+    "openai/gpt-5-mini": "gpt-5-mini",
+    "openai/gpt-6.1-sol": "gpt-6.1-sol",
+    "google/gemini-3.5-flash-lite": "gemini-3.5-flash-lite",
+    "google/gemini-3.8-flash": "gemini-3.8-flash",
+    "z-ai/glm-5.3": "glm-5.3",
     "z-ai/glm-5.3-flash": "glm-5.3-flash",
+    "z-ai/glm-4.7-flash": "glm-4.7-flash",
+    "qwen/qwen3.8-flash": "qwen3.8-flash",
+    "qwen/qwen3.8-27b": "qwen3.8-27b",
+    "qwen/qwen3.8-max": "qwen3.8-max",
+    "qwen/qwen3.8-2.4t-a95b": "qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-max-0902": "qwen3.8-max-0902",
+    "xiaomi/mimo-v2.6-flash": "mimo-v2.6-flash",
+    "xiaomi/mimo-v2.6-pro": "mimo-v2.6-pro",
+    "minimax/minimax-m3": "minimax-m3",
 }
+
+
+# Models the OpenRouter auto router may spend on for this request. Empty means
+# ``openrouter/auto`` is not a routed call: CI house still fails closed rather
+# than sending an unconstrained router at OpenRouter.
+_router_models: ContextVar[tuple[str, ...] | None] = ContextVar(
+    "digillm_router_models", default=None
+)
+
+
+def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
+    """Bind the router allowlist (comma-separated). At most 64 ids."""
+    raw = (value or "").strip()
+    if not raw:
+        return _router_models.set(None)
+    ids: list[str] = []
+    for part in raw.split(","):
+        slug = part.strip()
+        if slug and slug not in ids:
+            ids.append(slug)
+        if len(ids) >= 64:
+            break
+    return _router_models.set(tuple(ids) if ids else None)
+
+
+def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
+    _router_models.reset(token)
+
+
+def get_router_models() -> tuple[str, ...] | None:
+    models = _router_models.get()
+    if not models:
+        return None
+    premium = _premium_models.get()
+    if not premium:
+        return models
+    kept = tuple(model for model in models if model not in premium)
+    return kept or None
+
+
+# Manual Premium picks. The OpenRouter router must not spend them. The BFF
+# sends the ids on X-Digi-Premium-Models; an empty value clears the set.
+_premium_models: ContextVar[frozenset[str]] = ContextVar(
+    "digillm_premium_models", default=frozenset()
+)
+
+
+def push_premium_models(value: str | None) -> Token[frozenset[str]]:
+    """Bind the premium ids the router has to drop. Comma-separated."""
+    raw = (value or "").strip()
+    if not raw:
+        return _premium_models.set(frozenset())
+    ids = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    return _premium_models.set(ids)
+
+
+def pop_premium_models(token: Token[frozenset[str]]) -> None:
+    _premium_models.reset(token)
+
+
+def _is_openrouter_auto(model: str) -> bool:
+    if model in {"openrouter/auto", "openrouter/openrouter/auto"}:
+        return True
+    provider, model_id = _parse_provider_prefix(model)
+    return provider == "openrouter" and model_id in {"auto", "openrouter/auto"}
+
+
+def _openrouter_auto_routed(model: str) -> bool:
+    """True when this call may hit OpenRouter's auto router with an allowlist.
+
+    Requires a non-empty router context and ``OPENROUTER_API_KEY``. Without
+    either, the call is not given an unconstrained OpenRouter route.
+    """
+    models = get_router_models()
+    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    return bool(models) and bool(key) and _is_openrouter_auto(model)
 
 
 def _api_base_is_cheaperinference() -> bool:
@@ -823,6 +927,87 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     if ":online" in model:
         return None
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
+
+
+# Chat reasoning (Chris, 2026-10-22): reasoning is on for every chat. A chat's
+# /effort (low/medium/high, ``X-Digi-Effort``) maps to ``reasoning_effort`` on
+# models whose level is configurable; with no /effort set the model keeps its
+# own default level. Models without levels reason (or not) as they always do.
+REASONING_EFFORTS: frozenset[str] = frozenset({"low", "medium", "high"})
+
+
+@dataclass(frozen=True)
+class ReasoningEffortPolicy:
+    """Which models take ``reasoning_effort``, and which need their default sent.
+
+    The ids live in ``config/model-policy.json`` (``reasoning_effort``), not here:
+    model names belong in config (#5029), and digillm reads no files at runtime,
+    so the application loads the policy and registers it with
+    :func:`set_reasoning_effort_policy` (digigraph does this in ``llm_client``).
+
+    ``default_sent`` maps a bare catalog id to the level sent when the chat set
+    no /effort, for models that only reason when a level is sent.
+    ``configurable_prefixes`` are bare-id prefixes of models that take a level
+    and already reason at their default when the field is omitted. The empty
+    default policy sends the field to no model, so a process that registers
+    nothing keeps every request unchanged.
+    """
+
+    default_sent: dict[str, str] = field(default_factory=dict)
+    configurable_prefixes: tuple[str, ...] = ()
+
+
+_reasoning_effort_policy = ReasoningEffortPolicy()
+
+
+def set_reasoning_effort_policy(policy: ReasoningEffortPolicy) -> None:
+    """Register the process-wide chat reasoning policy (see :class:`ReasoningEffortPolicy`)."""
+    global _reasoning_effort_policy
+    _reasoning_effort_policy = policy
+
+
+def get_reasoning_effort_policy() -> ReasoningEffortPolicy:
+    """Return the registered chat reasoning policy (empty until one is registered)."""
+    return _reasoning_effort_policy
+
+
+def _reasoning_wire_id(model: str) -> str:
+    """Catalog id the reasoning policy keys on.
+
+    An ``openrouter/`` prefix is stripped first. A house slug then maps to its
+    Cheaper Inference bare id; anything else keeps its last slug segment, without
+    a ``:variant`` suffix.
+    """
+    slug = model.removeprefix("openrouter/")
+    bare = cheaperinference_bare_id_for_house_slug(slug)
+    if bare is not None:
+        return bare
+    return slug.split(":", 1)[0].rsplit("/", 1)[-1]
+
+
+def reasoning_effort_configurable(model: str) -> bool:
+    """True when ``model`` takes a ``reasoning_effort`` level (house slug or bare id)."""
+    policy = _reasoning_effort_policy
+    wire = _reasoning_wire_id(model)
+    return wire in policy.default_sent or (
+        bool(policy.configurable_prefixes) and wire.startswith(policy.configurable_prefixes)
+    )
+
+
+def chat_reasoning_effort(model: str, requested: str | None = None) -> str | None:
+    """``reasoning_effort`` a chat turn sends for ``model``, or ``None`` to omit it.
+
+    ``requested`` is the chat's /effort. It is sent only to models with
+    configurable levels; anything other than low/medium/high counts as unset.
+    Unset keeps the model's default: omitted, except where the default has to be
+    sent to turn reasoning on at all (the policy's ``default_sent``).
+    """
+    if not reasoning_effort_configurable(model):
+        return None
+    effort = (requested or "").strip().lower()
+    if effort in REASONING_EFFORTS:
+        return effort
+    return _reasoning_effort_policy.default_sent.get(_reasoning_wire_id(model))
 
 
 def _cheaperinference_api_base() -> str:
@@ -1019,6 +1204,8 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    if _openrouter_auto_routed(model):
+        return "openrouter/auto"
     bare = cheaperinference_bare_id_for_house_slug(model)
     if bare is not None and _cheaperinference_direct_house():
         return bare
@@ -1066,10 +1253,15 @@ def get_client_for_model(model: str) -> OpenAI:
             f"provider {provider!r} (expected {expected!r}); refusing silent "
             "house/vendor fallthrough."
         )
+    # OpenRouter auto, only with an allowlist already bound for this request.
+    # Direct to OpenRouter (not the LiteLLM proxy, and not Cheaper Inference):
+    # there is no unconstrained ``openrouter/auto`` route on the CI overlay.
+    if _openrouter_auto_routed(model):
+        provider = "openrouter"
     # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
     # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
     # there is no OpenRouter fallback.
-    if _is_ci_catalog_miss(model):
+    elif _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
     elif cheaperinference_bare_id_for_house_slug(model) is not None and (
         _cheaperinference_direct_house()
@@ -1077,7 +1269,7 @@ def get_client_for_model(model: str) -> OpenAI:
         if _api_base_is_cheaperinference():
             return get_client()
         return _cheaperinference_direct_client()
-    if provider is None or _use_default_base_client(model):
+    if not _openrouter_auto_routed(model) and (provider is None or _use_default_base_client(model)):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
@@ -1939,8 +2131,11 @@ def completion(
         )
 
     attempt_scope = _attempt_scope.get()
+    routed_auto = _openrouter_auto_routed(model)
     cache_status = (
-        CacheStatus.BYPASSED if tools or _byok_override.get() is not None else CacheStatus.MISS
+        CacheStatus.BYPASSED
+        if tools or _byok_override.get() is not None or routed_auto
+        else CacheStatus.MISS
     )
     if attempt_scope is not None:
         attempt_scope.cache_status = cache_status
@@ -1948,7 +2143,7 @@ def completion(
     # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or
     # read the shared in-process cache; tool calls may have side effects).
     cache_key: str | None = None
-    if not tools and _byok_override.get() is None:
+    if not tools and _byok_override.get() is None and not routed_auto:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -1982,6 +2177,12 @@ def completion(
         kwargs["tool_choice"] = tool_choice
     elif response_format is not None:
         kwargs["response_format"] = response_format
+    if routed_auto:
+        # OpenAI SDK extra_body is merged onto the JSON body. OpenRouter reads
+        # a top-level ``models`` array as the router's allowlist.
+        extra = dict(kwargs.get("extra_body") or {})
+        extra["models"] = list(get_router_models() or ())
+        kwargs["extra_body"] = extra
 
     try:
         r = create_with_retry(kwargs)
@@ -2106,6 +2307,7 @@ def _stream_completion_one_turn(
     tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, list[ToolCallDict] | None]:
     """Run one ``stream=True`` completion, accumulating content and tool calls.
 
@@ -2117,6 +2319,10 @@ def _stream_completion_one_turn(
     models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
     model called no tool (caller returns the content), else the accumulated calls
     for the caller to run before looping.
+
+    ``reasoning_effort`` is the chat's /effort; :func:`chat_reasoning_effort`
+    decides what goes on the wire. A 400 that names the field drops it once and
+    retries, so a provider that refuses levels still answers.
     """
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
@@ -2132,32 +2338,35 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    wire_effort = chat_reasoning_effort(model, reasoning_effort)
+    if wire_effort is not None:
+        kwargs["reasoning_effort"] = wire_effort
 
     usage_started = time.perf_counter()
-    try:
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
-    except BadRequestError as error:
-        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
-        # field rather than ignoring it. Retry once without the field so streaming
-        # still works there; usage then simply arrives only if that provider reports
-        # it some other way. Only a 400 that names the field is treated as this
-        # dialect mismatch — every other bad request propagates untouched.
-        if "stream_options" not in str(error).lower():
-            raise
-        kwargs.pop("stream_options", None)
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
+    # Strict OpenAI-compatible endpoints 400 on an unknown optional field rather
+    # than ignoring it, and name one field per refusal. ``stream_options`` (usage
+    # then arrives only if the provider reports it some other way) and
+    # ``reasoning_effort`` (the model then reasons at its default) are each
+    # dropped once when a 400 names them, so at most one retry per field. Every
+    # other bad request, or a field already dropped, propagates untouched.
+    droppable = ("stream_options", "reasoning_effort")
+    while True:
+        try:
+            stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+                client,
+                _provider=provider,
+                _requested_model=model,
+                _defer_success=True,
+                **kwargs,
+            )
+            break
+        except BadRequestError as error:
+            message = str(error).lower()
+            named = [field for field in droppable if field in kwargs and field in message]
+            if not named:
+                raise
+            for field in named:
+                kwargs.pop(field, None)
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
     evidence = _StreamEvidence()
@@ -2458,6 +2667,7 @@ def run_tools(
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
     final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -2509,6 +2719,9 @@ def run_tools(
             retry path and discards the grounding this loop just gathered. The
             wrap-up runs with ``turn_tools=None``, so it is the one legal place
             to enforce a schema; providers without json_schema support ignore it.
+        reasoning_effort: The chat's /effort (low/medium/high) for streamed turns.
+            ``None`` keeps the model's default level; see
+            :func:`chat_reasoning_effort`.
 
     Returns:
         The model's final response content.
@@ -2599,6 +2812,7 @@ def run_tools(
                 tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
+                reasoning_effort=reasoning_effort,
             )
             if gate_required and on_tool_step is not None and tool_calls:
                 # Requirement satisfied this round -- release the buffered narration in

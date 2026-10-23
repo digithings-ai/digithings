@@ -62,7 +62,7 @@ only guard. The usual accident is a branch tracking `develop` upstream, so a
 bare `git push` lands there — repair it with
 `git branch --set-upstream-to=github/<branch> <branch>`, then push that branch.
 
-**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
+**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digibot`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
 command here. As of 2026-08 that was `module/website`, `module/dashboard`,
@@ -107,6 +107,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
+| `revert/<slug>` | Reverting or rolling back an earlier change (e.g. a `git revert` of a merged PR, or restoring paths to a known-good commit). Name what is being undone. | `revert/digiquant-to-7de39ec9a` |
 | `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.
@@ -165,6 +166,8 @@ which this section used to point at, does not exist in the repo, and `origin`
 has no branch-naming ruleset to edit.
 
 ## Cutting a release
+
+> **Parked modules** (see [docs/PARKED_MODULES.md](docs/PARKED_MODULES.md)) stay on `develop` and are never cut into `main` or a `release/` branch.
 
 `develop` accumulates features; `main` is production. A release is **promoted to
 `main` first**, and only then gets its own branch — one per version, cut from

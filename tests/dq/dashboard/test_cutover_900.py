@@ -46,8 +46,9 @@ def _policy_body(sql: str, table: str) -> str:
 
 def test_cutover_stays_under_cutover_dir() -> None:
     assert CUTOVER_PATH.parent.name == "cutover"
-    top_level = list((REPO_ROOT / "digiquant" / "supabase" / "migrations").glob("900_*.sql"))
-    assert top_level == []
+    migrations_dir = REPO_ROOT / "digiquant" / "supabase" / "migrations"
+    # Exactly one 900 in the tree, and it is the cutover file (#5854 split).
+    assert sorted(migrations_dir.rglob("900_*.sql")) == [CUTOVER_PATH]
 
 
 def test_reverts_109_house_uuid_on_book_tables(sql: str) -> None:

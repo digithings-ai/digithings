@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
 import { DEFAULT_CLIENT_CONFIG, toDigichatClientConfig } from "./client-projection";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
@@ -127,23 +126,60 @@ describe("page-layout embeds keep embed chrome (#3733)", () => {
   });
 });
 
+describe("foundry tenants do not inherit the house catalog", () => {
+  it("blanks models and the picker even when a catalog was attached", () => {
+    const foundry = {
+      slug: "foundry-trial",
+      gateMode: "ungated",
+      theme: "dark",
+      accent: null,
+      attribution: false,
+      backendType: "foundry",
+      models: {
+        default: "deepseek/deepseek-v4.1-flash-1017",
+        available: ["deepseek/deepseek-v4.1-flash-1017"],
+        allowPicker: true,
+        picker: {
+          showFullList: true,
+          presets: [
+            {
+              id: "auto",
+              label: "Auto",
+              description: "default",
+              model: "deepseek/deepseek-v4.1-flash-1017",
+            },
+          ],
+          groups: [],
+        },
+      },
+    } as EmbedTenantClientConfig;
+    const client = clientConfigFromEmbedTenant(foundry);
+    expect(client.models.available).toEqual([]);
+    expect(client.models.allowPicker).toBe(false);
+    expect(client.models.picker).toBeUndefined();
+  });
+});
+
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the deploy catalog with the V4.1 Flash default and an enabled picker", () => {
-    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash");
-    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(14);
-    expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash");
+    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(13);
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
   });
 });
 
-describe("baseline embed defaults (unconfigured container) are least-privilege", () => {
-  it("ships template suggestions but leaves user MCP, web search, and BYOK off", () => {
-    expect(BASELINE_EMBED_SUGGESTIONS).toHaveLength(4);
-    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+describe("client fallback matches house", () => {
+  it("ships the house suggestions with web search, BYOK, and the context meter on", () => {
+    expect(DEFAULT_CLIENT_CONFIG.slug).toBe("digithings-ai");
+    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toHaveLength(8);
+    expect(DEFAULT_CLIENT_CONFIG.chrome.welcome).toBe("Ask about digithings");
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(false);
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showContextMeter).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.features.attachments).toBe(false);
   });
 
   it("enables user MCP, web search, and BYOK only for an explicitly-configured deployment", () => {

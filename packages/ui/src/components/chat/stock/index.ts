@@ -25,11 +25,21 @@ export {
   useStockSendGate,
   type StockSendGateHandlers,
 } from "./stock-send-gate";
-export type {
-  ChainDisclosureMode,
-  ChromeMode,
-  PageContextMode,
-  UserAlign,
+// The prefs twin of the view ids. Hosts keep their own id contract
+// (`apps/digichat/src/lib/view-modes.ts`) and this normaliser is the other
+// half of it, so a host can check that both name the same levels instead of
+// trusting that they do. The alias map is exported under a name of its own:
+// it is the twin's map to compare against the host's, not the host's.
+export {
+  LEGACY_VIEW_MODE_ALIASES as PREFS_LEGACY_VIEW_MODE_ALIASES,
+  normalizeViewPref,
+  type ChainDisclosureMode,
+  type ChromeMode,
+  type PageContextMode,
+  type UserAlign,
+  type ViewMode,
+  isStockComposerMenuKind,
+  type StockComposerMenuKind,
 } from "./skin-types";
 export {
   SkinRuntime,
@@ -48,6 +58,10 @@ export {
   useEmbedChatPrefsOptional,
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
+  persistDensity,
+  useStoredDensityAfterMount,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,

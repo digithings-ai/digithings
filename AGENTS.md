@@ -92,7 +92,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digibot** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -144,7 +144,7 @@ Every Digi product, module, package, and service name is **always lowercase** in
 | digisearch | DigiSearch, Digisearch |
 | digikey | DigiKey, Digikey |
 | digitrace | DigiTrace, Digitrace |
-| digiclaw | DigiClaw, Digiclaw |
+| digibot | DigiBot, Digibot |
 | digibase | DigiBase, Digibase |
 | digiskills | DigiSkills, Digiskills |
 | digiweb | DigiWeb, Digiweb |
@@ -255,6 +255,29 @@ flagged areas — see CODE_REVIEW_POLICY.md and `agents/sources/commands/review.
 Author session must not review its own work. Verify each finding with a command,
 refute, then post survivors as a PR comment opening with
 `<!-- in-session-review -->` and apply `reviewed:agent`.
+
+**A review must come from a different seat, and it must name the head.** The
+in-session comment carries a second marker next to the first one —
+`<!-- digithings-review agent=<seat> run=<run> head=<sha> -->` — and the merge
+queue reads it. That marker stands on a line of its own: a comment that quotes
+it to explain it is prose about the marker, not the claim, and a value that is
+not a real seat or run id is refused by name instead of being sent to the API.
+Two things follow. The marker must name the head the PR stands at
+now, so a verdict on an older head cannot pass as coverage of this one; the sha is
+read as a prefix of the head, so 7 characters bind it and fewer do not. And the
+seat that **wrote the PR's code** cannot be the seat whose review counts: the queue
+drops a marker from the authoring seat — the seat the commits name in
+`Paperclip-Agent-Id:`, the seat the `Paperclip-Run-Id:` trailer resolves to, or the
+seat whose run on the PR's ticket was open when the commits were committed — and a
+marker that seat posted while its own run was still active, which is what the
+author's own subagent review looks like. That window is not a veto on other seats: a
+review from another seat posted while the author was still working is that seat's
+review and counts. **Owning the PR's ticket is not authorship** — the seat that owns
+the ticket is the seat asked to move it along, and a reviewer that owns the ticket
+still reviews. The queue reads the last review marker on the PR and judges that one,
+so a stale last marker is a refusal rather than a cue to fall back on an older
+review. So the authoring seat hands the PR to another seat; the Code Reviewer
+approves, the queue merges (DIG-4795).
 
 Every line here is written by a coding agent, so an agent reviewing it is not weaker
 in kind than Bugbot — which is also an agent. What matters is that the reviewer did
@@ -547,7 +570,7 @@ Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop's tree (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
-Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, `bot/<slug>` for branches the workflows push, and `<handle>/<slug>` for a named human contributor.
+Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore,revert}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, `bot/<slug>` for branches the workflows push, and `<handle>/<slug>` for a named human contributor.
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Block edits to protected paths unless we're on a properly-named branch
-# (task/N-slug or the repo's feat|fix|docs|chore taxonomy) or the caller
+# (task/N-slug or the repo's feat|fix|docs|chore|revert taxonomy) or the caller
 # explicitly sets DIGI_ALLOW_PROTECTED=1 (must be human-set, not agent-set).
 # Issue linkage is a convention, not a CI gate (ADR 0024). This hook only
 # gates *which branch shape* may touch these paths.
@@ -60,8 +60,8 @@ fi
 for p in "${protected[@]}"; do
   case "$target" in
     "$p"*)
-      if [[ ! "$branch" =~ ^(task/[0-9]+-|feat/|fix/|docs/|chore/) ]]; then
-        deny "'$target' is protected. Edits allowed only from a properly-named branch (task/N-slug, feat/, fix/, docs/, chore/) or with explicit human approval. Current branch: '$branch'."
+      if [[ ! "$branch" =~ ^(task/[0-9]+-|feat/|fix/|docs/|chore/|revert/) ]]; then
+        deny "'$target' is protected. Edits allowed only from a properly-named branch (task/N-slug, feat/, fix/, docs/, chore/, revert/) or with explicit human approval. Current branch: '$branch'."
       fi
       ;;
   esac

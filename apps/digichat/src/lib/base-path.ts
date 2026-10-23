@@ -9,7 +9,13 @@
  * Next's <Link>/router auto-prefix basePath, but raw fetch() to "/api/..." and
  * next-auth/react's signIn/signOut callbackUrls do NOT — prefix those with BASE_PATH.
  */
-export const BASE_PATH = process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH ?? "";
+/**
+ * The base path prefix, normalised: no trailing slash, so `p("/api/x")` is
+ * "/chat/api/x" and never "/chat//api/x". next.config.ts compares the two
+ * base-path names after the same normalisation, so the server and the client
+ * always agree on the value (DIG-5121).
+ */
+export const BASE_PATH = (process.env.NEXT_PUBLIC_DIGICHAT_BASE_PATH ?? "").trim().replace(/\/+$/, "");
 
 /** Prefix an app-absolute path with the base path. `p("/api/x")` → "/api/x" or "/chat/api/x". */
 export const p = (path: string): string => `${BASE_PATH}${path}`;

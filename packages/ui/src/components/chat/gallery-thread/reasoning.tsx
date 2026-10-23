@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix } from "../DotMatrix";
 import {
   Collapsible,
@@ -17,12 +18,13 @@ import {
   CollapsibleTrigger,
 } from "../../../ui/collapsible";
 import { cn } from "./cn";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 
 export const ANIMATION_DURATION = 200;
 
 const ReasoningPreviewContext = createContext(false);
 
-const reasoningVariants = cva("aui-reasoning-root mb-4 w-full", {
+const reasoningVariants = cva("aui-reasoning-root w-full", {
   variants: {
     variant: {
       outline: "rounded-lg border px-3 py-2",
@@ -187,7 +189,7 @@ function ReasoningTrigger({
       >
         <DotMatrix
           state={active ? "thinking" : "thought"}
-          label={active ? "Reasoning" : "Thought"}
+          decorative
           className="size-3.5"
         />
       </span>
@@ -200,12 +202,7 @@ function ReasoningTrigger({
       >
         Reasoning{durationText}
       </span>
-      <span
-        data-slot="reasoning-trigger-chevron"
-        className="aui-reasoning-trigger-chevron inline-flex shrink-0 items-center justify-center"
-      >
-        <DotMatrix state="expand" label="Toggle reasoning" className="size-3.5" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -216,9 +213,11 @@ function ReasoningContent({
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
   const isPreview = useContext(ReasoningPreviewContext);
+  const keepMounted = useExportKeepMounted();
 
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="reasoning-content"
       className={cn(
         "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",
@@ -314,7 +313,7 @@ function ReasoningText({
       )}
       {...props}
     >
-      <div ref={contentRef} className="aui-reasoning-text-content space-y-4">
+      <div ref={contentRef} className="aui-reasoning-text-content">
         {children}
       </div>
     </div>

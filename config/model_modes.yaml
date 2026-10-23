@@ -25,22 +25,24 @@
 # it must never appear here. Tier defaults follow the cheap-inference route.
 
 defaults:
-  test: deepseek/deepseek-v4-flash
-  medium: deepseek/deepseek-v4-flash
-  best: deepseek/deepseek-v4-flash
+  test: deepseek/deepseek-v4.1-flash-1017
+  medium: deepseek/deepseek-v4.1-flash-1017
+  best: deepseek/deepseek-v4.1-flash-1017
 
 # Optional per-phase overrides — empty by default; digiquant_models.yaml owns routing.
 phase_models:
   # #1006: pin deliberation. Historically the cheap research pool also held
   # llama-4-maverick (empty completions under STRICT json_schema — ~40% of watchlist
   # tickers hashing onto it failed json.loads). Maverick is no longer in pools
-  # (#3660/#3788); pin stays on deepseek-v4-flash. The trailing '-' is a prefix
+  # (#3660/#3788); pin stays on the DeepSeek flash model
+  # (deepseek-v4.1-flash-1017 since 2026-10-21; was deepseek-v4-flash). The trailing '-' is a prefix
   # match for every per-ticker slug (portfolio/deliberation-{ticker}).
-  portfolio/deliberation-: deepseek/deepseek-v4-flash
+  portfolio/deliberation-: deepseek/deepseek-v4.1-flash-1017
   # #1559/#1622: pin Phase-7 master-digest. First pinned to deepseek-chat when the
   # ``reasoning`` pool hash landed on deepseek-r1, whose chain-of-thought output is not
   # reliably strict JSON (2026-07-18 delta digest JSONDecodeError → prior digest carried).
-  # Repointed to deepseek-v4-flash (#1622): 1M-token context removes the 64k synthesis
-  # ceiling entirely (the #1559 input budget stays as a cost bound), at half the price.
+  # Repointed to deepseek-v4-flash (#1622) and to deepseek-v4.1-flash-1017 (2026-10-21,
+  # DIG-4782): 1M-token context removes the 64k synthesis ceiling entirely (the #1559
+  # input budget stays as a cost bound), at half the price.
   # Kept as a pin (not a pool hash) so digest routing stays deterministic.
-  master-digest: deepseek/deepseek-v4-flash
+  master-digest: deepseek/deepseek-v4.1-flash-1017

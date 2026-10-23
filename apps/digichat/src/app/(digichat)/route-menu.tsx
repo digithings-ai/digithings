@@ -5,22 +5,28 @@
  * Command-palette-style pick list, DigiWeb-aligned kit tokens.
  * Plain server links, zero client JS.
  */
+import { p } from "@/lib/base-path";
+
 export function RouteMenu() {
+  // These are plain <a> links, not Next's <Link>, so they carry no basePath:
+  // prefix them by hand or the menu jumps to the apex site when the app is
+  // served under /chat (DIG-5121).
+  const root = p("/").replace(/\/+$/, "") || "/";
   const rows = [
     {
-      href: "/?mode=product",
+      href: `${root}?mode=product`,
       key: "1",
       title: "Product chat",
       desc: "The hosted product thread.",
     },
     {
-      href: "/?mode=embed",
+      href: `${root}?mode=embed`,
       key: "2",
       title: "Embed preview",
       desc: "The tenant iframe surface.",
     },
     {
-      href: "/?mode=catalog",
+      href: `${root}?mode=catalog`,
       key: "3",
       title: "Skin catalog",
       desc: "Browse every skin, side by side.",

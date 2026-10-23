@@ -5,11 +5,10 @@
 
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
 import {
-  catalogToolSlashDef,
+  commandOpensPane,
   isEffortCode,
   isSearchEngine,
   isThinkingCode,
-  isViewCode,
   parseSlashInput,
   type SlashDef,
   type SlashVisibility,
@@ -22,18 +21,30 @@ import {
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
+import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
+import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import {
+  applyDocumentTheme,
+  isPaletteId,
+  isThemePreference,
+  matchThemeStep,
+  normalizePalette,
+  type ThemePreference,
+  type ThemeState,
+} from "@digithings/ui/theme";
 import {
   isLegacyViewMode,
+  isViewMode,
   normalizeViewMode,
 } from "@/lib/view-modes";
-import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
-import { connectedMcpConfigs } from "@/components/stock/embed-mcp-flow";
+import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/palette-prefs";
 
 export type SlashSubmitAction =
   | { kind: "pass" }
   | { kind: "block" }
   | { kind: "force"; forceTool: string; text: string }
   | { kind: "force-web"; text: string }
+  | { kind: "pane"; command: SlashDef; arg: string }
   | { kind: "run"; command: SlashDef; arg: string };
 
 /** Map slash force-tool ids onto BFF catalog values. */
@@ -44,18 +55,57 @@ export function catalogForceTool(forceTool: string | undefined): string | undefi
   return forceTool;
 }
 
+/** Catalog and MCP tools are toggled in `/tools`, not as their own commands. */
 export function extraSlashDefs(api: EmbedChatPrefsApi): SlashDef[] {
-  const builtins = new Set(SLASH_COMMANDS.map((c) => c.id));
-  const seen = new Set<string>();
-  const out: SlashDef[] = [];
-  const mcp = connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom);
-  for (const t of [...api.catalogTools, ...mcp]) {
-    const id = t.id.trim();
-    if (!id || seen.has(id) || builtins.has(id) || id === "web_search") continue;
-    seen.add(id);
-    out.push(catalogToolSlashDef(t));
+  void api;
+  return [];
+}
+
+function themeArgApplies(raw: string): boolean {
+  const text = raw.trim().toLowerCase();
+  if (!text) return false;
+  if (isThemePreference(text)) return true;
+  if (text === "default" || isPaletteId(text)) return true;
+  const [pal, mode, ...rest] = text.split(/\s+/);
+  return (
+    rest.length === 0 &&
+    (pal === "default" || isPaletteId(pal)) &&
+    (mode === "dark" || mode === "light")
+  );
+}
+
+/**
+ * A pane with no resolved option stays open. Typing filters it. Enter must
+ * not clear the composer, or the next `/` stacks a second palette.
+ * `/mcp new` and `/provider openai` still run: the remainder seeds the editor.
+ */
+function paneStaysOpen(command: SlashDef, arg: string): boolean {
+  if (!commandOpensPane(command)) return false;
+  const raw = arg.trim();
+  switch (command.id) {
+    case "lang":
+      return !raw || tryResolveLanguageInput(raw) == null;
+    case "effort":
+      return !raw || !isEffortCode(raw);
+    case "view": {
+      if (!raw) return true;
+      const mode = raw.toLowerCase();
+      return !isViewMode(mode) && !isLegacyViewMode(mode);
+    }
+    case "density":
+      return !raw || !isTraceDensity(raw.toLowerCase());
+    case "thinking":
+      return !raw || !isThinkingCode(raw);
+    case "search-engine":
+      return !raw || !isSearchEngine(raw);
+    case "theme":
+      return !themeArgApplies(raw);
+    case "mcp":
+    case "byok":
+      return !raw;
+    default:
+      return true;
   }
-  return out;
 }
 
 export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): SlashSubmitAction {
@@ -67,14 +117,8 @@ export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): Sla
   if (parsed.kind === "unknown") return { kind: "block" };
   if (parsed.kind === "incomplete") return { kind: "block" };
   const { command, arg } = parsed;
-  if (command.kind === "tool" && arg) {
-    if (command.id === "websearch" || command.forceTool === "web_search") {
-      return { kind: "force-web", text: arg };
-    }
-    const forceTool = catalogForceTool(command.forceTool);
-    if (!forceTool) return { kind: "block" };
-    return { kind: "force", forceTool, text: arg };
-  }
+  if (command.kind === "tool") return { kind: "block" };
+  if (paneStaysOpen(command, arg)) return { kind: "pane", command, arg };
   return { kind: "run", command, arg };
 }
 
@@ -96,11 +140,37 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
     mcp: hasMcp,
     tools: hasTools,
     artifacts: api.hasArtifacts,
+    theme: api.themeLocked !== true,
   };
+}
+
+/** The theme `/theme` reads: the host's own (tenant embed) or the document's. */
+export function currentThemeState(api: EmbedChatPrefsApi): ThemeState {
+  // The painted palette when the host does not own the theme (a deployment
+  // palette is painted, not stored).
+  return api.themeState ?? readEffectiveThemeState();
+}
+
+/** Apply a `/theme` pick through the host when it owns the theme, else document-wide. */
+export function applyThemePick(api: EmbedChatPrefsApi, preference: ThemePreference, palette: string): void {
+  if (api.setTheme) api.setTheme(preference, normalizePalette(palette));
+  else applyDocumentTheme(preference, palette);
 }
 
 function toggleHint(on: boolean, onText: string, offText: string): string {
   return on ? `On · ${onText}` : `Off · ${offText}`;
+}
+
+/** Friendly /models hint. Preset tokens stay words; a concrete pick stays its id. */
+function modelChoiceLabel(model: string | undefined): string {
+  const value = model?.trim() ?? "";
+  if (!value) return "";
+  if (value === "auto" || value === "preset:auto") return "Auto";
+  if (value.startsWith("preset:")) {
+    const id = value.slice("preset:".length);
+    return id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
+  }
+  return value;
 }
 
 /** Featured language rows so `/dutch` etc. still resolve. */
@@ -125,32 +195,29 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
   const rows: Unstable_SlashCommand[] = [];
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
-    if (def.id === "websearch" && !vis.webSearch) continue;
     if (def.id === "search-engine" && !vis.webSearch) continue;
     if (def.id === "byok" && vis.byok === false) continue;
-    if (def.id === "digisearch" && vis.digisearch === false) continue;
-    if (def.id === "digivault" && vis.digivault === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
     if (def.id === "artifacts" && vis.artifacts !== true) continue;
     if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
     if (def.id === "mcp" && vis.mcp === false) continue;
     if (def.id === "tools" && vis.tools === false) continue;
+    if (def.id === "theme" && vis.theme === false) continue;
 
     let description = def.hint;
-    if (def.id === "websearch") {
-      description = toggleHint(prefs.webSearch, "External cites", "corpus only");
-    } else if (def.id === "digisearch") {
-      description = toggleHint(prefs.digisearch, "knowledge base", "disabled this session");
-    } else if (def.id === "digivault") {
-      description = toggleHint(prefs.vault, "vault notes", "disabled this session");
-    } else if (def.id === "view") {
+    if (def.id === "view") {
       description = `View: ${prefs.view}`;
+    } else if (def.id === "density") {
+      description = `Density: ${prefs.density}`;
+    } else if (def.id === "theme") {
+      const state = currentThemeState(api);
+      description = matchThemeStep(state.preference, state.palette, state.resolved).label;
     } else if (def.id === "thinking") {
       description = `Thinking: ${prefs.thinking}`;
     } else if (def.id === "lang") {
       description = `Reply language (${languageLabel(prefs.language)})`;
     } else if (def.id === "models") {
-      description = prefs.model || def.hint;
+      description = modelChoiceLabel(prefs.model) || def.hint;
     } else if (def.id === "toolbar") {
       description = toggleHint(prefs.toolbar, "visible", "hidden");
     } else if (def.id === "scrollbar") {
@@ -159,51 +226,91 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = prefs.effort || "medium";
     } else if (def.id === "search-engine") {
       description = prefs.searchEngine || "auto";
-    } else if (def.kind === "tool" && def.id) {
-      const on = api.extraToolOn(def.id);
-      description = toggleHint(on, def.hint, "disabled this session");
+    } else if (def.id === "export") {
+      description = "Markdown file of this thread";
     }
 
     const id = def.id === "lang" ? "language" : def.id;
-    const insertName = def.names[0];
+    const insertName = def.id === "export" ? "/export md" : def.names[0];
     rows.push({
       id,
       label: insertName,
       description,
       execute: () => {
-        if (def.kind === "tool") return;
         executeSlashDef(def, "", api);
       },
     });
+    if (def.id === "export") {
+      rows.push({
+        id: "export-html",
+        label: "/export html",
+        description: "Rendered HTML of this chat",
+        execute: () => {},
+      });
+    }
   }
 
   rows.push(...featuredLanguageCommands(api.setLanguage));
   return rows;
 }
 
-/** Menu pick for a catalog tool inserts `/id ` so the user can add a query. */
+/** Direct tool drafts are gone. Pane commands write their sequence themselves. */
 export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): boolean {
-  if (id === "digisearch" || id === "digivault" || id === "websearch") return true;
-  return extra.some((d) => d.id === id && d.kind === "tool");
+  void id;
+  void extra;
+  return false;
 }
 
 export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsApi): void {
   switch (def.id) {
-    case "websearch":
-      if (api.tenantAllowsWeb) api.setWebSearch(!api.prefs.webSearch);
-      return;
-    case "digisearch":
-      api.setDigisearch(!api.prefs.digisearch);
-      return;
-    case "digivault":
-      api.setVault(!api.prefs.vault);
-      return;
     case "view": {
       const mode = arg.trim().toLowerCase();
-      // `compact` / `detailed` are the retired ids; they fold forward.
-      if (isViewCode(mode)) api.setView(mode);
+      // `hidden` / `compact` / `detailed` are the retired ids; they fold
+      // forward. The live ids come from the app's own contract
+      // (`@/lib/view-modes.ts`), the one that owns them.
+      if (isViewMode(mode)) api.setView(mode);
       else if (isLegacyViewMode(mode)) api.setView(normalizeViewMode(mode));
       else api.openView();
+      return;
+    }
+    case "density": {
+      const raw = arg.trim().toLowerCase();
+      if (isTraceDensity(raw)) api.setDensity(raw);
+      else api.openDensity();
+      return;
+    }
+    case "theme": {
+      if (api.themeLocked) return;
+      const raw = arg.trim().toLowerCase();
+      if (!raw) {
+        api.openTheme?.();
+        return;
+      }
+      // The painted palette, so `/theme light` keeps a deployment palette the
+      // picker and the row description already show (not storage alone).
+      const state = currentThemeState(api);
+      if (isThemePreference(raw)) {
+        // A host-owned theme (embed) takes the pick; the app changes the mode
+        // and keeps the painted palette without freezing it into dt-palette.
+        if (api.setTheme) applyThemePick(api, raw, state.palette);
+        else applyThemeModeKeepingPalette(raw);
+        return;
+      }
+      if (raw === "default" || isPaletteId(raw)) {
+        applyThemePick(api, state.preference, raw);
+        return;
+      }
+      // The picker rows read "/theme <palette> <mode>"; typing one applies it.
+      const [pal, mode, ...rest] = raw.split(/\s+/);
+      if (
+        rest.length === 0 &&
+        (pal === "default" || isPaletteId(pal)) &&
+        (mode === "dark" || mode === "light")
+      ) {
+        applyThemePick(api, mode, pal);
+        return;
+      }
+      api.openTheme?.();
       return;
     }
     case "thinking": {
@@ -285,9 +392,6 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.redo();
       return;
     default:
-      if (def.kind === "tool") {
-        api.setExtraTool(def.id, !api.extraToolOn(def.id));
-      }
       return;
   }
 }

@@ -53,18 +53,23 @@
  * here; the vars are deliberately absent from `[vars]` so they never become
  * hand-maintained keys that the config-contract and parity gates would pin.
  *
- * There is no CI deploy lane for this Worker (deleted 2026-10-01 by f54af7052,
- * #4919 Human Gate; see README "Deploy"), so this script plus `npm run deploy`
- * IS the deploy path. Keep it that way: the container ids are a function of
- * the commit only for as long as every deploy goes through it.
+ * The CI deploy lane for this Worker is `deploy-digithings-stack-cloudflare.yml`
+ * (re-derived on `develop` on 2026-10-20, DIG-4612 / #6013; see README "Deploy").
+ * It deploys through this script — `npm run deploy --workspace
+ * digithings-stack-cloudflare` — never through a bare `npx wrangler deploy`: the
+ * container ids are a function of the commit only for as long as every deploy
+ * goes through it.
  *
  * Usage: `npm run deploy [-- <extra wrangler args>]`, e.g.
  *   npm run deploy -- --containers-rollout=none
  *
- * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml still applies to whatever
+ * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml applies to the LOCAL
  * environment this is launched from: unset it for wrangler's own process (see
- * the README) — it is a Vectorize/D1 token and makes every deploy fail with
- * code 10000.
+ * the README) — the token in the developer's .env is a Vectorize/D1 token and
+ * makes every deploy fail with code 10000. CI never sees that token: the
+ * deploy lane exports the repo secret of the same name, which carries
+ * Workers Scripts:Edit and deployed this Worker (run 39490394661, main,
+ * 2026-10-20).
  */
 import { spawnSync } from "node:child_process";
 import { dirname, resolve as resolvePath } from "node:path";

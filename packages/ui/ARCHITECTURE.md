@@ -258,6 +258,77 @@ give 99 or 101. The arithmetic sits in its own module beside the component
 (`digichat-context-meter-shares.ts`), so it can be tested without a React
 tree.
 
+### Decision note: the work chain is the outer disclosure boundary
+
+The chain group (`group-chainOfThought`) is the **outer** disclosure boundary
+for the agent's work. The grouping paths in `gallery-thread/thread.aui.tsx`
+(`chainGroupBy`) are hierarchical:
+
+```
+reasoning              -> ["group-chainOfThought", "group-reasoning"]
+"tool-call"            -> ["group-chainOfThought", "group-tool"]
+source                 -> ["group-chainOfThought", "group-tool"]
+data / data-*          -> ["group-chainOfThought", "group-tool"]
+data-notice            -> outside the chain (stays visible after the fold)
+"standalone-tool-call" -> []  (renders outside the chain)
+```
+
+assistant-ui's `buildGroupTree` turns those paths into a **nested** tree
+(`@assistant-ui/core`, `src/react/utils/groupParts.ts`): the
+`group-chainOfThought` node exists for every message that carries a reasoning
+or a non-standalone tool-call part, and the row groups (`group-reasoning`,
+`group-tool`) are its children. A chain group is therefore not "the combined
+case" — a reasoning-only turn and a tool-only turn have one too.
+
+**Decision.** A visibility level becomes behaviour in two shape-independent
+places: the chain takes the level's fold rule (`openAtRest`, `foldOnAnswer`),
+and every row inside takes the level's row rule (`openWhileRunning`,
+`openAtRest`). `resolveWorkDisclosure` (`stock/skin-types.ts`) is the only
+place the **work-visibility** level becomes a disclosure policy in the gallery
+thread, and the renderer applies that policy to every shape of work instead of
+deciding the fold per shape. A quiet client therefore folds a reasoning-only,
+a tool-only and a combined turn alike: one chain — open while the work runs,
+folded once the answer starts — with closed rows inside it, and the work
+content not mounted while the rows stay closed. (`showDetails` is set by every
+level and read by no renderer yet; it is not part of the contract.)
+
+**Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
+and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
+`src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
+separate from the design tokens' `--space-*` names; `trace-spacing.source.test.ts` keeps it so. The Worked
+title, the gap between sibling groups, the gap inside a group, and the
+reasoning header-to-body step all read those tokens. Sibling groups share
+`--trace-group-gap`; a tool group and a reasoning group do not carry their
+own margins. The chain header's marker-to-label gap stays `0.45rem` so it
+still matches the pre-response loader. `data-density` (`compact`, `default`,
+`airy`) reassigns the tokens. The palette stores the user's choice in
+`dt-density`; a deployment `features.density` applies when that key is absent.
+The tool-call group mark is a pixel `{ }` on that same 5×5 cube grid as the
+reasoning bulb; the bulb itself is unchanged.
+
+**Reason.** The quiet contract was once a single `summaryOnly` branch inside
+the `group-chainOfThought` case, which read as if it covered only the
+combined case. It did not: because the tree nests, that branch was the
+branch every work shape took, and a quiet client got one summary line for all
+of them. The level `summaryOnly` belonged to is retired now (the field is
+`@deprecated` and always false), and the contract lives in the level defaults
+instead. Deciding it there — rather than in a branch that reads as "the
+combined case" — is what makes it hold for every shape, and it keeps the
+invariant provable: the render test drives a reasoning-only, a tool-only and
+a combined turn through the quiet level and pins the same folded outcome for
+all three. A second test pins the one rule quiet carries alone: while the
+agent works, quiet keeps the rows shut where the balanced level opens them.
+The chain's own fold flag (`foldOnAnswer`) cannot be pinned that way: it
+resolves to `working`, while the balanced rule resolves to `!settled && working`,
+and the effect resets `settled` whenever the chain is working, so the two
+rules coincide in every state a flushed DOM can show.
+
+**Rule.** A new work part type joins the chain by joining the
+`group-chainOfThought` path, never by rendering outside it — the
+`standalone-tool-call` path is the one deliberate exception. A level that must
+not expand work closes the rows from the level defaults, so the contract never
+depends on the shape of the group tree.
+
 ### The move touched deploy config
 
 Relocating `design/` and `web/` under `digiweb/` was pure directory bookkeeping
@@ -398,6 +469,22 @@ and run `make agents-init` (CI enforces idempotence).
   returns-matrix cell ink, the light diff palette) so a hue change that drops
   a pair under AA fails the kit suite. Measure with the composited fill, not
   the flat surface — the matrix and diff washes both composite over a ground.
+
+## Platform colour theme
+
+`packages/ui/src/theme/` owns mode and palette for every web surface that
+opts in. Mode is `light`, `dark`, or `auto` (`dt-theme` stores only `light`
+or `dark`; auto removes the key). Palette is `default` or one of the 32
+DigiVoice ids in `dt-palette`. The existing light/dark toggle advances one
+stop: default dark, default light, then each palette in dark and then light.
+`/theme` is one entry in the existing slash list and uses that same list.
+The tables are generated from
+`digivoice/hammerspoon/theme_registry.json` by
+`scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
+`palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in
+charge. The dashboard keeps its own provider and never writes `dt-palette`.
+TUIs read the same ids from `@digithings/ui/theme/tui` and share
+`~/.digithings/theme.json`.
 
 ## RTL & logical properties (#4306)
 
@@ -549,3 +636,190 @@ renders the element, so a `pointer-events: auto` in another rule cannot
 satisfy it and a duplicated block cannot carry a stale value. Full rule and
 the pinned test:
 [MIGRATION.md § Overlay scrollbar pointer contract](MIGRATION.md).
+
+## Scrollbar mode carrier (DIG-4603)
+
+The scrollbar preference has two states, `always` and `auto`, and it is
+written in exactly one place in the repo: `data-scrollbars` on the thread
+root (`packages/ui/src/components/chat/gallery-thread/thread.aui.tsx`), next
+to `data-thread-skin` on the same `ThreadPrimitive.Root`. The thread root is
+therefore the **only carrier** of the mode, and every mode-dependent rule in
+the sheet has to be keyed on it **in the same compound as the skin** and name
+the mode value:
+`[data-thread-skin="digichat"][data-scrollbars="always"]`.
+
+The rule exists because the two modes need opposite treatments of the
+native bar. `always` is a square bar in a stable gutter (the native bar is
+suppressed, `scrollbar-width: none` and the webkit pseudo set to
+`display: none`, and a styled `::-webkit-scrollbar` replaces it). `auto` is
+the native overlay (no reserved gutter, no bar when the surface fits), and a
+styled webkit pseudo must not appear at all — a styled webkit scrollbar is a
+classic bar that reserves its own track and never becomes an overlay. A
+rule that takes the native bar away without being conditioned on the mode
+reaches an `auto` thread as well, and since the `auto` rules hide the
+component bars, that surface paints **no bar at all**. The failure is
+silent: a missing bar reads as a quiet preference, not as a defect.
+
+Five ways to get it wrong, all of them seen in this repo: a rule not
+conditioned on the mode at all; a rule keyed on `:not([data-scrollbars="auto"])`
+on an ancestor (the app shell carries `data-thread-skin` without the mode, so
+that ancestor matches the negation); a rule that reads the mode off a
+descendant (the mode is a property of the carrier, not of whatever is below
+it); a rule that reads the mode off the document (`html:has(...)` — a page can
+carry one thread per mode, and the document-level form hands the always
+treatment to the auto thread's palette); and a selector list that mixes one
+conditioned selector with one unconditioned selector, so the condition on half
+a group styles the other half too.
+
+The check is a **source-text** test
+(`packages/ui/src/styles/chat-scrollbars.contract.test.ts`) for the same
+reason as the pointer contract above: the `packages/ui` test environment is
+`node`, with no CSS processing and no DOM, so the effective cascade cannot be
+computed. It parses the rule body per selector and audits **every** rule
+that touches a scroll surface, so a mode condition on one selector cannot
+satisfy a rule that mixes selectors, and a duplicated unscoped block cannot
+hide. Every surface the sheet styles is in the list: the thread viewport, the
+composer menu body, the reasoning pane, the tool group content and the
+palette list.
+
+## DotMatrix — one name per control (DIG-4669)
+
+`DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
+`@digithings/ui/chat/dot-matrix`) is the 5x5 dot-matrix status glyph the chat
+family draws where it used to draw lucide icons. It has **two modes**, and
+they are mutually exclusive:
+
+| Mode | Markup | Used when |
+| --- | --- | --- |
+| named | `role="img"` + `aria-label={label ?? state}` | the glyph is the only content of its control (an icon-only button) |
+| decorative | `aria-hidden="true"`, no role, no name | the control already has visible text that names it |
+
+`decorative` is its own prop, and the type **refuses a label on it** — a
+decorative glyph has no name to carry.
+
+### Decision note: the glyph inside a labelled control is decorative
+
+**Decision.** A control is named once. When it has visible text, that text is
+the name and every glyph inside it is decorative — the disclosure chevron
+included: the trigger already carries `aria-expanded`, so the chevron adds a
+second label and nothing else. When it has no visible text, the glyph is the
+name. A glyph that repeats a word the control already says is always
+decorative; a glyph that adds a word the control does not say may stay named.
+
+**Reason.** The accessible name of a control is computed from its contents, so
+a named glyph inside a labelled control is concatenated with the visible text.
+PR #6034 replaced name-less lucide glyphs with `DotMatrix` instances that all
+carry a label, and the reasoning toggle started reading "Reasoning Reasoning
+(5s) Toggle reasoning" while the tool group read "Tools running 3 tool calls
+Toggle tools". The label also sat in the DOM twice: `role="img"` has
+presentational children, so the `sr-only` copy of the label never reached the
+accessibility tree and only duplicated the string. The name now has one home,
+the `aria-label`.
+
+**State belongs to the control, not to a second name.** The tool group's
+"Tools running" was the glyph's name. The name is now the visible text alone
+("3 tool calls"), and the running state is on the control as `aria-busy`: the
+group is collapsed while the tools run — the panel is unmounted — so the
+trigger is the only thing on screen that knows about it, and a glyph's
+animation is not perceivable to a screen reader. The same reading applies to
+the gallery's action bar, whose tooltip buttons carried the word twice
+("Undo Undo"): the tooltip text names the button, so the glyph is decorative.
+
+**The exception.** `stock/chat-notice.tsx` keeps its named glyph: the visible
+notice text does not carry the tone and the tone is painted in colour alone,
+so the glyph's name ("Error", "Status") is the only non-colour signal. The
+glyph adds a word the control does not say, which the rule allows.
+
+**Still open.** `gallery-thread/action-icons.tsx` names every action glyph
+("Copy", "Copied", "Close", "Add"), and the buttons that host them carry a
+tooltip or a label of their own. The button's name is right; the glyph is
+one more node in the browse tree. The copy button is why it is not in this
+change: its glyph says "Copied" while the tooltip says "Copy", and choosing
+which of the two words the button keeps is a product decision, not an
+accessibility repair.
+
+**Out of scope.** `skins/base/ui/dot-matrix.tsx` is a second and different
+component: it renders `role="status"` — a live region, without presentational
+children — so its `sr-only` child *is* its name. It was not changed.
+
+Pinned by `packages/ui/src/components/chat/disclosure-trigger-aria.test.tsx`
+(the computed accessible name of every disclosure trigger, plus the icon-only
+control that keeps its name from its glyph),
+`packages/ui/src/components/chat/dot-matrix-aria.test.tsx` (the two modes) and
+`packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
+(the chain trigger's name).
+
+## Chat HTML export
+
+`/export` and `/export md` download the thread as markdown. Any other format shows an unsupported-format error. `/export html`
+downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
+sidebar or any other thread. Ancestors of that thread are attribute-only
+wrappers, so deployment rules scoped to `[data-stock-product]` still match,
+and a node the live page has computed as `display: none` or `visibility:
+hidden` is left out. Only the closed panel element is exempt, so a
+deployment-hidden source inside it is still omitted. The live page unmounts
+closed reasoning and tool panels; the export mounts them for the read and
+then unmounts them again. A page with no thread
+root shows an error instead of saving a file, and a refresh meta is removed
+wherever it sits. The file is that thread's rendered DOM:
+styles and same-origin images are inlined, the composer is removed, and
+work-chain, reasoning, tool, and source disclosures become `<details>` so
+they still open offline. `redact-dom.ts` redacts text and
+attribute values on the cloned DOM before serialization (tool JSON by key,
+everything else with the `redact.ts` patterns, including a standalone 48-hex
+invite key, a `session` JSON key, and `Signature` and `Key-Pair-Id` query
+values). It is
+pattern-based, so an unlabeled secret of unknown shape can
+still get through. The filename is
+`<deployment>-<YYYY-MM-DD-HHMM>-<question-slug>.html` (UTC, latest question,
+id-like words dropped). The filename reads the slug from the open page.
+The file itself does not keep `data-deployment` or any other deployment
+or tenant attribute. The assistant message menu's Export as HTML uses
+that same path for the question and answer of that one interaction. It
+resolves the message while its action bar is still mounted, so an
+older answer still exports after that bar unmounts, and a duplicate id
+earlier in the page is not the one that is saved. It waits until the
+menu has closed. The file drops the menu's page lock (`aria-hidden`
+only where `data-aria-hidden` is set, `inert` on the page shell,
+`data-scroll-locked`, the body's `pointer-events`, and
+`[data-scroll-locked]` CSS). If that message
+cannot be resolved, it shows an error and does not save the thread.
+Markdown `/export`, a bare `/export`, and Export as Markdown run the
+same string redactor before the file is saved.
+
+## Chat export redaction
+
+Every digichat export path runs its payload through the shared redactor
+(`packages/ui/src/replay/redact.ts`) before the payload leaves the page:
+the clipboard copy (and its fallback textarea, its parent-window post
+message, and its markdown download), the `mailto:` subject and body, the
+`.txt` export, and the minimal-HTML export. The replay HTML snapshot export
+is a different path: it redacts the cloned DOM (`redact-dom.ts`), not a
+string.
+
+The mailto body is redacted *before* the URL budget is applied, so the
+`[redacted]` marker counts toward the budget and a cut that lands inside a
+secret cannot leave a fragment of it in the URL. A cut that lands inside the
+marker drops the partial marker instead of writing out half of it. The
+serializers themselves (`markdownToPlainText`, `markdownToHtmlDocument`) are
+pure and do not redact: the download helpers redact before they call them, so
+a caller that writes the serializer output itself must redact first.
+
+The redactor is pattern-based, so an unlabeled secret of unknown shape can
+still get through. Two delimiters end a secret value only when the value does
+not continue after them: a `)` inside a query secret belongs to the secret
+when the value continues after it with a character that can be part of a
+secret — a base64 or base64url character, or another delimiter — so
+`?token=abc)def` and `?token=abcdef123456)+GHIJKLMNOP` redact the whole
+value, and the same holds for a backtick inside a session value. A `)` that
+closes a link (`?token=abc)`), a full stop (`?token=abc).`) and a backtick
+that closes a code span (`session=abc``) stay outside the value, so the
+surrounding prose keeps its delimiters. Three limits follow from the
+delimiter being ambiguous: a secret whose value *ends* in one of those two
+characters leaves that last character outside the match, a word that follows
+a closing parenthesis with no space in between (`?token=abc)and more`) is
+eaten with the value, and a delimiter followed by prose punctuation
+(`?token=abc).def`) ends the value, so the text after such a delimiter is not
+redacted. The rule is deliberately biased towards the secret — a redactor that
+eats a word is a bug in every export, and a redactor that leaves a secret
+tail is a leak.

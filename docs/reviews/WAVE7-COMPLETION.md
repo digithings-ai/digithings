@@ -47,7 +47,7 @@ Wave 7 landed in sub-waves **7a–7j** on PR #578. Wave **7j** closed the last e
 | SIMP-022 | digibase | done | `errors.py` documents vulture false-positive handlers (SIMP-022 comment) |
 | SIMP-023 | digismith | done | `trace.py` setup fallback narrowed to `(TypeError, ValueError, RuntimeError, OSError)` + debug log (SIMP-023, wave **7j**) |
 | SIMP-024 | digikey | done | `jwt_verify.py` re-raises as `JwtVerificationError` |
-| SIMP-025 | digiclaw | done | `heartbeat_runner.py` drift paths emit `audit_log` events; `main()` exits 0/1 on health (SIMP-025, wave **7j**) |
+| SIMP-025 | digibot | done | `heartbeat_runner.py` drift paths emit `audit_log` events; `main()` exits 0/1 on health (SIMP-025, wave **7j**) |
 | SIMP-026 | digichat | done | `embed-gate.ts` header trimmed to short module comment |
 | SIMP-027 | digichat | done | `route.ts` delegates auth/upstream to `lib/digigraph-upstream.ts` |
 | SIMP-028 | olympus | done | `use-async-data.ts` shared fetch lifecycle; single centralized eslint-disable |
@@ -83,8 +83,8 @@ Wave 7 landed in sub-waves **7a–7j** on PR #578. Wave **7j** closed the last e
 | DESLOP-016 | digisearch | done | `search/_stub.py` module doc: stub branches intentional for tests (DESLOP-016, wave **7j**) |
 | DESLOP-017 | digisearch | done | `pdf.py` OCR path uses `_OCR_ERRORS` tuple (wave **7j**) |
 | DESLOP-018 | digibase | done | `connectors/notion.py` / `upsert_database_row` absent from tree |
-| DESLOP-019 | digiclaw | done | Drift skip now writes `drift_check_skipped` audit event |
-| DESLOP-020 | digiclaw | done | `_request` handles `URLError` only; redundant broad except removed |
+| DESLOP-019 | digibot | done | Drift skip now writes `drift_check_skipped` audit event |
+| DESLOP-020 | digibot | done | `_request` handles `URLError` only; redundant broad except removed |
 | DESLOP-021 | digichat | done | `embed-gate.ts` banner reduced to one-line header |
 | DESLOP-022 | digichat | done | Storage catches call `logStorageFailure` via `storage-debug.ts` |
 | DESLOP-023 | olympus | done | `theme-provider.tsx` hydrates via `useSyncExternalStore` (no set-state disable) |

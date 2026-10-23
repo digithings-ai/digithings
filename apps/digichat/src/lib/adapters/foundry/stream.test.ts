@@ -5,6 +5,7 @@ import {
   createFoundryStreamResponse,
   applyGroundingDirective,
   FoundryToolLeakFilter,
+  consumeLeakDrop,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   capacityRetryDelayMs,
@@ -12,8 +13,11 @@ import {
   rateLimitHintMs,
   rateLimitResumeDelayMs,
   RATE_LIMIT_EXHAUSTED_TEXT,
+  FoundryToolCallCounter,
+  toolCallLimitNotice,
   type FoundryStreamEvent,
   type FoundryConversationItem,
+  type FoundryResponsesCreateBody,
 } from "./stream";
 import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
 
@@ -67,17 +71,158 @@ describe("FoundryToolLeakFilter", () => {
       expect(filter.flush()).toBeNull();
     });
 
+    it("does not emit remote_functions.azure_ai_search({...}) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+      expect(filter.push(call)).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      for (const part of ["remote_functions.azure_ai_search(", '{"query":"Acme"})']) {
+        expect(fragmented.push(part)).toBeNull();
+      }
+      expect(fragmented.flush()).toBeNull();
+      const withAnswer = new FoundryToolLeakFilter();
+      expect(withAnswer.push(`${call}\n\nAcme is the customer.`)).toBe("\n\nAcme is the customer.");
+    });
+
+    it("does not emit (remote search in progress) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push("(remote search in progress)")).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      expect(fragmented.push("(remote")).toBeNull();
+      expect(fragmented.push(" search in progress)")).toBeNull();
+      expect(fragmented.flush()).toBeNull();
+      const cutOff = new FoundryToolLeakFilter();
+      expect(cutOff.push("(remote search")).toBeNull();
+      expect(cutOff.flush()).toBeNull();
+    });
+
     it("a legitimate reply that starts like the leak token but diverges is not truncated", () => {
-      // "(remote work example)" never matches the leak grammar past "(remote" —
-      // isRemoteFunctionsLeakPrefix requires the token to continue with
-      // "_functions" (or close immediately), so " work example)" flushes the
-      // held "(remote" ahead of itself. flush() at the end is a null-op here;
-      // the real assertion is that push() already returned everything.
+      // "(remote work example)" never matches the leak grammar past "(remote":
+      // the call scanner requires "_functions" (or the end of the chunk), so
+      // " work example)" flushes the held "(remote" ahead of itself.
       const filter = new FoundryToolLeakFilter();
       expect(filter.push("(remote")).toBeNull();
       expect(filter.push(" work example)")).toBe("(remote work example)");
       expect(filter.flush()).toBeNull();
     });
+  });
+
+  it("drops back-to-back remote_functions calls in one chunk", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = (query: string) => `remote_functions.azure_ai_search({"query":"${query}"})`;
+    expect(filter.push(`${call("Acme")} ${call("Bob")}`)).toBe(" ");
+    expect(filter.flush()).toBeNull();
+    const glued = new FoundryToolLeakFilter();
+    expect(glued.push(call("Acme") + call("Bob"))).toBeNull();
+    expect(glued.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call that shares a chunk with answer text", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    expect(filter.push(`Let me look that up. ${call}`)).toBe("Let me look that up. ");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call inside a code fence", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    const out = filter.push("```\n" + call + "\n```");
+    expect(out).toBe("```\n\n```");
+    expect(out).not.toContain("remote_functions");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a remote_functions call split across chunks, then drops it", () => {
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("Result: remote_functions.azu")).toBe("Result: ");
+    expect(filter.push('re_ai_search({"query":"Acme"}) done')).toBe(" done");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a chunk that ends inside the word remote", () => {
+    for (const partial of ["r", "re", "rem", "remo", "remot", "(r", "(re", "(rem", "(remo", "(remot"]) {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push(`Look ${partial}`)).toBe("Look ");
+      expect(filter.flush()).toBe(partial);
+    }
+    expect(new FoundryToolLeakFilter().push("for")).toBe("for");
+    expect(new FoundryToolLeakFilter().push("Look(")).toBe("Look(");
+    const paren = new FoundryToolLeakFilter();
+    expect(paren.push("Look (")).toBe("Look ");
+    expect(paren.flush()).toBe("(");
+    const prose = "Here is the answer (remote work is fine).";
+    for (let i = 1; i < prose.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const out = `${filter.push(prose.slice(0, i)) ?? ""}${filter.push(prose.slice(i)) ?? ""}${filter.flush() ?? ""}`;
+      expect(out, `prose split ${i}`).toBe(prose);
+    }
+  });
+
+  it("drops a wrapped call split at every index, including the opening paren", () => {
+    const text = 'Let me check. (remote_functions.azure_ai_search({"q":1}))';
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("Let me check. ");
+    }
+  });
+
+  it("drops a wrapped call whose closing paren never arrives", () => {
+    const text =
+      'Let me check. (remote_functions.azure_ai_search({"query":"weather"})\n\nThe answer is 5 degrees.';
+    const expected = "Let me check. \n\nThe answer is 5 degrees.";
+    const whole = new FoundryToolLeakFilter();
+    expect(`${whole.push(text) ?? ""}${whole.flush() ?? ""}`).toBe(expected);
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe(expected);
+    }
+  });
+
+  it("drops a remote_functions call streamed one character at a time", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    let out = "";
+    for (const ch of `See ${call} now`) out += filter.push(ch) ?? "";
+    out += filter.flush() ?? "";
+    expect(out).toBe("See  now");
+    expect(out).not.toContain("remote_functions");
+  });
+
+  it("drops every two-way split of a remote_functions call", () => {
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    for (let i = 1; i < call.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(call.slice(0, i));
+      const second = filter.push(call.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("");
+    }
+  });
+
+  it("releases an unclosed call as prose once the hold passes 8KB", () => {
+    const filter = new FoundryToolLeakFilter();
+    const open = 'remote_functions.azure_ai_search({"query":"';
+    expect(filter.push(open)).toBeNull();
+    const answer = `${"n".repeat(8 * 1024)} Acme is the customer.`;
+    const released = filter.push(answer);
+    expect(released).toContain("Acme is the customer.");
+    expect(filter.push(" Still here.")).toBe(" Still here.");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("emits the remainder when a leak drop does not advance", () => {
+    expect(consumeLeakDrop("Seen", " kept", 2, 2)).toEqual({ emit: "Seen kept", rest: null });
+    expect(consumeLeakDrop("", "Answer", 1, 0)).toEqual({ emit: "Answer", rest: null });
+    expect(consumeLeakDrop("Pre ", "Hi there", 0, 3)).toEqual({ emit: "Pre ", rest: "there" });
   });
 });
 
@@ -504,6 +649,30 @@ describe("createFoundryStreamResponse", () => {
 
     expect(out).toContain('"delta":"See the "');
     expect(out).toContain('"delta":"(remote"');
+  });
+
+  it("does not stream a raw azure_ai_search tool call or the remote-search placeholder as the answer", async () => {
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "remote_functions.azure" },
+      { type: "response.output_text.delta", delta: '_ai_search({"query":"Acme"})' },
+      { type: "response.output_text.delta", delta: "(remote search in progress)" },
+      { type: "response.output_text.delta", delta: "Acme is the customer." },
+      { type: "response.completed" },
+    ]);
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("who is Acme?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+    expect(out).not.toContain("remote_functions");
+    expect(out).not.toContain("azure_ai_search");
+    expect(out).not.toContain("remote search in progress");
+    expect(out).toContain("Acme is the customer.");
   });
 
   it("flushes a held leak-prefix when the stream exhausts naturally, not just on a done break", async () => {
@@ -1749,5 +1918,385 @@ describe("mid-stream rate limit resume (DC-18)", () => {
       expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 2, [30_000, 60_000])).toBeNull();
       expect(rateLimitResumeDelayMs(new Error("nope"), 0, [1])).toBeNull();
     });
+  });
+});
+
+function mcpEvent(
+  phase: "added" | "done",
+  id: string,
+  name: string,
+): FoundryStreamEvent {
+  return {
+    type: phase === "added" ? "response.output_item.added" : "response.output_item.done",
+    item: {
+      type: "mcp_call",
+      name,
+      call_id: id,
+      status: "completed",
+      output: phase === "done" ? '{"ok":true}' : undefined,
+    },
+  } as FoundryStreamEvent;
+}
+
+describe("FoundryToolCallCounter", () => {
+  it("counts a start and its done once, and ignores search output", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(counter.observe(mcpEvent("added", "c1", "fixture__list"))).toBe("new");
+    expect(counter.observe(mcpEvent("done", "c1", "fixture__list"))).toBe("known");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "azure_ai_search_call_output", call_id: "s1" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "reasoning" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(counter.observe({ type: "response.file_search_call.in_progress" })).toBe("new");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "file_search_call", call_id: "fs1" },
+      } as FoundryStreamEvent),
+    ).toBe("known");
+    expect(counter.observe({ type: "response.file_search_call.searching" })).toBe("ignore");
+    expect(counter.count).toBe(2);
+  });
+
+  it("counts a done-only call and pairs an id-less start with a later id", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(
+      counter.observe({
+        type: "response.output_item.added",
+        item: { type: "mcp_call", name: "fixture__get" },
+      } as FoundryStreamEvent),
+    ).toBe("new");
+    expect(counter.observe(mcpEvent("done", "late", "fixture__get"))).toBe("known");
+    expect(counter.observe(mcpEvent("done", "only", "fixture__other"))).toBe("new");
+    expect(counter.count).toBe(2);
+  });
+});
+
+describe("createFoundryStreamResponse tool-call cap", () => {
+  function scriptedClient(streams: FoundryStreamEvent[][]) {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          const events = streams[calls.length - 1] ?? [];
+          const signal = options?.signal;
+          return {
+            async *[Symbol.asyncIterator]() {
+              try {
+                for (const event of events) yield event;
+              } finally {
+                // A real SDK abort rejects without setting `name` to
+                // AbortError. Closing the iterator must surface that shape.
+                if (signal?.aborted) throw new Error("request aborted");
+              }
+            },
+          };
+        },
+      },
+    };
+    return { client, calls };
+  }
+
+  function bodyOf(call: unknown): FoundryResponsesCreateBody {
+    return (call as [unknown, { body: FoundryResponsesCreateBody }])[1].body;
+  }
+
+  it("leaves the request uncapped when maxToolCalls is unset", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).toContain('"delta":"Done"');
+    expect(out).not.toContain("data-notice");
+    expect(out).not.toContain("Tool-call limit reached");
+  });
+
+  it("stops at the cap, asks for a final answer, and shows a status notice", async () => {
+    const first = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      mcpEvent("added", "c3", "tool_c"),
+      mcpEvent("done", "c3", "tool_c"),
+      { type: "response.output_text.delta", delta: "should not stream" },
+    ];
+    const second = [
+      { type: "response.output_text.delta", delta: "From the two results, " },
+      { type: "response.output_text.delta", delta: "the answer is 4." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([first, second]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        maxToolCalls: 2,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+      tool_choice: "none",
+    });
+    const secondParams = (calls[1] as [{ input?: string }])[0];
+    expect(secondParams.input).toBeUndefined();
+
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).not.toContain("tool_c");
+    expect(out).toContain('"type":"data-notice"');
+    expect(out).toContain(toolCallLimitNotice(2));
+    expect(out).toContain('"tone":"status"');
+    expect(out).toContain("From the two results, ");
+    expect(out).toContain("the answer is 4.");
+    expect(out).not.toContain("should not stream");
+    expect(out).not.toContain('"type":"error"');
+    expect(out).not.toContain("The assistant is unavailable");
+  });
+
+  it("does not notice a turn that finishes under the cap", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      { type: "response.output_text.delta", delta: "Just one lookup." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 5,
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0]).max_tool_calls).toBe(5);
+    expect(out).toContain("Just one lookup.");
+    expect(out).not.toContain("data-notice");
+  });
+
+  it("retries without the override when the agent reference rejects it", async () => {
+    const calls: unknown[][] = [];
+    let creates = 0;
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          creates += 1;
+          calls.push([params, options]);
+          if (creates === 1) {
+            const err = new Error("Not allowed when agent is specified") as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] =
+            creates === 2
+              ? [
+                  mcpEvent("added", "c1", "tool_a"),
+                  mcpEvent("done", "c1", "tool_a"),
+                  mcpEvent("added", "c2", "tool_b"),
+                  { type: "response.output_text.delta", delta: "partial" },
+                ]
+              : [
+                  { type: "response.output_text.delta", delta: "Final from the instruction." },
+                  { type: "response.completed" },
+                ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 1,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    // First create sends max_tool_calls and is refused. The retry omits it.
+    expect(bodyOf(calls[0])).toMatchObject({ max_tool_calls: 1 });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    // The follow-up tries tool_choice, is not sent because the override was
+    // already refused, and carries the bracketed instruction instead.
+    expect(bodyOf(calls[2])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
+    expect(out).toContain("tool_a");
+    expect(out).not.toContain("tool_b");
+    expect(out).toContain(toolCallLimitNotice(1));
+    expect(out).toContain("Final from the instruction.");
+    expect(out).not.toContain('"type":"error"');
+  });
+
+  it("sends the chat's /effort as reasoning.effort", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 3,
+        reasoningEffort: "high",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 3,
+      reasoning: { effort: "high" },
+    });
+  });
+
+  it("omits reasoning when no /effort is set, so the model keeps its default", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0]).reasoning).toBeUndefined();
+  });
+
+  it.each([
+    "Not allowed when agent is specified",
+    "Unsupported value: 'reasoning.effort' does not support 'low' with this model.",
+  ])("drops only the effort when Foundry refuses it: %s", async (refusal) => {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_effort" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          if (options.body.reasoning) {
+            const err = new Error(refusal) as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] = [
+            { type: "response.output_text.delta", delta: "Answer at the default level." },
+            { type: "response.completed" },
+          ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 2,
+        reasoningEffort: "low",
+        capacityRetryDelaysMs: [],
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toMatchObject({ reasoning: { effort: "low" }, max_tool_calls: 2 });
+    // The tool cap survives; only the refused effort is dropped.
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(out).toContain("Answer at the default level.");
+    expect(out).not.toContain('"type":"error"');
   });
 });

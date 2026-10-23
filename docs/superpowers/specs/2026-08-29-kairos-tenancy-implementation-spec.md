@@ -54,7 +54,7 @@ flowchart TB
     DB[(Postgres + RLS: shared corpus / private books)]
     EF[Edge Functions: stripe-webhook, checkout, vault, email-dispatch]
   end
-  subgraph runners [digiquant runners — GHA cron / digiclaw]
+  subgraph runners [digiquant runners — GHA cron / digibot]
     HOUSE[House run: Atlas→Hermes→internal paper]
     OVERLAY[Overlay runs: per-workspace, BYOK]
     KAIROS[Kairos router + broker sync]

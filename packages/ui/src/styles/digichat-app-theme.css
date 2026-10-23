@@ -1,3 +1,4 @@
+@import "@digithings/design/palettes.css";
 /* Shared digichat app theme bridge (WS1).
    Single home for the blocks (digichat)/globals.css and
    (baseline)/baseline.css used to duplicate: data-open/data-closed
@@ -9,7 +10,9 @@
    :root[data-theme] selectors); product-chrome body:has() wins by
    specificity regardless of order; tw-animate-css stays before this sheet
    so these collapsible keyframes still win ties.
-   No @source here — each app keeps its own scan roots. */
+   No @source here — each app keeps its own scan roots.
+   Palette sheets are imported here because the product app does not load
+   tokens.css. Selectors require data-palette, so the default look is unchanged. */
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

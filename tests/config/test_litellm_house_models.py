@@ -290,10 +290,13 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     assert overlay.is_file()
     names = _model_names(overlay)
     expected = {
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-release",
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-release",
         "deepseek/deepseek-v4-flash-0731",
-        "deepseek/deepseek-v4-pro",
-        "google/gemini-3.7-flash",
+        "deepseek/deepseek-v4-flash-0731-release",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
@@ -313,11 +316,85 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
 
 
+def test_ci_overlay_lets_reasoning_effort_reach_configurable_models() -> None:
+    """drop_params strips reasoning_effort on openai/ routes unless allowed per route.
+
+    Chats send reasoning_effort (the /effort level, or 1017's default) to every
+    model digillm treats as configurable; each such overlay route must allow it
+    or the proxy silently drops it.
+    """
+    from digillm.client import (
+        ReasoningEffortPolicy,
+        get_reasoning_effort_policy,
+        reasoning_effort_configurable,
+        set_reasoning_effort_policy,
+    )
+
+    configured = json.loads((CONFIG / "model-policy.json").read_text(encoding="utf-8"))[
+        "reasoning_effort"
+    ]
+    previous = get_reasoning_effort_policy()
+    set_reasoning_effort_policy(
+        ReasoningEffortPolicy(
+            default_sent=dict(configured["default_sent"]),
+            configurable_prefixes=tuple(configured["configurable_prefixes"]),
+        )
+    )
+    try:
+        _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable)
+    finally:
+        set_reasoning_effort_policy(previous)
+
+
+def _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable: Any) -> None:
+    overlay = CONFIG / "litellm.cheaperinference.yaml"
+    data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    routes = [
+        entry
+        for entry in data["model_list"]
+        if reasoning_effort_configurable(str(entry["litellm_params"]["model"]))
+    ]
+    assert any(
+        entry["litellm_params"]["model"] == "openai/deepseek-v4.1-flash-1017" for entry in routes
+    )
+    missing = sorted(
+        entry["model_name"]
+        for entry in routes
+        if "reasoning_effort" not in (entry["litellm_params"].get("allowed_openai_params") or [])
+    )
+    assert not missing, f"routes drop reasoning_effort: {missing}"
+
+
+def test_picker_catalog_models_are_on_the_ci_overlay() -> None:
+    """Every catalog house id routes on the CI overlay. The router does not."""
+    catalog = json.loads(
+        (REPO_ROOT / "apps/digichat/config/model-picker-catalog.json").read_text(encoding="utf-8")
+    )
+    names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
+    missing = sorted(model["id"] for model in catalog["models"] if model["id"] not in names)
+    assert not missing, f"catalog ids missing from CI overlay: {missing}"
+    assert "openrouter/auto" not in names
+
+
+def test_picker_catalog_models_map_to_ci_bare_ids() -> None:
+    """Direct digillm clients resolve every catalog house id to a CI bare id."""
+    from digillm.client import cheaperinference_bare_id_for_house_slug
+
+    catalog = json.loads(
+        (REPO_ROOT / "apps/digichat/config/model-picker-catalog.json").read_text(encoding="utf-8")
+    )
+    missing = sorted(
+        model["id"]
+        for model in catalog["models"]
+        if cheaperinference_bare_id_for_house_slug(model["id"]) is None
+    )
+    assert not missing, f"catalog ids missing from the CI slug map: {missing}"
+
+
 # Cheap CI house slugs for the default product picker. Must exist on both the
 # overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
 _PRODUCT_CI_CHEAP_PICKER = (
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash-1017",
     "openai/gpt-oss-120b",
     "z-ai/glm-5.3-flash",
 )
@@ -329,7 +406,7 @@ def _assert_ci_only_product_picker(models: dict) -> None:
     overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
     available = list(models["available"])
     assert models["allowPicker"] is True
-    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] == "deepseek/deepseek-v4.1-flash-1017"
     assert models["default"] in available
     assert available == list(_PRODUCT_CI_CHEAP_PICKER)
     assert not any(str(m).endswith(":free") for m in available)
@@ -340,13 +417,19 @@ def _assert_ci_only_product_picker(models: dict) -> None:
 
 
 def test_digichat_public_picker_is_ci_cheap_only() -> None:
-    """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
+    """Dashboard keeps the three-slug list. digithings.ai uses the catalog policy."""
     embed = yaml.safe_load(
         (REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml").read_text(
             encoding="utf-8"
         )
     )
-    _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
+    product = embed["hosts"]["digithings.ai"]["models"]
+    assert product["catalog"] is True
+    assert product["allowPicker"] is True
+    assert product["default"] == "deepseek/deepseek-v4.1-flash-1017"
+    assert product["priceCapUsdPerMillion"] == 2
+    assert "available" not in product
+    assert "auto" in product["presets"]
     dashboard = yaml.safe_load(
         (REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml").read_text(
             encoding="utf-8"
@@ -386,7 +469,12 @@ def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
-    assert flash["model"] == "openai/deepseek-v4-flash"
+    # Legacy flash slugs and the *-release names all alias to 1017.
+    assert flash["model"] == "openai/deepseek-v4.1-flash-1017"
+    release = by_name["deepseek/deepseek-v4-flash-release"]["litellm_params"]
+    assert release["model"] == "openai/deepseek-v4.1-flash-1017"
+    checkpoint = by_name["deepseek/deepseek-v4.1-flash-1017"]["litellm_params"]
+    assert checkpoint["model"] == "openai/deepseek-v4.1-flash-1017"
     resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
     assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 

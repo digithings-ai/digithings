@@ -39,7 +39,11 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { messageAnchor } from "../../../replay/snapshot";
+import { downloadMarkdown } from "../transcript";
 import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -176,10 +180,10 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
-   * How much of the agent's work the user sees: `quiet` (one summary line),
-   * `balanced` (open while it runs, collapsed when it finishes) or `verbose`
-   * (stays open). The client's `features.view` picks the default; the user can
-   * change it per session.
+   * How much of the agent's work the user sees: `quiet` (the titles only,
+   * with the folded header as a live status line), `balanced` (open while it
+   * runs, collapsed when it finishes) or `verbose` (stays open). The client's
+   * `features.view` picks the default; the user can change it per session.
    */
   workVisibility?: WorkVisibility | undefined;
   /**
@@ -190,6 +194,8 @@ export type ThreadProps = {
   composerToolbar?: ReactNode;
   /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
   scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -223,7 +229,17 @@ const chainGroupBy = (() => {
     "standalone-tool-call": [],
     source: ["group-chainOfThought", "group-tool"],
   });
-  const fn = (part: { type: string }, context?: unknown) => {
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
     if (part.type === "data" || part.type.startsWith("data-")) {
       return ["group-chainOfThought", "group-tool"] as const;
     }
@@ -231,7 +247,7 @@ const chainGroupBy = (() => {
   };
   (fn as unknown as Record<symbol, string>)[
     Symbol.for("@assistant-ui/groupBy.memoKey")
-  ] = "digichat:chain-v2";
+  ] = "digichat:chain-v3";
   return fn;
 })();
 
@@ -436,6 +452,7 @@ export const Thread: FC<ThreadProps> = ({
   workVisibility = "balanced",
   composerToolbar,
   scrollbars = "always",
+  density = "default",
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -469,6 +486,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
+                  density={density}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -495,7 +513,8 @@ const ThreadRoot: FC<{
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars }) => {
+  density: "compact" | "default" | "airy";
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -521,6 +540,7 @@ const ThreadRoot: FC<{
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
       data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
@@ -528,7 +548,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -540,7 +561,7 @@ const ThreadRoot: FC<{
       <ThreadPrimitive.Viewport
         ref={attachViewport}
         turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
@@ -556,7 +577,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -691,7 +712,7 @@ const ThreadScrollToBottom: FC = () => {
         variant="outline"
         className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
-        <DotMatrix state="scroll" label="Scroll to bottom" className="size-3.5" />
+        <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -755,7 +776,7 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       <span className="aui-msg-marker" aria-hidden="true">
         <DotMatrix
           state="example"
-          label="Example"
+          decorative
           className="aui-thread-welcome-suggestion-mark size-3.5"
         />
       </span>
@@ -773,7 +794,7 @@ const ThreadSuggestionItem: FC = () => {
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
-            label="Example"
+            decorative
             className="aui-thread-welcome-suggestion-mark size-3.5"
           />
         </span>
@@ -896,7 +917,7 @@ const Composer: FC<{
           data-slot="aui_composer-shell"
           data-layout={layout}
           onMouseDown={handleShellMouseDown}
-          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding,0.5rem) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
@@ -1003,7 +1024,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="dictate"
-                label="Voice input"
+                decorative
                 className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1022,7 +1043,7 @@ const ComposerSendControls: FC = () => {
             >
               <DotMatrix
                 state="stop"
-                label="Stop dictation"
+                decorative
                 className="aui-composer-stop-dictation-icon size-3.5"
               />
             </TooltipIconButton>
@@ -1044,7 +1065,7 @@ const ComposerSendControls: FC = () => {
         >
           <DotMatrix
             state="send"
-            label="Send"
+            decorative
             className="aui-composer-send-icon size-3.5"
           />
         </Button>
@@ -1060,7 +1081,7 @@ const ComposerSendControls: FC = () => {
           >
             <DotMatrix
               state="stop"
-              label="Stop generating"
+              decorative
               className="aui-composer-cancel-icon size-3.5"
             />
           </Button>
@@ -1083,21 +1104,17 @@ const AssistantWorkingIndicator: FC = () => {
   const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="!size-3"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-xs text-muted-foreground">Waking up services…</span>
-      ) : statusText ? (
-        <span className="text-xs text-muted-foreground">{statusText}</span>
-      ) : null}
     </span>
   );
 };
@@ -1174,8 +1191,17 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
-                // Quiet clients see one line for the whole chain instead of
-                // the two collapsibles.
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
                 if (disclosure.summaryOnly) {
                   return (
                     <div data-slot="aui_chain-of-thought">
@@ -1333,10 +1359,19 @@ const AssistantMessage: FC = () => {
 
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
+  const messageId = useAuiState((s) => s.message.id);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportMessage = useRef<HTMLElement | null>(null);
+  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
+      // Earlier turns: the bar is unmounted until the turn is hovered, then it
+      // takes its footer row back in flow. It cannot float in the message gap —
+      // the bar is 24px tall and the gap is 12/8/20px by density, so a float
+      // paints over the next turn's first line. The empty-footer collapse in
+      // chat-digichat.css keeps the un-hovered turns at one message gap.
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>
@@ -1357,34 +1392,51 @@ const AssistantActionBar: FC = () => {
         >
           <BranchPickerPrimitive.Previous asChild>
             <TooltipIconButton tooltip="Undo">
-              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+              <DotMatrix state="prev" decorative className="size-3.5" />
             </TooltipIconButton>
           </BranchPickerPrimitive.Previous>
         </AuiIf>
       ) : null}
       <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Redo">
-          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
+          <DotMatrix state="refresh" decorative className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
       {feedback ? (
         <>
           <ActionBarPrimitive.FeedbackPositive asChild>
             <TooltipIconButton tooltip="Good response">
-              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+              <DotMatrix state="thumbsUp" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackPositive>
           <ActionBarPrimitive.FeedbackNegative asChild>
             <TooltipIconButton tooltip="Bad response">
-              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+              <DotMatrix state="thumbsDown" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
+      <ActionBarMorePrimitive.Root
+        onOpenChange={(open) => {
+          if (open || !exportHtmlAfterClose.current) return;
+          exportHtmlAfterClose.current = false;
+          const doc = document;
+          const message = exportMessage.current;
+          exportMessage.current = null;
+          const id = messageId;
+          requestAnimationFrame(() => {
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
+              (error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(doc, message);
+              },
+            );
+          });
+        }}
+      >
+        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
           <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" label="More" className="size-3.5" />
+            <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
@@ -1393,12 +1445,27 @@ const AssistantActionBar: FC = () => {
           sideOffset={6}
           className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
-          <ActionBarPrimitive.ExportMarkdown asChild>
+          <ActionBarPrimitive.ExportMarkdown
+            asChild
+            onExport={(content) => {
+              downloadMarkdown("digichat.md", content);
+            }}
+          >
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" label="Export" className="size-3.5" />
+              <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
+          <ActionBarMorePrimitive.Item
+            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+            onClick={() => {
+              exportMessage.current = messageAnchor(triggerRef.current, messageId);
+              exportHtmlAfterClose.current = true;
+            }}
+          >
+            <DotMatrix state="export" decorative className="size-3.5" />
+            Export as HTML
+          </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
       <MessageTiming />
@@ -1473,7 +1540,7 @@ const UserActionBar: FC = () => {
         className="aui-user-action-edit"
         onClick={onEdit}
       >
-        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+        <DotMatrix state="edit" decorative className="size-3.5" />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
@@ -1494,7 +1561,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     >
       <BranchPickerPrimitive.Previous asChild>
         <TooltipIconButton tooltip="Previous">
-          <DotMatrix state="prev" label="Previous" className="size-3.5" />
+          <DotMatrix state="prev" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
       <span className="aui-branch-picker-state font-medium">
@@ -1502,7 +1569,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       </span>
       <BranchPickerPrimitive.Next asChild>
         <TooltipIconButton tooltip="Next">
-          <DotMatrix state="next" label="Next" className="size-3.5" />
+          <DotMatrix state="next" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>

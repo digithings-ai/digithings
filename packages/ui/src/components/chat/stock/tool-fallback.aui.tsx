@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useCallback, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
+import { useTurnOutcome } from "../turn-outcome";
 import {
   toolApprovalAcceptsText,
   useScrollLock,
@@ -19,6 +20,7 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -190,7 +192,7 @@ function ToolFallbackTrigger({
     >
       <DotMatrix
         state={matrixState}
-        label={label}
+        decorative
         className="aui-tool-fallback-trigger-icon size-4 shrink-0"
       />
       <span
@@ -204,12 +206,7 @@ function ToolFallbackTrigger({
         {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
-      <span
-        data-slot="tool-fallback-trigger-chevron"
-        className="aui-tool-fallback-trigger-chevron inline-flex shrink-0"
-      >
-        <DotMatrix state="expand" label="Toggle tool" className="size-4" />
-      </span>
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -219,8 +216,10 @@ function ToolFallbackContent({
   children,
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
+  const keepMounted = useExportKeepMounted();
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="tool-fallback-content"
       className={cn(
         "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
@@ -769,7 +768,17 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
-  const effectiveStatus = resolveToolStatus(status, isError, result);
+  const outcome = useTurnOutcome();
+  const resolved = resolveToolStatus(status, isError, result);
+  // A call still waiting on a result when the turn was stopped will never
+  // get one: show it cancelled, not "Waiting on tool". A call that waits on
+  // the visitor (approval, interrupt) keeps its controls.
+  const effectiveStatus: ToolCallMessagePartStatus | undefined =
+    outcome === "stopped" &&
+    resolved?.type === "requires-action" &&
+    !offersInterruptAction(resolved, approval, interrupt)
+      ? { type: "incomplete", reason: "cancelled" }
+      : resolved;
   const isCancelled =
     effectiveStatus?.type === "incomplete" &&
     effectiveStatus.reason === "cancelled";

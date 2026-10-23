@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "071_olympus_position_events_book_source.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "071_olympus_position_events_book_source.sql"
 
 VIEWS = (
     "olympus_position_events",
@@ -56,7 +56,7 @@ def _view_body(sql: str, view: str) -> str:
 
 
 def test_migration_is_the_only_071() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("071_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("071_*.sql")) == [MIGRATION_PATH]
 
 
 def test_adds_book_source_default_legacy(sql: str) -> None:

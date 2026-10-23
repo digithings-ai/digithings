@@ -25,7 +25,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "099_broker_connections.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "099_broker_connections.sql"
 
 TABLE = "broker_connections"
 TRIGGER_FUNCTION = "reject_broker_connection_credential_mutation"
@@ -113,7 +113,7 @@ def table_body(sql: str) -> str:
 
 
 def test_migration_is_the_only_099(raw: str) -> None:
-    assert sorted(MIGRATIONS_DIR.glob("099_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("099_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_remains_single_transaction_compatible(raw: str) -> None:

@@ -1,6 +1,6 @@
 # ADR 0018 — digichat on digithings.ai (path), not a separate `chat.` deploy
 
-Status: Accepted · Amended 2026-08-10 (Cloudflare Containers multi-tenant + Profile A stack) · Supersedes the `chat.digithings.ai` subdomain decision in [ADR-0002](0002-domain-unification.md)
+Status: Accepted · Amended 2026-08-10 (Cloudflare Containers multi-tenant + Profile A stack) · Amended 2026-10-22 (the `/chat` cutover: the app under `/chat`, DIG-5121) · Supersedes the `chat.digithings.ai` subdomain decision in [ADR-0002](0002-domain-unification.md)
 
 ## Context
 
@@ -12,7 +12,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 
 | Path | Owner | Role |
 |---|---|---|
-| `digithings.ai/chat` | Cloudflare Pages shell | iframe → `/embed?host=digithings.ai` |
+| `digithings.ai/chat` | Worker → **one** digichat Container (the app, built with `basePath: /chat`) | the digichat app itself; `/embed?host=digithings.ai` stays reachable as a compatibility route (amendment 2026-10-22, note 8) |
 | `digithings.ai/chat/occ` | Cloudflare Pages shell | iframe → `/embed?host=occ.digithings.ai` |
 | `digithings.ai/embed*`, digichat APIs, `/_dtchat*` | Worker → **one** digichat Container | BFF; tenants via `DIGICHAT_EMBED_TENANTS` |
 | `graph.digithings.ai` | Worker → **one** Profile A stack Container | digigraph (chat brain) |
@@ -40,6 +40,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 5. 2026-08-09: digigraph cutover — marketing chat iframes digichat digigraph backend.
 6. **2026-08-10:** Containers scaffold restored for multi-tenant digithings + OCC on one Node (#2073).
 7. **2026-08-10 (evening):** Profile A backends (digigraph + digikey + digisearch + digivault + LiteLLM) move to a second Cloudflare Container (`digithings-stack`) so production digichat has no laptop dependency (#2078).
+8. **2026-10-22:** the `/chat` cutover (DIG-5121, GitHub #1252) — the digichat **app** is served under `digithings.ai/chat*` by the digichat Worker, and the Container is built with `DIGICHAT_BASE_PATH=/chat`: the shape of the original decision (note 1). `/chat/occ` stays a Pages shell behind the invite gate. The legacy routes stay declared as a **compatibility window**: `/embed*` stays for good (the OCC shell iframe and the marketing site point at `digithings.ai/embed?host=…`), while the legacy `/api/*` spellings (`/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`) are the pre-cutover spelling of `/chat/api/*` and are reviewed once the cutover is live. The change reaches production with the digichat deploy lane (DIG-5120) and Chris's approval of the production environment.
 
 ## Production configuration
 

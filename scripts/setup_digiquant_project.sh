@@ -63,7 +63,7 @@ add_field "Area" \
   "digikey" \
   "digichat" \
   "digibase" \
-  "digiclaw" \
+  "digibot" \
   "Website" \
   "Client Pilot" \
   "Docs" \

@@ -10,12 +10,19 @@ vi.mock("@/lib/chat-route-context", () => ({
   resolveChatTenantContext: vi.fn(),
 }));
 
-vi.mock("@/lib/bff-rate-limit", () => ({
-  checkBffRateLimit: vi.fn(() => ({ allowed: true })),
-}));
+vi.mock("@/lib/bff-rate-limit", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/bff-rate-limit")>(
+    "@/lib/bff-rate-limit",
+  );
+  return {
+    ...actual,
+    checkBffRateLimit: vi.fn(() => ({ allowed: true })),
+  };
+});
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true })),
+  clientIpForEmbedLimit: vi.fn(() => "127.0.0.1"),
   clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
 }));
 
@@ -43,6 +50,8 @@ vi.mock("@/lib/adapters/digithings/stream", async () => {
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
   DigigraphUpstreamAuthError: class DigigraphUpstreamAuthError extends Error {},
+  DigigraphUpstreamUnavailableError: class DigigraphUpstreamUnavailableError extends Error {},
+  DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS: 5,
 }));
 
 vi.mock("@/lib/ecosystem", () => ({
@@ -83,21 +92,35 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import type { EmbedChatTenantContext } from "@/lib/embed-chat-tenant";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
-import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
-import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
+import { checkEmbedIpRateLimit, clientIpForRateLimit } from "@/lib/embed-ip-rate-limit";
+import { activeGuardrailStore, resetGuardrailStoreForTests } from "@/lib/guardrails/store";
+import {
+  DigigraphUpstreamAuthError,
+  DigigraphUpstreamUnavailableError,
+  resolveDigigraphUpstreamAuth,
+} from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
-import { signTrialProof } from "@/lib/trial-proof";
 import { streamText, createUIMessageStreamResponse } from "ai";
 import { parseDigichatConfig } from "@/lib/deploy-config";
 import {
+  loadDigichatConfig,
   resetDigichatConfigForTests,
   setDigichatConfigForTests,
 } from "@/lib/deploy-config/loader";
+import { catalogModelRate } from "@/lib/model-picker-catalog";
+import {
+  chargePremiumUsage,
+  premiumSpendIdentity,
+  premiumUserKey,
+  resetPremiumSpendForTests,
+} from "@/lib/premium-budget/budget";
+import { createDigiGraphClient } from "@/lib/digigraph";
+import { resetLimitsStoreForTests } from "@/lib/limits/store";
 
 /**
  * The retired client-asserted unlock header, assembled from parts.
@@ -140,8 +163,11 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(clientIpForRateLimit).mockReset();
+    vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
     resetEmbedTrialQuotaForTests();
     resetChatRunLocksForTests();
+    resetPremiumSpendForTests();
 vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createAiSdkStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
@@ -220,6 +246,83 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(res.status).toBe(400);
   });
 
+  it("answers 503 upstream_unavailable with a Retry-After when digikey is cold", async () => {
+    // A cold digikey is a retryable dependency, not a credential problem, so
+    // it must not be answered 502 upstream_auth (DIG-4424).
+    vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
+      new DigigraphUpstreamUnavailableError(
+        "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds."
+      )
+    );
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("upstream_unavailable");
+    expect(body.message).toContain("not a DIGIKEY_BFF_TOKEN problem");
+    expect(res.headers.get("retry-after")).toBe("5");
+  });
+
+  it("does not refuse the retry with 409 run_id_replay after a cold digikey", async () => {
+    // The client repeats the send with the same X-Digi-Run-Id when it obeys
+    // the Retry-After, so a request that failed before it produced a turn must
+    // not leave the run id behind and turn that retry into a 409 (DIG-4424).
+    vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
+      new DigigraphUpstreamUnavailableError(
+        "digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds."
+      )
+    );
+    const request = () =>
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-cold",
+          "x-digi-run-id": "run-cold-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+
+    const first = await POST(request());
+    expect(first.status).toBe(503);
+
+    const second = await POST(request());
+    expect(second.status).toBe(503);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("upstream_unavailable");
+  });
+
+  it("still answers 502 upstream_auth when digikey refuses the token", async () => {
+    vi.mocked(resolveDigigraphUpstreamAuth).mockRejectedValue(
+      new DigigraphUpstreamAuthError(
+        "digikey rejected the bff_session exchange (answered 401). Check DIGIKEY_BFF_TOKEN and digikey configuration."
+      )
+    );
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("upstream_auth");
+    expect(body.message).toContain("DIGIKEY_BFF_TOKEN");
+    expect(res.headers.get("retry-after")).toBeNull();
+  });
+
   it("streams response and forwards abortSignal to streamText", async () => {
     const controller = new AbortController();
     const res = await POST(
@@ -268,6 +371,211 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       })
     );
     expect(res.status).toBe(429);
+  });
+
+  it("keeps the request limiter when a deployment omits rateLimit", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "house",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 5 },
+        },
+      }),
+    );
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+        }),
+      );
+      expect(res.status).toBe(429);
+      expect(checkBffRateLimit).toHaveBeenCalled();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("skips the request limiter when the visitor brings their own key", async () => {
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "openai/gpt-4o-mini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(checkBffRateLimit).not.toHaveBeenCalled();
+    expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("still rate-limits a blank own-key header", async () => {
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "   ",
+        },
+        body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
+  });
+
+  it("skips both request limiters and the per-visitor minute for an anonymous own key", async () => {
+    resetGuardrailStoreForTests();
+    vi.mocked(clientIpForRateLimit).mockReturnValue("203.0.113.9");
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
+    const spentAt = Date.now();
+    activeGuardrailStore().commit("tpm:user:public:203.0.113.9", "seed", 900, spentAt);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "public",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+        },
+        guardrails: {
+          maxToolCallsPerTurn: 5,
+          answerAt: 0.7,
+          pauseAt: 0.9,
+          rateLimit: true,
+          tokensPerMinute: { user: 1000, deployment: 10_000 },
+        },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://public.digithings.ai",
+            "x-byok-key": "sk-test",
+            "x-byok-provider": "openai",
+            "x-byok-model": "openai/gpt-4o-mini",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        guard?: {
+          toolCap?: number;
+          beforeRound: (opts: {
+            writer: { write: (part: unknown) => void };
+            pendingTokens?: number;
+            toolCallsSoFar?: number;
+          }) => Promise<{ action: string }>;
+          recordUsage: (usage: { totalTokens: number }) => void;
+        };
+      };
+      expect(call?.guard?.toolCap).toBe(5);
+      const clearance = await call?.guard?.beforeRound({
+        writer: { write() {} },
+        pendingTokens: 10,
+      });
+      expect(clearance?.action).toBe("proceed");
+      const stopped = await call?.guard?.beforeRound({
+        writer: { write() {} },
+        toolCallsSoFar: 5,
+      });
+      expect(stopped?.action).toBe("stop-tools");
+      call?.guard?.recordUsage({ totalTokens: 5 });
+      const spent = (key: string) =>
+        activeGuardrailStore()
+          .read(key, Date.now())
+          .events.reduce((sum, event) => sum + event.tokens, 0);
+      expect(spent("tpm:user:public:203.0.113.9")).toBe(900);
+      expect(spent("tpm:dep:public")).toBeGreaterThan(0);
+    } finally {
+      resetGuardrailStoreForTests();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+    }
+  });
+
+  it("turns the request limiter off when the deployment sets rateLimit false", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: {
+            rateLimit: false,
+            maxToolCallsPerTurn: 5,
+            answerAt: 0.7,
+            pauseAt: 0.9,
+          },
+        },
+      }),
+    );
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        prepareStep?: (step: {
+          steps: { toolCalls?: unknown[] }[];
+          messages: { role: string; content: unknown }[];
+        }) => Promise<{ toolChoice?: string } | undefined>;
+      };
+      const prepared = await call.prepareStep?.({
+        steps: [{ toolCalls: [{}, {}, {}, {}, {}] }],
+        messages: [{ role: "user", content: "hi" }],
+      });
+      expect(prepared?.toolChoice).toBe("none");
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("returns 429 when the anonymous embed IP limiter blocks", async () => {
@@ -362,8 +670,370 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
         model?: string;
+        upstreamHeaders?: Record<string, string>;
       };
       expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+      expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  function catalogDeployment(costPerWindow?: { usd: number; windowSeconds: number }) {
+    return parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "local",
+        backend: { type: "digigraph" },
+        models: {
+          catalog: true,
+          ...(costPerWindow ? { costPerWindow } : {}),
+        },
+      },
+    });
+  }
+
+  it("falls back to Auto once the premium budget is spent", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const session = "sess-premium-spent";
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": session,
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+        upstreamHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.preface).toMatch(/premium budget/);
+      expect(call?.onUsage).toBeUndefined();
+      expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe(
+        "deepseek/deepseek-v4.1-flash-1017",
+      );
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("serves a premium OCC model with no budget fallback", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        hosts: {
+          "occ.digithings.ai": {
+            slug: "occ",
+            backend: { type: "digigraph" },
+            models: {
+              catalog: true,
+              occPicker: true,
+              presets: ["auto", "reasoning", "fast", "light"],
+              showFullList: true,
+            },
+          },
+        },
+      }),
+    );
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "digigraph" },
+        activityDetail: "labels",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-embed-host": "https://occ.digithings.ai",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.onUsage).toBeUndefined();
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("does not reset the premium window when the session header changes", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    const post = async (session?: string) => {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        "x-digichat-trace": "1",
+        "x-digi-model": "z-ai/glm-5.3",
+      };
+      if (session) headers["x-digichat-session"] = session;
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.preface).toMatch(/premium budget/);
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+    };
+    try {
+      await post("sess-a");
+      await post("sess-b");
+      await post();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("keeps rotating x-digichat-peer-ip values on one anonymous premium window", async () => {
+    delete process.env.DIGICHAT_PEER_STAMP;
+    process.env.DIGICHAT_TRUSTED_PROXIES = "203.0.113.7,198.51.100.8,192.0.2.10";
+    const actual = await vi.importActual<typeof import("@/lib/embed-ip-rate-limit")>(
+      "@/lib/embed-ip-rate-limit",
+    );
+    vi.mocked(clientIpForRateLimit).mockImplementation((req: Request) =>
+      actual.clientIpForRateLimit(req),
+    );
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+    });
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    setDigichatConfigForTests(catalogDeployment(budget));
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      "public",
+      premiumSpendIdentity({ userId: "embed:anonymous", ip: "unknown" }),
+    );
+    expect(key).toBe("public:anonymous");
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    const peers = ["203.0.113.7", "198.51.100.8", "192.0.2.10"];
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      for (const peer of peers) {
+        const res = await POST(
+          new Request("http://localhost/api/chat", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-digichat-trace": "1",
+              "x-digi-model": "z-ai/glm-5.3",
+              "x-digichat-peer-ip": peer,
+              "x-forwarded-for": `${peer}, 10.0.0.1`,
+              "cf-connecting-ip": peer,
+            },
+            body: JSON.stringify({
+              messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+            }),
+          }),
+        );
+        expect(res.status).toBe(200);
+        const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+          model?: string;
+          responseHeaders?: Record<string, string>;
+        };
+        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+        expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
+      }
+    } finally {
+      delete process.env.DIGICHAT_TRUSTED_PROXIES;
+      delete process.env.DIGICHAT_PEER_STAMP;
+      resetDigichatConfigForTests();
+      vi.mocked(clientIpForRateLimit).mockReset();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    }
+  });
+
+  it("shows the Auto fallback notice on the non-trace path when no default is set", async () => {
+    const budget = { usd: 0.0125565, windowSeconds: 86400 };
+    const cfg = catalogDeployment(budget);
+    if (cfg.deployment?.models) delete cfg.deployment.models.default;
+    setDigichatConfigForTests(cfg);
+    const rate = catalogModelRate("z-ai/glm-5.3");
+    expect(rate).toBeTruthy();
+    const key = premiumUserKey(
+      mockAuthCtx.tenantSlug,
+      premiumSpendIdentity({ userId: mockAuthCtx.ownerUserSub, ip: "127.0.0.1" }),
+    );
+    const now = Date.now();
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    chargePremiumUsage(key, rate!, undefined, now);
+    try {
+      process.env.DIGICHAT_TRACE_UI = "0";
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "0",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("X-Digi-Premium-Fallback")).toBe("auto");
+      const sent = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash-1017");
+      const streamArg = vi.mocked(createUIMessageStreamResponse).mock.calls.at(-1)?.[0] as {
+        stream: ReadableStream<unknown>;
+      };
+      const reader = streamArg.stream.getReader();
+      const chunks: unknown[] = [];
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        chunks.push(next.value);
+      }
+      expect(JSON.stringify(chunks)).toMatch(/premium budget/);
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("keeps a premium pick while the budget still has room", async () => {
+    setDigichatConfigForTests(
+      catalogDeployment({ usd: 0.0125565, windowSeconds: 86400 }),
+    );
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": "sess-premium-open",
+            "x-digi-model": "z-ai/glm-5.3",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+      expect(call?.model).toBe("z-ai/glm-5.3");
+      expect(call?.preface).toBeUndefined();
+      expect(typeof call?.onUsage).toBe("function");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("does not meter a premium pick when the deployment has no budget", async () => {
+    setDigichatConfigForTests(catalogDeployment());
+    try {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digichat-session": "sess-occ",
+            "x-digi-model": "google/gemini-3.8-flash",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        model?: string;
+        preface?: string;
+        onUsage?: unknown;
+        responseHeaders?: Record<string, string>;
+      };
+      expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBeUndefined();
+      expect(call?.model).toBe("google/gemini-3.8-flash");
+      expect(call?.preface).toBeUndefined();
+      expect(call?.onUsage).toBeUndefined();
     } finally {
       resetDigichatConfigForTests();
     }
@@ -707,25 +1377,39 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search when env gate is off (#3420)", async () => {
+  it("does not forward web search when the deployment and the env gate are off (#3420)", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
-    const res = await POST(
-      new Request("http://localhost/api/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-digi-enable-web-search": "1",
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "plain",
+          backend: { type: "digigraph" },
+          gate: { webSearch: false },
         },
-        body: JSON.stringify({
-          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
-        }),
-      })
+      }),
     );
-    expect(res.status).toBe(200);
-    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
-      headers?: Record<string, string>;
-    };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-enable-web-search": "1",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
   });
 
   it("forwards web search for first-party (null embedConfig) when DIGICHAT_WEB_SEARCH=1", async () => {
@@ -753,7 +1437,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
-  it("does not forward web search for first-party (null embedConfig) when env is unset", async () => {
+  it("forwards web search for first-party house when the deployment allows it", async () => {
     delete process.env.DIGICHAT_WEB_SEARCH;
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       ...mockAuthCtx,
@@ -775,7 +1459,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
       headers?: Record<string, string>;
     };
-    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
   });
 
   it("forwards X-Digi-License when the container holds a license (spec §7.1)", async () => {
@@ -1189,6 +1873,222 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.responseLanguage).toBe("fr");
   });
 
+  it("passes maxToolCalls from the foundry backend to the adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+          maxToolCalls: 5,
+        },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      maxToolCalls?: number;
+    };
+    expect(call?.maxToolCalls).toBe(5);
+    expect(call && "guard" in call).toBe(true);
+  });
+
+  it.each([
+    ["high", "high"],
+    ["LOW", "low"],
+    ["max", undefined],
+    [undefined, undefined],
+  ])("passes /effort %s to the foundry adapter as %s", async (header, expected) => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "fixture-agent" },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-embed-host": "https://foundry-tenant.digithings.ai",
+    };
+    if (header) headers["x-digi-effort"] = header;
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      reasoningEffort?: string;
+    };
+    expect(call?.reasoningEffort).toBe(expected);
+  });
+
+  it("prefers guardrails.maxToolCallsPerTurn over the Foundry alias", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+          maxToolCalls: 9,
+        },
+        guardrails: { maxToolCallsPerTurn: 4 },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      maxToolCalls?: number;
+      guard?: { toolCap?: number; active?: boolean };
+    };
+    expect(call?.maxToolCalls).toBe(4);
+    expect(call?.guard?.active).toBe(true);
+    expect(call?.guard?.toolCap).toBe(4);
+  });
+
+  it("keys anonymous token spend by the server-derived IP, not the client session", async () => {
+    vi.mocked(clientIpForRateLimit).mockReturnValue("203.0.113.9");
+    resetGuardrailStoreForTests();
+    const session = "client-chosen-session";
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "public",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+        },
+        guardrails: { tokensPerMinute: { user: 80_000 } },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://public.digithings.ai",
+            "x-digichat-session": session,
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        guard?: { recordUsage: (usage: { totalTokens: number }) => void };
+      };
+      call?.guard?.recordUsage({ totalTokens: 10 });
+      const spent = (key: string) =>
+        activeGuardrailStore()
+          .read(key, Date.now())
+          .events.reduce((sum, event) => sum + event.tokens, 0);
+      expect(spent("tpm:user:public:203.0.113.9")).toBe(10);
+      expect(spent(`tpm:user:public:${session}`)).toBe(0);
+      expect(spent("tpm:user:public:anonymous")).toBe(0);
+    } finally {
+      resetGuardrailStoreForTests();
+      vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+    }
+  });
+
+  it("stops tools from the trace-off stream when the guard says the cap is spent", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "local",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 1 },
+        },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        prepareStep?: (step: {
+          steps: { toolCalls?: unknown[] }[];
+          messages: { role: string; content: unknown }[];
+        }) => Promise<{ toolChoice?: string } | undefined>;
+      };
+      const prepared = await call.prepareStep?.({
+        steps: [{ toolCalls: [{}] }],
+        messages: [{ role: "user", content: "hi" }],
+      });
+      expect(prepared?.toolChoice).toBe("none");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("returns 400 when OpenRouter BYOK missing model", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
@@ -1473,8 +2373,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         headers: Record<string, string>,
         provider: () => Promise<Response>,
       ) {
-        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue(ip);
+        const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForEmbedLimit).mockReturnValue(ip);
         const fetchMock = vi.fn(async () => provider());
         vi.stubGlobal("fetch", fetchMock);
         const foundryBefore = vi.mocked(createFoundryStreamResponse).mock.calls.length;
@@ -1561,8 +2461,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         // cannot be resolved skips the per-IP quota entirely — admitted, uncounted,
         // and not bounded by the 100-turn cap. This is pre-existing behaviour of the
         // per-IP quota, unchanged by this leaf; the degraded path does not widen it.
-        const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-        const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+        const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+        const ipSpy = vi.mocked(clientIpForEmbedLimit).mockReturnValue("unknown");
         const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
         const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
         vi.stubGlobal("fetch", fetchMock);
@@ -1779,183 +2679,9 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
     });
 
-    // DIG-3797 leaf 3: the trial_form gate must honour a server-signed trial
-    // proof (apps/digichat/src/lib/trial-proof.ts), minted by the embed mint
-    // endpoint (apps/digichat/src/app/api/embed/trial-proof-mint/route.ts) with
-    // the shared DIGICHAT_TRIAL_PROOF_SECRET.
-    //
-    // The proof binds host|exp|sig only - no tenant, no nonce - so the route
-    // has to compare the verified host itself: a valid signature for a
-    // different host must buy nothing. And the proof's host is the CANONICAL
-    // bare registry host (the registered tenant host), while the browser sends the embed
-    // origin as a URL, so the comparison is against the canonical form of
-    // x-embed-host (embed-tenants.normalizeEmbedHost), not the raw header.
-    // Expiry, a wrong secret and a tampered token are already pinned by
-    // lib/trial-proof.test.ts; what is left for the route is the gate itself.
-    describe("trial proof (DIG-3797 leaf 3)", () => {
-      const PROOF_SECRET = "trial-proof-secret-0123456789abcdef0123456789abcdef";
-      const OTHER_SECRET = "other-secret-0123456789abcdef0123456789abcdef";
-      const PROOF_HOST = new URL(trialReq().headers.get("x-embed-host") ?? "").hostname;
-      const OTHER_HOST = "other.example";
-
-      it("admits a request carrying a valid proof for this host, and never consults the per-IP quota", async () => {
-        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
-        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
-          expect((await POST(trialReq())).status).toBe(200);
-        }
-        // Spy only after the free turns are burnt: a plain turn does consult and
-        // record the per-IP quota, a proof-carrying turn must not.
-        const quotaModule = await import("@/lib/embed-turn-quota");
-        const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
-        const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
-        try {
-          const admitted = await POST(
-            trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, PROOF_SECRET) }),
-          );
-          expect(admitted.status).toBe(200);
-          expect(overSpy).not.toHaveBeenCalled();
-          expect(recordSpy).not.toHaveBeenCalled();
-          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
-        } finally {
-          overSpy.mockRestore();
-          recordSpy.mockRestore();
-        }
-      });
-
-      it("still gates a request whose proof is valid for a different host", async () => {
-        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
-        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
-          expect((await POST(trialReq())).status).toBe(200);
-        }
-        const gated = await POST(
-          trialReq({ "x-embed-trial-proof": signTrialProof(OTHER_HOST, PROOF_SECRET) }),
-        );
-        expect(gated.status).toBe(402);
-        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
-      });
-
-      it("still gates a request whose proof was signed with another secret", async () => {
-        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
-        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
-          expect((await POST(trialReq())).status).toBe(200);
-        }
-        const gated = await POST(
-          trialReq({ "x-embed-trial-proof": signTrialProof(PROOF_HOST, OTHER_SECRET) }),
-        );
-        expect(gated.status).toBe(402);
-        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
-      });
-
-      it("treats a bare proof header exactly like no header at all", async () => {
-        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
-          expect((await POST(trialReq())).status).toBe(200);
-        }
-        const withoutHeader = await POST(trialReq());
-        const withHeader = await POST(trialReq({ "x-embed-trial-proof": "not-a-proof" }));
-        expect(withHeader.status).toBe(402);
-        expect(withHeader.status).toBe(withoutHeader.status);
-        expect(await withHeader.json()).toEqual(await withoutHeader.json());
-      });
-    });
-
-    // DIG-4537: the proof is a 10-minute bearer. The tenant page relays it
-    // once, the client presents it on every request, and after ten minutes
-    // the client is still sending a dead proof. An EXPIRED proof and an
-    // INVALID proof are different problems for the client: only the expired
-    // one can be dropped and re-minted, so only the expired one is
-    // signalled. The gate's behaviour does not change either way.
-    describe("trial proof expiry signal (DIG-4537)", () => {
-      const PROOF_SECRET = "expiry-secret-0123456789abcdef0123456789abcdef";
-      const OTHER_SECRET = "other-secret-0123456789abcdef0123456789abcdef";
-      const PROOF_HOST = new URL(
-        trialReq().headers.get("x-embed-host") ?? "",
-      ).hostname;
-      const OTHER_HOST = "other.example";
-      const EXPIRED_HEADER = "x-embed-trial-proof-expired";
-
-      function expiredProof(): string {
-        return signTrialProof(PROOF_HOST, PROOF_SECRET, Date.now() - 1000);
-      }
-
-      beforeEach(() => {
-        process.env.DIGICHAT_TRIAL_PROOF_SECRET = PROOF_SECRET;
-      });
-
-      afterEach(() => {
-        delete process.env.DIGICHAT_TRIAL_PROOF_SECRET;
-      });
-
-      it("signals an expired proof to the client on the chat response", async () => {
-        const res = await POST(
-          trialReq({ "x-embed-trial-proof": expiredProof() }),
-        );
-        expect(res.status).toBe(200);
-        expect(res.headers.get(EXPIRED_HEADER)).toBe("1");
-      });
-
-      it("does not signal a wrongly-signed proof", async () => {
-        const res = await POST(
-          trialReq({
-            "x-embed-trial-proof": signTrialProof(
-              PROOF_HOST,
-              OTHER_SECRET,
-              Date.now() - 1000,
-            ),
-          }),
-        );
-        expect(res.status).toBe(200);
-        expect(res.headers.get(EXPIRED_HEADER)).toBeNull();
-      });
-
-      it("does not signal a malformed proof", async () => {
-        const res = await POST(
-          trialReq({ "x-embed-trial-proof": "not-a-proof" }),
-        );
-        expect(res.status).toBe(200);
-        expect(res.headers.get(EXPIRED_HEADER)).toBeNull();
-      });
-
-      it("does not signal a proof for another host, even an expired one", async () => {
-        const res = await POST(
-          trialReq({
-            "x-embed-trial-proof": signTrialProof(
-              OTHER_HOST,
-              PROOF_SECRET,
-              Date.now() - 1000,
-            ),
-          }),
-        );
-        expect(res.status).toBe(200);
-        expect(res.headers.get(EXPIRED_HEADER)).toBeNull();
-      });
-
-      it("does not signal when no proof is presented", async () => {
-        const res = await POST(trialReq());
-        expect(res.status).toBe(200);
-        expect(res.headers.get(EXPIRED_HEADER)).toBeNull();
-      });
-
-      it("leaves the quota outcome of an expired proof unchanged: the visitor is still on the trial path", async () => {
-        // The gate must not change: an expired proof buys no bypass, exactly
-        // like no proof at all. Burn the free turns, then present an expired
-        // proof - the visitor is still gated.
-        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
-          expect((await POST(trialReq())).status).toBe(200);
-        }
-        const gated = await POST(
-          trialReq({ "x-embed-trial-proof": expiredProof() }),
-        );
-        expect(gated.status).toBe(402);
-        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
-        // The signal rides on whichever response the client actually
-        // receives - the gated one included.
-        expect(gated.headers.get(EXPIRED_HEADER)).toBe("1");
-      });
-    });
-
     it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
-      const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
-      const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+      const { clientIpForEmbedLimit } = await import("@/lib/embed-ip-rate-limit");
+      const spy = vi.mocked(clientIpForEmbedLimit).mockReturnValue("unknown");
       try {
         // Even well past the server cap, every "unknown"-IP request succeeds —
         // the quota is never consulted for a non-identity IP (route.ts).
@@ -2167,6 +2893,264 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(dashboardCtx.embedConfig.showByok).toBe(true);
     });
   });
+  describe("DIG-4589: one source decides the session lock and the model allowlist", () => {
+    // The embed tenant registry and the deployment config are two sources
+    // that can disagree. The loader merges them once, so the route reads the
+    // lock and the allowlist from ONE artefact: the request's tenant, which
+    // in production is the projection of the merged host deployment. These
+    // tests drive the real embed tenant resolution, so the tenant the route
+    // sees has the production shape.
+    const OCC_HOST = "occ.digithings.ai";
+    const OCC_TOKEN = "occ-secret";
+
+    // A deployment host with NO model list. Since #6237 every product chat
+    // (the OCC host is one) resolves a catalog list even when the YAML has
+    // no `models` block, so "this tenant has no list" has to be said
+    // explicitly. `allowPicker: false` is the operator's way of saying it,
+    // and it is the shape Counsel's DIG-4486 ruling gives a locked OCC
+    // tenant: no picker, no hand list, the operator's model only.
+    const NO_MODEL_LIST = ["    models:", "      allowPicker: false"];
+
+    function occYaml(opts: { host?: string[]; deployment?: string[] } = {}): string {
+      return [
+        "version: 1",
+        ...(opts.deployment ? ["deployment:", ...opts.deployment] : []),
+        "hosts:",
+        `  ${OCC_HOST}:`,
+        "    slug: occ",
+        `    token: ${OCC_TOKEN}`,
+        "    backend:",
+        "      type: digigraph",
+        ...(opts.host ?? []),
+        "",
+      ].join("\n");
+    }
+
+    function installConfig(yaml: string, tenant: Record<string, unknown>): void {
+      setDigichatConfigForTests(
+        loadDigichatConfig({
+          fileContents: yaml,
+          env: {
+            DIGICHAT_EMBED_TENANTS: JSON.stringify({ [OCC_HOST]: tenant }),
+          },
+        }),
+      );
+    }
+
+    function occReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": `https://${OCC_HOST}`,
+          "x-embed-token": OCC_TOKEN,
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    // A referer-resolved tenant: the browser sends no X-Embed-Host, so the
+    // host comes from the Referer. The route must decide from the tenant it
+    // resolved, never from the header-only deployment lookup.
+    function occRefererReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          referer: `https://${OCC_HOST}/embed`,
+          "x-embed-token": OCC_TOKEN,
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    /** Captures the model the route forwards to digigraph. */
+    function captureForwardedModel(): string[] {
+      const forwarded: string[] = [];
+      vi.mocked(createDigiGraphClient).mockImplementation(
+        (() =>
+          ((modelId: string) => {
+            forwarded.push(modelId);
+            return {};
+          }) as never) as never,
+      );
+      return forwarded;
+    }
+
+    beforeEach(() => {
+      // The embed surface: auth refuses, the route resolves the embed tenant.
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+    });
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+      vi.mocked(createDigiGraphClient).mockImplementation(
+        (() => (() => ({})) as never) as never,
+      );
+    });
+
+    it("enforces the tenant model offer when the deployment config has no list", async () => {
+      // The tenant curates the offer; the deployment config has no model
+      // list. Before the fix the empty deployment list won, so no allowlist
+      // ran and any x-digi-model was forwarded unchecked.
+      installConfig(occYaml(), {
+        slug: "occ",
+        token: OCC_TOKEN,
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        models: { default: "only-this-model", available: ["only-this-model"] },
+      });
+
+      const denied = await POST(occReq({ "x-digi-model": "other-model" }));
+      expect(denied.status).toBe(400);
+      const body = (await denied.json()) as { error: string };
+      expect(body.error).toBe("model_not_allowed");
+
+      const allowed = await POST(occReq({ "x-digi-model": "only-this-model" }));
+      expect(allowed.status).toBe(200);
+    });
+
+    it("honours the pick from a locked tenant's own curated list", async () => {
+      // The live OCC shape: the tenant is locked AND curates its own model
+      // list. The lock pins the session controls, but the picker is the
+      // operator's own list, so a pick from that list is forwarded. The
+      // deployment host in this fixture also resolves a catalog (every
+      // product chat does since #6237), so this also pins that the merge
+      // lets the tenant's hand list win instead of letting the catalog
+      // ignore it and pin the tenant's default against a catalog that does
+      // not know it.
+      installConfig(occYaml(), {
+        slug: "occ",
+        token: OCC_TOKEN,
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        lockSessionControls: true,
+        models: { default: "only-this-model", available: ["only-this-model"] },
+      });
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "only-this-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["only-this-model"]);
+    });
+
+    it("honours a session lock set in the deployment config", async () => {
+      // The lock is set in the deployment config only. The merged tenant
+      // carries it, so the visitor's model pick is never forwarded.
+      installConfig(
+        occYaml({
+          host: [
+            "    gate:",
+            "      mode: ungated",
+            "      lockSessionControls: true",
+            ...NO_MODEL_LIST,
+          ],
+        }),
+        {
+          slug: "occ",
+          token: OCC_TOKEN,
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
+      );
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      // The house default, never the visitor's pick.
+      expect(forwarded).toEqual(["digigraph"]);
+    });
+
+    it("never drops a session lock set in the tenant registry", async () => {
+      // The mirror image: the lock is set in the tenant registry while the
+      // deployment config has a host for the same host without a lock. The
+      // merge keeps the stricter of the two, so the pick is not forwarded.
+      installConfig(occYaml({ host: NO_MODEL_LIST }), {
+        slug: "occ",
+        token: OCC_TOKEN,
+        gateMode: "ungated",
+        backend: { type: "digigraph" },
+        lockSessionControls: true,
+      });
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["digigraph"]);
+    });
+
+    it("keeps the tenant's own lock when the default deployment locks another tenant", async () => {
+      // The config has a default `deployment:` block (locked) and an OCC host
+      // (not locked). The tenant is resolved from the Referer, so the
+      // header-only deployment lookup falls back to the default deployment.
+      // The tenant's own lock decides: OCC is not locked.
+      installConfig(
+        occYaml({
+          deployment: [
+            "  slug: default",
+            "  backend:",
+            "    type: digigraph",
+            "  gate:",
+            "    mode: ungated",
+            "    lockSessionControls: true",
+          ],
+          host: NO_MODEL_LIST,
+        }),
+        {
+          slug: "occ",
+          token: OCC_TOKEN,
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
+      );
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occRefererReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual(["some-model"]);
+    });
+
+    it("merges a registry tenant into an origin-form deployment host key", async () => {
+      // The deployment config keys the host as an origin, the registry keys it
+      // as a bare host. The lookup normalises both, so the merge has to as
+      // well — otherwise the host ends up with two entries and the
+      // registry-only duplicate wins, dropping the deployment's own gate.
+      installConfig(
+        [
+          "version: 1",
+          "hosts:",
+          `  "https://${OCC_HOST}":`,
+          "    slug: occ",
+          `    token: ${OCC_TOKEN}`,
+          "    backend:",
+          "      type: digigraph",
+          "    gate:",
+          "      mode: ungated",
+          "      lockSessionControls: true",
+          "",
+        ].join("\n"),
+        {
+          slug: "occ",
+          token: OCC_TOKEN,
+          gateMode: "ungated",
+          backend: { type: "digigraph" },
+        },
+      );
+
+      const forwarded = captureForwardedModel();
+      const res = await POST(occReq({ "x-digi-model": "some-model" }));
+      expect(res.status).toBe(200);
+      // The deployment's lock survived the merge and still pins the model.
+      expect(forwarded).toEqual(["digigraph"]);
+    });
+  });
+
   describe("trace stream (the production default)", () => {
     // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
     // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`
@@ -2231,11 +3215,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
       expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
-      // The session path now resolves the same deployment the embed path does
-      // (Phase 2b), so the adapter gets that deployment's `gate.activityDetail`
-      // instead of a hard-coded "full". The synthetic dev config in tests leaves
-      // it at the schema default.
-      expect(call?.activityDetail).toBe("labels");
+      // No config file loads house. House sets activityDetail full.
+      expect(call?.activityDetail).toBe("full");
       expect(call?.signal).toBeDefined();
     });
 
@@ -2499,5 +3480,59 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }
       });
     });
+  });
+});
+
+describe("POST /api/chat limits", () => {
+  beforeEach(() => {
+    resetLimitsStoreForTests();
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    vi.mocked(resolveDigigraphUpstreamAuth).mockResolvedValue({
+      bearer: "jwt-token",
+      litellmProxyApiKey: null,
+    });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    resetLimitsStoreForTests();
+    resetDigichatConfigForTests();
+  });
+
+  it("blocks a second conversation from the same IP without calling a model", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "trial",
+          backend: { type: "digigraph" },
+          limits: { sessions: { perIp: { max: 1, window: "concurrent", message: "one chat" } } },
+        },
+      }),
+    );
+    const req = (conversation: string) =>
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-external-conversation": conversation,
+          "x-digichat-session": "sess-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    const first = await POST(req("conv-a"));
+    expect(first.status).toBe(200);
+    const streamCalls = vi.mocked(streamText).mock.calls.length;
+    const traceCalls = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length;
+    const second = await POST(req("conv-b"));
+    expect(second.status).toBe(429);
+    expect(await second.json()).toMatchObject({ error: "limit_exceeded", message: "one chat" });
+    expect(vi.mocked(streamText).mock.calls.length).toBe(streamCalls);
+    expect(vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length).toBe(traceCalls);
+    expect(vi.mocked(createFoundryStreamResponse)).not.toHaveBeenCalled();
   });
 });

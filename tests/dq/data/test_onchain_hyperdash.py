@@ -21,6 +21,8 @@ from digiquant.data.onchain.hyperdash import (
     get_onchain_cohort_positioning,
 )
 
+from tests.dq.data.onchain_fakes import FakeSession
+
 pytestmark = pytest.mark.unit
 
 
@@ -70,32 +72,6 @@ def _cohort_summary() -> dict[str, Any]:
             },
         ],
     }
-
-
-class _FakeResp:
-    def __init__(self, body: dict[str, Any]) -> None:
-        self._body = body
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict[str, Any]:
-        return self._body
-
-
-class _FakeSession:
-    """Minimal requests-like session for the scraper (no network)."""
-
-    def __init__(self, *, body: dict[str, Any] | None = None, exc: Exception | None = None) -> None:
-        self._body = body
-        self._exc = exc
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def post(self, url: str, **kwargs: Any) -> _FakeResp:
-        self.calls.append((url, kwargs))
-        if self._exc is not None:
-            raise self._exc
-        return _FakeResp(self._body or {})
 
 
 def _eth(pos: CohortPositioning) -> dict[str, Any]:
@@ -223,7 +199,7 @@ class TestDivergenceMonotonicity:
 class TestHyperdashScraper:
     def test_fetch_parses_full_graphql_body(self) -> None:
         body = {"data": {"analytics": {"cohortSummary": _cohort_summary()}}}
-        session = _FakeSession(body=body)
+        session = FakeSession(body=body)
         pos = HyperdashScraper(session=session).fetch()
         assert pos.error is None and pos.has_data
         assert _eth(pos)["divergence"] == pytest.approx(-0.8)
@@ -233,14 +209,14 @@ class TestHyperdashScraper:
         assert "User-Agent" in kwargs["headers"]
 
     def test_fetch_fail_soft_on_network_error(self) -> None:
-        session = _FakeSession(exc=ConnectionError("boom"))
+        session = FakeSession(exc=ConnectionError("boom"))
         pos = HyperdashScraper(session=session).fetch()
         assert pos.error is not None
         assert pos.has_data is False
         assert pos.compact_summary()["overall_divergence"] is None
 
     def test_fetch_fail_soft_on_graphql_errors(self) -> None:
-        session = _FakeSession(body={"errors": [{"message": "bad query"}], "data": None})
+        session = FakeSession(body={"errors": [{"message": "bad query"}], "data": None})
         pos = HyperdashScraper(session=session).fetch()
         assert pos.error == "graphql_errors"
         assert pos.has_data is False
@@ -273,7 +249,7 @@ class TestHyperdashScraper:
         body = {"data": {"analytics": {"cohortSummary": _cohort_summary()}}}
         monkeypatch.setattr(
             "digiquant.data.onchain.hyperdash.HyperdashScraper",
-            lambda: HyperdashScraper(session=_FakeSession(body=body)),
+            lambda: HyperdashScraper(session=FakeSession(body=body)),
         )
         pos = get_onchain_cohort_positioning()
         assert pos.has_data and pos.total_traders == 12_345

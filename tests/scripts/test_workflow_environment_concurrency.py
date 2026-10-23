@@ -98,7 +98,6 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     # this is a precondition for DIG-248 rather than a live break today.
     "agent-backlog-snapshot.yml": {"snapshot"},
     "agent-pr-finalizer.yml": {"finalize"},
-    "deploy-digithings-cron.yml": {"deploy"},
     "execution-cron-check.yml": {"probe"},
     "pipeline-checkpoint-archive.yml": {"archive"},
     "pipeline-continuous-improvement.yml": {"digest"},
@@ -127,10 +126,19 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     "sync-digiquant-runner-digikey-secret.yml": {"sync-runner-house"},
     "sync-digiquant-runner-mail-secrets.yml": {"sync-runner-mail"},
     "token-canary.yml": {"canary"},
-    # `production` — the one job whose environment *can* make a run wait, and therefore
-    # the one the queueing assertions actually bite on. Its reviewer gate is intentional
-    # and its concurrency group has to keep superseding.
+    # `production` — the environment that *can* make a run wait, and therefore the one the
+    # queueing assertions actually bite on. Its reviewer gate is intentional and its
+    # concurrency group has to keep superseding.
     "deploy-digiquant-runner.yml": {"deploy"},
+    # The cron deploy lane was moved off `cron` onto `production` by DIG-3129 on 2026-10-12:
+    # it publishes org-wide production clocks, so its gate is Chris's too.
+    "deploy-digithings-cron.yml": {"deploy"},
+    # The two Cloudflare Container lanes (DIG-4612 for the stack, DIG-5120 for the digichat).
+    # Both deploy production, so both sit behind Chris's approval on this environment, and
+    # both hold a run at that gate long enough for a shared concurrency group to cancel an
+    # already-approved deploy.
+    "deploy-digithings-stack-cloudflare.yml": {"deploy"},
+    "deploy-digichat-cloudflare-container.yml": {"deploy"},
 }
 
 

@@ -38,7 +38,7 @@
     },
     {
       "id": "claim_15f50e7d70fc479fa32cc76535a39595",
-      "statement": "digiquant is the sole source of truth for performance claims, called by digigraph over HTTP, by MCP clients, by power users via CLI, and polled by digiclaw for drift.",
+      "statement": "digiquant is the sole source of truth for performance claims, called by digigraph over HTTP, by MCP clients, by power users via CLI, and polled by digibot for drift.",
       "evidence": [
         {
           "resource": "repo://digiquant/ARCHITECTURE.md#L26-L36",

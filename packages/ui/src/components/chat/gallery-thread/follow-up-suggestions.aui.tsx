@@ -60,7 +60,7 @@ const FollowupSuggestionsRow: FC = () => {
           >
             <DotMatrix
               state="example"
-              label="Example"
+              decorative
               className="aui-thread-followup-suggestion-mark size-3.5"
             />
             {suggestion.title ?? suggestion.prompt}

@@ -18,10 +18,17 @@ name: "Test: digiquant"
 #
 # So the lane pins its own extras instead of subtracting from everything, which
 # also keeps the historical set exact rather than approximately right:
-# `[dev,visualization,brokers-alpaca]` transitively brings research, indicators and m2
-# (via dev) plus the optional Alpaca paper SDK for `tests/dq/brokers/`, but not
-# prices, data, optimize, mcp, otel or nautilus. digibase and digikey arrive as
-# declared dependencies of digiquant.
+# `[dev,visualization,brokers-alpaca,mcp]` transitively brings research, indicators and m2
+# (via dev) plus the optional Alpaca paper SDK for `tests/dq/brokers/` and the
+# MCP client SDK for the `digifetch_*` MCP server tests, but not prices, data,
+# optimize, otel or nautilus. digibase and digikey arrive as declared
+# dependencies of digiquant.
+#
+# The `mcp` extra is `mcp>=1.2,<2` plus `yfinance>=0.2` and pulls in neither
+# nautilus nor otel, so it widens the gate without reopening the #42 SIGABRT.
+# It was added for the §7 envelope contract: `tests/dq/data/test_gloomberb_agent_tools.py`
+# calls the live MCP wrappers, and while the lane had no `mcp` extra that
+# assertion was skipped — the contract stopped being gated in CI (DIG-3427).
 #
 # Verified equivalent on the K1 tip with ``--extra brokers-alpaca`` included:
 # "1031 passed, 48 skipped, 66 deselected" (uv sync --frozen --package digiquant
@@ -29,6 +36,15 @@ name: "Test: digiquant"
 # pre-brokers count was 491/18/64 under pip (run 30503444075). For contrast,
 # `--all-extras` gave 1534 passed / 13 skipped / 79 deselected — a silent 3x
 # widening of the gate (nautilus), which is what this shape avoids.
+#
+# Verified on the 2026-10-22 tip with `--extra mcp` added: the four
+# `tests/dq/test_mcp_*.py` files the lane used to skip now run (195 tests), and
+# together with `tests/dq/data/test_gloomberb_agent_tools.py` they give
+# "223 passed" in 28.85s. The lane total on that tip is 3999 passed / 87 skipped
+# / 4 deselected / 1 xfailed, with 74 failures and 139 errors that predate this
+# change — the migrations split (#5854) broke the migration checks, which
+# DIG-3427 repairs for the 20 in the S28 shard (PR #6204); the rest are tracked
+# separately.
 #
 # `pip install cryptography pandas` dropped as redundant: both arrive
 # transitively (cryptography via digikey, pandas via the research/m2 extras).
@@ -60,10 +76,13 @@ jobs:
       # Deliberately NOT --all-packages --all-extras — see the header.
       # brokers-alpaca is explicit (not via --all-extras) so tests/dq/brokers/
       # unit tests run against alpaca-py without pulling nautilus (#42).
+      # mcp is explicit for the same reason: the digifetch_* MCP wrapper tests
+      # need the mcp extra, and it is the one that gates the §7 envelope
+      # contract (DIG-3427).
       - name: Install from lockfile (excludes nautilus — see header, #42)
         run: >-
           uv sync --frozen --package digiquant
-          --extra dev --extra visualization --extra brokers-alpaca
+          --extra dev --extra visualization --extra brokers-alpaca --extra mcp
 
       - name: Ruff
         run: uv run --frozen --no-sync ruff check digiquant/src

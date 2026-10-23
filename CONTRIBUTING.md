@@ -36,7 +36,7 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 ## Workflow
 
 1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
-2. Branch: `feature/<short-description>` or `fix/<short-description>`.
+2. Branch: `feat/<short-description>`, `fix/<short-description>`, or `revert/<short-description>` to roll back an earlier change (full taxonomy in [BRANCHING.md](BRANCHING.md)).
 3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
 4. Open a PR with the template. Include: what changed, why, how it was tested. Quality bar is review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
 5. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
@@ -53,7 +53,7 @@ Examples:
 - `ci(root): conventional-commit PR title lint`
 - `fix(digiquant): correct fill timestamp timezone`
 
-Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digiclaw, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digibot, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
 
 Exempt patterns (not blocked):
 
