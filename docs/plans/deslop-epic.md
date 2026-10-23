@@ -447,3 +447,31 @@ lint and `tsc --noEmit` green.
 Caveat found by the slice: `/app` is drawn by `pages/brief.tsx`, not only
 `desk-view.tsx`, and `/brief` does not pass a `/kpis/live` payload. **UC2b**
 owns that wiring and must not fake data if the route is static.
+
+### UD1 — landed
+
+Commit `2ea5d4f0ef`, merged `7cf54d3cda`. Appearance now renders a 12-skin grid
+with name, mode, light/dark swatch strips, per-pair WCAG lines, `aria-pressed`
+and arrow/Home/End keyboard selection. Selection rewrites the draft only; no
+save call. 122 tests pass in the devkit suite; canon and the devkit eslint pass.
+
+Findings:
+
+1. **Skins are not colour-defined.** Colour is palette-driven (`data-palette`)
+   plus the accent pair; `THREAD_SKINS` carries ids only. The gallery therefore
+   shows palette-derived swatches, not invented per-skin colours. Do not add a
+   fake per-skin palette table.
+2. Selection highlight follows `parsed.chrome.skin`, so it moves after the
+   debounced validate round-trip. An optimistic local state would make it
+   instant; that is polish, not correctness.
+3. The pair readout lacks the dismissible below-minimum warning that the accent
+   readout has.
+
+### Pre-existing gate failures (baseline, not caused by this epic)
+
+- `npm run lint -w digichat` exits 1 at
+  `src/lib/base-path-usage.source.test.ts:9` (direct `packages/ui/src` import,
+  `no-restricted-imports`). It exists on the epic baseline. **Fix before the
+  final PR**; otherwise the digichat lint gate is red.
+- `tsc --noEmit` in digichat reports 3 errors in `src/app/api/chat/route.ts`,
+  also present on the baseline.
