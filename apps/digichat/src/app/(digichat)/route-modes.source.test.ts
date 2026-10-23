@@ -47,6 +47,19 @@ describe("single route / with ?mode=", () => {
     expect(page).toMatch(/resolveRouteMode\(params\.mode\)/);
   });
 
+  it("still resolves the explicit embed and catalog surfaces", () => {
+    expect(resolveRouteMode("embed")).toBe("embed");
+    expect(resolveRouteMode("catalog")).toBe("catalog");
+  });
+
+  it("falls back to product for repeated, empty and oddly-cased values", () => {
+    expect(resolveRouteMode(["embed", "x"])).toBe("product");
+    expect(resolveRouteMode(["menu", "menu"])).toBe("product");
+    expect(resolveRouteMode([])).toBe("product");
+    expect(resolveRouteMode("PRODUCT")).toBe("product");
+    expect(resolveRouteMode(" menu ")).toBe("product");
+  });
+
   it("guards catalog in production and de-indexes non-product modes", () => {
     expect(page).toMatch(/NODE_ENV.*production/);
     expect(page).toMatch(/notFound\(\)/);

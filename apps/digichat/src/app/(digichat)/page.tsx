@@ -25,8 +25,9 @@ export async function generateMetadata({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const params = await searchParams;
-  if (params.mode !== "embed" && params.mode !== "catalog") return {};
-  if (params.mode === "embed")
+  const routeMode = resolveRouteMode(params.mode);
+  if (routeMode === "product") return {};
+  if (routeMode === "embed")
     return {
       title: "digichat",
       description: "Embedded digichat preview.",
