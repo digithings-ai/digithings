@@ -426,6 +426,8 @@ devkit remains the only place that edits and saves.
 | C7 | `a483c3c629` | merge | one `asRecord`, dead `humanizeToolName`, ten dead exports |
 | C5 | `5c031bbaf2` | merge | digigraph shared artifacts helper, logging, dead config exports |
 | UC2d/e | `c2635baf2d` | merge | ledger cash + 13 FX/rates blocks on real payloads |
+| C6 | `74b938c3a7` | merge | digivoice/digivault/digibase/digillm dead code, shared store helpers, exception logging |
+| C1 | `6e5596aa4d` | merge | digiquant scalar policies, one hash dialect, dead reducer, MCP error envelope |
 
 `github/develop` was merged into the epic at `48d2a6fb4d` after the table was
 first written. That merge brought the upstream companion fix for the chat turn
