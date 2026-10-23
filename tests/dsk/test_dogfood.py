@@ -32,7 +32,7 @@ _MODULES = {
     "digiquant": "digiquant",
     "digisearch": "digisearch",
     "digitrace": "digitrace",
-    "digiclaw": "digiclaw",
+    "digibot": "digibot",
     "digibase": "digibase",
     "digikey": "digikey",
     "digivault": "digivault",

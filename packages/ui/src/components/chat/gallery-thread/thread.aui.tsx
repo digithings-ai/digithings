@@ -7,6 +7,11 @@ import {
   UserMessageAttachments,
   useHiddenAttachmentNames,
 } from "./attachment.aui";
+import {
+  composerHasText,
+  dismissComposerKeyboard,
+  isCoarsePointer,
+} from "./composer-keyboard";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
@@ -19,6 +24,12 @@ import {
   ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import {
+  DEFAULT_SCROLL_MODE,
+  scrollModeProps,
+  useFollowStream,
+  type ScrollMode,
+} from "./scroll-mode";
 import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
 import {
@@ -196,6 +207,11 @@ export type ThreadProps = {
   scrollbars?: "always" | "auto";
   /** Worked-chain rhythm. `default` is the fixed spacing. */
   density?: "compact" | "default" | "airy";
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. See `scroll-mode.ts`.
+   */
+  scrollMode?: ScrollMode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -453,6 +469,7 @@ export const Thread: FC<ThreadProps> = ({
   composerToolbar,
   scrollbars = "always",
   density = "default",
+  scrollMode = DEFAULT_SCROLL_MODE,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -487,6 +504,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
                   density={density}
+                  scrollMode={scrollMode}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -507,6 +525,20 @@ export const Thread: FC<ThreadProps> = ({
  */
 const ThreadFooter: FC = () => <SkinCredit />;
 
+/**
+ * Keeps the viewport on the stream while following. A component rather than a
+ * hook call in `ThreadRoot` because the message count lives in the thread
+ * store, which only exists inside `ThreadPrimitive.Root`.
+ */
+const ScrollFollower: FC<{ viewport: HTMLElement | null; enabled: boolean }> = ({
+  viewport,
+  enabled,
+}) => {
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  useFollowStream(viewport, enabled, messageCount);
+  return null;
+};
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
@@ -514,7 +546,8 @@ const ThreadRoot: FC<{
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
   density: "compact" | "default" | "airy";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
+  scrollMode: ScrollMode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density, scrollMode }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -524,6 +557,8 @@ const ThreadRoot: FC<{
     viewportRef.current = node;
     setViewportEl(node);
   }, []);
+
+  const viewportProps = scrollModeProps(scrollMode);
 
   return (
     <ThreadPrimitive.Root
@@ -548,7 +583,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -559,8 +595,8 @@ const ThreadRoot: FC<{
       <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
         ref={attachViewport}
-        turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        {...viewportProps}
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
@@ -569,6 +605,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
+        <ScrollFollower viewport={viewportEl} enabled={scrollMode === "follow"} />
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
@@ -576,7 +613,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -819,6 +856,13 @@ const Composer: FC<{
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRootRef = useRef<HTMLFormElement | null>(null);
   const isEditingMessage = edit.editing !== null;
+  // Read after mount, not during render: the server has no matchMedia, and a
+  // phone reporting "coarse" on its first render would hydrate a different
+  // tree than the one that was sent.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(isCoarsePointer());
+  }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (edit.editing) {
@@ -826,7 +870,13 @@ const Composer: FC<{
       edit.commit(aui.composer().getState().text);
       return;
     }
+    // Captured before the send clears the textarea — see composerHasText.
+    const sent = composerHasText(composerRootRef.current);
     onComposerSubmit?.(event);
+    // On a phone the keyboard would otherwise stay up over the streaming
+    // answer; blurring retracts it and leaves the thread in full view. A
+    // no-op on a fine pointer, so a desktop keeps its caret for the next turn.
+    if (sent) dismissComposerKeyboard(composerRootRef.current);
   };
 
   // Click outside the composer cancels an in-progress edit. The edit button
@@ -916,7 +966,7 @@ const Composer: FC<{
           data-slot="aui_composer-shell"
           data-layout={layout}
           onMouseDown={handleShellMouseDown}
-          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding,0.5rem) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
@@ -940,6 +990,12 @@ const Composer: FC<{
                 autoFocus={autoFocus}
                 submitMode="enter"
                 enterKeyHint="send"
+                // assistant-ui refocuses the composer when a run starts and
+                // when the viewport scrolls back to the bottom. On a phone
+                // that reopens the keyboard over the answer we just revealed,
+                // so both are off there; on a desktop the caret is welcome.
+                unstable_focusOnRunStart={!coarsePointer}
+                unstable_focusOnScrollToBottom={!coarsePointer}
                 aria-label="Message"
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
@@ -1366,6 +1422,11 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
+      // Earlier turns: the bar is unmounted until the turn is hovered, then it
+      // takes its footer row back in flow. It cannot float in the message gap —
+      // the bar is 24px tall and the gap is 12/8/20px by density, so a float
+      // paints over the next turn's first line. The empty-footer collapse in
+      // chat-digichat.css keeps the un-hovered turns at one message gap.
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>

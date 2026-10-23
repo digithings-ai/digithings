@@ -8,11 +8,18 @@
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import {
+  matchesMobileDensityViewport,
   readStoredDensity,
   resolveTraceDensity,
   writeStoredDensity,
   type TraceDensity,
 } from "../trace-spacing";
+import {
+  readStoredScrollMode,
+  resolveScrollMode,
+  writeStoredScrollMode,
+  type ScrollMode,
+} from "../gallery-thread/scroll-mode";
 import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
@@ -44,6 +51,12 @@ export type EmbedChatPrefs = {
   scrollbars: "always" | "auto";
   /** Worked-chain rhythm. A stored user choice wins over the deployment default. */
   density: TraceDensity;
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. A stored user choice wins over the
+   * deployment default.
+   */
+  scroll: ScrollMode;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -64,6 +77,7 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   toolbar: true,
   scrollbars: "always",
   density: "default",
+  scroll: "follow",
 };
 
 /**
@@ -77,40 +91,93 @@ export function chromePrefsFromDeploy(
     searchEngine?: string | null;
     toolbar?: boolean | null;
     scrollbars?: "always" | "auto" | null;
+    scroll?: "follow" | "free" | null;
   } = {},
   storage?: { getItem(key: string): string | null } | null,
-): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
+  context: { mobile?: boolean } = {},
+): Pick<
+  EmbedChatPrefs,
+  "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars" | "scroll"
+> {
   const effort = input.effort?.trim().toLowerCase();
   return {
     density: resolveTraceDensity(
       storage === undefined ? readStoredDensity() : readStoredDensity(storage),
       input.density,
+      context,
     ),
     effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
     searchEngine: input.searchEngine?.trim() ?? "",
     toolbar: input.toolbar !== false,
     scrollbars: input.scrollbars === "auto" ? "auto" : "always",
+    scroll: resolveScrollMode(
+      storage === undefined ? readStoredScrollMode() : readStoredScrollMode(storage),
+      input.scroll,
+    ),
   };
 }
 
 /**
- * Apply a stored `dt-density` after hydration. The first render uses the
- * deployment density on both server and client, so `data-density` matches
- * and only a user with a stored choice re-renders once.
+ * The reset paths (`/new`, `/clear`, `/compact`, the thread's new-thread
+ * button) rebuild chrome from the deployment. Density must resolve exactly the
+ * way the mount effect does — a stored choice first, then the phone default —
+ * or a phone drops back to the deployment rhythm on the first reset and never
+ * returns, because the embed client does not remount. Other chrome still
+ * returns to the deployment.
+ */
+export function resetChromePrefsFromDeploy(
+  input: Parameters<typeof chromePrefsFromDeploy>[0] = {},
+): ReturnType<typeof chromePrefsFromDeploy> {
+  return chromePrefsFromDeploy(input, undefined, {
+    mobile: matchesMobileDensityViewport(),
+  });
+}
+
+/**
+ * Apply a stored `dt-density` after hydration, and the mobile default when the
+ * user has never chosen one. The first render uses the deployment density on
+ * both server and client, so `data-density` matches; afterwards a stored choice
+ * (or an airy mobile default) re-renders once.
+ *
+ * Order is stored user choice > mobile default (airy) > deployment default >
+ * "default" — see `resolveTraceDensity`.
  */
 export function useStoredDensityAfterMount(
   setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
 ): void {
   useEffect(() => {
-    const stored = readStoredDensity();
-    if (!stored) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is client-only; reading it during render would mismatch the server HTML
-    setPrefs((prev) => (prev.density === stored ? prev : { ...prev, density: stored }));
+    const mobile = matchesMobileDensityViewport();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage and matchMedia are client-only; reading them during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const next = resolveTraceDensity(readStoredDensity(), prev.density, { mobile });
+      return prev.density === next ? prev : { ...prev, density: next };
+    });
   }, [setPrefs]);
 }
 
 export function persistDensity(density: TraceDensity): void {
   writeStoredDensity(density);
+}
+
+/**
+ * Apply a stored `dt-scroll` after hydration. The first render uses the
+ * deployment default on both server and client, so the viewport props match;
+ * a visitor who chose a mode re-renders once.
+ */
+export function useStoredScrollAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; reading it during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const stored = readStoredScrollMode();
+      return !stored || prev.scroll === stored ? prev : { ...prev, scroll: stored };
+    });
+  }, [setPrefs]);
+}
+
+export function persistScroll(mode: ScrollMode): void {
+  writeStoredScrollMode(mode);
 }
 
 /**
@@ -155,6 +222,7 @@ export type EmbedChatPrefsApi = {
   setToolbar: (visible: boolean) => void;
   setScrollbars: (mode: "always" | "auto") => void;
   setDensity: (density: TraceDensity) => void;
+  setScroll: (mode: ScrollMode) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;
@@ -177,6 +245,13 @@ export type EmbedChatPrefsApi = {
    * when this is true.
    */
   showContextMeter?: boolean;
+  /**
+   * The trial gate's own turn budget, when the host runs one. The toolbar
+   * draws this in place of the context meter: a turn budget is the number
+   * that stops the visitor, and it exists even where the backend reports no
+   * token usage. Absent means "no gate", so the context meter keeps the slot.
+   */
+  usage?: { used: number; limit: number };
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;

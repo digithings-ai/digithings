@@ -592,7 +592,7 @@ def test_the_operator_prompt_branch_reads_the_local_prefixes_only(
 ):
     """An operator-prompt value is a LOCAL credential. It is looked up in the
     local namespace only, never in the shared one (DIG-4675)."""
-    entry = next(e for e in entries if e["name"] == "DIGICLAW_DIGIKEY_API_KEY")
+    entry = next(e for e in entries if e["name"] == "DIGIBOT_DIGIKEY_API_KEY")
     seen: dict = {}
 
     def fake_stores(name, prefixes, allow_prompt):

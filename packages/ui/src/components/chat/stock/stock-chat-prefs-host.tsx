@@ -17,8 +17,11 @@ import {
   catalogToolsFromClient,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   persistDensity,
+  persistScroll,
   useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   disabledCatalogIds,
   extraOffFromCatalog,
   type CatalogToolRow,
@@ -57,6 +60,8 @@ export type StockChatPrefsConfig = {
   searchEngine?: string;
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
+  /** Deployment default for follow/free. A stored `dt-scroll` still wins. */
+  scroll?: { mode: "follow" | "free" };
   tenantAllowsWeb: boolean;
   showByok: boolean;
   /**
@@ -156,11 +161,13 @@ export function useStockChatPrefs({
         searchEngine: config.searchEngine,
         toolbar: config.toolbar,
         scrollbars: config.scrollbars,
+        scroll: config.scroll?.mode,
       },
       null,
     ),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const draftSink = useRef<(text: string) => void>(() => {});
@@ -257,18 +264,23 @@ export function useStockChatPrefs({
         persistDensity(density);
         setChatPrefs((p) => ({ ...p, density }));
       },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
             toolbar: config.toolbar,
             scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
           }),
         }),
       tenantAllowsWeb,
@@ -333,12 +345,13 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
             toolbar: config.toolbar,
             scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
           }),
         });
         newThread();
@@ -349,12 +362,13 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
             toolbar: config.toolbar,
             scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
           }),
         });
         newThread();

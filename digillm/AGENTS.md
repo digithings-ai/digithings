@@ -110,7 +110,7 @@ Beyond root `AGENTS.md`:
   ledger must not share a mount, a backup, or a read grant in any shared
   deployment — and a file mode is not a read grant, because no service in
   `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind the
-  five digillm-importing compose services (`digiclaw`, `digigraph`, `digiquant`,
+  five digillm-importing compose services (`digibot`, `digigraph`, `digiquant`,
   `digisearch`, `digitrace`) has a `USER` directive, so those services run as uid
   0 and root reads the ledger whatever its bits say. Only a sink the
   process cannot read back separates them; see

@@ -596,6 +596,7 @@ describe("DigichatConfigSchema", () => {
           models: {
             catalog: true,
             occPicker: false,
+            priceCapUsdPerMillion: 2,
             costPerWindow: { usd: 0.0125565 },
           },
         },
@@ -617,7 +618,12 @@ describe("DigichatConfigSchema", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
-          models: { catalog: true, occPicker: true, costPerWindow: { usd: 0.0125565 } },
+          models: {
+            catalog: true,
+            occPicker: true,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.0125565 },
+          },
         },
       },
     });

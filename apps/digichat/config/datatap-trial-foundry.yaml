@@ -194,12 +194,38 @@ deployment:
             label: count_content
             group: Content search and retrieval
           - id: datatap__get_item
-            label: Open item
+            label: get_item
+            group: Content search and retrieval
+          - id: datatap__search_content_advanced
+            label: search_content_advanced
+            group: Content search and retrieval
+          - id: datatap__list_searchable_fields
+            label: list_searchable_fields
+            group: Content search and retrieval
+          - id: datatap__get_conversation_thread
+            label: get_conversation_thread
+            group: Content search and retrieval
+          - id: datatap__get_channel_thread
+            label: get_channel_thread
+            group: Content search and retrieval
+          - id: datatap__find_related_items
+            label: find_related_items
+            group: Content search and retrieval
+          - id: datatap__search_attachments
+            label: search_attachments
+            group: Content search and retrieval
+          - id: datatap__summarize_content
+            label: summarize_content
+            group: Content search and retrieval
+          - id: datatap__azure_ai_search
+            label: azure_ai_search
+            group: Azure AI Search
   # House MCP servers are not this trial's. An omitted block would inherit them.
   mcp:
     servers: []
     allowUserServers: false
-    allowAddForm: false  gate:
+    allowAddForm: false
+  gate:
     mode: ungated
     activityDetail: full
     llmAccess: operator

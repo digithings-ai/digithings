@@ -236,6 +236,7 @@ hosts:
         gateMode: "ungated",
         models: {
           catalog: true,
+          priceCapUsdPerMillion: 2,
           costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
         },
       },

@@ -38,7 +38,7 @@ export function DeskShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   return (
-    <ChatDesk active={path === "/tools/chat"}>
+    <ChatDesk active={path === "/tools/digichat"}>
       {/* First in the DOM, so the skip link is the first Tab stop and bypasses
           the header and the rail. The route h1 is the page's only h1; page
           bodies use h2 when they carry their own visible title. */}

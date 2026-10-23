@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   extraOffFromCatalog,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   DEFAULT_EMBED_CHAT_PREFS,
   disabledCatalogIds,
 } from "./embed-chat-prefs";
@@ -58,6 +59,11 @@ describe("composer chrome prefs", () => {
     expect(DEFAULT_EMBED_CHAT_PREFS.density).toBe("default");
     expect(createDefaultEmbedChatPrefs().density).toBe("default");
   });
+
+  it("starts following the stream", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.scroll).toBe("follow");
+    expect(createDefaultEmbedChatPrefs().scroll).toBe("follow");
+  });
 });
 
 describe("chromePrefsFromDeploy", () => {
@@ -72,8 +78,19 @@ describe("chromePrefsFromDeploy", () => {
     expect(chromePrefsFromDeploy({ density: "nope" }, null).density).toBe("default");
   });
 
-  it("seeds the other palette settings from the deployment and keeps today's defaults", () => {
-    expect(chromePrefsFromDeploy({}, null)).toMatchObject({
+  it("lets a stored scroll choice win over the deployment", () => {
+    const stored = {
+      getItem: (key: string) => (key === "dt-scroll" ? "free" : null),
+    };
+    expect(chromePrefsFromDeploy({ scroll: "follow" }, stored).scroll).toBe("free");
+    expect(chromePrefsFromDeploy({ scroll: "free" }, null).scroll).toBe("free");
+    expect(
+      chromePrefsFromDeploy({ scroll: "free" }, { getItem: () => "wide" }).scroll,
+    ).toBe("free");
+    expect(chromePrefsFromDeploy({}, null).scroll).toBe("follow");
+  });
+
+  it("seeds the other palette settings from the deployment and keeps today's defaults", () => {    expect(chromePrefsFromDeploy({}, null)).toMatchObject({
       effort: "medium",
       searchEngine: "",
       toolbar: true,
@@ -89,6 +106,44 @@ describe("chromePrefsFromDeploy", () => {
       searchEngine: "exa",
       toolbar: false,
       scrollbars: "auto",
+    });
+  });
+});
+
+describe("resetChromePrefsFromDeploy", () => {
+  function withEnv(mobile: boolean, stored: string | null, run: () => void): void {
+    vi.stubGlobal("window", {
+      matchMedia: (query: string) => ({
+        matches: mobile && query === "(max-width: 640px)",
+      }),
+    });
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => (key === "dt-density" ? stored : null),
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    try {
+      run();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it("keeps the phone default on a reset instead of dropping to the deployment", () => {
+    withEnv(true, null, () => {
+      expect(resetChromePrefsFromDeploy({ density: "compact" }).density).toBe("airy");
+    });
+  });
+
+  it("still lets a stored choice win on a phone", () => {
+    withEnv(true, "compact", () => {
+      expect(resetChromePrefsFromDeploy({ density: "airy" }).density).toBe("compact");
+    });
+  });
+
+  it("uses the deployment density on a desktop", () => {
+    withEnv(false, null, () => {
+      expect(resetChromePrefsFromDeploy({ density: "compact" }).density).toBe("compact");
     });
   });
 });

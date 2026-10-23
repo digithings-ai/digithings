@@ -18,5 +18,6 @@ Invite-only desks are not on this list. Do not invent rows, prices, or sessions.
 - [x] `/strategies/detail` Detail — overview fields as a stat or table. Parameters table. Track record: stat from the card, table of points, and a chart only when `points` has two or more values. Runs table. Empty sentence when a store is empty.
 - [x] `/strategies/deploy` Deploy — targets table, plan steps table, draft fields. Empty sentence when a list is empty. The draft is not an order.
 - [ ] `/tools/terminal` Terminal — not drawn in this terminal. Web keeps the existing link. No invented quotes.
-- [ ] `/tools/charts` Charts — not drawn in this terminal. Web chart stays on bars the API returns. No invented prices.
-- [x] `/tools/chat` digichat — threads in the desk rail. One sentence when digichat is not configured. No second sidebar and no read footer. No invented messages.
+- [ ] `/tools/gloomberb` Gloomberb — not drawn in this terminal. Web brands the tools as Gloomberb. Empty sentence until the tools are mounted.
+- [ ] `/tools/vela` Vela — not drawn in this terminal. Web chart stays on bars the API returns. No invented prices.
+- [x] `/tools/digichat` digichat — threads in the desk rail. One sentence when digichat is not configured. Baseline desk and FX Hub each get their own context. No second sidebar and no read footer. No invented messages.

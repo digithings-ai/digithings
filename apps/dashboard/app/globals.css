@@ -154,7 +154,7 @@ html.light {
 }
 
 /* P&L semantics: quant-native still points .qn-up/.qn-down at module accents
-   (digiquant green / digiclaw brown). On this dashboard money colors are the
+   (digiquant green / digibot brown). On this dashboard money colors are the
    canon --up/--down tokens ONLY — re-point them here (same specificity, later
    source) rather than editing the shared design package. */
 .qn-up   { color: var(--up); }

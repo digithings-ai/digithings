@@ -44,7 +44,7 @@ const VERSION_SOURCES: Record<string, string> = {
   digichat: "apps/digichat/package.json",
   digikey: "digikey/pyproject.toml",
   digitrace: "digitrace/pyproject.toml",
-  digiclaw: "digiclaw/pyproject.toml",
+  digibot: "digibot/pyproject.toml",
   digibase: "digibase/pyproject.toml",
   digivault: "digivault/pyproject.toml",
   digiskills: "digiskills/pyproject.toml",
@@ -83,7 +83,7 @@ describe("module-counts.json", () => {
   });
 
   it("reports an absence as null, never as zero", () => {
-    for (const id of ["digiclaw", "digibase", "digistore", "digilink"]) {
+    for (const id of ["digibot", "digibase", "digistore", "digilink"]) {
       expect(moduleCounts(id)).toEqual({ endpoints: null, mcpTools: null });
       expect(moduleCountLabel(id)).toBe("");
     }

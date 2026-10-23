@@ -163,6 +163,17 @@ FORK_DESC = "fork code never runs on this Mac; maintainer: re-push to a same-rep
 GATED_NOTE = "static gates passed (pytest/audits not gated, see DIG-3605)"
 TYPES = "feat|fix|docs|chore|refactor|perf|test|ci|build|revert|style"
 
+# Ruff path list used by the lint gate. The gate reads the list from the tree
+# under test (its own .github/workflows/ci.yml) so a module rename cannot leave
+# the gate naming a directory that no longer exists (DIG-4602). The list below
+# is the fallback only: it is used when the tree's ci.yml cannot be read, and
+# every entry that does not exist in the tree is dropped. ruff 0.16 fails on a
+# missing path (E902), so naming a directory that is not there turns every
+# other PR red; linting fewer paths only under-lints.
+RUFF_PATHS_CANDIDATES = ("digibase/src", "digibot/src", "digigraph/src",
+                         "digiquant/src", "digisearch/src", "digitrace/src",
+                         "tests")
+
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
 WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
@@ -841,12 +852,222 @@ def worker_build(wt, step):
         shutil.rmtree(outdir, ignore_errors=True)
 
 
+# The checks worktree checkout (DIG-5285). A healthy checkout of this tree
+# takes well under a second; the step was allowed 900 s, so a stalled git - a
+# lazy promisor fetch on a partial clone, a busy Mac - held the gate for a
+# quarter of an hour and then failed the whole check on a transient stall. The
+# budget is now minutes, a checkout that does not land is retried in place
+# before anything is thrown away, and the reason a check failed says which of
+# the two happened.
+WT_CHECKOUT_TIMEOUT = 300
+WT_REBUILD_TIMEOUT = 600
+WT_META_TIMEOUT = 60
+WT_CACHES = (".venv", "node_modules")
+
+
 def wt_head():
     """HEAD sha of the checks worktree, or None when git cannot read it
     (missing dir, pruned worktree metadata, broken index)."""
     rc, o = sh(["git", "rev-parse", "HEAD"], cwd=WT) if os.path.isdir(WT) else (1, "")
     o = (o or "").strip()
     return o if rc == 0 and re.fullmatch(r"[0-9a-f]{40}", o) else None
+
+
+def _wt_gitdir(path):
+    """The gitdir a linked worktree points at, or None when `path` is not one.
+
+    Read from the .git file, not from git: a broken worktree is exactly the
+    case where this has to work.
+    """
+    gitfile = os.path.join(path, ".git")
+    if not os.path.isfile(gitfile):
+        return None
+    try:
+        with open(gitfile, encoding="utf-8", errors="replace") as fh:
+            text = fh.read(4096)
+    except OSError:
+        return None
+    if "gitdir:" not in text:
+        return None
+    return os.path.realpath(text.split("gitdir:", 1)[1].strip())
+
+
+def wt_is_rebuildable(path):
+    """True when the runner may destroy `path` and build it again.
+
+    The sentinel file is not proof of ownership: the runner writes it into
+    whatever directory LOCAL_CI_WT names, so an operator's own directory would
+    look like ours after one successful run (DIG-5285). The proof is git: a
+    worktree of MAIN's repository may be removed, a worktree of another
+    repository may not, and an operator-supplied path that is no worktree at
+    all may not either (DIG-4490).
+    """
+    gitdir = _wt_gitdir(path)
+    if gitdir is None:
+        # Not a worktree at all: an orphan directory. Only the runner's own
+        # default path may be cleared out.
+        default = os.path.join(HOME, "Code", "local-ci", "wt")
+        return (not os.environ.get("LOCAL_CI_WT")
+                and os.path.realpath(path) == os.path.realpath(default))
+    rc, o = sh(["git", "rev-parse", "--git-common-dir"], cwd=MAIN)
+    if rc != 0:
+        return False
+    common = (o or "").strip()
+    if not common:
+        return False
+    if not os.path.isabs(common):
+        common = os.path.join(MAIN, common)
+    return os.path.dirname(gitdir) == os.path.join(os.path.realpath(common), "worktrees")
+
+
+def _wt_unlock():
+    """Release the worktree lock. A locked worktree cannot be removed, and the
+    post-merge worktree has been locked since 20 Oct. git exits 128 when the
+    worktree was not locked; that is not an error, so it stays out of the log."""
+    return sh(["git", "worktree", "unlock", WT], cwd=MAIN, timeout=WT_META_TIMEOUT)[0] == 0
+
+
+def _wt_stash_caches(out):
+    """Move the preserved, heavy directories aside so a rebuild does not throw
+    them away: prepare_wt keeps .venv and node_modules out of `git clean`, and
+    a rebuild that drops them costs a full uv sync and npm ci."""
+    stash = os.path.join(os.path.dirname(WT), ".ci-cache-stash")
+    os.makedirs(stash, exist_ok=True)
+    moved = []
+    for name in WT_CACHES:
+        src = os.path.join(WT, name)
+        if os.path.isdir(src):
+            dst = os.path.join(stash, name)
+            shutil.rmtree(dst, ignore_errors=True)
+            try:
+                os.rename(src, dst)
+                moved.append((name, dst))
+            except OSError as exc:
+                out.write(f"could not move {name} aside: {exc}\n")
+    return stash, moved
+
+
+def _wt_restore_caches(stash, moved, out):
+    for name, src in moved:
+        dst = os.path.join(WT, name)
+        if os.path.exists(dst):
+            continue
+        try:
+            os.rename(src, dst)
+        except OSError as exc:
+            out.write(f"could not move {name} back: {exc}\n")
+    shutil.rmtree(stash, ignore_errors=True)
+
+
+def _wt_remove(out):
+    """Remove the checks worktree and its admin entry. Returns (ok, reason).
+
+    `git worktree remove` is scoped to this one worktree; `git worktree prune`
+    is repository-wide and would take the admin entry of an operator's
+    worktree on an unmounted volume with it (DIG-5285).
+
+    A worktree with modified tracked files is not removed: that is somebody's
+    work, not checkout material (DIG-4490).
+    """
+    rc, o = sh(["git", "status", "--porcelain", "--untracked-files=no"], cwd=WT,
+               timeout=WT_META_TIMEOUT)
+    if rc == 0 and (o or "").strip():
+        return False, "the worktree has uncommitted changes"
+    _wt_unlock()
+    rc, _ = sh(["git", "worktree", "remove", "--force", "--force", WT], cwd=MAIN,
+               timeout=WT_META_TIMEOUT, out=out)
+    if rc == 0:
+        return True, ""
+    if os.path.exists(WT):
+        # git does not know this path as a worktree any more (its admin entry
+        # is gone), so the directory is all that is left, and the add below
+        # needs the path to be free.
+        shutil.rmtree(WT, ignore_errors=True)
+    if os.path.exists(WT):
+        return False, f"the worktree remove failed (rc={rc})"
+    return True, ""
+
+
+def _wt_mark_ours(sha, out):
+    """Mark the worktree as the runner's, so a later stall can heal itself."""
+    try:
+        with open(os.path.join(WT, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
+            fh.write(sha + "\n")
+    except OSError as exc:  # a read-only worktree still works; it just cannot be rebuilt
+        out.write(f"could not mark the worktree as ours: {exc}\n")
+
+
+def _wt_rebuild(sha, out):
+    """Rebuild the checks worktree at `sha`. Returns (ok, reason).
+
+    The caches come along: the rebuild moves .venv and node_modules aside and
+    puts them back, because prepare_wt keeps them out of `git clean` on
+    purpose and dropping them costs a full uv sync and npm ci.
+    """
+    stash, moved = _wt_stash_caches(out)
+    ok, why = _wt_remove(out)
+    if not ok:
+        _wt_restore_caches(stash, moved, out)
+        return False, why
+    rc, _ = sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN,
+               timeout=WT_REBUILD_TIMEOUT, out=out)
+    _wt_restore_caches(stash, moved, out)
+    if rc != 0:
+        return False, f"the worktree add failed (rc={rc})"
+    out.write(f"worktree rebuilt at {sha[:12]}\n")
+    _wt_mark_ours(sha, out)
+    return True, ""
+
+
+def checkout_wt(sha, out):
+    """Put the checks worktree on `sha`. Returns (ok, reason).
+
+    Three failures, three answers (DIG-5285):
+    - the checkout timed out: git stalled, most likely fetching a blob over
+      the network on a partial clone. A rebuild repeats the same fetch, so the
+      checkout is retried in place - git keeps what it already fetched - and a
+      second stall is reported as a stall.
+    - the checkout failed or landed on another HEAD: the worktree itself is
+      broken. It is rebuilt once and the checkout is retried there.
+    - the worktree is not the runner's: never rebuilt.
+    """
+    if not os.path.isdir(WT):
+        return False, f"the checks worktree {WT} does not exist; the worktree add failed"
+    rc, _ = sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT,
+               timeout=WT_CHECKOUT_TIMEOUT, out=out)
+    head = wt_head()
+    if rc == 0 and head == sha:
+        return True, ""
+    why = f"checkout rc={rc} HEAD {(head or 'unreadable')[:12]} != {sha[:12]}"
+    if rc == 124:
+        # A stall, not a broken worktree. git keeps what it fetched, so a
+        # second attempt often finishes; a rebuild would fetch it all again.
+        out.write(f"worktree checkout stalled ({why}); retrying in place\n")
+        rc, _ = sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT,
+                   timeout=WT_CHECKOUT_TIMEOUT, out=out)
+        head = wt_head()
+        if rc == 0 and head == sha:
+            return True, ""
+        return False, (f"git stalled in the worktree checkout for {sha[:12]} "
+                       f"(rc={rc}, HEAD {(head or 'unreadable')[:12]}); the checkout did not "
+                       f"finish within {WT_CHECKOUT_TIMEOUT}s")
+    if not wt_is_rebuildable(WT):
+        return False, f"{why}; {WT} is not a worktree this runner created; refusing to rebuild over it"
+    out.write(f"worktree checkout did not land ({why}); rebuilding the worktree and retrying\n")
+    ok, why2 = _wt_rebuild(sha, out)
+    if not ok:
+        return False, f"{why}; {why2}"
+    head = wt_head()
+    if head == sha:
+        # `git worktree add --detach -f` checks the commit out itself.
+        return True, ""
+    rc, _ = sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT,
+               timeout=WT_CHECKOUT_TIMEOUT, out=out)
+    head = wt_head()
+    if rc == 0 and head == sha:
+        return True, ""
+    return False, (f"{why}; the rebuilt worktree also failed "
+                   f"(rc={rc}, HEAD {(head or 'unreadable')[:12]})")
 
 
 def prepare_wt(n, sha, base, out):
@@ -857,32 +1078,119 @@ def prepare_wt(n, sha, base, out):
     one frozen tree, so local-ci posted green for code it never checked.
     Now every step's rc is logged, a worktree git cannot read is rebuilt,
     and HEAD must equal the PR head before any gate runs. origin/main is
-    fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main)."""
+    fetched too: check_vendor_content.py baselines on merge-base(HEAD, origin/main).
+    A checkout that stalls is retried in place and a worktree that lands on
+    another HEAD is rebuilt (DIG-5285); the reason it failed carries the rc
+    and both HEADs."""
     _guard()
     out.write(f"===== worktree {sha[:12]}\n")
     sh(["git", "fetch", "-q", "origin", base, "main", f"pull/{n}/head"], cwd=MAIN, timeout=600, out=out)
     if os.path.isdir(WT) and wt_head() is None:
-        if not wt_is_ours(WT):
+        if not wt_is_rebuildable(WT):
             return False, (f"{WT} is not a worktree this runner created; refusing to rebuild "
                            "over it (set LOCAL_CI_WT to the runner's own worktree directory)")
         out.write("worktree unreadable by git; rebuilding\n")
-        shutil.rmtree(WT, ignore_errors=True)
-        sh(["git", "worktree", "prune"], cwd=MAIN, out=out)
+        ok, why2 = _wt_rebuild(sha, out)
+        if not ok:
+            return False, why2
     if not os.path.exists(WT):
-        sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN, timeout=900, out=out)
-    sh(["git", "checkout", "-q", "--detach", "-f", sha], cwd=WT, timeout=900, out=out)
+        rc, _ = sh(["git", "worktree", "add", "--detach", "-f", WT, sha], cwd=MAIN,
+                   timeout=WT_REBUILD_TIMEOUT, out=out)
+        if rc != 0:
+            return False, f"the worktree add failed (rc={rc})"
+        _wt_mark_ours(sha, out)
+    ok, why = checkout_wt(sha, out)
+    if not ok:
+        out.write(f"worktree FAIL: {why}; no gate ran\n")
+        log(f"PR #{n} worktree checkout failed: {why}")
+        return False, why
     sh(["git", "clean", "-fdq", "-e", ".venv", "-e", "node_modules"], cwd=WT, out=out)
-    try:
-        with open(os.path.join(WT, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
-            fh.write(sha + "\n")
-    except OSError as exc:  # a read-only worktree still works; it just cannot be rebuilt
-        out.write(f"could not mark the worktree as ours: {exc}\n")
+    _wt_mark_ours(sha, out)
     head = wt_head()
     if head != sha:
         out.write(f"worktree FAIL: HEAD {head} != PR head {sha}; no gate ran\n")
         log(f"PR #{n} worktree checkout failed: HEAD {head} != {sha}")
         return False, f"HEAD {(head or 'unreadable')[:12]} != {sha[:12]}"
     return True, ""
+
+
+def _ruff_paths_from_ci_yml(text):
+    """Path list of the `ruff check` step in a ci.yml, or None.
+
+    Pure text, no YAML dependency: the daemon runs under /usr/bin/python3 and
+    must not depend on a package it may not have. Backslash line
+    continuations are joined, comment lines are skipped, and the path tokens
+    that follow `ruff check` are collected. Returns None when the file has no
+    ruff step, when it has two different path lists, or when a path leaves the
+    tree. Ambiguity is never guessed.
+    """
+    joined = []
+    pending = ""
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            continue
+        if pending:
+            s = pending + " " + s
+            pending = ""
+        if s.endswith("\\"):
+            pending = s[:-1].strip()
+            continue
+        joined.append(s)
+    if pending:
+        joined.append(pending)
+    found = []
+    for line in joined:
+        m = re.search(r"(?:^|\s)ruff\s+check\b(.*)$", line)
+        if not m:
+            continue
+        rest = re.split(r"&&|\|\||[|;&]", m.group(1), maxsplit=1)[0]
+        paths = []
+        for tok in rest.split():
+            if tok.startswith("-"):
+                continue
+            if tok.startswith("/") or ".." in tok.split("/"):
+                return None
+            paths.append(tok)
+        if paths:
+            found.append(tuple(paths))
+    if not found:
+        return None
+    if len(set(found)) > 1:
+        return None
+    return list(found[0])
+
+
+def ruff_paths_for_tree(wt):
+    """Ruff path list for the tree under test, or None with the reason.
+
+    The gate lints the same paths the tree's own ci.yml lints. A rename
+    (digiclaw -> digibot, DIG-4602) moved a path out from under a hardcoded
+    list, and ruff 0.16 fails on a missing path (E902), so a stale list
+    turns every other PR red.
+    """
+    path = os.path.join(wt, ".github", "workflows", "ci.yml")
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        return None, "ci.yml not readable (%s)" % e
+    paths = _ruff_paths_from_ci_yml(text)
+    if paths is None:
+        return None, "no single ruff check path list in ci.yml"
+    return paths, "read from .github/workflows/ci.yml"
+
+
+def ruff_paths_fallback(wt):
+    """The fallback ruff path list: the candidates that exist in this tree.
+
+    ruff 0.16 fails on a path that does not exist (E902), so a candidate that
+    the tree does not have is dropped rather than named. Linting fewer paths
+    only under-lints. Returns None when no candidate exists, so the caller
+    fails closed instead of linting nothing.
+    """
+    paths = [p for p in RUFF_PATHS_CANDIDATES if os.path.exists(os.path.join(wt, p))]
+    return paths or None
 
 
 def run_checks(pr, out):
@@ -931,7 +1239,20 @@ def run_checks(pr, out):
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
     if "uv-sync" not in fails:
         U = "uv run --frozen --no-sync "
-        step("ruff", U + "ruff check digibase/src digiclaw/src digigraph/src digiquant/src digisearch/src digitrace/src tests", 600)
+        rpaths, rnote = ruff_paths_for_tree(WT)
+        if rpaths is None:
+            rpaths = ruff_paths_fallback(WT)
+            if rpaths is None:
+                out.write("\n===== ruff\nno ruff path list: ci.yml unavailable (%s) and no candidate path exists in this tree\n" % rnote)
+                fails.append("ruff")
+                rpaths = []
+            else:
+                out.write("\nruff-paths: ci.yml unavailable (%s); using the fallback list: %s\n" % (rnote, " ".join(rpaths)))
+                log("ruff: path list from ci.yml unavailable (%s); using the fallback list" % rnote)
+        else:
+            out.write("\nruff-paths: %s: %s\n" % (rnote, " ".join(rpaths)))
+        if rpaths:
+            step("ruff", U + "ruff check " + " ".join(rpaths), 600)
         step("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200)
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
@@ -1689,7 +2010,19 @@ def run_applied(pr, out):
         except AttributeError: pass
     fix_ats = [t for t in fix_ats if t]
     reviewers = review_applied.reviewer_logins_for(passes)
-    ok, msg, open_ids = review_applied.evaluate(passes, threads, fix_ats, check_runs, reviewers)
+    # The verdict leg (DIG-4646): a head whose latest review says "changes
+    # requested" must never be posted as a review-applied success. The verdicts
+    # are read with the shared parser the merge queue uses, so both read the
+    # fleet's "Review verdict: ..." lines. An unreadable record is not a
+    # clearance, so the check fails closed with that reason.
+    verdict_inputs = review_applied.fetch_verdict_inputs(n, REPO, _rest)
+    if verdict_inputs is None:
+        verdict_blocks, verdict_error = (), "the reviews or comments could not be read"
+    else:
+        verdict_blocks, verdict_error = review_applied.blocking_verdicts(*verdict_inputs), None
+    ok, msg, open_ids = review_applied.evaluate(
+        passes, threads, fix_ats, check_runs, reviewers,
+        verdict_blocks=verdict_blocks, verdict_error=verdict_error)
     out.write(f"review-applied: passes={len(passes)} threads={len(threads)} "
               f"fix_commits={len(fix_ats)} ok={ok}\n{msg}\n")
     for tid in open_ids:
@@ -1705,7 +2038,16 @@ def process_applied(pr, dry):
     sh(["git", "fetch", "-q", "origin", pr["baseRefName"], f"pull/{n}/head"], cwd=MAIN, timeout=600)
     t0 = time.time()
     with open(logf, "w") as out:
-        ok, msg = run_applied(pr, out)
+        try:
+            ok, msg = run_applied(pr, out)
+        except Exception as exc:
+            # One broken PR must not kill the whole tick: the tick has no
+            # except, and the escape left the head's "review-applied" status
+            # stuck at "pending", which the queue then reads as a refusal
+            # (DIG-4646).
+            ok = False
+            msg = "review-applied: the check raised %s (see log)" % type(exc).__name__
+            out.write("%s: %s\n" % (type(exc).__name__, exc))
     mins = (time.time() - t0) / 60
     desc = f"{msg} ({mins:.0f}m)"
     log(f"PR #{n} review-applied {sha[:12]} {'success' if ok else 'failure'}: {desc} log={logf}")
