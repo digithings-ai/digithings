@@ -657,17 +657,16 @@
   }
 
   /* One caption at a time, under the graph, never on top of it. The floor is
-     the tallest clamped caption (index + label + two lines = 106.8px at 390),
-     measured across all eleven steps rather than guessed, plus the air that
-     keeps the last line off the pane's own edge: with a smaller floor the four
-     longest steps shrank the graph by 19px mid-walk, and with no floor at all a
-     two-line caption on one side and a one-line caption on the other moved the
-     frame between beats (and mid-crossfade). */
+     the tallest full caption across all eleven steps at 390 (13.25rem = the
+     six-line mobile step plus its two-line label), measured rather than
+     guessed. Keeping the floor means the frame does not resize as the walk
+     moves between a short and a long caption; the caption itself is no longer
+     clamped, so a reader never loses the end of the explanation. */
   .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
     grid-row: 2;
     grid-column: 1;
     display: block;
-    min-height: 7.25rem;
+    min-height: 13.25rem;
   }
 
   .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step {
@@ -686,13 +685,10 @@
     display: none;
   }
 
-  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step.on .arch-tour__line {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-  }
+  /* The step line is deliberately not clamped: on a phone the caption is the
+     explanation, so it takes as many lines as it needs and the frame gives up
+     the height (the rail floor below keeps that height stable step to step).
+     Short viewports hide the line entirely and keep the label only. */
 
   /* The price aside folds itself away whenever the rail sits under the frame
      (there is no room to the right of it in one column); removing it here also
@@ -726,6 +722,19 @@
     transform: none;
     transition: none;
     opacity: var(--arch-in, 1);
+  }
+}
+
+/* A short phone cannot hold the full explanation and a readable graph at the
+   same time. Show the step label only — never a mid-sentence ellipsis — and
+   give the frame the freed height. */
+@media (max-width: 1023.98px) and (max-height: 700px) {
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step.on .arch-tour__line {
+    display: none;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+    min-height: 4.5rem;
   }
 }
 

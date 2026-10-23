@@ -39,7 +39,7 @@ const LEDE =
   "m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft";
 const LABEL = "font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute";
 const TAB_BASE =
-  "-ms-px flex w-full min-w-0 items-baseline gap-[0.6rem] border border-hair px-[0.95rem] py-[0.7rem] text-start font-mono text-[0.8rem] leading-[1.35] transition-[color,background-color,box-shadow] duration-200 first:ms-0 max-[640px]:px-[0.6rem] max-[640px]:text-[0.74rem]";
+  "-ms-px flex w-full min-w-0 items-baseline gap-[0.6rem] border border-hair px-[0.95rem] py-[0.7rem] text-start font-mono text-[0.8rem] leading-[1.35] transition-[color,background-color,box-shadow] duration-200 first:ms-0 max-[640px]:items-end max-[640px]:px-[0.45rem] max-[640px]:py-[0.4rem] max-[640px]:text-[0.68rem] max-[640px]:leading-[1.25]";
 const TAB = `${TAB_BASE} bg-bg text-ink-soft hover:bg-surface hover:text-ink`;
 const TAB_ON = `${TAB_BASE} relative z-10 border-b-transparent bg-surface text-ink shadow-[inset_0_2px_0_var(--accent)]`;
 /** How long the graph's build entrance runs before the class is dropped. */
@@ -348,7 +348,11 @@ export function AppFirstSection() {
               </p>
             )}
             <div className="whyx__apps mt-[0.8rem] flex min-w-0 flex-col">
-              <div className="grid grid-cols-3 gap-0" role="tablist" aria-label="Application">
+              <div
+                className="whyx__app-tabs grid grid-cols-3 gap-0"
+                role="tablist"
+                aria-label="Application"
+              >
                 {APP_PRESETS.map((app, i) => (
                   <button
                     key={app.id}
@@ -374,7 +378,7 @@ export function AppFirstSection() {
               {/* Every app's description sits in the same cell, only the
                   selected one visible, so the strip is always as tall as the
                   longest and the graph box below never changes size. */}
-              <div className="grid border-x border-hair bg-surface px-[0.95rem] pt-[0.75rem] pb-[0.6rem]">
+              <div className="whyx__app-subhead grid border-x border-hair bg-surface px-[0.95rem] pt-[0.75rem] pb-[0.6rem]">
                 {APP_PRESETS.map((app) => (
                   <p
                     key={app.id}

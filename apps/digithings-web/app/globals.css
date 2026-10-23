@@ -657,6 +657,25 @@ html {
   }
 }
 
+/* Narrow: the app strip is the graph's own header. The subhead band is
+   padding-only once the head paragraphs are hidden, so drop it; the tabs sit
+   flush on the frame and the active tab covers the frame's top rule. */
+@media (max-width: 1023.98px) {
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__pin {
+    row-gap: 0;
+  }
+
+  .whyx__app-subhead {
+    display: none;
+  }
+
+  .whyx__apps {
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 2;
+  }
+}
+
 /* A short screen gives the graph the lede's rows; the walk shows the same thing. */
 @media (max-height: 820px) {
   .whyx .whyx__how {
