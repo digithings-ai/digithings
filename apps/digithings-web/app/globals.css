@@ -286,33 +286,65 @@ html {
    sections, interface lists, related links. The copy-as-Markdown buttons and
    the tier badges are the vendored kit's Button/Badge (wave 2, #4206), so the
    old .docs-copy/.doc-badge dress went with them. */
+/* Sizing tokens for the content chrome below. Roots are the module article and
+   the guide section; every consumer here (including .doc-block and .doc-links)
+   is a descendant of one of them. The docs shell, hero, code blocks and field
+   tables stay owned by the shared docs family. */
+.doc-mod,
+.doc-guide {
+  --doc-gap-2xs: 0.1rem;
+  --doc-gap-xs: 0.2rem;
+  --doc-gap-sm: 0.35rem;
+  --doc-gap-md: 0.6rem;
+  --doc-gap-lg: 0.7rem;
+  --doc-block-pad-top: clamp(1.2rem, 3vw, 1.8rem);
+  --doc-label-size: 0.72rem;
+  --doc-label-tracking: 0.14em;
+  --doc-sub-label-size: 0.74rem;
+  --doc-sub-label-tracking: 0.12em;
+  --doc-mod-title-size: 1.05rem;
+  --doc-tracking-tight: -0.01em;
+  --doc-role-size: 0.78rem;
+  --doc-lead-size: 0.96rem;
+  --doc-summary-size: 0.88rem;
+  --doc-desc-size: 0.86rem;
+  --doc-body-size: 0.9rem;
+  --doc-link-size: 0.8rem;
+  --doc-guide-title-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  --doc-list-indent: 1.1rem;
+  --doc-underline-offset: 2px;
+  --doc-leading-tight: 1.5;
+  --doc-leading-body: 1.6;
+  --doc-leading-loose: 1.65;
+}
+
 .doc-block { margin: 0; }
-.doc-block h3 { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-block h3 { margin: 0 0 var(--space-2); font-family: var(--font-mono); font-size: var(--doc-label-size); letter-spacing: var(--doc-label-tracking); text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 
 /* anchored sections get their scroll offset from the shared docs.css rule
    (.docs-content :where([id])), driven by --docs-nav-h above. */
-.doc-mod { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.7rem; }
-.doc-mod-head { display: flex; align-items: center; gap: 0.7rem; }
-.doc-mod-title { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; }
-.doc-mod-title h2 { margin: 0; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
+.doc-mod { border-top: 1px solid var(--hair); padding-top: var(--doc-block-pad-top); display: flex; flex-direction: column; gap: var(--doc-gap-lg); }
+.doc-mod-head { display: flex; align-items: center; gap: var(--doc-gap-lg); }
+.doc-mod-title { display: flex; flex-direction: column; gap: var(--doc-gap-2xs); margin-right: auto; }
+.doc-mod-title h2 { margin: 0; font-family: var(--font-mono); font-size: var(--doc-mod-title-size); font-weight: 500; letter-spacing: var(--doc-tracking-tight); }
 .doc-mod-title .dt-d { color: var(--ink); }
 .doc-mod-title .dt-s { color: var(--accent); }
-.doc-mod-role { font-size: 0.78rem; color: var(--ink-mute); }
-.doc-tagline { margin: 0; color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
-.doc-summary { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.65; }
+.doc-mod-role { font-size: var(--doc-role-size); color: var(--ink-mute); }
+.doc-tagline { margin: 0; color: var(--ink); font-size: var(--doc-lead-size); line-height: var(--doc-leading-tight); }
+.doc-summary { margin: 0; color: var(--ink-soft); font-size: var(--doc-summary-size); line-height: var(--doc-leading-loose); }
 
-.doc-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.2rem; }
-.doc-links a { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--doc-gap-xs); }
+.doc-links a { font-family: var(--font-mono); font-size: var(--doc-link-size); color: var(--accent); text-decoration: none; text-underline-offset: var(--doc-underline-offset); }
 .doc-links a:hover { text-decoration: underline; }
 .doc-links a .dt-d { color: var(--ink); }
 .doc-links a .dt-s { color: var(--accent); }
 
 /* ---- shared guides ---- */
-.doc-guide { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.6rem; }
-.doc-guide-title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
-.doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
-.doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
-.doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-guide { border-top: 1px solid var(--hair); padding-top: var(--doc-block-pad-top); display: flex; flex-direction: column; gap: var(--doc-gap-md); }
+.doc-guide-title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: var(--doc-guide-title-size); letter-spacing: var(--doc-tracking-tight); color: var(--ink); }
+.doc-guide-h { margin: var(--doc-gap-md) 0 0; font-family: var(--font-mono); font-size: var(--doc-sub-label-size); letter-spacing: var(--doc-sub-label-tracking); text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.doc-guide-list { margin: var(--doc-gap-xs) 0 0; padding-left: var(--doc-list-indent); display: flex; flex-direction: column; gap: var(--doc-gap-sm); color: var(--ink-soft); font-size: var(--doc-body-size); line-height: var(--doc-leading-body); }
+.doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: var(--doc-underline-offset); }
 .doc-inline-link:hover { text-decoration: underline; }
 
 /* Docs and the API explorer fill the column between the site rails.
@@ -358,9 +390,9 @@ html {
 .docs-swagger .swagger-ui .btn.execute { display: none !important; }
 
 /* ---- public interface / mcp lists ---- */
-.doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.doc-iface li { display: flex; flex-direction: column; gap: 0.2rem; }
-.doc-iface-desc { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.55; }
+.doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-iface li { display: flex; flex-direction: column; gap: var(--doc-gap-xs); }
+.doc-iface-desc { color: var(--ink-soft); font-size: var(--doc-desc-size); line-height: var(--leading); }
 
 /* Chat iframe canvas: snapshot the theme's --bg token on the root (the config
    variable from tokens.css, set per [data-theme]). Snapshotting on :root keeps
@@ -397,14 +429,21 @@ html {
    data-layout (styles + component + tests) and this block is deleted.
    ========================================================================== */
 .stack-pin {
+  /* The pin's gap under the nav. Fixed on purpose: a fluid gap would slide the
+     cells as the viewport height changes. */
+  --stack-pin-gap: 1.6rem;
   position: sticky;
-  top: calc(var(--dq-nav-h) + 1.6rem);
+  top: calc(var(--dq-nav-h) + var(--stack-pin-gap));
 }
 
 .stack-grid {
+  /* Content-measured floors: the tallest cell sets the row, and 7rem is the
+     minimum a caption-only cell needs before its text starts to clip. */
+  --stack-row-min: 7rem;
+  --stack-gap: 0.75rem;
   display: grid;
-  grid-auto-rows: minmax(7rem, auto);
-  gap: 0.75rem;
+  grid-auto-rows: minmax(var(--stack-row-min), auto);
+  gap: var(--stack-gap);
 }
 
 /* The focus ring: the active cell fills its livery hairline and lifts, every
@@ -467,7 +506,7 @@ html {
 
 .faq-morph__pin {
   position: sticky;
-  top: calc(var(--dq-nav-h) + 1rem);
+  top: calc(var(--dq-nav-h) + var(--space-3));
 }
 
 .faq-morph__chat-inner {
@@ -483,8 +522,11 @@ html {
    has room to absorb an answer. */
 .faq-list-body {
   /* Fixed, not max-height: the list owns its scroll so opening a question can
-     never grow the band and push the footer down. */
-  height: min(58vh, 540px);
+     never grow the band and push the footer down. Content-measured cap — the
+     viewport share keeps three questions visible on a phone, the 540px ceiling
+     is the desktop column's height. */
+  --faq-list-h: min(58vh, 540px);
+  height: var(--faq-list-h);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -758,11 +800,55 @@ html {
   max-height: none;
 }
 
+/* Sizing tokens for the #why composites that sit below the band header. The
+   band's own strip tokens (--why-*) live on .whyx in the block above and are
+   untouched; these cover the diagrams, the capability table, the cost model and
+   the guided tours so each block can be retuned here. Declared on every block
+   root via :where() (zero specificity, so it can outrank nothing) because these
+   render as separate blocks, not one nested tree. */
+:where(
+  .whyx,
+  .whyx__diagrams,
+  .whyx__block,
+  .whyx__pair,
+  .whyx__side,
+  .whyx-cap,
+  .whyx-assume,
+  .whyx-caveat,
+  .whyx-cost,
+  .whyx__tours,
+  .whyx__tour
+) {
+  --whyx-block-gap: 1.6rem;
+  --whyx-block-inset: 0.4rem;
+  --whyx-pair-gap: 2.4rem;
+  --whyx-side-gap: 0.8rem;
+  --whyx-tag-size: 0.68rem;
+  --whyx-foot-size: 0.74rem;
+  --whyx-body-size: 0.86rem;
+  --whyx-key-size: 0.78rem;
+  --whyx-head-size: 0.62rem;
+  --whyx-head-tracking: 0.1em;
+  --whyx-source-size: 0.7rem;
+  --whyx-leading-body: 1.6;
+  --whyx-leading-loose: 1.65;
+  --whyx-row-pad: 0.85rem;
+  --whyx-row-gap: 0.2rem;
+  --whyx-row-col-gap: 1.6rem;
+  --whyx-list-gap: 0.35rem;
+  --whyx-list-indent: 0.9rem;
+  --whyx-cost-pad: 0.95rem;
+  --whyx-cost-gap: 0.25rem;
+  --whyx-cost-col-gap: 1.4rem;
+  --whyx-cost-body-pad: 1.4rem;
+  --whyx-tour-gap: 0.6rem;
+}
+
 .whyx__diagrams,
 .whyx__block {
   display: flex;
   flex-direction: column;
-  gap: 1.6rem;
+  gap: var(--whyx-block-gap);
 }
 
 
@@ -771,21 +857,21 @@ html {
 .whyx__pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2.4rem;
-  margin-top: 0.4rem;
+  gap: var(--whyx-pair-gap);
+  margin-top: var(--whyx-block-inset);
 }
 
 .whyx__side {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: var(--whyx-side-gap);
   min-width: 0;
 }
 
 .whyx__tag {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  font-size: var(--whyx-tag-size);
+  letter-spacing: var(--tracking-meta);
   text-transform: uppercase;
   color: var(--ink-mute);
 }
@@ -797,8 +883,8 @@ html {
 .whyx__foot {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.74rem;
-  line-height: 1.6;
+  font-size: var(--whyx-foot-size);
+  line-height: var(--whyx-leading-body);
   color: var(--ink-soft);
 }
 
@@ -808,15 +894,15 @@ html {
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--hair);
-  margin-top: 0.4rem;
+  margin-top: var(--whyx-block-inset);
 }
 
 .whyx-cap__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.2rem 1.6rem;
+  gap: var(--whyx-row-gap) var(--whyx-row-col-gap);
   border-bottom: 1px solid var(--hair);
-  padding: 0.85rem 0;
+  padding: var(--whyx-row-pad) 0;
 }
 
 .whyx-cap__row--head {
@@ -825,22 +911,22 @@ html {
 
 .whyx-cap__key {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--whyx-key-size);
   color: var(--ink);
 }
 
 .whyx-cap__row--head .whyx-cap__key,
 .whyx-cap__row--head .whyx-cap__cell {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
+  font-size: var(--whyx-head-size);
+  letter-spacing: var(--whyx-head-tracking);
   text-transform: uppercase;
   color: var(--ink-mute);
 }
 
 .whyx-cap__cell {
-  font-size: 0.86rem;
-  line-height: 1.6;
+  font-size: var(--whyx-body-size);
+  line-height: var(--whyx-leading-body);
   color: var(--ink-mute);
 }
 
@@ -862,24 +948,24 @@ html {
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 0.35rem;
+  gap: var(--whyx-list-gap);
 }
 
 .whyx-assume {
   border-inline-start: 2px solid var(--accent);
-  padding-inline-start: 0.9rem;
+  padding-inline-start: var(--whyx-list-indent);
 }
 
 .whyx-caveat {
   border-inline-start: 2px solid var(--hair);
-  padding-inline-start: 0.9rem;
+  padding-inline-start: var(--whyx-list-indent);
 }
 
 .whyx-assume__item,
 .whyx-caveat__item {
   font-family: var(--font-mono);
-  font-size: 0.74rem;
-  line-height: 1.65;
+  font-size: var(--whyx-foot-size);
+  line-height: var(--whyx-leading-loose);
 }
 
 .whyx-assume__item {
@@ -899,11 +985,11 @@ html {
 .whyx-cost__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.25rem 1.4rem;
+  gap: var(--whyx-cost-gap) var(--whyx-cost-col-gap);
   border-bottom: 1px solid var(--hair);
-  padding: 0.95rem 0;
-  font-size: 0.86rem;
-  line-height: 1.6;
+  padding: var(--whyx-cost-pad) 0;
+  font-size: var(--whyx-body-size);
+  line-height: var(--whyx-leading-body);
   color: var(--ink-soft);
 }
 
@@ -913,28 +999,28 @@ html {
 
 .whyx-cost__row--head > span {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
+  font-size: var(--whyx-head-size);
+  letter-spacing: var(--whyx-head-tracking);
   text-transform: uppercase;
   color: var(--ink-mute);
 }
 
 .whyx-cost__layer {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--whyx-key-size);
   color: var(--ink);
 }
 
 .whyx-cost__source {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.6;
+  font-size: var(--whyx-source-size);
+  line-height: var(--whyx-leading-body);
   color: var(--ink-mute);
 }
 
 .whyx-cost__body {
   border-top: 1px solid var(--hair);
-  padding-top: 1.4rem;
+  padding-top: var(--whyx-cost-body-pad);
 }
 
 @media (min-width: 900px) {
@@ -963,14 +1049,14 @@ html {
 .whyx__tours {
   display: flex;
   flex-direction: column;
-  gap: 3rem;
-  margin-top: 0.4rem;
+  gap: var(--space-6);
+  margin-top: var(--whyx-block-inset);
 }
 
 .whyx__tour {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--whyx-tour-gap);
   min-width: 0;
 }
 
@@ -978,8 +1064,8 @@ html {
   margin: 0;
   max-width: var(--measure-prose);
   font-family: var(--font-mono);
-  font-size: 0.74rem;
-  line-height: 1.6;
+  font-size: var(--whyx-foot-size);
+  line-height: var(--whyx-leading-body);
   color: var(--ink-soft);
 }
 
@@ -989,7 +1075,10 @@ html {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 27rem;
+  /* The hero's floor, and the height of the ground fade at its foot. */
+  --hero-min-h: 27rem;
+  --hero-fade-h: 6rem;
+  min-height: var(--hero-min-h);
 }
 
 .pixel-field {
@@ -1005,24 +1094,28 @@ html {
 
 .pixel-word {
   display: block;
-  width: 264px;
+  /* The mark's drawn width per breakpoint (the media queries below retune
+     --wordmark-w only). The footer override sets width: 100% itself. */
+  --wordmark-w: 264px;
+  --wordmark-margin-top: 2.25rem;
+  width: var(--wordmark-w);
   height: auto;
-  margin-top: 2.25rem;
+  margin-top: var(--wordmark-margin-top);
   color: var(--ink);
   shape-rendering: crispEdges;
   --glint: var(--accent);
 }
 
 @media (min-width: 380px) {
-  .pixel-word { width: 352px; }
+  .pixel-word { --wordmark-w: 352px; }
 }
 
 @media (min-width: 640px) {
-  .pixel-word { width: 528px; }
+  .pixel-word { --wordmark-w: 528px; }
 }
 
 @media (min-width: 768px) {
-  .pixel-word { width: 616px; }
+  .pixel-word { --wordmark-w: 616px; }
 }
 
 /* The band holds the footer mark at page width. Two rules, both load-bearing:
@@ -1053,7 +1146,8 @@ html {
   margin-right: auto;
   /* min-height, not height: the mark is an 88:10 SVG and grows with the band;
      a fixed box would clip its top and bottom glyph rows. */
-  min-height: clamp(4.5rem, 12vw, 9rem);
+  --band-min-h: clamp(4.5rem, 12vw, 9rem);
+  min-height: var(--band-min-h);
   padding-left: var(--page-pad);
   padding-right: var(--page-pad);
   overflow-x: clip;
@@ -1126,7 +1220,7 @@ html {
   position: absolute;
   inset-inline: 0;
   bottom: 0;
-  height: 6rem;
+  height: var(--hero-fade-h);
   background: linear-gradient(to bottom, transparent, var(--bg));
   pointer-events: none;
 }
@@ -1156,8 +1250,10 @@ html {
 }
 
 .hero-action__arrow {
+  /* em: the gap follows the CTA's own font size. */
+  --hero-arrow-gap: 0.6em;
   display: inline-block;
-  margin-inline-start: 0.6em;
+  margin-inline-start: var(--hero-arrow-gap);
   color: var(--ink-mute);
   transition:
     transform var(--duration-hover) var(--ease),
@@ -1176,7 +1272,8 @@ html {
   z-index: 10;
   display: flex;
   justify-content: center;
-  height: 3.25rem;
+  --hero-cue-h: 3.25rem;
+  height: var(--hero-cue-h);
   outline-offset: -2px;
 }
 

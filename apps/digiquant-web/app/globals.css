@@ -102,7 +102,9 @@ html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
 
 /* Compact density is a settings choice. Regular keeps the desk type as written. */
 :root[data-density="compact"] .desk-pane-body {
-  font-size: 0.6875rem;
+  --desk-compact-type: 0.6875rem;
+
+  font-size: var(--desk-compact-type);
   line-height: 1.3;
 }
 
@@ -121,7 +123,9 @@ html {
    cannot quote that underscore (it becomes a space and the stylesheet fails
    to parse), so the gap lives here. */
 .scripted-digichat [data-slot="aui_message-group"] {
-  row-gap: 0.75rem;
+  --digichat-msg-gap: 0.75rem;
+
+  row-gap: var(--digichat-msg-gap);
 }
 
 /* The band chat sits on the page ground: sidebar, message area and footer are
@@ -255,25 +259,35 @@ body {
 /* Band eyebrow: `NN / label`, numbered like the gutter rail. The tick matches the
    rail's own stroke so the two read as one system. */
 .section-eyebrow {
+  /* Component sizing tokens — band eyebrow + its tick. */
+  --eyebrow-gap: 0.6rem;
+  --eyebrow-size: 0.72rem;
+  --eyebrow-tracking: 0.04em;
+  --eyebrow-tick-w: 1.1rem;
+
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--eyebrow-gap);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--eyebrow-size);
   line-height: 1;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--eyebrow-tracking);
   color: var(--ink-mute);
 }
 
 .section-eyebrow__tick {
   display: block;
-  width: 1.1rem;
+  width: var(--eyebrow-tick-w);
   height: 1px;
   background: var(--ink-mute);
 }
 
 @media (min-width: 640px) {
-  .section-eyebrow__tick { width: 1.6rem; }
+  .section-eyebrow {
+    --eyebrow-tick-w: 1.6rem;
+  }
+
+  .section-eyebrow__tick { width: var(--eyebrow-tick-w); }
 }
 
 /* ── pinned band head (DIG-2854, DIG-3311) ─────────────────────────────────
@@ -312,6 +326,9 @@ body {
   }
 
   .band-pin {
+    /* Component sizing token — pinned head's own bottom pad, above its rule. */
+    --band-pin-pad-end: 0.75rem;
+
     position: sticky;
     top: var(--nav-shell-h, 62px);
     /* Above the deck's own stacking (cards and the rail carry no z-index)
@@ -322,7 +339,7 @@ body {
        of this box's real size (see Band.tsx), not an input to it. Clamping
        it here would re-introduce the undershoot/clip this rewrite removed. */
     block-size: auto;
-    padding-block-end: 0.75rem;
+    padding-block-end: var(--band-pin-pad-end);
   }
 
   /* The rule runs to the same edges as the band's own border-b, so the pinned
@@ -354,25 +371,31 @@ body {
    hero (apps/digithings-web). The integrations block zeros the hero's top
    margin so the lockup sits in the band. */
 .pixel-word {
+  /* Component sizing tokens — hero lockup. The widths are the SVG's rendered
+     size at each breakpoint (fixed, not fluid: the mark is pixel art and must
+     stay on whole cells), so they ride a variable the breakpoints retune. */
+  --pixel-word-w: 264px;
+  --pixel-word-mt: 2.25rem;
+
   display: block;
-  width: 264px;
+  width: var(--pixel-word-w);
   height: auto;
-  margin-top: 2.25rem;
+  margin-top: var(--pixel-word-mt);
   color: var(--ink);
   shape-rendering: crispEdges;
   --glint: var(--accent);
 }
 
 @media (min-width: 380px) {
-  .pixel-word { width: 352px; }
+  .pixel-word { --pixel-word-w: 352px; }
 }
 
 @media (min-width: 640px) {
-  .pixel-word { width: 528px; }
+  .pixel-word { --pixel-word-w: 528px; }
 }
 
 @media (min-width: 768px) {
-  .pixel-word { width: 616px; }
+  .pixel-word { --pixel-word-w: 616px; }
 }
 
 /* The website hero glints in ink. This site's accent is teal, and that flash is the wrong mark. */
@@ -448,26 +471,37 @@ body {
    --win, --wash, and --mono are local because this site does not define them.
    The pointer on a row comes from the kit Button, not from a cursor rule here. */
 .cmd {
+  /* Component sizing tokens — desk path field. Terminal px scale, kept in px
+     so glyph cells stay on whole pixels; --cmd-field-h is the 11px row box. */
+  --cmd-pad-inline: 10px;
+  --cmd-basis: 340px;
+  --cmd-type: 11px;
+  --cmd-field-h: 20px;
+  --cmd-focus-pad: 6px;
+  --cmd-hit-gap: 12px;
+  --cmd-hit-pad-block: 6px;
+  --cmd-hit-pad-inline: 7px;
+
   --win: var(--term-bg);
   --wash: var(--term-fill);
   --mono: var(--font-mono);
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  flex: 0 1 340px;
+  padding: 0 var(--cmd-pad-inline);
+  flex: 0 1 var(--cmd-basis);
   min-width: 0;
 }
 .cmd-in {
   width: 100%;
   max-width: 100%;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--cmd-type);
   line-height: 1;
   color: var(--ink);
   background: transparent;
   border: 0;
-  height: 20px;
+  height: var(--cmd-field-h);
   padding: 0;
   outline: 0;
 }
@@ -475,20 +509,20 @@ body {
 .cmd-in:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 0;
-  padding-left: 6px;
+  padding-left: var(--cmd-focus-pad);
 }
 .cmd-list {
   position: absolute;
   top: 100%;
-  left: 10px;
-  right: 10px;
+  left: var(--cmd-pad-inline);
+  right: var(--cmd-pad-inline);
   margin: 0;
   padding: 0;
   list-style: none;
   background: var(--win);
   border: 1px solid var(--hair-strong);
   z-index: 40;
-  font: 11px/1 var(--mono);
+  font: var(--cmd-type)/1 var(--mono);
 }
 .cmd-list li {
   display: flex;
@@ -502,9 +536,9 @@ body {
   width: 100%;
   height: auto;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--cmd-hit-gap);
   margin: 0;
-  padding: 6px 7px;
+  padding: var(--cmd-hit-pad-block) var(--cmd-hit-pad-inline);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -535,19 +569,26 @@ body {
 
 /* Skip link. Off screen until it takes keyboard focus. Tokens only. */
 .desk-skip {
+  /* Component sizing tokens — skip link. Sits one own-height above the top
+     edge until focused, so the offset is the link's own box, not a magic gap. */
+  --desk-skip-inset: var(--space-2);
+  --desk-skip-offset: 3rem;
+  --desk-skip-pad-inline: 0.75rem;
+  --desk-skip-type: 0.75rem;
+
   position: fixed;
-  left: 0.5rem;
-  top: -3rem;
+  left: var(--desk-skip-inset);
+  top: calc(var(--desk-skip-offset) * -1);
   z-index: 100;
-  padding: 0.5rem 0.75rem;
+  padding: var(--desk-skip-inset) var(--desk-skip-pad-inline);
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--ink);
-  font: 0.75rem/1 var(--font-mono);
+  font: var(--desk-skip-type)/1 var(--font-mono);
   text-decoration: none;
 }
 .desk-skip:focus-visible {
-  top: 0.5rem;
+  top: var(--desk-skip-inset);
   outline: 1px solid var(--ink);
   outline-offset: 2px;
 }
@@ -623,11 +664,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 1.75rem;
-  padding: 0 0.35rem 0 0.75rem;
+  height: var(--desk-row-h);
+  padding: 0 var(--desk-pad-inline-xs) 0 var(--desk-pad-inline-sm);
   border-bottom: 1px solid var(--hair);
-  font: 0.6875rem/1 var(--mono);
-  letter-spacing: 0.04em;
+  font: var(--desk-micro)/1 var(--mono);
+  letter-spacing: var(--desk-tracking);
   color: var(--ink-mute);
 }
 .rail-size {
@@ -636,25 +677,57 @@ body {
 }
 .rail-step,
 .desk-pages {
-  height: 1.25rem;
+  height: var(--desk-step-h);
   min-height: 0;
   margin: 0;
-  padding: 0 0.3rem;
+  padding: 0 var(--desk-pad-inline-2xs);
   border: 0;
   border-radius: 0;
   background: none;
   box-shadow: none;
   color: var(--ink-soft);
-  font: 0.75rem/1 var(--mono);
+  font: var(--desk-small)/1 var(--mono);
   font-weight: 400;
 }
-.rail-step { width: 1.25rem; padding: 0; }
+.rail-step { width: var(--desk-step-h); padding: 0; }
 .desk-pages { display: none; }
 /* The head scrolls internally; the shell around it never widens the
    document. `hidden` (not `clip`: the toolchain drops `clip` at build)
    keeps the page at the viewport width. The open palette list sits
    inside the viewport, so it still paints. */
+/* Desk chrome token root. Every `.rail-*`, `.nav-*`, `.desk-pick`, `.desk-list`
+   and `.cmd*` element renders inside this shell (DeskFrame), so the terminal
+   chrome's sizing scale lives here instead of being repeated per rule. The px
+   entries are the terminal type/cell scale (kept in px so 10-11px mono rows
+   stay on whole pixels); the rem entries are the 11/12px row box and pads. */
 .desk-shell {
+  --desk-micro-px: 10px;
+  --desk-small-px: 11px;
+  --desk-micro: 0.6875rem;
+  --desk-small: 0.75rem;
+  --desk-tracking: 0.04em;
+  --desk-row-h: 1.75rem;
+  --desk-step-h: 1.25rem;
+  --desk-pad-inline: 10px;
+  --desk-pad-inline-sm: 0.75rem;
+  --desk-pad-inline-xs: 0.35rem;
+  --desk-pad-inline-2xs: 0.3rem;
+  --desk-nav-tri-w: 1.5rem;
+  --desk-nav-kid-pad: 0.85rem;
+  --desk-nav-link-gap: 0.4rem;
+  --desk-nav-title-pad: 0.55rem var(--desk-pad-inline-sm) 0.2rem;
+  --desk-cmd-list-max: 26rem;
+  --desk-list-min-w: 260px;
+  --desk-empty-pad-inline: 12px;
+  --desk-hit-pad-block: 8px;
+  --desk-hit-pad-inline: 10px;
+  --desk-toggle-pad-block: 2px;
+  --desk-name-gap: 8px;
+  --desk-blurb-mt: 3px;
+  --desk-sub-ml: 10px;
+  --desk-shade-w: 1.5rem;
+  --desk-shade-w-soft: 0.75rem;
+
   overflow-x: hidden;
 }
 /* Desk name, blurb and path stay whole on one line. A narrow header scrolls
@@ -677,14 +750,14 @@ body {
 .desk-head .cmd { position: static; }
 /* The path field shrinks with the header instead of widening the document. */
 .desk-head .cmd { flex: 1 1 auto; min-width: 0; }
-.desk-head .desk-list { left: 0.5rem; }
+.desk-head .desk-list { left: var(--space-2); }
 .desk-head .cmd-list {
   left: auto;
-  right: 0.5rem;
-  width: min(26rem, calc(100% - 1rem));
+  right: var(--space-2);
+  width: min(var(--desk-cmd-list-max), calc(100% - var(--space-3)));
 }
 .desk-sub {
-  margin-left: 10px;
+  margin-left: var(--desk-sub-ml);
   color: var(--ink-mute);
 }
 /* Desk tiles are placed by inline rects from the shared expand solve. Opening
@@ -701,31 +774,44 @@ body {
   .desk-tile { transition: none; }
 }
 @media (max-width: 759px) {
+  /* Narrow-layout desk tokens: the header collapses to a fixed-height bar and
+     the rail becomes a drawer. Declared here so the sizes below stay named. */
+  .desk-shell {
+    --desk-head-pad-inline: 0.4rem;
+    --desk-head-gap: var(--desk-pad-inline-xs);
+    --desk-mark-w: 3.25rem;
+    --desk-pick-pad-inline: 0.15rem;
+    --desk-cmd-pad-inline-narrow: 0.2rem;
+    --desk-field-collapsed-w: 2.5rem;
+    --desk-drawer-top: 2rem;
+    --desk-drawer-w: min(18.5rem, calc(100vw - var(--desk-field-collapsed-w)));
+  }
+
   .desk-pages { display: inline-flex; }
   .desk-shell > header {
-    gap: 0.35rem;
-    padding-inline: 0.4rem;
+    gap: var(--desk-head-gap);
+    padding-inline: var(--desk-head-pad-inline);
   }
   .desk-mark {
     flex: 0 0 auto;
-    width: 3.25rem;
+    width: var(--desk-mark-w);
   }
   .desk-shell > header .desk-mark svg {
-    width: 3.25rem;
+    width: var(--desk-mark-w);
     height: auto;
   }
-  .desk-pick { padding-inline: 0.15rem; }
+  .desk-pick { padding-inline: var(--desk-pick-pad-inline); }
   .desk-shell > header .cmd {
-    padding-inline: 0.2rem;
+    padding-inline: var(--desk-cmd-pad-inline-narrow);
   }
   /* Narrow screens collapse the path field to a / key. It never
      shrinks (the picker keeps its width by design), and focus opens it
      over the header bar, so the document never widens. */
   .desk-head .cmd {
-    flex: 0 0 2.5rem;
+    flex: 0 0 var(--desk-field-collapsed-w);
   }
   .desk-head .cmd-in {
-    width: 2.5rem;
+    width: var(--desk-field-collapsed-w);
   }
   /* The path is the field value, and a 2.5rem field cannot show it
      without cutting a glyph mid-word. Collapsed, the field carries the
@@ -738,15 +824,15 @@ body {
     content: "/";
     color: var(--ink);
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--desk-small-px);
     line-height: 1;
   }
   .desk-head .cmd:focus-within {
     position: absolute;
-    left: 0.4rem;
-    right: 0.4rem;
-    top: 0.2rem;
-    bottom: 0.2rem;
+    left: var(--desk-head-pad-inline);
+    right: var(--desk-head-pad-inline);
+    top: var(--desk-cmd-pad-inline-narrow);
+    bottom: var(--desk-cmd-pad-inline-narrow);
     flex: none;
     z-index: 60;
     background: var(--term-bg);
@@ -759,10 +845,10 @@ body {
   .desk-shell .rail {
     position: fixed;
     z-index: 35;
-    top: 2rem;
+    top: var(--desk-drawer-top);
     bottom: 0;
     left: 0;
-    width: min(18.5rem, calc(100vw - 2.5rem));
+    width: var(--desk-drawer-w);
     transform: translateX(-110%);
     visibility: hidden;
   }
@@ -826,8 +912,8 @@ body {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   background:
-    linear-gradient(to left, var(--surface) 50%, transparent) right center / 1.5rem 100% no-repeat local,
-    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+    linear-gradient(to left, var(--surface) 50%, transparent) right center / var(--desk-shade-w) 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right center / var(--desk-shade-w-soft) 100% no-repeat scroll;
 }
 .desk-table-scroll:focus-visible {
   outline: 1px solid var(--ink);
@@ -865,31 +951,31 @@ body {
   .desk-page-settle { animation: none; }
 }
 .nav-title {
-  font: 0.6875rem/1 var(--mono);
-  letter-spacing: 0.08em;
+  font: var(--desk-micro)/1 var(--mono);
+  letter-spacing: var(--tracking-meta);
   text-transform: uppercase;
   color: var(--ink-mute);
-  padding: 0.55rem 0.75rem 0.2rem;
+  padding: var(--desk-nav-title-pad);
 }
 .nav-row {
   display: flex;
   align-items: center;
-  min-height: 1.75rem;
-  font: 0.75rem/1 var(--mono);
+  min-height: var(--desk-row-h);
+  font: var(--desk-small)/1 var(--mono);
 }
-.nav-row.kid { padding-left: 0.85rem; }
+.nav-row.kid { padding-left: var(--desk-nav-kid-pad); }
 .nav-tri {
   flex: none;
   display: inline-flex;
   align-items: center;
-  width: 1.5rem;
-  min-width: 1.5rem;
-  height: 1.75rem;
+  width: var(--desk-nav-tri-w);
+  min-width: var(--desk-nav-tri-w);
+  height: var(--desk-row-h);
   margin: 0;
-  padding: 0 0 0 0.75rem;
+  padding: 0 0 0 var(--desk-pad-inline-sm);
   justify-content: flex-start;
   text-align: left;
-  font: 0.6875rem/1 var(--mono);
+  font: var(--desk-micro)/1 var(--mono);
   font-weight: 400;
   color: var(--ink-mute);
   background: none;
@@ -904,9 +990,9 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 1.75rem;
-  padding: 0 0.75rem 0 0.35rem;
+  gap: var(--desk-nav-link-gap);
+  min-height: var(--desk-row-h);
+  padding: 0 var(--desk-pad-inline-sm) 0 var(--desk-pad-inline-xs);
   color: var(--ink-soft);
   text-decoration: none;
 }
@@ -921,27 +1007,27 @@ body {
 .nav-link.locked .nav-path { color: var(--ink-mute); }
 .nav-tag {
   margin-left: auto;
-  font: 10px/1 var(--mono);
+  font: var(--desk-micro-px)/1 var(--mono);
   color: var(--ink-mute);
 }
 .nav-empty {
   margin: 0;
-  padding: 8px 12px;
+  padding: var(--desk-hit-pad-block) var(--desk-empty-pad-inline);
   color: var(--ink-mute);
-  font: 11px/1.4 var(--mono);
+  font: var(--desk-small-px)/1.4 var(--mono);
 }
 .desk-pick {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  font: 11px/1 var(--mono);
+  padding: 0 var(--desk-pad-inline);
+  font: var(--desk-small-px)/1 var(--mono);
   white-space: nowrap;
 }
 .desk-pick .desk-toggle {
   height: auto;
   margin: 0;
-  padding: 2px 0;
+  padding: var(--desk-toggle-pad-block) 0;
   border: 0;
   border-radius: 0;
   background: none;
@@ -971,7 +1057,7 @@ body {
   top: 100%;
   left: 0;
   z-index: 40;
-  min-width: 260px;
+  min-width: var(--desk-list-min-w);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -983,13 +1069,13 @@ body {
   width: 100%;
   height: auto;
   margin: 0;
-  padding: 8px 10px;
+  padding: var(--desk-hit-pad-block) var(--desk-hit-pad-inline);
   border: 0;
   border-radius: 0;
   background: none;
   box-shadow: none;
   color: var(--ink);
-  font: 11px/1.3 var(--mono);
+  font: var(--desk-small-px)/1.3 var(--mono);
   font-weight: 400;
   text-align: left;
   white-space: normal;
@@ -1002,10 +1088,10 @@ body {
 }
 .desk-list .desk-hit:disabled { color: var(--ink-mute); }
 .desk-list .desk-hit[aria-current="true"] .desk-name::before { content: "▸ "; color: var(--accent); }
-.desk-name { display: flex; gap: 8px; }
+.desk-name { display: flex; gap: var(--desk-name-gap); }
 .desk-blurb {
   display: block;
   color: var(--ink-mute);
-  font-size: 10px;
-  margin-top: 3px;
+  font-size: var(--desk-micro-px);
+  margin-top: var(--desk-blurb-mt);
 }

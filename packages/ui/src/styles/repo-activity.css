@@ -17,27 +17,45 @@
   .ra-compact,
   .ra-detailed,
   .ra-activity {
+    /* component tokens — repo-activity frame + type rhythm */
+    --ra-pad-block: 1.15rem;
+    --ra-pad-inline: 1.25rem;
+    --ra-gap: 0.4rem;
+    --ra-gap-row: 0.7rem;
+    --ra-font-micro: 0.7rem;
+    --ra-font-meta: 0.72rem;
+    --ra-font-sm: 0.74rem;
+    --ra-font-md: 0.78rem;
+    --ra-font-lg: 0.92rem;
+    --ra-font-num: 1.15rem;
+    --ra-font-body: 0.8rem;
+    --ra-space-block: 1.15rem;
+    --ra-gap-activity: 1.4rem;
+    --ra-metric-min: 5.2rem;
+    --ra-heat-rail: 2.1rem;
+    --ra-avatar: 36px;
+
     border: 1px solid var(--hair);
     background: var(--surface);
-    padding: 1.15rem 1.25rem;
+    padding: var(--ra-pad-block) var(--ra-pad-inline);
   }
 
   .ra-kicker {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--ra-font-meta);
     letter-spacing: 0.04em;
     color: var(--accent);
   }
 
   .ra-stamp {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--ra-font-meta);
     color: var(--ink-mute);
   }
 
   .ra-n {
     font-family: var(--font-mono);
-    font-size: 1.15rem;
+    font-size: var(--ra-font-num);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.03em;
     color: var(--ink);
@@ -46,13 +64,13 @@
 
   .ra-l {
     font-family: var(--font-mono);
-    font-size: 0.74rem;
+    font-size: var(--ra-font-sm);
     color: var(--ink-mute);
   }
 
   .ra-num {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--ra-font-md);
     color: var(--accent);
     text-underline-offset: 2px;
   }
@@ -64,21 +82,21 @@
   .ra-title {
     flex: 1 1 12rem;
     min-width: 0;
-    font-size: 0.92rem;
+    font-size: var(--ra-font-lg);
     line-height: 1.45;
     color: var(--ink-soft);
   }
 
   .ra-date {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--ra-font-micro);
     color: var(--ink-mute);
     white-space: nowrap;
   }
 
   .ra-copy {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--ra-font-micro);
     color: var(--ink-mute);
     background: transparent;
     border: 0;
@@ -123,14 +141,14 @@
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.4rem 1.1rem;
+  gap: var(--ra-gap, 0.4rem) 1.1rem;
 }
 
 .ra-metrics {
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem 1.6rem;
-  margin-top: 0.7rem;
+  margin-top: var(--ra-gap-row, 0.7rem);
   list-style: none;
   padding: 0;
 }
@@ -139,7 +157,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.18rem;
-  min-width: 5.2rem;
+  min-width: var(--ra-metric-min, 5.2rem);
 }
 
 .ra-meta {
@@ -165,9 +183,9 @@
 .ra-repo {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--ra-gap, 0.4rem);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--ra-font-md, 0.78rem);
   color: var(--ink-soft);
 }
 
@@ -186,7 +204,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.25rem 0.7rem;
+  gap: 0.25rem var(--ra-gap-row, 0.7rem);
   padding: 0.62rem 0;
   border-bottom: 1px solid var(--hair);
 }
@@ -209,7 +227,7 @@
   align-items: flex-start;
   gap: 0.6rem;
   border: 1px solid var(--hair);
-  padding: 0.6rem 0.75rem;
+  padding: 0.6rem var(--space-2);
 }
 
 .ra-clone code {
@@ -230,11 +248,11 @@
 .ra-cta a {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--space-1);
   border: 1px solid var(--hair);
-  padding: 0.5rem 0.85rem;
+  padding: var(--space-2) 0.85rem;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--ra-font-md, 0.78rem);
   color: var(--ink);
 }
 
@@ -289,7 +307,7 @@
   position: relative;
   height: 1rem;
   margin-bottom: 0.3rem;
-  margin-inline-start: 2.1rem;
+  margin-inline-start: var(--ra-heat-rail, 2.1rem);
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--ink-mute);
@@ -335,7 +353,7 @@
   justify-content: space-between;
   gap: 0.4rem 1rem;
   margin-top: 0.5rem;
-  margin-inline-start: 2.1rem;
+  margin-inline-start: var(--ra-heat-rail, 2.1rem);
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--ink-mute);
@@ -468,7 +486,7 @@
 }
 
 .ra-activity-metrics .ra-group + .ra-group {
-  margin-top: 1.15rem;
+  margin-top: var(--ra-space-block, 1.15rem);
   padding-top: 1.05rem;
   border-top: 1px solid var(--hair);
 }
@@ -478,8 +496,8 @@
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1.4rem 2rem;
-  margin-top: 1.4rem;
+  gap: var(--ra-gap-activity, 1.4rem) 2rem;
+  margin-top: var(--ra-gap-activity, 1.4rem);
   padding-top: 1.2rem;
   border-top: 1px solid var(--hair);
 }
@@ -497,7 +515,7 @@
   gap: 0.6rem;
   margin-top: 0.75rem;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--ra-font-body, 0.8rem);
   color: var(--ink);
 }
 
@@ -511,14 +529,14 @@
 
 .ra-contributor-role {
   display: block;
-  font-size: 0.72rem;
+  font-size: var(--ra-font-meta, 0.72rem);
   color: var(--ink-mute);
 }
 
 .ra-avatar {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: var(--ra-avatar, 36px);
+  height: var(--ra-avatar, 36px);
   border-radius: 0;
   object-fit: cover;
   border: 1px solid var(--hair);
@@ -530,7 +548,7 @@
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--ra-font-body, 0.8rem);
   color: var(--ink-soft);
 }
 

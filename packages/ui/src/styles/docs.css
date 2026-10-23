@@ -38,12 +38,22 @@
 
 /* ── shell: one column; the sidebar reveals sticky ≥ 860px ──────────────── */
 .docs-shell {
+  /* component tokens — docs shell geometry */
+  --docs-gap: clamp(1.4rem, 3vw, 2.4rem);
+  --docs-gap-wide: clamp(2rem, 4vw, 3rem);
+  --docs-max: 1040px;
+  --docs-pad-inline: clamp(1rem, 4vw, 2rem);
+  --docs-side-w: 200px;
+  --docs-rail-w: 200px;
+  --docs-sticky-gap: 1.2rem;
+  --docs-sticky-clear: 2rem;
+
   display: grid;
   grid-template-columns: 1fr;
-  gap: clamp(1.4rem, 3vw, 2.4rem);
-  max-width: 1040px;
+  gap: var(--docs-gap);
+  max-width: var(--docs-max);
   margin: 0 auto;
-  padding: 0 clamp(1rem, 4vw, 2rem);
+  padding: 0 var(--docs-pad-inline);
 }
 .docs-side { display: none; }
 @media (min-width: 860px) {
@@ -52,15 +62,15 @@
      single column instead of dropping their content into the 200px sidebar
      track (#4206). */
   .docs-shell:has(> .docs-side) {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: var(--docs-side-w) minmax(0, 1fr);
     align-items: start;
-    gap: clamp(2rem, 4vw, 3rem);
+    gap: var(--docs-gap-wide);
   }
   .docs-side {
     display: block;
     position: sticky;
-    top: calc(var(--docs-nav-h, 62px) + 1.2rem);
-    max-height: calc(100vh - var(--docs-nav-h, 62px) - 2rem);
+    top: calc(var(--docs-nav-h, 62px) + var(--docs-sticky-gap));
+    max-height: calc(100vh - var(--docs-nav-h, 62px) - var(--docs-sticky-clear));
     overflow-y: auto;
     scrollbar-width: thin;
   }
@@ -69,7 +79,7 @@
 
 /* Anchored doc sections land clear of the fixed chrome. */
 .docs-content :where([id]) {
-  scroll-margin-top: calc(var(--docs-nav-h, 62px) + 1rem);
+  scroll-margin-top: calc(var(--docs-nav-h, 62px) + var(--space-3));
 }
 
 /* ── mobile disclosure: the sidebar never just vanishes (canon §17) ─────── */
@@ -77,13 +87,18 @@
 .docs-side-mobile summary::-webkit-details-marker { display: none; }
 .docs-side-mobile summary::before { content: "▸ "; color: var(--accent); }
 .docs-side-mobile[open] summary::before { content: "▾ "; }
-.docs-side-mobile[open] summary { margin-bottom: 0.5rem; }
+.docs-side-mobile[open] summary { margin-bottom: var(--space-2); }
 
 /* ── code blocks: the copy affordance reveals on hover / focus ──────────── */
+.doc-code {
+  /* component tokens — copy affordance inset */
+  --doc-copy-inset: 0.4rem;
+}
+
 .doc-code .docs-code-copy {
   position: absolute;
-  top: 0.4rem;
-  inset-inline-end: 0.4rem;
+  top: var(--doc-copy-inset);
+  inset-inline-end: var(--doc-copy-inset);
   opacity: 0;
   transition: opacity 0.15s var(--ease, ease);
 }
@@ -100,8 +115,13 @@
    the only consumer (docs/Endpoint.tsx:70). Migrating would mean overriding
    every kit cell with counter-utilities — a re-style, not a promotion — so
    it stays family CSS until kit Table grows the density/numeric API. */
+.doc-fields {
+  --doc-field-pad-block: 0.3rem;
+  --doc-field-pad-inline: 0.6rem;
+}
+
 .doc-fields td {
-  padding: 0.3rem 0.6rem 0.3rem 0;
+  padding: var(--doc-field-pad-block) var(--doc-field-pad-inline) var(--doc-field-pad-block) 0;
   vertical-align: top;
   border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
 }
@@ -118,18 +138,18 @@
 
 @media (min-width: 1200px) {
   .docs-shell:has(> .docs-side):has(> .docs-rail) {
-    grid-template-columns: 200px minmax(0, 1fr) 200px;
+    grid-template-columns: var(--docs-side-w) minmax(0, 1fr) var(--docs-rail-w);
   }
   .docs-shell:has(> .docs-rail):not(:has(> .docs-side)) {
-    grid-template-columns: minmax(0, 1fr) 200px;
+    grid-template-columns: minmax(0, 1fr) var(--docs-rail-w);
   }
   .docs-rail {
     display: block;
     align-self: start;
     position: sticky;
     /* Same offset as .docs-side, so "on this page" lines up with Guides. */
-    top: calc(var(--docs-nav-h, 62px) + 1.2rem);
-    max-height: calc(100vh - var(--docs-nav-h, 62px) - 2rem);
+    top: calc(var(--docs-nav-h, 62px) + var(--docs-sticky-gap, 1.2rem));
+    max-height: calc(100vh - var(--docs-nav-h, 62px) - var(--docs-sticky-clear, 2rem));
     overflow-y: auto;
     scrollbar-width: thin;
   }

@@ -18,10 +18,24 @@
  */
 
 .arch-figure {
+  /* Component sizing tokens. The figure is retunable from here; hairlines and
+     the pending floor stay literal (a fractional hairline rounds away, and the
+     floor is measured against the tallest placeholder, not a fluid ramp). */
+  --figure-gap: 0.6rem;
+  --figure-pad: 1.1rem;
+  --figure-pending-min-h: 14rem;
+  --figure-source-pad-block: var(--space-3);
+  --figure-source-pad-inline: 1.1rem;
+  --figure-source-size: 0.72rem;
+  --figure-source-leading: 1.6;
+  --figure-caption-size: 0.68rem;
+  --figure-caption-leading: var(--leading, 1.55);
+  --figure-svg-text-size: var(--text-xs, 11px);
+  --figure-svg-tracking: 0.02em;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--figure-gap);
   min-width: 0;
 }
 
@@ -30,11 +44,11 @@
   overflow-x: auto;
   border: 1px solid var(--hair);
   background: var(--surface);
-  padding: 1.1rem;
+  padding: var(--figure-pad);
 }
 
 .arch-figure[data-state="pending"] .arch-figure__body {
-  min-height: 14rem;
+  min-height: var(--figure-pending-min-h);
 }
 
 .arch-figure__body > svg {
@@ -46,12 +60,12 @@
 
 .arch-figure__source {
   margin: 0;
-  padding: 1rem 1.1rem;
+  padding: var(--figure-source-pad-block) var(--figure-source-pad-inline);
   border: 1px solid var(--hair);
   background: var(--surface);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.6;
+  font-size: var(--figure-source-size);
+  line-height: var(--figure-source-leading);
   color: var(--ink-soft);
   overflow-x: auto;
 }
@@ -59,8 +73,8 @@
 .arch-figure__caption {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  line-height: 1.55;
+  font-size: var(--figure-caption-size);
+  line-height: var(--figure-caption-leading);
   color: var(--ink-mute);
 }
 
@@ -138,8 +152,8 @@
 }
 
 .arch-figure__body svg .architecture-service text {
-  font-size: 11px;
-  letter-spacing: 0.02em;
+  font-size: var(--figure-svg-text-size);
+  letter-spacing: var(--figure-svg-tracking);
   fill: var(--ink) !important;
 }
 
@@ -149,8 +163,8 @@
  * Everything in the drawing sits on the same mono step.
  */
 .arch-figure__body svg text {
-  font-size: 11px;
-  letter-spacing: 0.02em;
+  font-size: var(--figure-svg-text-size);
+  letter-spacing: var(--figure-svg-tracking);
 }
 
 /*
@@ -178,7 +192,7 @@
 .arch-tour {
   display: flex;
   flex-direction: column;
-  gap: 1.6rem;
+  gap: var(--tour-gap);
   min-width: 0;
 
   /* Component sizing tokens. Breakpoints and 1px hairlines stay literal:
@@ -207,6 +221,29 @@
   --tour-label-size: 0.9rem;
   --tour-tag-inset-block: 0.42rem;
   --tour-tag-inset-inline: 0.72rem;
+  /* Wave-1 additions: the tour rules that were still carrying raw values.
+     Nothing above is renamed or re-valued. */
+  --tour-gap: 1.6rem;
+  --tour-side-gap: 1.8rem;
+  --tour-side-row-gap: 0.6rem;
+  --tour-side-col-gap: 2.4rem;
+  --tour-static-gap: 1.2rem;
+  --tour-tag-size: 0.62rem;
+  --tour-tag-tracking: 0.1em;
+  --tour-tag-pad-block: 0.1rem;
+  --tour-tag-pad-inline: 0.45rem;
+  --tour-side-tag-gap: 0.15rem;
+  --tour-step-pad: 0.9rem;
+}
+
+/* Morph carries its own five values: they only apply when the variant class is
+   present, so they do not belong on every tour. */
+.arch-tour.arch-tour-morph {
+  --tour-morph-pin-offset: 0.35rem;
+  --tour-morph-frame-pad-block: 0.55rem;
+  --tour-morph-frame-pad-inline: 0.7rem;
+  --tour-morph-svg-max: 26rem;
+  --tour-morph-svg-reserve: 19rem;
 }
 
 .arch-tour__frame {
@@ -245,7 +282,7 @@
    * step list below. Without the explicit row the tag auto-placed into the
    * diagram's cell and landed bottom-left. */
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 1.8rem;
+  gap: var(--tour-side-gap);
   min-width: 0;
   transition: transform 1.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -353,22 +390,22 @@
 .arch-tour__static {
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: var(--tour-static-gap);
   min-width: 0;
 }
 
 .arch-tour__tag,
 .arch-tour__side-tag {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
+  font-size: var(--tour-tag-size);
+  letter-spacing: var(--tour-tag-tracking);
   text-transform: uppercase;
   color: var(--ink-mute);
 }
 
 .arch-tour__side-tag {
   display: block;
-  margin-bottom: 0.15rem;
+  margin-bottom: var(--tour-side-tag-gap);
   color: var(--accent);
 }
 
@@ -383,7 +420,7 @@
 .arch-tour__side-tag[data-tag="digithings stack"] {
   color: var(--ink-mute);
   border: 1px solid var(--hair);
-  padding: 0.1rem 0.45rem;
+  padding: var(--tour-tag-pad-block) var(--tour-tag-pad-inline);
   transition: color 0.35s var(--ease), border-color 0.35s var(--ease);
 }
 .arch-tour__side[data-active="true"] .arch-tour__tag,
@@ -518,7 +555,7 @@
   display: grid;
   gap: var(--tour-step-gap);
   border-inline-start: 1px solid var(--hair);
-  padding-inline-start: 0.9rem;
+  padding-inline-start: var(--tour-step-pad);
   opacity: 0.42;
   transition:
     opacity 0.6s var(--ease),
@@ -547,7 +584,7 @@
   border-inline-start: 0;
   border-inline-end: 1px solid var(--hair);
   padding-inline-start: 0;
-  padding-inline-end: 0.9rem;
+  padding-inline-end: var(--tour-step-pad);
   text-align: end;
 }
 
@@ -561,8 +598,8 @@
 
 .arch-tour__index {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
+  font-size: var(--tour-tag-size);
+  letter-spacing: var(--tour-tag-tracking);
   color: var(--ink-mute);
 }
 
@@ -780,7 +817,7 @@
     grid-area: 1 / 1;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.6rem 2.4rem;
+    gap: var(--tour-side-row-gap) var(--tour-side-col-gap);
     align-items: start;
   }
 
@@ -898,6 +935,15 @@
  * ════════════════════════════════════════════════════════════════════════════ */
 
 .arch-svg {
+  /* Component sizing tokens for the drawn diagram. SVG user units, so px is
+     the honest unit for label steps; hairlines and the paint-order halos stay
+     literal. */
+  --svg-text-size: var(--text-xs, 11px);
+  --svg-tracking: 0.02em;
+  --svg-group-label-size: 10px;
+  --svg-group-label-tracking: 0.08em;
+  --svg-edge-label-size: 10px;
+  --svg-node-label-size: 11.5px;
   display: block;
   width: 100%;
   height: auto;
@@ -908,8 +954,8 @@
 
 .arch-svg text {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
+  font-size: var(--svg-text-size);
+  letter-spacing: var(--svg-tracking);
 }
 
 /* ── boundaries ─────────────────────────────────────────────────────────── */
@@ -929,8 +975,8 @@
 
 .arch-svg .arch-group__label {
   fill: var(--ink-mute);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: var(--svg-group-label-size);
+  letter-spacing: var(--svg-group-label-tracking);
   text-transform: uppercase;
 }
 
@@ -964,7 +1010,7 @@
 
 .arch-svg .arch-edge__label {
   fill: var(--ink-soft);
-  font-size: 10px;
+  font-size: var(--svg-edge-label-size);
   text-anchor: middle;
   paint-order: stroke;
   stroke: var(--surface);
@@ -997,7 +1043,7 @@
 
 .arch-svg .arch-node__label {
   fill: var(--ink-soft);
-  font-size: 11.5px;
+  font-size: var(--svg-node-label-size);
   transition: fill 0.25s var(--ease);
 }
 
@@ -1018,7 +1064,7 @@
  */
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0 2.4rem;
+  gap: 0 var(--tour-side-col-gap);
   overflow: visible;
 }
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side {
@@ -1061,18 +1107,21 @@
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__pin {
   min-height: 0;
   justify-content: flex-start;
-  top: calc(var(--dq-nav-h, 4.5rem) + 0.35rem);
+  top: calc(var(--dq-nav-h, 4.5rem) + var(--tour-morph-pin-offset));
 }
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__rail {
   display: none;
 }
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__frame {
-  padding: 0.55rem 0.7rem;
+  padding: var(--tour-morph-frame-pad-block) var(--tour-morph-frame-pad-inline);
 }
 .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-svg {
   width: 100%;
   height: auto;
-  max-height: min(26rem, calc(100svh - var(--dq-nav-h, 4.5rem) - 19rem));
+  max-height: min(
+    var(--tour-morph-svg-max),
+    calc(100svh - var(--dq-nav-h, 4.5rem) - var(--tour-morph-svg-reserve))
+  );
 }
 
 /* Walk-through text rail (AppFirstSection): remounts per step (key), so a
@@ -1197,6 +1246,55 @@
   --down: #e5533e;
   --accent-digisearch: #5aa3c4;
   --accent-digitrace: #6fa3a3;
+  /* Component sizing tokens (wave 1). A terminal cell has its own type steps and
+     gutters, so they are named here instead of borrowed from the page scale.
+     Hairlines, the dotted rules and the keyframe end-points stay literal. */
+  --tschem-size: var(--type-meta, 0.75rem);
+  --tschem-leading: 1.45;
+  --tschem-pad-block: 0.4rem;
+  --tschem-pad-inline: 0.7rem;
+  --tschem-title-tracking: 0.04em;
+  --tschem-body-pad-top: 0.75rem;
+  --tschem-body-pad-bottom: 0.55rem;
+  --tschem-body-gap: 0.85rem;
+  --tschem-legend-col-min: 7.5rem;
+  --tschem-legend-col-max: 9.5rem;
+  --tschem-notes-col-min: 10rem;
+  --tschem-notes-col-max: 16rem;
+  --tschem-legend-gap: 0.35rem;
+  --tschem-legend-item-gap: 0.4rem;
+  --tschem-notes-gap: 0.4rem;
+  --tschem-note-item-gap: 0.45rem;
+  --tschem-swatch: 0.55rem;
+  --tschem-stack-pad: 0.95rem;
+  --tschem-stack-rule-inset: 0.28rem;
+  --tschem-stack-rule-top: 0.2rem;
+  --tschem-stack-rule-bottom: 1.6rem;
+  --tschem-small-size: 0.68rem;
+  --tschem-drop-size: 0.7rem;
+  --tschem-join-h: 0.85rem;
+  --tschem-join-inset: 0.65rem;
+  --tschem-join-arrow-x: -0.32rem;
+  --tschem-join-arrow-y: -0.45rem;
+  --tschem-bus-h: 1rem;
+  --tschem-bus-gap: 0.3rem;
+  --tschem-cluster-top: -0.2rem;
+  --tschem-cluster-tracking: 0.14em;
+  --tschem-node-min: 8.5rem;
+  --tschem-node-gap: 0.4rem;
+  --tschem-box-gap: 0.15rem;
+  --tschem-box-pad-block: 0.35rem;
+  --tschem-box-pad-inline: 0.45rem;
+  --tschem-state-leading: 1.2;
+  --tschem-loop-gap: 0.55rem;
+  --tschem-loop-pad: 0.35rem;
+  --tschem-receipt-h: 4.8rem;
+  --tschem-receipt-pad-top: 0.45rem;
+  --tschem-receipt-track-gap: 0.12rem;
+  --tschem-foot-gap-block: 0.7rem;
+  --tschem-foot-gap-inline: 0.9rem;
+  --tschem-meter-w: 4.5rem;
+  --tschem-meter-h: 0.35rem;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -1206,24 +1304,28 @@
   border: 1px solid var(--term-hair);
   border-radius: 0;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  font-size: var(--tschem-size);
+  line-height: var(--tschem-leading);
   font-variant-numeric: tabular-nums;
 }
 
 .tschem__title {
   margin: 0;
-  padding: 0.4rem 0.7rem;
+  padding: var(--tschem-pad-block) var(--tschem-pad-inline);
   border-bottom: 1px solid var(--term-hair);
   color: var(--term-mute);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tschem-title-tracking);
 }
 
 .tschem__body {
   display: grid;
-  grid-template-columns: minmax(7.5rem, 9.5rem) minmax(0, 1fr) minmax(10rem, 16rem);
-  gap: 0.85rem;
-  padding: 0.75rem 0.7rem 0.55rem;
+  grid-template-columns:
+    minmax(var(--tschem-legend-col-min), var(--tschem-legend-col-max))
+    minmax(0, 1fr)
+    minmax(var(--tschem-notes-col-min), var(--tschem-notes-col-max));
+  gap: var(--tschem-body-gap);
+  padding: var(--tschem-body-pad-top) var(--tschem-pad-inline)
+    var(--tschem-body-pad-bottom);
 }
 
 .tschem__legend,
@@ -1237,19 +1339,19 @@
 .tschem__legend {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--tschem-legend-gap);
   color: var(--term-mute);
 }
 
 .tschem__legend li {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--tschem-legend-item-gap);
 }
 
 .tschem__swatch {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--tschem-swatch);
+  height: var(--tschem-swatch);
   border: 1px solid currentColor;
   flex: none;
 }
@@ -1264,15 +1366,15 @@
 .tschem__stack {
   position: relative;
   min-width: 0;
-  padding-inline-start: 0.95rem;
+  padding-inline-start: var(--tschem-stack-pad);
 }
 
 .tschem__stack::before {
   content: "";
   position: absolute;
-  inset-inline-start: 0.28rem;
-  top: 0.2rem;
-  bottom: 1.6rem;
+  inset-inline-start: var(--tschem-stack-rule-inset);
+  top: var(--tschem-stack-rule-top);
+  bottom: var(--tschem-stack-rule-bottom);
   border-inline-start: 1px dotted var(--term-mute);
 }
 
@@ -1281,7 +1383,7 @@
   inset-inline-start: 0;
   top: 0;
   color: var(--warn);
-  font-size: 0.7rem;
+  font-size: var(--tschem-drop-size);
   line-height: 1;
 }
 
@@ -1296,8 +1398,8 @@
 
 .tschem__join {
   display: block;
-  height: 0.85rem;
-  margin-inline-start: 0.65rem;
+  height: var(--tschem-join-h);
+  margin-inline-start: var(--tschem-join-inset);
   border-inline-start: 1px dotted var(--term-mute);
   position: relative;
 }
@@ -1305,32 +1407,32 @@
 .tschem__join::after {
   content: "↓";
   position: absolute;
-  left: -0.32rem;
-  bottom: -0.45rem;
+  left: var(--tschem-join-arrow-x);
+  bottom: var(--tschem-join-arrow-y);
   color: var(--term-mute);
-  font-size: 0.68rem;
+  font-size: var(--tschem-small-size);
   line-height: 1;
 }
 
 .tschem__bus {
   position: relative;
-  height: 1rem;
-  margin: 0 0 0.3rem;
+  height: var(--tschem-bus-h);
+  margin: 0 0 var(--tschem-bus-gap);
   border-bottom: 1px dotted var(--term-mute);
 }
 
 .tschem__par {
   color: var(--term-mute);
-  font-size: 0.68rem;
+  font-size: var(--tschem-small-size);
 }
 
 .tschem__cluster {
   position: absolute;
   left: 0;
-  top: -0.2rem;
+  top: var(--tschem-cluster-top);
   color: var(--accent-digitrace);
-  letter-spacing: 0.14em;
-  font-size: 0.68rem;
+  letter-spacing: var(--tschem-cluster-tracking);
+  font-size: var(--tschem-small-size);
   visibility: hidden;
 }
 
@@ -1344,8 +1446,8 @@
 
 .tschem__nodes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(var(--tschem-node-min), 1fr));
+  gap: var(--tschem-node-gap);
 }
 
 .tschem__box {
@@ -1353,11 +1455,11 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.15rem;
+  gap: var(--tschem-box-gap);
   border: 1px solid var(--term-hair);
   background: transparent;
   color: var(--term-ink);
-  padding: 0.35rem 0.45rem;
+  padding: var(--tschem-box-pad-block) var(--tschem-box-pad-inline);
 }
 
 .tschem__name {
@@ -1369,7 +1471,7 @@
 .tschem__state {
   align-self: flex-end;
   white-space: nowrap;
-  line-height: 1.2;
+  line-height: var(--tschem-state-leading);
   color: var(--term-mute);
 }
 
@@ -1418,8 +1520,8 @@
 }
 
 .tschem__loop {
-  margin: 0.55rem 0 0;
-  padding-top: 0.35rem;
+  margin: var(--tschem-loop-gap) 0 0;
+  padding-top: var(--tschem-loop-pad);
   border-top: 1px dotted var(--term-mute);
   color: var(--term-mute);
 }
@@ -1427,13 +1529,13 @@
 .tschem__notes {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--tschem-notes-gap);
   color: var(--term-mute);
 }
 
 .tschem__notes li {
   display: flex;
-  gap: 0.45rem;
+  gap: var(--tschem-note-item-gap);
 }
 
 .tschem__num {
@@ -1444,18 +1546,19 @@
 .tschem__receipt {
   box-sizing: border-box;
   flex: 0 0 auto;
-  height: 4.8rem;
+  height: var(--tschem-receipt-h);
   overflow: hidden;
   border-top: 1px solid var(--term-hair);
   background: var(--term-bg);
   color: var(--term-mute);
-  padding: 0.45rem 0.7rem 0.4rem;
+  padding: var(--tschem-receipt-pad-top) var(--tschem-pad-inline)
+    var(--tschem-pad-block);
 }
 
 .tschem__receipt-track {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
+  gap: var(--tschem-receipt-track-gap);
 }
 
 .tschem[data-motion="on"] .tschem__receipt-track {
@@ -1469,11 +1572,11 @@
   flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.7rem 0.9rem;
+  gap: var(--tschem-foot-gap-block) var(--tschem-foot-gap-inline);
   margin: 0;
   border-top: 1px solid var(--term-hair);
   background: var(--term-bg);
-  padding: 0.4rem 0.7rem;
+  padding: var(--tschem-pad-block) var(--tschem-pad-inline);
   color: var(--term-mute);
 }
 
@@ -1487,8 +1590,8 @@
 }
 
 .tschem__meter {
-  width: 4.5rem;
-  height: 0.35rem;
+  width: var(--tschem-meter-w);
+  height: var(--tschem-meter-h);
   border: 1px solid var(--term-hair);
 }
 
@@ -1553,18 +1656,42 @@
   --flow-model: #5aa3c4;
   --flow-side: #6fa3a3;
   --flow-fallback: #e5533e;
+  /* Component sizing tokens (wave 1). `--flow-*` is the colour set above, so
+     these take the `--pflow-` prefix to stay out of its way. */
+  --pflow-gap: 0.6rem;
+  --pflow-size: 0.78rem;
+  --pflow-leading: 1.4;
+  --pflow-pad-block-start: 1.1rem;
+  --pflow-pad-inline: 1rem;
+  --pflow-pad-block-end: 0.9rem;
+  --pflow-conduit-h: 1.5rem;
+  --pflow-pulse-size: 5px;
+  --pflow-pulse-inset-x: -2px;
+  --pflow-pulse-inset-y: -3px;
+  --pflow-nodes-gap: var(--space-2);
+  --pflow-parallel-pad-top: 1.3rem;
+  --pflow-bus-size: 0.62rem;
+  --pflow-bus-tracking: 0.08em;
+  --pflow-node-pad-block: 0.4rem;
+  --pflow-node-pad-inline: 0.75rem;
+  --pflow-loop-margin: 0.35rem;
+  --pflow-loop-pad: 0.6rem;
+  --pflow-loop-size: 0.7rem;
+  --pflow-loop-gap: var(--space-2);
+  --pflow-arc-size: 0.7rem;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--pflow-gap);
   min-width: 0;
   background: var(--flow-bg);
   color: var(--flow-ink);
   border: 1px solid var(--flow-hair);
-  padding: 1.1rem 1rem 0.9rem;
+  padding: var(--pflow-pad-block-start) var(--pflow-pad-inline)
+    var(--pflow-pad-block-end);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  line-height: 1.4;
+  font-size: var(--pflow-size);
+  line-height: var(--pflow-leading);
 }
 
 .pflow__chain {
@@ -1590,7 +1717,7 @@
   position: relative;
   align-self: center;
   width: 1px;
-  height: 1.5rem;
+  height: var(--pflow-conduit-h);
   background: var(--flow-hair);
 }
 
@@ -1603,10 +1730,10 @@
 
 .pflow__pulse {
   position: absolute;
-  inset-inline-start: -2px;
-  top: -3px;
-  width: 5px;
-  height: 5px;
+  inset-inline-start: var(--pflow-pulse-inset-x);
+  top: var(--pflow-pulse-inset-y);
+  width: var(--pflow-pulse-size);
+  height: var(--pflow-pulse-size);
   border-radius: 50%;
   background: var(--flow-side);
   box-shadow: 0 0 6px 1px var(--flow-side);
@@ -1623,13 +1750,13 @@
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--pflow-nodes-gap);
   position: relative;
   min-width: 0;
 }
 
 .pflow__nodes[data-parallel="true"] {
-  padding-top: 1.3rem;
+  padding-top: var(--pflow-parallel-pad-top);
 }
 
 .pflow__bus {
@@ -1637,8 +1764,8 @@
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: var(--pflow-bus-size);
+  letter-spacing: var(--pflow-bus-tracking);
   text-transform: uppercase;
   color: var(--flow-mute);
   white-space: nowrap;
@@ -1647,7 +1774,7 @@
 .pflow__node {
   min-width: 0;
   border: 1px solid var(--flow-hair);
-  padding: 0.4rem 0.75rem;
+  padding: var(--pflow-node-pad-block) var(--pflow-node-pad-inline);
   color: var(--flow-ink);
   text-align: center;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -1671,20 +1798,20 @@
 .pflow__node[data-tone="side"] { --flow-glow: var(--flow-side); }
 
 .pflow__loop {
-  margin: 0.35rem 0 0;
-  padding-top: 0.6rem;
+  margin: var(--pflow-loop-margin) 0 0;
+  padding-top: var(--pflow-loop-pad);
   border-top: 1px dotted var(--flow-hair);
   color: var(--flow-mute);
-  font-size: 0.7rem;
+  font-size: var(--pflow-loop-size);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--pflow-loop-gap);
 }
 
 .pflow__loop-arc {
   display: inline-block;
-  width: 0.7rem;
-  height: 0.7rem;
+  width: var(--pflow-arc-size);
+  height: var(--pflow-arc-size);
   flex: none;
   border: 1px dotted var(--flow-mute);
   border-radius: 50%;

@@ -64,12 +64,21 @@
 
 @layer components {
   .srt-table {
+    /* component sizing tokens (finance-composites / SortableTable) */
+    --srt-fs: 0.82rem;
+    --srt-min-w: 35rem;      /* content floor: 560px at the 16px root */
+    --srt-cell-y: 0.6rem;
+    --srt-cell-x: 1rem;
+    --srt-head-y: 0.7rem;
+    --srt-head-gap: 0.35rem;
+    --srt-head-fs: 0.58rem;
+    --srt-caret-fs: 0.6rem;
     width: 100%;
-    min-width: 560px;
+    min-width: var(--srt-min-w);
     border-collapse: collapse;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-size: 0.82rem;
+    font-size: var(--srt-fs);
   }
 
   .srt-l {
@@ -83,13 +92,13 @@
     width: 100%;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.7rem 1rem;
+    gap: var(--srt-head-gap);
+    padding: var(--srt-head-y) var(--srt-cell-x);
     border: none;
     background: transparent;
     color: var(--ink-mute);
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--srt-head-fs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     cursor: pointer;
@@ -97,7 +106,7 @@
   }
 
   .srt-caret {
-    font-size: 0.6rem;
+    font-size: var(--srt-caret-fs);
     opacity: 0.55;
   }
 }
@@ -127,7 +136,7 @@
 }
 
 .srt-table td {
-  padding: 0.6rem 1rem;
+  padding: var(--srt-cell-y) var(--srt-cell-x);
   border-bottom: 1px solid color-mix(in srgb, var(--hair) 55%, transparent);
   color: var(--ink-soft);
 }
