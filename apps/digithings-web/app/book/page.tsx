@@ -18,8 +18,15 @@ export default function BookIndexPage() {
       <div className="mt-[clamp(2rem,4vw,3rem)] max-w-[64ch]">
         <BookToc chapters={chapters} />
       </div>
-      <p className="book-screen-only mt-10 font-mono text-[0.8rem] text-ink-soft">
-        <Link href="/book/print/" className="text-accent">
+      <p className="book-screen-only mt-10 flex flex-wrap items-baseline gap-x-4 gap-y-2 font-mono text-[0.8rem] text-ink-soft">
+        <a
+          href="/book/the-digithings-book.pdf"
+          download
+          className="inline-flex min-h-11 items-center border-hair border-b text-accent hover:text-ink"
+        >
+          download the pdf
+        </a>
+        <Link href="/book/print/" className="text-accent hover:text-ink">
           printable edition
         </Link>
       </p>

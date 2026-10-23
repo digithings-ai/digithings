@@ -67,6 +67,14 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // for boxes printed the table of contents with every reference still
         // empty. Measured, not assumed.
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
+        // Paged.js leaves the source document in place beside the page boxes.
+        // In print that would emit the source as extra pages before the book —
+        // measured as two blank pages, one carrying the running header. The
+        // paginated copy is the only thing that should reach paper.
+        content.hidden = true;
+        cleanups.current.push(() => {
+          content.hidden = false;
+        });
         setStatus("done");
       } catch (err) {
         console.error("book: pagination failed", err);

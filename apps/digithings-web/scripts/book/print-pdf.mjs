@@ -10,7 +10,7 @@
  * `/book/…` paths, which do not resolve over `file://`. It is a fixture, not
  * a product surface, and it binds to loopback only.
  */
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,7 +86,9 @@ try {
   // Wait for the book's own completion marker, not for the page boxes: pagedjs
   // creates those first and the page-number pass runs after, so waiting on the
   // boxes printed a table of contents with empty references.
-  await page.waitForSelector("[data-book-paginated]", { timeout: 60_000 });
+  // The source document is hidden after pagination, so wait for the marker to
+  // be attached, not visible.
+  await page.waitForSelector("[data-book-paginated]", { state: "attached", timeout: 60_000 });
   const pages = await page.locator(".pagedjs_page").count();
   if (pages < 1) throw new Error("pagination produced no pages");
   const refs = await page.$$eval("[data-book-toc-ref]", (nodes) => nodes.map((n) => n.textContent));
@@ -95,7 +97,9 @@ try {
     throw new Error(`no table-of-contents page reference resolved (${refs.length} entries)`);
   }
 
-  const target = process.argv[2] ?? join(APP_ROOT, "book.pdf");
+  const target =
+    process.argv[2] ?? join(APP_ROOT, "public", "book", "the-digithings-book.pdf");
+  mkdirSync(dirname(target), { recursive: true });
   await page.pdf({
     path: target,
     format: "A4",
@@ -104,6 +108,13 @@ try {
     // takes the geometry from the document rather than from this call.
     preferCSSPageSize: true,
   });
+  // The exported site is what ships; keep the link's target in it without
+  // requiring a second build after printing.
+  const exported = join(OUT, "book", "the-digithings-book.pdf");
+  if (resolve(target) !== resolve(exported)) {
+    mkdirSync(dirname(exported), { recursive: true });
+    copyFileSync(target, exported);
+  }
   console.log(`book: wrote ${target} (${pages} pages)`);
 } finally {
   await browser.close();

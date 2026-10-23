@@ -114,49 +114,157 @@ export const PRINT_CSS = `
  * day it is printed.
  */
 export const PAGED_CSS = `
-@page { size: A4; margin: 0; }
+@page { size: A4; margin: 0 0 16mm; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
    block — is what decides what a page box contains. */
-.site-rails, header, footer, nav, .book-screen-only, .book-paged-status,
-[role="status"], .skip-link { display: none !important; }
+.site-rails, header, footer, nav, .book-screen-only, .book-print-only, .running-element,
+.book-paged-status, [role="status"], .skip-link, a[href="#main"] { display: none !important; }
 
 body {
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), ui-monospace, monospace;
   font-size: 10.5pt;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink);
   background: var(--bg);
 }
+
+/* Paged.js carries the source document into print; hiding that source
+   (PagedBoot) leaves only the page boxes. */
+.pagedjs_page { position: relative; }
+.pagedjs_page:first-child::after { content: none; }
+
+/* Title page: one centred block, then a hard break. */
+.book-cover {
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+  min-height: 232mm;
+  padding-top: 34mm;
+}
+.book-cover__kicker {
+  margin: 0 0 22mm;
+  font-family: var(--font-sans), monospace;
+  font-size: 8.5pt;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.book-cover__title {
+  margin: 0;
+  max-width: 120mm;
+  font-size: 34pt;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+.book-cover__subtitle {
+  margin: 9mm 0 0;
+  max-width: 108mm;
+  font-size: 11.5pt;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.book-cover__meta {
+  margin: auto 0 0;
+  padding-top: 4mm;
+  border-top: 0.4pt solid var(--hair);
+  font-family: var(--font-sans), monospace;
+  font-size: 8pt;
+  color: var(--ink-soft);
+}
+
+/* Contents: dot leaders and a right-aligned folio, one page or more. */
+.book-contents { break-after: page; }
+.book-contents__title {
+  margin: 0 0 8mm;
+  font-family: var(--font-sans), monospace;
+  font-size: 9pt;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.book-toc { margin: 0; padding: 0; list-style: none; }
+.book-toc__chapter { padding: 3.6mm 0; border-bottom: 0.4pt solid var(--hair); break-inside: avoid; }
+.book-toc__chapter:last-child { border-bottom: 0; }
+.book-toc__row { display: flex; align-items: baseline; break-inside: avoid; }
+.book-toc__label { flex: 0 1 auto; }
+.book-toc__leader {
+  flex: 1 1 auto;
+  min-width: 8mm;
+  margin: 0 2.5mm;
+  border-bottom: 0.4pt dotted var(--ink-mute);
+  transform: translateY(-0.5mm);
+}
+.book-toc__ref {
+  flex: 0 0 8mm;
+  text-align: right;
+  font-family: var(--font-sans), monospace;
+  font-size: 9pt;
+}
+.book-toc__summary { display: none; }
+.book-toc__sections {
+  margin: 2mm 0 0 8mm;
+  padding: 0;
+  list-style: none;
+  font-size: 9pt;
+}
+.book-toc__sections li { padding: 0.7mm 0; }
+
+/* Chapters and sections. */
 .book-chapter { break-before: page; }
-.book-chapter:first-of-type { break-before: auto; }
-h1 { font-size: 20pt; margin: 0 0 6pt; line-height: 1.15; }
-h2 { font-size: 14pt; margin: 18pt 0 6pt; line-height: 1.2; }
-h3 { font-size: 11.5pt; margin: 14pt 0 4pt; }
-h4 { font-size: 9pt; margin: 12pt 0 3pt; font-family: var(--font-mono), monospace; }
-p { margin: 0 0 8pt; max-width: 92%; orphans: 3; widows: 3; }
-ul, ol { margin: 0 0 8pt 18pt; }
-li { margin: 0 0 3pt; }
-code, pre { font-family: var(--font-mono), monospace; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; margin: 0 0 10pt; }
-img { max-width: 100%; }
-.book-figure__dark { display: none !important; }
-.book-figure__light { display: block !important; }
-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 0 0 10pt; }
-th, td { border-bottom: 0.4pt solid var(--hair); padding: 2pt 4pt; text-align: left; vertical-align: top; }
-pre { line-height: 1.25; }
+.book-chapter h2 { margin: 0 0 4mm; font-size: 23pt; line-height: 1.1; letter-spacing: -0.01em; }
+.book-chapter > p:first-of-type { margin: 0 0 3mm; font-family: var(--font-sans), monospace; font-size: 8.5pt; color: var(--accent); }
+.book-chapter > p:nth-of-type(2) { margin: 0 0 8mm; max-width: 105mm; color: var(--ink-soft); }
+.book-section h3 { margin: 9mm 0 3mm; font-size: 14pt; line-height: 1.2; }
+h4 { margin: 6mm 0 2mm; font-size: 9pt; font-family: var(--font-sans), monospace; letter-spacing: 0.04em; }
 h1, h2, h3, h4 { break-after: avoid; }
-p, pre, img, li { break-inside: avoid; }
+h1 { font-size: 24pt; margin: 0 0 5mm; line-height: 1.12; }
+
+p { margin: 0 0 3.4mm; orphans: 3; widows: 3; }
+p, pre, img, li, figure, table { break-inside: avoid; }
+ul, ol { margin: 0 0 3.4mm 5mm; padding: 0; }
+li { margin: 0 0 1.2mm; }
+
+code, pre { font-family: var(--font-sans), monospace; }
+code { font-size: 0.92em; }
+pre {
+  margin: 0 0 4mm;
+  padding: 3mm 3.5mm;
+  border: 0.4pt solid var(--hair);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 8.5pt;
+  line-height: 1.4;
+}
+blockquote {
+  margin: 0 0 4mm;
+  padding: 0 0 0 4mm;
+  border-left: 1.2pt solid var(--accent);
+  color: var(--ink-soft);
+}
+hr { border: 0; border-top: 0.4pt solid var(--hair); margin: 6mm 0; }
+strong { font-weight: 600; }
 a { color: inherit; text-decoration: none; }
 
+img, svg { max-width: 100%; }
+figure { margin: 0 0 5mm; }
+figcaption { margin-top: 2mm; font-family: var(--font-sans), monospace; font-size: 8pt; color: var(--ink-soft); }
+.book-figure__dark { display: none !important; }
+.book-figure__light { display: block !important; }
+
+table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 0 0 4mm; }
+thead { display: table-header-group; }
+th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
+th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
+
 /* The page box carries the folio number PagedBoot stamps on it. */
-.pagedjs_page { position: relative; }
 .pagedjs_page::after {
   content: attr(data-book-page);
   position: absolute;
   bottom: 8mm;
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-sans), monospace;
   font-size: 8pt;
   color: var(--ink-soft);
 }

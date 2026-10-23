@@ -56,19 +56,22 @@ export default async function BookPrintPage() {
         <span>digithings.ai/book</span>
       </div>
 
-      <h1 className="mt-10 mb-2 font-display text-[clamp(2rem,4vw,3rem)] tracking-[-0.02em] text-ink">
-        The digithings book
-      </h1>
-      <p className="mb-8 max-w-[64ch] text-[1.05rem] text-ink-soft">
-        Printed from the same files the web pages are built from.
-      </p>
+      <section className="book-cover">
+        <p className="book-cover__kicker">digithings</p>
+        <h1 className="book-cover__title">the digithings book</h1>
+        <p className="book-cover__subtitle">
+          A short, philosophical book about self-hosted AI infrastructure — why it matters, how it
+          scales, and what it costs.
+        </p>
+        <p className="book-cover__meta">digithings.ai/book · edition 2026</p>
+      </section>
 
       {/* Front matter. The reference beside each chapter is filled in by
           PagedBoot, after the engine has decided where the pages break — a
           number written here would be wrong the moment a paragraph grew a
           line. */}
-      <section className="mb-10">
-        <h2 className="mb-3 font-mono text-[0.9rem] tracking-[0.02em] text-accent">contents</h2>
+      <section className="book-contents">
+        <h2 className="book-contents__title">contents</h2>
         <BookToc chapters={refs} withRefs />
       </section>
 

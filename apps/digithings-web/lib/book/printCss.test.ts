@@ -40,6 +40,9 @@ describe("the stylesheets are well-formed template literals", () => {
     expect(PAGED_CSS).toContain("@page");
     expect(PAGED_CSS).toContain(".book-chapter { break-before: page; }");
     expect(PAGED_CSS).toContain("[role=\"status\"]");
+    expect(PAGED_CSS).toContain(".book-cover");
+    expect(PAGED_CSS).toContain(".book-contents");
+    expect(PAGED_CSS).toContain(".book-toc__leader");
     expect(PRINT_CSS).toContain(".running-element");
     expect(PRINT_CSS).toContain(".book-toc__ref");
   });
