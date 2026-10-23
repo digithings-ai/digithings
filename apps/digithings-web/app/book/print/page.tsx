@@ -62,10 +62,26 @@ export const metadata: Metadata = {
  * in one of them means nothing to the reader holding a different one.
  */
 export default async function BookPrintPage() {
-  // The print edition is the argument, not the book-about-the-book chapters.
-  // Orders 90+ are the web-only production notes (how it is built, how it is
-  // printed, what writing surfaced); they read as meta on paper.
-  const chapters = loadChapters(process.cwd()).filter((chapter) => chapter.order < 90);
+  // The PDF is the brief edition: the chapters that carry the argument for a
+  // client or partner. The web keeps every detail section; paper keeps the
+  // through-line and fits in half an hour.
+  const BRIEF = new Set([
+    "01-why-a-book",
+    "02-why-self-hosted",
+    "03-how-it-scales",
+    "04-pricing",
+    "10-digigraph",
+    "11-digillm",
+    "12-digichat",
+    "13-digiquant",
+    "14-digivoice",
+    "17-digisearch",
+    "18-cloudflare-stack",
+    "19-local-stack",
+    "20-mcp",
+    "23-self-hosting",
+  ]);
+  const chapters = loadChapters(process.cwd()).filter((chapter) => BRIEF.has(chapter.slug));
   // Print numbering is sequential over the chapters that actually ship. The
   // source `order` values skip drafts (03, 06–09), which made a book whose
   // contents read 01, 02, 04, 05, 10.
@@ -80,11 +96,7 @@ export default async function BookPrintPage() {
       const load = async (file: string) =>
         ((await import(`../../../content/book/${chapter.slug}/${file}.mdx`)) as { default: () => React.JSX.Element })
           .default;
-      return {
-        chapter,
-        Opener: await load("index"),
-        sections: await Promise.all(chapter.sections.map(async (s) => ({ section: s, Body: await load(s.slug) }))),
-      };
+      return { chapter, Opener: await load("index") };
     }),
   );
 
@@ -114,7 +126,7 @@ export default async function BookPrintPage() {
         <BookToc chapters={refs} withRefs />
       </section>
 
-      {bodies.map(({ chapter, Opener, sections }, index) => {
+      {bodies.map(({ chapter, Opener }, index) => {
         const displayOrder = index + 1;
         return (
         <section key={chapter.slug} className="book-chapter">
@@ -125,28 +137,18 @@ export default async function BookPrintPage() {
             {/* The book title above is the page's single h1; chapter openers
                 sit one level below it so the printed outline stays in order. */}
             <h2 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h2>
-            <p className="mb-6 text-ink-soft">{chapter.summary}</p>
           </div>
           <Opener />
-          {sections.map(({ section, Body }) => (
-            <div key={section.slug} className="book-section">
-              <div data-book-anchor={section.href} />
-              <h3 className="mt-12 mb-4 font-display text-[1.6rem] leading-[1.15] tracking-[-0.01em] text-ink">
-                {String(displayOrder).padStart(2, "0")}.{section.order} {section.title}
-              </h3>
-              <Body />
-            </div>
-          ))}
         </section>
         );
       })}
 
       <section className="book-colophon">
-        <p className="book-colophon__kicker">the digithings book</p>
-        <p className="book-colophon__title">edition 2026 · version 1.0</p>
-        <p className="book-colophon__mark" aria-hidden="true">
-          digithings
-        </p>
+        <div className="book-colophon__mark" aria-hidden dangerouslySetInnerHTML={{ __html: WORDMARK }} />
+        <div className="book-colophon__foot">
+          <p className="book-colophon__kicker">the digithings book</p>
+          <p className="book-colophon__title">edition 2026 · version 1.0</p>
+        </div>
       </section>
 
       {/* Endpaper: the only closing surface with no text. The browser builder

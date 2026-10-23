@@ -15,7 +15,7 @@ purpose.
 digichat answers one audience question: what does it feel like to use this
 system? A person signs in, opens a conversation, and talks. The interface
 streams answers as they arrive, keeps history per conversation, and offers
-artifacts — rendered outputs like documents and visuals — beside the chat.
+artifacts, rendered outputs like documents and visuals, beside the chat.
 It also embeds elsewhere: a host site can frame the chat experience for its
 own visitors, with the same backend serving both.
 
@@ -29,23 +29,6 @@ artifacts. Neither half holds anything an attacker would want: sessions are
 verified per request, conversation content lives in the data layer rather
 than in the interface, and embed visitors are authorised per host before they
 see anything.
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant P as person
-  participant C as digichat
-  participant H as orchestration hub
-  participant D as data layer
-
-  P->>C: signs in, opens a conversation
-  C->>C: verifies the session
-  P->>C: sends a message
-  C->>H: forwards with a short-lived identity
-  H-->>C: streamed answer
-  C->>D: persists the exchange
-  C-->>P: streams the answer
-```
 
 The embed path follows the same shape with one extra check: the host naming
 the visitor must itself be recognised before any conversation resolves. A
@@ -69,27 +52,10 @@ Locally the interface runs beside the stack it talks to, which makes
 development a single checkout. On Cloudflare it runs at the edge, close to
 visitors, while the hub and verticals sit behind service bindings. Self-hosted
 it runs wherever the operator serves web traffic from. In every home the
-interface stays stateless: stop it, move it, scale it — conversations survive
+interface stays stateless: stop it, move it, scale it, conversations survive
 because they never lived in it.
-
-## Trade-offs
-
-A stateless interface is easy to run and slightly harder to build: every
-request must re-establish context the interface refuses to keep. The payoff
-is operational calm. The interface can be redeployed mid-conversation without
-anyone noticing, and scaling it is a capacity decision with no data
-migration attached. The embed story carries the one real tension — reaching
-visitors on other sites means thinking carefully about which hosts are
-recognised and what a framed visitor may do.
-
-## Roadmap
-
-The surface roadmap is about richness, not plumbing: better artifacts,
-clearer history, and embed options that stay safe by default. The request
-path is deliberately finished — its job is to be boring so the surface can
-be interesting.
 
 > **Why digithings.** The interface is open source and stateless, so it runs
 > anywhere the operator already serves traffic. No hosted-only surface, no
-> per-seat metering in the interface itself — the chat you run is the chat
+> per-seat metering in the interface itself, the chat you run is the chat
 > you own.

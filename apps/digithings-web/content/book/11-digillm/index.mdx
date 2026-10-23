@@ -23,7 +23,7 @@ not how the code asks.
 
 ## How it works
 
-digillm is a library, not a service — it ships inside the services that use
+digillm is a library, not a service: it ships inside the services that use
 it rather than running on its own. It defines the shared shapes every model
 call uses: the request, the tool call, the tool definition, and structured
 answers in schema form. On top of those shapes it layers the behaviours every
@@ -63,27 +63,11 @@ service can be read in another without translation.
 ## Running it in each home
 
 A library has no deployment of its own, so the three homes change nothing
-about digillm itself — they change what sits underneath it. Locally it points
+about digillm itself, they change what sits underneath it. Locally it points
 at a model runner on the same machine. On Cloudflare it points at whatever
 inference the deployment chose. Self-hosted, the operator picks the endpoint
 and the library behaves identically. That indifference is the point: the
 decision of where models run stays an operator decision, never a code change.
-
-## Trade-offs
-
-The shared layer charges a small tax: every caller accepts the same shapes
-and the same retry semantics, even when a special case tempts. In return, the
-system gets one place where model behaviour is understood, measured and
-changed. The alternative — each service with its own client — looks faster
-until the first vendor migration, at which point it bills everything it
-saved, with interest.
-
-## Roadmap
-
-The layer grows by absorbing patterns the services prove out: new structured
-answer shapes, richer usage accounting, and deeper tracing integration. The
-rule for growth stays the same — shared shapes first, vendor specifics
-never.
 
 > **Why digithings.** Swapping a model vendor is usually a migration project.
 > Here it is a routing decision, because no service code names a vendor. Open

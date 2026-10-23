@@ -95,6 +95,25 @@ export async function buildBookPdf(
         sheet.style.zIndex = "1";
       }
     }
+    // Continuation pages need the chapter name at the top. A page that starts
+    // a chapter already carries the title; every later page of that chapter
+    // gets a quiet running head, so the reader never lands on an orphaned
+    // "Trade-offs" with no idea which chapter it belongs to.
+    let runningChapter = "";
+    for (const page of pages) {
+      if (page.querySelector(".book-cover, .book-contents, .book-colophon, .book-end")) continue;
+      const title = page.querySelector(".book-chapter__head h2")?.textContent?.trim() ?? "";
+      if (title) {
+        runningChapter = title;
+        continue;
+      }
+      if (!runningChapter) continue;
+      const head = frame.createElement("div");
+      head.className = "book-running-head";
+      head.textContent = runningChapter;
+      page.append(head);
+    }
+
     await new Promise((resolve) => win.requestAnimationFrame(() => resolve(null)));
 
     const { domToJpeg } = await import("modern-screenshot");

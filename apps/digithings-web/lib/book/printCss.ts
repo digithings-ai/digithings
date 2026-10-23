@@ -118,9 +118,6 @@ export const PRINT_CSS = `
  */
 export const PAGED_CSS = `
 @page { size: A4 !important; margin: 20mm 18mm 18mm !important; }
-/* Diagrams get a landscape plate: a wide flow or a tall sequence is illegible
-   in a 174mm portrait measure. */
-@page plate { size: A4 landscape; margin: 14mm; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
@@ -262,8 +259,7 @@ body {
    break after a short final paragraph produced pages holding one line. The
    opener is kept together and given air, so it reads as a chapter start
    without wasting a page. */
-.book-chapter { break-before: auto; margin-top: 9mm; }
-.book-chapter:first-of-type { margin-top: 0; }
+.book-chapter { break-before: page; margin-top: 0; }
 .book-chapter__head {
   display: block;
   break-inside: avoid;
@@ -379,13 +375,13 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page li,
 .pagedjs_page blockquote,
 .pagedjs_page td {
-  font-size: 10.5pt !important;
-  line-height: 1.5 !important;
+  font-size: 10pt !important;
+  line-height: 1.45 !important;
   max-width: none !important;
   color: var(--ink) !important;
   text-align: left !important;
 }
-.pagedjs_page p { margin: 0 0 3mm !important; orphans: 4; widows: 4; }
+.pagedjs_page p { margin: 0 0 2.4mm !important; orphans: 4; widows: 4; }
 .pagedjs_page p:last-child { margin-bottom: 0 !important; }
 .pagedjs_page ul,
 .pagedjs_page ol { margin: 0 0 3mm 5mm !important; padding: 0 !important; }
@@ -433,35 +429,29 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page th { font-size: 7.5pt !important; }
 .pagedjs_page figure { margin: 0 0 4mm !important; width: 100% !important; }
 .book-figure {
-  page: plate;
-  break-before: page;
-  break-after: page;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 158mm;
+  break-inside: avoid;
+  margin: 3mm 0 4mm !important;
+  width: 100% !important;
 }
 .book-figure__viewport {
   width: 100% !important;
-  height: 158mm !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  height: auto !important;
+  border: 0 !important;
+  display: block !important;
 }
 .book-figure__viewport > div {
   width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  height: auto !important;
+  display: block !important;
   transform: none !important;
 }
 .book-figure__viewport img {
   width: auto !important;
   height: auto !important;
   max-width: 100% !important;
-  max-height: 158mm !important;
+  max-height: 78mm !important;
   margin: 0 auto !important;
+  display: block !important;
 }
 .pagedjs_page figcaption { margin-top: 2mm !important; font-size: 8pt !important; }
 
@@ -507,17 +497,43 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 /* The colophon is a closing text page; it keeps its own scale. */
 .pagedjs_page .book-colophon__kicker { font-size: 8pt !important; margin: 0 0 4mm !important; }
 .pagedjs_page .book-colophon__title { font-size: 17pt !important; line-height: 1.25 !important; margin: 0 0 6mm !important; }
+.book-colophon {
+  position: relative !important;
+  display: block !important;
+  min-height: 232mm !important;
+}
 .pagedjs_page .book-colophon__mark {
-  margin: auto 0 0 !important;
-  max-width: none !important;
-  font-size: 62pt !important;
-  line-height: 1 !important;
-  color: color-mix(in srgb, var(--ink) 12%, transparent) !important;
+  width: 142mm !important;
+  max-width: 100% !important;
+  margin: 44mm auto 0 !important;
+}
+.pagedjs_page .book-colophon__mark svg { display: block; width: 100%; height: auto; }
+.pagedjs_page .book-colophon__foot {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  padding-top: 5mm !important;
+  border-top: 0.4pt solid var(--hair) !important;
 }
 .pagedjs_page .book-chapter__head > p:nth-of-type(2) { margin-bottom: 6mm !important; }
 
 /* A closing sheet with no text. The browser builder paints the field here. */
 .book-end { break-before: page; min-height: 240mm; }
+
+/* Added by the browser builder to continuation pages. */
+.book-running-head {
+  position: absolute;
+  top: 10mm;
+  left: 18mm;
+  right: 18mm;
+  z-index: 2;
+  padding-bottom: 2mm;
+  border-bottom: 0.4pt solid var(--hair);
+  font-family: var(--font-sans), monospace;
+  font-size: 8pt;
+  color: var(--ink-soft);
+}
 `;
 
 export default PRINT_CSS;
