@@ -26,7 +26,7 @@ Apply::
 
 ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` are canonical (#2239 credential
 rename; same pair Vectorize now uses); the legacy ``D1_ACCOUNT_ID``/``D1_API_TOKEN``
-names still work as a fallback (see ``_first_env`` below).
+names still work as a fallback (see ``digivault.store_helpers.first_env``).
 
 One-time backfill (see the #2239 runbook for the expected counts to verify against).
 ``--from-supabase`` needs the ``digivault[supabase]`` extra installed and
@@ -50,7 +50,8 @@ from typing import Any  # score:allow untyped any -- row params are heterogeneou
 
 from digivault.d1_errors import D1StoreError
 from digivault.d1_store import D1Store, normalize_vault_path, resolve_path_prefix
-from digivault.supabase_store import SupabaseStoreError, _first_env
+from digivault.store_helpers import first_env
+from digivault.supabase_store import SupabaseStoreError
 from digivault.vault import _normalize_tags
 
 #: notes table column count -- keep in step with digivault/src/digivault/d1_schema.sql
@@ -438,8 +439,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Canonical-first, legacy-fallback (#2239 credential rename): the same
     # Cloudflare account + token now authorizes both D1 and Vectorize.
-    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    account_id = first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
         print("error: CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required", file=sys.stderr)
         return 1
