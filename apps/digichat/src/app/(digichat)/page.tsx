@@ -15,6 +15,7 @@ import { HomeStockClient } from "./home-stock-client";
 import { BaselineClient } from "../(baseline)/baseline/baseline-client";
 import EmbedRouteShell from "./embed-route-shell";
 import { RouteMenu } from "./route-menu";
+import { resolveRouteMode } from "./route-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +36,10 @@ export async function generateMetadata({
 }
 
 /**
- * Root `/` — the single digichat route (single-route plan, Step 3 + menu root).
- * `?mode=` selects the surface; bare `/` renders the menu (no chat).
+ * Root `/` — the single digichat route (single-route plan, Step 3).
+ * `?mode=` selects the surface; bare `/` renders the product chat.
+ * - (default): product surface, presentation from deployment config
+ * - menu: dev-only three-surface picker (`?mode=menu`, never the default)
  * - embed: tenant iframe surface (same shell as /embed)
  * - catalog: skin catalog (same client as /baseline; production → notFound)
  * - product: chrome.mode from deployment config selects presentation:
@@ -51,14 +54,7 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const routeMode =
-    params.mode === "embed"
-      ? "embed"
-      : params.mode === "catalog"
-        ? "catalog"
-        : params.mode === "product"
-          ? "product"
-          : "menu";
+  const routeMode = resolveRouteMode(params.mode);
 
   if (routeMode === "menu") return <RouteMenu />;
 
