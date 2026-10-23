@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-  cropMainDeskPane,
-  HEADER_ROWS,
   makeRecordedFrame,
-  RAIL_COLS_DEFAULT,
   serializeRecordedFrame,
-} from "./frame";
+} from "../../../packages/tui-frame/src/record.ts";
+import { cropMainDeskPane, HEADER_ROWS } from "./frame";
+import { RAIL_COLS_DEFAULT } from "./rail";
 
 /** A rail row: the page list ends with its right border in the last rail column. */
 function rail(text: string): string {

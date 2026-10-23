@@ -24,8 +24,8 @@ import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { deskForPath, railLine, stepRailCols, RAIL_COLS_DEFAULT } from "./rail";
 import { readBlock, type ReadResult } from "./read";
-import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
-import { asOfStatus } from "./format";
+import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WARN, WASH } from "./theme";
+import { asOfStatus, stateLines, stateTone } from "./format";
 
 const STATUS = process.env.DQ_TUI_STATUS;
 
@@ -35,11 +35,7 @@ const share = (cells: number, total: number): `${number}%` => `${(cells / total)
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const WEB_ONLY = new Set<string>(WEB_SLOTS.map((slot) => slot.path));
-const tone = (status: ReadResult["status"] | "loading") => {
-  if (status === "ok") return INK;
-  if (status === "empty" || status === "loading") return MUTE;
-  return DANGER;
-};
+const INK_FOR = { ink: INK, mute: MUTE, warn: WARN, danger: DANGER } as const;
 
 function PixelMark() {
   const [now, setNow] = useState(() => Date.now());
@@ -585,8 +581,9 @@ export function App() {
                 const status = read?.status ?? "loading";
                 const lines = read?.lines ?? ["loading…"];
                 const on = index === shownFocus;
+                const state = stateTone(status);
                 const border =
-                  on ? ACCENT : status === "empty" || status === "loading" || status === "ok" ? HAIR : DANGER;
+                  on ? ACCENT : state === "danger" ? DANGER : state === "warn" ? WARN : HAIR;
                 return (
                   <box
                     key={placement.id}
@@ -605,7 +602,7 @@ export function App() {
                     paddingLeft={1}
                     paddingRight={1}
                   >
-                    <text fg={tone(status)}>{lines.slice(0, 14).join("\n")}</text>
+                    <text fg={INK_FOR[state]}>{stateLines(status, lines).slice(0, 14).join("\n")}</text>
                   </box>
                 );
               }))
