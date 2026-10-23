@@ -475,3 +475,15 @@ Findings:
   final PR**; otherwise the digichat lint gate is red.
 - `tsc --noEmit` in digichat reports 3 errors in `src/app/api/chat/route.ts`,
   also present on the baseline.
+
+### UC2b — landed
+
+Commit `0cde7e9534`, merged `e1765e1b0b`. `/brief` was already client-fetched
+(`"use client"` + `readOfficial`), so the live block gets a real `/kpis/live`
+payload with no static constraint and no fake data. 7 tests; suite 353 passed;
+canon, lint, test and `tsc` green.
+
+Approved shared change: `pages/pane.tsx` gained an optional
+`body?: ReactNode` slot. It overrides only the painted face; `blocks` still size
+the tile, and every existing caller is unchanged. UC2c/UC2d should use it rather
+than adding more slots.
