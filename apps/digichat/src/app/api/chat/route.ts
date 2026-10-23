@@ -600,6 +600,9 @@ export async function POST(req: Request) {
     foundryMaxToolCalls: foundryAlias,
     userId: ownerUserSub,
     ip: clientIp,
+    // A visitor's own key is not our spend, so a BYOK turn keeps the user TPM
+    // out of the guard. The deployment TPM, tool cap and answer guard stay.
+    omitUserTpm: byokKey.length > 0,
     ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
   });
   const recordLimitUsage = guard.recordUsage.bind(guard);
