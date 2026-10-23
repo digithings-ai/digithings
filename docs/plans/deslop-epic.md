@@ -9,7 +9,7 @@ Final PR: `feat/deslop-epic` → `develop`, left merge-ready for the EM/CTO merg
 The repo contains two generations of UI. The old gallery (`apps/reference`) and the
 prose design docs (`packages/ui/DESIGN.md`, `PRODUCT.md`, `packages/design/*.md`)
 predate the current work. The active generation is the new website + hero banners,
-the new digiquant desk, digichat, the dashboard, and the terminal clients.
+the new digiquant desk, digichat, and the terminal clients.
 
 This epic spends nothing on the old generation. It fixes the new generation against
 the design language the new code actually uses — not against the stale docs.
@@ -46,7 +46,7 @@ Two design skills would otherwise fight over the same files. Split by surface:
 | Tool | Owns | Verbs |
 |---|---|---|
 | **Hallmark** | public pages: `apps/digithings-web` (landing, marketing, variants), `apps/digiquant-web` marketing routes | `audit` first; `redesign <path>` only where the audit proves a structural failure, keeping content and wiring and preserving the ASCII/hero-banner identity |
-| **Impeccable** | product UI: `apps/dashboard`, `apps/digichat`, `apps/digiquant-web/app/app`, shared kit | audit → fix (polish/distill/critique), within tokens |
+| **Impeccable** | product UI: `apps/digichat`, `apps/digiquant-web/app/app`, shared kit | audit → fix (polish/distill/critique), within tokens |
 | **Taste / frontend-design** | direction checks only on public pages; never a second theme | audit only |
 | **baseline-ui / make-interfaces-feel-better** | component-level polish and pass/fail checks on product UI | review then fix |
 
@@ -121,7 +121,7 @@ and the per-surface differences. It also records what the old docs got wrong.
 | C4 | `feat/deslop-c4-py-digisearch` | `digisearch/**` | deslop, karpathy-guidelines, codebase-design |
 | C5 | `feat/deslop-c5-py-digigraph` | `digigraph/**` | deslop, karpathy-guidelines, codebase-design |
 | C6 | `feat/deslop-c6-py-core-libs` | `digillm/**`, `digibase/**`, `digivault/**`, `digivoice/**` | deslop, karpathy-guidelines, codebase-design |
-| C7 | `feat/deslop-c7-ts-apps-code` | non-UI code in `apps/{digichat,dashboard,digiquant-web,digithings-web}/**` (`lib`, `hooks`, `api`, `app/**/route.ts`) | deslop, codebase-design, code-review |
+| C7 | `feat/deslop-c7-ts-apps-code` | non-UI code in `apps/{digichat,digiquant-web,digithings-web}/**` (`lib`, `hooks`, `api`, `app/**/route.ts`) | deslop, codebase-design, code-review |
 
 C3 and C6 exclude human-gated paths by construction. C1–C6 do not change public
 behaviour; they remove dead code, duplicate helpers, needless abstraction, AI
