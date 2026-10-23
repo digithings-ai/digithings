@@ -235,3 +235,58 @@ where the devkit shares code with it.
 4. **Wave 4**: U14/U15/U16 shared kit, U13 TUI shell.
 5. **Wave 5**: C1–C6 Python, C7 TS app code.
 6. **Wave 6**: D1 docs, then convergence.
+
+## UC — digiquant consolidation (6 + 8 + 10)
+
+Canonical host: **`/app` in `apps/digiquant-web`**. ADR D2 already decided this;
+`apps/digiquant-app` is the stale tree copy. `/app` actually carries 19 catalog
+pages across 22 route entries (5 FX routes are invite-only), not 12.
+
+### UC1 — lift primitives into the shared kit (S, ~1 day)
+
+Move, with tests and no behaviour change, into `packages/ui/src/components/desk/`:
+
+- `DataTable` feature set from `apps/digiquant-app/components/DataTable.tsx`
+  (sort, filter, pagination, sticky, bar, tone) merged with the desk's
+  `columnRoles` from `apps/digiquant-web/components/desk/pages/table-columns.ts`.
+- `KpiGrid` + `Sparkline` from the parked `components/atoms.tsx` / `ui.tsx`.
+- `StateBlock` from `apps/digiquant-app/components/Block.tsx` (per-block error
+  boundary + "withheld" + reason). This closes audit T4.
+
+Acceptance: each primitive has a vitest file; `/app` imports the new components;
+no second token layer; canon guard green.
+
+### UC2 — replace text panes with rich blocks (M, ~3–5 days, per route)
+
+`apps/digiquant-web/components/desk/desk-view.tsx` currently renders catalog
+panes as one 11px line. Replace pane-by-pane with the richer block, keeping
+`readOfficial` / `presentResponse` as the data path and `PanelView` as the
+table/chart toggle. Order:
+
+1. brief `live` (missing component today)
+2. tearsheet `nav` and `benchmarks`
+3. ledger cash
+4. `/fx` (invite-only, gated; no auth changes)
+
+Acceptance: each route renders loading, empty, error and withheld states through
+`StateBlock`; no new chart library; existing tests stay green.
+
+### UC3 — retire the parked app (S, ~½ day)
+
+- Delete `apps/digiquant-app/**`, including the committed `.next` referenced in
+  `.gitleaks.toml`.
+- Fold `TIERS` / `tierAtLeast` (`apps/digiquant-app/lib/access.ts`) into
+  `apps/digiquant-web/components/desk/desk-manifest.ts`; do not port the file.
+- Move `BLOCKS.md`, `PLAN.md`, `contracts/*.md` to `docs/surfaces/` or delete.
+- Update ADR D2, the parity matrix, `docs/surfaces/digiquant-app-shortcuts.md`,
+  and the slice status in this plan.
+
+Acceptance: one host, one env name (`NEXT_PUBLIC_DASHBOARD_API_URL` +
+`/official-api`), no hand-copied catalog, `npm run build -w digiquant-web` green.
+
+### Risks
+
+Static export + `trailingSlash` means a new page needs a `PAGES` entry or it
+404s. Invite gating is client-side post-hydration; do not turn it into a server
+check in this epic. Never touch `digiquant/brokers/**` or the auth/entitlement
+path.
