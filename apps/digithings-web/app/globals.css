@@ -539,6 +539,74 @@ html {
   /* The frame width, so the band sits a gutter inside the vertical rails. */
   max-width: var(--frame-w);
   margin-inline: auto;
+
+  /* App-strip sizing tokens. The tab ramp is fluid between the phone and the
+     desktop endpoint; the subhead and rail values stay explicit because they
+     are the measured content heights, not decorative spacing. */
+  --why-apps-margin-top: 0.8rem;
+  --why-tab-font-size: clamp(0.68rem, 0.635rem + 0.183vw, 0.8rem);
+  --why-tab-line-height: 1.35;
+  --why-tab-pad-block: clamp(0.4rem, 0.289rem + 0.457vw, 0.7rem);
+  --why-tab-pad-inline: clamp(0.45rem, 0.264rem + 0.762vw, 0.95rem);
+  --why-tab-gap: 0.75em;
+  --why-tab-index-size: 0.68rem;
+  --why-subhead-font-size: 0.9rem;
+  --why-subhead-line-height: 1.65;
+  --why-subhead-pad-top: 0.75rem;
+  --why-subhead-pad-inline: var(--why-tab-pad-inline);
+  --why-subhead-pad-bottom: 0.6rem;
+  --why-pin-pad-block: 1.2rem;
+  --why-side-gap: 2.4rem;
+  --why-rail-gap: 0.55rem;
+  --why-step-column-gap: 0.6rem;
+}
+
+/* The app strip is the graph's own header at every width: the tabs sit flush
+   on the frame, so the tour's default pin gap is zero inside this band. */
+.whyx .arch-tour {
+  --tour-pin-gap: 0;
+  --tour-pin-gap-narrow: 0;
+}
+
+.whyx__apps {
+  margin-top: var(--why-apps-margin-top);
+}
+
+.whyx__app-tab {
+  display: flex;
+  align-items: baseline;
+  gap: var(--why-tab-gap);
+  padding: var(--why-tab-pad-block) var(--why-tab-pad-inline);
+  font-size: var(--why-tab-font-size);
+  line-height: var(--why-tab-line-height);
+}
+
+.whyx__app-tab-index {
+  font-size: var(--why-tab-index-size);
+}
+
+.whyx__app-subhead {
+  display: grid;
+  border-inline: 1px solid var(--hair);
+  background: var(--surface);
+  padding: var(--why-subhead-pad-top) var(--why-subhead-pad-inline)
+    var(--why-subhead-pad-bottom);
+}
+
+.whyx__app-subhead-line {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-size: var(--why-subhead-font-size);
+  line-height: var(--why-subhead-line-height);
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .whyx__app-tab {
+    align-items: flex-end;
+    --why-tab-line-height: 1.25;
+  }
 }
 
 /* An app switch fades only the graph. The tour stays mounted, so the header
@@ -556,8 +624,8 @@ html {
    takes the height the header does not, so the band is not a short
    graph over an empty page. */
 .whyx .arch-tour__pin {
-  min-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
-  max-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+  min-height: calc(100svh - var(--tour-nav-h) - var(--space-5, 2rem));
+  max-height: calc(100svh - var(--tour-nav-h) - var(--space-5, 2rem));
   justify-content: flex-start;
   overflow: clip;
 }
@@ -600,12 +668,12 @@ html {
    slide with it to the right edge when the digithings side takes the walk. */
 @media (min-width: 1024px) {
   .whyx .arch-tour:not([data-variant="static"]) .whyx__apps {
-    width: calc((100% - 2.4rem) * 1.35 / 2);
+    width: calc((100% - var(--why-side-gap)) * 1.35 / 2);
     margin-inline-start: 0;
     transition: margin-inline-start 1.7s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .whyx .arch-tour:not([data-variant="static"])[data-active-side="1"] .whyx__apps {
-    margin-inline-start: calc(100% - (100% - 2.4rem) * 1.35 / 2);
+    margin-inline-start: calc(100% - (100% - var(--why-side-gap)) * 1.35 / 2);
   }
   /* The box sits flush under its tabs: no pin gap, and the frame spans the
      side-tag row (the tag only ever sits over the rail column).
@@ -616,11 +684,10 @@ html {
      nav's edge — and fills to the viewport's foot, so both section rules are on
      screen for the whole walk and the graph compresses to fit between them. */
   .whyx .arch-tour:not([data-variant="static"]) .arch-tour__pin {
-    top: var(--dq-nav-h, 4.5rem);
-    min-height: calc(100svh - var(--dq-nav-h, 4.5rem));
-    max-height: calc(100svh - var(--dq-nav-h, 4.5rem));
-    row-gap: 0;
-    padding-block: 1.2rem;
+    top: var(--tour-nav-h);
+    min-height: calc(100svh - var(--tour-nav-h));
+    max-height: calc(100svh - var(--tour-nav-h));
+    padding-block: var(--why-pin-pad-block);
     border-block-end: 1px solid var(--hair);
     border-image: linear-gradient(var(--hair), var(--hair)) 0 0 1 0 / 0 0 1px 0 / 0 100vw;
   }
@@ -637,12 +704,12 @@ html {
   /* Resting steps fold to one line so the price table fits under the rail;
      the walked step still opens in full. */
   .whyx .arch-tour:not([data-variant="static"]) .arch-tour__rail {
-    gap: 0.55rem;
+    gap: var(--why-rail-gap);
   }
   .whyx .arch-tour:not([data-variant="static"]) .arch-tour__step:not(.on) {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: baseline;
-    column-gap: 0.6rem;
+    column-gap: var(--why-step-column-gap);
   }
   .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side[data-rail="end"] .arch-tour__step:not(.on) {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -661,10 +728,6 @@ html {
    padding-only once the head paragraphs are hidden, so drop it; the tabs sit
    flush on the frame and the active tab covers the frame's top rule. */
 @media (max-width: 1023.98px) {
-  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__pin {
-    row-gap: 0;
-  }
-
   .whyx__app-subhead {
     display: none;
   }
