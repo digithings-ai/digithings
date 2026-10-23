@@ -14,6 +14,7 @@ import {
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
 import { toDigichatClientConfig } from "@/lib/deploy-config/client-projection";
+import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";
 import { toolControlFor } from "@/lib/tool-control";
 
@@ -139,7 +140,10 @@ function trialClient() {
   const dir = resolve(__dirname, "../../../config");
   for (const name of readdirSync(dir)) {
     if (!name.endsWith(".yaml")) continue;
-    const cfg = parseDigichatConfig(loadYaml(readFileSync(resolve(dir, name), "utf8")), name);
+    const cfg = parseDigichatConfig(
+      expandDigichatDocument(loadYaml(readFileSync(resolve(dir, name), "utf8"))),
+      name,
+    );
     const client = toDigichatClientConfig(cfg.deployment!);
     if (client.backendType === "foundry") return client;
   }
