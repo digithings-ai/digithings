@@ -1,3 +1,31 @@
+## [2.6.9](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.8...digichat-v2.6.9) (2026-10-23)
+
+One density token set across the thread, and raw backend ids everywhere: the
+trace, `/tools`, the model toolbar, exports and mobile all name the tool the
+backend actually calls. The model picker is a provider path tree, the trial
+`/tools` page lists every tool its agent is bound to, and house chats stay on
+the 1017 checkpoint. Limits move into YAML per deployment.
+
+### Bug Fixes
+
+* **digichat:** raw backend tool ids everywhere — the streaming trace, `/tools`, the model toolbar, exports and mobile show the id the backend calls (`<service>_<tool>`), not a humanised label. The humanising layer is deleted, not bypassed ([#6320](https://github.com/digithings-ai/digithings/pull/6320), [#6324](https://github.com/digithings-ai/digithings/pull/6324))
+* **digichat:** one density token set across the thread. The phone keeps its airy default after a prefs reset, the floating action bar no longer paints over the next turn's first line, and the reference composer resolves `--composer-padding` instead of falling back to 0 ([#6304](https://github.com/digithings-ai/digithings/pull/6304))
+* **digichat:** the trial deployment's tool list had lost eight of the agent's 42 tools in a merge. All 42 are back, in the agent's groups, with raw ids ([#6334](https://github.com/digithings-ai/digithings/pull/6334))
+* **digichat:** the model chip and the lock agree. No open-models button over a locked, one-model list ([#6335](https://github.com/digithings-ai/digithings/pull/6335))
+* **digichat:** house chats run the 1017 checkpoint on the CheaperInference API — it reasons only when asked, and the chain asks ([#6344](https://github.com/digithings-ai/digithings/pull/6344))
+* **digichat:** the signed trial proof is removed from the trial deployment, as ordered (DIG-5111, [#6265](https://github.com/digithings-ai/digithings/pull/6265))
+* **ui:** the overlay scrollbars come from one copy of the rule blocks, and the composer picker closes through its own scope on the back key ([#6289](https://github.com/digithings-ai/digithings/pull/6289), [#6286](https://github.com/digithings-ai/digithings/pull/6286))
+* **digichat:** the invite-only embed with no key answers the site 404 at the Worker, and the in-image helpdesk MCP sees its own loopback Host ([#6243](https://github.com/digithings-ai/digithings/pull/6243), [#6274](https://github.com/digithings-ai/digithings/pull/6274))
+
+### Features
+
+* **digichat:** `/models` is a provider path tree — models grouped by id segments, bare modes as their own rows, and a typed filter that searches collapsed providers ([#6301](https://github.com/digithings-ai/digithings/pull/6301))
+* **digichat:** the trial `/tools` page lists all 42 tools the Foundry agent is bound to, in the agent's own groups, each reading On with a checked, non-toggling switch; the house page lists DigiSearch and DigiVault ([#6297](https://github.com/digithings-ai/digithings/pull/6297), [#6298](https://github.com/digithings-ai/digithings/pull/6298))
+* **digichat:** YAML limits for every deployment gate — per-deployment token, cost and rate limits live in config, not code ([#6199](https://github.com/digithings-ai/digithings/pull/6199))
+* **digichat:** house is the checked-in default: one `defaults.yaml` that hosts extend, with trial and OCC clearing what they do not want ([#6217](https://github.com/digithings-ai/digithings/pull/6217))
+* **digichat:** the session starts on Auto when the deployment's default is the auto model ([#6326](https://github.com/digithings-ai/digithings/pull/6326))
+* **ui:** the theme toggle is shared with `/chatbot` and the embed instead of three separate controls ([#6166](https://github.com/digithings-ai/digithings/pull/6166))
+
 ## [2.6.8](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.7...digichat-v2.6.8) (2026-10-22)
 
 Reasoning is on for every chat, and `/effort` sets how hard the model thinks.
