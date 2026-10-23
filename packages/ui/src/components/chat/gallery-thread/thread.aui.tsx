@@ -520,6 +520,20 @@ export const Thread: FC<ThreadProps> = ({
  */
 const ThreadFooter: FC = () => <SkinCredit />;
 
+/**
+ * Keeps the viewport on the stream while following. A component rather than a
+ * hook call in `ThreadRoot` because the message count lives in the thread
+ * store, which only exists inside `ThreadPrimitive.Root`.
+ */
+const ScrollFollower: FC<{ viewport: HTMLElement | null; enabled: boolean }> = ({
+  viewport,
+  enabled,
+}) => {
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  useFollowStream(viewport, enabled, messageCount);
+  return null;
+};
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
@@ -540,7 +554,6 @@ const ThreadRoot: FC<{
   }, []);
 
   const viewportProps = scrollModeProps(scrollMode);
-  useFollowStream(viewportEl, scrollMode === "follow");
 
   return (
     <ThreadPrimitive.Root
@@ -587,6 +600,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
+        <ScrollFollower viewport={viewportEl} enabled={scrollMode === "follow"} />
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />

@@ -124,6 +124,11 @@ export function writeStoredScrollMode(mode: ScrollMode): void {
 export function useFollowStream(
   viewport: HTMLElement | null,
   enabled: boolean,
+  /**
+   * Changes when a new turn starts (the message count). A send is an explicit
+   * intent to read the answer, so it clears a pause the reader had taken.
+   */
+  resumeKey: number = 0,
 ): void {
   useEffect(() => {
     if (!viewport || !enabled) return;
@@ -165,5 +170,5 @@ export function useFollowStream(
       viewport.removeEventListener("scroll", onScroll);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [viewport, enabled]);
+  }, [viewport, enabled, resumeKey]);
 }

@@ -24,9 +24,17 @@ class FakeResizeObserver {
   unobserve(): void {}
 }
 
-function Probe({ enabled, onElement }: { enabled: boolean; onElement: (el: HTMLElement) => void }) {
+function Probe({
+  enabled,
+  resumeKey = 0,
+  onElement,
+}: {
+  enabled: boolean;
+  resumeKey?: number;
+  onElement: (el: HTMLElement) => void;
+}) {
   const [el, setEl] = useState<HTMLElement | null>(null);
-  useFollowStream(el, enabled);
+  useFollowStream(el, enabled, resumeKey);
   return (
     <div
       data-testid="viewport"
@@ -122,5 +130,25 @@ describe("useFollowStream", () => {
     real.scrollTop = 400;
     grow(real, 1600);
     expect(real.scrollTop).toBe(400);
+  });
+
+  it("resumes on the next send even while the reader is scrolled up", () => {
+    let el: HTMLElement | null = null;
+    const { rerender } = render(<Probe enabled resumeKey={1} onElement={(node) => (el = node)} />);
+    const real = el as unknown as HTMLElement;
+    Object.defineProperty(real, "scrollHeight", { configurable: true, get: () => 1000 });
+    Object.defineProperty(real, "clientHeight", { configurable: true, get: () => 300 });
+    real.scrollTop = 900;
+    real.dispatchEvent(new Event("scroll"));
+    real.scrollTop = 300;
+    real.dispatchEvent(new Event("scroll"));
+
+    grow(real, 1400);
+    expect(real.scrollTop).toBe(300);
+
+    // A new user message bumps the key: the send is intent to read the answer.
+    rerender(<Probe enabled resumeKey={2} onElement={(node) => (el = node)} />);
+    grow(real, 1600);
+    expect(real.scrollTop).toBe(1600);
   });
 });
