@@ -7,6 +7,7 @@ import {
   UserMessageAttachments,
   useHiddenAttachmentNames,
 } from "./attachment.aui";
+import { dismissComposerKeyboard } from "./composer-keyboard";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
@@ -828,6 +829,10 @@ const Composer: FC<{
       return;
     }
     onComposerSubmit?.(event);
+    // On a phone the keyboard would otherwise stay up over the streaming
+    // answer; blurring retracts it and leaves the thread in full view. A
+    // no-op on a fine pointer, so a desktop keep its caret for the next turn.
+    dismissComposerKeyboard(composerRootRef.current);
   };
 
   // Click outside the composer cancels an in-progress edit. The edit button
