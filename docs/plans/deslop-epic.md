@@ -346,3 +346,52 @@ Each slice: import from `@digithings/ui`; replace `desk-view.tsx` text panes;
 wrap blocks in `BlockBoundary`; render `StateBlock` for loading/empty/error/
 withheld; keep `readOfficial`/`presentResponse` as the data path; no new chart
 library; tests for the new block and its states.
+
+## UD — digichat devkit UI
+
+The canonical customization surface is the **web `/devkit`** route in
+`apps/digichat` (`app/(devkit)/devkit/**`), not the terminal workbench. It
+already imports the real `DigichatConfigSchema`, `THREAD_SKINS` and
+`expandDigichatDocument`, has an inline preview using the same config resolution
+as the product route, and save is fail-closed end-to-end
+(`GET /api/devkit/configs`, `POST /api/devkit/save`, `POST /api/devkit/validate`,
+files under `config/*.yaml`). It is dev-only (`notFound()` in production) and
+loopback-gated; keep that.
+
+### UD1 — skin and colour gallery (core gap)
+
+Today Appearance is one skin `Select` plus one accent pair. The 12-skin grid
+still lives in `/?mode=catalog` (`(baseline)/baseline/baseline-client.tsx`).
+Fold that gallery into Appearance:
+
+- grid of `THREAD_SKINS` with swatches, name and mode, selected state;
+- light/dark pair per skin, not just one accent;
+- contrast readout stays, and is shown per candidate pair;
+- live preview updates from the gallery selection without saving;
+- tests for selection, contrast, and draft/apply.
+
+Acceptance: choosing a skin or colour in `/devkit` previews it, saves it, and
+`?mode=catalog` is no longer needed for discovery.
+
+### UD2 — preview unsaved behaviour (second gap)
+
+Gate, backend and model changes apply only after save, so the preview shows the
+old behaviour while the user edits. Add a "preview draft" path that overlays the
+unsaved draft on the preview request without writing the file. Keep save
+fail-closed and unchanged.
+
+### UD3 — retire the terminal workbench screens
+
+`clients/digichat-devkit` reads the same endpoints but never saves, has no
+preview, and hand-copies `ENUM_OPTIONS` / `THREAD_SKINS`. Retire its UI
+(`src/app.tsx`, `src/live.ts`, `src/present.ts`) and keep `src/cli.ts` as the
+agent/script surface over `POST /api/devkit/save`. Update its README and the
+digichat docs. `apps/digichat` `/` and `?mode=product` stay; only the config
+catalogue goes.
+
+### UD constraints
+
+- Preserve the dev-only / loopback gate. Do not expose `/devkit` publicly.
+- No schema copy: import `deploy-config/schema.ts` and `THREAD_SKINS`.
+- No new palette: skins come from the existing registry.
+- Do not touch the concurrent digithings.ai nav/grid files.
