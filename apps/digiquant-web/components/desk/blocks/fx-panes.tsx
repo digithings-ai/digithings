@@ -15,6 +15,8 @@ import {
   type StateKind,
 } from "@digithings/ui";
 
+import { asRecord as rec, isRecord } from "@digithings/ui/lib/record";
+
 /** The FX and rates panes. One block per catalog id, so no pane stays a text line. */
 export const FX_BLOCK_IDS = [
   "fx-summary",
@@ -52,14 +54,6 @@ type Rec = Record<string, unknown>;
 
 const ABSENT = "not in payload";
 const NO_MARKS = "no bid, offer or mark in this payload";
-
-function isRecord(value: unknown): value is Rec {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function rec(value: unknown): Rec | null {
-  return isRecord(value) ? value : null;
-}
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;

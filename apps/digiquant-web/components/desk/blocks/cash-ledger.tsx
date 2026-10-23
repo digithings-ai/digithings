@@ -11,6 +11,7 @@ import {
   type DataTableRowVariant,
   type KpiCell,
 } from "@digithings/ui";
+import { isRecord } from "@digithings/ui/lib/record";
 
 const ROUTE = "/ledger/cash";
 
@@ -51,10 +52,6 @@ type BalanceRow = {
   balance: string;
   total: boolean;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
