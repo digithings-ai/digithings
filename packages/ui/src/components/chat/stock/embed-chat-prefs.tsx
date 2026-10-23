@@ -202,6 +202,13 @@ export type EmbedChatPrefsApi = {
    * when this is true.
    */
   showContextMeter?: boolean;
+  /**
+   * The trial gate's own turn budget, when the host runs one. The toolbar
+   * draws this in place of the context meter: a turn budget is the number
+   * that stops the visitor, and it exists even where the backend reports no
+   * token usage. Absent means "no gate", so the context meter keeps the slot.
+   */
+  usage?: { used: number; limit: number };
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
