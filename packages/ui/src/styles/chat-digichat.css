@@ -1231,6 +1231,33 @@
   min-height: 0.75rem;
 }
 
+/* The pre-response row must not be shoved down when the work chain mounts.
+   The assistant content is a flex column with a 0.5rem gap, and the chain's
+   part comes before the indicator in the message stream: the moment the chain
+   mounts it becomes the first flow child and the gap alone pushes the marker
+   down by 8px — the visible jump at the handoff, before any tool row settles.
+   Pin the row to the content's top edge and keep the content's height while
+   the row is on its own, so the chain grows underneath the marker and the
+   swap moves nothing (#4459). Scoped to the digichat skin: the base skin
+   renders the indicator without the `hasContent` guard, so overlaying it
+   there would hide a live chain trigger. */
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]:has(
+    > [data-slot="aui_assistant-message-indicator"]
+  ) {
+  position: relative;
+  min-height: 0.75rem;
+}
+
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]
+  > [data-slot="aui_assistant-message-indicator"] {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  margin: 0;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] {
   display: inline-flex;
   width: 0.75rem;
