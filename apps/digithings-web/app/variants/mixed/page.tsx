@@ -74,7 +74,7 @@ export default function VariantMixed() {
               <FeatureCell
                 eyebrow="bring your own key"
                 outcome="Forwarded per request, never stored"
-                mechanism={`Your provider key lives in one tab's memory. The site persists two preference strings and nothing else — ${COUNTS.keysStored} keys stored, ever.`}
+                mechanism={`Your provider key lives in one tab's memory. The site persists two preference strings and nothing else: ${COUNTS.keysStored} keys stored, ever.`}
                 href="/legal/privacy"
                 linkLabel="Read the privacy notice"
                 linkAriaLabel="Read the digithings privacy notice"
@@ -85,7 +85,7 @@ export default function VariantMixed() {
               <FeatureCell
                 eyebrow="audit on by default"
                 outcome="Every hop lands on your disk"
-                mechanism="A correlation id rides every service call, and workflow events append to a JSONL trail you own — redacted by key name on the way in."
+                mechanism="A correlation id rides every service call, and workflow events append to a JSONL trail you own, redacted by key name on the way in."
                 href="/security"
                 linkLabel="Read the security posture"
                 linkAriaLabel="Read the digithings security posture"
@@ -104,7 +104,7 @@ export default function VariantMixed() {
           {/* One shared chrome dependency list, rather than eleven repeated ones. */}
           <Specimen label="assembled from parts you can name">
             <p className="m-0 max-w-[68ch] text-[0.92rem] leading-[1.7] text-ink-soft">
-              Every module composes with open-source libraries you can version and swap — no forks,
+              Every module composes with open-source libraries you can version and swap: no forks,
               no reimplementations of a database, a scheduler, or a model runtime.
             </p>
             <div className="mt-[1.3rem]">
