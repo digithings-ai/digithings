@@ -7,7 +7,11 @@ import {
   UserMessageAttachments,
   useHiddenAttachmentNames,
 } from "./attachment.aui";
-import { dismissComposerKeyboard } from "./composer-keyboard";
+import {
+  composerHasText,
+  dismissComposerKeyboard,
+  isCoarsePointer,
+} from "./composer-keyboard";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
@@ -821,6 +825,13 @@ const Composer: FC<{
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRootRef = useRef<HTMLFormElement | null>(null);
   const isEditingMessage = edit.editing !== null;
+  // Read after mount, not during render: the server has no matchMedia, and a
+  // phone reporting "coarse" on its first render would hydrate a different
+  // tree than the one that was sent.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(isCoarsePointer());
+  }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (edit.editing) {
@@ -828,11 +839,13 @@ const Composer: FC<{
       edit.commit(aui.composer().getState().text);
       return;
     }
+    // Captured before the send clears the textarea — see composerHasText.
+    const sent = composerHasText(composerRootRef.current);
     onComposerSubmit?.(event);
     // On a phone the keyboard would otherwise stay up over the streaming
     // answer; blurring retracts it and leaves the thread in full view. A
-    // no-op on a fine pointer, so a desktop keep its caret for the next turn.
-    dismissComposerKeyboard(composerRootRef.current);
+    // no-op on a fine pointer, so a desktop keeps its caret for the next turn.
+    if (sent) dismissComposerKeyboard(composerRootRef.current);
   };
 
   // Click outside the composer cancels an in-progress edit. The edit button
@@ -946,6 +959,12 @@ const Composer: FC<{
                 autoFocus={autoFocus}
                 submitMode="enter"
                 enterKeyHint="send"
+                // assistant-ui refocuses the composer when a run starts and
+                // when the viewport scrolls back to the bottom. On a phone
+                // that reopens the keyboard over the answer we just revealed,
+                // so both are off there; on a desktop the caret is welcome.
+                unstable_focusOnRunStart={!coarsePointer}
+                unstable_focusOnScrollToBottom={!coarsePointer}
                 aria-label="Message"
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />

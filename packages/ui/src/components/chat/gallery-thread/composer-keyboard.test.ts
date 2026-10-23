@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dismissComposerKeyboard, isCoarsePointer } from "./composer-keyboard";
+import {
+  composerHasText,
+  dismissComposerKeyboard,
+  isCoarsePointer,
+} from "./composer-keyboard";
 
 function stubPointer(coarse: boolean) {
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -67,5 +71,27 @@ describe("composer keyboard dismissal", () => {
 
     expect(dismissComposerKeyboard(empty)).toBe(false);
     expect(dismissComposerKeyboard(null)).toBe(false);
+  });
+});
+
+describe("composerHasText", () => {
+  it("reads the draft before a send clears it", () => {
+    const root = document.createElement("form");
+    const area = document.createElement("textarea");
+    area.value = "How do I get started?";
+    root.appendChild(area);
+
+    expect(composerHasText(root)).toBe(true);
+  });
+
+  it("treats whitespace as empty, and a missing composer as empty", () => {
+    const root = document.createElement("form");
+    const area = document.createElement("textarea");
+    area.value = "   \n  ";
+    root.appendChild(area);
+
+    expect(composerHasText(root)).toBe(false);
+    expect(composerHasText(document.createElement("form"))).toBe(false);
+    expect(composerHasText(null)).toBe(false);
   });
 });

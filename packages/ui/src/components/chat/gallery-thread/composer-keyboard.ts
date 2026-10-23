@@ -28,6 +28,20 @@ export function isCoarsePointer(matchMedia: MatchMedia = defaultMatchMedia()): b
 }
 
 /**
+ * True when the composer holds something the user meant to send.
+ *
+ * Read *before* the submit is handed to the runtime: a successful send clears
+ * the textarea, so asking afterwards would answer "empty" for every real send.
+ * Enter on an empty composer also submits through the same form, and that one
+ * must not steal focus.
+ */
+export function composerHasText(root: HTMLElement | null): boolean {
+  if (!root) return false;
+  const area = root.querySelector<HTMLTextAreaElement>("textarea");
+  return area ? area.value.trim().length > 0 : false;
+}
+
+/**
  * Blur the composer's textarea so the on-screen keyboard retracts.
  *
  * Returns true when the textarea had focus and was blurred, so a caller (or a
