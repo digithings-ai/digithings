@@ -8,6 +8,7 @@
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import {
+  matchesMobileDensityViewport,
   readStoredDensity,
   resolveTraceDensity,
   writeStoredDensity,
@@ -79,12 +80,14 @@ export function chromePrefsFromDeploy(
     scrollbars?: "always" | "auto" | null;
   } = {},
   storage?: { getItem(key: string): string | null } | null,
+  context: { mobile?: boolean } = {},
 ): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
   const effort = input.effort?.trim().toLowerCase();
   return {
     density: resolveTraceDensity(
       storage === undefined ? readStoredDensity() : readStoredDensity(storage),
       input.density,
+      context,
     ),
     effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
     searchEngine: input.searchEngine?.trim() ?? "",
@@ -94,18 +97,40 @@ export function chromePrefsFromDeploy(
 }
 
 /**
- * Apply a stored `dt-density` after hydration. The first render uses the
- * deployment density on both server and client, so `data-density` matches
- * and only a user with a stored choice re-renders once.
+ * The reset paths (`/new`, `/clear`, `/compact`, the thread's new-thread
+ * button) rebuild chrome from the deployment. Density must resolve exactly the
+ * way the mount effect does — a stored choice first, then the phone default —
+ * or a phone drops back to the deployment rhythm on the first reset and never
+ * returns, because the embed client does not remount. Other chrome still
+ * returns to the deployment.
+ */
+export function resetChromePrefsFromDeploy(
+  input: Parameters<typeof chromePrefsFromDeploy>[0] = {},
+): ReturnType<typeof chromePrefsFromDeploy> {
+  return chromePrefsFromDeploy(input, undefined, {
+    mobile: matchesMobileDensityViewport(),
+  });
+}
+
+/**
+ * Apply a stored `dt-density` after hydration, and the mobile default when the
+ * user has never chosen one. The first render uses the deployment density on
+ * both server and client, so `data-density` matches; afterwards a stored choice
+ * (or an airy mobile default) re-renders once.
+ *
+ * Order is stored user choice > mobile default (airy) > deployment default >
+ * "default" — see `resolveTraceDensity`.
  */
 export function useStoredDensityAfterMount(
   setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
 ): void {
   useEffect(() => {
-    const stored = readStoredDensity();
-    if (!stored) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is client-only; reading it during render would mismatch the server HTML
-    setPrefs((prev) => (prev.density === stored ? prev : { ...prev, density: stored }));
+    const mobile = matchesMobileDensityViewport();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- storage and matchMedia are client-only; reading them during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const next = resolveTraceDensity(readStoredDensity(), prev.density, { mobile });
+      return prev.density === next ? prev : { ...prev, density: next };
+    });
   }, [setPrefs]);
 }
 
