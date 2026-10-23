@@ -87,14 +87,14 @@ export const MessageError: FC = () => {
           detail={detail}
           extra={
             code || (rawDetail && !detail) ? (
-              <div className="aui-message-error-details mt-1 text-muted-foreground">
+              <div className="aui-message-error-details mt-1 text-ink-mute">
                 {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
                 {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
               </div>
             ) : null
           }
           action={
-            <ActionBarPrimitive.Reload className="aui-message-error-retry ms-auto flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/25 px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50">
+            <ActionBarPrimitive.Reload className="aui-message-error-retry ms-auto flex shrink-0 items-center gap-1.5 rounded-none border border-destructive/25 px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50">
               Retry
             </ActionBarPrimitive.Reload>
           }

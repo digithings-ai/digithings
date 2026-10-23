@@ -96,14 +96,14 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               </span>
               <span className="shrink-0 font-medium">{item.label}</span>
               {item.description ? (
-                <span className="text-muted-foreground ml-auto min-w-0 truncate text-end text-xs leading-tight">
+                <span className="text-ink-mute ml-auto min-w-0 truncate text-end text-xs leading-tight">
                   {item.description}
                 </span>
               ) : null}
             </ComposerPrimitive.Unstable_TriggerPopoverItem>
           ))}
           {items.length === 0 && (
-            <div className="text-muted-foreground px-3 py-2 text-sm">
+            <div className="text-ink-mute px-3 py-2 text-sm">
               {isLoading ? loadingLabel : emptyLabel}
             </div>
           )}
@@ -185,7 +185,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
     <ComposerPrimitive.Unstable_TriggerPopover
       data-slot="composer-trigger-popover"
       className={cn(
-        "aui-composer-trigger-popover bg-popover text-popover-foreground absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border",
+        "aui-composer-trigger-popover bg-surface-2 text-ink absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border",
         className,
       )}
       {...props}

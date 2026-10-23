@@ -69,7 +69,7 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
           extra={
             <>
               {code || (rawDetail && !detail) ? (
-                <div className="aui-message-error-details mt-1 text-muted-foreground">
+                <div className="aui-message-error-details mt-1 text-ink-mute">
                 {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
                 {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
               </div>

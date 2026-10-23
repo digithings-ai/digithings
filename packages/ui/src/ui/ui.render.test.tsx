@@ -138,6 +138,18 @@ describe("vendored ui kit renders server-side", () => {
     );
   });
 
+  it("Badge status variants use distinct semantic status tokens", () => {
+    const cases = ["open", "add", "trim", "exit", "closed"] as const;
+    for (const variant of cases) {
+      const html = renderToStaticMarkup(<Badge variant={variant}>{variant}</Badge>);
+      expect(html, variant).toContain(
+        `border-(--status-${variant}) text-(--status-${variant})`,
+      );
+      // The old collapse: every action badge read as --accent.
+      expect(html, variant).not.toContain("text-accent");
+    }
+  });
+
   it("Checkbox renders its root and (when checked) the indicator", () => {
     const checked = renderToStaticMarkup(<Checkbox defaultChecked aria-label="Enable" />);
     expect(checked).toContain('data-slot="checkbox"');

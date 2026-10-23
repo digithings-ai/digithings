@@ -417,13 +417,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -709,7 +709,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom border-hair bg-surface hover:bg-surface-2 absolute -top-12 z-10 self-center rounded-none p-4 disabled:invisible"
       >
         <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
@@ -916,7 +916,7 @@ const Composer: FC<{
           data-slot="aui_composer-shell"
           data-layout={layout}
           onMouseDown={handleShellMouseDown}
-          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-hair data-[dragging=true]:border-accent flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_50%,var(--bg))]"
         >
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
@@ -930,7 +930,7 @@ const Composer: FC<{
               <ComposerPrimitive.Input
                 placeholder={placeholder}
                 className={cn(
-                  "aui-composer-input placeholder:text-muted-foreground/60 w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
+                  "aui-composer-input placeholder:text-ink-mute w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
                   compact
                     ? "min-h-7 max-h-[8.75rem] px-1.5 py-0 text-sm leading-7"
                     : "min-h-[1.375rem] max-h-[7.75rem] px-2.5 py-0.5 text-base leading-6",
@@ -1018,7 +1018,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-dictate text-muted-foreground hover:text-foreground size-7 rounded-full"
+              className="aui-composer-dictate text-ink-mute hover:text-foreground size-7 rounded-none"
               aria-label="Start voice input"
             >
               <DotMatrix
@@ -1037,7 +1037,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
+              className="aui-composer-stop-dictation text-destructive size-7 rounded-none"
               aria-label="Stop voice input"
             >
               <DotMatrix
@@ -1057,7 +1057,7 @@ const ComposerSendControls: FC = () => {
           type="submit"
           variant="ghost"
           size="icon"
-          className="aui-composer-send size-7 rounded-full"
+          className="aui-composer-send size-7 rounded-none"
           aria-label="Send message"
           disabled={sendDisabled}
           onClick={submitComposer}
@@ -1075,7 +1075,7 @@ const ComposerSendControls: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className="aui-composer-cancel size-7 rounded-full"
+            className="aui-composer-cancel size-7 rounded-none"
             aria-label="Stop generating"
           >
             <DotMatrix
@@ -1366,7 +1366,7 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
+      className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -1548,7 +1548,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
       className={cn(
-        "aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs",
+        "aui-branch-picker-root text-ink-mute -ms-2 me-2 inline-flex items-center text-xs",
         className,
       )}
       {...rest}

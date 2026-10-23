@@ -13,9 +13,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import {
   CopyIcon,
   DownloadIcon,
-  ImageIcon,
   ImageOffIcon,
-  Loader2Icon,
   RefreshCwIcon,
   ShieldAlertIcon,
   XIcon,
@@ -25,6 +23,7 @@ import type {
   ImageMessagePartComponent,
 } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
+import { DotMatrix } from "../DotMatrix";
 
 const extensionForMimeType = (mimeType?: string): string => {
   switch (mimeType) {
@@ -109,13 +108,13 @@ const copyImagePart = async (
 };
 
 const imageVariants = cva(
-  "aui-image-root relative overflow-hidden rounded-lg",
+  "aui-image-root relative overflow-hidden rounded-none",
   {
     variants: {
       variant: {
-        outline: "border-border border",
+        outline: "border-hair border",
         ghost: "",
-        muted: "bg-muted/50",
+        muted: "bg-surface-2/50",
       },
       size: {
         sm: "max-w-64",
@@ -189,17 +188,17 @@ function ImagePreview({
       {!loaded && !error && (
         <div
           data-slot="image-preview-loading"
-          className="bg-muted/50 absolute inset-0 flex items-center justify-center"
+          className="bg-surface-2/50 absolute inset-0 flex items-center justify-center"
         >
-          <ImageIcon className="text-muted-foreground size-8 animate-pulse" />
+          <DotMatrix state="loading" decorative className="text-ink-mute size-8" />
         </div>
       )}
       {error ? (
         <div
           data-slot="image-preview-error"
-          className="bg-muted/50 flex min-h-32 items-center justify-center p-4"
+          className="bg-surface-2/50 flex min-h-32 items-center justify-center p-4"
         >
-          <ImageOffIcon className="text-muted-foreground size-8" />
+          <ImageOffIcon className="text-ink-mute size-8" />
         </div>
       ) : (
         <img
@@ -237,7 +236,7 @@ function ImageFilename({
     <span
       data-slot="image-filename"
       className={cn(
-        "text-muted-foreground block truncate px-2 py-1.5 text-xs",
+        "text-ink-mute block truncate px-2 py-1.5 text-xs",
         className,
       )}
       {...props}
@@ -351,7 +350,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
                 e.stopPropagation();
                 handleClose();
               }}
-              className="text-muted-foreground hover:text-foreground bg-background/80 absolute end-4 top-4 cursor-pointer rounded-md p-2"
+              className="text-ink-mute hover:text-foreground bg-background/80 absolute end-4 top-4 cursor-pointer rounded-none p-2"
             >
               <XIcon className="size-5" />
             </button>
@@ -367,11 +366,11 @@ function ImageGenerating({ className }: { className?: string }) {
     <div
       data-slot="image-generating"
       className={cn(
-        "bg-muted/50 flex min-h-32 items-center justify-center p-4",
+        "bg-surface-2/50 flex min-h-32 items-center justify-center p-4",
         className,
       )}
     >
-      <Loader2Icon className="text-muted-foreground size-8 animate-spin" />
+      <DotMatrix state="loading" decorative className="text-ink-mute size-8" />
       <span className="sr-only">Generating image…</span>
     </div>
   );
@@ -388,13 +387,13 @@ function ImageContentFilterError({
     <div
       data-slot="image-content-filter-error"
       className={cn(
-        "bg-muted/50 flex min-h-32 flex-col items-center justify-center gap-2 p-4 text-center",
+        "bg-surface-2/50 flex min-h-32 flex-col items-center justify-center gap-2 p-4 text-center",
         className,
       )}
     >
-      <ShieldAlertIcon className="text-muted-foreground size-8" />
+      <ShieldAlertIcon className="text-ink-mute size-8" />
       <p className="text-sm font-medium">Image could not be generated</p>
-      {reason && <p className="text-muted-foreground text-xs">{reason}</p>}
+      {reason && <p className="text-ink-mute text-xs">{reason}</p>}
     </div>
   );
 }
@@ -430,7 +429,7 @@ function RegenerateButton({
       disabled={isRegenerating}
       data-slot="image-regenerate"
       aria-label="Regenerate image"
-      className="hover:bg-muted inline-flex size-7 items-center justify-center rounded disabled:opacity-50"
+      className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none disabled:opacity-50"
     >
       <RefreshCwIcon
         className={cn("size-4", isRegenerating && "animate-spin")}
@@ -450,7 +449,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         onClick={() => downloadImagePart(part)}
         data-slot="image-download"
         aria-label="Download image"
-        className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
+        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none"
       >
         <DownloadIcon className="size-4" />
       </button>
@@ -461,7 +460,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         }}
         data-slot="image-copy"
         aria-label="Copy image"
-        className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
+        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none"
       >
         <CopyIcon className="size-4" />
       </button>
