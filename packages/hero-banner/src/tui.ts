@@ -234,4 +234,3 @@ export function toAnsi(lines: TermCell[][]): string[] {
 }
 
 export const toPlain = (lines: TermCell[][]) => lines.map((row) => row.map((c) => c.ch).join(""));
-

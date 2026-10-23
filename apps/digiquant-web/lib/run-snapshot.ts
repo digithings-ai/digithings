@@ -70,4 +70,3 @@ export function parseLatestRun(input: unknown): LatestRunFile {
 // Parsed at module load so a malformed capture fails loudly at build time
 // instead of on the block that reads it.
 parseLatestRun(raw);
-
