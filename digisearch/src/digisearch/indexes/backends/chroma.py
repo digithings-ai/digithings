@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -337,8 +338,6 @@ class ChromaBackend(DigiIndex):
 
     def snapshot(self, path: str) -> None:
         """Export snapshot. For persistent client, copy to path."""
-        import shutil
-
         if self._persist_path:
             shutil.copytree(self._persist_path, path, dirs_exist_ok=True)
         else:

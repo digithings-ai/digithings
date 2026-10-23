@@ -375,6 +375,13 @@ install_request_id_middleware(app)
 install_request_id_logging()
 
 
+def _normalize_mode(value: object) -> str:
+    """Coerce a request-level ``mode`` to a supported query mode (default hybrid)."""
+    from digisearch.embedding.factory import normalize_query_mode
+
+    return normalize_query_mode(str(value) if value is not None else "hybrid")
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -450,9 +457,7 @@ class QueryRequest(BaseModel):
     @field_validator("mode", mode="before")
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
-        from digisearch.embedding.factory import normalize_query_mode
-
-        return normalize_query_mode(str(value) if value is not None else "hybrid")
+        return _normalize_mode(value)
 
 
 class QueryResponse(BaseModel):
@@ -552,9 +557,7 @@ class ResearchTurnRequest(BaseModel):
     @field_validator("mode", mode="before")
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
-        from digisearch.embedding.factory import normalize_query_mode
-
-        return normalize_query_mode(str(value) if value is not None else "hybrid")
+        return _normalize_mode(value)
 
 
 @app.get("/health")

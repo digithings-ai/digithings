@@ -69,11 +69,6 @@ def register_backend(fn: _BackendFn) -> _BackendFn:
     return fn
 
 
-def _clear_backends() -> None:
-    """Remove all registered backends (test helper)."""
-    _backends.clear()
-
-
 @register_backend
 def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     """Azure AI Search backend. Active when AZURE_SEARCH_ENDPOINT is configured."""
@@ -568,7 +563,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         except ImportError as exc:
             raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
         except _BACKEND_ERRORS as exc:
-            logger.error("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
+            logger.exception("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
             raise
     if chroma_path:
         try:
@@ -587,7 +582,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         except ImportError as exc:
             raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
         except _BACKEND_ERRORS as exc:
-            logger.error("Chroma ingest failed for index %s: %s", index_name, exc)
+            logger.exception("Chroma ingest failed for index %s: %s", index_name, exc)
             raise
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
