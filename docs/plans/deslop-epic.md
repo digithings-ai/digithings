@@ -404,6 +404,16 @@ catalogue goes.
 | UC1 | `d5640d2929` | `ac0140cb73` | shared desk primitives, 33 tests |
 | U8 | `ffa6e0840b` | `abc82e630f` | landing metadata/JSON-LD, form a11y, canonical URL, focus, 390 tests |
 | U10 | `749108d1d8` | `d2d76486c6` | variants focus rings, captions, heading order, em-dash copy |
+| UC2b | `0cde7e9534` | `e1765e1b0b` | live marks on `/brief` via a real payload; pane body slot |
+| U6 | `f28f5c7295` | `6d75bb3845` | digiquant home metadata, skip target, overflow clip |
+| U11 | `bd85c89ed9` | `715b11b784` | hero-banner clock, pause gating, reduced motion, dead exports |
+| UC2c | `3e6d280323` | `7d21e778e3` | tearsheet NAV + benchmarks blocks from dashboard-api |
+| U14 | `22f06c13a1` | `d61b2543a7` | shared chat kit copy/radius/roles, status + duration tokens |
+| U16 | `545bb7c9d7` | `cc7119dda2` | digichat-ui radius/focus/token roles, slash matching |
+| C4 | `ac1c77f223` | `843152391e` | digisearch Python: dead code, shared time helper, logging |
+| D1 | `374fb1a939` | `064f552672` | stale surface claims corrected, superseded docs marked |
+| U17 | `ecf8accbe5` | direct | `/book` mobile contents, metadata, diagrams, PagedJS print |
+| U15 | `93ce299ad6` | direct | digichat welcome fallback, route types, baseline assertion |
 
 ### U8 caveat — `LandingSections.tsx`
 
@@ -467,14 +477,24 @@ Findings:
 3. The pair readout lacks the dismissible below-minimum warning that the accent
    readout has.
 
-### Pre-existing gate failures (baseline, not caused by this epic)
+### Gate failures found on the baseline (resolved and remaining)
 
-- `npm run lint -w digichat` exits 1 at
-  `src/lib/base-path-usage.source.test.ts:9` (direct `packages/ui/src` import,
-  `no-restricted-imports`). It exists on the epic baseline. **Fix before the
-  final PR**; otherwise the digichat lint gate is red.
-- `tsc --noEmit` in digichat reports 3 errors in `src/app/api/chat/route.ts`,
-  also present on the baseline.
+- **Resolved in U15 (`93ce299ad6`).** `npm run lint -w digichat` failed on a
+  direct `packages/ui/src` import in
+  `src/lib/base-path-usage.source.test.ts:9`; it now imports
+  `@digithings/ui/base-path`. `tsc --noEmit` in digichat reported 3 errors in
+  `src/app/api/chat/route.ts` (a duplicate unused `guard` block and a
+  `sessionId` field the guard type rejects on purpose — the budget key is the
+  server-derived IP); both are gone and `tsc` is clean.
+- **Remaining, pre-existing on the epic base.** `npm test -w digichat` has 17
+  failures across 8 files (`limits/schema`, `product-model-picker`,
+  `tool-control`, `deploy-config`, `chat-panel`, `stock/tool-catalog-bar`,
+  `api/chat/route`). They reproduce on the current develop checkout and come
+  from config/schema drift (`extends` and null-valued keys in
+  `config/datatap-trial-foundry.yaml`, missing price-cap pairs in test
+  deployments), not from this epic. Re-run after the convergence merge; do not
+  paper over them.
+
 
 ### UC2b — landed
 
