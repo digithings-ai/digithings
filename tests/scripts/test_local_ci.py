@@ -743,8 +743,11 @@ class WatchdogTest(unittest.TestCase):
         self._state = _mod.CHILD_STATE
         self._lock = _mod.LOCK
         self._grace = _mod.WATCHDOG_GRACE_SECS
+        self._logd = _mod.LOGD
         _mod.CHILD_STATE = os.path.join(self.tmp, "child.json")
         _mod.LOCK = os.path.join(self.tmp, "lock")
+        _mod.LOGD = os.path.join(self.tmp, "logs")
+        os.makedirs(_mod.LOGD, exist_ok=True)
         _mod.WATCHDOG_GRACE_SECS = 0
         self.marker = os.path.join(self.tmp, "child.pid")
         self.holder = subprocess.Popen(["/bin/sh", "-c", f"sleep 45 & echo $! > {self.marker}; wait"])
@@ -767,6 +770,7 @@ class WatchdogTest(unittest.TestCase):
                 pass
         _mod.CHILD_STATE = self._state
         _mod.LOCK = self._lock
+        _mod.LOGD = self._logd
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _alive(self, pid):
@@ -820,6 +824,56 @@ class WatchdogTest(unittest.TestCase):
         self.assertFalse(_mod.watchdog())
         self.assertIsNone(_mod.read_child_state())
         self.assertTrue(self._alive(self.child))
+
+    def _production_ticks(self):
+        """How many "watchdog: tick" records the production log holds.
+
+        The production log is derived from the module's HOME, never from LOGD:
+        LOGD is the variable this fix redirects, so counting through it would
+        count the test's own record (DIG-5255, review round 2). A missing log
+        counts as zero.
+        """
+        path = os.path.join(_mod.HOME, ".config", "digithings", "logs", "local-ci",
+                            "local-ci.log")
+        try:
+            with open(path) as f:
+                return sum(1 for line in f if "watchdog: tick" in line)
+        except OSError:
+            return 0
+
+    def test_the_decision_is_recorded_in_the_test_log(self):
+        """The watchdog's line must land in the test's own log, never in production.
+
+        The logger resolves LOGD at call time, and this class patches the child
+        state, the lock and the grace but not the log directory: every pytest
+        run wrote a synthetic "watchdog: tick ... over budget 0s" record into
+        the production log ~/.config/digithings/logs/local-ci/local-ci.log (446
+        such records measured 2026-10-22 09:03, one per test run). That log is
+        the forensic trail the receipt producer is attributed from, so a test
+        record there is a false lead about who produced a receipt.
+
+        The assertion has to be able to fail (DIG-5255, review round 2): the
+        record is read from the path the test owns, and the production log is
+        counted from the module's HOME - never from LOGD, which is the variable
+        this fix redirects, so reading it back would assert the fix against
+        itself. The production log is counted around the watchdog call itself,
+        so a concurrent run on another branch cannot make this flaky.
+        """
+        self.assertTrue(os.path.abspath(_mod.LOGD).startswith(os.path.abspath(self.tmp)),
+                        "the log directory must be redirected into the test's own directory")
+        self.assertTrue(self._wait_child_age(1))
+        self._state_file(budget=0)
+
+        ticks_before = self._production_ticks()
+        self.assertTrue(_mod.watchdog())
+        ticks_after = self._production_ticks()
+
+        with open(os.path.join(self.tmp, "logs", "local-ci.log")) as f:
+            record = f.read()
+        self.assertIn("watchdog: tick", record)
+        self.assertIn("worker-build:digithings-cron", record)
+        self.assertEqual(ticks_before, ticks_after,
+                         "the watchdog record must not reach the production log")
 
 
 class RuffPathResolverTest(unittest.TestCase):
