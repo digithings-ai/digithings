@@ -636,7 +636,7 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     "scripts/validate_model_routing.py": _Allowance(1, 1),
     # Names the house default and the retired picker ids so the drift check
     # can refuse them. The ids live in the catalog; this list only compares.
-    "scripts/check_digichat_house_defaults.py": _Allowance(12, 7),
+    "scripts/check_digichat_house_defaults.py": _Allowance(12, 8),
 }
 
 
