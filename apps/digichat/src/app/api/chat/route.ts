@@ -246,15 +246,6 @@ export async function POST(req: Request) {
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
   const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
-  // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
-  const guard = createTurnGuard({
-    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
-    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
-    foundryMaxToolCalls: foundryAlias,
-    userId: ownerUserSub,
-    ip: clientIpForRateLimit(req),
-    omitUserTpm: byokKey.length > 0,
-  });
   const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
   const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
   const limitConfig = embedConfig?.limits ?? dep?.limits;
@@ -608,7 +599,6 @@ export async function POST(req: Request) {
     guardrails: projectedGuardrails(limitConfig, limitGuardrails),
     foundryMaxToolCalls: foundryAlias,
     userId: ownerUserSub,
-    sessionId,
     ip: clientIp,
     ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
   });
