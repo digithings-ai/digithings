@@ -70,22 +70,27 @@ export const PRINT_CSS = `
   }
 
   /* Page numbers in the outer margin, alternating by page parity — the
-     convention that makes a spread read as one spread. */
-  .pagedjs_page_number {
+     convention that makes a spread read as one spread. Paged.js stamps the
+     number on the page box; it does not create a page-number element. */
+  .pagedjs_page { position: relative; }
+  .pagedjs_page::after {
+    content: attr(data-book-page);
     position: absolute;
     bottom: 8mm;
     font-family: var(--font-mono);
     font-size: 8pt;
     color: var(--ink-soft);
   }
-  .pagedjs_page--left .pagedjs_page_number { left: 18mm; }
-  .pagedjs_page--right .pagedjs_page_number { right: 18mm; }
+  .pagedjs_page:nth-child(odd)::after { left: 18mm; }
+  .pagedjs_page:nth-child(even)::after { right: 18mm; }
 
   /* A chapter starts on a new page; a section never breaks mid-figure. */
   .book-chapter { break-before: page; }
   .book-chapter:first-of-type { break-before: auto; }
   h1, h2, h3, h4 { break-after: avoid; }
   figure, pre, table, img, svg { break-inside: avoid; }
+  p { orphans: 3; widows: 3; }
+  .book-reference { break-inside: avoid; }
 
   /* The table of contents' page references are written by the print step into
      '.book-toc__ref'. Until then they must occupy no width, or every entry
@@ -130,11 +135,11 @@ h1 { font-size: 20pt; margin: 0 0 6pt; line-height: 1.15; }
 h2 { font-size: 14pt; margin: 18pt 0 6pt; line-height: 1.2; }
 h3 { font-size: 11.5pt; margin: 14pt 0 4pt; }
 h4 { font-size: 9pt; margin: 12pt 0 3pt; font-family: var(--font-mono), monospace; }
-p { margin: 0 0 8pt; max-width: 92%; }
+p { margin: 0 0 8pt; max-width: 92%; orphans: 3; widows: 3; }
 ul, ol { margin: 0 0 8pt 18pt; }
 li { margin: 0 0 3pt; }
 code, pre { font-family: var(--font-mono), monospace; }
-pre { white-space: pre-wrap; font-size: 8.5pt; margin: 0 0 10pt; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; margin: 0 0 10pt; }
 img { max-width: 100%; }
 .book-figure__dark { display: none !important; }
 .book-figure__light { display: block !important; }
@@ -144,6 +149,19 @@ pre { line-height: 1.25; }
 h1, h2, h3, h4 { break-after: avoid; }
 p, pre, img, li { break-inside: avoid; }
 a { color: inherit; text-decoration: none; }
+
+/* The page box carries the folio number PagedBoot stamps on it. */
+.pagedjs_page { position: relative; }
+.pagedjs_page::after {
+  content: attr(data-book-page);
+  position: absolute;
+  bottom: 8mm;
+  font-family: var(--font-mono), monospace;
+  font-size: 8pt;
+  color: var(--ink-soft);
+}
+.pagedjs_page:nth-child(odd)::after { left: 18mm; }
+.pagedjs_page:nth-child(even)::after { right: 18mm; }
 `;
 
 export default PRINT_CSS;
