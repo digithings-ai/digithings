@@ -13,6 +13,7 @@ import { thesesBody } from "digiquant-tui/pages/theses-format";
 import { shapeLines, type PaneBody } from "digiquant-tui/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
 import { BenchmarksBlock } from "../blocks/benchmarks";
+import { CashLedgerBlock } from "../blocks/cash-ledger";
 import { NavSeriesBlock } from "../blocks/nav-series";
 import { PanelView } from "../panel-view";
 import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
@@ -368,12 +369,50 @@ export function AttributionPage() {
   return <AttributionHome />;
 }
 
-/** `/portfolio/ledger` only. Later portfolio pages stay on the line read. */
+/** The ledger mosaic, painted from reads. Exported so the panes can be rendered with a payload and no fetch. */
+export function LedgerPanes({ reads }: { reads: Record<string, OfficialRead> }) {
+  const path = "/portfolio/ledger";
+  const layout = layoutFor(path);
+  const { mount, style, pane } = useDeskMosaic(layout);
+
+  return (
+    <div ref={mount} className={PANE_MOSAIC}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paintLedger(placement.id, reads[placement.id]);
+        const read = reads[placement.id];
+        return (
+          <div
+            key={placement.id}
+            className={DESK_TILE}
+            style={style(placement.id)}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              dataAsOf={view.dataAsOf}
+              blocks={view.blocks}
+              body={placement.id === "cash" ? (
+                <PanelView id={placement.id} title={def.title} data={read?.data}>
+                  <CashLedgerBlock read={read?.result} data={read?.data} />
+                </PanelView>
+              ) : undefined}
+              tone={tone[view.status]}
+              {...pane(placement.id)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** `/portfolio/ledger` only. */
 function LedgerHome() {
   const path = "/portfolio/ledger";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
-  const layout = layoutFor(path);
-  const { mount, style, pane } = useDeskMosaic(layout);
   const refresh = useRefreshGeneration();
 
   useEffect(() => {
@@ -394,32 +433,7 @@ function LedgerHome() {
     };
   }, [refresh]);
 
-  return (
-    <div ref={mount} className={PANE_MOSAIC}>
-      {layout.map((placement) => {
-        const def = BLOCKS[placement.id];
-        if (!def) return null;
-        const view = paintLedger(placement.id, reads[placement.id]);
-        return (
-          <div
-            key={placement.id}
-            className={DESK_TILE}
-            style={style(placement.id)}
-          >
-            <DeskPane
-              title={def.title}
-              route={def.route}
-              asOf={view.asOf}
-              dataAsOf={view.dataAsOf}
-              blocks={view.blocks}
-              tone={tone[view.status]}
-              {...pane(placement.id)}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <LedgerPanes reads={reads} />;
 }
 
 function paintLedger(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {

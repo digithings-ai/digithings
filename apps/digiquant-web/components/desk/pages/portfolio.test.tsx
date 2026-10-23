@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { STUB_READ, type ReadResult } from "digiquant-tui/read";
 import type { OfficialRead } from "../read-block";
-import { TearsheetPanes } from "./portfolio";
+import { LedgerPanes, TearsheetPanes } from "./portfolio";
 
 const OK: ReadResult = { status: "ok", lines: [], asOf: "2026-09-24" };
 
@@ -176,5 +176,37 @@ describe("the rest of the tearsheet", () => {
       expect(html).toContain(title);
     }
     expect(html).toContain('data-route="/performance/drawdown"');
+  });
+});
+
+describe("ledger cash block", () => {
+  const CASH = {
+    entries: [
+      { date: "2026-09-24", kind: "period", amount: 5, balance: 105 },
+      { date: "2026-09-10", kind: "dividend", amount: -12.5, balance: 97.5 },
+    ],
+  };
+
+  it("paints the cash pane as a block inside the ledger tile", () => {
+    const html = renderToStaticMarkup(<LedgerPanes reads={{ cash: read(OK, CASH) }} />);
+    expect(html).toContain('data-route="/ledger/cash"');
+    expect(html).toContain("Closing cash");
+    expect(html).toContain("105.00");
+    expect(html).toContain("-12.50");
+    // The payload carries no currency, so none is invented.
+    expect(html).toContain("no currency code in this payload");
+    expect(html).not.toMatch(/[$€£¥]/);
+  });
+
+  it("shows the read's own error instead of a zero cash balance", () => {
+    const html = renderToStaticMarkup(
+      <LedgerPanes
+        reads={{ cash: read({ status: "error", lines: ["/ledger/cash failed (403): forbidden"], asOf: null }) }}
+      />,
+    );
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Cash ledger could not be read.");
+    expect(html).toContain("/ledger/cash failed (403): forbidden");
+    expect(html).not.toContain("Closing cash");
   });
 });
