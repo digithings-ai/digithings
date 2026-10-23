@@ -548,7 +548,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -560,7 +561,7 @@ const ThreadRoot: FC<{
       <ThreadPrimitive.Viewport
         ref={attachViewport}
         turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
@@ -576,7 +577,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -916,7 +917,7 @@ const Composer: FC<{
           data-slot="aui_composer-shell"
           data-layout={layout}
           onMouseDown={handleShellMouseDown}
-          className="border-hair data-[dragging=true]:border-accent flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_50%,var(--bg))]"
+          className="border-hair data-[dragging=true]:border-accent flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding,0.5rem) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_50%,var(--bg))]"
         >
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
@@ -1366,6 +1367,11 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
+      // Earlier turns: the bar is unmounted until the turn is hovered, then it
+      // takes its footer row back in flow. It cannot float in the message gap —
+      // the bar is 24px tall and the gap is 12/8/20px by density, so a float
+      // paints over the next turn's first line. The empty-footer collapse in
+      // chat-digichat.css keeps the un-hovered turns at one message gap.
       className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
       <ActionBarPrimitive.Copy asChild>

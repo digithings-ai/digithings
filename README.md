@@ -51,7 +51,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
 | **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
-| **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
+| **digibot** | Heartbeat, audit, MCP skill → digigraph | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
 | **digillm** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
@@ -66,7 +66,7 @@ Python members live in their own directories. The import name is the directory n
 | Package | Path |
 |---------|------|
 | digibase | [digibase/](digibase/) |
-| digiclaw | [digiclaw/](digiclaw/) |
+| digibot | [digibot/](digibot/) |
 | digifetch | [digifetch/](digifetch/) |
 | digigraph | [digigraph/](digigraph/) |
 | digikey | [digikey/](digikey/) |
@@ -180,13 +180,13 @@ digithings/
 ├── digivault/    # markdown vault management
 ├── digivoice/    # local speech tools (dictation, speech)
 ├── digikey/      # API keys + JWT
-├── digitrace/    # tracing helpers + status API
-├── digibase/     # shared HTTP/audit library
-├── digiclaw/     # heartbeat runner + JSONL audit log
-├── digidev/      # agentic coding workflow kit
-├── infra/        # deployment infrastructure
-├── openspec/     # change proposals and specs
-├── openwiki/     # generated repo wiki
+├── digitrace/    # Tracing helpers + status API
+├── digibot/      # Heartbeat, audit, MCP skill
+├── digibase/     # Shared HTTP/audit library
+├── digidev/      # Agentic coding workflow kit
+├── infra/        # Deployment infrastructure
+├── openspec/     # Change proposals and specs
+├── openwiki/     # Generated repo wiki
 ├── config/       # LiteLLM, model modes
 ├── projects/     # confidential pilots (gitignored)
 ├── scripts/      # Makefile-driven helpers

@@ -24,7 +24,7 @@ export const ANIMATION_DURATION = 200;
 
 const ReasoningPreviewContext = createContext(false);
 
-const reasoningVariants = cva("aui-reasoning-root mb-4 w-full", {
+const reasoningVariants = cva("aui-reasoning-root w-full", {
   variants: {
     variant: {
       outline: "rounded-none border px-3 py-2",
@@ -313,7 +313,7 @@ function ReasoningText({
       )}
       {...props}
     >
-      <div ref={contentRef} className="aui-reasoning-text-content space-y-4">
+      <div ref={contentRef} className="aui-reasoning-text-content">
         {children}
       </div>
     </div>

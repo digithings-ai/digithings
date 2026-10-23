@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from digiclaw.cron import parse_cron
+from digibot.cron import parse_cron
 
 from digisearch.monitors.delivery import DeliveryConfigError, validate_delivery
 from digisearch.monitors.models import Watch

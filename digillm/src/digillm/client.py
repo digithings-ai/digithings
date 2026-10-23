@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of
@@ -780,7 +780,9 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    # House chats: the bare v4.1-flash id streams reasoning_content by default;
+    # the 1017 id does not (live check 2026-10-22), so chats keep this id.
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
     "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",

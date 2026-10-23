@@ -59,6 +59,7 @@ export {
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   persistDensity,
   useStoredDensityAfterMount,
   disabledCatalogIds,

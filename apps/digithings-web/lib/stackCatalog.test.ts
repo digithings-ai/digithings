@@ -220,7 +220,7 @@ describe("morph specs", () => {
       ...opts,
       boxes: ["launcher"],
     });
-    expect(runner.services.find((s) => s.id === "launcher")?.label).toBe("digiclaw runner");
+    expect(runner.services.find((s) => s.id === "launcher")?.label).toBe("digibot runner");
     expect(runner.services.find((s) => s.id === "record")?.label).toBe("Azure archive");
   });
 });

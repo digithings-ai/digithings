@@ -17,6 +17,7 @@ import {
   catalogToolsFromClient,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   persistDensity,
   useStoredDensityAfterMount,
   disabledCatalogIds,
@@ -263,7 +264,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
@@ -333,7 +334,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
@@ -349,7 +350,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,

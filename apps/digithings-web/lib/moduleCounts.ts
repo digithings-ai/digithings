@@ -19,7 +19,7 @@ import counts from "./module-counts.json";
  * digiskills, so a ledger built from `releases.json` would list two modules and
  * omit the other seven.
  *
- * Null is meaningful and not zero. `digiclaw` is a CLI, `digibase` is a
+ * Null is meaningful and not zero. `digibot` is a CLI, `digibase` is a
  * library, and `digistore`/`digilink` are roadmap, so none of the four has a
  * spec — and printing `0 endpoints` beside them would read as "shipped and
  * exposes nothing" rather than "does not expose this at all". The same rule

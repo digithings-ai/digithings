@@ -38,6 +38,7 @@ import {
   disabledCatalogIds,
   extraOffFromCatalog,
   persistDensity,
+  resetChromePrefsFromDeploy,
   useStoredDensityAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
@@ -463,6 +464,8 @@ function EmbedChat({
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
     }),
     language: tenantLanguage,
     view: stockClient.features.view,
@@ -1151,7 +1154,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
@@ -1243,7 +1246,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
@@ -1260,7 +1263,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,

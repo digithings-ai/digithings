@@ -1,5 +1,5 @@
 {
-  "default": "deepseek/deepseek-v4.1-flash-1017",
+  "default": "deepseek/deepseek-v4.1-flash",
   "available": [
     "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash",

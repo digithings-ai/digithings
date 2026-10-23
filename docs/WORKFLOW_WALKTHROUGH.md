@@ -6,7 +6,7 @@ Step-by-step flow from user prompt to final response. Run with stack up: `docker
 
 ## Step 1: User prompt (entrypoint)
 
-**What happens:** User (or digiclaw/API client) sends a natural-language request to digigraph.
+**What happens:** User (or digibot/API client) sends a natural-language request to digigraph.
 
 **Example:** `"Build me a mean-reversion stat-arb on tech"`
 

@@ -675,6 +675,10 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "digigraph" },
         models: {
           catalog: true,
+          // The budget is priced from the catalog, but the limits validation
+          // still requires an output cap (or explicit premium ids) before a
+          // costPerWindow is accepted — mirror defaults.yaml.
+          priceCapUsdPerMillion: 2,
           ...(costPerWindow ? { costPerWindow } : {}),
         },
       },
@@ -720,11 +724,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         upstreamHeaders?: Record<string, string>;
       };
       expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
-      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
       expect(call?.preface).toMatch(/premium budget/);
       expect(call?.onUsage).toBeUndefined();
       expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe(
-        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
       );
     } finally {
       resetDigichatConfigForTests();
@@ -828,7 +832,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         preface?: string;
         responseHeaders?: Record<string, string>;
       };
-      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
       expect(call?.preface).toMatch(/premium budget/);
       expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
     };
@@ -892,7 +896,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           model?: string;
           responseHeaders?: Record<string, string>;
         };
-        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
+        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
         expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
       }
     } finally {
@@ -940,7 +944,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       const sent = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
         headers?: Record<string, string>;
       };
-      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash-1017");
+      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash");
       const streamArg = vi.mocked(createUIMessageStreamResponse).mock.calls.at(-1)?.[0] as {
         stream: ReadableStream<unknown>;
       };

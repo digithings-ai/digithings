@@ -1952,7 +1952,7 @@
       },
       "WatchSchedule": {
         "additionalProperties": false,
-        "description": "When a watch runs.\n\n``cron`` uses the same 5-field grammar as ``digiclaw/cron.py`` (grammar\nvalidation happens at the runner seam, not here). ``interval_seconds``\nmirrors digiclaw's continuous sleep; the ``ge=60`` floor is deliberately\nstricter than digiclaw's own ``ge=1``.",
+        "description": "When a watch runs.\n\n``cron`` uses the same 5-field grammar as ``digibot/cron.py`` (grammar\nvalidation happens at the runner seam, not here). ``interval_seconds``\nmirrors digibot's continuous sleep; the ``ge=60`` floor is deliberately\nstricter than digibot's own ``ge=1``.",
         "properties": {
           "cron": {
             "anyOf": [
@@ -3406,7 +3406,7 @@
     },
     "/v1/monitors/tick": {
       "post": {
-        "description": "Run every due + enabled watch once (digiclaw wake-up clock, \u00a74.8).",
+        "description": "Run every due + enabled watch once (digibot wake-up clock, \u00a74.8).",
         "operationId": "api_tick_monitors_v1_monitors_tick_post",
         "responses": {
           "200": {

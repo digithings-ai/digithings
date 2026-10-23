@@ -246,6 +246,10 @@ export async function POST(req: Request) {
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
   const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
+  // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
+  // The turn guard itself is created after the admission decision below, where
+  // the deployment limits are projected; creating a second one here would shadow
+  // it and leave the one that does the work unreachable.
   const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
   const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
   const limitConfig = embedConfig?.limits ?? dep?.limits;
