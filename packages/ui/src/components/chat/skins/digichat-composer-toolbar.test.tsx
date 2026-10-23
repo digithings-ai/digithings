@@ -200,3 +200,34 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     );
   });
 });
+
+describe("DigichatComposerToolbar usage meter", () => {
+  it("draws the gate's turn budget in place of the context meter", () => {
+    const { container } = render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+          usage: { used: 1, limit: 3 },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("embed-usage-meter")).toBeTruthy();
+    // One meter in the slot, never two.
+    expect(screen.queryByRole("img", { name: /^Context / })).toBeNull();
+    expect(container.querySelectorAll(".aui-usage-meter")).toHaveLength(1);
+  });
+
+  it("keeps the context meter when the tenant has no gate", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("embed-usage-meter")).toBeNull();
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+  });
+});

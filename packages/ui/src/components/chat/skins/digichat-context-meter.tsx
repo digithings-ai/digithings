@@ -6,6 +6,7 @@ import {
   CONTEXT_BAR_CELLS,
   computeContextShares,
 } from "./digichat-context-meter-shares";
+import { meterTone } from "./digichat-meter-tone";
 
 /**
  * Context used, as the segmented digichat cube bar. The bar is the same
@@ -158,6 +159,10 @@ export function DigichatContextMeter({
   // No fabricated fill: until a turn reports usage the grid stays empty.
   const input = reportedInput ?? 0;
   const label = `${format(input)} / ${format(window)} tokens`;
+  // The same amber/orange/red scale the usage meter uses: a full context is
+  // as much a limit as a spent turn budget. The tone tints the bar only; the
+  // legend keeps the system/tools/user colours that explain the split.
+  const tone = meterTone(window > 0 ? input / window : 0);
 
   // The three shares are a partition of the reported total, so no share
   // can print above 100 and the printed numbers describe the same turn.
@@ -174,7 +179,7 @@ export function DigichatContextMeter({
   } = computeContextShares({ input, userChars, toolCount, window });
 
   return (
-    <span className="aui-context-meter-wrap">
+    <span className={`aui-context-meter-wrap ${tone}`.trim()}>
       <span
         className="aui-context-meter"
         role="img"

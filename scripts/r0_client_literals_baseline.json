@@ -313,10 +313,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "apps/digichat/src/lib/embed-turn-limits.ts": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/src/lib/embed-ui-flags.test.ts": {
       "count": 4,
       "ticket": "DIG-3689"

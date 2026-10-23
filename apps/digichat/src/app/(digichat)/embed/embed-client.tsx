@@ -91,10 +91,7 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import {
-  EMBED_TRIAL_TURN_LIMIT,
-  formatEmbedTurnCounter,
-} from "@/lib/embed-turn-limits";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
@@ -1187,6 +1184,10 @@ function EmbedChat({
       ),
       showModels,
       showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The gate's own budget takes the meter slot: a trial tenant gates on
+      // turns, so the turns are the number worth showing, and a Foundry
+      // agent reports no token usage for the context bar to size.
+      usage: isTrialForm ? { used: gate.turns, limit: gate.limit } : undefined,
       // The model the turn sends, including a bring-your-own-key binding.
       // Not the session model alone, and not written back into the session.
       meterModel: contextMeterModel({
@@ -1312,6 +1313,9 @@ function EmbedChat({
       showModels,
       tenantCfg.showContextMeter,
       tenantCfg.slug,
+      isTrialForm,
+      gate.turns,
+      gate.limit,
       catalog,
       catalogTools,
       gate.host,
@@ -1383,14 +1387,6 @@ function EmbedChat({
   const footerSlot = footerAttribution ? (
     <SkinCredit attribution={footerAttribution} />
   ) : null;
-  const turnCounterSlot = isTrialForm ? (
-    <p
-      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
-      data-testid="embed-turn-counter"
-    >
-      {formatEmbedTurnCounter(gate.turns, gate.limit)}
-    </p>
-  ) : null;
 
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
@@ -1422,7 +1418,6 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
-        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1470,7 +1465,6 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
-            {turnCounterSlot}
           </>
         }
       />
