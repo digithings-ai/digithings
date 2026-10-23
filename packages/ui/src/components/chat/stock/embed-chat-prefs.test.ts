@@ -59,6 +59,11 @@ describe("composer chrome prefs", () => {
     expect(DEFAULT_EMBED_CHAT_PREFS.density).toBe("default");
     expect(createDefaultEmbedChatPrefs().density).toBe("default");
   });
+
+  it("starts following the stream", () => {
+    expect(DEFAULT_EMBED_CHAT_PREFS.scroll).toBe("follow");
+    expect(createDefaultEmbedChatPrefs().scroll).toBe("follow");
+  });
 });
 
 describe("chromePrefsFromDeploy", () => {
@@ -73,8 +78,19 @@ describe("chromePrefsFromDeploy", () => {
     expect(chromePrefsFromDeploy({ density: "nope" }, null).density).toBe("default");
   });
 
-  it("seeds the other palette settings from the deployment and keeps today's defaults", () => {
-    expect(chromePrefsFromDeploy({}, null)).toMatchObject({
+  it("lets a stored scroll choice win over the deployment", () => {
+    const stored = {
+      getItem: (key: string) => (key === "dt-scroll" ? "free" : null),
+    };
+    expect(chromePrefsFromDeploy({ scroll: "follow" }, stored).scroll).toBe("free");
+    expect(chromePrefsFromDeploy({ scroll: "free" }, null).scroll).toBe("free");
+    expect(
+      chromePrefsFromDeploy({ scroll: "free" }, { getItem: () => "wide" }).scroll,
+    ).toBe("free");
+    expect(chromePrefsFromDeploy({}, null).scroll).toBe("follow");
+  });
+
+  it("seeds the other palette settings from the deployment and keeps today's defaults", () => {    expect(chromePrefsFromDeploy({}, null)).toMatchObject({
       effort: "medium",
       searchEngine: "",
       toolbar: true,

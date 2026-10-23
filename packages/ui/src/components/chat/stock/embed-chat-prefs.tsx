@@ -14,6 +14,12 @@ import {
   writeStoredDensity,
   type TraceDensity,
 } from "../trace-spacing";
+import {
+  readStoredScrollMode,
+  resolveScrollMode,
+  writeStoredScrollMode,
+  type ScrollMode,
+} from "../gallery-thread/scroll-mode";
 import type { PaletteName, ResolvedTheme, ThemePreference } from "../../../theme/apply-theme";
 import {
   normalizeViewPref,
@@ -45,6 +51,12 @@ export type EmbedChatPrefs = {
   scrollbars: "always" | "auto";
   /** Worked-chain rhythm. A stored user choice wins over the deployment default. */
   density: TraceDensity;
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. A stored user choice wins over the
+   * deployment default.
+   */
+  scroll: ScrollMode;
 };
 
 export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
@@ -65,6 +77,7 @@ export const DEFAULT_EMBED_CHAT_PREFS: EmbedChatPrefs = {
   toolbar: true,
   scrollbars: "always",
   density: "default",
+  scroll: "follow",
 };
 
 /**
@@ -78,10 +91,14 @@ export function chromePrefsFromDeploy(
     searchEngine?: string | null;
     toolbar?: boolean | null;
     scrollbars?: "always" | "auto" | null;
+    scroll?: "follow" | "free" | null;
   } = {},
   storage?: { getItem(key: string): string | null } | null,
   context: { mobile?: boolean } = {},
-): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
+): Pick<
+  EmbedChatPrefs,
+  "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars" | "scroll"
+> {
   const effort = input.effort?.trim().toLowerCase();
   return {
     density: resolveTraceDensity(
@@ -93,6 +110,10 @@ export function chromePrefsFromDeploy(
     searchEngine: input.searchEngine?.trim() ?? "",
     toolbar: input.toolbar !== false,
     scrollbars: input.scrollbars === "auto" ? "auto" : "always",
+    scroll: resolveScrollMode(
+      storage === undefined ? readStoredScrollMode() : readStoredScrollMode(storage),
+      input.scroll,
+    ),
   };
 }
 
@@ -139,6 +160,27 @@ export function persistDensity(density: TraceDensity): void {
 }
 
 /**
+ * Apply a stored `dt-scroll` after hydration. The first render uses the
+ * deployment default on both server and client, so the viewport props match;
+ * a visitor who chose a mode re-renders once.
+ */
+export function useStoredScrollAfterMount(
+  setPrefs: (update: (prev: EmbedChatPrefs) => EmbedChatPrefs) => void,
+): void {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; reading it during render would mismatch the server HTML
+    setPrefs((prev) => {
+      const stored = readStoredScrollMode();
+      return !stored || prev.scroll === stored ? prev : { ...prev, scroll: stored };
+    });
+  }, [setPrefs]);
+}
+
+export function persistScroll(mode: ScrollMode): void {
+  writeStoredScrollMode(mode);
+}
+
+/**
  * The package cannot import `@/lib/languages` / `@/lib/view-modes`, so hosts
  * pass their own defaults; called with no overrides it returns the app
  * defaults above, byte-for-byte.
@@ -180,6 +222,7 @@ export type EmbedChatPrefsApi = {
   setToolbar: (visible: boolean) => void;
   setScrollbars: (mode: "always" | "auto") => void;
   setDensity: (density: TraceDensity) => void;
+  setScroll: (mode: ScrollMode) => void;
   reset: () => void;
   tenantAllowsWeb: boolean;
   showByok: boolean;

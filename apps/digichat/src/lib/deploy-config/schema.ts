@@ -168,6 +168,15 @@ export const ChromeSchema = z
     /** `always` reserves the gutter; `auto` shows bars on scroll. */
     scrollbars: ScrollbarSchema.default("always"),
     /**
+     * Whether the thread follows the answer. `follow` (the default) anchors
+     * the sent question at the top and chases the stream; `free` never moves
+     * the viewport. A visitor's palette choice still wins in the browser.
+     */
+    scroll: z
+      .object({ mode: z.enum(["follow", "free"]).default("follow") })
+      .strict()
+      .default({ mode: "follow" }),
+    /**
      * Which Thread to mount (11 official catalog ids + first-party `digichat`).
      * Overlay: `DIGICHAT_CHROME_SKIN`. Catalog default remains `base`.
      * First-party hosts default omitted `skin` to `digichat` in the tenants

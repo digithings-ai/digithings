@@ -437,6 +437,7 @@ export function DigichatSkin({
         ) : undefined
       }
       scrollbars={prefs?.prefs.scrollbars ?? "always"}
+      scrollMode={prefs?.prefs.scroll}
       density={prefs?.prefs.density ?? "default"}
     />
   );
