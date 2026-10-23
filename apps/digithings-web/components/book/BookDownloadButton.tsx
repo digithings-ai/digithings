@@ -51,7 +51,7 @@ export default function BookDownloadButton({ className = "" }: { className?: str
       disabled={working}
       aria-busy={working}
       aria-live="polite"
-      className={`cursor-pointer border-0 bg-transparent p-0 text-left disabled:cursor-wait disabled:opacity-60 ${className}`}
+      className={`border-0 bg-transparent p-0 text-left disabled:opacity-60 ${className}`}
     >
       {label}
     </button>

@@ -105,8 +105,9 @@ export async function buildBookPdf(
 
     const body = win.getComputedStyle(frame.body);
     const root = win.getComputedStyle(frame.documentElement);
+    const transparent = "rgba(0, 0, 0, 0)"; // canon-allow: computed-style comparison, not a painted colour
     const background =
-      body.backgroundColor !== "rgba(0, 0, 0, 0)"
+      body.backgroundColor !== transparent
         ? body.backgroundColor
         : root.getPropertyValue("--bg").trim() || "transparent";
 

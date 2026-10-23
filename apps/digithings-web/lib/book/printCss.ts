@@ -30,6 +30,7 @@ export const PRINT_CSS = `
 .book-figure__dark { display: none; }
 :root[data-theme="dark"] .book-figure__light { display: none; }
 :root[data-theme="dark"] .book-figure__dark { display: block; }
+.book-figure__diagram svg { display: block; width: auto; height: auto; max-width: 100%; max-height: min(75vh, 48rem); }
 .book-figure:fullscreen { background: var(--bg); display: flex; flex-direction: column; padding: 1.5rem; }
 .book-figure:fullscreen .book-figure__viewport { flex: 1; }
 .book-figure__viewport[data-active] { outline: 1px solid var(--ink-soft); }
@@ -50,6 +51,8 @@ export const PRINT_CSS = `
   html, body { background: transparent; }
   .book-figure__dark { display: none !important; }
   .book-figure__light { display: block !important; }
+  :root[data-theme="dark"] .book-figure__light { display: none !important; }
+  :root[data-theme="dark"] .book-figure__dark { display: block !important; }
   .book-figure__viewport { border: 0; }
   /* The screen chrome is not part of the book. */
   .site-rails, header[data-dt-nav], footer[data-dt-footer], .book-screen-only { display: none !important; }
@@ -114,7 +117,7 @@ export const PRINT_CSS = `
  * day it is printed.
  */
 export const PAGED_CSS = `
-@page { size: A4 !important; margin: 24mm 20mm 22mm !important; }
+@page { size: A4 !important; margin: 20mm 18mm 18mm !important; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
@@ -146,8 +149,8 @@ body {
 }
 .book-flow p, .book-flow li, .book-flow td, .book-flow blockquote {
   max-width: none !important;
-  font-size: 10.25pt !important;
-  line-height: 1.58 !important;
+  font-size: 9.75pt !important;
+  line-height: 1.45 !important;
   text-align: left !important;
 }
 
@@ -256,7 +259,7 @@ body {
    break after a short final paragraph produced pages holding one line. The
    opener is kept together and given air, so it reads as a chapter start
    without wasting a page. */
-.book-chapter { break-before: auto; margin-top: 12mm; }
+.book-chapter { break-before: auto; margin-top: 9mm; }
 .book-chapter:first-of-type { margin-top: 0; }
 .book-chapter__head {
   display: block;
@@ -290,16 +293,16 @@ body {
   letter-spacing: -0.05em;
   color: color-mix(in srgb, var(--ink) 12%, transparent);
 }
-.book-chapter__head h2 { margin: 0 0 4mm; font-size: 23pt; line-height: 1.1; letter-spacing: -0.01em; }
+.book-chapter__head h2 { margin: 0 0 3mm; font-size: 21pt; line-height: 1.08; letter-spacing: -0.01em; }
 .book-chapter__head > p:first-of-type { margin: 0 0 2mm; font-family: var(--font-sans), monospace; font-size: 8.5pt; color: var(--accent); }
 .book-chapter__head > p:nth-of-type(2) { margin: 0 0 8mm; color: var(--ink-soft); }
-.book-chapter h2 { margin: 7mm 0 3mm; font-size: 15pt; line-height: 1.2; }
-.book-section h3 { margin: 6mm 0 3mm; font-size: 13pt; line-height: 1.25; }
-h4 { margin: 6mm 0 2mm; font-size: 9pt; font-family: var(--font-sans), monospace; letter-spacing: 0.04em; }
+.book-chapter h2 { margin: 6mm 0 2mm; font-size: 13.5pt; line-height: 1.2; }
+.book-section h3 { margin: 5mm 0 2mm; font-size: 11.5pt; line-height: 1.25; }
+h4 { margin: 5mm 0 2mm; font-size: 8.5pt; font-family: var(--font-sans), monospace; letter-spacing: 0.04em; }
 h1, h2, h3, h4 { break-after: avoid; }
 h1 { font-size: 24pt; margin: 0 0 5mm; line-height: 1.12; }
 
-p { margin: 0 0 3.2mm; orphans: 4; widows: 4; }
+p { margin: 0 0 2.4mm; orphans: 4; widows: 4; }
 p, pre, img, li, figure, table { break-inside: avoid; }
 ul, ol { margin: 0 0 3.4mm 5mm; padding: 0; }
 li { margin: 0 0 1.2mm; }
@@ -307,13 +310,13 @@ li { margin: 0 0 1.2mm; }
 code, pre { font-family: var(--font-sans), monospace; }
 code { font-size: 0.92em; }
 pre {
-  margin: 0 0 4mm;
-  padding: 3mm 3.5mm;
+  margin: 0 0 3mm;
+  padding: 2.5mm 3mm;
   border: 0.4pt solid var(--hair);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 8.5pt;
-  line-height: 1.4;
+  font-size: 8pt;
+  line-height: 1.35;
 }
 blockquote {
   margin: 0 0 4mm;
@@ -326,12 +329,15 @@ strong { font-weight: 600; }
 a { color: inherit; text-decoration: none; }
 
 img, svg { max-width: 100%; }
-figure { margin: 0 0 5mm; }
+figure { margin: 0 0 3.5mm; }
+.book-figure__diagram svg { max-height: 190mm; }
 figcaption { margin-top: 2mm; font-family: var(--font-sans), monospace; font-size: 8pt; color: var(--ink-soft); }
 .book-figure__dark { display: none !important; }
 .book-figure__light { display: block !important; }
+:root[data-theme="dark"] .book-figure__light { display: none !important; }
+:root[data-theme="dark"] .book-figure__dark { display: block !important; }
 
-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 0 0 4mm; }
+table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 0 0 3mm; }
 thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }

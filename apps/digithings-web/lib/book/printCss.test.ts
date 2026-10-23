@@ -38,7 +38,7 @@ describe("the stylesheets are well-formed template literals", () => {
 
   it("declares the page box and the chrome rules the print step relies on", () => {
     expect(PAGED_CSS).toContain("@page");
-    expect(PAGED_CSS).toContain(".book-chapter { break-before: auto; margin-top: 12mm; }");
+    expect(PAGED_CSS).toContain(".book-chapter { break-before: auto; margin-top: 9mm; }");
     expect(PAGED_CSS).toContain(".book-colophon");
     expect(PAGED_CSS).toContain("[role=\"status\"]");
     expect(PAGED_CSS).toContain(".book-cover");
