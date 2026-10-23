@@ -41,6 +41,7 @@
     "./styles/digichat-boot-loader.css": "./src/styles/digichat-boot-loader.css",
     "./styles/digichat-app-theme.css": "./src/styles/digichat-app-theme.css",
     "./chat/thread": "./src/components/chat/DigichatThread.tsx",
+    "./chat/composer-keyboard": "./src/components/chat/gallery-thread/composer-keyboard.ts",
     "./chat/trace-spacing": "./src/components/chat/trace-spacing.ts",
     "./chat/boot-signal": "./src/components/chat/boot-signal.ts",
     "./chat/use-warmup-phase": "./src/components/chat/use-warmup-phase.ts",

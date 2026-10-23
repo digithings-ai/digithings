@@ -60,3 +60,47 @@ export function dismissComposerKeyboard(
   area.blur();
   return wasFocused;
 }
+
+const TEXT_INPUT_TYPES = new Set([
+  "text",
+  "search",
+  "email",
+  "url",
+  "tel",
+  "password",
+  "number",
+]);
+
+/** True when focusing this element is what opens the software keyboard. */
+function isTextEntry(element: Element | null): boolean {
+  if (!element) return false;
+  if (element.tagName === "TEXTAREA") return true;
+  if (element.tagName === "INPUT") {
+    const type = (element as HTMLInputElement).type || "text";
+    return TEXT_INPUT_TYPES.has(type);
+  }
+  return (element as HTMLElement).isContentEditable === true;
+}
+
+/**
+ * Blur whatever text field currently holds focus, so the keyboard retracts.
+ *
+ * The composer is not the only way to send: an example question, a redo, a
+ * retry and an edit all start a turn without going through the composer's
+ * submit, and each one leaves the keyboard up over the answer. This is the
+ * entry-point-shaped dismissal those paths call, and it deliberately works
+ * from the document's active element rather than from a composer ref.
+ *
+ * Only a text field is blurred. A focused button (an example question the
+ * visitor tapped) is left alone: it does not open a keyboard, and blurring it
+ * would drop the focus ring for a switch or keyboard user on a hybrid device.
+ */
+export function dismissKeyboardIfCoarse(options: { coarse?: boolean } = {}): boolean {
+  if (typeof document === "undefined") return false;
+  const coarse = options.coarse ?? isCoarsePointer();
+  if (!coarse) return false;
+  const active = document.activeElement;
+  if (!isTextEntry(active)) return false;
+  (active as HTMLElement).blur();
+  return true;
+}

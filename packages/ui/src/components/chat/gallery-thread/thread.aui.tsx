@@ -10,6 +10,7 @@ import {
 import {
   composerHasText,
   dismissComposerKeyboard,
+  dismissKeyboardIfCoarse,
   isCoarsePointer,
 } from "./composer-keyboard";
 import { File } from "./file";
@@ -802,6 +803,9 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       type="button"
       onClick={() => {
         if (aui.thread.getState().isRunning) return;
+        // A tapped example is a send: on iOS a button does not take focus, so
+        // the composer would keep the keyboard up over the answer.
+        dismissKeyboardIfCoarse();
         aui.thread.append({
           content: [{ type: "text", text: prompt }],
           runConfig: aui.composer.getState().runConfig,
@@ -826,7 +830,11 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
+      <button
+        type="button"
+        className={SUGGESTION_BUTTON_CLASS}
+        onClick={() => dismissKeyboardIfCoarse()}
+      >
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
@@ -868,6 +876,10 @@ const Composer: FC<{
     if (edit.editing) {
       event.preventDefault();
       edit.commit(aui.composer().getState().text);
+      // An edit is a send: the corrected text goes off and the answer starts
+      // streaming. Leaving the keyboard up would hide it, so the same
+      // dismissal runs here as on a normal submit.
+      dismissKeyboardIfCoarse();
       return;
     }
     // Captured before the send clears the textarea — see composerHasText.

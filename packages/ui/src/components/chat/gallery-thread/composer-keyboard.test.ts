@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   composerHasText,
   dismissComposerKeyboard,
+  dismissKeyboardIfCoarse,
   isCoarsePointer,
 } from "./composer-keyboard";
 
@@ -93,5 +94,61 @@ describe("composerHasText", () => {
     expect(composerHasText(root)).toBe(false);
     expect(composerHasText(document.createElement("form"))).toBe(false);
     expect(composerHasText(null)).toBe(false);
+  });
+});
+
+describe("keyboard dismissal from a non-composer send", () => {
+  it("blurs a focused textarea on a coarse pointer", () => {
+    stubPointer(true);
+    const area = document.createElement("textarea");
+    document.body.appendChild(area);
+    area.focus();
+
+    expect(dismissKeyboardIfCoarse()).toBe(true);
+    expect(document.activeElement).not.toBe(area);
+  });
+
+  it("blurs a focused text input and a contenteditable", () => {
+    stubPointer(true);
+    const input = document.createElement("input");
+    input.type = "email";
+    document.body.appendChild(input);
+    input.focus();
+    expect(dismissKeyboardIfCoarse()).toBe(true);
+
+    const editable = document.createElement("div");
+    // jsdom neither computes `isContentEditable` nor focuses a plain div, so
+    // state both: the branch under test is the one a real browser reports true
+    // for a rich-text composer, and a real one carries its own tabindex.
+    editable.setAttribute("tabindex", "-1");
+    Object.defineProperty(editable, "isContentEditable", { value: true });
+    document.body.appendChild(editable);
+    editable.focus();
+    expect(dismissKeyboardIfCoarse()).toBe(true);
+  });
+
+  it("leaves a focused button alone: it holds no keyboard", () => {
+    stubPointer(true);
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+
+    expect(dismissKeyboardIfCoarse()).toBe(false);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("does nothing on a fine pointer", () => {
+    stubPointer(false);
+    const area = document.createElement("textarea");
+    document.body.appendChild(area);
+    area.focus();
+
+    expect(dismissKeyboardIfCoarse()).toBe(false);
+    expect(document.activeElement).toBe(area);
+  });
+
+  it("is a no-op when nothing is focused", () => {
+    stubPointer(true);
+    expect(dismissKeyboardIfCoarse()).toBe(false);
   });
 });
