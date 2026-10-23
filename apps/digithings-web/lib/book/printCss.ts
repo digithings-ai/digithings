@@ -158,10 +158,28 @@ body {
 
 /* Title page: one centred block, then a hard break. */
 .book-cover {
+  position: relative;
+  overflow: hidden;
   break-after: page;
   box-sizing: border-box;
   padding-top: 34mm;
 }
+.book-cover__motion {
+  position: absolute;
+  top: 18mm;
+  left: -38%;
+  width: 176%;
+  opacity: 0.055;
+  pointer-events: none;
+}
+.book-cover__motion svg { display: block; width: 100%; height: auto; }
+.book-cover__mark {
+  position: relative;
+  width: 90mm;
+  margin: 0 0 14mm;
+}
+.book-cover__mark svg { display: block; width: 100%; height: auto; }
+.book-cover__title, .book-cover__subtitle, .book-cover__meta { position: relative; }
 .book-cover__kicker {
   margin: 0 0 22mm;
   font-family: var(--font-sans), monospace;
@@ -172,8 +190,9 @@ body {
 }
 .book-cover__title {
   margin: 0;
-  max-width: 120mm;
-  font-size: 34pt;
+  max-width: none;
+  white-space: nowrap;
+  font-size: 27pt;
   line-height: 1.04;
   letter-spacing: -0.02em;
 }
