@@ -436,3 +436,14 @@ Follow-up: the website body uses `overflow-x: hidden` (`globals.css:38`);
 Hallmark rule 34 asks for `clip` on `html` and `body`. That is a website-wide
 change in a file owned by U8, and `hidden` can break sticky positioning, so it
 needs a visual check before switching. Recorded, not changed here.
+
+### UC2a — landed
+
+Commit `9e04696e4f`, merged `23687592d7`. `blocks/live-marks.tsx` renders the
+five live figures through `KpiGrid`, a sparkline only when a series is present,
+and `StateBlock` for missing/unknown data. 9 tests; suite 346 passed; canon,
+lint and `tsc --noEmit` green.
+
+Caveat found by the slice: `/app` is drawn by `pages/brief.tsx`, not only
+`desk-view.tsx`, and `/brief` does not pass a `/kpis/live` payload. **UC2b**
+owns that wiring and must not fake data if the route is static.
