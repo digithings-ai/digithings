@@ -105,6 +105,12 @@ model as a normal result that names the error, so the agent can retry or
 explain instead of the turn ending. Unset the env var (or point `server_url`
 back) to remove it.
 
+**Exposure.** The route adds no credentials: it forwards the caller's own auth
+headers, so all authorisation is the upstream's. Publish it only behind the
+same edge gate as `/api/mcp/zammad` (`x-digi-mcp-key`), and treat a loopback
+target (`http://127.0.0.1:<port>`) as a development setting — it would publish
+an internal, unauthenticated MCP to whoever can reach the app.
+
 ## Container environment (V2 — DigiGraph harness, parked)
 
 | Variable | Value / source |

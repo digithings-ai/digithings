@@ -223,8 +223,25 @@ describe("proxySchemaNormalizedMcp", () => {
     expect(seen?.aborted).toBe(true);
   });
 
-  it("answers 504 when the upstream returns no headers in time", async () => {
-    const hung = vi.fn(
+  it("probes at most once per request and remembers a miss", async () => {
+    const { calls, impl } = fakeFetch((b) => listReply((b as { id?: unknown }).id));
+    const batch = Array.from({ length: 200 }, (_, i) => ({
+      jsonrpc: "2.0",
+      id: i + 1,
+      method: "tools/call",
+      params: { name: `missing_${i}`, arguments: {} },
+    }));
+    const first = await proxySchemaNormalizedMcp(rpc(batch), "tools", { fetchImpl: impl, env });
+    expect(first.status).toBe(200);
+    // one cold-cache probe plus the forwarded batch, not one probe per message
+    expect(calls).toHaveLength(2);
+    const second = await proxySchemaNormalizedMcp(rpc(batch), "tools", { fetchImpl: impl, env });
+    expect(second.status).toBe(200);
+    // the misses are cached for their TTL, so the second request forwards only
+    expect(calls).toHaveLength(3);
+  });
+
+  it("answers 504 when the upstream returns no headers in time", async () => {    const hung = vi.fn(
       (_input: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));

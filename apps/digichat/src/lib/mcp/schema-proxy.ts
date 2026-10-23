@@ -79,8 +79,37 @@ type JsonRpcMessage = {
 /** label → original inputSchema per tool name. Module-level: survives requests, not restarts. */
 const originalSchemas = new Map<string, Map<string, unknown>>();
 
+/**
+ * Names we looked for and did not find, with the time (epoch ms) after which a
+ * probe may try again. Without this, a batch of `tools/call` messages naming a
+ * tool the upstream does not publish would probe once per message.
+ */
+const probeMisses = new Map<string, number>();
+const PROBE_MISS_TTL_MS = 60_000;
+
 export function resetSchemaProxyCacheForTests(): void {
   originalSchemas.clear();
+  probeMisses.clear();
+}
+
+function missKey(label: string, name: string): string {
+  return `${label}\u0000${name}`;
+}
+
+function recentlyMissed(label: string, name: string): boolean {
+  const until = probeMisses.get(missKey(label, name));
+  if (until === undefined) return false;
+  if (until <= Date.now()) {
+    probeMisses.delete(missKey(label, name));
+    return false;
+  }
+  return true;
+}
+
+function rememberMiss(label: string, name: string): void {
+  // Keep the map bounded: a 1 MB batch can name thousands of unknown tools.
+  if (probeMisses.size > 2_000) probeMisses.clear();
+  probeMisses.set(missKey(label, name), Date.now() + PROBE_MISS_TTL_MS);
 }
 
 export interface SchemaProxyTarget {
@@ -395,6 +424,8 @@ export async function proxySchemaNormalizedMcp(
   let body: string | undefined;
   const listIds = new Set<string>();
   const softenCallIds = new Set<string>();
+  /** At most one cold-cache `tools/list` probe per request, whatever the batch names. */
+  let probesThisRequest = 0;
 
   if (method !== "GET" && method !== "HEAD") {
     const raw = await readBodyWithCap(req, MAX_BODY_BYTES);
@@ -416,8 +447,15 @@ export async function proxySchemaNormalizedMcp(
             softenCallIds.add(JSON.stringify(m.id));
           }
           if (m.method === "tools/call" && isObject(m.params) && typeof m.params.name === "string") {
-            if (!cacheFor(label).has(m.params.name)) await probeToolsList(label, upstream, headers, fetchImpl);
-            const original = cacheFor(label).get(m.params.name);
+            const name = m.params.name;
+            if (!cacheFor(label).has(name)) {
+              if (probesThisRequest < 1 && !recentlyMissed(label, name)) {
+                probesThisRequest += 1;
+                await probeToolsList(label, upstream, headers, fetchImpl);
+              }
+              if (!cacheFor(label).has(name)) rememberMiss(label, name);
+            }
+            const original = cacheFor(label).get(name);
             if (original !== undefined && isObject(m.params.arguments)) {
               m.params = { ...m.params, arguments: coerceToolArguments(original, m.params.arguments) };
             }
