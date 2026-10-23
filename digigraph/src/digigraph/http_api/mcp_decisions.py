@@ -31,11 +31,14 @@ resolves the transport and forwards; it decides nothing.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
 
 ALLOWED_KEYS = frozenset({"pending_id", "approve"})
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -81,10 +84,21 @@ def resolve_session_transport(http_request: Request, session_id: str) -> list[di
     try:
         config = _thread_config(http_request, session_id)
     except Exception:
+        logger.warning(
+            "MCP decision transport: thread config unresolved for session %s; "
+            "answering no-transport",
+            session_id,
+            exc_info=True,
+        )
         return []
     try:
         snapshot = build_workflow_graph().get_state(config)
     except Exception:
+        logger.warning(
+            "MCP decision transport: checkpoint unreadable for session %s; answering no-transport",
+            session_id,
+            exc_info=True,
+        )
         return []
     values = getattr(snapshot, "values", None) or {}
     stored = values.get("mcp_servers") or []
