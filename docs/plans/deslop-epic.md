@@ -426,3 +426,13 @@ keep the other session's focus/resize changes. Do not revert them.
    record it, do not fix it here.
 4. **`eslint.base.mjs` registers `react-hooks` with no rules**, so dependency
    arrays are unverified across the repo. Separate CI-policy issue.
+
+### U9 — landed
+
+Commit `e8005a4a1f`, merged `e3fb88ebd8`. `/docs` and `/book` canonical URLs,
+`/book/print` noindex, print heading order fixed. Content untouched.
+
+Follow-up: the website body uses `overflow-x: hidden` (`globals.css:38`);
+Hallmark rule 34 asks for `clip` on `html` and `body`. That is a website-wide
+change in a file owned by U8, and `hidden` can break sticky positioning, so it
+needs a visual check before switching. Recorded, not changed here.
