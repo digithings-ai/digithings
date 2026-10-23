@@ -44,11 +44,11 @@ import { OpenSourceLive } from "./OpenSourceLive";
 const FAQ: { q: string; a: string }[] = [
   {
     q: "What is digithings?",
-    a: "An open-source stack of trading-intelligence modules — chat, research, quant, search and more. Each module runs standalone or composes with the rest, on your own hardware.",
+    a: "An open-source stack of trading-intelligence modules: chat, research, quant, search and more. Each module runs standalone or composes with the rest, on your own hardware.",
   },
   {
     q: "How do I run it?",
-    a: "Clone the repo and run the stack locally with your own provider key. There is no hosted product and no account to create — it runs on your hardware, under your control.",
+    a: "Clone the repo and run the stack locally with your own provider key. There is no hosted product and no account to create. It runs on your hardware, under your control.",
   },
   {
     q: "Does it work with my existing stack?",
@@ -56,11 +56,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Why run this instead of a hosted product?",
-    a: "Your keys, your hardware, your data. Nothing leaves your machine except the model calls you make with your own key, and there is no vendor lock-in — the code is yours to keep.",
+    a: "Your keys, your hardware, your data. Nothing leaves your machine except the model calls you make with your own key, and there is no vendor lock-in: the code is yours to keep.",
   },
   {
     q: "Is it really open source?",
-    a: "Yes — MIT-licensed on GitHub. Clone it, fork it, contribute back. The repo activity, backlog and releases are public, and the open-source band above shows them live.",
+    a: "Yes: MIT-licensed on GitHub. Clone it, fork it, contribute back. The repo activity, backlog and releases are public, and the open-source band above shows them live.",
   },
   {
     q: "What does it cost?",
@@ -100,7 +100,7 @@ export function FaqList() {
             {item.q}
             <span
               aria-hidden="true"
-              className="shrink-0 font-mono text-ink-mute transition-transform duration-200 ease-brand group-open:rotate-45"
+              className="shrink-0 font-mono text-ink-mute transition-transform duration-200 ease-brand group-open:rotate-45 motion-reduce:transition-none"
             >
               +
             </span>
