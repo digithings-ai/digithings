@@ -11,6 +11,7 @@ const local = (p) => fileURLToPath(new URL(p, import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: { agentUpgrade: "security" },
   // The book (DIG-2821) is MDX under content/book, compiled by @next/mdx and
   // imported dynamically by app/book/[slug]/page.tsx. `.md`/`.mdx` are NOT in
   // pageExtensions on purpose: adding them would turn every chapter file into a

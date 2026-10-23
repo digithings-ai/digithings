@@ -2,6 +2,7 @@
 const dashboardBasePath = '/dashboard';
 
 const nextConfig = {
+  experimental: { agentUpgrade: "security" },
   output: 'export',
   basePath: dashboardBasePath,
   images: { unoptimized: true },
