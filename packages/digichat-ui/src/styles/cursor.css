@@ -21,12 +21,12 @@
   font: inherit;
   font-size: 0.72rem;
   color: var(--ink-soft);
-  background: var(--accent-weak, color-mix(in srgb, var(--accent) 13%, transparent));
+  background: var(--accent-weak);
   border: 1px solid var(--hair);
   border-radius: 0;
   padding: 0.18rem 0.55rem;
   cursor: pointer;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dtc-chip:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -39,7 +39,8 @@
 .dtc-error {
   margin: 0.3rem 0 0;
   font-size: 0.8rem;
-  color: color-mix(in srgb, var(--down) 80%, var(--ink));
+  /* State red, not the market-down hue. */
+  color: color-mix(in srgb, var(--danger) 80%, var(--ink));
 }
 .dtc-error .dc-inline-link {
   color: var(--accent-digichat, var(--accent));
@@ -49,16 +50,4 @@
   .dtc-chip {
     transition: none;
   }
-}
-
-.dc-wordmark {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.dc-wordmark .dc-wm-d {
-  color: var(--ink);
-}
-.dc-wordmark .dc-wm-s {
-  color: var(--accent-digichat, var(--accent));
 }
