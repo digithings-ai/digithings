@@ -24,5 +24,3 @@ export const MCP_TOOLS = tools as McpTool[];
 export const MCP_INSTALL_COMMAND = 'pip install "digiquant[nautilus,mcp]"';
 
 export const MCP_COMMAND = "python -m digiquant.mcp_server --stdio --scope full";
-
-export const MCP_READ_COUNT = MCP_TOOLS.filter((t) => t.scope === "read").length;
