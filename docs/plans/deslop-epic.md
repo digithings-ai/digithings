@@ -395,3 +395,34 @@ catalogue goes.
 - No schema copy: import `deploy-config/schema.ts` and `THREAD_SKINS`.
 - No new palette: skins come from the existing registry.
 - Do not touch the concurrent digithings.ai nav/grid files.
+
+## Landed slices
+
+| Slice | Commit | Merge | Result |
+|---|---|---|---|
+| S0 | `75da5b8c74` | `5ce85f0663` | current UI language doc |
+| UC1 | `d5640d2929` | `ac0140cb73` | shared desk primitives, 33 tests |
+| U8 | `ffa6e0840b` | `abc82e630f` | landing metadata/JSON-LD, form a11y, canonical URL, focus, 390 tests |
+| U10 | `749108d1d8` | `d2d76486c6` | variants focus rings, captions, heading order, em-dash copy |
+
+### U8 caveat — `LandingSections.tsx`
+
+U8 fixed 9 em dashes and added `motion-reduce` in this file, which the concurrent
+digithings.ai session also has dirty. At rebase, recheck this file by hand and
+keep the other session's focus/resize changes. Do not revert them.
+
+### Follow-ups found while fixing
+
+1. **`--shadow-overlay` is missing from `packages/design/tokens.css`.** The
+   literal is duplicated at `packages/ui/src/components/page-geometry.tsx:96`
+   and `components/landing/AppFirstSection.tsx:413`. Add the token in U14 and
+   replace both literals.
+2. **digivoice is missing from the repo-activity snapshot.** Not in
+   `scripts/fetch_repo_activity.py` output, `lib/repo-activity.json`, or
+   `packages/catalog`, which is why `DIGIVOICE_LINES` and `DIGIVOICE_MODULE` are
+   hardcoded on the landing. Fix in C7 or D1; do not invent a count.
+3. **Variants `MonoNav` has no mobile equivalent** below 880px (`hidden` with no
+   replacement). This is a nav redesign and the concurrent session owns nav;
+   record it, do not fix it here.
+4. **`eslint.base.mjs` registers `react-hooks` with no rules**, so dependency
+   arrays are unverified across the repo. Separate CI-policy issue.
