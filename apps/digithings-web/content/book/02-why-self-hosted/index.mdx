@@ -1,15 +1,19 @@
 ---
-title: Why self-hosted
+title: Software that lives anywhere
 order: 2
 summary: >-
-  Rented infrastructure trades money for convenience every month. Owning it trades a slower start for a ceiling you control.
+  An AI application should not be tied to the machine it first ran on. Build on a laptop, scale in place, move to the cloud without a rewrite.
 ---
 
-Every rented service is a bet that the convenience stays worth the price, and
-that the terms do not change while you are not looking. AI infrastructure is
-no different, except that the thing being rented, compute, a model endpoint,
-a place to put your data, is unusually central to whatever you are building
-on top of it.
+An AI application should not be tied to the machine it first ran on. The model
+endpoint, the data store and the number of users will change. The application
+should not have to change with them.
 
-The other option is to run the stack yourself. Not as a hobby or a protest,
-but as a position with ordinary costs and an unusual upside.
+digithings is built so the same code runs on a laptop and in a cloud account.
+You develop locally, prove the application end to end, then move it when the
+work needs more capacity. The migration is a deployment choice, not a rewrite.
+
+This is not an argument against cloud. It is an argument against choosing
+infrastructure before you know what the application needs. Open source, open
+core and standard protocols keep that choice open. No layer in the stack
+decides where the rest of it must live.
