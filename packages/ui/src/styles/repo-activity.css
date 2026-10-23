@@ -378,13 +378,26 @@
 .ra-heat--fit .ra-heat-body {
   overflow-x: visible;
 }
-.ra-heat--fit .ra-heat-frame,
-.ra-heat--fit .ra-heat-grid {
+.ra-heat--fit .ra-heat-frame {
   width: 100%;
+}
+/* The row is `days rail + gap + grid`; a grid declared at 100% of the row
+   adds the rail and gap on top and overflows the column as soon as the
+   viewport narrows. Let the grid take the leftover flex space instead. */
+.ra-heat--fit .ra-heat-row {
+  width: 100%;
+  min-width: 0;
+}
+.ra-heat--fit .ra-heat-grid {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
 }
 .ra-heat--fit .ra-heat-cell {
   width: auto;
   height: auto;
+  min-width: 0;
+  min-height: 0;
   aspect-ratio: 1;
 }
 .ra-heat--fit .ra-heat-row {

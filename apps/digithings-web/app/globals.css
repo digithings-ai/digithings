@@ -240,7 +240,7 @@ html {
   html:has(main #why) {
     scroll-snap-type: y proximity;
   }
-  html:has(main #why) main > section[id] {
+  html:has(main #why) main > section {
     scroll-snap-align: start;
   }
   html:has(main #why) footer {
@@ -249,6 +249,15 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Robustness across zoom levels: at extreme zoom (very tall = zoomed out,
+   very short = zoomed in/mobile) the scrollytelling snap track fights the
+   viewport, so drop back to a plain continuous document. Intermediate zoom
+   keeps the snap behaviour. */
+@media (max-width: 768px), (max-height: 600px), (min-height: 1400px) {
+  html { scroll-snap-type: none !important; }
+  html:has(main #why) main > section { scroll-snap-align: none !important; }
+}
 
 /* DtNav's "ask digichat" tail entry is now the kit's <CtaLink variant="outline">
    (buttonVariants), so the `.dc-nav-cta` family is gone — one CTA treatment in
@@ -467,6 +476,17 @@ html {
 
 .faq-morph__faq {
   will-change: opacity, transform;
+}
+
+/* Opening a question scrolls inside this list instead of growing the band and
+   shoving the footer down. The bot's pane sets the column height, so the list
+   has room to absorb an answer. */
+.faq-list-body {
+  /* Fixed, not max-height: the list owns its scroll so opening a question can
+     never grow the band and push the footer down. */
+  height: min(58vh, 540px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Below the grid's two-column breakpoint and under reduced motion the morph is

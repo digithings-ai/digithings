@@ -165,7 +165,7 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
           guided walk, a box-by-box morph to the digithings stack, and a
           sticky live invoice. `WhyStack` is a thin alias for it; the section
           keeps only the anchor and the band rules. */}
-      <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
+      <section id="why" className="line-b px-[var(--page-pad)] pb-[var(--page-step)]">
         <WhyStack />
       </section>
 

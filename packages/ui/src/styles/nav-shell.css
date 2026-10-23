@@ -402,6 +402,9 @@
   align-items: flex-end;
   gap: 0.35rem;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   width: min(100%, 20rem);
   margin-inline-start: auto;
   font-size: 1.35rem;
@@ -480,7 +483,10 @@
    mousemove event -- `(hover: none)` is the correct, width-independent way to
    ask "can this pointer even hover", so it catches those devices too. */
 @media (max-width: 768px), (hover: none) {
-  .nav-shell.is-hidden {
+  /* Only the hover grammar needs this neutralisation: it hides the bar on
+     mount and a touch device has no mouse to reveal it. The scroll grammar
+     hides/reveals on scroll, so it must keep its transform on touch too. */
+  .nav-shell[data-autohide="hover"].is-hidden {
     transform: none;
   }
 }

@@ -164,9 +164,10 @@ interface SideMeasure {
 }
 
 const NO_MOTION = "(prefers-reduced-motion: reduce)";
-// Must agree with the two-column grid breakpoint in diagrams.css: below it the
-// rail has nowhere to travel to, so the animated treatment cannot hold.
-const PIN_MEDIA = "(min-width: 1024px)";
+// The pinned treatment runs at every width. Narrow viewports keep the same
+// single-stage scroll walk but collapse it to one column (diagrams.css), so the
+// two stacks share one pane and the scroll swaps them.
+const PIN_MEDIA = "(min-width: 1px)";
 
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
 const smooth = (n: number): number => {
@@ -461,24 +462,23 @@ export function ArchitectureTour({
     let frame = 0;
 
     const measureTrack = () => {
-      distance = Math.round(window.innerHeight * vhPerStep * Math.max(1, count));
-      track.style.height = `${pin.offsetHeight + distance}px`;
+      /* Cap the scroll budget: at extreme zoom-out a viewport-relative track
+         grows without bound and the stack section reads as an endless page. */
+      distance = Math.min(Math.round(window.innerHeight * vhPerStep * Math.max(1, count)), 3000);
+      /* Cap the whole section too: the pin's own content grows with the
+         viewport, so capping only the scroll distance still leaves an
+         unbounded section at extreme zoom-out. */
+      track.style.height = `${Math.max(pin.offsetHeight, Math.min(pin.offsetHeight + distance, 4800))}px`;
     };
 
-    const boxesFor = (
-      entry: { side: number; ids: string[] } | undefined,
-      si: number,
-    ): Box[] => {
+    const boxesFor = (entry: { side: number; ids: string[] } | undefined, si: number): Box[] => {
       if (!entry || entry.side !== si || entry.ids.length === 0) return [];
       const m = measuresRef.current[si];
       if (!m) return [];
       return entry.ids.map((id) => m.boxes[id]).filter((box): box is Box => Boolean(box));
     };
 
-    const frameFor = (
-      entry: { side: number; ids: string[] } | undefined,
-      si: number,
-    ): CamFrame => {
+    const frameFor = (entry: { side: number; ids: string[] } | undefined, si: number): CamFrame => {
       const camera = cameraRefs.current[si];
       const m = measuresRef.current[si];
       if (!camera || !m?.w || !m.h) return CAM_IDENTITY;
@@ -537,8 +537,16 @@ export function ArchitectureTour({
         const spot = spotRefs.current[si];
         if (!spot) return;
         const mixed = mixSpot(
-          unionSpot(boxesFor(current, si), measuresRef.current[si]?.w ?? 0, measuresRef.current[si]?.h ?? 0),
-          unionSpot(boxesFor(upcoming, si), measuresRef.current[si]?.w ?? 0, measuresRef.current[si]?.h ?? 0),
+          unionSpot(
+            boxesFor(current, si),
+            measuresRef.current[si]?.w ?? 0,
+            measuresRef.current[si]?.h ?? 0,
+          ),
+          unionSpot(
+            boxesFor(upcoming, si),
+            measuresRef.current[si]?.w ?? 0,
+            measuresRef.current[si]?.h ?? 0,
+          ),
           glide,
         );
         if (!mixed || mixed.opacity < 0.02) {
@@ -644,12 +652,14 @@ export function ArchitectureTour({
       }
       const grid = gridRef.current;
       if (grid) {
-        // "get rid of the old, in with the new": the rented group leaves over
-        // the first half of the window and the owned group arrives over the
-        // second, so the two are never in the frame together and nothing has to
-        // be faded to hide the hand-off.
-        grid.style.setProperty("--arch-out", clamp01(swap * 2).toFixed(4));
-        grid.style.setProperty("--arch-in", clamp01(swap * 2 - 1).toFixed(4));
+        // "get rid of the old, in with the new": on a wide two-column stage the
+        // rented group leaves over the first half of the window and the owned
+        // group arrives over the second, so the two are never in the frame
+        // together. On a narrow single-pane stage that hand-off would leave a
+        // blank frame at p=0.5, so the same swap value drives a crossfade.
+        const narrow = window.innerWidth < 1024;
+        grid.style.setProperty("--arch-out", clamp01(narrow ? swap : swap * 2).toFixed(4));
+        grid.style.setProperty("--arch-in", clamp01(narrow ? swap : swap * 2 - 1).toFixed(4));
       }
 
       pose(p);
@@ -783,7 +793,11 @@ export function ArchitectureTour({
         {header ? <div className="arch-tour__head">{header}</div> : null}
         {sides.map((side, si) => (
           <div className="arch-tour__static" key={si}>
-            {side.tag ? <span className="arch-tour__tag" data-tag={side.tag}>{side.tag}</span> : null}
+            {side.tag ? (
+              <span className="arch-tour__tag" data-tag={side.tag}>
+                {side.tag}
+              </span>
+            ) : null}
             <ArchitectureDiagram spec={side.spec} caption={side.caption} />
             <ol className="arch-tour__rail">
               {side.steps.map((entry, index) => (
@@ -868,7 +882,9 @@ export function ArchitectureTour({
                   </div>
 
                   {side.tag ? (
-                    <span className="arch-tour__side-tag" data-tag={side.tag}>{side.tag}</span>
+                    <span className="arch-tour__side-tag" data-tag={side.tag}>
+                      {side.tag}
+                    </span>
                   ) : null}
                   <ol className="arch-tour__rail">
                     {side.steps.map((entry, index) => {

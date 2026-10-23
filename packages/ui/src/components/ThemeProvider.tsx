@@ -213,6 +213,16 @@ export function ThemeProvider({
   );
 }
 
+/**
+ * Theme control for the nav tail.
+ *
+ * One glyph, not two: the control moves through *theme* (default dark, default
+ * light, then 32 palettes), so a sun/moon pair only ever described two stops of
+ * a longer cycle and read as a mode switch that it is not. The contrast mark —
+ * a ring with half of it filled — is the general "appearance" signifier, and it
+ * stays put as the cycle advances. `aria-label` carries the state the glyph no
+ * longer distinguishes ("Theme: Dark"), and `title` names the next stop.
+ */
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, preference, palette, toggle } = useTheme();
   const step = matchThemeStep(preference, palette, theme);
@@ -220,36 +230,24 @@ export function ThemeToggle({ className }: { className?: string }) {
     <IconButton
       type="button"
       onClick={toggle}
-      aria-label="Toggle colour theme"
+      aria-label={`Theme: ${theme === "dark" ? "Dark" : "Light"}`}
       title={step.label}
       className={className ?? "theme-toggle"}
     >
-      {theme === "dark" ? (
-        <svg
-          viewBox="0 0 24 24"
-          width="17"
-          height="17"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        >
-          <circle cx="12" cy="12" r="4.2" />
-          <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
-        </svg>
-      ) : (
-        <svg
-          viewBox="0 0 24 24"
-          width="17"
-          height="17"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        >
-          <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
-        </svg>
-      )}
+      <svg
+        viewBox="0 0 24 24"
+        width="17"
+        height="17"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {/* Ring + filled right half: the contrast/appearance glyph. */}
+        <circle cx="12" cy="12" r="8.4" />
+        <path d="M12 3.6a8.4 8.4 0 0 1 0 16.8z" fill="currentColor" stroke="none" />
+      </svg>
     </IconButton>
   );
 }

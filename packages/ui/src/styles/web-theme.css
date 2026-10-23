@@ -313,6 +313,16 @@ body {
   justify-content: center;
 }
 
+/* Extreme zoom-out (very tall viewport): once the mosaic hits its height cap,
+   centring leaves cavernous gaps above and below. Top-align it instead so it
+   enters the view with the section that follows, rather than floating in the
+   middle of an empty screen. */
+@media (min-height: 1400px) {
+  .dg-stage--mosaic {
+    justify-content: flex-start;
+  }
+}
+
 /* The stacked face — the same boxes on a phone, one per row.
    There is no pinned track here, so the column is in normal flow and grows with
    its content. Every tile is open: the tile under the reader's eye only lights
@@ -354,6 +364,18 @@ body {
    without the wrap a narrow tile had its name run underneath it. */
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
 .dg-mosaic-version { margin-left: auto; text-align: right; }
+.dg-mosaic-link {
+  margin-left: 0.35rem;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ink-mute);
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+.dg-mosaic-link:hover,
+.dg-mosaic-link:focus-visible { color: var(--ink); }
 .dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
 /* Mini tiles step the name down a notch instead of clipping it: the full
    name still shows (never an abbreviation), just set smaller next to the
@@ -916,5 +938,70 @@ button.dg-docker.is-copied { color: var(--accent); }
     opacity: 1;
     transform: none;
     filter: none;
+  }
+}
+
+/* ── Squared scrollbars: one bar for the whole product surface ─────────────
+   Every box in this system is square, so the scrollbar must be too. macOS
+   draws a rounded overlay pill by default, and on a page of hairline edges it
+   is the only rounded shape left.
+
+   Two renderers, two mechanisms, and they must not meet:
+
+   · Blink/WebKit expose a bar only through ::-webkit-scrollbar-*. A styled
+     pseudo is a classic bar — it reserves its own track and never becomes an
+     overlay — and `border-radius: 0` on the thumb is what squares it. This is
+     the same treatment as digichat's `data-scrollbars="always"` skin
+     (chat-digichat.css), so the chat surface and the site read identically.
+   · Firefox has no pseudo-elements, so it takes the standard
+     `scrollbar-width` / `scrollbar-color` pair — guarded to Gecko. That guard
+     is load-bearing, not tidiness: declaring either property in Blink switches
+     the element to the native bar renderer and silently disables the
+     ::-webkit-scrollbar rules above, so an unguarded `*` rule would un-square
+     every Chromium surface while still looking right in the source.
+
+   The fill stays under :where(*) and therefore carries zero specificity. A
+   surface that hides its bar — `.dg-cell`, `.cr-track`, `.h-scroll__track`,
+   Tailwind's `[&::-webkit-scrollbar]:hidden` — keeps winning with its own
+   class-level `display: none` / `scrollbar-width: none`, and a surface that
+   paints its own thumb (digichat's skin, digiquant-web's `McpCli`) keeps its
+   colour. Do not raise these selectors to "fix" a local case. */
+:where(*)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* Transparent, so the bar lies on whatever surface it crosses — page, panel,
+   popover, terminal — instead of painting a stripe across it. */
+:where(*)::-webkit-scrollbar-track,
+:where(*)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Shape is the one part that is not negotiable, and it is the one part an
+   app-local stylesheet is most likely to have already answered: a bare
+   `::-webkit-scrollbar-thumb { border-radius: 3px }` (apps/dashboard) ties
+   :where(*) on specificity and wins on order, because every app imports this
+   file before its own rules. The element-level `html` prefix lifts this rule
+   to (0,0,2) — above a bare pseudo (0,0,1) and still far below any
+   class-level `display: none` (0,1,x) — so the square holds everywhere. */
+html::-webkit-scrollbar-thumb,
+html :where(*)::-webkit-scrollbar-thumb {
+  border-radius: 0;
+}
+
+:where(*)::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+:where(*)::-webkit-scrollbar-thumb:hover,
+:where(*)::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklab, var(--ink-mute) 55%, transparent);
+}
+
+@supports (-moz-appearance: none) {
+  :where(*) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--ink-mute) 38%, transparent) transparent;
   }
 }

@@ -570,6 +570,165 @@
  * to the right. The grid clips, which is what keeps a group parked off-screen
  * from widening the page.
  */
+/* ── Narrow pinned tour: ONE pane ───────────────────────────────────────────
+ * Under the two-column breakpoint both stacks share a single graph box and the
+ * walk crossfades their-stack → digithings-stack inside it, with exactly one
+ * caption under the graph.
+ *
+ * READ THIS BEFORE CHANGING A ROW HERE. The pane's height must be owned by the
+ * pane, never by a drawing. The first cut of this layout left `align-items:
+ * start` on the grid and a content-sized row, so every side was exactly as tall
+ * as its own SVG — and because both sides sat in the same cell, the *hidden*
+ * one sized the row for both. The digithings drawing is taller (400px vs 315px
+ * at 390 wide), so the visible frame hung above a pane sized by a drawing nobody
+ * could see, the drawing spilled over the caption, and resizing re-measured into
+ * a different (equally wrong) answer. `align-items: stretch` + a definite
+ * `minmax(0, 1fr)` row + `height: 100%` down the frame → stage → pane chain is
+ * what makes the frame fill the space it is given, let the drawing shrink into
+ * it (`fitFrame` re-lays its gutters to the measured box), and keep the caption
+ * below the graph at every width and after any resize.
+ */
+@media (max-width: 1023.98px) {
+  .arch-tour:not([data-variant="static"]) .arch-tour__pin {
+    /* The graph gets every pixel the header does not take: no 40rem cap (which
+       left a band under the pane) and no centring slack. `svh` keeps the pane
+       clear of the mobile URL bar; the app's max-height is the same sum. */
+    min-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+    gap: 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0;
+    min-height: 0;
+    overflow: hidden;
+    flex: 1 1 0;
+  }
+
+  /* Both sides occupy the same cell as identical boxes, so the swap is a pure
+     crossfade: same frame, same caption baseline, no group sliding past a page
+     that is only one column wide. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side {
+    grid-area: 1 / 1;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* The stack tag is a label on the pane's own top edge, not a row between the
+     tabs and the graph: it sits in the frame's reserved top band, so the graph
+     starts a half-rem under the header instead of 44.6px below it. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__side-tag {
+    position: absolute;
+    inset-block-start: 0.42rem;
+    inset-inline-start: 0.72rem;
+    z-index: 2;
+    margin: 0;
+    /* A zoomed box can pass under the label; the chip stays legible on it. */
+    background: var(--surface);
+    text-align: start;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame {
+    grid-row: 1;
+    grid-column: 1;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    /* top band = the tag; the rest is the graph */
+    padding: 1.85rem 0.85rem 0.85rem;
+    min-height: 0;
+  }
+
+  /* Definite heights all the way down, so the SVG is sized by the pane instead
+     of the pane being sized by the SVG. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__stage,
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__pane,
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__camera {
+    min-height: 0;
+  }
+
+  /* One caption at a time, under the graph, never on top of it. The floor is
+     the tallest clamped caption (index + label + two lines = 106.8px at 390),
+     measured across all eleven steps rather than guessed, plus the air that
+     keeps the last line off the pane's own edge: with a smaller floor the four
+     longest steps shrank the graph by 19px mid-walk, and with no floor at all a
+     two-line caption on one side and a one-line caption on the other moved the
+     frame between beats (and mid-crossfade). */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+    grid-row: 2;
+    grid-column: 1;
+    display: block;
+    min-height: 7.25rem;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step {
+    display: none;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step.on {
+    display: grid;
+    border-inline-start: 0;
+    border-inline-end: 0;
+    padding-inline: 0;
+    text-align: start;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail::before {
+    display: none;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__step.on .arch-tour__line {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+
+  /* The price aside folds itself away whenever the rail sits under the frame
+     (there is no room to the right of it in one column); removing it here also
+     keeps it from adding an empty grid row under the caption. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__aside {
+    display: none;
+  }
+
+  /* On a phone the graph is the pane; the copy that would otherwise sit
+     between the tabs and the graph is the step caption below it. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__head p {
+    display: none;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__head {
+    gap: 0.35rem;
+  }
+
+  /* One pane: swap by crossfade instead of two groups sliding past each other,
+     so the frame is never empty mid-scroll. The fade is scroll-driven (the
+     `--arch-out` / `--arch-in` custom properties move with every frame), so the
+     sides themselves carry no transition — a leftover 1.7s transform tween was
+     what made a 1440→390 resize slide the whole pane across the phone. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--leaving {
+    transform: none;
+    transition: none;
+    opacity: calc(1 - var(--arch-out, 0));
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering {
+    transform: none;
+    transition: none;
+    opacity: var(--arch-in, 1);
+  }
+}
+
 @media (min-width: 1024px) {
   .arch-tour:not([data-variant="static"]) .arch-tour__grid {
     grid-template-columns: minmax(0, 1fr);
