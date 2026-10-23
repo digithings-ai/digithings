@@ -424,6 +424,8 @@ devkit remains the only place that edits and saves.
 | U15 | `93ce299ad6` | direct | digichat welcome fallback, route types, baseline assertion |
 | U13 | `4197b1b2a4` | merge | TUI frame writer, export validation, terminal token/focus fixes |
 | C7 | `a483c3c629` | merge | one `asRecord`, dead `humanizeToolName`, ten dead exports |
+| C5 | `5c031bbaf2` | merge | digigraph shared artifacts helper, logging, dead config exports |
+| UC2d/e | `c2635baf2d` | merge | ledger cash + 13 FX/rates blocks on real payloads |
 
 `github/develop` was merged into the epic at `48d2a6fb4d` after the table was
 first written. That merge brought the upstream companion fix for the chat turn
