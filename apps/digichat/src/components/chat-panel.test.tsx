@@ -137,6 +137,7 @@ import {
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
 import { webSearchStorageKey } from "@/lib/web-search-pref";
+import { DEFAULT_CLIENT_CONFIG, type DigichatClientConfig } from "@/lib/deploy-config/client-projection";
 
 function baseProps() {
   return {
@@ -307,8 +308,8 @@ describe("ChatPanel web search follows the deployment allow", () => {
     else process.env[HOUSE_WEB_SEARCH] = previousEnv;
   });
 
-  async function sendHeaders(): Promise<Headers> {
-    render(<ChatPanel {...baseProps()} />);
+  async function sendHeaders(clientConfig?: DigichatClientConfig): Promise<Headers> {
+    render(<ChatPanel {...baseProps()} {...(clientConfig ? { clientConfig } : {})} />);
     const config = readCapturedTransportConfig();
     if (!config) {
       throw new Error("AssistantChatTransport was never constructed by ChatPanel");
@@ -327,9 +328,17 @@ describe("ChatPanel web search follows the deployment allow", () => {
   });
 
   it("does not ask for web search when the deployment leaves it off", async () => {
+    // The default client config allows web search (the house is public), so the
+    // "deployment leaves it off" case has to say so explicitly — this is the
+    // shape a deny tenant resolves to: gate off and no web_search catalog entry.
+    const off: DigichatClientConfig = {
+      ...DEFAULT_CLIENT_CONFIG,
+      gate: { ...DEFAULT_CLIENT_CONFIG.gate, webSearch: false },
+      tools: { ...DEFAULT_CLIENT_CONFIG.tools, catalog: [] },
+    };
     const key = webSearchStorageKey("auth");
     restoreStorage = stubStorage({ [key]: "0" });
-    const headers = await sendHeaders();
+    const headers = await sendHeaders(off);
     expect(window.localStorage.getItem(key)).toBeNull();
     expect(headers.has("X-Digi-Enable-Web-Search")).toBe(false);
   });
