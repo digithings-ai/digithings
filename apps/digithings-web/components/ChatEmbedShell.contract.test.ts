@@ -8,6 +8,7 @@ import {
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
   formatShellLoadDiagnostic,
+  readParentDocumentPalette,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -22,7 +23,7 @@ describe("ChatEmbedShell contracts", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 
-  it("posts digichat:theme with light|dark only", () => {
+  it("posts digichat:theme with light|dark and an optional palette", () => {
     expect(THEME).toBe("digichat:theme");
     expect(buildEmbedThemeMessage("light")).toEqual({
       type: "digichat:theme",
@@ -34,6 +35,23 @@ describe("ChatEmbedShell contracts", () => {
       theme: "dark",
       ts: 42,
     });
+  });
+
+  it("forwards only a known parent palette on the theme message", () => {
+    const attr = (v: string | null) => ({ getAttribute: () => v });
+    expect(readParentDocumentPalette(attr("dracula"))).toBe("dracula");
+    expect(readParentDocumentPalette(attr(" Nord "))).toBe("nord");
+    expect(readParentDocumentPalette(attr("default"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr("nope"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr(null))).toBeUndefined();
+    expect(buildEmbedThemeMessage("light", 1, "dracula")).toEqual({
+      type: THEME,
+      theme: "light",
+      ts: 1,
+      palette: "dracula",
+    });
+    expect(buildEmbedThemeMessage("dark", 1)).toEqual({ type: THEME, theme: "dark", ts: 1 });
+    expect("palette" in buildEmbedThemeMessage("dark", 1)).toBe(false);
   });
 
   it("posts digichat:parent-error for in-chat handshake failures", () => {
