@@ -46,13 +46,16 @@ describe("composer keyboard dismissal wiring", () => {
     expect(body).toContain("if (sent) dismissComposerKeyboard");
   });
 
-  it("does not run the dismissal on the edit-message path", () => {
+  it("dismisses on the edit-message path too", () => {
+    // An edit is a send: the visitor submits corrected text and the answer
+    // starts streaming. Leaving the keyboard up there hides the very thing
+    // they just asked for, so this branch dismisses as well.
     const start = thread.indexOf("const handleSubmit");
     const body = thread.slice(start, start + 900);
     const editBranch = body.slice(0, body.indexOf("onComposerSubmit?.(event)"));
 
     expect(editBranch).toContain("edit.commit(");
-    expect(editBranch).not.toContain("dismissComposerKeyboard");
+    expect(editBranch).toContain("dismissKeyboardIfCoarse()");
   });
 
   it("turns off the runtime's refocus on a coarse pointer", () => {

@@ -20,6 +20,7 @@ import {
   messageActivities,
 } from "@/lib/chat-activity";
 import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import { dismissKeyboardIfCoarse } from "@digithings/ui/chat/composer-keyboard";
 import {
   setPendingForceTool,
   setPendingTurnMode,
@@ -452,6 +453,10 @@ export function useEmbedDigiChat({
     ) => {
       const q = question.trim();
       if (!q || busy) return;
+      // Every send fills the thread, but not every send goes through the
+      // composer's submit: an example question, a redo or a retry all land
+      // here. Dropping the keyboard at the entry point covers them together.
+      dismissKeyboardIfCoarse();
       setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
@@ -483,6 +488,9 @@ export function useEmbedDigiChat({
 
   const doRegenerate = useCallback(() => {
     if (!allowClientTurnMutation || busy) return;
+    // A redo starts a new answer just like a send, so it retracts the keyboard
+    // too — otherwise the phone shows the keyboard over the regenerated text.
+    dismissKeyboardIfCoarse();
     armRegenerate();
     void regenerate();
   }, [allowClientTurnMutation, armRegenerate, busy, regenerate]);
@@ -498,6 +506,9 @@ export function useEmbedDigiChat({
       if (!allowClientTurnMutation || busy) return;
       const next = text.trim();
       if (!next) return;
+      // Resubmitting an edited question starts a turn too; the keyboard has
+      // nothing left to type into, so it should not stay up over the answer.
+      dismissKeyboardIfCoarse();
       let lastUserIdx = -1;
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i]?.role === "user") {

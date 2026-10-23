@@ -10,6 +10,7 @@ import {
 import {
   composerHasText,
   dismissComposerKeyboard,
+  dismissKeyboardIfCoarse,
   isCoarsePointer,
 } from "./composer-keyboard";
 import { File } from "./file";
@@ -868,6 +869,10 @@ const Composer: FC<{
     if (edit.editing) {
       event.preventDefault();
       edit.commit(aui.composer().getState().text);
+      // An edit is a send: the corrected text goes off and the answer starts
+      // streaming. Leaving the keyboard up would hide it, so the same
+      // dismissal runs here as on a normal submit.
+      dismissKeyboardIfCoarse();
       return;
     }
     // Captured before the send clears the textarea — see composerHasText.
