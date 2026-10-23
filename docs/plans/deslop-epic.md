@@ -317,3 +317,32 @@ Rules for this epic:
 5. At convergence, rebase `feat/deslop-epic` onto the new `develop` (or onto the
    other session's merged work) and re-run the full gate set. Do not resolve a
    conflict by reverting the other session's focus/resize fixes.
+
+### UC1 — landed
+
+Commit `d5640d2929`, merged `ac0140cb73`. `packages/ui/src/components/desk/` now
+ships `DataTable`, `KpiGrid`, `Sparkline`, `StateBlock`, `BlockBoundary` and
+`index.ts`, with 33 tests. Canon guard, `typecheck -w @digithings/ui`,
+`test -w @digithings/ui` (1214 passed) and `lint -w @digithings/ui` are green.
+No app wiring yet; UC2 does that.
+
+Two notes for consumers:
+
+- `DataTable` emits `data-col` on every cell from `columnRoles(columns, rows)`.
+- `Sparkline` derives its accessible summary; pass `label` to override.
+- `KpiCell` is the exported item type because `Kpi` already exists in
+  `finance-tearsheet`.
+
+### UC2 — split into per-route branches
+
+| Slice | Branch | Route | Work |
+|---|---|---|---|
+| UC2a | `feat/deslop-uc2a-live-marks` | brief `live` | first `KpiGrid` + `Sparkline` block; the desk has no component for this today |
+| UC2b | `feat/deslop-uc2b-tearsheet-nav` | tearsheet `nav`, `benchmarks` | `DataTable` + `Sparkline`, keep `PanelView` toggle |
+| UC2c | `feat/deslop-uc2c-ledger-cash` | portfolio ledger | cash ledger missing from the desk |
+| UC2d | `feat/deslop-uc2d-fx-panes` | `/app/fx` ×5 (invite) | rich blocks, no auth changes |
+
+Each slice: import from `@digithings/ui`; replace `desk-view.tsx` text panes;
+wrap blocks in `BlockBoundary`; render `StateBlock` for loading/empty/error/
+withheld; keep `readOfficial`/`presentResponse` as the data path; no new chart
+library; tests for the new block and its states.
