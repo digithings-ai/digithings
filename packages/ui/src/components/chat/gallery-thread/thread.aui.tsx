@@ -803,6 +803,9 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       type="button"
       onClick={() => {
         if (aui.thread.getState().isRunning) return;
+        // A tapped example is a send: on iOS a button does not take focus, so
+        // the composer would keep the keyboard up over the answer.
+        dismissKeyboardIfCoarse();
         aui.thread.append({
           content: [{ type: "text", text: prompt }],
           runConfig: aui.composer.getState().runConfig,
@@ -827,7 +830,11 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
+      <button
+        type="button"
+        className={SUGGESTION_BUTTON_CLASS}
+        onClick={() => dismissKeyboardIfCoarse()}
+      >
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"

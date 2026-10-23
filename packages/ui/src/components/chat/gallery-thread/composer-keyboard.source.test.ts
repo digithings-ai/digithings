@@ -69,3 +69,37 @@ describe("composer keyboard dismissal wiring", () => {
     expect(thread).toContain("const [coarsePointer, setCoarsePointer] = useState(false)");
   });
 });
+
+/**
+ * A tapped example never reaches the composer's submit or the app's `send`:
+ * the static chip calls `aui.thread.append`, the runtime one goes through
+ * `SuggestionPrimitive.Trigger send`, and a follow-up chip through
+ * `ThreadPrimitive.Suggestion send`. On iOS a button takes no focus, so the
+ * composer would keep the keyboard up over the answer unless each one
+ * dismisses for itself.
+ */
+describe("suggestion taps retract the keyboard", () => {
+  const followUps = readFileSync(join(here, "follow-up-suggestions.aui.tsx"), "utf8");
+
+  it("dismisses from a static example question before appending", () => {
+    const at = thread.indexOf("const StaticSuggestionItem");
+    expect(at).toBeGreaterThan(-1);
+    const body = thread.slice(at, at + 700);
+    const dismissed = body.indexOf("dismissKeyboardIfCoarse()");
+    const appended = body.indexOf("aui.thread.append(");
+
+    expect(dismissed).toBeGreaterThan(-1);
+    expect(appended).toBeGreaterThan(-1);
+    expect(dismissed).toBeLessThan(appended);
+  });
+
+  it("dismisses from a runtime suggestion trigger", () => {
+    const at = thread.indexOf("<SuggestionPrimitive.Trigger send asChild>");
+    expect(at).toBeGreaterThan(-1);
+    expect(thread.slice(at, at + 400)).toContain("onClick={() => dismissKeyboardIfCoarse()}");
+  });
+
+  it("dismisses from a follow-up suggestion chip", () => {
+    expect(followUps).toContain("onClick={() => dismissKeyboardIfCoarse()}");
+  });
+});
