@@ -24,6 +24,12 @@ import {
   ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import {
+  DEFAULT_SCROLL_MODE,
+  scrollModeProps,
+  useFollowStream,
+  type ScrollMode,
+} from "./scroll-mode";
 import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
 import {
@@ -201,6 +207,11 @@ export type ThreadProps = {
   scrollbars?: "always" | "auto";
   /** Worked-chain rhythm. `default` is the fixed spacing. */
   density?: "compact" | "default" | "airy";
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. See `scroll-mode.ts`.
+   */
+  scrollMode?: ScrollMode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -458,6 +469,7 @@ export const Thread: FC<ThreadProps> = ({
   composerToolbar,
   scrollbars = "always",
   density = "default",
+  scrollMode = DEFAULT_SCROLL_MODE,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -492,6 +504,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
                   density={density}
+                  scrollMode={scrollMode}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -512,6 +525,20 @@ export const Thread: FC<ThreadProps> = ({
  */
 const ThreadFooter: FC = () => <SkinCredit />;
 
+/**
+ * Keeps the viewport on the stream while following. A component rather than a
+ * hook call in `ThreadRoot` because the message count lives in the thread
+ * store, which only exists inside `ThreadPrimitive.Root`.
+ */
+const ScrollFollower: FC<{ viewport: HTMLElement | null; enabled: boolean }> = ({
+  viewport,
+  enabled,
+}) => {
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  useFollowStream(viewport, enabled, messageCount);
+  return null;
+};
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
@@ -519,7 +546,8 @@ const ThreadRoot: FC<{
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
   density: "compact" | "default" | "airy";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
+  scrollMode: ScrollMode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density, scrollMode }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -529,6 +557,8 @@ const ThreadRoot: FC<{
     viewportRef.current = node;
     setViewportEl(node);
   }, []);
+
+  const viewportProps = scrollModeProps(scrollMode);
 
   return (
     <ThreadPrimitive.Root
@@ -565,7 +595,7 @@ const ThreadRoot: FC<{
       <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
         ref={attachViewport}
-        turnAnchor="top"
+        {...viewportProps}
         // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
@@ -575,6 +605,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
+        <ScrollFollower viewport={viewportEl} enabled={scrollMode === "follow"} />
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />

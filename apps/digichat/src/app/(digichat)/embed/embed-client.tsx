@@ -38,8 +38,10 @@ import {
   disabledCatalogIds,
   extraOffFromCatalog,
   persistDensity,
+  persistScroll,
   resetChromePrefsFromDeploy,
   useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
   isStockComposerMenuKind,
@@ -488,12 +490,14 @@ function EmbedChat({
         searchEngine: stockClient.gate.searchEngine,
         toolbar: stockClient.chrome.toolbar,
         scrollbars: stockClient.chrome.scrollbars,
+        scroll: stockClient.chrome.scroll?.mode,
       },
       null,
     ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const draftSink = useRef<(text: string) => void>(() => {});
@@ -1158,6 +1162,10 @@ function EmbedChat({
         persistDensity(density);
         setChatPrefs((p) => ({ ...p, density }));
       },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
@@ -1170,6 +1178,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         }),
@@ -1266,6 +1275,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });
@@ -1283,6 +1293,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });

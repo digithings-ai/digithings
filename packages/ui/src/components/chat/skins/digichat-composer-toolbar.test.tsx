@@ -41,6 +41,7 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setToolbar: noop,
     setScrollbars: noop,
     setDensity: noop,
+    setScroll: noop,
     setView: noop,
     setThinking: noop,
     setModel: noop,

@@ -30,6 +30,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setToolbar: vi.fn(),
     setScrollbars: vi.fn(),
     setDensity: vi.fn(),
+    setScroll: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: false,
     showByok: false,
@@ -78,6 +79,31 @@ describe("composer palette sync", () => {
   beforeEach(mountHost);
   afterEach(() => {
     document.body.replaceChildren();
+  });
+
+  it("flips scroll follow/free from the main palette, naming the state it switches to", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="settings" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const toFree = await screen.findByRole("menuitemcheckbox", { name: /scroll free/i });
+    await user.click(toFree);
+    expect(api.setScroll).toHaveBeenCalledWith("free");
+
+    document.body.replaceChildren();
+    mountHost();
+    const free = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, scroll: "free" } });
+    render(
+      <EmbedChatPrefsProvider value={free}>
+        <EmbedComposerMenu kind="settings" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const toFollow = await screen.findByRole("menuitemcheckbox", { name: /scroll follow/i });
+    await user.click(toFollow);
+    expect(free.setScroll).toHaveBeenCalledWith("follow");
   });
 
   it("writes /language English when that row is chosen and filters as the user types", async () => {

@@ -235,6 +235,8 @@ export type EmbedTenantConfig = {
   toolbar?: boolean;
   /** Scrollbar gutter. Omit keeps `always`. */
   scrollbars?: "always" | "auto";
+  /** Whether the thread follows the answer. Omit keeps `follow`. */
+  scroll?: { mode: "follow" | "free" };
   /** Web-search engine name. Omit means auto. */
   searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
   /** page = full content chrome inside iframe; embed = compact iframe child. */
@@ -722,6 +724,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
     throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
   }
+  const scrollMode = (v.scroll as { mode?: unknown } | undefined)?.mode;
+  if (v.scroll !== undefined && scrollMode !== "follow" && scrollMode !== "free") {
+    throw new Error(`${ctx}: scroll.mode must be "follow" or "free"`);
+  }
   // An embed pins its own document theme (embed-route-shell), so a tenant
   // palette could never paint. Refuse it rather than accept a no-op key; the
   // deploy YAML's chrome.palette works for mode: app.
@@ -972,6 +978,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     ...(v.toolbar === false ? { toolbar: false as const } : {}),
     ...(v.scrollbars === "always" || v.scrollbars === "auto"
       ? { scrollbars: v.scrollbars }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "follow"
+      ? { scroll: { mode: "follow" as const } }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "free"
+      ? { scroll: { mode: "free" as const } }
       : {}),
     ...(typeof v.searchEngine === "string" &&
     (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
