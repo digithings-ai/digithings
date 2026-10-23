@@ -56,8 +56,9 @@ const TIERS: PricingMatrixTier[] = [
     name: "service",
     price: "on contact",
     // Featured column (#4429 ship list): the table carries the section, so
-    // the custom-build middle tier gets the gradient band. No `popularLabel`
-    // — tinting is emphasis, not a recommendation of one tier over the others.
+    // the custom-build middle tier gets the kit's accent tint and top rule.
+    // Not a gradient, and no `popularLabel` — tinting is emphasis, not a
+    // recommendation of one tier over the others.
     popular: true,
     cta: <CtaLink href="/#contact">Talk to us</CtaLink>,
   },
@@ -74,7 +75,7 @@ const GROUPS: PricingMatrixGroup[] = [
     rows: [
       {
         label: "what you pay",
-        cells: ["$0 — no account", "scoped to the deployment", "scoped to the work"],
+        cells: ["$0, no account", "scoped to the deployment", "scoped to the work"],
       },
       {
         label: "what it covers",
@@ -124,13 +125,13 @@ const GROUPS: PricingMatrixGroup[] = [
     rows: [
       {
         label: "who holds the keys",
-        cells: ["you do", "you do — we wire them up", "you do — we build around them"],
+        cells: ["you do", "you do, we wire them up", "you do, we build around them"],
       },
       {
         label: "who owns the result",
         cells: [
-          "you — it stays yours",
-          "you — the deployment stays yours",
+          "you, and it stays yours",
+          "you, and the deployment stays yours",
           "you, and the custom work is handed over",
         ],
       },
