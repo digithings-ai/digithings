@@ -271,7 +271,7 @@ table/chart toggle. Order:
 Acceptance: each route renders loading, empty, error and withheld states through
 `StateBlock`; no new chart library; existing tests stay green.
 
-### UC3 — retire the parked app (S, ~½ day)
+### UC3 — retire the parked app (S, ~½ day) — **blocked, not done**
 
 - Delete `apps/digiquant-app/**`, including the committed `.next` referenced in
   `.gitleaks.toml`.
@@ -280,6 +280,15 @@ Acceptance: each route renders loading, empty, error and withheld states through
 - Move `BLOCKS.md`, `PLAN.md`, `contracts/*.md` to `docs/surfaces/` or delete.
 - Update ADR D2, the parity matrix, `docs/surfaces/digiquant-app-shortcuts.md`,
   and the slice status in this plan.
+
+**Why it is blocked:** ADR D2 says the app retires only once the desk renders
+`/fx/*`, `/settings`, `/settings/paper` and the access/tier ladder with live
+data. UC2e ports FX; settings and the tier ladder still exist only in the
+parked app, so deleting it now would remove the reference implementation
+before the desk has a replacement. `TIERS` has no consumers outside the parked
+app, and nothing outside it imports the package, so the deletion is safe as a
+follow-up the moment UC2f lands.
+
 
 Acceptance: one host, one env name (`NEXT_PUBLIC_DASHBOARD_API_URL` +
 `/official-api`), no hand-copied catalog, `npm run build -w digiquant-web` green.
@@ -414,6 +423,13 @@ catalogue goes.
 | D1 | `374fb1a939` | `064f552672` | stale surface claims corrected, superseded docs marked |
 | U17 | `ecf8accbe5` | direct | `/book` mobile contents, metadata, diagrams, PagedJS print |
 | U15 | `93ce299ad6` | direct | digichat welcome fallback, route types, baseline assertion |
+| U13 | `4197b1b2a4` | merge | TUI frame writer, export validation, terminal token/focus fixes |
+
+`github/develop` was merged into the epic at `48d2a6fb4d` after the table was
+first written. That merge brought the upstream companion fix for the chat turn
+guard (`ec85a81018`), the digiclaw → digibot rename, and the chat density token
+pass; conflicts were resolved toward upstream for `route.ts`, and by combining
+the house roles with the density fallback in `gallery-thread/thread.aui.tsx`.
 
 ### U8 caveat — `LandingSections.tsx`
 
