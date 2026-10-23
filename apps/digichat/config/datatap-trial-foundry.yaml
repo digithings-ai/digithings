@@ -199,7 +199,8 @@ deployment:
   mcp:
     servers: []
     allowUserServers: false
-    allowAddForm: false  gate:
+    allowAddForm: false
+  gate:
     mode: ungated
     activityDetail: full
     llmAccess: operator

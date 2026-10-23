@@ -89,8 +89,8 @@ def main() -> int:
         problems.append(f"defaults.yaml embedHosts {defaults.get('embedHosts')} != {HOUSE_HOSTS}")
     if defaults.get("graphTools") != GRAPH_TOOLS:
         problems.append("defaults.yaml graphTools drifted from the digiproject tool list")
-    if house.get("models", {}).get("default") != "deepseek/deepseek-v4.1-flash-1017":
-        problems.append("defaults.yaml default model is not deepseek-v4.1-flash-1017")
+    if house.get("models", {}).get("default") != "deepseek/deepseek-v4.1-flash":
+        problems.append("defaults.yaml default model is not deepseek-v4.1-flash")
 
     example = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
     if example.get("extends") != "defaults" or "hosts" in example or "deployment" in example:
