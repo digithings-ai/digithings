@@ -53,20 +53,28 @@ export function pixelColor(pixel: Pixel, palette: Palette, mode: ColorMode): Ter
   const a = Math.max(0, pixel.alpha);
   const fg = hexToRgb(tone.hex);
   const bg = hexToRgb(palette.ground.hex);
-  const mixed: [number, number, number] = [0, 1, 2].map((i) => bg[i]! + (fg[i]! - bg[i]!) * a) as [number, number, number];
+  const mixed: [number, number, number] = [
+    bg[0] + (fg[0] - bg[0]) * a,
+    bg[1] + (fg[1] - bg[1]) * a,
+    bg[2] + (fg[2] - bg[2]) * a,
+  ];
   return mode === "truecolor" ? { hex: rgbToHex(mixed) } : { cube: nearestCube(mixed) };
 }
 
 const same = (a: TermColor, b: TermColor) =>
   "hex" in a ? "hex" in b && a.hex === b.hex : "cube" in b && a.cube === b.cube;
 
+/** Only a pixel above zero alpha paints: the canvas and the SVG mask skip the
+ *  rest, so the terminal encoder does too. */
+const litPixel = (pixel: Pixel | null): Pixel | null => (pixel && pixel.alpha > 0 ? pixel : null);
+
 export function halfBlocks(frame: Frame, palette: Palette, mode: ColorMode): TermCell[][] {
   const lines: TermCell[][] = [];
   for (let y = 0; y < frame.height; y += 2) {
     const row: TermCell[] = [];
     for (let x = 0; x < frame.width; x += 1) {
-      const top = pixelAt(frame, x, y);
-      const bot = pixelAt(frame, x, y + 1);
+      const top = litPixel(pixelAt(frame, x, y));
+      const bot = litPixel(pixelAt(frame, x, y + 1));
       if (!top && !bot) {
         row.push({ ch: " ", fg: null, bg: null });
       } else if (top && bot) {
@@ -227,19 +235,3 @@ export function toAnsi(lines: TermCell[][]): string[] {
 
 export const toPlain = (lines: TermCell[][]) => lines.map((row) => row.map((c) => c.ch).join(""));
 
-/** A colour as OpenTUI takes it: a hex string. Cube indices map to their xterm RGB. */
-export function termColorHex(c: TermColor): string {
-  if ("hex" in c) return c.hex;
-  const n = c.cube;
-  if (n >= 232) {
-    const v = 8 + (n - 232) * 10;
-    return rgbToHex([v, v, v]);
-  }
-  if (n >= 16) {
-    const i = n - 16;
-    return rgbToHex([CUBE[Math.floor(i / 36)]!, CUBE[Math.floor(i / 6) % 6]!, CUBE[i % 6]!]);
-  }
-  const base = ["#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0", // canon-allow: the xterm-256 base palette table is the terminal's own colour standard, not app theming
-    "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"]; // canon-allow: the xterm-256 base palette table is the terminal's own colour standard, not app theming
-  return base[n] ?? "#ffffff"; // canon-allow: terminal fallback; the table above is the xterm-256 standard
-}
