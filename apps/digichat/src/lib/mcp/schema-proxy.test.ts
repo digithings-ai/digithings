@@ -10,6 +10,7 @@ import {
 } from "./schema-proxy";
 
 const UPSTREAM = "https://mcp.example.com/";
+const URL_PATH = "https://chat.example.com/api/mcp-proxy/tools";
 const env = { [SCHEMA_PROXY_ENV]: JSON.stringify({ tools: UPSTREAM }) };
 
 const SDK_TOOL = {
@@ -175,6 +176,67 @@ describe("proxySchemaNormalizedMcp", () => {
     expect(res.status).toBe(502);
     const big = new Request("https://chat.example.com/api/mcp-proxy/tools", { method: "POST", body: "x".repeat(1_000_001) });
     expect((await proxySchemaNormalizedMcp(big, "tools", { fetchImpl: down, env })).status).toBe(413);
+  });
+
+  it("refuses a declared oversized body without reading it or dialling the upstream", async () => {
+    const { calls, impl } = fakeFetch((b) => listReply(b.id));
+    const declared = new Request(URL_PATH, {
+      method: "POST",
+      headers: { "content-length": "1000001" },
+      body: "{}",
+    });
+    const res = await proxySchemaNormalizedMcp(declared, "tools", { fetchImpl: impl, env });
+    expect(res.status).toBe(413);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("stops a chunked body at the cap while it streams, before the upstream is dialled", async () => {
+    const { calls, impl } = fakeFetch((b) => listReply(b.id));
+    let pulled = 0;
+    const chunk = new Uint8Array(100_000).fill(120);
+    const body = new ReadableStream({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(chunk);
+        if (pulled >= 50) controller.close();
+      },
+    });
+    const chunked = new Request(URL_PATH, { method: "POST", body, duplex: "half" } as RequestInit);
+    expect(chunked.headers.get("content-length")).toBeNull();
+    const res = await proxySchemaNormalizedMcp(chunked, "tools", { fetchImpl: impl, env });
+    expect(res.status).toBe(413);
+    expect(calls).toHaveLength(0);
+    expect(pulled).toBeLessThan(50);
+  });
+
+  it("propagates the caller's abort to the forwarded request", async () => {
+    const ac = new AbortController();
+    let seen: AbortSignal | null | undefined;
+    const impl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = init?.signal;
+      return new Response("{}", { headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const req = new Request(URL_PATH, { method: "POST", body: "{}", signal: ac.signal });
+    await proxySchemaNormalizedMcp(req, "tools", { fetchImpl: impl, env });
+    expect(seen?.aborted).toBe(false);
+    ac.abort();
+    expect(seen?.aborted).toBe(true);
+  });
+
+  it("answers 504 when the upstream returns no headers in time", async () => {
+    const hung = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    ) as unknown as typeof fetch;
+    const res = await proxySchemaNormalizedMcp(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }), "tools", {
+      fetchImpl: hung,
+      env,
+      headersTimeoutMs: 10,
+    });
+    expect(res.status).toBe(504);
+    expect(await res.json()).toEqual({ error: "mcp_upstream_timeout" });
   });
 });
 

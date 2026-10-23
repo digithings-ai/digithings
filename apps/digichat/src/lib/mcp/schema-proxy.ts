@@ -28,6 +28,12 @@ import { coerceToolArguments, normalizeToolsListResult } from "@/lib/mcp/schema-
 export const SCHEMA_PROXY_ENV = "DIGICHAT_MCP_SCHEMA_PROXY";
 const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const MAX_BODY_BYTES = 1_000_000;
+/**
+ * How long the upstream may take to return RESPONSE HEADERS before the relay
+ * abandons the call. The limit is deliberately on the header phase only: an
+ * SSE reply legitimately stays open for the length of a turn.
+ */
+const UPSTREAM_HEADERS_TIMEOUT_MS = 30_000;
 const PROBE_ID = "digichat-schema-proxy-probe";
 
 const STRIPPED_REQUEST_HEADERS = new Set([
@@ -144,6 +150,78 @@ function json(status: number, body: unknown): Response {
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Read the request body, refusing it once it passes `max` bytes.
+ *
+ * The declared `content-length` is checked first, so an oversized upload is
+ * rejected without being read at all; a body that declares no length (chunked)
+ * is counted while it streams and abandoned the moment it crosses the cap, so
+ * the whole body is never resident. Returns null when the body is too large.
+ */
+async function readBodyWithCap(req: Request, max: number): Promise<Uint8Array | null> {
+  const declared = req.headers.get("content-length");
+  if (declared !== null) {
+    const n = Number(declared);
+    if (Number.isFinite(n) && n > max) return null;
+  }
+  if (!req.body) return new Uint8Array(0);
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      total += value.byteLength;
+      if (total > max) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => {});
+    return null;
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/**
+ * The signal for the forwarded call: it follows the caller's abort, and it
+ * fires if the upstream has not answered with headers within
+ * {@link UPSTREAM_HEADERS_TIMEOUT_MS}. `settle` stops the header timer once the
+ * response arrives; the caller's abort stays wired for the life of the request.
+ */
+function upstreamAbort(clientSignal: AbortSignal | null | undefined, timeoutMs: number): {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  settle: () => void;
+} {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error("upstream_headers_timeout"));
+  }, timeoutMs);
+  const forward = () => controller.abort(clientSignal?.reason);
+  if (clientSignal) {
+    if (clientSignal.aborted) forward();
+    else clientSignal.addEventListener("abort", forward, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    settle: () => clearTimeout(timer),
+  };
 }
 
 function cacheFor(label: string): Map<string, unknown> {
@@ -300,7 +378,12 @@ function sseRewriter(rw: Rewrite): TransformStream<Uint8Array, Uint8Array> {
 export async function proxySchemaNormalizedMcp(
   req: Request,
   label: string,
-  opts: { fetchImpl?: typeof fetch; env?: Record<string, string | undefined> } = {},
+  opts: {
+    fetchImpl?: typeof fetch;
+    env?: Record<string, string | undefined>;
+    /** Test seam: how long the upstream may take to return headers. */
+    headersTimeoutMs?: number;
+  } = {},
 ): Promise<Response> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const target = schemaProxyTarget(label, opts.env);
@@ -314,8 +397,8 @@ export async function proxySchemaNormalizedMcp(
   const softenCallIds = new Set<string>();
 
   if (method !== "GET" && method !== "HEAD") {
-    const raw = await req.arrayBuffer();
-    if (raw.byteLength > MAX_BODY_BYTES) return json(413, { error: "payload_too_large" });
+    const raw = await readBodyWithCap(req, MAX_BODY_BYTES);
+    if (raw === null) return json(413, { error: "payload_too_large" });
     body = new TextDecoder().decode(raw);
     if (method === "POST") {
       let parsed: unknown;
@@ -346,10 +429,22 @@ export async function proxySchemaNormalizedMcp(
   }
 
   let res: Response;
+  const abort = upstreamAbort(req.signal, opts.headersTimeoutMs ?? UPSTREAM_HEADERS_TIMEOUT_MS);
   try {
-    res = await fetchImpl(upstream, { method, headers, body, redirect: "manual", cache: "no-store" });
+    res = await fetchImpl(upstream, {
+      method,
+      headers,
+      body,
+      redirect: "manual",
+      cache: "no-store",
+      signal: abort.signal,
+    });
   } catch {
+    if (req.signal?.aborted) return json(499, { error: "client_closed_request" });
+    if (abort.timedOut()) return json(504, { error: "mcp_upstream_timeout" });
     return json(502, { error: "mcp_upstream_unreachable" });
+  } finally {
+    abort.settle();
   }
 
   const outHeaders = pickHeaders(res.headers, STRIPPED_RESPONSE_HEADERS);
@@ -366,7 +461,13 @@ export async function proxySchemaNormalizedMcp(
     return new Response(res.body.pipeThrough(sseRewriter(rw)), { status: res.status, headers: outHeaders });
   }
   if (type.includes("json")) {
-    const text = await res.text();
+    let text: string;
+    try {
+      text = await res.text();
+    } catch {
+      if (req.signal?.aborted) return json(499, { error: "client_closed_request" });
+      return json(502, { error: "mcp_upstream_unreachable" });
+    }
     return new Response(rewriteJsonBody(text, rw), { status: res.status, headers: outHeaders });
   }
   return new Response(res.body, { status: res.status, headers: outHeaders });
