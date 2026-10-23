@@ -4,6 +4,7 @@
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { asRecord } from "@digithings/ui/lib/record";
 import { p } from "@/lib/base-path";
 import { isAllowedMcpServerUrl } from "@/lib/deploy-config/mcp-servers";
 import { sameOrigin } from "@/lib/fetch-guarded";
@@ -97,12 +98,6 @@ export async function ssrfFetch(
     }
   }
   throw new Error("too_many_redirects");
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 async function readJson(res: Response): Promise<Record<string, unknown> | null> {

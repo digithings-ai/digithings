@@ -98,10 +98,6 @@ export type ResolvedCatalog = {
   picker: ModelPickerView;
 };
 
-export function catalogSource(): string {
-  return catalog.source;
-}
-
 export function catalogModelRate(
   id: string,
 ): { inputPerM: number; outputPerM: number } | undefined {

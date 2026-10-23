@@ -7,6 +7,7 @@ import {
   isEffortCode,
   isSearchEngine,
 } from "@digithings/digichat-ui";
+import { asRecord } from "@digithings/ui/lib/record";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   MCP_ID_RE,
@@ -36,12 +37,6 @@ export function isSessionToolName(name: string): name is SessionToolName {
   return (SESSION_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 function str(args: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     const v = args[k];
@@ -69,7 +64,7 @@ export function applySessionTool(
   rawArgs: unknown,
   api: EmbedChatPrefsApi,
 ): ApplySessionToolResult {
-  const args = asRecord(rawArgs);
+  const args = asRecord(rawArgs) ?? {};
   if (name === "session_set_language") {
     const code = tryResolveLanguageInput(str(args, "code", "language"));
     if (!code) return { ok: false, message: "Unknown language." };
@@ -182,14 +177,14 @@ function toolNameFromType(type: string): string | null {
 export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[] {
   const out: ToolCallHit[] = [];
   for (const msg of messages) {
-    const rec = asRecord(msg);
+    const rec = asRecord(msg) ?? {};
     const role = rec.role;
     if (role && role !== "assistant") continue;
     const bags: unknown[] = [];
     if (Array.isArray(rec.parts)) bags.push(...rec.parts);
     if (Array.isArray(rec.content)) bags.push(...rec.content);
     for (const part of bags) {
-      const p = asRecord(part);
+      const p = asRecord(part) ?? {};
       const type = typeof p.type === "string" ? p.type : "";
       const named =
         (typeof p.toolName === "string" && p.toolName) ||
@@ -201,7 +196,7 @@ export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[]
         if (state === "partial-call" || state === "input-streaming") continue;
       }
       const id = String(p.toolCallId ?? p.id ?? `${named}:${out.length}`);
-      const args = asRecord(p.input ?? p.args ?? p.arguments);
+      const args = asRecord(p.input ?? p.args ?? p.arguments) ?? {};
       out.push({ id, name: named, args });
     }
   }
