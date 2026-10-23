@@ -1,4 +1,5 @@
 import rawModels from "../../../digichat/config/digichat-deploy-models.json";
+import { isRecord } from "@digithings/ui/lib/record";
 
 /**
  * Desk preferences the settings page can change.
@@ -80,10 +81,6 @@ export function normalizeSettings(input: Partial<AppSettings>): AppSettings {
     notify: oneOf(input.notify, NOTIFY_MODES, DEFAULT_SETTINGS.notify),
     chatModel: allowedModel(typeof input.chatModel === "string" ? input.chatModel : ""),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Read a stored document. Unknown fields, including any key, are ignored. */

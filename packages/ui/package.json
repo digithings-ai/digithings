@@ -73,6 +73,7 @@
     "./data/subsystems": "./src/data/subsystems.ts",
     "./ui": "./src/ui/index.ts",
     "./lib/stub-payload": "./src/lib/stub-payload.ts",
+    "./lib/record": "./src/lib/record.ts",
     "./pixel-wordmark": "./src/components/landing/PixelWordmark.tsx"
   },
   "scripts": {

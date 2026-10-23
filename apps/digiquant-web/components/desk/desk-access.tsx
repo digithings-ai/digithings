@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { isRecord } from "@digithings/ui/lib/record";
 import { officialApiBase } from "@/lib/official-api";
 import {
   findDeskId,
@@ -55,10 +56,6 @@ const DeskCtx = createContext<Ctx>({
 });
 
 export const useDeskAccess = () => useContext(DeskCtx);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function failReason(status: number, body: unknown): string {
   if (isRecord(body) && isRecord(body.error) && typeof body.error.message === "string") {

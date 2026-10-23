@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReadResult } from "digiquant-tui/read";
+import { isRecord } from "@digithings/ui/lib/record";
 import { BlockBoundary, KpiGrid, Sparkline, StateBlock, type KpiCell } from "@digithings/ui";
 
 const ROUTE = "/kpis/live";
@@ -22,10 +23,6 @@ const NOT_AVAILABLE = "not available";
 function signedPct(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readPct(payload: Record<string, unknown>, key: string): Read {
