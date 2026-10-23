@@ -780,8 +780,10 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    # House chats: the bare v4.1-flash id streams reasoning_content by default;
-    # the 1017 id does not (live check 2026-10-22), so chats keep this id.
+    # House chats run the 1017 checkpoint (Chris, 23 Oct 2026); this slug stays
+    # its own id so a picker selection is never silently rewritten. 1017 reasons
+    # only when asked — the digichat chain sends reasoning_effort for it — while
+    # the bare id reasons unprompted (live check 2026-10-22).
     "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
     "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",

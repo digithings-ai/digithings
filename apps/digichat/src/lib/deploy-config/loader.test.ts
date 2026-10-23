@@ -415,7 +415,7 @@ deployment:
       "digisearch",
       "digivault",
     ]);
-    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash");
+    expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(cfg.deployment?.models.available).toHaveLength(13);
     expect(cfg.deployment?.models.allowPicker).toBe(true);
     expect(cfg.deployment?.chrome.suggestions).toHaveLength(8);

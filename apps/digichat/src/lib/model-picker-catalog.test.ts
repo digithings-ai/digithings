@@ -139,7 +139,7 @@ describe("model picker catalog", () => {
     const resolved = policy();
     const byId = Object.fromEntries(resolved.picker.presets.map((preset) => [preset.id, preset]));
     expect(byId.auto?.label).toBe("Default");
-    expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash");
+    expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(byId.reasoning?.label).toBe("Reasoning");
     expect(byId.reasoning?.model).toBe("z-ai/glm-5.3-flash");
     expect(byId.fast?.label).toBe("Fast");
@@ -177,6 +177,7 @@ describe("model picker catalog", () => {
     expect([...grouped].sort()).toEqual([...resolved.available].sort());
     expect(grouped).toHaveLength(resolved.available.length);
     const deepseek = resolved.picker.groups[0]?.models ?? [];
+    // Catalog order, not default order: the 1017 checkpoint is listed second.
     expect(deepseek.map((row) => row.id)).toEqual([
       "deepseek/deepseek-v4.1-flash",
       "deepseek/deepseek-v4.1-flash-1017",
@@ -184,7 +185,7 @@ describe("model picker catalog", () => {
     const hidden = resolveModelCatalog({ showFullList: false }, { openRouterConfigured: false });
     expect(hidden.picker.groups).toEqual([]);
     expect(hidden.available).toEqual([
-      "deepseek/deepseek-v4.1-flash",
+      "deepseek/deepseek-v4.1-flash-1017",
       "z-ai/glm-5.3-flash",
       "google/gemini-3.5-flash-lite",
       "openai/gpt-oss-120b",

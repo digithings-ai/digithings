@@ -23,7 +23,7 @@
     {
       "id": "auto",
       "label": "Default",
-      "model": "deepseek/deepseek-v4.1-flash"
+      "model": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
       "id": "reasoning",
