@@ -80,18 +80,36 @@ export function chromePrefsFromDeploy(
     scrollbars?: "always" | "auto" | null;
   } = {},
   storage?: { getItem(key: string): string | null } | null,
+  context: { mobile?: boolean } = {},
 ): Pick<EmbedChatPrefs, "density" | "effort" | "searchEngine" | "toolbar" | "scrollbars"> {
   const effort = input.effort?.trim().toLowerCase();
   return {
     density: resolveTraceDensity(
       storage === undefined ? readStoredDensity() : readStoredDensity(storage),
       input.density,
+      context,
     ),
     effort: effort === "low" || effort === "medium" || effort === "high" ? effort : "medium",
     searchEngine: input.searchEngine?.trim() ?? "",
     toolbar: input.toolbar !== false,
     scrollbars: input.scrollbars === "auto" ? "auto" : "always",
   };
+}
+
+/**
+ * The reset paths (`/new`, `/clear`, `/compact`, the thread's new-thread
+ * button) rebuild chrome from the deployment. Density must resolve exactly the
+ * way the mount effect does — a stored choice first, then the phone default —
+ * or a phone drops back to the deployment rhythm on the first reset and never
+ * returns, because the embed client does not remount. Other chrome still
+ * returns to the deployment.
+ */
+export function resetChromePrefsFromDeploy(
+  input: Parameters<typeof chromePrefsFromDeploy>[0] = {},
+): ReturnType<typeof chromePrefsFromDeploy> {
+  return chromePrefsFromDeploy(input, undefined, {
+    mobile: matchesMobileDensityViewport(),
+  });
 }
 
 /**

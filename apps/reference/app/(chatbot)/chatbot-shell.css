@@ -3,6 +3,10 @@
 @import "tailwindcss" source(none);
 @import "@digithings/design/tokens.css";
 @import "@digithings/ui/styles/web-theme.css";
+/* The Thread's density token set (--density-*, --composer-padding) lives in
+   chat-aui.css. The gallery app loads it from its globals; this shell must load
+   it directly, or the composer falls back to padding 0. */
+@import "@digithings/ui/styles/chat-aui.css";
 @import "@digithings/ui/styles/digichat-launcher.css";
 @import "tw-animate-css";
 

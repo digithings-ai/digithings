@@ -143,3 +143,16 @@ describe("density tokens", () => {
     expect(aui).not.toMatch(/--composer-padding:\s*8px/);
   });
 });
+
+describe("composer padding token", () => {
+  it("is loaded by every shell that mounts the gallery Thread", () => {
+    // apps/reference/(chatbot) mounts the Thread and imports chat-digichat.css,
+    // but never app/globals.css — so its shell must load chat-aui.css itself or
+    // var(--composer-padding) is undefined and the composer padding resolves to 0.
+    const shell = readFileSync(
+      join(here, "../../../../apps/reference/app/(chatbot)/chatbot-shell.css"),
+      "utf8",
+    );
+    expect(shell).toContain('@import "@digithings/ui/styles/chat-aui.css";');
+  });
+});

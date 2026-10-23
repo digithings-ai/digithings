@@ -2452,7 +2452,7 @@ html:has(.aui-theme-stage) :focus-visible {
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-literal { color: color-mix(in oklab, var(--ink-soft) 70%, #b48ef0); }
 
 /* DENSITY: the assistant footer reserves the action bar's row (min-h-7.5 +
-   pt-1.5, ~36px) only while it has something to show. On earlier turns the
+   pt-1.5, ~30px) only while it has something to show. On earlier turns the
    bar autohides (`autohide="not-last"`) and the branch picker hides on a single
    branch, so an empty footer collapses and the message-group gap alone spaces
    assistant → user. When the bar appears (hover, or always on the last turn)
@@ -2460,22 +2460,4 @@ html:has(.aui-theme-stage) :focus-visible {
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"]:not(:has(> *)) {
   min-height: 0;
   padding-top: 0;
-}
-
-/* DENSITY: on earlier turns the action bar floats (`autohideFloat="always"`
-   sets data-floating while the turn is hovered). The footer keeps height 0 and
-   the bar overlays the message gap just below the last line, so hovering never
-   shifts the thread. The last turn's bar is not floating and stays in flow. */
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"]:has(> [data-floating]) {
-  position: relative;
-  min-height: 0;
-  padding-top: 0;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"] > .aui-assistant-action-bar-root[data-floating] {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 20;
-  background: var(--background);
 }

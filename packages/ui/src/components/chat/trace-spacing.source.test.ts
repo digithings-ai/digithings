@@ -132,10 +132,22 @@ describe("worked chain spacing tokens", () => {
     expect(rule?.[1]).not.toContain("1.5rem");
   });
 
-  it("floats the earlier turns' action bar over the gap instead of taking a row", () => {
-    expect(skin).toMatch(
-      /\[data-slot="aui_assistant-message-footer"\]:has\(> \[data-floating\]\) \{[^}]*min-height: 0/,
+  it("keeps the earlier turns' action bar in flow so it never paints over the next turn", () => {
+    // The bar is 24px tall; the message gap is 12/8/20px by density. A float
+    // would necessarily cover the next turn's first line, so the bar takes its
+    // footer row back in flow when it appears on hover.
+    expect(skin).not.toMatch(/\.aui-assistant-action-bar-root\[data-floating\]/);
+    expect(skin).not.toMatch(
+      /\[data-slot="aui_assistant-message-footer"\]:has\(> \[data-floating\]\)/,
     );
-    expect(skin).toMatch(/\.aui-assistant-action-bar-root\[data-floating\] \{[^}]*position: absolute/);
+    const thread = readFileSync(
+      join(stylesDir, "..", "components", "chat", "gallery-thread", "thread.aui.tsx"),
+      "utf8",
+    );
+    expect(thread).not.toContain("autohideFloat");
+    // The un-hovered turn still collapses to the message gap.
+    expect(skin).toMatch(
+      /\[data-slot="aui_assistant-message-footer"\]:not\(:has\(> \*\)\) \{[^}]*min-height: 0/,
+    );
   });
 });
