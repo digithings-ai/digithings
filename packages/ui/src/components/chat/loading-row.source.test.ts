@@ -85,4 +85,25 @@ describe("one loading row", () => {
     expect(notice).toMatch(/aui-chat-notice-marker !size-3/);
     expect(notice).not.toMatch(/text-sm/);
   });
+
+  it("pins the pre-response row so the work chain cannot push it down", () => {
+    const css = readStyle("chat-digichat.css");
+    // The chain's part comes before the indicator in the message stream and the
+    // assistant content is a flex column with a gap, so the moment the chain
+    // mounts the gap alone pushes the marker down — the visible jump at the
+    // handoff. The row is pinned to the content's top edge and the content keeps
+    // the row's height while the row is alone, so the chain grows underneath it
+    // (#4459). Scoped to the digichat skin: the base skin renders the indicator
+    // without the hasContent guard, so overlaying it there would hide a live
+    // chain trigger.
+    expect(css).toMatch(
+      /\[data-thread-skin="digichat"\]\s*\[data-slot="aui_assistant-message-content"\]:has\(\s*> \[data-slot="aui_assistant-message-indicator"\]\s*\) \{[\s\S]*?position: relative;[\s\S]*?min-height: 0\.75rem;/,
+    );
+    expect(css).toMatch(
+      /\[data-thread-skin="digichat"\]\s*\[data-slot="aui_assistant-message-content"\]\s*> \[data-slot="aui_assistant-message-indicator"\] \{[\s\S]*?position: absolute;[\s\S]*?inset-block-start: 0;/,
+    );
+    expect(css).not.toMatch(
+      /:is\(\.aui-theme-stage, \[data-thread-skin="digichat"\]\)\s*\[data-slot="aui_assistant-message-content"\]:has\(/,
+    );
+  });
 });
