@@ -21,8 +21,6 @@ tuples. Canonical IDs and content hashes are independent of input list ordering.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -37,6 +35,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 # Stable UUID5 namespaces — do not change; persisted IDs would diverge.
 _EVIDENCE_ID_NS = UUID("c1a0e501-4b8d-5f2a-9c17-3d6e8f0a1b22")
@@ -120,13 +120,9 @@ def _require_utc(value: AwareDatetime, *, field_name: str) -> AwareDatetime:
     return value
 
 
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def content_digest(payload: object) -> str:
     """SHA-256 over canonical JSON (ordering-independent for sorted structures)."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def _coerce_uuid_tuple(value: object) -> object:
