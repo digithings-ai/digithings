@@ -235,6 +235,20 @@ class TestMergeRightWinsDictReducer:
 
 
 @pytest.mark.unit
+def test_dead_strict_specialist_reducer_is_gone() -> None:
+    """Audit P0: ``_merge_specialist_dict`` had zero references.
+
+    It was the only reducer that raised on an inner-axis collision, and it was
+    never wired into the graph — the strict guard was decorative. Wiring it
+    would have changed merge behaviour, so it was deleted; the two live
+    reducers carry the policies the graph actually uses.
+    """
+    from digiquant.research import state as state_module
+
+    assert not hasattr(state_module, "_merge_specialist_dict")
+
+
+@pytest.mark.unit
 class TestKnowledgeCutoff:
     """WP4.1 (#2628): one UTC knowledge boundary per run."""
 

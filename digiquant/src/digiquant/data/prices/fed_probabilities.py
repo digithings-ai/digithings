@@ -42,14 +42,19 @@ _USER_AGENT = "digiquant-research/1.0 (+https://digiquant.io)"
 _UNIT = "probability"
 
 
-def _opt_float(value: Any) -> float | None:
+def _opt_probability(value: Any) -> float | None:
+    """A prediction-market price in ``[0, 1]``, or ``None``.
+
+    Deliberately not ``digiquant.scalars.opt_float``: a price outside the unit
+    interval is a bad row, not a number to pass through.
+    """
     if value is None or value == "":
         return None
     try:
         out = float(value)
     except (TypeError, ValueError):
         return None
-    return out if 0.0 <= out <= 1.0 else None  # prediction-market prices are in [0, 1]
+    return out if 0.0 <= out <= 1.0 else None
 
 
 def _meeting_date_from_iso(value: Any) -> str | None:
@@ -80,12 +85,12 @@ def kalshi_markets_to_rows(markets: list[dict[str, Any]], *, as_of: date) -> lis
         meeting = _meeting_date_from_iso(m.get("close_time"))
         if strike is None or meeting is None:
             continue
-        bid = _opt_float(m.get("yes_bid_dollars"))
-        ask = _opt_float(m.get("yes_ask_dollars"))
+        bid = _opt_probability(m.get("yes_bid_dollars"))
+        ask = _opt_probability(m.get("yes_ask_dollars"))
         if bid is not None and ask is not None:
             prob = round((bid + ask) / 2.0, 4)
         else:
-            prob = _opt_float(m.get("last_price_dollars"))
+            prob = _opt_probability(m.get("last_price_dollars"))
         if prob is None:
             continue
         try:
@@ -193,9 +198,9 @@ def polymarket_events_to_rows(
             prices = _json_list(m.get("outcomePrices"))
             yes_prob: float | None = None
             if "yes" in outcomes and len(prices) == len(outcomes):
-                yes_prob = _opt_float(prices[outcomes.index("yes")])
+                yes_prob = _opt_probability(prices[outcomes.index("yes")])
             if yes_prob is None:
-                yes_prob = _opt_float(m.get("lastTradePrice"))
+                yes_prob = _opt_probability(m.get("lastTradePrice"))
             slug = str(m.get("slug") or m.get("question") or "").strip()
             if yes_prob is None or not slug:
                 continue

@@ -51,6 +51,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _rows_for_date,
 )
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import decimal_or_raise
 
 POLICY_VERSION_ID = "ledger_reconvergence"
 CASH = "CASH"
@@ -107,10 +108,6 @@ class ReconPlan:
 
 def _recon_id(kind: str, day: date, symbol: str = "") -> UUID:
     return uuid5(_RECON_ID_NAMESPACE, f"{kind}:{day.isoformat()}:{symbol}")
-
-
-def _decimal(value: Any) -> Decimal:
-    return Decimal(str(value))
 
 
 def _quantize_qty(value: Decimal) -> Decimal:
@@ -171,7 +168,7 @@ def _read_book(client: SupabaseClient, *, book_date: date) -> dict[str, Decimal]
         raw = row.get("weight_pct")
         if not symbol or symbol == CASH or raw is None:
             continue
-        weights[symbol] = _decimal(raw)
+        weights[symbol] = decimal_or_raise(raw)
     return weights
 
 
@@ -187,7 +184,7 @@ def _read_nav(client: SupabaseClient, *, day: date) -> Decimal:
     rows = resp.data or []
     if not rows or rows[0].get("nav") is None:
         raise ValueError(f"no nav_history row for {day.isoformat()}")
-    return _decimal(rows[0]["nav"])
+    return decimal_or_raise(rows[0]["nav"])
 
 
 def _marks(client: SupabaseClient, *, day: date, symbols: set[str]) -> dict[str, Decimal]:
@@ -196,7 +193,7 @@ def _marks(client: SupabaseClient, *, day: date, symbols: set[str]) -> dict[str,
     marks: dict[str, Decimal] = {}
     for symbol, close in raw.items():
         if close and close > 0:
-            marks[symbol] = _decimal(close)
+            marks[symbol] = decimal_or_raise(close)
     return marks
 
 
@@ -347,7 +344,7 @@ def plan_convergence(
         if not symbol or symbol == CASH or raw_weight is None or not raw_day:
             continue
         day = date.fromisoformat(raw_day)
-        by_day.setdefault(day, {})[symbol] = _decimal(raw_weight)
+        by_day.setdefault(day, {})[symbol] = decimal_or_raise(raw_weight)
     if not by_day:
         raise ValueError(
             f"no positions rows between {start.isoformat()} and {book_date.isoformat()}"
