@@ -954,7 +954,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
-      "count": 15,
+      "count": 12,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_digichat_aca_secret_detector.py": {

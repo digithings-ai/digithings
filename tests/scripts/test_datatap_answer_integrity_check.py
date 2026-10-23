@@ -2617,10 +2617,10 @@ def test_with_nothing_given_the_target_is_still_datatap_stream() -> None:
     """
     code, fake = _run_main(_both_probes_clean())
     assert code == mod.OK
-    assert fake.calls[0]["url"] == "https://datatap.stream/chat"
+    assert fake.calls[0]["url"] == mod.DISCOVERY_URL
     chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
-    assert chat["headers"]["X-Embed-Host"] == "datatap.stream"
-    assert chat["headers"]["Origin"] == "https://datatap.stream"
+    assert chat["headers"]["X-Embed-Host"] == mod.EMBED_HOST
+    assert chat["headers"]["Origin"] == f"https://{mod.EMBED_HOST}"
 
 
 # --------------------------------------------------------------------------
