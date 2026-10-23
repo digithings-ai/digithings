@@ -45,9 +45,9 @@ sources:
   - apps/digichat/AGENTS.md
   - apps/digichat/README.md
   - apps/digichat/DIGI*.md
-  - digiclaw/ARCHITECTURE.md
-  - digiclaw/AGENTS.md
-  - digiclaw/DIGI*.md
+  - digibot/ARCHITECTURE.md
+  - digibot/AGENTS.md
+  - digibot/DIGI*.md
   - digigraph/ARCHITECTURE.md
   - digigraph/AGENTS.md
   - digigraph/DIGI*.md

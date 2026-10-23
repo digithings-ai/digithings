@@ -70,7 +70,7 @@ cutover; mono renamed private then archived):
 `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`,
 `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
 `CURSOR_API_KEY`), `DIGISEARCH_SEED_API_KEY`, `DIGIGRAPH_UPSTREAM_API_KEY`,
-`DIGICLAW_DIGIKEY_API_KEY`, `DIGIQUANT_VAULT_MASTER_KEY`,
+`DIGIBOT_DIGIKEY_API_KEY`, `DIGIQUANT_VAULT_MASTER_KEY`,
 `E2E_BEARER_TOKEN`, `DIGISEARCH_MONITORS_DB`.
 Worker `[vars]` (non-secret config such as `SUPABASE_URL` public anon URL,
 `DIGICHAT_EMBED_HOSTS`, `DIGISEARCH_URL`) are not secrets and stay as vars;
@@ -190,7 +190,7 @@ and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
 
 `digithings-local/CHEAPERINFERENCE_API_KEY`,
 `digithings-local/DIGICHAT_API_KEY`,
-`digithings-local/DIGICLAW_DIGIKEY_API_KEY`,
+`digithings-local/DIGIBOT_DIGIKEY_API_KEY`,
 `digithings-local/DIGIGRAPH_UPSTREAM_API_KEY`,
 `digithings-local/DIGIKEY_ADMIN_TOKEN`,
 `digithings-local/DIGIKEY_BFF_TOKEN`,

@@ -29,7 +29,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `test-digibase.yml` | Test: digibase | workflow_call | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
 | `test-digichat.yml` | Test: digichat | workflow_call | digichat (Next.js) lint + tests | Working | `apps/digichat/**`, `packages/design/**`, `package.json` |
 | `publish-digichat-image.yml` | Publish: digichat image | push (tag `digichat-v*`), dispatch (`tag`) | Build + push the digichat image to GHCR from a `digichat-vX.Y.Z` tag; refuses when the tag's version ≠ `apps/digichat/package.json`, no-ops on an already-published version, passes `DIGICHAT_REVISION=<tag commit>`, then re-verifies the pushed image with `scripts/check_digichat_image_binding.py`. Restored in DIG-1294 (lane A of [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md)) — **build only**: no `azure/login`, no `id-token: write`, no `environment:`, so it holds no credential that could reach a customer Container App. | Working (restored) | `apps/digichat/**` |
-| `test-digiclaw.yml` | Test: digiclaw | workflow_call | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
+| `test-digibot.yml` | Test: digibot | workflow_call | digibot unit tests | Working | `digibot/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
 | `pipeline-digiquant-prices.yml` | Pipeline: digiquant prices | dispatch only (Cloudflare Worker clock dispatches the at-open/EOD slots; schedules removed #3780/#4053) | Market-open `position_events` + calendar sync; macro writes gated behind `run_writers`; price/technicals ingest retired (#4053 — the R2 refresh owns it; Supabase tables dropped in 127) | Working | none |
@@ -283,7 +283,7 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 - `PR quality gate` → (no matching file; legacy name — see Known Issues)
 - `digibase tests` → `test-digibase.yml`
 - `digichat tests` → `test-digichat.yml`
-- `digiclaw tests` → `test-digiclaw.yml`
+- `digibot tests` → `test-digibot.yml`
 - `digigraph tests` → `test-digigraph.yml`
 - `digikey tests` → `test-digikey.yml`
 - `digiquant tests` → `test-digiquant.yml`

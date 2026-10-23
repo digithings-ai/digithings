@@ -1,7 +1,7 @@
 """Phase C monitor HTTP API (#4065, Task 6).
 
 Pins the §4.6 surface: watch CRUD, manual/poll trigger, run history, the
-digiclaw wake-up tick, and the auth-exempt but secret-gated EXA webhook, plus
+digibot wake-up tick, and the auth-exempt but secret-gated EXA webhook, plus
 the R10 parameterized rate-limit matcher.
 
 Offline only: the runner's shallow-recall boundary is stubbed (the Task 4

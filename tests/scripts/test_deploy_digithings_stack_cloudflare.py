@@ -191,7 +191,7 @@ def test_the_push_filter_covers_every_tree_the_image_bakes_in() -> None:
     paths = set(_triggers(_stack_spec())["push"]["paths"])
     for tree in (
         "digibase",
-        "digiclaw",
+        "digibot",
         "digifetch",
         "digigraph",
         "digikey",

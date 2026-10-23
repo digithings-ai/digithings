@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of

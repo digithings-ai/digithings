@@ -57,8 +57,8 @@ const ROWS: TerminalManifestRow[] = [
       "the forge's ledger — traces, spans, and token spend for every\nagent hop.\n\nstack   OpenTelemetry  ·  FastAPI",
   },
   {
-    id: "digiclaw",
-    name: "digiclaw",
+    id: "digibot",
+    name: "digibot",
     status: "roadmap",
     blurb: "heartbeat + audit",
     detail: "heartbeat and audit trail for the whole stack — on the roadmap.",
