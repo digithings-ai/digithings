@@ -290,3 +290,30 @@ Static export + `trailingSlash` means a new page needs a `PAGES` entry or it
 404s. Invite gating is client-side post-hydration; do not turn it into a server
 check in this epic. Never touch `digiquant/brokers/**` or the auth/entitlement
 path.
+
+## Coordination — concurrent digithings.ai session
+
+Another opencode session, `digiquant-grid-steals-page-focus`, is doing mostly
+digithings.ai work **in the main checkout** (`task/auto-default-model` at
+`d5b78c51e1` + uncommitted changes). Its current diff touches:
+
+- `apps/digithings-web/app/{_nav.tsx,page.tsx,globals.css}`
+- `apps/digithings-web/components/{DtNav.tsx,landing/*}`
+- `packages/ui/src/components/{NavShell.tsx,data-layout/ModuleGrid.tsx,diagrams/ArchitectureTour.tsx}`
+- `packages/ui/src/navigation/HashScrollManager.tsx`
+- `packages/ui/src/styles/{diagrams,nav-shell,web-theme}.css`
+
+Rules for this epic:
+
+1. **Do not edit those paths** in any slice while that session is active. U8
+   (landing) is computed but its branch is **HOLD**: at merge time keep only
+   metadata/copy/a11y hunks that do not touch nav, grid, `_nav.tsx`,
+   `globals.css` or the shared UI files above; drop overlapping hunks.
+2. U9 (docs) and U10 (variants) are disjoint and continue.
+3. Wave 2 runs **U6 digiquant home, U11 hero-banner, UC1 desk primitives** —
+   none of which touch the digithings.ai nav/grid surface.
+4. Defer **U2 website `/chat`** until the concurrent session lands, because it
+   may touch `ChatEmbedShell` and nav chrome.
+5. At convergence, rebase `feat/deslop-epic` onto the new `develop` (or onto the
+   other session's merged work) and re-run the full gate set. Do not resolve a
+   conflict by reverting the other session's focus/resize fixes.
