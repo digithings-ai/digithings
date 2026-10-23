@@ -1,6 +1,17 @@
+import type { Metadata } from "next";
+
 import BookToc from "@/components/book/BookToc";
 import PagedBoot from "@/components/book/PagedBoot";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
+
+/**
+ * The print artefact is a rendering of the same book content with PagedJS
+ * chrome; it is not a destination page. Keep it out of the index (searchers
+ * want /book, which is where we send them instead).
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 /**
  * The whole book as one continuous document — the thing that gets printed
@@ -66,15 +77,17 @@ export default async function BookPrintPage() {
           {/* Anchors the front matter's page references resolve against. */}
           <div data-book-anchor={chapter.href} />
           <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
-          <h1 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h1>
+          {/* The book title above is the page's single h1; chapter openers
+              sit one level below it so the printed outline stays in order. */}
+          <h2 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h2>
           <p className="mb-6 max-w-[64ch] text-ink-soft">{chapter.summary}</p>
           <Opener />
           {sections.map(({ section, Body }) => (
             <div key={section.slug} className="book-section">
               <div data-book-anchor={section.href} />
-              <h2 className="mt-12 mb-4 font-display text-[1.6rem] leading-[1.15] tracking-[-0.01em] text-ink">
+              <h3 className="mt-12 mb-4 font-display text-[1.6rem] leading-[1.15] tracking-[-0.01em] text-ink">
                 {String(chapter.order).padStart(2, "0")}.{section.order} {section.title}
-              </h2>
+              </h3>
               <Body />
             </div>
           ))}
