@@ -326,6 +326,18 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   proves nothing about a client says so instead of reading green (DIG-5203).
 - **Fails closed on a missing input.** If the review record or the PR body cannot
   be read, the check fails; it does not assume the best.
+- **A stalled checkout is retried, not a verdict.** The checkout of the checks
+  worktree gets minutes, not a quarter of an hour, and a checkout that stalls
+  is retried in place once: a rebuild repeats the same lazy fetch that stalled,
+  so a slow network is not a broken worktree. A checkout that lands on another
+  HEAD is a broken worktree, and that one is rebuilt (DIG-5285).
+- **A worktree the runner does not own is never rebuilt.** A rebuild removes
+  files, so it is allowed only for a worktree of this repository, and only
+  when it has no uncommitted changes (DIG-5285).
+- **A rebuild keeps the caches.** `.venv` and `node_modules` are the two
+  directories the clean step protects; a rebuild moves them aside and puts them
+  back, so a repaired worktree does not turn into an hour of `uv sync` and
+  `npm ci` (DIG-5285).
 - **Static gates, plus two path-gated lanes.** The worker dry-run build and the
   bun suites run only for the paths that need them. Per-package pytest suites,
   compose validation, npm and pip audit, token canary, secret staleness,

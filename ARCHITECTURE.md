@@ -24,7 +24,7 @@ digithings (digithings.ai) is an open-core modular agentic stack for building co
 | **Ollama** | 11435 (host) | Local LLM inference (maps to container port 11434) | None | core | No | Shipped |
 | **digichat** | 3005 | Next.js BFF + React chat UI; Auth.js OIDC; machine API keys | OIDC session or Bearer API key | digichat | No | Shipped |
 | **digichat-DB** | 5433 | Postgres 16 for digichat conversations and API keys | Postgres credentials | digichat | No | Shipped |
-| **digiclaw** (heartbeat) | — | Heartbeat agent; health polling; JSONL audit; ADDM drift trigger | None (internal cron) | heartbeat | No (Phase 2) | Partial (Phase 3) |
+| **digibot** (heartbeat) | — | Heartbeat agent; health polling; JSONL audit; ADDM drift trigger | None (internal cron) | heartbeat | No (Phase 2) | Partial (Phase 3) |
 | **digibase** (service) | TBD | Data-plane broker: managed Postgres/Redis/object credentials | digikey-scoped tokens | not shipped | No | Roadmap |
 
 **Notes:**
@@ -106,18 +106,18 @@ sequenceDiagram
 
 ## 4. MCP Server Topology
 
-MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, digisearch, and digivault each expose MCP servers. digikey, digitrace, and digiclaw do not (digiclaw MCP integration is Phase 2).
+MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, digisearch, and digivault each expose MCP servers. digikey, digitrace, and digibot do not (digibot MCP integration is Phase 2).
 
 | Component | MCP Server Command | Host Port | Exposed Tools (examples) | Typical Clients |
 |-----------|-------------------|-----------|--------------------------|-----------------|
-| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 (streamable-http) or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digiclaw (Phase 2), IDE plugins, Claude Desktop |
+| **digigraph** | `python -m digigraph.mcp_server` (install: `pip install -e "digigraph[mcp]"`); in the cloudflare stack, loopback `:8766` inside `DigiStackContainer` via the `digigraph-mcp` supervisord program (no public route yet) | 8766 (streamable-http) or stdio | `workflow`, `chat`, `thread_state`, `list_orchestrator_tools`, `list_orchestrator_tools_detailed` | digibot (Phase 2), IDE plugins, Claude Desktop |
 | **digiquant** | `python -m digiquant.mcp_server` | 8767 (streamable-http) or stdio | `digiquant_run_pipeline`, `digiquant_list_strategies`, `run_backtest`, `run_optimize`, `run_validation` | digigraph (invokes via HTTP orchestrator), power-user IDE |
 | **digisearch** | `docker compose --profile digisearch-mcp up` → container port 8765; in the cloudflare stack, `:8765` inside `DigiStackContainer` via the `digisearch-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route | 8765 (streamable-http) | `semantic`, `digisearch_fetch_all`, `research_turn` (with `digisearch[agent]`), `digisearch_research_delegate` | digigraph (invokes via HTTP orchestrator), Langflow, IDE |
 | **digivault** | `docker compose --profile digivault-mcp up` → container port 8769; in the cloudflare stack, `:8769` inside `DigiStackContainer` via the `digivault-mcp` supervisord program, reachable only through the key-gated `/_stack/mcp/digivault/*` edge route | 8769 (streamable-http) | `digivault_search_notes`, `digivault_search_tag`, `digivault_backlinks`, `digivault_lint` (`digivault_create_note` only when `DIGIVAULT_MCP_WRITE=1`) | digigraph (invokes via HTTP orchestrator), IDE |
 
 **Design notes:**
 
-- For normal chat operation, digigraph does **not** connect to digisearch/digiquant via MCP. It uses HTTP (`POST /v1/orchestrator_tools` + `/v1/orchestrator_invoke`) for vertical dispatch. MCP servers are for external clients (IDEs, digiclaw, Langflow) that want to attach directly to a vertical.
+- For normal chat operation, digigraph does **not** connect to digisearch/digiquant via MCP. It uses HTTP (`POST /v1/orchestrator_tools` + `/v1/orchestrator_invoke`) for vertical dispatch. MCP servers are for external clients (IDEs, digibot, Langflow) that want to attach directly to a vertical.
 - digigraph's own MCP server exposes the hub workflow surface. Clients that want single-entry-point access should connect here.
 - All four MCP servers default to the **streamable-http** transport on loopback with distinct ports — digigraph `8766`, digiquant `8767`, digisearch `8765`, digivault `8769` — so they can run side by side. digigraph, digiquant, and digivault also offer `--stdio` for trusted local clients (Claude Desktop); digisearch is streamable-http only (its CLI exposes `--config`/`--port`, no `--stdio`).
 - Use **hub-only** (digigraph MCP) when you want one digikey allowlist and unified trace stream. Use **direct vertical MCP** (digisearch or digiquant MCP) when a client should bypass digigraph.
@@ -145,7 +145,7 @@ make up
 
 ### Profile: `heartbeat`
 
-**Adds:** `heartbeat` container (Python 3.12-slim running `python -m digiclaw` in a loop every 1800 seconds)
+**Adds:** `heartbeat` container (Python 3.12-slim running `python -m digibot` in a loop every 1800 seconds)
 
 **When to use:** Production-style monitoring; ADDM drift detection; periodic health checks logged to JSONL audit.
 
@@ -355,7 +355,7 @@ Prohibited in spans: raw prompts, API keys, bearer tokens, file paths outside ap
 
 ### Layer 2: Audit Logs
 
-**JSONL append-only audit:** digiclaw (`digiclaw/audit.py`) and digiquant (`digiquant/audit.py`) write structured JSONL to `AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). digigraph writes `workflow_start`, `workflow_end`, and `tool_denied` events to the same path.
+**JSONL append-only audit:** digibot (`digibot/audit.py`) and digiquant (`digiquant/audit.py`) write structured JSONL to `AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). digigraph writes `workflow_start`, `workflow_end`, and `tool_denied` events to the same path.
 
 **Event fields (standard):** `event_type`, `agent_id`, `request_id`, `workflow_id`, `timestamp`, `payload` (redacted). Secret keys are stripped by `audit_log()` before writing.
 
@@ -363,7 +363,7 @@ Prohibited in spans: raw prompts, API keys, bearer tokens, file paths outside ap
 
 ### Layer 3: Health and Status
 
-Every service exposes `GET /health` returning `{"status": "ok"}` (used by Docker Compose healthchecks and digiclaw heartbeat). digichat exposes `GET /api/health` which also checks the digigraph upstream and Postgres connection.
+Every service exposes `GET /health` returning `{"status": "ok"}` (used by Docker Compose healthchecks and digibot heartbeat). digichat exposes `GET /api/health` which also checks the digigraph upstream and Postgres connection.
 
 digichat's ecosystem side panel displays health badges for digigraph, digiquant, digitrace, and digisearch (configurable via `DIGICHAT_ENABLED_SERVICES`).
 
@@ -607,7 +607,7 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | digisearch | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
 | digitrace | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | digibase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
-| digiclaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
+| digibot | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | digikey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
 | digichat | [apps/digichat/ARCHITECTURE.md](apps/digichat/ARCHITECTURE.md) |
 | Frontend umbrella (ADR-0009) | [docs/adr/0009-frontend-umbrella.md](docs/adr/0009-frontend-umbrella.md) |

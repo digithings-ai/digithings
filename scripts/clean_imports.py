@@ -28,7 +28,7 @@ DEFAULT_PATHS = [
     "digiquant/src",
     "digisearch/src",
     "digitrace/src",
-    "digiclaw",
+    "digibot",
     "digibase/src",
     "digikey/src",
     "scripts",

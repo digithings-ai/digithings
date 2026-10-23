@@ -728,7 +728,7 @@ instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
 Entry point: `digiquant.research.graph.build_research_graph` plus `ResearchInput`.
-digiclaw (issue #219) invokes this on a cron schedule.
+digibot (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
 

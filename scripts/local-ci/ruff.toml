@@ -1,7 +1,9 @@
-# This directory is a verbatim copy of the host CI runner that posts the `local-ci`
-# status (see README.md here). The copy is deliberate: the exact bytes that run on
-# the host are reviewable in the repo, so reformatting them would destroy the audit
-# trail and turn every future sync into a manual merge.
+# This directory holds the reviewable copy of the host CI runner that posts the
+# `local-ci` status (see README.md here). The host copy in ~/Code/local-ci is
+# its own checkout and has diverged from this repository - it carries the
+# post-merge driver, which is not in this repository at all - so the two are
+# synced deliberately, not copied over. Do not read this file as "the host runs
+# exactly these bytes".
 #
 # E701/E702 are the compact one-line style that script has always used. They are the
 # only rules waived, and only here. Everything else in the root config still applies.

@@ -202,10 +202,10 @@ task/4912-digiquant--update-simulator-cron-schedul	2026-10-01	1	merged	4914	dele
 task/4927-digibase-otlp-headers	2026-10-01	1	merged	4934	delete-safe	T0-free	task
 task/4947-digivoice-banner-v58	2026-10-01	1	merged	4950	delete-safe	T0-free	task
 module/digibase	2026-09-11	12	merged	2174	long-lived-module-branch	T2-decide	module
-module/digiclaw	2026-09-11	10	merged	2179	long-lived-module-branch	T1-small	module
+module/digibot	2026-09-11	10	merged	2179	long-lived-module-branch	T1-small	module
 chore/sync-module-digibase-to-develop	2026-09-09	8	merged	3750	long-lived-module-branch	T1-small	chore
 module/digismith	2026-09-09	7	merged	2178	long-lived-module-branch	T0-free	module
-chore/sync-module-digiclaw-to-develop	2026-09-09	6	merged	3751	long-lived-module-branch	T0-free	chore
+chore/sync-module-digibot-to-develop	2026-09-09	6	merged	3751	long-lived-module-branch	T0-free	chore
 chore/sync-module-digismith-to-develop	2026-09-09	6	merged	3758	long-lived-module-branch	T0-free	chore
 module/digikey	2026-09-09	5	merged	2492	long-lived-module-branch	T0-free	module
 chore/sync-module-digikey-to-develop	2026-09-09	4	merged	3753	long-lived-module-branch	T0-free	chore

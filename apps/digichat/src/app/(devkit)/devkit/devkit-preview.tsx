@@ -66,7 +66,7 @@ const PREFS_DEPS = {
     models: readonly string[];
     defaultModel?: string;
     modelPicker?: {
-      presets: readonly { id: string; label: string; description: string; model: string }[];
+      presets: readonly { id: string; label: string; model: string }[];
       groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
       showFullList: boolean;
     };

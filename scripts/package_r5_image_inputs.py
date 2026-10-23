@@ -40,7 +40,7 @@ STACK_PACKAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("digillm", ()),
     ("digigraph", ("mcp",)),
     ("digifetch", ()),
-    ("digiclaw", ()),
+    ("digibot", ()),
     ("digisearch", ("server", "ingestion", "chroma", "web-search", "embedding-multilingual")),
     ("digivault", ("service",)),
 )

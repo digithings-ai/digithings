@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode } from "react";
 import type { EmbedChatPrefsApi } from "../stock/embed-chat-prefs";
 import { DigichatContextMeter } from "./digichat-context-meter";
+import { DigichatUsageMeter } from "./digichat-usage-meter";
 
 /**
  * Plain-text composer footer for the digichat skin. Shows the selected
@@ -138,7 +139,13 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
         </Fragment>
       ))}
       <span className="aui-composer-meta-spacer" aria-hidden />
-      {prefs.showContextMeter ? (
+      {/* A gate budget outranks the context estimate: it is the number that
+          stops the visitor, and it is available even when the backend
+          reports no token usage at all (a Foundry agent). A zero budget is
+          not a meter, so it falls through to the context slot. */}
+      {prefs.usage && prefs.usage.limit > 0 ? (
+        <DigichatUsageMeter usage={prefs.usage} />
+      ) : prefs.showContextMeter ? (
         <DigichatContextMeter
           model={meterModel}
           toolCount={mcpToolTotal + prefs.catalogTools.length}

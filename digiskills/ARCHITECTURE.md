@@ -261,7 +261,7 @@ stripped).
 
 `tests/dsk/test_dogfood.py` (P2) compiles every digithings module's real
 `ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digitrace,
-digiclaw, digibase, digikey, digivault, digifetch, digillm, digiskills,
+digibot, digibase, digikey, digivault, digifetch, digillm, digiskills,
 digichat) through the full pipeline with `TemplateSynthesizer`, asserting a
 clean compile (no truncation warnings) and a well-formed, round-trippable
 `SKILL.md` whose references carry every source doc through verbatim. The

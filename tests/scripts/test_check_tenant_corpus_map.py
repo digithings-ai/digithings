@@ -248,10 +248,11 @@ def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
     assert len(set(prompts.values())) == 1, "occ researchSystemPrompt drifted across maps"
 
 
-def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
-    """digithings entries stay prompt-free in all three maps (generic project prompt)."""
+def test_real_blobs_digithings_prompt_parity(ccm: Any) -> None:
+    """Each map's digithings entry carries the same short house prompt."""
     raw = _load_raw_corpus_maps(ccm)
-    for name, blob in raw.items():
-        entry = blob["digithings"]
-        assert "researchSystemPrompt" not in entry, f"{name}[digithings] carries a prompt"
-        assert "research_system_prompt" not in entry, f"{name}[digithings] carries a prompt"
+    prompts = {
+        name: blob["digithings"].get("researchSystemPrompt") for name, blob in raw.items()
+    }
+    assert all(isinstance(p, str) and "Web search is on." in p for p in prompts.values()), prompts
+    assert len(set(prompts.values())) == 1, "digithings researchSystemPrompt drifted across maps"

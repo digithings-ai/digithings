@@ -21,7 +21,7 @@ Fixes #
 - [ ] digiquant
 - [ ] digisearch
 - [ ] digitrace
-- [ ] digiclaw
+- [ ] digibot
 - [ ] digibase
 - [ ] digikey
 - [ ] digichat

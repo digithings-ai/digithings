@@ -1,22 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
-import { DIGICLAW } from "../src/definitions";
+import { DIGIBOT } from "../src/definitions";
 import { preparedBanner, sampleBanner, terminalFit } from "../src/engine";
 import { litCells, pixelAt } from "../src/layout";
 import { HEADROOM, liveEvent, type ClawState } from "../src/animations/claw";
 import type { Frame } from "../src/types";
 
-const { layout } = preparedBanner(DIGICLAW);
-const state = preparedBanner(DIGICLAW).state as ClawState;
-const loadingMs = DIGICLAW.animation.loadingMs(state);
+const { layout } = preparedBanner(DIGIBOT);
+const state = preparedBanner(DIGIBOT).state as ClawState;
+const loadingMs = DIGIBOT.animation.loadingMs(state);
 const tones = (f: Frame) => new Set(f.pixels.filter(Boolean).map((p) => p!.tone));
-const at = (t: number, live = true) => sampleBanner(DIGICLAW, { t, live }).frame;
+const at = (t: number, live = true) => sampleBanner(DIGIBOT, { t, live }).frame;
 const count = (f: Frame) => f.pixels.filter(Boolean).length;
 const headroomLit = (f: Frame) => f.pixels.slice(0, HEADROOM * f.width).filter(Boolean).length;
 
-describe("digiclaw CLAW", () => {
+describe("digibot CLAW", () => {
   test("the font carries blank headroom over every glyph", () => {
-    expect(layout.height).toBe(DIGICLAW.font.rows);
+    expect(layout.height).toBe(DIGIBOT.font.rows);
     expect(layout.height % 2).toBe(0);
     for (const c of litCells(layout)) expect(c.y).toBeGreaterThanOrEqual(HEADROOM);
   });
@@ -85,12 +85,12 @@ describe("digiclaw CLAW", () => {
 
   test("LIVE off and reduced motion settle on the plain word", () => {
     expect([...tones(at(loadingMs + 5000, false))]).toEqual(["ink"]);
-    const still = sampleBanner(DIGICLAW, { t: 0, motion: "reduced" }).frame;
+    const still = sampleBanner(DIGIBOT, { t: 0, motion: "reduced" }).frame;
     expect(count(still)).toBe(litCells(layout).length);
   });
 
   test("fits 120x30 and 80x24 terminals", () => {
-    expect(terminalFit(DIGICLAW, { cols: 120, rows: 30 })).not.toBeNull();
-    expect(terminalFit(DIGICLAW, { cols: 80, rows: 24 })).not.toBeNull();
+    expect(terminalFit(DIGIBOT, { cols: 120, rows: 30 })).not.toBeNull();
+    expect(terminalFit(DIGIBOT, { cols: 80, rows: 24 })).not.toBeNull();
   });
 });
