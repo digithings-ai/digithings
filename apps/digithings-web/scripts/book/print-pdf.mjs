@@ -116,20 +116,10 @@ try {
     const jpeg = await sharp(shot).jpeg({ quality: 78 }).toBuffer();
     const image = await pdf.embedJpg(jpeg);
     const sheet = pdf.addPage([A4.width, A4.height]);
-    // The page box has no printable margin of its own; fit it inside a 20mm
-    // frame so the screenshot reads as a typeset page, not a browser viewport.
-    const margin = 56.7;
-    const maxW = A4.width - margin * 2;
-    const maxH = A4.height - margin * 2;
-    const scale = Math.min(maxW / image.width, maxH / image.height);
-    const width = image.width * scale;
-    const height = image.height * scale;
-    sheet.drawImage(image, {
-      x: (A4.width - width) / 2,
-      y: (A4.height - height) / 2,
-      width,
-      height,
-    });
+    // Full bleed: the page box already carries the site's light background
+    // and its own @page margins. Drawing it inset produced a visible white
+    // frame around a differently coloured page.
+    sheet.drawImage(image, { x: 0, y: 0, ...A4 });
   }
   await (await import("node:fs/promises")).writeFile(target, await pdf.save());
   // The exported site is what ships; keep the link's target in it without

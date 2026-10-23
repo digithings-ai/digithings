@@ -48,7 +48,7 @@ export default async function BookPrintPage() {
   return (
     // `data-paged-content` is what PagedBoot hands the chunker: this element
     // becomes the paginated document. The site nav and footer sit outside it.
-    <div data-paged-content="book" className="mx-auto w-full max-w-[var(--wrap)] px-[var(--gutter)]">
+    <div data-paged-content="book" className="book-flow mx-auto w-full max-w-[var(--wrap)] px-[var(--gutter)]">
       <PagedBoot enabled />
 
       <div className="book-print-only running-element">
@@ -79,11 +79,13 @@ export default async function BookPrintPage() {
         <section key={chapter.slug} className="book-chapter">
           {/* Anchors the front matter's page references resolve against. */}
           <div data-book-anchor={chapter.href} />
-          <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
-          {/* The book title above is the page's single h1; chapter openers
-              sit one level below it so the printed outline stays in order. */}
-          <h2 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h2>
-          <p className="mb-6 max-w-[64ch] text-ink-soft">{chapter.summary}</p>
+          <div className="book-chapter__head">
+            <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
+            {/* The book title above is the page's single h1; chapter openers
+                sit one level below it so the printed outline stays in order. */}
+            <h2 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h2>
+            <p className="mb-6 text-ink-soft">{chapter.summary}</p>
+          </div>
           <Opener />
           {sections.map(({ section, Body }) => (
             <div key={section.slug} className="book-section">
@@ -96,6 +98,19 @@ export default async function BookPrintPage() {
           ))}
         </section>
       ))}
+
+      <section className="book-colophon">
+        <p className="book-colophon__kicker">colophon</p>
+        <p className="book-colophon__title">the digithings book</p>
+        <p>
+          Set in the digithings mono voice. Built from the same files as the web edition at
+          digithings.ai/book.
+        </p>
+        <p>Edition 2026 · digithings.ai</p>
+        <p className="book-colophon__mark" aria-hidden="true">
+          digithings
+        </p>
+      </section>
     </div>
   );
 }

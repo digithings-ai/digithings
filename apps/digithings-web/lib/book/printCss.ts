@@ -114,7 +114,7 @@ export const PRINT_CSS = `
  * day it is printed.
  */
 export const PAGED_CSS = `
-@page { size: A4 !important; margin: 0 !important; }
+@page { size: A4 !important; margin: 24mm 20mm 22mm !important; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
@@ -129,6 +129,26 @@ body {
   line-height: 1.6;
   color: var(--ink);
   background: var(--bg);
+}
+
+/* Paged.js clones the site's layout wrappers into every page. Both the app
+   shell and the print route carry the gutter, so the page had 96px of extra
+   inset on each side; the @page margin is the only frame a printed page needs.
+   Body copy also inherited the site's 16px base and its 92% max-width, which
+   is what made the text look like a narrow column. */
+.book-root > div, .book-flow, [data-paged-content] {
+  width: auto !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.book-flow p, .book-flow li, .book-flow td, .book-flow blockquote {
+  max-width: none !important;
+  font-size: 10.25pt !important;
+  line-height: 1.58 !important;
+  text-align: left !important;
 }
 
 /* Paged.js carries the source document into print; hiding that source
@@ -213,17 +233,54 @@ body {
 .book-toc__sections li { padding: 0.7mm 0; }
 
 /* Chapters and sections. */
-/* Chapters start on a fresh leaf, as they did before the book had a cover. */
-.book-chapter { break-before: page; }
-.book-chapter h2 { margin: 0 0 4mm; font-size: 23pt; line-height: 1.1; letter-spacing: -0.01em; }
-.book-chapter > p:first-of-type { margin: 0 0 3mm; font-family: var(--font-sans), monospace; font-size: 8.5pt; color: var(--accent); }
-.book-chapter > p:nth-of-type(2) { margin: 0 0 8mm; max-width: 105mm; color: var(--ink-soft); }
-.book-section h3 { margin: 9mm 0 3mm; font-size: 14pt; line-height: 1.2; }
+/* Chapters flow like essays instead of each forcing a fresh leaf: a forced
+   break after a short final paragraph produced pages holding one line. The
+   opener is kept together and given air, so it reads as a chapter start
+   without wasting a page. */
+.book-chapter { break-before: auto; margin-top: 12mm; }
+.book-chapter:first-of-type { margin-top: 0; }
+.book-chapter__head {
+  display: block;
+  break-inside: avoid;
+  break-after: avoid;
+}
+.book-colophon {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14mm;
+  padding-top: 6mm;
+  border-top: 0.4pt solid var(--hair);
+  min-height: 225mm;
+  break-inside: avoid;
+}
+.book-colophon__kicker {
+  margin: 0 0 5mm;
+  font-family: var(--font-sans), monospace;
+  font-size: 8pt;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.book-colophon__title { margin: 0 0 6mm; font-size: 22pt; line-height: 1.1; }
+.book-colophon p { max-width: 120mm !important; color: var(--ink-soft); }
+.book-colophon__mark {
+  margin: auto 0 0 !important;
+  max-width: none !important;
+  font-size: 46pt;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.book-chapter__head h2 { margin: 0 0 4mm; font-size: 23pt; line-height: 1.1; letter-spacing: -0.01em; }
+.book-chapter__head > p:first-of-type { margin: 0 0 2mm; font-family: var(--font-sans), monospace; font-size: 8.5pt; color: var(--accent); }
+.book-chapter__head > p:nth-of-type(2) { margin: 0 0 8mm; color: var(--ink-soft); }
+.book-chapter h2 { margin: 7mm 0 3mm; font-size: 15pt; line-height: 1.2; }
+.book-section h3 { margin: 6mm 0 3mm; font-size: 13pt; line-height: 1.25; }
 h4 { margin: 6mm 0 2mm; font-size: 9pt; font-family: var(--font-sans), monospace; letter-spacing: 0.04em; }
 h1, h2, h3, h4 { break-after: avoid; }
 h1 { font-size: 24pt; margin: 0 0 5mm; line-height: 1.12; }
 
-p { margin: 0 0 3.4mm; orphans: 3; widows: 3; }
+p { margin: 0 0 3.2mm; orphans: 4; widows: 4; }
 p, pre, img, li, figure, table { break-inside: avoid; }
 ul, ol { margin: 0 0 3.4mm 5mm; padding: 0; }
 li { margin: 0 0 1.2mm; }
