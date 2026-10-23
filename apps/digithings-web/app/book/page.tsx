@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageHead } from "@digithings/ui";
 
+import BookDownloadButton from "@/components/book/BookDownloadButton";
 import BookToc from "@/components/book/BookToc";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
 
@@ -19,13 +20,7 @@ export default function BookIndexPage() {
         <BookToc chapters={chapters} />
       </div>
       <p className="book-screen-only mt-10 flex flex-wrap items-baseline gap-x-4 gap-y-2 font-mono text-[0.8rem] text-ink-soft">
-        <a
-          href="/book/the-digithings-book.pdf"
-          download
-          className="inline-flex min-h-11 items-center border-hair border-b text-accent hover:text-ink"
-        >
-          download the pdf
-        </a>
+        <BookDownloadButton className="inline-flex min-h-11 items-center border-hair border-b text-accent hover:text-ink" />
         <Link href="/book/print/" className="text-accent hover:text-ink">
           printable edition
         </Link>

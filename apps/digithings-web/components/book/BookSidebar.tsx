@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import BookDownloadButton from "./BookDownloadButton";
+
 import type { ChapterWithSections } from "@/lib/book/toc";
 
 /**
@@ -55,13 +57,7 @@ export default function BookSidebar({
           );
         })}
       </ol>
-      <a
-        href="/book/the-digithings-book.pdf"
-        download
-        className="mt-5 inline-flex min-h-11 items-center border-hair border-t pt-3 text-ink-soft hover:text-ink"
-      >
-        download the pdf
-      </a>
+      <BookDownloadButton className="mt-5 inline-flex min-h-11 items-center border-hair border-t pt-3 text-ink-soft hover:text-ink" />
     </nav>
   );
 }

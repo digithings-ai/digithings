@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { sampleBanner, type Frame } from "@digithings/hero-banner";
 import { DIGITHINGS } from "@digithings/hero-banner/definitions";
 
+
 import BookToc from "@/components/book/BookToc";
 import PagedBoot from "@/components/book/PagedBoot";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
@@ -35,9 +36,10 @@ function frameSvg(frame: Frame): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${frame.width} ${frame.height}" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" aria-hidden="true">${runs.join("")}</svg>`;
 }
 
-/** Mid-build and near-settled frames from the same script the landing hero runs. */
+/** Mid-build frame from the same script the landing hero runs. */
 const WORDMARK = frameSvg(sampleBanner(DIGITHINGS, { t: 940 }).frame);
-const MOTION = frameSvg(sampleBanner(DIGITHINGS, { t: 1240 }).frame);
+
+/** The landing page's embedding field, frozen for the server-rendered fallback. */
 
 /**
  * The print artefact is a rendering of the same book content with PagedJS
@@ -92,7 +94,6 @@ export default async function BookPrintPage() {
       </div>
 
       <section className="book-cover">
-        <div className="book-cover__motion" aria-hidden dangerouslySetInnerHTML={{ __html: MOTION }} />
         <div className="book-cover__mark" aria-hidden dangerouslySetInnerHTML={{ __html: WORDMARK }} />
         <h1 className="book-cover__title">the digithings book</h1>
         <p className="book-cover__subtitle">
