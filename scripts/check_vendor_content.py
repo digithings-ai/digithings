@@ -450,7 +450,20 @@ def resolve_base(base_ref: str) -> str:
             "A shallow or single-commit checkout cannot baseline 'new' occurrences — "
             "fetch enough history (actions/checkout fetch-depth: 0)."
         )
-    return proc.stdout.strip()
+    base = proc.stdout.strip()
+    # Partial clones (blob:none filter) fetch commit/tree objects eagerly but
+    # leave blobs to be fetched on demand. `git grep` below then triggers one
+    # promisor fetch per blob, which times out on CI (DIG-5344). Pull the base
+    # commit's blobs in a single batched request first; ignore failures so an
+    # offline/full clone still works (the objects are already local there).
+    try:
+        subprocess.run(
+            [GIT, "fetch", "--no-filter", "origin", base],
+            cwd=REPO, capture_output=True, text=True, timeout=300,
+        )
+    except Exception:
+        pass
+    return base
 
 
 def baseline_pairs(base: str) -> set[tuple[str, str]]:
@@ -472,19 +485,29 @@ def scan(base: str, allowlist: Allowlist) -> tuple[list[Finding], list[str]]:
     baseline = baseline_pairs(base)
     files = tracked_files()
 
+    # Read each tracked file once and cache it: the scan loop and the retirement
+    # pass both need the contents, and re-reading (or re-fetching blobs in a
+    # partial clone) per consumer is what made this gate slow enough to time
+    # out on CI (DIG-5344).
+    file_cache: dict[str, str | None] = {rel: read_text(rel) for rel in files}
+
     for rel in files:
         if rel in SELF_PATHS:
             continue
-        text = read_text(rel)
+        text = file_cache.get(rel)
         if text is None:
             continue
         lines = text.splitlines()
         method_hits: dict[str, tuple[int, str]] = {}
-        for rule in METHOD_RULES:
-            hit = _first_match(lines, rule)
-            if hit is not None:
-                method_hits[rule.id] = hit
-        method_hits = _drop_unwitnessed_markers(method_hits)
+        # Method rules can only fire where a vendor reference is present, so a
+        # file with no vendor context at all cannot produce a method hit. Skip
+        # the expensive per-line regex scan for those files.
+        if VENDOR_CONTEXT.search(text):
+            for rule in METHOD_RULES:
+                hit = _first_match(lines, rule)
+                if hit is not None:
+                    method_hits[rule.id] = hit
+            method_hits = _drop_unwitnessed_markers(method_hits)
         vendor_hits: list[tuple[Rule, int, str]] = []
         for rule in VENDOR_RULES:
             for idx, line in enumerate(lines, start=1):
@@ -559,7 +582,10 @@ def scan(base: str, allowlist: Allowlist) -> tuple[list[Finding], list[str]]:
         for rel in files:
             if rel in SELF_PATHS or not glob.fullmatch(rel):
                 continue
-            text = read_text(rel)
+            text = file_cache.get(rel)
+            if text is None:
+                text = read_text(rel)
+                file_cache[rel] = text
             if text and needle.lower() in text.lower():
                 still_there = True
                 break
