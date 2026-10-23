@@ -30,6 +30,14 @@ describe("usageBarShape", () => {
     expect(usageBarShape(1, 100).lit).toBe(1);
   });
 
+  it("stays one cell short until the budget is actually spent", () => {
+    // 98/100 and 99/100 round to a full bar, but a turn is still left; a full
+    // bar must mean "no turns left", so the last cell waits for 100/100.
+    expect(usageBarShape(98, 100).lit).toBe(24);
+    expect(usageBarShape(99, 100).lit).toBe(24);
+    expect(usageBarShape(100, 100).lit).toBe(25);
+  });
+
   it("clamps out-of-range counts and refuses a zero budget", () => {
     expect(usageBarShape(-2, 3)).toEqual({ cells: 3, lit: 0 });
     expect(usageBarShape(9, 3)).toEqual({ cells: 3, lit: 3 });

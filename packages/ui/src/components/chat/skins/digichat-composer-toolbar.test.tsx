@@ -230,4 +230,20 @@ describe("DigichatComposerToolbar usage meter", () => {
     expect(screen.queryByTestId("embed-usage-meter")).toBeNull();
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
+
+  it("falls back to the context meter when a gate reports no budget", () => {
+    // A limit of 0 is not a meter; blanking the slot would hide the context
+    // bar for a reading that means "no gate".
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+          usage: { used: 0, limit: 0 },
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("embed-usage-meter")).toBeNull();
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+  });
 });

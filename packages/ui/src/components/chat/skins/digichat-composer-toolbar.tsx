@@ -141,8 +141,9 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
       <span className="aui-composer-meta-spacer" aria-hidden />
       {/* A gate budget outranks the context estimate: it is the number that
           stops the visitor, and it is available even when the backend
-          reports no token usage at all (a Foundry agent). */}
-      {prefs.usage ? (
+          reports no token usage at all (a Foundry agent). A zero budget is
+          not a meter, so it falls through to the context slot. */}
+      {prefs.usage && prefs.usage.limit > 0 ? (
         <DigichatUsageMeter usage={prefs.usage} />
       ) : prefs.showContextMeter ? (
         <DigichatContextMeter
