@@ -423,10 +423,17 @@ def test_digichat_public_picker_is_ci_cheap_only() -> None:
             encoding="utf-8"
         )
     )
-    product = embed["hosts"]["digithings.ai"]["models"]
+    # #6217 moved the house policy into the default document; the example only
+    # inherits it, so read the values from the document that declares them.
+    assert embed.get("extends") == "defaults"
+    defaults = yaml.safe_load(
+        (REPO_ROOT / "apps/digichat/config/defaults.yaml").read_text(encoding="utf-8")
+    )
+    product = defaults["deployment"]["models"]
     assert product["catalog"] is True
     assert product["allowPicker"] is True
-    assert product["default"] == "deepseek/deepseek-v4.1-flash-1017"
+    # v4.1-flash streams reasoning; 1017 does not (2026-10-22).
+    assert product["default"] == "deepseek/deepseek-v4.1-flash"
     assert product["priceCapUsdPerMillion"] == 2
     assert "available" not in product
     assert "auto" in product["presets"]

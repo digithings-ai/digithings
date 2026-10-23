@@ -483,7 +483,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.allowPicker).toBe(true);
     expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.models.catalog).toBe(true);
-    expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
+    expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash");
     expect(dt?.models.available).toContain("google/gemini-3.5-flash-lite");
