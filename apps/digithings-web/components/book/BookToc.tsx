@@ -65,7 +65,7 @@ export default function BookToc({
               chapter.href,
             )}
             <p className="book-toc__summary m-0 text-ink-soft">{chapter.summary}</p>
-            {chapter.sections.length > 0 ? (
+            {!withRefs && chapter.sections.length > 0 ? (
               <ol className="book-toc__sections mt-2 list-none p-0 pl-6 font-mono text-[0.82rem]">
                 {chapter.sections.map((s) => (
                   <li key={s.slug} className="py-0.5">

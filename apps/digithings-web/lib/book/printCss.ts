@@ -114,7 +114,7 @@ export const PRINT_CSS = `
  * day it is printed.
  */
 export const PAGED_CSS = `
-@page { size: A4; margin: 0 0 16mm; }
+@page { size: A4 !important; margin: 0 !important; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
@@ -122,6 +122,7 @@ export const PAGED_CSS = `
 .site-rails, header, footer, nav, .book-screen-only, .book-print-only, .running-element,
 .book-paged-status, [role="status"], .skip-link, a[href="#main"] { display: none !important; }
 
+html, body, .pagedjs_pages { margin: 0; padding: 0; }
 body {
   font-family: var(--font-sans), ui-monospace, monospace;
   font-size: 10.5pt;
@@ -138,9 +139,7 @@ body {
 /* Title page: one centred block, then a hard break. */
 .book-cover {
   break-after: page;
-  display: flex;
-  flex-direction: column;
-  min-height: 232mm;
+  box-sizing: border-box;
   padding-top: 34mm;
 }
 .book-cover__kicker {
@@ -166,7 +165,7 @@ body {
   color: var(--ink-soft);
 }
 .book-cover__meta {
-  margin: auto 0 0;
+  margin: 72mm 0 0;
   padding-top: 4mm;
   border-top: 0.4pt solid var(--hair);
   font-family: var(--font-sans), monospace;
@@ -175,7 +174,7 @@ body {
 }
 
 /* Contents: dot leaders and a right-aligned folio, one page or more. */
-.book-contents { break-after: page; }
+.book-contents { break-before: page; break-after: page; }
 .book-contents__title {
   margin: 0 0 8mm;
   font-family: var(--font-sans), monospace;
@@ -186,8 +185,9 @@ body {
   color: var(--accent);
 }
 .book-toc { margin: 0; padding: 0; list-style: none; }
-.book-toc__chapter { padding: 3.6mm 0; border-bottom: 0.4pt solid var(--hair); break-inside: avoid; }
+.book-toc__chapter { padding: 1.8mm 0; border-bottom: 0.4pt solid var(--hair); break-inside: avoid; }
 .book-toc__chapter:last-child { border-bottom: 0; }
+.book-toc__label { font-size: 9.5pt; }
 .book-toc__row { display: flex; align-items: baseline; break-inside: avoid; }
 .book-toc__label { flex: 0 1 auto; }
 .book-toc__leader {
@@ -213,6 +213,7 @@ body {
 .book-toc__sections li { padding: 0.7mm 0; }
 
 /* Chapters and sections. */
+/* Chapters start on a fresh leaf, as they did before the book had a cover. */
 .book-chapter { break-before: page; }
 .book-chapter h2 { margin: 0 0 4mm; font-size: 23pt; line-height: 1.1; letter-spacing: -0.01em; }
 .book-chapter > p:first-of-type { margin: 0 0 3mm; font-family: var(--font-sans), monospace; font-size: 8.5pt; color: var(--accent); }
@@ -259,7 +260,7 @@ thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
 
-/* The page box carries the folio number PagedBoot stamps on it. */
+/* Folios sit in the bottom outer margin, alternating by parity. */
 .pagedjs_page::after {
   content: attr(data-book-page);
   position: absolute;

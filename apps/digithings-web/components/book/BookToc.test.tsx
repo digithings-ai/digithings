@@ -28,9 +28,11 @@ const chapters: ChapterWithSections[] = [
 describe("BookToc", () => {
   it("gives every print entry a dot leader and a page-reference cell", () => {
     const html = renderToStaticMarkup(<BookToc chapters={chapters} withRefs />);
-    expect(html.match(/book-toc__leader/g) ?? []).toHaveLength(2);
+    // The printed contents is chapter-level; the section rail belongs to the
+    // web page, not to a one-page contents.
+    expect(html.match(/book-toc__leader/g) ?? []).toHaveLength(1);
     expect(html).toContain('data-book-toc-ref="/book/why/"');
-    expect(html).toContain('data-book-toc-ref="/book/why/start/"');
+    expect(html).not.toContain('data-book-toc-ref="/book/why/start/"');
   });
 
   it("does not reserve page references on the screen index", () => {

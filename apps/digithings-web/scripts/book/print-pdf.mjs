@@ -14,6 +14,7 @@ import { copyFileSync, createReadStream, existsSync, mkdirSync, statSync } from 
 import { createServer } from "node:http";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = resolve(HERE, "..", "..");
@@ -74,20 +75,17 @@ const { chromium } = await import("playwright");
 const browser = await chromium.launch();
 
 try {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ deviceScaleFactor: 1.5 });
   // emulatedMedia "screen" on purpose: Paged.js paginates into fixed boxes and
   // its own stylesheet, and Chrome's print media would restyle on top of it.
   await page.emulateMedia({ media: "screen" });
   await page.goto(`${base}/book/print/`, { waitUntil: "networkidle" });
 
-  // PagedBoot publishes nothing to wait on, so wait for the DOM it produces:
-  // page boxes exist only after `chunk()` has run. A timeout here is a real
-  // failure and exits non-zero rather than printing an unpaginated page.
   // Wait for the book's own completion marker, not for the page boxes: pagedjs
   // creates those first and the page-number pass runs after, so waiting on the
-  // boxes printed a table of contents with empty references.
-  // The source document is hidden after pagination, so wait for the marker to
-  // be attached, not visible.
+  // boxes printed a table of contents with empty references. The source
+  // document is hidden after pagination, so wait for the marker to be
+  // attached, not visible.
   await page.waitForSelector("[data-book-paginated]", { state: "attached", timeout: 60_000 });
   const pages = await page.locator(".pagedjs_page").count();
   if (pages < 1) throw new Error("pagination produced no pages");
@@ -100,14 +98,40 @@ try {
   const target =
     process.argv[2] ?? join(APP_ROOT, "public", "book", "the-digithings-book.pdf");
   mkdirSync(dirname(target), { recursive: true });
-  await page.pdf({
-    path: target,
-    format: "A4",
-    printBackground: true,
-    // The @page rule in the print stylesheet owns the page box, so the PDF
-    // takes the geometry from the document rather than from this call.
-    preferCSSPageSize: true,
-  });
+
+  // Print the page boxes we already have, one image per sheet. Chrome's own
+  // pagination re-flowed the fixed boxes: it packed short pages together,
+  // pushed chapter openers to the foot of a sheet, and inserted blank pages.
+  // A screenshot of each finished page box is the only faithful copy of what
+  // Paged.js laid out.
+  const { PDFDocument } = await import("pdf-lib");
+  const A4 = { width: 595.28, height: 841.89 };
+  const pdf = await PDFDocument.create();
+  pdf.setTitle("The digithings book");
+  pdf.setAuthor("digithings");
+  pdf.setSubject("Self-hosted AI infrastructure: why it matters, how it scales, and what it costs.");
+  pdf.setCreator("digithings.ai/book");
+  for (let i = 0; i < pages; i += 1) {
+    const shot = await page.locator(".pagedjs_page").nth(i).screenshot();
+    const jpeg = await sharp(shot).jpeg({ quality: 82 }).toBuffer();
+    const image = await pdf.embedJpg(jpeg);
+    const sheet = pdf.addPage([A4.width, A4.height]);
+    // The page box has no printable margin of its own; fit it inside a 20mm
+    // frame so the screenshot reads as a typeset page, not a browser viewport.
+    const margin = 56.7;
+    const maxW = A4.width - margin * 2;
+    const maxH = A4.height - margin * 2;
+    const scale = Math.min(maxW / image.width, maxH / image.height);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    sheet.drawImage(image, {
+      x: (A4.width - width) / 2,
+      y: (A4.height - height) / 2,
+      width,
+      height,
+    });
+  }
+  await (await import("node:fs/promises")).writeFile(target, await pdf.save());
   // The exported site is what ships; keep the link's target in it without
   // requiring a second build after printing.
   const exported = join(OUT, "book", "the-digithings-book.pdf");
