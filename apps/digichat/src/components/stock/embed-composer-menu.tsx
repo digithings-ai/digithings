@@ -141,6 +141,20 @@ export type MenuRow = {
   treePrefix?: string;
 };
 
+/**
+ * A tool's name as `/tools` shows it: a trailing note in parentheses, such as
+ * "(help docs)", is dropped, so the page lists tool names only.
+ */
+export function bareToolLabel(label: string): string {
+  // String scan, not a regex: a backtracking pattern here is a ReDoS (CodeQL js/polynomial-redos).
+  const trimmed = label.trim();
+  if (!trimmed.endsWith(")")) return trimmed;
+  const open = trimmed.lastIndexOf("(");
+  if (open < 0 || trimmed.slice(open + 1, -1).includes(")")) return trimmed;
+  const bare = trimmed.slice(0, open).trim();
+  return bare || trimmed;
+}
+
 /** One node of the /models path tree: a folder (an id segment) or a leaf (a model id). */
 export type ModelPathNode =
   | { kind: "folder"; name: string; path: string; children: ModelPathNode[] }
@@ -1038,16 +1052,17 @@ export function EmbedComposerMenu({
       ];
     }
     const readOnly = api.toolControl === "agent" || api.toolControl === "locked";
+    // The agent owns its tools: always on, never toggled here.
     const agent = api.toolControl === "agent";
     // A file-system-like tree: the service as `/slash`, its tools under it.
     return toolRows.flatMap((t): MenuRow[] => {
-      const on = connectedToolIsOn(t.id, toolOnInput);
-      const state = agent ? "Managed by the agent" : on ? "On" : "Off";
+      const on = agent || connectedToolIsOn(t.id, toolOnInput);
+      const state = on ? "On" : "Off";
       const group: MenuRow = {
         id: t.id,
         label: slashName(t.slash),
         value: state,
-        ...(agent ? {} : { checked: on }),
+        checked: on,
         insert: optionDraft("/tools", t.slash),
         token: t.slash,
         aliases: t.label && t.label !== t.slash ? [t.label] : [],
@@ -1058,23 +1073,44 @@ export function EmbedComposerMenu({
       };
       const configured = t.tools ?? [];
       const count = configured.length || (t.builtinTools?.length ?? 0);
-      const branchAt = (i: number): MenuRow["branch"] => (i === count - 1 ? "last" : "mid");
-      const subs = configured.map((sub, i): MenuRow => {
-        const subOn = on && api.extraToolOn(sub.id);
-        const subLabel = sub.label?.trim() || sub.id;
-        return {
-          id: `${t.id}::${sub.id}`,
-          label: subLabel,
-          branch: branchAt(i),
-          value: agent ? "Managed by the agent" : subOn ? "On" : "Off",
-          ...(agent ? {} : { checked: subOn }),
-          insert: optionDraft("/tools", subLabel),
-          token: subLabel,
-          activate: () => {
-            if (readOnly || !on) return;
-            api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
+      // A tool closes its branch when it is the last one, or the last one in
+      // its sub-header group.
+      const branchAt = (i: number): MenuRow["branch"] =>
+        i === count - 1 || (configured[i]?.group ?? "") !== (configured[i + 1]?.group ?? "")
+          ? "last"
+          : "mid";
+      const subs = configured.flatMap((sub, i): MenuRow[] => {
+        const subOn = agent || (on && api.extraToolOn(sub.id));
+        const subLabel = bareToolLabel(sub.label?.trim() || sub.id);
+        const groupName = sub.group?.trim() ?? "";
+        const opensGroup = groupName !== "" && groupName !== (configured[i - 1]?.group?.trim() ?? "");
+        const heading: MenuRow[] = opensGroup
+          ? [
+              {
+                id: `${t.id}::group::${groupName}`,
+                label: groupName,
+                value: "",
+                heading: true,
+                activate: () => {},
+              },
+            ]
+          : [];
+        return [
+          ...heading,
+          {
+            id: `${t.id}::${sub.id}`,
+            label: subLabel,
+            branch: branchAt(i),
+            value: subOn ? "On" : "Off",
+            checked: subOn,
+            insert: optionDraft("/tools", subLabel),
+            token: subLabel,
+            activate: () => {
+              if (readOnly || !on) return;
+              api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
+            },
           },
-        };
+        ];
       });
       // Built-in tools follow the service switch, so they carry its state but
       // no switch of their own.
@@ -1083,10 +1119,10 @@ export function EmbedComposerMenu({
         : (t.builtinTools ?? []).map(
             (sub, i): MenuRow => ({
               id: `${t.id}::${sub.id}`,
-              label: sub.label,
+              label: bareToolLabel(sub.label),
               branch: branchAt(i),
               value: state,
-              token: sub.label,
+              token: bareToolLabel(sub.label),
               activate: () => {},
             }),
           );
@@ -1100,20 +1136,20 @@ export function EmbedComposerMenu({
     if (agent && mcpConfigs.length === 0) {
       return toolRows.map((t) => ({
         id: t.id,
-        label: t.label,
-        value: "Managed by the agent",
-        insert: optionDraft("/mcp", t.label),
-        token: t.label,
+        label: bareToolLabel(t.label),
+        value: "On",
+        insert: optionDraft("/mcp", bareToolLabel(t.label)),
+        token: bareToolLabel(t.label),
         activate: () => {},
       }));
     }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
-      const label = s.label || s.id;
+      const label = bareToolLabel(s.label || s.id);
       return {
         id: s.id,
         label,
-        value: agent ? "Managed by the agent" : mcpStatusLabel(status),
+        value: agent ? "On" : mcpStatusLabel(status),
         insert: optionDraft("/mcp", label),
         token: label,
         activate: () => {
