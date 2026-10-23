@@ -29,6 +29,44 @@ the design language the new code actually uses — not against the stale docs.
 6. digi names stay lowercase in prose, copy and docs.
 7. Human-gated paths are untouched: `digiquant/brokers/**`, `digikey/**`.
 
+## Tool ownership
+
+Two design skills would otherwise fight over the same files. Split by surface:
+
+| Tool | Owns | Verbs |
+|---|---|---|
+| **Hallmark** | public pages: `apps/digithings-web` (landing, marketing, variants), `apps/digiquant-web` marketing routes | `audit` first; `redesign <path>` only where the audit proves a structural failure, keeping content and wiring and preserving the ASCII/hero-banner identity |
+| **Impeccable** | product UI: `apps/dashboard`, `apps/digichat`, `apps/digiquant-web/app/app`, shared kit | audit → fix (polish/distill/critique), within tokens |
+| **Taste / frontend-design** | direction checks only on public pages; never a second theme | audit only |
+| **baseline-ui / make-interfaces-feel-better** | component-level polish and pass/fail checks on product UI | review then fix |
+
+Both tools may audit anywhere; only the owner may rewrite.
+
+## Hallmark profile for this product
+
+Hallmark's Floor is tuned for editorial marketing pages. Four of its rules encode
+generic-web taste and would delete this product's deliberate identity, so they are
+**not applied** here:
+
+| Rule | What it bans | Why waived |
+|---|---|---|
+| 22 | zero-chroma neutrals | the monochrome terminal palette is intentional |
+| 63 | middle-dot-joined meta strings | used deliberately in terminal/status chrome |
+| 64 | monospace labels | the ASCII terminal voice |
+| 67 | uppercase tracked labels | the instrument-panel/terminal motif |
+
+Rules 19 (em dashes) and 54 (eyebrow labels) are judged per surface: fix on
+marketing pages where they are generic, keep where the terminal motif needs them.
+
+Everything else in the Floor still applies, notably: 48 raw colour literals,
+10 layout-animating properties and `transition: all`, 34 overflow-x,
+46 invented metrics, 30 emoji icons, 4 card-in-card, 2a purple gradient,
+focus-visible, reduced-motion and scripting-off visibility.
+
+`sloplint` is a signal, not a CI gate. The blocking gate remains
+`python3 scripts/check_frontend_canon.py`. A slice reports sloplint counts with the
+waived rules already excluded, so the number reflects actionable work.
+
 ## Slice manifest
 
 Each slice owns a disjoint path set. A slice may not edit paths owned by another
@@ -53,11 +91,11 @@ and the per-surface differences. It also records what the old docs got wrong.
 | U3 | `feat/deslop-u3-dashboard-desk` | `apps/dashboard/app/**/{desk,charts,strategies,portfolio,markets}/**`, `apps/dashboard/components/{desk,charts,data}/**` | impeccable, emil-design-eng, web-quality/performance, review-animations |
 | U4 | `feat/deslop-u4-dashboard-shell` | `apps/dashboard/app/**/{settings,account,onboarding,login}/**`, `apps/dashboard/components/{shell,nav,account}/**` | impeccable, baseline-ui, make-interfaces-feel-better |
 | U5 | `feat/deslop-u5-digiquant-desk` | `apps/digiquant-web/app/app/**` | impeccable, baseline-ui, avoid-ai-design, fixing-motion-performance |
-| U6 | `feat/deslop-u6-digiquant-marketing` | `apps/digiquant-web/app/{page,pipeline,strategies,subsystems,changelog,contact}/**` | impeccable, hallmark (audit only), web-quality/seo, frontend-design |
+| U6 | `feat/deslop-u6-digiquant-marketing` | `apps/digiquant-web/app/{page,pipeline,strategies,subsystems,changelog,contact}/**` | hallmark (audit → targeted redesign), impeccable (component audit), web-quality/seo, frontend-design |
 | U7 | `feat/deslop-u7-digiquant-atoms` | `apps/digiquant-app/**` | impeccable, baseline-ui, make-interfaces-feel-better |
-| U8 | `feat/deslop-u8-web-landing` | `apps/digithings-web/app/{page.tsx,_nav.tsx}`, `apps/digithings-web/components/{landing,chat}/**` | frontend-design, hallmark (direction only), design-taste-frontend, emil-design-eng |
-| U9 | `feat/deslop-u9-web-docs` | `apps/digithings-web/app/{docs,book,about,team,security,services,changelog,legal}/**` | impeccable, baseline-ui, fixing-metadata, avoid-ai-writing |
-| U10 | `feat/deslop-u10-web-variants` | `apps/digithings-web/app/variants/**` | impeccable, design-taste-frontend (audit only), baseline-ui |
+| U8 | `feat/deslop-u8-web-landing` | `apps/digithings-web/app/{page.tsx,_nav.tsx}`, `apps/digithings-web/components/{landing,chat}/**` | hallmark (audit → targeted redesign), frontend-design, design-taste-frontend (direction), emil-design-eng |
+| U9 | `feat/deslop-u9-web-docs` | `apps/digithings-web/app/{docs,book,about,team,security,services,changelog,legal}/**` | hallmark (audit only), impeccable, baseline-ui, fixing-metadata, avoid-ai-writing |
+| U10 | `feat/deslop-u10-web-variants` | `apps/digithings-web/app/variants/**` | hallmark (audit only), impeccable, design-taste-frontend (audit only), baseline-ui |
 | U11 | `feat/deslop-u11-hero-banner` | `packages/hero-banner/**` | emil-design-eng, animation-performance, fixing-motion-performance, deslop |
 | U12 | `feat/deslop-u12-tui-clients` | `clients/{digichat-tui,digiquant-tui,digivoice-tui,digichat-devkit}/**` | emil-design-eng, animation-performance, deslop, karpathy-guidelines |
 | U13 | `feat/deslop-u13-tui-shell` | `packages/tui-frame/**`, `packages/design/{app-shell-terminal,quant-native}/**` | deslop, codebase-design, animation-performance |
