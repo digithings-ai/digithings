@@ -227,6 +227,28 @@ describe("shouldSuggestByokOnEmbedError", () => {
       }),
     ).toBe(false);
   });
+
+  it("never suggests BYOK for a cold digikey (upstream_unavailable)", () => {
+    // The code alone carries the answer: the embed client passes no message
+    // for it, so a cold digikey must be recognised as an infrastructure
+    // failure and must never open the BYOK prompt (DIG-4424).
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "byok_only",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "upstream_unavailable",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "operator",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "upstream_unavailable",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("model-remediable BYOK refusals (#2490)", () => {

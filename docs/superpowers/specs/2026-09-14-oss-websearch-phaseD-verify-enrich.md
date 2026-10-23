@@ -473,7 +473,7 @@ candidate recall calls `digisearch.web_search.service.search_web` and page
 markdown calls `digisearch.web_search.fetch.fetch_markdown` by direct import
 (same package) — never `ingest_url`, never `run_web_search`; HTTP (`POST
 /v1/orchestrator_invoke`, `POST /v1/research_turn`) is used only at
-process/component boundaries (digiclaw, digigraph, external callers) with
+process/component boundaries (digibot, digigraph, external callers) with
 the caller's service JWT. Regression gate (R1 — replaces the unsatisfiable
 pre-erratum gate; audit D21/I2); this command must return zero matches:
 
@@ -882,7 +882,7 @@ implementers follow it verbatim:
   | Error shape | `digibase.errors` codes | same envelope + webset codes listed above | ALIGNED |
   | Store handle | `DIGISEARCH_MONITORS_DB` → `{DIGI_WORKSPACE}/…monitors.sqlite3` → `./.digisearch/monitors.sqlite3` | `DIGISEARCH_WEBSETS_DB` → `{DIGI_WORKSPACE}/…websets.sqlite3` → `./.digisearch/websets.sqlite3` | ALIGNED (convention + volume + cwd fallback, R6) |
   | Store concurrency | one connection per instance/thread, WAL + `busy_timeout=5000`, no in-process lock (`store.py:20-25,159-166`) | same (R5) | ALIGNED |
-  | Monitor lifecycle | scheduled tick via `POST /v1/monitors/tick` (`server.py:1376-1382`, `digiclaw/monitors_tick.py:30`) | same: the shared tick driver refreshes due, unpaused monitors (`websets/driver.py`, #4221); manual `trigger_monitor` stays | ALIGNED (#4221 resolved the R8 divergence) |
+  | Monitor lifecycle | scheduled tick via `POST /v1/monitors/tick` (`server.py:1376-1382`, `digibot/monitors_tick.py:30`) | same: the shared tick driver refreshes due, unpaused monitors (`websets/driver.py`, #4221); manual `trigger_monitor` stays | ALIGNED (#4221 resolved the R8 divergence) |
 
 ## Global Constraints
 

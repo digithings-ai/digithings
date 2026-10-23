@@ -448,9 +448,23 @@ export const JOBS: readonly Job[] = [
   // land in one review window.
   wd("dependency-freshness", "23 6 * * MON", MONOREPO, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
-  // Hourly answer-integrity probe against DataTap production. Clock lives here,
-  // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
-  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml"),
+  // The hourly answer-integrity probe had its clock here (DIG-306). Chris
+  // retired it on 2026-10-18: the client manages their own infrastructure, so
+  // we do not probe them on a schedule. The workflow file stays, dispatchable
+  // by hand; no clock dispatches it any more (DIG-4435).
+  //
+  // The row stays, disabled, rather than being deleted. The deployed Worker
+  // still carries the "17 * * * *" trigger until the next digithings-cron
+  // deploy, and the deployed-trigger contract (src/trigger-contract.ts) fails
+  // a deployed cron that no job row claims - not even a disabled one. Deleting
+  // the row would red local-ci with unrecognised_cron "17 * * * *" and
+  // deadlock the very merge that has to remove the clock. A disabled row still
+  // claims its cron (the contract agrees with the quiet tick in src/index.ts),
+  // so the contract stays green and the next deploy drops the trigger. Do not
+  // re-enable this row without a new order from Chris.
+  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml", {
+    enabled: false,
+  }),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
@@ -550,7 +564,7 @@ export const JOBS: readonly Job[] = [
   // in order, needs no reshuffle. Minute :22 is five minutes after the Monday
   // 09:17 house-run start, so a POST that never arrived is raised inside the
   // grace DIG-4416 sets; it is also clear of the :17 cluster
-  // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
+  // (production-deploy-gate-watchdog, secret-staleness, smoke-site), :41
   // (token-canary) and :47.
   wj("digiquant-house-run-watch", "22 * * * *", "digiquant-runner"),
   // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.

@@ -520,7 +520,9 @@ def test_mcp_web_search_allowed_with_opt_in() -> None:
 # --- DIG-507: the remote MCP server must be asked for the name it advertised ---
 
 
-def _capture_names(monkeypatch: pytest.MonkeyPatch, server: dict[str, str], names: list[str]) -> None:
+def _capture_names(
+    monkeypatch: pytest.MonkeyPatch, server: dict[str, str], names: list[str]
+) -> None:
     from digigraph.orchestration import mcp_client
 
     monkeypatch.setitem(mcp_client._raw_names_cache, mcp_client.mcp_list_cache_key(server), names)
@@ -696,3 +698,78 @@ def test_call_prefixed_tool_falls_back_to_the_offered_name_without_a_capture(
         out = call_prefixed_tool("nocapture_echo", {"q": "hi"}, [server])
     assert out == {"ok": True}
     call.assert_called_once_with(server, "echo", {"q": "hi"})
+
+
+@pytest.mark.unit
+def test_a_failed_listing_is_not_cached_as_an_empty_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server that cannot be listed must not look like a server with no tools."""
+    from digigraph.orchestration import mcp_client
+
+    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+
+    def boom(_server: dict[str, str]) -> list[dict[str, object]]:
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", boom)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+
+    assert mcp_client.list_tools_cached(server) == []
+    assert mcp_client.mcp_list_cache_key(server) not in mcp_client._cache
+
+
+@pytest.mark.unit
+def test_mcp_server_failures_reports_the_unreachable_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digigraph.orchestration import mcp_client
+
+    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+
+    def boom(_server: dict[str, str]) -> list[dict[str, object]]:
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", boom)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+
+    mcp_client.list_tools_cached(server)
+    failures = mcp_client.mcp_server_failures([server])
+    assert "helpdesk" in failures
+    assert "connection refused" in failures["helpdesk"]
+
+
+@pytest.mark.unit
+def test_a_recovered_server_is_listed_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digigraph.orchestration import mcp_client
+
+    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+    calls: list[int] = []
+
+    async def flaky(_server: dict[str, str]) -> list[dict[str, object]]:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("down")
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "helpdesk_search",
+                    "description": "",
+                    "parameters": {},
+                },
+            }
+        ]
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", flaky)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+    monkeypatch.setattr(mcp_client, "_FAILURE_TTL_S", 0.0)
+
+    assert mcp_client.list_tools_cached(server) == []
+    assert mcp_client.mcp_server_failures([server]) == {}
+
+    assert mcp_client._list_tools_blocking(server)
+    assert mcp_client.mcp_server_failures([server]) == {}

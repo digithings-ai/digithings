@@ -30,7 +30,7 @@ PROJECT_MAP = {
     "digichat": 5,
     "digikey": 6,
     "digismith": 7,
-    "digiclaw": 8,
+    "digibot": 8,
     "digibase": 9,
 }
 
@@ -152,29 +152,29 @@ Enterprise client onboarding (e.g. a company using Microsoft) requires employees
         model="opus",
         milestone=None,
         labels_extra=["type:feature", "complexity:XL", "priority:high"],
-        title="[Epic] digiclaw — OpenClaw integration and autonomous agent scheduling",
+        title="[Epic] digibot — OpenClaw integration and autonomous agent scheduling",
         body="""\
 ## Goal
-Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the research daily cycle running automatically without manual execution.
+Build out digibot from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the research daily cycle running automatically without manual execution.
 
-## Sub-tasks (in digiclaw project board)
+## Sub-tasks (in digibot project board)
 - [ ] OpenClaw runtime integration
 - [ ] Agent definition schema and registry
 - [ ] Cron and continuous scheduling
-- [ ] research daily cycle automation — digiclaw scheduled job
+- [ ] research daily cycle automation — digibot scheduled job
 - [ ] Strategy performance monitor agent
 - [ ] ADDM — Adaptive Drift Detection Monitor (rewrite from stub)
-- [ ] digiclaw dashboard — agent status and audit log viewer
+- [ ] digibot dashboard — agent status and audit log viewer
 
 ## Acceptance Criteria
 - [ ] research daily delta, weekly full-gen, and monthly rollup run automatically on schedule
 - [ ] A new agent can be defined in a YAML file and scheduled without code changes
 - [ ] Audit log captures every autonomous action with timestamp and outcome
-- [ ] `docs/vision/digiclaw.md` reflects implementation state
+- [ ] `docs/vision/digibot.md` reflects implementation state
 
 ## Documentation to Update
-- [ ] `docs/vision/digiclaw.md`
-- [ ] `digiclaw/ARCHITECTURE.md`
+- [ ] `docs/vision/digibot.md`
+- [ ] `digibot/ARCHITECTURE.md`
 """,
     ),
     dict(
@@ -230,7 +230,7 @@ YES — current research is ad-hoc scripts requiring manual execution and backfi
 - [ ] All LLM calls use structured outputs (Pydantic v2 models)
 - [ ] Prompt caching enabled on all repeated-context calls
 - [ ] Daily Digest generated fresh; other documents delta-patched
-- [ ] Sub-graph can be scheduled via digiclaw
+- [ ] Sub-graph can be scheduled via digibot
 - [ ] `digiquant/ARCHITECTURE.md` and `digigraph/ARCHITECTURE.md` updated
 
 ## Files affected (new)
@@ -240,7 +240,7 @@ YES — current research is ad-hoc scripts requiring manual execution and backfi
 - `digigraph/src/digigraph/graph/research/prompts.py`
 
 ## Dependencies
-None — this is the foundation for portfolio, execution, and digiclaw research runner.
+None — this is the foundation for portfolio, execution, and digibot research runner.
 
 ## Parallelizable: NO — blocks portfolio (#8), research runner (#47)
 ## Model: opus — complex orchestration, parallel sub-graph design
@@ -405,13 +405,13 @@ Build deployment connectors that take a validated execution strategy (passed Nau
 ## Non-negotiables
 - Human approval gate REQUIRED before any live deployment — non-bypassable
 - No live-trading path touched without this gate
-- Audit trail via digiclaw for every deployment action
+- Audit trail via digibot for every deployment action
 
 ## Acceptance Criteria
 - [ ] `AlpacaDeployment` and `QuantConnectDeployment` classes implement `DeploymentBase`
 - [ ] Paper trading validation step mandatory before live deployment option appears
 - [ ] Human approval gate: deployment cannot proceed without explicit human sign-off in digichat
-- [ ] digiclaw audit log captures every deployment action
+- [ ] digibot audit log captures every deployment action
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
@@ -853,7 +853,7 @@ Deploy the digithings-guide digisearch index (already defined in `docs/projects/
 - [ ] `docs/projects/digithings-guide/` index deployed and populated
 - [ ] All `docs/`, `ARCHITECTURE.md`, ADRs, vision docs, module READMEs indexed
 - [ ] Semantic search returns relevant results for queries like "what does digiquant do?"
-- [ ] Index auto-updates when docs change (CI hook or scheduled digiclaw job)
+- [ ] Index auto-updates when docs change (CI hook or scheduled digibot job)
 
 ## Files affected
 - `docs/projects/digithings-guide/indexes/docs.yaml` (extend sources)
@@ -1231,7 +1231,7 @@ Implement scheduled JWKS key rotation that maintains a transition period where b
 Roll out Prometheus `/metrics` endpoints to all digithings services using the shared `digibase.metrics` instrumentation. Consistent labels across all services enable unified dashboards.
 
 ## Acceptance Criteria
-- [ ] `/metrics` endpoint live on: digigraph, digiquant, digisearch, digikey, digismith, digiclaw
+- [ ] `/metrics` endpoint live on: digigraph, digiquant, digisearch, digikey, digismith, digibot
 - [ ] Consistent metric labels: `service`, `version`, `environment`
 - [ ] Request duration histogram, request count, and error rate per route
 - [ ] `digibase/src/digibase/metrics.py` utility used by all (no per-service duplicate)
@@ -1336,9 +1336,9 @@ Add structured JSON logging throughout digisearch — currently it has zero stru
 ## Model: sonnet
 """,
     ),
-    # ── digiclaw (Project #8) ──────────────────────────────────────────────────
+    # ── digibot (Project #8) ──────────────────────────────────────────────────
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="med",
         priority="high",
@@ -1349,30 +1349,30 @@ Add structured JSON logging throughout digisearch — currently it has zero stru
         title="[INFRA] OpenClaw runtime integration",
         body="""\
 ## Goal
-Integrate the OpenClaw runtime as the agent execution engine beneath digiclaw. OpenClaw handles the actual agent loop, tool calling, and session management. digiclaw wraps it with scheduling, agent definitions, audit logging, and tool provisioning.
+Integrate the OpenClaw runtime as the agent execution engine beneath digibot. OpenClaw handles the actual agent loop, tool calling, and session management. digibot wraps it with scheduling, agent definitions, audit logging, and tool provisioning.
 
 ## From scratch
-YES — digiclaw currently has no OpenClaw integration.
+YES — digibot currently has no OpenClaw integration.
 
 ## Acceptance Criteria
-- [ ] OpenClaw installed as digiclaw dependency
-- [ ] `OpenClawRuntime` class wraps OpenClaw with digiclaw's agent definition schema
+- [ ] OpenClaw installed as digibot dependency
+- [ ] `OpenClawRuntime` class wraps OpenClaw with digibot's agent definition schema
 - [ ] An agent can be launched with: definition file, tool list, and schedule config
 - [ ] Agent output captured and written to JSONL audit log
-- [ ] `digiclaw/ARCHITECTURE.md` updated with integration architecture
+- [ ] `digibot/ARCHITECTURE.md` updated with integration architecture
 
 ## Files affected (new)
-- `digiclaw/src/digiclaw/openclaw/__init__.py`
-- `digiclaw/src/digiclaw/openclaw/runtime.py`
-- `digiclaw/src/digiclaw/openclaw/adapter.py`
+- `digibot/src/digibot/openclaw/__init__.py`
+- `digibot/src/digibot/openclaw/runtime.py`
+- `digibot/src/digibot/openclaw/adapter.py`
 
-## Dependencies: None — foundation for all other digiclaw tasks
+## Dependencies: None — foundation for all other digibot tasks
 ## Parallelizable: NO — blocks agent registry and scheduler
 ## Model: opus — novel architecture integration
 """,
     ),
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="low",
         priority="high",
@@ -1383,20 +1383,20 @@ YES — digiclaw currently has no OpenClaw integration.
         title="[FEATURE] Agent definition schema and registry",
         body="""\
 ## Goal
-Define the schema for digiclaw agent definitions (YAML files) and build the registry that loads, validates, and manages them. An agent definition specifies: what the agent does, which tools/sub-graphs it has access to, its schedule, and its output sink.
+Define the schema for digibot agent definitions (YAML files) and build the registry that loads, validates, and manages them. An agent definition specifies: what the agent does, which tools/sub-graphs it has access to, its schedule, and its output sink.
 
 ## Acceptance Criteria
 - [ ] `AgentDefinition` Pydantic v2 schema: name, description, tools, schedule, output_sink
-- [ ] YAML files in `digiclaw/agents/` auto-loaded on startup
+- [ ] YAML files in `digibot/agents/` auto-loaded on startup
 - [ ] Registry validates all definitions against schema on load
-- [ ] `digiclaw agents list` CLI command shows registered agents
+- [ ] `digibot agents list` CLI command shows registered agents
 - [ ] Unit tests for schema validation and registry loading
 
 ## Files affected (new)
-- `digiclaw/src/digiclaw/agents/__init__.py`
-- `digiclaw/src/digiclaw/agents/schema.py`
-- `digiclaw/src/digiclaw/agents/registry.py`
-- `digiclaw/agents/` (example definitions directory)
+- `digibot/src/digibot/agents/__init__.py`
+- `digibot/src/digibot/agents/schema.py`
+- `digibot/src/digibot/agents/registry.py`
+- `digibot/agents/` (example definitions directory)
 
 ## Dependencies: OpenClaw integration (#44)
 ## Parallelizable: NO
@@ -1404,7 +1404,7 @@ Define the schema for digiclaw agent definitions (YAML files) and build the regi
 """,
     ),
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="low",
         priority="high",
@@ -1415,18 +1415,18 @@ Define the schema for digiclaw agent definitions (YAML files) and build the regi
         title="[FEATURE] Cron and continuous scheduling",
         body="""\
 ## Goal
-Build the scheduling layer for digiclaw: agents can be scheduled on a cron expression, run continuously (24/7 with configurable sleep between iterations), or triggered by events. The scheduler manages agent lifecycle: start, stop, pause, resume.
+Build the scheduling layer for digibot: agents can be scheduled on a cron expression, run continuously (24/7 with configurable sleep between iterations), or triggered by events. The scheduler manages agent lifecycle: start, stop, pause, resume.
 
 ## Acceptance Criteria
 - [ ] Cron schedule parsed from agent definition YAML (standard cron syntax)
 - [ ] Continuous mode: agent loops with configurable `interval_seconds`
 - [ ] Scheduler survives service restart (pending jobs re-queued)
-- [ ] `digiclaw schedule status` CLI shows next run times
+- [ ] `digibot schedule status` CLI shows next run times
 - [ ] Agent runs are isolated — one run's failure doesn't affect next scheduled run
 - [ ] Unit tests for cron expression parsing and run scheduling
 
 ## Files affected (new)
-- `digiclaw/src/digiclaw/scheduler.py`
+- `digibot/src/digibot/scheduler.py`
 - `tests/dc/test_scheduler.py`
 
 ## Dependencies: Agent registry (#45)
@@ -1435,7 +1435,7 @@ Build the scheduling layer for digiclaw: agents can be scheduled on a cron expre
 """,
     ),
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="med",
         priority="critical",
@@ -1443,21 +1443,21 @@ Build the scheduling layer for digiclaw: agents can be scheduled on a cron expre
         model="sonnet",
         milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
-        title="[FEATURE] research daily cycle automation — digiclaw scheduled job",
+        title="[FEATURE] research daily cycle automation — digibot scheduled job",
         body="""\
 ## Goal
-Define and deploy the research daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual research execution entirely.
+Define and deploy the research daily cycle as a digibot scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual research execution entirely.
 
 ## Acceptance Criteria
-- [ ] `digiclaw/agents/research_daily.yaml` agent definition with correct schedule
+- [ ] `digibot/agents/research_daily.yaml` agent definition with correct schedule
 - [ ] Agent triggers the research digigraph sub-graph via MCP/API call
 - [ ] Run result (success/failure, documents updated, token cost) written to audit log
 - [ ] Alert triggered (via digismith or webhook) if run fails 2x consecutively
 - [ ] Integration test: trigger agent manually, verify research sub-graph runs
 
 ## Files affected (new)
-- `digiclaw/agents/research_daily.yaml`
-- `digiclaw/src/digiclaw/jobs/research_daily.py`
+- `digibot/agents/research_daily.yaml`
+- `digibot/src/digibot/jobs/research_daily.py`
 
 ## Dependencies: Scheduler (#46) + research digigraph migration (#6)
 ## Parallelizable: NO
@@ -1465,7 +1465,7 @@ Define and deploy the research daily cycle as a digiclaw scheduled job: delta up
 """,
     ),
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="low",
         priority="medium",
@@ -1476,10 +1476,10 @@ Define and deploy the research daily cycle as a digiclaw scheduled job: delta up
         title="[FEATURE] Strategy performance monitor agent",
         body="""\
 ## Goal
-Build a digiclaw agent that continuously monitors live strategy performance against backtest baseline. Detects statistically significant P&L drift, Sharpe degradation, or execution anomalies and files a GitHub issue or sends an alert.
+Build a digibot agent that continuously monitors live strategy performance against backtest baseline. Detects statistically significant P&L drift, Sharpe degradation, or execution anomalies and files a GitHub issue or sends an alert.
 
 ## Acceptance Criteria
-- [ ] `digiclaw/agents/strategy_monitor.yaml` agent definition (continuous, 1hr interval)
+- [ ] `digibot/agents/strategy_monitor.yaml` agent definition (continuous, 1hr interval)
 - [ ] Fetches live performance metrics from deployed strategy (Alpaca API)
 - [ ] Compares rolling Sharpe, win rate, and max drawdown vs. backtest baseline
 - [ ] Drift threshold configurable per strategy in the definition file
@@ -1487,8 +1487,8 @@ Build a digiclaw agent that continuously monitors live strategy performance agai
 - [ ] Unit tests for drift detection logic
 
 ## Files affected (new)
-- `digiclaw/agents/strategy_monitor.yaml`
-- `digiclaw/src/digiclaw/jobs/strategy_monitor.py`
+- `digibot/agents/strategy_monitor.yaml`
+- `digibot/src/digibot/jobs/strategy_monitor.py`
 
 ## Dependencies: Scheduler (#46)
 ## Parallelizable: YES — after scheduler
@@ -1496,7 +1496,7 @@ Build a digiclaw agent that continuously monitors live strategy performance agai
 """,
     ),
     dict(
-        component="digiclaw",
+        component="digibot",
         type="feat",
         risk="high",
         priority="medium",
@@ -1516,12 +1516,12 @@ YES — current ADDM is a stub. Full implementation needed.
 - [ ] Statistical drift detection: Page-Hinkley test or CUSUM on rolling performance metrics
 - [ ] Agent output quality drift: embedding distance between recent outputs and historical baseline
 - [ ] `DriftReport` Pydantic v2 model: drift_type, severity, metric, threshold, recommendation
-- [ ] ADDM runs as a digiclaw agent (scheduled, after each monitored run)
+- [ ] ADDM runs as a digibot agent (scheduled, after each monitored run)
 - [ ] Unit tests with synthetic drift scenarios
-- [ ] `digiclaw/ARCHITECTURE.md` updated (ADDM section)
+- [ ] `digibot/ARCHITECTURE.md` updated (ADDM section)
 
 ## Files affected
-- `digiclaw/src/digiclaw/addm.py` (rewrite)
+- `digibot/src/digibot/addm.py` (rewrite)
 - `tests/dc/test_addm.py` (new)
 
 ## Dependencies: Scheduler (#46)

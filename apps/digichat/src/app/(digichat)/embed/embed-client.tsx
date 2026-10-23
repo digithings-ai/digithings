@@ -38,6 +38,7 @@ import {
   disabledCatalogIds,
   extraOffFromCatalog,
   persistDensity,
+  resetChromePrefsFromDeploy,
   useStoredDensityAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
@@ -89,7 +90,6 @@ import {
   readUnlockToken,
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
-  TRIAL_PROOF_REFRESH_MESSAGE_TYPE,
 } from "@/lib/embed-trial-messages";
 import {
   EMBED_TRIAL_TURN_LIMIT,
@@ -129,12 +129,14 @@ import {
   parseEmbedUserTheme,
   parseThemeMessage,
   readEmbedUserThemeRaw,
+  resolveEmbedPalette,
   resolveEmbedTheme,
   subscribeEmbedUserTheme,
   writeEmbedUserTheme,
   type EmbedTheme,
   type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
+import type { PaletteName } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -157,111 +159,6 @@ const DEFAULT_WELCOME =
 function resolveAccent(raw: string | null | undefined): Accent {
   if (raw && (ACCENTS as readonly string[]).includes(raw)) return raw as Accent;
   return "digichat";
-}
-
-/**
- * Trial proof channel (DIG-4523).
- *
- * The embedding page hands over a server-signed, host-scoped trial proof over
- * postMessage. The proof is a short-lived bearer: it is held in memory only —
- * never in storage, never in a URL — and read at send time, so a proof that
- * arrives after mount still reaches the outgoing request.
- *
- * The message type carries no client name: the channel is shared by every
- * embedding page.
- */
-export const TRIAL_PROOF_MESSAGE_TYPE = "trial:proof";
-
-/** Origin of the page that embeds us — the only origin allowed to post a proof. */
-export function embedParentOrigin(host: string | undefined): string | null {
-  const raw = host?.trim();
-  if (!raw) return null;
-  try {
-    return raw.includes("://") ? new URL(raw).origin : `https://${raw}`;
-  } catch {
-    return null;
-  }
-}
-
-/** Host part of a host string, to compare the host a proof was signed for. */
-function hostKey(value: string | undefined): string | null {
-  const raw = value?.trim();
-  if (!raw) return null;
-  try {
-    return new URL(raw.includes("://") ? raw : `https://${raw}`).host.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Read a trial proof out of a postMessage.
- *
- * Returns the proof, or null when the message must be ignored: a foreign
- * origin, a different message type, an empty value, or a proof that names a
- * host other than the one we serve. The server re-verifies the proof against
- * the host it serves — the client never papers over that.
- */
-export function readTrialProofMessage(
-  event: { origin: string; data: unknown },
-  options: { parentOrigin: string; servingHost?: string },
-): string | null {
-  if (event.origin !== options.parentOrigin) return null;
-  const data = event.data as
-    | { type?: string; proof?: string; host?: string }
-    | null
-    | undefined;
-  if (!data || data.type !== TRIAL_PROOF_MESSAGE_TYPE) return null;
-  // The field name is fixed by the wire contract: the page posts
-  // `{ type: "trial:proof", proof }`. Any other spelling is not our proof.
-  const raw = data.proof;
-  if (typeof raw !== "string" || raw.trim().length === 0) return null;
-  const proof = raw.trim();
-  const named = data.host?.trim();
-  if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
-  return proof;
-}
-
-/**
- * Hold the host-scoped trial proof and react to the server's expired signal.
- *
- * The proof lives in this ref only — never in storage, never in a URL — and is
- * read at send time, so a proof that arrives after mount still reaches the
- * outgoing request. When the server reports the proof expired, the held proof
- * is dropped and the page is asked to mint a fresh one over the same channel.
- *
- * Dropping first and asking second is what keeps this from looping: a signal
- * that arrives when no proof is held finds nothing to drop and asks for
- * nothing, so a page that does not implement the request cannot spin.
- */
-export function useTrialProofChannel(servingHost: string) {
-  const trialProofRef = useRef<string | null>(null);
-  const getTrialProof = useCallback(() => trialProofRef.current, []);
-  const parentOrigin = embedParentOrigin(servingHost);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    // A proof is bound to one host: drop an earlier one when the host changes.
-    trialProofRef.current = null;
-    if (!parentOrigin) return;
-    const onMessage = (event: MessageEvent) => {
-      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
-      if (proof) trialProofRef.current = proof;
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [parentOrigin, servingHost]);
-  const onTrialProofExpired = useCallback(() => {
-    const held = trialProofRef.current;
-    if (!held) return;
-    // Never present a proof the server called expired.
-    trialProofRef.current = null;
-    if (!parentOrigin) return;
-    window.parent.postMessage(
-      { type: TRIAL_PROOF_REFRESH_MESSAGE_TYPE },
-      parentOrigin,
-    );
-  }, [parentOrigin]);
-  return { getTrialProof, onTrialProofExpired };
 }
 
 /**
@@ -324,6 +221,9 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // The parent's palette rides the same message; it never writes data-palette
+  // itself (that would fight the theme effect below).
+  const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
   // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
   const userThemeKey = embedUserThemeKey(tenantCfg.slug);
   const userThemeRaw = useSyncExternalStore(
@@ -345,7 +245,12 @@ function EmbedPageInner({
     url: urlTheme,
     tenant: tenantCfg.theme,
   });
-  const effectivePalette = userTheme?.palette ?? "default";
+  // /theme pick > parent postMessage > default look. One channel, one writer
+  // (the theme effect below), so a parent palette cannot be reverted mid-tick.
+  const effectivePalette = resolveEmbedPalette({
+    pick: userTheme,
+    parent: parentPalette,
+  });
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -426,6 +331,9 @@ function EmbedPageInner({
       const parsed = parseThemeMessage(event, themeParentOrigins);
       if (!parsed) return;
       setParentTheme(parsed.theme);
+      // A message without a palette clears the parent channel, so the pick or
+      // the default look takes over again.
+      setParentPalette(parsed.palette ?? null);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -569,6 +477,8 @@ function EmbedChat({
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
     }),
     language: tenantLanguage,
     view: stockClient.features.view,
@@ -631,13 +541,6 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
   const getPlanProof = useCallback(() => planProofRef.current, []);
-
-  // Host-scoped trial proof (DIG-4523): the embedding page hands over a
-  // server-signed proof over postMessage. It is a short-lived bearer, so it is
-  // held in memory only — never in storage, never in a URL — and read at send
-  // time so a proof that arrives after mount still reaches the header.
-  const servingHost = resolveEmbedHost(host);
-  const { getTrialProof, onTrialProofExpired } = useTrialProofChannel(servingHost);
 
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
   const tenantAllowsWeb = uiFlags.webSearch;
@@ -809,8 +712,6 @@ function EmbedChat({
     getEffort,
     getSearchEngine,
     getPlanProof,
-    getTrialProof,
-    onTrialProofExpired,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.
@@ -1266,7 +1167,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
@@ -1358,7 +1259,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
@@ -1375,7 +1276,7 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,

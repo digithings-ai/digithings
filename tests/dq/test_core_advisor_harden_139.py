@@ -20,6 +20,7 @@ MIGRATION = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "139_core_advisor_harden.sql"
 )
 

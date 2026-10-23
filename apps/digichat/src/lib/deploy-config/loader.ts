@@ -10,7 +10,10 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { load as loadYaml } from "js-yaml";
+import { expandExtendsDocument } from "./extends-merge";
 import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
@@ -21,15 +24,8 @@ import {
   type DigichatConfig,
   type DigichatDeployment,
 } from "./schema";
-import {
-  BASELINE_EMBED_PLACEHOLDER,
-  BASELINE_EMBED_SKIN,
-  BASELINE_EMBED_SUGGESTIONS,
-  BASELINE_EMBED_WELCOME,
-  BASELINE_EMBED_WELCOME_BODY,
-} from "@/lib/baseline-embed";
+import { BASELINE_EMBED_WELCOME } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
-import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
@@ -39,6 +35,59 @@ import {
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 
 export const DEFAULT_CONFIG_PATH = "/app/config/digichat.yaml";
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+
+/** Checked-in house document. A missing DIGICHAT_CONFIG_PATH loads this. */
+export function defaultsYamlCandidates(): string[] {
+  return [
+    resolve(MODULE_DIR, "../../../config/defaults.yaml"),
+    resolve(process.cwd(), "config", "defaults.yaml"),
+    resolve(process.cwd(), "apps", "digichat", "config", "defaults.yaml"),
+    "/app/config/defaults.yaml",
+  ];
+}
+
+function digichatConfigDir(): string {
+  const hit = defaultsYamlCandidates().find((path) => existsSync(path));
+  if (!hit) {
+    throw new Error(
+      `digichat defaults.yaml not found (looked in ${defaultsYamlCandidates().join(", ")})`,
+    );
+  }
+  return dirname(hit);
+}
+
+function readExtendsName(name: string): unknown {
+  const file = name.endsWith(".yaml") || name.endsWith(".yml") ? name : `${name}.yaml`;
+  const path = resolve(digichatConfigDir(), file);
+  if (!existsSync(path)) throw new Error(`extends: ${name} not found at ${path}`);
+  return parseYamlOrJson(readFileSync(path, "utf8"), path);
+}
+
+/** Expand `extends` before schema parse. No-op when the document does not extend. */
+export function expandDigichatDocument(input: unknown): unknown {
+  return expandExtendsDocument(input, readExtendsName);
+}
+
+export function materializeDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  return parseDigichatConfig(expandDigichatDocument(input), ctx, opts);
+}
+
+function loadDefaultsDocument(
+  ctx: string,
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  const path = defaultsYamlCandidates().find((candidate) => existsSync(candidate));
+  if (!path) {
+    throw new Error(`${ctx}: defaults.yaml not found`);
+  }
+  return materializeDigichatConfig(parseYamlOrJson(readFileSync(path, "utf8"), path), path, opts);
+}
 
 function resolveConfigPath(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
@@ -155,6 +204,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     cli: { enabled: false },
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
+    ...(cfg.limits ? { limits: cfg.limits } : {}),
     ...(catalog.length
       ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
       : {}),
@@ -190,6 +240,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     aliases: dep.aliases,
     backend: dep.backend,
     ...(dep.guardrails ? { guardrails: dep.guardrails } : {}),
+    ...(dep.limits ? { limits: dep.limits } : {}),
     gateMode: dep.gate.mode,
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
@@ -296,15 +347,29 @@ function applyEnvOverlay(
 
   // Resolve `mcp.servers[].tokenEnv` → `.token` (operator-static MCP auth, #3841).
   if (next.deployment) {
-    next.deployment = resolveMcpServerTokens(next.deployment, env);
+    next.deployment = resolveDeploymentTokenEnv(
+      resolveMcpServerTokens(next.deployment, env),
+      env,
+    );
   }
   if (next.hosts) {
     for (const [hostKey, dep] of Object.entries(next.hosts)) {
-      next.hosts[hostKey] = resolveMcpServerTokens(dep, env);
+      next.hosts[hostKey] = resolveDeploymentTokenEnv(resolveMcpServerTokens(dep, env), env);
     }
   }
 
   return next;
+}
+
+/** Fills `token` from `tokenEnv` when the slug env and `token` are both unset. */
+function resolveDeploymentTokenEnv(
+  dep: DigichatDeployment,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): DigichatDeployment {
+  if (dep.token || !dep.tokenEnv) return dep;
+  const value = env[dep.tokenEnv]?.trim();
+  if (!value) return dep;
+  return { ...dep, token: value };
 }
 
 /** Fills each `mcp.servers[].token` from its `tokenEnv` when `token` is unset (#3841). */
@@ -340,6 +405,88 @@ function unresolveCatalog(dep: DigichatDeployment): DigichatDeployment {
   return { ...dep, models };
 }
 
+/**
+ * Merge one registry tenant onto a deployment so that ONE artefact decides
+ * both the session lock and the model allowlist (DIG-4589).
+ *
+ * Rules, each chosen so a merge can never drop a restriction:
+ * - `gate.lockSessionControls`: true when EITHER source says true. A lock is
+ *   a restriction, so the merge keeps the stricter of the two.
+ * - `models.available`: the tenant's curated list when it is non-empty, else
+ *   the deployment's list. A parsed tenant list is always an array (possibly
+ *   empty), so "non-empty wins" is the only usable rule. The projection in
+ *   `embed-bridge.ts` consumes THIS merged artefact, so the list the client
+ *   is shown is the list the server enforces.
+ * - `models.default` / `models.allowPicker` and every other model field: the
+ *   tenant's when it sets one, else the deployment's. The registry's own
+ *   models block is spread on top, so the picker, the catalog and the
+ *   premium meter still travel to a host that also has a deployment entry.
+ * - `models.catalog`: dropped when the tenant curates a list. A catalog
+ *   policy and a hand-written list cannot coexist - `applyModelCatalog`
+ *   ignores the hand list and pins the tenant's `default` against a catalog
+ *   that does not know it, which throws. The tenant's curation is the more
+ *   specific statement, so it wins, exactly as it does in
+ *   `withProductPickerDefaults`.
+ *
+
+ * `gate.requiredPlanTier` is NOT merged here: #3662 keeps its own rule in
+ * `mergeEmbedTenantsOverlay` (the registry fills it in only when the
+ * deployment omitted it).
+ */
+function mergeEmbedTenantIntoDeployment(
+  dep: DigichatDeployment,
+  cfg: EmbedTenantConfig,
+): DigichatDeployment {
+  // The registry's models block is only meaningful when the tenant has one:
+  // `embedTenantToDeployment` always fills `available`, so spreading an
+  // absent block would wipe the deployment's own list.
+  const fromRegistry = cfg.models ? embedTenantToDeployment(cfg).models : undefined;
+  const tenantAvailable = cfg.models?.available ?? [];
+  const tenantDefault = cfg.models?.default?.trim() || undefined;
+  const tenantAllowPicker = cfg.models?.allowPicker;
+
+  const available =
+    tenantAvailable.length > 0
+      ? [...tenantAvailable]
+      : [...(dep.models?.available ?? [])];
+  const defaultModel = tenantDefault ?? dep.models?.default;
+  const allowPicker = tenantAllowPicker ?? dep.models?.allowPicker;
+
+  const models: DigichatDeployment["models"] = {
+    ...dep.models,
+    ...(fromRegistry ?? {}),
+    ...(defaultModel ? { default: defaultModel } : {}),
+    available,
+    ...(allowPicker === undefined ? {} : { allowPicker }),
+  };
+
+  // A catalog policy and a hand-written list are mutually exclusive:
+  // `applyModelCatalog` warns that the hand list is ignored, lets the
+  // catalog win, and pins the tenant's `default` against a catalog that does
+  // not know it - which throws and takes the whole config down with it. The
+  // tenant's curation is the more specific statement, so when the tenant
+  // curates a list the deployment's catalog policy is dropped and the hand
+  // list is left alone - the same precedence `withProductPickerDefaults`
+  // gives a hand-written list over the product-chat default policy. When the
+  // tenant curates nothing the deployment's catalog stays and resolves as
+  // before.
+  if (tenantAvailable.length > 0 && models.catalog) {
+    delete models.catalog;
+  }
+
+  return {
+    ...dep,
+    models,
+    gate: {
+      ...dep.gate,
+      lockSessionControls:
+        dep.gate.lockSessionControls === true || cfg.lockSessionControls === true
+          ? true
+          : dep.gate.lockSessionControls,
+    },
+  };
+}
+
 function mergeEmbedTenantsOverlay(
   config: DigichatConfig | null,
   tenantsRaw: string | undefined,
@@ -362,32 +509,42 @@ function mergeEmbedTenantsOverlay(
       : {}),
   };
 
+  // Index the config hosts by NORMALISED host. `matchHostDeployment` looks a
+  // host up the same way, so a config key written as an origin
+  // (`https://occ.digithings.ai`) or with a port has to merge with the
+  // registry key for the same host. Without this index one host ended up with
+  // two entries and the lookup returned the registry-only duplicate, so the
+  // deployment's own gate and model list were silently dropped (DIG-4589).
+  const configKeyByHost = new Map<string, string>();
+  for (const key of Object.keys(hosts)) {
+    const normalized = normalizeConfigHost(key);
+    if (normalized && !configKeyByHost.has(normalized)) {
+      configKeyByHost.set(normalized, key);
+    }
+  }
+
   // Registry is host → config. New hosts hydrate fully. Existing YAML hosts
-  // keep chrome and token. `requiredPlanTier` is copied when YAML omitted it
-  // so a baked example cannot drop the live DIGICHAT_EMBED_TENANTS Desk+ gate
-  // (#3662). The registry `models` block is spread on top so a host that
-  // already exists in YAML still receives the picker and the premium meter.
-  // Registry model keys win.
+  // keep chrome, but the session lock and the model allowlist are merged so
+  // one artefact decides both (DIG-4589). `requiredPlanTier` is still copied
+  // when YAML omitted it so a baked example file cannot drop the live
+  // DIGICHAT_EMBED_TENANTS Desk+ gate (#3662).
   for (const [host, cfg] of registry) {
-    if (!hosts[host]) {
+    const normalized = normalizeConfigHost(host) ?? host;
+    // An exact key match wins: `matchHostDeployment` returns the exact
+    // normalised key before it scans the entries.
+    const existingKey = hosts[host] ? host : configKeyByHost.get(normalized);
+    if (!existingKey) {
       hosts[host] = embedTenantToDeployment(cfg);
+      configKeyByHost.set(normalized, host);
       continue;
     }
-    let next = hosts[host];
-    if (cfg.requiredPlanTier && !next.gate.requiredPlanTier) {
-      next = {
-        ...next,
-        gate: { ...next.gate, requiredPlanTier: cfg.requiredPlanTier },
+    hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
+      hosts[existingKey] = {
+        ...hosts[existingKey],
+        gate: { ...hosts[existingKey].gate, requiredPlanTier: cfg.requiredPlanTier },
       };
     }
-    if (cfg.models) {
-      const fromRegistry = embedTenantToDeployment(cfg).models;
-      next = {
-        ...next,
-        models: { ...(next.models ?? { available: [] }), ...(fromRegistry ?? {}) },
-      };
-    }
-    hosts[host] = next;
   }
 
   return parseDigichatConfig(
@@ -484,7 +641,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         : null;
 
   if (contents != null && contents.trim()) {
-    const parsed = parseYamlOrJson(contents, path);
+    const parsed = expandDigichatDocument(parseYamlOrJson(contents, path));
     fromFile = parseDigichatConfig(parsed, path, {
       openRouterConfigured: openRouterConfigured(env),
     });
@@ -501,42 +658,10 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   } else if (fromFile) {
     merged = fromFile;
   } else {
-    // Dev default: single anonymous embed deployment (digigraph), no token.
-    merged = parseDigichatConfig(
-      {
-        version: 1,
-        deployment: {
-          slug: "local",
-          chrome: {
-            mode: "embed",
-            theme: "dark",
-            skin: BASELINE_EMBED_SKIN,
-            welcome: {
-              title: BASELINE_EMBED_WELCOME,
-              body: BASELINE_EMBED_WELCOME_BODY,
-            },
-            placeholder: BASELINE_EMBED_PLACEHOLDER,
-            suggestions: [...BASELINE_EMBED_SUGGESTIONS],
-          },
-          persistence: "none",
-          auth: "anonymous",
-          // Table lives in config/digichat-deploy-models.json (#5029).
-          models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
-          backend: { type: "digigraph" },
-          // Least-privilege fallback: the unconfigured container opts into
-          // nothing; BYOK / user MCP / web search require an explicit config.
-          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
-          gate: {
-            mode: "ungated",
-            activityDetail: "labels",
-            showByok: false,
-            webSearch: false,
-          },
-        },
-      },
-      "digichat config (dev default)",
-      { openRouterConfigured: openRouterConfigured(env) },
-    );
+    // No config file and no tenant overlay: house (defaults.yaml).
+    merged = loadDefaultsDocument("digichat config (defaults)", {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   }
 
   assertRenderedDeployment(merged, path);
@@ -583,14 +708,19 @@ export function setDigichatConfigForTests(cfg: DigichatConfig | null): void {
 
 /**
  * True when this process is a single-install client container (YAML `deployment`
- * or DIGICHAT_CHROME_SKIN overlay), not the synthetic no-file dev default.
- * Hosts-only multi-tenant configs stay on DIGICHAT_EMBED_TENANTS.
+ * on disk, or DIGICHAT_CHROME_SKIN). Hosts-only configs stay on
+ * DIGICHAT_EMBED_TENANTS. The built-in house document is the no-file fallback,
+ * not an anonymous install: an unknown parent must not inherit it. Session-auth
+ * deployments are not anonymous installs.
  */
 export function isExplicitClientInstall(
   config: DigichatConfig = getDigichatConfig(),
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): boolean {
   if (!config.deployment || config.deployment.auth === "session") return false;
+  // A host map is a registry. Unknown parents must not fall through to
+  // deployment, including when that deployment is house.
+  if (config.hosts && Object.keys(config.hosts).length > 0) return false;
   if (env.DIGICHAT_CHROME_SKIN?.trim()) return true;
   return existsSync(resolveConfigPath(env));
 }

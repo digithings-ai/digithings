@@ -34,7 +34,7 @@ COMPONENT_PATHS: list[tuple[str, str]] = [
     ("digiquant/src/digiquant", "digiquant"),
     ("digisearch/src/digisearch", "digisearch"),
     ("digitrace/src/digitrace", "digitrace"),
-    ("digiclaw/", "digiclaw"),
+    ("digibot/", "digibot"),
     ("digibase/src/digibase", "digibase"),
     ("digikey/src/digikey", "digikey"),
     ("digichat/", "digichat"),

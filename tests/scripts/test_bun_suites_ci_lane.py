@@ -34,12 +34,19 @@ SUITES = (
     "clients/digichat-tui",
     "packages/surface-config",
     "packages/hero-banner",
+    # DIG-5212: the recorded-frame contract both TUI clients and the dashboard
+    # import. Its suite is the only place that contract is tested.
+    "packages/tui-frame",
 )
 
 # Suites with zero dependencies skip the install step (see the workflow): there
 # is nothing to install, and `bun install` there would walk up to the repo-root
 # workspace and install the whole monorepo instead.
-NO_INSTALL_SUITES = ("packages/surface-config", "packages/hero-banner")
+NO_INSTALL_SUITES = (
+    "packages/surface-config",
+    "packages/hero-banner",
+    "packages/tui-frame",
+)
 
 
 def test_bun_suites_are_not_vanished() -> None:
@@ -135,15 +142,22 @@ def test_suites_with_dependencies_commit_a_lockfile() -> None:
     A new dependency added without its lockfile would make the lane red on
     arrival — this fails first, at the commit that adds the dependency,
     naming the missing file.
+
+    A no-install suite is exempt only from the install, not from the rule: it
+    must declare no runtime dependency, because `bun test` would then resolve
+    one from somewhere it did not install. A devDependency is allowed: the
+    exemption means "the tests need no install", and a build-only tool (the
+    hero-banner's `tsup`) is not on the test path. Before this, hero-banner's
+    first devDependency turned this guard red on a lane that was passing.
     """
     for suite in SUITES:
         pkg = json.loads((REPO_ROOT / suite / "package.json").read_text(encoding="utf-8"))
-        deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+        runtime = pkg.get("dependencies", {})
         lockfile = REPO_ROOT / suite / "bun.lock"
         if suite in NO_INSTALL_SUITES:
-            assert not deps, (
-                f"{suite} now declares dependencies {sorted(deps)} but the lane "
-                f"skips its install step — commit a bun.lock for it and drop the "
+            assert not runtime, (
+                f"{suite} now declares runtime dependencies {sorted(runtime)} but the "
+                f"lane skips its install step — commit a bun.lock for it and drop the "
                 f"matrix condition in test-bun-suites.yml"
             )
         else:

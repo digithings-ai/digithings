@@ -17,6 +17,7 @@ import {
   catalogToolsFromClient,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   persistDensity,
   useStoredDensityAfterMount,
   disabledCatalogIds,
@@ -43,7 +44,7 @@ export type StockChatPrefsConfig = {
   availableModels: readonly string[];
   /** Catalog presets and groups. The menu falls back to raw ids when absent. */
   modelPicker?: {
-    presets: readonly { id: string; label: string; description: string; model: string }[];
+    presets: readonly { id: string; label: string; model: string }[];
     groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
     showFullList: boolean;
   };
@@ -263,7 +264,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
@@ -333,7 +334,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,
@@ -349,7 +350,7 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: config.density,
             effort: config.effort,
             searchEngine: config.searchEngine,

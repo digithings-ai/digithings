@@ -17,42 +17,9 @@ from digiquant.data.onchain.ingest import (
     ingest_bitview,
 )
 
+from tests.dq.data.onchain_fakes import FakeResponse, FakeSession, mvrv_slice
+
 pytestmark = pytest.mark.unit
-
-
-def _mvrv_slice() -> dict[str, Any]:
-    return {
-        "version": 1,
-        "index": "day1",
-        "type": "StoredF32",
-        "start": 800,
-        "end": 805,
-        "stamp": "2026-08-30T22:07:42Z",
-        "data": [3.214286, 3.214286, 3.178571, 3.142857, 2.931034],
-    }
-
-
-class _FakeResp:
-    def __init__(self, body: object, status: int = 200) -> None:
-        self._body = body
-        self.status_code = status
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
-
-    def json(self) -> object:
-        return self._body
-
-
-class _FakeSession:
-    def __init__(self, body: object) -> None:
-        self._body = body
-        self.calls: list[str] = []
-
-    def get(self, url: str, **kwargs: Any) -> _FakeResp:
-        self.calls.append(url)
-        return _FakeResp(self._body)
 
 
 class _FakeTable:
@@ -96,12 +63,12 @@ class TestFrameToMacroRows:
 
 class TestIngestBitview:
     def test_writes_parquet_and_upserts(self, tmp_path: Path) -> None:
-        session = _FakeSession(
-            [
-                _mvrv_slice(),
-                {**_mvrv_slice(), "data": [1.0] * 5},
-                {**_mvrv_slice(), "data": [0.5] * 5},
-                {**_mvrv_slice(), "data": [0.2] * 5},
+        session = FakeSession(
+            body=[
+                mvrv_slice(),
+                {**mvrv_slice(), "data": [1.0] * 5},
+                {**mvrv_slice(), "data": [0.5] * 5},
+                {**mvrv_slice(), "data": [0.2] * 5},
             ]
         )
         client = _FakeClient()
@@ -125,7 +92,7 @@ class TestIngestBitview:
 
     def test_fail_soft_on_transport_error(self, tmp_path: Path) -> None:
         class _Boom:
-            def get(self, url: str, **kwargs: Any) -> _FakeResp:
+            def get(self, url: str, **kwargs: Any) -> FakeResponse:
                 raise RuntimeError("network down")
 
         result = ingest_bitview(["mvrv"], cache_dir=tmp_path, session=_Boom())

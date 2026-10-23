@@ -1,7 +1,7 @@
 import type { Layout } from "./grid";
 
-// Browser pages, not drawn here: /tools/terminal, /tools/charts.
-// /tools/chat is a dedicated page: threads in the desk rail, one empty sentence.
+// Browser pages, not drawn here: /tools/terminal, /tools/gloomberb, /tools/vela.
+// /tools/digichat is a dedicated page: threads in the desk rail, one empty sentence.
 
 const FX_PAIR = "USDJPY";
 

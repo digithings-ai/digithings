@@ -20,6 +20,14 @@ import {
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
 import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
+import { limitSupport } from "@/lib/limits/matrix";
+import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  costPerWindowIssue,
+  limitsDisagree,
+  LimitsSchema,
+} from "@/lib/limits/schema";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
@@ -243,16 +251,25 @@ const ModelPickerPresetSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
-    description: z.string(),
     model: z.string().min(1),
   })
   .strict();
 
 const ModelPickerGroupSchema = z
   .object({
+    /** Backend provider id: the model id prefix before the first "/". */
     provider: z.string().min(1),
-    models: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) }).strict()),
-    /** Manual Premium group. Presets and the router never select these ids. */
+    models: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          /** Above the standard cap, at or under the premium cap. */
+          premium: z.boolean().optional(),
+        })
+        .strict(),
+    ),
+    /** A hand-written group can still be manual-only. The catalog never sets it. */
     premium: z.boolean().optional(),
   })
   .strict();
@@ -287,11 +304,15 @@ export const ModelsSchema = z
     /**
      * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
      * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
-     * sign off on overriding the DIG-4488 lock". Other hosts ignore it. Tool
-     * and MCP locks stay closed.
+     * sign off on overriding the DIG-4488 lock". `false` keeps the operator
+     * model. A row that only shares the slug stays locked unless the flag
+     * is true. Tool and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
-    /** USD per million output tokens. Omit to use the catalog default. */
+    /**
+     * USD per million output tokens for the standard tier. The same number as
+     * `limits.models.standard.maxOutputUsdPerMillion` when both are set.
+     */
     priceCapUsdPerMillion: z.number().positive().optional(),
     /**
      * Manual Premium tier: above the standard cap, at or under this cap.
@@ -299,9 +320,9 @@ export const ModelsSchema = z
      */
     premiumCapUsdPerMillion: z.number().positive().optional(),
     /**
-     * Per-user premium spend, USD over a rolling window. Omit to leave
-     * premium picks unmetered. Fold into guardrails beside tokensPerMinute
-     * when #6182 lands; that block is not on this branch.
+     * Per-user premium spend, USD over a rolling window. The same gate as
+     * `limits.cost.usd` with `premiumOnly: true` and `onExceed: fallback-auto`.
+     * Omit to leave premium picks unmetered.
      */
     costPerWindow: z
       .object({
@@ -319,6 +340,42 @@ export const ModelsSchema = z
     picker: ModelPickerSchema.optional(),
   })
   .strict();
+
+/**
+ * The model offer both the deployment config and the embed tenant registry
+ * describe (DIG-4589). The deployment config always carries `available`
+ * (`ModelsSchema` defaults it to `[]`); the registry leaves it optional, so
+ * the shared shape keeps it optional and the allowlist treats a missing list
+ * as "no restriction" — the same as an empty one.
+ *
+ * Every field is optional on purpose: this is the shape ONE artefact takes
+ * wherever it comes from — a deployment entry, a registry row, or the merged
+ * host deployment the request path reads (DIG-4589). The deployment's parsed
+ * models assign to it (`available` becomes optional, the defaulted
+ * `windowSeconds` becomes optional), so one helper serves all three.
+ */
+export type ModelOffer = {
+  default?: string;
+  available?: string[];
+  allowPicker?: boolean;
+  catalog?: boolean;
+  occPicker?: boolean;
+  priceCapUsdPerMillion?: number;
+  premiumCapUsdPerMillion?: number;
+  costPerWindow?: { usd: number; windowSeconds?: number };
+  presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
+  showFullList?: boolean;
+  minContextTokens?: number;
+  picker?: {
+    presets: Array<{ id: string; label: string; model: string }>;
+    groups: Array<{
+      provider: string;
+      models: Array<{ id: string; label: string; premium?: boolean }>;
+      premium?: boolean;
+    }>;
+    showFullList: boolean;
+  };
+};
 
 export const CliSchema = z
   .object({
@@ -499,9 +556,20 @@ export const ToolCatalogEntrySchema = z
     id: z.string().min(1),
     default: z.boolean().optional(),
     label: z.string().optional(),
-    /** Individual tools under this entry, for per-tool session toggles. */
+    /**
+     * Individual tools under this entry, for per-tool session toggles.
+     * `group` files a tool under a sub-header in `/tools`, in listed order.
+     */
     tools: z
-      .array(z.object({ id: z.string().min(1), label: z.string().optional() }).strict())
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            label: z.string().optional(),
+            group: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
       .optional(),
   })
   .strict();
@@ -717,6 +785,13 @@ export const GuardrailsSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * Chat request limiter for this deployment. Omit or true keeps the
+     * process default (per visitor, and per IP for anonymous embed).
+     * `false` turns it off. OCC does that. The tool-call cap and the
+     * answer guard are separate and stay on.
+     */
+    rateLimit: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -732,6 +807,13 @@ export const GuardrailsSchema = z
   });
 
 export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
+/** Omitted means the request limiter is on. `false` is the per-deployment off switch. */
+export function deploymentRateLimitEnabled(
+  guardrails: { rateLimit?: boolean } | null | undefined,
+): boolean {
+  return guardrails?.rateLimit !== false;
+}
 
 export const DeploymentSchema = z
   .object({
@@ -764,8 +846,15 @@ export const DeploymentSchema = z
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),
     backend: BackendSchema,
-    /** Off unless a key is set. See ARCHITECTURE.md, Guardrails. */
+    /**
+     * Legacy alias of `limits.tokens.total.perMinute` and
+     * `limits.toolCalls.perTurn`. Omit both blocks and every gate is off.
+     */
     guardrails: GuardrailsSchema.optional(),
+    /**
+     * Canonical limits. Off unless a gate is set. See docs/digichat/LIMITS.md.
+     */
+    limits: LimitsSchema.optional(),
     tools: ToolsSchema.optional(),
     mcp: McpSchema.optional(),
     gate: GateSchema.default({ mode: "ungated", activityDetail: "labels" }),
@@ -774,29 +863,109 @@ export const DeploymentSchema = z
      * Never projected to the browser via the client config API.
      */
     token: z.string().min(1).optional(),
+    /**
+     * Env var that holds the embed token. The name only — the loader resolves
+     * it and the client projection never copies it.
+     */
+    tokenEnv: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*$/, "tokenEnv must be an env var name")
+      .optional(),
+    /**
+     * Server-only system prompt for this deployment. The client projection
+     * does not copy it. House puts the digithings corpus prompt here.
+     */
+    prompt: z.string().min(1).optional(),
   })
   .strict()
-  .superRefine((deployment, ctx) => {
-    const alias =
-      deployment.backend.type === "foundry" ? deployment.backend.maxToolCalls : undefined;
+  .superRefine((dep, ctx) => {
+    const alias = dep.backend.type === "foundry" ? dep.backend.maxToolCalls : undefined;
     const issue = toolCallCapIssue(
-      deployment.backend.type,
-      deployment.guardrails?.maxToolCallsPerTurn ?? alias,
+      dep.backend.type,
+      dep.guardrails?.maxToolCallsPerTurn ?? alias,
     );
-    if (!issue) return;
-    ctx.addIssue({
-      code: "custom",
-      message: issue,
-      path:
-        deployment.guardrails?.maxToolCallsPerTurn != null
-          ? ["guardrails", "maxToolCallsPerTurn"]
-          : ["backend", "maxToolCalls"],
-    });
+    if (issue) {
+      ctx.addIssue({
+        code: "custom",
+        message: issue,
+        path:
+          dep.guardrails?.maxToolCallsPerTurn != null
+            ? ["guardrails", "maxToolCallsPerTurn"]
+            : ["backend", "maxToolCalls"],
+      });
+    }
+    if (dep.guardrails && dep.limits) {
+      const disagree = limitsDisagree(dep.guardrails, dep.limits);
+      if (disagree) {
+        ctx.addIssue({ code: "custom", message: disagree, path: ["limits"] });
+      }
+    }
+    for (const issue of collectLimitIssues(
+      dep.limits,
+      dep.backend.type,
+      dep.models?.priceCapUsdPerMillion,
+    )) {
+      ctx.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    const budget = dep.models?.costPerWindow;
+    if (budget) {
+      const mode = dep.limits?.onUnsupported ?? "reject";
+      if (
+        mode !== "warn" &&
+        limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) === "unsupported"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `models.costPerWindow is not enforceable on the ${dep.backend.type} backend`,
+          path: ["models", "costPerWindow"],
+        });
+      }
+      const disagree = costPerWindowIssue(dep.limits, budget);
+      if (disagree) {
+        ctx.addIssue({ code: "custom", message: disagree, path: ["models", "costPerWindow"] });
+      }
+      const cap =
+        dep.limits?.models?.standard?.maxOutputUsdPerMillion ?? dep.models.priceCapUsdPerMillion;
+      if (cap == null && !dep.limits?.models?.premium?.ids?.length) {
+        ctx.addIssue({
+          code: "custom",
+          message: "models.costPerWindow needs models.priceCapUsdPerMillion or premium ids",
+          path: ["models", "costPerWindow"],
+        });
+      }
+    }
+  })
+  .transform((dep) => {
+    const warn = (dep.limits?.onUnsupported ?? "reject") === "warn";
+    let next = dep;
+    if (dep.limits && warn) {
+      next = { ...next, limits: applyUnsupportedPolicy(dep.limits, dep.backend.type).limits };
+    }
+    if (
+      warn &&
+      next.models?.costPerWindow &&
+      limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) === "unsupported"
+    ) {
+      const models = { ...next.models };
+      delete models.costPerWindow;
+      next = { ...next, models };
+    }
+    return next;
   });
 
 export const DigichatConfigSchema = z
   .object({
     version: z.literal(1),
+    /**
+     * Parents allowed to embed this install. Hostnames, not origins.
+     * An overlay unions onto this list (`extends-merge`).
+     */
+    embedHosts: z.array(z.string().min(1)).optional(),
+    /**
+     * digigraph tool names for the house project. Not the catalog ids.
+     * Server-only; the client projection does not copy the list.
+     */
+    graphTools: z.array(z.string().min(1)).optional(),
     /** Single-install product shape (typical client deploy). */
     deployment: DeploymentSchema.optional(),
     /**
@@ -845,9 +1014,13 @@ export function disclosureIsLocked(mode: DisclosureMode): boolean {
  * Empty `available` → no restriction (requested or `default`).
  * Non-empty list → requested must be listed; missing request uses `default`
  * if listed, else first available entry.
+ *
+ * The offer may come from the deployment config or from the embed tenant
+ * registry (DIG-4589) — one artefact decides it, so the caller passes the
+ * merged offer and this function stays the only place that reads it.
  */
 export function allowlistModelId(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -871,7 +1044,7 @@ const PRESET_PREFIX = "preset:";
  * apply the deployment allowlist. An unknown preset is not allowed.
  */
 export function resolveHouseModelSelection(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   requested: string | null | undefined,
 ): string | undefined {
   const id = requested?.trim() || undefined;
@@ -889,7 +1062,7 @@ export function resolveHouseModelSelection(
  * visitor picked the router preset. The browser never supplies this list.
  */
 export function routerModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
   selected: string | undefined,
 ): string | undefined {
   const router = models?.picker?.presets.find((preset) => preset.id === "router");
@@ -903,7 +1076,7 @@ export function routerModelsHeader(
 
 /** Comma list of manual Premium ids, so digillm can drop them from a router allowlist. */
 export function premiumModelsHeader(
-  models: DigichatDeployment["models"] | undefined,
+  models: ModelOffer | undefined,
 ): string | undefined {
   const ids = premiumIdsFromGroups(models?.picker?.groups);
   return ids.length ? ids.join(",") : undefined;

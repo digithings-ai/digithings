@@ -6,7 +6,7 @@ clamp per R6, adapted via ``_oss_response_to_data`` per R3), dedup against the
 store's seen memory, append-only persistence, delivery only on ``ok`` +
 non-poll runs (R13) threading the watch's stored secret, a loud failure when a
 delivery-enabled watch has no stored secret, cron/interval due evaluation with
-the cron grammar imported from ``digiclaw.cron`` (never copied), and per-watch
+the cron grammar imported from ``digibot.cron`` (never copied), and per-watch
 tick isolation. Offline only — the recall boundary is always mocked.
 """
 

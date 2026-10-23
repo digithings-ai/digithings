@@ -5,10 +5,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    ".github/workflows/pipeline-dependency-freshness.yml": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     ".github/workflows/publish-digichat-image.yml": {
       "count": 4,
       "ticket": "DIG-3689"
@@ -107,10 +103,6 @@
     },
     "apps/digichat/OPERATIONS.md": {
       "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "apps/digichat/embed-hosts.txt": {
-      "count": 7,
       "ticket": "DIG-3689"
     },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
@@ -681,14 +673,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "packages/ui/src/components/chat/stock/tool-display.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
     "renovate.json": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -754,7 +738,7 @@
       "ticket": "DIG-3895"
     },
     "scripts/repo_split_workflow_map.py": {
-      "count": 2,
+      "count": 1,
       "ticket": "DIG-3689"
     },
     "scripts/scan_customer_pii.py": {
@@ -954,7 +938,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_check_clock.py": {
-      "count": 24,
+      "count": 23,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
@@ -978,10 +962,6 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_mcp_container.py": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "tests/scripts/test_migrated_workflows_still_clocked.py": {
       "count": 1,
       "ticket": "DIG-3689"
     },
@@ -1052,6 +1032,10 @@
     "tests/dg/test_tenant_digisearch_tools.py": {
       "count": 8,
       "ticket": "DIG-2203"
+    },
+    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
+      "count": 2,
+      "ticket": "DIG-3689"
     }
   }
 }

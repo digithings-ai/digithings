@@ -76,12 +76,12 @@ describe("no consumer re-declares the deploy model table (#5029)", () => {
       const found = src.match(new RegExp(MODEL_LITERAL.source, "gi")) ?? [];
       expect(found).toEqual([]);
     });
-
-    it(`${consumer} reads the table from ./deploy-models`, () => {
-      const src = readFileSync(resolve(__dirname, consumer), "utf8");
-      expect(src).toMatch(/from "\.\/deploy-models"/);
-    });
   }
+
+  it("client-projection.ts reads the table from ./deploy-models", () => {
+    const src = readFileSync(resolve(__dirname, "client-projection.ts"), "utf8");
+    expect(src).toMatch(/from "\.\/deploy-models"/);
+  });
 
   it("client-projection.ts does not import the server-only loader", () => {
     const src = readFileSync(resolve(__dirname, "client-projection.ts"), "utf8");
@@ -90,20 +90,20 @@ describe("no consumer re-declares the deploy model table (#5029)", () => {
 });
 
 describe("both consumers project the same config-sourced table (#5029)", () => {
-  it("the unconfigured-container deployment default matches the config table", () => {
+  it("the house deployment default matches the config table", () => {
     resetDigichatConfigForTests();
     const cfg = loadDigichatConfig({ fileContents: null, env: {} });
-    expect(cfg.deployment?.models).toEqual({
-      ...DEPLOY_DEFAULT_MODELS,
-      allowPicker: true,
-    });
+    expect(cfg.deployment?.models.default).toBe(DEPLOY_DEFAULT_MODELS.default);
+    expect(cfg.deployment?.models.available).toEqual(DEPLOY_DEFAULT_MODELS.available);
+    expect(cfg.deployment?.models.allowPicker).toBe(true);
+    expect(cfg.deployment?.gate.showContextMeter).toBe(true);
   });
 
   it("the browser-facing client config matches the config table", () => {
-    expect(DEFAULT_CLIENT_CONFIG.models).toEqual({
-      ...DEPLOY_DEFAULT_MODELS,
-      allowPicker: true,
-    });
+    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe(DEPLOY_DEFAULT_MODELS.default);
+    expect(DEFAULT_CLIENT_CONFIG.models.available).toEqual(DEPLOY_DEFAULT_MODELS.available);
+    expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.models.picker).toBeDefined();
   });
 
   it("the two projections agree — this is the pair that used to drift", () => {

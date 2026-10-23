@@ -23,6 +23,7 @@ export {
   type WelcomeCopy,
   type DigichatConfig,
   type DigichatDeployment,
+  type ModelOffer,
   type ChromeMode,
   type ThreadSkin,
   type PersistenceMode,
