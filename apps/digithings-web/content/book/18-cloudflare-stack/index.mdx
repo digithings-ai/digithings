@@ -2,16 +2,14 @@
 title: The Cloudflare stack and its workers
 order: 18
 summary: >-
-  The same system at the edge: workers, containers and bindings. What moves
-  to the edge unchanged, and what the edge changes.
+  The same system at the edge: workers, containers and bindings. Some parts move unchanged; others change shape.
 ---
 
-Cloudflare is one of the three homes, and the only one where the system
-runs on someone else's computers without becoming someone else's product.
-Workers run the request paths at the edge, containers carry the workloads
-that need a full machine, and bindings wire them to state. This chapter is
-about what that home looks like from the inside — and what it deliberately
-does not change.
+Cloudflare is one of three homes, and the only one that runs on someone
+else's computers without becoming someone else's product. Workers handle
+request paths at the edge, containers run the workloads that need a full
+machine, and bindings connect them to state. The shape changes; the interface
+does not.
 
 ## What it is for
 

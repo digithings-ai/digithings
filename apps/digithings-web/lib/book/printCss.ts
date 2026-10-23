@@ -118,6 +118,9 @@ export const PRINT_CSS = `
  */
 export const PAGED_CSS = `
 @page { size: A4 !important; margin: 20mm 18mm 18mm !important; }
+/* Diagrams get a landscape plate: a wide flow or a tall sequence is illegible
+   in a 174mm portrait measure. */
+@page plate { size: A4 landscape; margin: 14mm; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
@@ -353,6 +356,168 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 }
 .pagedjs_page:nth-child(odd)::after { left: 18mm; }
 .pagedjs_page:nth-child(even)::after { right: 18mm; }
+
+/* Paged.js paints its margin boxes (the slots that would hold a running
+   header) with the page background. Over the injected field those slots read
+   as rectangular cutouts, especially at the top centre of the cover. */
+.pagedjs_margin, .pagedjs_margin * { display: none !important; }
+.pagedjs_pagebox, .pagedjs_sheet { background: transparent !important; }
+
+/* Paged.js clones the source wrappers (html/body) into each page box, and
+   they carry the site's opaque background. Behind the injected field those
+   clones read as rectangular cutouts — the clear band at the top of the cover
+   and the blocks at the page edges. Only the page background should paint. */
+.pagedjs_page, .pagedjs_page * { background-color: transparent !important; }
+
+/* ── Print-edition typography ─────────────────────────────────────────────
+   The MDX components carry the web's utility classes, and those classes still
+   exist in the paginated document. Element-level print rules are not enough:
+   a web mb-4 or text-[1.05rem] wins on specificity, which is why some
+   paragraphs were larger and further apart than others. One scale, enforced
+   with !important, is the whole point of a book stylesheet. */
+.pagedjs_page p,
+.pagedjs_page li,
+.pagedjs_page blockquote,
+.pagedjs_page td {
+  font-size: 10.5pt !important;
+  line-height: 1.5 !important;
+  max-width: none !important;
+  color: var(--ink) !important;
+  text-align: left !important;
+}
+.pagedjs_page p { margin: 0 0 3mm !important; orphans: 4; widows: 4; }
+.pagedjs_page p:last-child { margin-bottom: 0 !important; }
+.pagedjs_page ul,
+.pagedjs_page ol { margin: 0 0 3mm 5mm !important; padding: 0 !important; }
+.pagedjs_page li { margin: 0 0 1.2mm !important; }
+.pagedjs_page blockquote {
+  margin: 0 0 4mm !important;
+  padding: 0 0 0 4mm !important;
+  border-left: 1.2pt solid var(--accent) !important;
+  color: var(--ink-soft) !important;
+}
+.pagedjs_page h1 { margin: 0 0 5mm !important; font-size: 20pt !important; line-height: 1.12 !important; }
+.pagedjs_page h2 { margin: 7mm 0 2.5mm !important; font-size: 12pt !important; line-height: 1.25 !important; }
+.pagedjs_page h3 { margin: 5mm 0 2mm !important; font-size: 10.5pt !important; line-height: 1.3 !important; }
+.pagedjs_page h4 { margin: 4mm 0 1.5mm !important; font-size: 9pt !important; line-height: 1.35 !important; }
+.pagedjs_page h1, .pagedjs_page h2, .pagedjs_page h3, .pagedjs_page h4 { break-after: avoid; }
+.pagedjs_page .book-chapter__head h2 {
+  margin: 0 0 3mm !important;
+  font-size: 20pt !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.01em;
+}
+.pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; }
+.pagedjs_page .book-chapter__head > p:nth-of-type(2) {
+  margin: 0 0 4mm !important;
+  font-size: 10pt !important;
+  color: var(--ink-soft) !important;
+}
+.pagedjs_page .book-chapter__head {
+  padding-bottom: 4mm;
+  border-bottom: 0.4pt solid var(--hair);
+  margin-bottom: 4mm;
+}
+.pagedjs_page .book-section h3 { margin: 6mm 0 2mm !important; font-size: 12pt !important; }
+.pagedjs_page a { color: inherit !important; text-decoration: none !important; }
+.pagedjs_page strong { font-weight: 600 !important; color: var(--ink) !important; }
+.pagedjs_page code { font-size: 0.92em !important; }
+.pagedjs_page pre {
+  margin: 0 0 3mm !important;
+  padding: 2.5mm 3mm !important;
+  font-size: 8.5pt !important;
+  line-height: 1.35 !important;
+}
+.pagedjs_page table { margin: 0 0 3mm !important; font-size: 8.5pt !important; }
+.pagedjs_page th, .pagedjs_page td { padding: 1.6mm 2mm !important; }
+.pagedjs_page th { font-size: 7.5pt !important; }
+.pagedjs_page figure { margin: 0 0 4mm !important; width: 100% !important; }
+.book-figure {
+  page: plate;
+  break-before: page;
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 158mm;
+}
+.book-figure__viewport {
+  width: 100% !important;
+  height: 158mm !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.book-figure__viewport > div {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transform: none !important;
+}
+.book-figure__viewport img {
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 158mm !important;
+  margin: 0 auto !important;
+}
+.pagedjs_page figcaption { margin-top: 2mm !important; font-size: 8pt !important; }
+
+/* "Go deeper" is a web affordance. On paper the links cannot be followed, so
+   the cards are not part of the book. */
+.pagedjs_page .book-reference { display: none !important; }
+
+/* Diagrams fill the measure on paper and lose the interactive frame. */
+.pagedjs_page .book-figure__viewport {
+  width: 100% !important;
+  height: auto !important;
+  border: 0 !important;
+}
+.pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
+
+
+/* Cover: edition/version, the hero banner, the title. Nothing else. */
+.book-cover {
+  text-align: center !important;
+  padding-top: 28mm !important;
+}
+.book-cover__kicker {
+  margin: 0 0 10mm !important;
+  font-size: 8pt !important;
+  letter-spacing: 0.12em !important;
+  text-transform: none !important;
+  color: var(--ink-soft) !important;
+}
+.book-cover__mark { width: 150mm !important; max-width: 100% !important; margin: 0 auto 12mm !important; }
+.book-cover__title {
+  margin: 0 auto !important;
+  font-size: 24pt !important;
+  line-height: 1.1 !important;
+  white-space: normal !important;
+}
+.book-cover__subtitle { display: none !important; }
+.book-cover__meta { display: none !important; }
+
+.book-colophon { min-height: 220mm !important; }
+.book-colophon__title { font-size: 18pt !important; line-height: 1.2 !important; }
+.book-colophon__mark { font-size: 58pt !important; }
+
+/* The colophon is a closing text page; it keeps its own scale. */
+.pagedjs_page .book-colophon__kicker { font-size: 8pt !important; margin: 0 0 4mm !important; }
+.pagedjs_page .book-colophon__title { font-size: 17pt !important; line-height: 1.25 !important; margin: 0 0 6mm !important; }
+.pagedjs_page .book-colophon__mark {
+  margin: auto 0 0 !important;
+  max-width: none !important;
+  font-size: 62pt !important;
+  line-height: 1 !important;
+  color: color-mix(in srgb, var(--ink) 12%, transparent) !important;
+}
+.pagedjs_page .book-chapter__head > p:nth-of-type(2) { margin-bottom: 6mm !important; }
+
+/* A closing sheet with no text. The browser builder paints the field here. */
+.book-end { break-before: page; min-height: 240mm; }
 `;
 
 export default PRINT_CSS;

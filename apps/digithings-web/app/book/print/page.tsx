@@ -62,8 +62,14 @@ export const metadata: Metadata = {
  * in one of them means nothing to the reader holding a different one.
  */
 export default async function BookPrintPage() {
-  const chapters = loadChapters(process.cwd());
-  const refs = chapterRefs(chapters);
+  // The print edition is the argument, not the book-about-the-book chapters.
+  // Orders 90+ are the web-only production notes (how it is built, how it is
+  // printed, what writing surfaced); they read as meta on paper.
+  const chapters = loadChapters(process.cwd()).filter((chapter) => chapter.order < 90);
+  // Print numbering is sequential over the chapters that actually ship. The
+  // source `order` values skip drafts (03, 06–09), which made a book whose
+  // contents read 01, 02, 04, 05, 10.
+  const refs = chapterRefs(chapters).map((chapter, index) => ({ ...chapter, order: index + 1 }));
 
   // Loaded up front, before any JSX: a page that will not compile must fail
   // the build, not leave a hole in the printed book. Every chapter opener and
@@ -94,13 +100,9 @@ export default async function BookPrintPage() {
       </div>
 
       <section className="book-cover">
+        <p className="book-cover__kicker">digithings · edition 2026 · version 1.0</p>
         <div className="book-cover__mark" aria-hidden dangerouslySetInnerHTML={{ __html: WORDMARK }} />
         <h1 className="book-cover__title">the digithings book</h1>
-        <p className="book-cover__subtitle">
-          A short, philosophical book about self-hosted AI infrastructure — why it matters, how it
-          scales, and what it costs.
-        </p>
-        <p className="book-cover__meta">digithings.ai/book · edition 2026</p>
       </section>
 
       {/* Front matter. The reference beside each chapter is filled in by
@@ -112,12 +114,14 @@ export default async function BookPrintPage() {
         <BookToc chapters={refs} withRefs />
       </section>
 
-      {bodies.map(({ chapter, Opener, sections }) => (
+      {bodies.map(({ chapter, Opener, sections }, index) => {
+        const displayOrder = index + 1;
+        return (
         <section key={chapter.slug} className="book-chapter">
           {/* Anchors the front matter's page references resolve against. */}
           <div data-book-anchor={chapter.href} />
           <div className="book-chapter__head">
-            <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
+            <p className="m-0 font-mono text-[0.8rem] text-accent">{String(displayOrder).padStart(2, "0")}</p>
             {/* The book title above is the page's single h1; chapter openers
                 sit one level below it so the printed outline stays in order. */}
             <h2 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h2>
@@ -128,26 +132,26 @@ export default async function BookPrintPage() {
             <div key={section.slug} className="book-section">
               <div data-book-anchor={section.href} />
               <h3 className="mt-12 mb-4 font-display text-[1.6rem] leading-[1.15] tracking-[-0.01em] text-ink">
-                {String(chapter.order).padStart(2, "0")}.{section.order} {section.title}
+                {String(displayOrder).padStart(2, "0")}.{section.order} {section.title}
               </h3>
               <Body />
             </div>
           ))}
         </section>
-      ))}
+        );
+      })}
 
       <section className="book-colophon">
-        <p className="book-colophon__kicker">colophon</p>
-        <p className="book-colophon__title">the digithings book</p>
-        <p>
-          Set in the digithings mono voice. Built from the same files as the web edition at
-          digithings.ai/book.
-        </p>
-        <p>Edition 2026 · digithings.ai</p>
+        <p className="book-colophon__kicker">the digithings book</p>
+        <p className="book-colophon__title">edition 2026 · version 1.0</p>
         <p className="book-colophon__mark" aria-hidden="true">
           digithings
         </p>
       </section>
+
+      {/* Endpaper: the only closing surface with no text. The browser builder
+          paints the same random field here that it puts behind the cover. */}
+      <section className="book-end" aria-hidden="true" />
     </div>
   );
 }

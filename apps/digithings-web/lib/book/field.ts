@@ -5,8 +5,8 @@ import { createEmbeddingSubject } from "../../components/landing/embedding-map";
  *
  * The same function is used by the server-rendered fallback PDF and by the
  * browser download builder, so a generated edition and a downloaded edition
- * cannot drift apart. The grid is portrait A4: the subject's own headline
- * keep-out leaves the middle clear for the title.
+ * cannot drift apart. The grid is portrait A4 and deliberately has no
+ * headline keep-out: in print the empty ellipse read as a cutout.
  */
 export const FIELD_COLS = 84;
 export const FIELD_ROWS = 118;
@@ -36,7 +36,7 @@ export function fieldSvg({
     offsetY: 0,
     small: false,
   };
-  createEmbeddingSubject(seed)(grid).update(time, state);
+  createEmbeddingSubject(seed, { keepOut: false })(grid).update(time, state);
   const runs: string[] = [];
   for (let y = 0; y < rows; y += 1) {
     let x = 0;

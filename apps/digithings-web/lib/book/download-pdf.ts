@@ -9,8 +9,9 @@ import { fieldSvg } from "./field";
  * The site is a static export, so a fixed `/book/*.pdf` cannot be random per
  * download. This opens the real paginated print route in an off-screen iframe,
  * applies the reader's current theme and palette, paints a fresh embedding
- * field behind the cover, contents and every chapter opener, then captures the
- * finished page boxes and assembles them with pdf-lib.
+ * field behind the cover, contents and closing page only, then captures the
+ * finished page boxes and assembles them with pdf-lib. A field on a chapter
+ * opener read as a cutout behind the title, so text pages stay clean.
  */
 export type BuildProgress = { done: number; total: number };
 
@@ -68,18 +69,19 @@ export async function buildBookPdf(
       (page) =>
         page.querySelector(".book-cover") ||
         page.querySelector(".book-contents") ||
-        page.querySelector(".book-chapter__head"),
+        page.querySelector(".book-end"),
     );
     for (const page of fields) {
       const isCover = Boolean(page.querySelector(".book-cover"));
       const isContents = Boolean(page.querySelector(".book-contents"));
+      const isEnd = Boolean(page.querySelector(".book-end"));
       page.querySelectorAll(".book-cover__field").forEach((node) => node.remove());
       const layer = frame.createElement("div");
       layer.className = "book-field";
       layer.setAttribute("aria-hidden", "true");
       const light = theme === "light";
       layer.style.cssText = `position:absolute;inset:0;z-index:0;pointer-events:none;opacity:${
-        isCover ? (light ? 0.5 : 0.82) : isContents ? (light ? 0.18 : 0.4) : light ? 0.14 : 0.3
+        isCover ? (light ? 0.5 : 0.82) : isContents ? (light ? 0.18 : 0.4) : isEnd ? (light ? 0.42 : 0.62) : light ? 0.14 : 0.3
       }`;
       layer.innerHTML = fieldSvg({
         seed: randomSeed(),
@@ -122,8 +124,12 @@ export async function buildBookPdf(
       });
       const jpeg = await (await fetch(dataUrl)).arrayBuffer();
       const image = await pdf.embedJpg(jpeg);
-      const sheet = pdf.addPage([A4.width, A4.height]);
-      sheet.drawImage(image, { x: 0, y: 0, ...A4 });
+      // Diagram plates are landscape page boxes; every other page is A4.
+      const landscape = image.width > image.height;
+      const width = landscape ? A4.height : A4.width;
+      const height = landscape ? A4.width : A4.height;
+      const sheet = pdf.addPage([width, height]);
+      sheet.drawImage(image, { x: 0, y: 0, width, height });
       await sleep(0);
     }
 

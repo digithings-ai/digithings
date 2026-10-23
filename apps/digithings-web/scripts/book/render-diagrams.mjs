@@ -110,7 +110,7 @@ function mermaidConfig(t) {
   return {
     themeCSS: terminalThemeCss(t),
     // 8px grid, the kit's spacing step.
-    flowchart: { htmlLabels: false, useMaxWidth: false, curve: "step", padding: 12, nodeSpacing: 32, rankSpacing: 40 },
+    flowchart: { htmlLabels: false, useMaxWidth: false, curve: "step", padding: 18, nodeSpacing: 42, rankSpacing: 54 },
     startOnLoad: false,
     theme: "base",
     darkMode: false, // colours below are explicit per theme; no page detection
@@ -125,7 +125,7 @@ function mermaidConfig(t) {
     securityLevel: "strict",
     themeVariables: {
       fontFamily: FONT_FAMILY,
-      fontSize: "12px",
+      fontSize: "18px",
       background: "transparent",
       mainBkg: "transparent",
       primaryColor: "transparent",
@@ -192,6 +192,23 @@ try {
       const result = await page.evaluate(
         async ([id, source, fontFace, bg]) => {
           const { svg } = await window.mermaid.render(`d${id}`, source);
+          // Measure the rendered diagram, then crop the viewBox to its actual
+          // ink. Mermaid's own canvas often leaves a wide empty margin; an
+          // image at page width then renders labels at half the size they were
+          // drawn at. The bbox is measured in the live document, not the
+          // parsed one, because getBBox needs layout.
+          const holder = document.createElement("div");
+          holder.style.cssText = "position:absolute;left:-99999px;top:0";
+          holder.innerHTML = svg;
+          document.body.append(holder);
+          const live = holder.querySelector("svg");
+          let bbox = null;
+          try {
+            bbox = live?.getBBox() ?? null;
+          } catch {
+            bbox = null;
+          }
+          holder.remove();
           // Re-serialise through the XML parser so the file is well-formed XML
           // whatever mermaid emitted; a parse error fails the build here rather
           // than shipping a figure an <img> silently cannot decode.
@@ -205,6 +222,13 @@ try {
           root.insertBefore(style, root.firstChild);
           root.removeAttribute("style"); // drop max-width; the viewer sizes it
           root.setAttribute("width", "100%");
+          if (bbox && bbox.width > 0 && bbox.height > 0) {
+            const pad = 10;
+            root.setAttribute(
+              "viewBox",
+              `${bbox.x - pad} ${bbox.y - pad} ${bbox.width + pad * 2} ${bbox.height + pad * 2}`,
+            );
+          }
           return { svg: new XMLSerializer().serializeToString(root) };
         },
         [`${diagram.id}${theme.suffix.replace(".", "_")}`, diagram.source, FONT_FACE, tokens.bg],
