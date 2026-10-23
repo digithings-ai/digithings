@@ -247,14 +247,9 @@ export async function POST(req: Request) {
   const backend = embedConfig?.backend ?? dep?.backend;
   const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
   // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
-  const guard = createTurnGuard({
-    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
-    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
-    foundryMaxToolCalls: foundryAlias,
-    userId: ownerUserSub,
-    ip: clientIpForRateLimit(req),
-    omitUserTpm: byokKey.length > 0,
-  });
+  // The turn guard itself is created after the admission decision below, where
+  // the deployment limits are projected; creating a second one here would shadow
+  // it and leave the one that does the work unreachable.
   const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
   const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
   const limitConfig = embedConfig?.limits ?? dep?.limits;
@@ -609,8 +604,10 @@ export async function POST(req: Request) {
     guardrails: projectedGuardrails(limitConfig, limitGuardrails),
     foundryMaxToolCalls: foundryAlias,
     userId: ownerUserSub,
-    sessionId,
     ip: clientIp,
+    // A visitor's own key is not our spend, so a BYOK turn keeps the user TPM
+    // out of the guard. The deployment TPM, tool cap and answer guard stay.
+    omitUserTpm: byokKey.length > 0,
     ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
   });
   const recordLimitUsage = guard.recordUsage.bind(guard);

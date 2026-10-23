@@ -687,6 +687,10 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         backend: { type: "digigraph" },
         models: {
           catalog: true,
+          // The budget is priced from the catalog, but the limits validation
+          // still requires an output cap (or explicit premium ids) before a
+          // costPerWindow is accepted — mirror defaults.yaml.
+          priceCapUsdPerMillion: 2,
           ...(costPerWindow ? { costPerWindow } : {}),
         },
       },
