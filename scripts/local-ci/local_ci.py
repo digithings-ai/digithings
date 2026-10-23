@@ -2010,7 +2010,19 @@ def run_applied(pr, out):
         except AttributeError: pass
     fix_ats = [t for t in fix_ats if t]
     reviewers = review_applied.reviewer_logins_for(passes)
-    ok, msg, open_ids = review_applied.evaluate(passes, threads, fix_ats, check_runs, reviewers)
+    # The verdict leg (DIG-4646): a head whose latest review says "changes
+    # requested" must never be posted as a review-applied success. The verdicts
+    # are read with the shared parser the merge queue uses, so both read the
+    # fleet's "Review verdict: ..." lines. An unreadable record is not a
+    # clearance, so the check fails closed with that reason.
+    verdict_inputs = review_applied.fetch_verdict_inputs(n, REPO, _rest)
+    if verdict_inputs is None:
+        verdict_blocks, verdict_error = (), "the reviews or comments could not be read"
+    else:
+        verdict_blocks, verdict_error = review_applied.blocking_verdicts(*verdict_inputs), None
+    ok, msg, open_ids = review_applied.evaluate(
+        passes, threads, fix_ats, check_runs, reviewers,
+        verdict_blocks=verdict_blocks, verdict_error=verdict_error)
     out.write(f"review-applied: passes={len(passes)} threads={len(threads)} "
               f"fix_commits={len(fix_ats)} ok={ok}\n{msg}\n")
     for tid in open_ids:
@@ -2026,7 +2038,16 @@ def process_applied(pr, dry):
     sh(["git", "fetch", "-q", "origin", pr["baseRefName"], f"pull/{n}/head"], cwd=MAIN, timeout=600)
     t0 = time.time()
     with open(logf, "w") as out:
-        ok, msg = run_applied(pr, out)
+        try:
+            ok, msg = run_applied(pr, out)
+        except Exception as exc:
+            # One broken PR must not kill the whole tick: the tick has no
+            # except, and the escape left the head's "review-applied" status
+            # stuck at "pending", which the queue then reads as a refusal
+            # (DIG-4646).
+            ok = False
+            msg = "review-applied: the check raised %s (see log)" % type(exc).__name__
+            out.write("%s: %s\n" % (type(exc).__name__, exc))
     mins = (time.time() - t0) / 60
     desc = f"{msg} ({mins:.0f}m)"
     log(f"PR #{n} review-applied {sha[:12]} {'success' if ok else 'failure'}: {desc} log={logf}")
