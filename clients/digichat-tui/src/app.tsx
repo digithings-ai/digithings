@@ -14,6 +14,7 @@ import {
   type ThreadLine,
   type Tone,
 } from "./chrome";
+import { railColumns } from "./frame";
 import { INITIAL_UI, reduceKey, type KeyEffect, type UiState } from "./keys";
 import { choiceOptions, mentionRows, paletteRows, paneRows, type PaneCatalog } from "./palette";
 import {
@@ -394,7 +395,7 @@ export function App() {
   };
   useKeyboard((key) => onKey.current(key));
 
-  const rail = Math.min(28, Math.max(18, Math.floor(width * 0.28)));
+  const rail = railColumns(width);
   const threadWidth = Math.max(24, width - rail - 4);
   const spinner = still ? STILL_SPINNER : spinnerFrame(tick);
   const messages = screen?.messages ?? [];

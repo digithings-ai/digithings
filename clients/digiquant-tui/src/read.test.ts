@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DASH, EMPTY_READ, NOT_PUBLISHED, STUB_READ, fieldLines, graphLines, isEmptyPayload, isStubEnvelope, presentResponse } from "./read";
+import { DASH, EMPTY_READ, NOT_PUBLISHED, STUB_READ, fieldLines, graphLines, isEmptyPayload, isStubEnvelope, presentResponse, readBlock } from "./read";
 
 test("stub fingerprints are withheld, including the fixture ledger", () => {
   expect(isStubEnvelope({ data: { nav: 99.909 } })).toBe(true);
@@ -129,4 +129,14 @@ test("a pipeline graph is a node list", () => {
   });
   expect(lines[2]).toBe("Inputs  ingest  ok  → learn");
   expect(lines.join(" ")).not.toContain(STUB_READ);
+});
+
+test("an aborted read still returns a line to paint", async () => {
+  // The pane used to get `lines: []` for an aborted read, so it drew nothing
+  // inside a danger border. A cancelled read says so instead.
+  const controller = new AbortController();
+  controller.abort();
+  const result = await readBlock("http://127.0.0.1:1", "/brief", "fields", controller.signal);
+  expect(result.status).toBe("error");
+  expect(result.lines).toEqual(["/brief: read cancelled."]);
 });

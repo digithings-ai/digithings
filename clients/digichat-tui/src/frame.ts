@@ -7,23 +7,20 @@
  * rendered byte-for-byte, never interpreted.
  *
  * The record itself is declared once, in `packages/tui-frame`, and shared with
- * the digiquant client and the dashboard. This module adds what is specific to
- * the digichat client: its source label, the terminal size it records at and
- * the crop that takes the chat thread out of a captured frame.
+ * the digiquant client and the dashboard. This module adds only what is
+ * specific to the digichat client: its source label, the terminal size it
+ * records at and the crop that takes the chat thread out of a captured frame.
+ * It does not re-export the record — a second export surface is how the copies
+ * drifted before.
  *
  * The client paints a left rail (the session list) and the chat thread to its
  * right (src/app.tsx:397,470,484). The rail is `min(28, max(18, floor(width *
  * 0.28)))` columns wide and its right border sits in the last rail column, so
- * the thread starts at column `rail`.
+ * the thread starts at column `rail`. The app paints that width through
+ * `railColumns()` below, so the crop and the paint cannot disagree.
  */
 
 import type { CroppedFrame } from "../../../packages/tui-frame/src/record.ts";
-
-export {
-  makeRecordedFrame,
-  serializeRecordedFrame,
-  type RecordedFrame,
-} from "../../../packages/tui-frame/src/record.ts";
 
 export const TUI_SOURCE = "digichat-tui";
 
