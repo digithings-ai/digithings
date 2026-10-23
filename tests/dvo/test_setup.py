@@ -322,3 +322,19 @@ def test_interactive_timeout_cycles_presets(tmp_path: Path) -> None:
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).rewrite_timeout_seconds == 15.0
+
+
+def test_setup_carries_no_lint_silencer_or_type_only_settings() -> None:
+    # deslop P0 #5: `_silence_unused()` existed only to keep five type-only settings
+    # names referenced for ruff's F401. Setup imports what it uses or nothing.
+    from digivoice import setup as setup_mod
+
+    assert not hasattr(setup_mod, "_silence_unused")
+    for name in (
+        "PRESET_LABELS",
+        "BannerDensity",
+        "BannerPosition",
+        "RewritePreset",
+        "RewriteRunnerKind",
+    ):
+        assert not hasattr(setup_mod, name), name
