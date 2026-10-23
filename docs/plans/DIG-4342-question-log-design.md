@@ -2,12 +2,13 @@
 
 CTO decision, 19 Oct 2026. This pins the contract for leaves A, B and C.
 
-**Status, 22 Oct 2026 16:05 local (14:05Z).** The contract is settled, the 13-19 Oct
-window is measurable from the file, and one of the two defects is closed. The
-implementation is **not** complete on the tree that runs: the writer fix is on the kit
-`develop` branch and not on the kit `main` branch that the launchd job executes. Read
-[Status](#status-22-oct-2026-the-tree-that-runs) first; it names the tree and the
-outstanding landing.
+**Status, 23 Oct 2026.** The contract is settled, the 13-19 Oct window is measurable from
+the file, and **both defects are closed on the tree that runs**: the DevOps Lead landed
+DIG-4353 on kit `main` @ `f5f3808` (commit "fix(qlog): land DIG-4353 asker resolution +
+backfill on kit main"), so `resolve_asker`, `UNKNOWN_ASKER`, the docstring fix, the
+backfill script and the 42-test suite are all on the tree the launchd job executes. Read
+[Status](#status-22-oct-2026-the-tree-that-runs) first; it records the landing and the
+measurements that confirm it.
 
 Every number in this document is dated and has a "measured by" next to it. The file
 `question-log.csv` is live and the writer keeps appending, so a number without a date is
@@ -18,46 +19,49 @@ a defect in the document.
 | Fact | How measured |
 |---|---|
 | The daemon runs the kit **working tree**, by absolute path, not a copy | the launchd job `com.digithings.decide-poll` (StartInterval 300) execs `/usr/bin/python3 /Users/chrisstefan/paperclip-workspace/kit/bin/dt-decide-poll` | `PlistBuddy -c Print ~/Library/LaunchAgents/com.digithings.decide-poll.plist` |
-| That working tree is on `main` @ `ba07f68`, which is the `origin/main` tip. It was switched to `main` at 15:23:56 +0200 on 22 Oct, out of `rescue/2026-10-22-DIG-5289-kit-live-tree` | the switch is in the kit reflog | `git -C ~/paperclip-workspace/kit reflog --date=iso` |
-| **The writer on that tree has no `resolve_asker` and no `UNKNOWN_ASKER`** | grep on the production file returns nothing | `grep -E 'resolve_asker\|UNKNOWN_ASKER' ~/paperclip-workspace/kit/bin/dt-qlog.py` |
-| On that tree `agent_name()` returns `""` for a seat that is not in the agents map, and the row is then refused | `agent_name` at `main:188-195`, the empty-field refusal at `main:239`, the raw-uuid refusal at `main:246` | `git show main:bin/dt-qlog.py` |
-| The fix is on `develop` @ `dc69e0c`, and on the branch `DIG-4353-land` | `resolve_asker` at `develop:227`, `UNKNOWN_ASKER` at `develop:110`; the commits are `fbaea9d` (merged as `92aacff`) and `50312e4` (merged as `37dc12b`) | `git show develop:bin/dt-qlog.py`, `git log` |
-| The suite that pins the fix is on `develop` only | `develop` holds 42 tests in `tests/test_dt_qlog.py`, including `test_an_unresolvable_asking_agent_is_recorded_as_unknown_not_a_uuid`, `test_a_blank_asker_is_recorded_as_unknown` and `test_a_raw_uuid_asker_is_recorded_as_unknown`. `main` holds 29 and none of the three | `git show <branch>:tests/test_dt_qlog.py` |
-| The module docstring contradicts the code on **both** branches | `develop:35` and `main:28` still read "answered after >= 1 hand-up  ANSWERABLE"; the code says `HANDUP_RUNG = 2` (`develop:102`, `main:93`) and the rule at `develop:152` / `main:123` | `git show <branch>:bin/dt-qlog.py` |
-| The committed backfill script is on `develop` only | `bin/dt-qlog-backfill.py` exists on `develop`; `main` has no such file | `git ls-tree --name-only <branch> bin/` |
+| That working tree is on `main` @ `f5f3808`, the `origin/main` tip after the DIG-4353 landing. It was switched to `main` at 15:23:56 +0200 on 22 Oct (out of `rescue/2026-10-22-DIG-5289-kit-live-tree`, at `ba07f68`) and fast-forwarded to `f5f3808` by the landing | the switch and the landing are in the kit reflog | `git -C ~/paperclip-workspace/kit reflog --date=iso` |
+| **The writer on that tree now carries `resolve_asker` and `UNKNOWN_ASKER`** | the landing commit `f5f3808` on `main` adds both; grep returns 2 matches | `git -C ~/paperclip-workspace/kit grep -c resolve_asker main -- bin/dt-qlog.py` |
+| `agent_name()` still returns `""` for a seat that is not in the agents map, but the row is no longer refused | `resolve_asker` converts an empty or uuid result to `unknown` before the empty-field guard, so the card stays in the denominator (landed on `main` @ `f5f3808`) | `git show main:bin/dt-qlog.py` |
+| The fix landed on `main` @ `f5f3808` (DIG-4353), and is also on `develop` | `resolve_asker` and `UNKNOWN_ASKER` present on both branches; landing commit `f5f3808` "fix(qlog): land DIG-4353 asker resolution + backfill on kit main" | `git -C ~/paperclip-workspace/kit log --oneline -1 main`, `git show <branch>:bin/dt-qlog.py` |
+| The suite that pins the fix is on both branches | 42 tests in `tests/test_dt_qlog.py` on both `main` and `develop`, including `test_an_unresolvable_asking_agent_is_recorded_as_unknown_not_a_uuid`, `test_a_blank_asker_is_recorded_as_unknown` and `test_a_raw_uuid_asker_is_recorded_as_unknown` | `git show <branch>:tests/test_dt_qlog.py` |
+| The module docstring contradicts the code on **develop only** | `main` now reads "answered at rung 0 or 1 ... GOOD" and "answered at rung 2 or higher ... ANSWERABLE", consistent with `HANDUP_RUNG = 2`. `develop:34-35` still reads "answered at the first rung ... GOOD" and "answered after >= 1 hand-up ... ANSWERABLE" | `git show <branch>:bin/dt-qlog.py` |
+| The committed backfill script is on both branches | `bin/dt-qlog-backfill.py` exists on `main` and `develop` | `git ls-tree --name-only <branch> bin/` |
 | Defect 2, the second writer in the seat skill, is closed and is branch-independent | the deployed `~/.claude/skills/decision-making/SKILL.md` carries the one-writer line and is byte-identical to **both** `develop`'s and `main`'s copy of `skills/decision-making/SKILL.md` | `diff` against `git show <branch>:skills/decision-making/SKILL.md` |
 
-**Defect 1 - the writer dropped a card whose asking seat cannot be resolved - is OPEN on
-the tree that runs.** The three cards the daemon refused 888 times (DIG-871 `6fe65075`,
-DIG-1648 `cf21aed2`, DIG-2232 `392cc610`) hold a machine row with `asking_agent=unknown`
-today, because they were written between 10:27 and 15:23 local, while the tree still
-carried the fix. The router has not seen them since 22 Oct 08:39 local - the route log's
-last event on `6fe65075` is at 08:39:31, and the other two have no route event left at
-all, because the router deletes a retired card's route entry. So the daemon log is silent
-after 09:36:50 local, and that silence is not evidence of a fix. The defect is **latent**:
-any card from a seat that has left the company, that the router sees again, is dropped by
-the running writer and falls out of the review denominator.
+**Defect 1 - the writer dropped a card whose asking seat cannot be resolved - is CLOSED on
+the tree that runs.** The DevOps Lead landed DIG-4353 on kit `main` @ `f5f3808`, which
+adds `resolve_asker` and `UNKNOWN_ASKER` to `bin/dt-qlog.py`, applies the resolved value
+to the asker column before the empty-field guard, and ships the 42-test suite that pins
+the three asker cases. The running writer no longer refuses a row for an unresolvable
+asking seat; it writes `asking_agent=unknown` and the card stays in the denominator. The
+three cards the daemon refused 888 times (DIG-871 `6fe65075`, DIG-1648 `cf21aed2`,
+DIG-2232 `392cc610`) still hold their machine rows with `asking_agent=unknown`, written
+between 10:27 and 15:23 local on 22 Oct while the tree still carried the fix. The defect
+was latent between the 22 Oct 13:23 switch to `main` and the 23 Oct landing; it is closed
+now, and the running tree is re-measured by the suite (42 tests OK on `main`).
 
 **Defect 2 - a second, hand-written writer was live in the seat skill - is CLOSED**, and
 it is closed on the running tree as well, because the deployed copy is byte-identical to
 both branches.
 
-### What is owed on the tree that runs
+### Landing complete (23 Oct 2026)
 
-Owned by the DevOps Lead as the kit landing owner. The CTO does not merge, and `main` is
-production, so a promotion into it is a Chris-gated step.
+The DevOps Lead landed DIG-4353 on kit `main` @ `f5f3808` ("fix(qlog): land DIG-4353
+asker resolution + backfill on kit main"). All four owed items are done on the tree that
+runs:
 
-1. `resolve_asker` and `UNKNOWN_ASKER` on `main` (`fbaea9d`, `50312e4`).
-2. The docstring fix in `bin/dt-qlog.py`: "answered after >= 1 hand-up" must read "answered
-   at rung 2 or later", on both branches. The side comment at `develop:98-101` already
-   says it; the docstring is what the code and this document must agree with.
-3. `bin/dt-qlog-backfill.py` on `main`, so the 13-19 Oct backfill is reproducible on the
-   tree that runs and not only on a branch.
-4. The three asker tests in `tests/test_dt_qlog.py` on `main` (29 tests to 42).
+1. `resolve_asker` and `UNKNOWN_ASKER` on `main` - present (grep returns 2 matches).
+2. The docstring fix on `main` - "answered at rung 0 or 1 ... GOOD" and "answered at rung 2
+   or higher ... ANSWERABLE", consistent with `HANDUP_RUNG = 2`. (Still open on
+   `develop`, which keeps the old wording; `develop` is behind `main` on this point.)
+3. `bin/dt-qlog-backfill.py` on `main` - present.
+4. The three asker tests on `main` - 42 tests in `tests/test_dt_qlog.py`.
 
-Landing `develop` on `main` is a **merge, not a fast-forward**: `main` carries 27 commits
-that `develop` does not, and `develop` carries 41 that `main` does not. After the landing
-the production tree is fast-forwarded to `main` and the daemon is re-measured.
+The landing was a merge, not a fast-forward: `main` still carries 30 commits that
+`develop` does not, and `develop` carries 41 that `main` does not. The production tree
+was re-measured after the landing: 42 tests OK on `main`. Defect 1 is closed on the tree
+that runs, and the running writer no longer drops a card whose asking seat cannot be
+resolved.
 
 ## Measured facts
 
@@ -186,11 +190,12 @@ The empty `ANSWERABLE` bucket in the first review was plumbing, not definition:
 and called it `GOOD`. The writer now recovers the rung from the route log.
 Confirmed by the R&D Engineer on DIG-4355.
 
-**The docstring gap is still open, on both branches.** The module docstring still carries
-the wording this section replaces: `develop:35` and `main:28` read "answered after >= 1
-hand-up  ANSWERABLE", and `develop:34` and `main:27` read "answered at the first rung (or
-before any wake)  GOOD". The code says `HANDUP_RUNG = 2`, so the docstring is one rung
-loose. Fixing it is item 2 of the landing list above; it is not closed.
+**The docstring gap is closed on `main`, open on `develop`.** The landing fixed the module
+docstring on `main`: it now reads "answered at rung 0 or 1 ... GOOD" and "answered at rung
+2 or higher ... ANSWERABLE", consistent with `HANDUP_RUNG = 2`. On `develop` the old
+wording remains at `develop:34-35` ("answered at the first rung ... GOOD" and "answered
+after >= 1 hand-up ... ANSWERABLE"), so `develop` is behind `main` on this point and the
+R&D Engineer's branch still needs the docstring edit.
 
 ## Cohorts and denominators (22 Oct 2026)
 
@@ -306,8 +311,8 @@ Fixed 10 columns, matching the existing header:
 - `csv.writer` with `QUOTE_MINIMAL` - a field containing a comma or newline is
   quoted, which is what the hand-written rows failed to do.
 - `asking_agent` resolves the uuid through the agents map the router already loads.
-  No raw uuid, no empty. This is the rule leaf A has to land on the tree that runs:
-  see the landing list.
+  No raw uuid, no empty. This rule landed on the tree that runs with DIG-4353 @
+  `f5f3808` (resolve_asker + UNKNOWN_ASKER on `main`).
 - `interaction_id` is the full uuid. Never truncated.
 - No free text field accepts a newline. The 4337-char essay fails to write rather
   than corrupting the file.
@@ -360,16 +365,18 @@ holds on 22 Oct 2026:
 - launchd execs `~/paperclip-workspace/kit/bin/dt-decide-poll` by absolute path
   (`ProgramArguments` in `~/Library/LaunchAgents/com.digithings.decide-poll.plist`),
   so **the working tree is production**;
-- the tree sits on `main` @ `ba07f68`, the `origin/main` tip;
+- the tree sits on `main` @ `f5f3808`, the `origin/main` tip after the DIG-4353
+  landing;
 - the tree carries **15 uncommitted entries**;
-- `main` and `develop` have **diverged**: 41 commits only on `develop`, 27 only on
+- `main` and `develop` have **diverged**: 41 commits only on `develop`, 30 only on
   `main`, so a landing is a merge, not a fast-forward;
 - the branch list holds many `rescue/kit-*` and `backup/main-*` refs, so this
   condition has been rescued before.
 
-So leaf A landed as commits on ticket branches in the kit repo (`DIG-4353-land`), and
-the landing step on `develop` is owned by the DevOps Lead. The structural fix was
-raised separately as a governance issue, owned by the EM.
+The DIG-4353 landing is complete: the DevOps Lead merged it onto `main` @ `f5f3808`,
+so `resolve_asker`, `UNKNOWN_ASKER`, the docstring fix, the backfill script and the
+42-test suite are all on the tree the launchd job executes. The structural fix is no
+longer open on the production tree.
 
 ## Definition of done for the whole ticket
 
@@ -383,11 +390,12 @@ raised separately as a governance issue, owned by the EM.
 
 | | Measured, 22 Oct 16:30 local |
 |---|---|
-| 1 | 380 of 380 distinct route-log cards hold a row, 0 missing; at every cutoff from 2026-10-19 08:27 local to 2026-10-22 13:00 local, 0 of the cards the router touched is missing a row (112, 92, 58, 45 and 10 cards at those cutoffs); the writer suite is green on `develop` (42 tests) and does not carry the asker tests on `main` (29) |
+| 1 | 380 of 380 distinct route-log cards hold a row, 0 missing; at every cutoff from 2026-10-19 08:27 local to 2026-10-22 13:00 local, 0 of the cards the router touched is missing a row (112, 92, 58, 45 and 10 cards at those cutoffs); the writer suite is green on both branches (42 tests) after the DIG-4353 landing on `main` @ `f5f3808` |
 | 2 | the 206-card window cohort reads GOOD 63 of 206, 31 percent, and BAD 77 - not 100 percent GOOD |
 | 3 | the per-asker table is computable from the file with no transcription: 27 askers in the denominator, for example Host & Runtime Engineer 19 cards at 42.1 percent, Backend Engineer, Core Services 15 at 73.3 percent, EM 11 at 63.6 percent, Software Architect 8 at 25.0 percent |
 | 4 | 178 of 178 window cards hold a row; the hole is 52 of 257 cards (20 percent), split 47 on medium and low priority issues, 3 with no route event, 2 withdrawn or expired inside a tick |
 
-Item 1 is met for every card the router has touched, and the writer that runs on the
-production tree is missing the asker fix. That is the landing list at the top of this
-document, and it is the one thing between this ticket and done.
+Item 1 is met for every card the router has touched, including cards whose asking seat
+cannot be resolved: the running writer now writes `asking_agent=unknown` and the card
+stays in the denominator (DIG-4353 landed on `main` @ `f5f3808`). The landing list at
+the top of this document is complete, and both defects are closed on the tree that runs.
