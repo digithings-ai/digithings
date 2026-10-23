@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 import {
   Button,
   Card,
@@ -28,6 +27,7 @@ import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
 import { VIEW_MODES } from "@/lib/view-modes";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { CONTRAST_MINIMUM, contrast } from "./devkit-contrast";
+import { SkinGallery } from "./skin-gallery";
 import {
   appendListItem,
   applyAll,
@@ -817,10 +817,9 @@ export function DevkitEditors({
       case "Appearance":
         return (
           <>
-        <SelectRow
-          label="skin"
+        <SkinGallery
           value={chrome?.skin ?? "digichat"}
-          groups={[{ label: "skins", options: THREAD_SKINS }]}
+          palette={chrome?.palette}
           onCommit={(v) => scalar(["chrome", "skin"], v)}
         />
         <SegRow
