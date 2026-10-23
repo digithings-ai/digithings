@@ -14,6 +14,7 @@
  */
 
 import TuiFramePreview from '@/components/tui-frame-preview';
+import digichatTuiFrame from '@/fixtures/tui-frames/digichat-tui.json';
 import digiquantTuiFrame from '@/fixtures/tui-frames/digiquant-tui.json';
 import {
   formatRecordedTuiFrameDate,
@@ -24,7 +25,7 @@ import {
 } from '@/lib/tui-preview';
 
 /** Committed recorded frames, one per TUI that ships an exporter. */
-const COMMITTED_FRAMES: unknown[] = [digiquantTuiFrame];
+const COMMITTED_FRAMES: unknown[] = [digiquantTuiFrame, digichatTuiFrame];
 
 // The pointer cursor belongs to the disclosure affordance. packages/ui owns no
 // summary primitive, so it cannot carry the cursor for this surface.

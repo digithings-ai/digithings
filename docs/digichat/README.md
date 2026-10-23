@@ -15,6 +15,7 @@ Any other version number in these guides is drift — fix it, don't work around 
 | [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md) | Running the offline docs-onboard pipeline (`scripts/docs_onboard/`) for client-doc grounding |
 | [`DESIGN-THEMES.md`](DESIGN-THEMES.md) | Theming the official assistant-ui Thread with digiweb CSS variables (contract: `packages/ui/CHAT_THEME.md`) |
 | [`STOCK-SMOKE.md`](STOCK-SMOKE.md) | Manually checking the stock product path after assistant-ui slices |
+| [`LIMITS.md`](LIMITS.md) | Deployment YAML limits: paths, backend matrix, example configs |
 
 ## Elsewhere (canonical homes)
 

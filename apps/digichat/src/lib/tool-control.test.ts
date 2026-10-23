@@ -32,12 +32,11 @@ describe("toolControlFor", () => {
     const client = foundryClient();
     expect(client.backendType).toBe("foundry");
     expect(client.tools.allowUserToggle).toBe(false);
-    expect(client.tools.catalog).toHaveLength(2);
-    expect(client.tools.catalog[0]?.id).toBe("file_search");
-    expect(client.tools.catalog[1]?.tools?.map((tool) => tool.label)).toEqual([
-      "List connections",
-      "Open item",
-    ]);
+    expect(client.tools.catalog).toHaveLength(1);
+    const tools = client.tools.catalog[0]?.tools ?? [];
+    expect(tools).toHaveLength(42);
+    expect(new Set(tools.map((tool) => tool.id)).size).toBe(42);
+    expect(tools.every((tool) => tool.group && tool.label)).toBe(true);
     expect(
       toolControlFor({
         backendType: client.backendType,

@@ -822,6 +822,94 @@ class WatchdogTest(unittest.TestCase):
         self.assertTrue(self._alive(self.child))
 
 
+class RuffPathResolverTest(unittest.TestCase):
+    """DIG-4602: the ruff path list must come from the tree under test.
+
+    A module rename (digiclaw -> digibot) moved a path out from under the
+    hardcoded list, and ruff 0.16 fails on a missing path (E902), so a stale
+    list turns every other PR red.
+    """
+
+    CI = (
+        "jobs:\n"
+        "  lint:\n"
+        "    steps:\n"
+        "      - name: Ruff (all src + tests)\n"
+        "        run: |\n"
+        "          uv run --frozen --no-sync ruff check \\\n"
+        "            digibase/src %s digigraph/src \\\n"
+        "            digisearch/src digitrace/src tests\n"
+    )
+
+    def _tree(self, body):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, ".github", "workflows"))
+        with open(os.path.join(d, ".github", "workflows", "ci.yml"), "w") as f:
+            f.write(body)
+        return d
+
+    def test_list_comes_from_the_tree_own_ci_yml(self):
+        tree = self._tree(self.CI % "digiclaw/src")
+        paths, note = _mod.ruff_paths_for_tree(tree)
+        self.assertEqual(paths, ["digibase/src", "digiclaw/src", "digigraph/src",
+                                 "digisearch/src", "digitrace/src", "tests"])
+        self.assertIn("ci.yml", note)
+
+    def test_a_renamed_module_resolves_to_its_new_name(self):
+        tree = self._tree(self.CI % "digibot/src")
+        paths, _ = _mod.ruff_paths_for_tree(tree)
+        self.assertIn("digibot/src", paths)
+        self.assertNotIn("digiclaw/src", paths)
+
+    def test_missing_ci_yml_falls_back_loudly(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        paths, note = _mod.ruff_paths_for_tree(d)
+        self.assertIsNone(paths)
+        self.assertIn("ci.yml", note)
+
+    def test_two_different_lists_are_refused(self):
+        body = self.CI % "digibot/src" + "          uv run --frozen --no-sync ruff check tests\n"
+        tree = self._tree(body)
+        paths, note = _mod.ruff_paths_for_tree(tree)
+        self.assertIsNone(paths)
+        self.assertIn("single", note)
+
+    def test_a_path_outside_the_tree_is_refused(self):
+        tree = self._tree(self.CI % "/etc")
+        paths, _ = _mod.ruff_paths_for_tree(tree)
+        self.assertIsNone(paths)
+
+    def test_the_fallback_keeps_only_paths_that_exist_in_the_tree(self):
+        """The fallback drops a path the tree does not have.
+
+        ruff 0.16 fails on a missing path (E902), so a fallback that named a
+        retired module directory would turn every other PR red. Linting fewer
+        paths only under-lints, and this branch only runs when the tree's
+        ci.yml cannot be read.
+        """
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, "digibot", "src"))
+        os.makedirs(os.path.join(d, "tests"))
+        paths = _mod.ruff_paths_fallback(d)
+        self.assertEqual(sorted(paths), ["digibot/src", "tests"])
+
+    def test_the_fallback_names_no_retired_module(self):
+        self.assertNotIn("digiclaw", " ".join(_mod.RUFF_PATHS_CANDIDATES))
+
+    def test_the_fallback_is_empty_when_the_tree_has_no_candidate(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.assertIsNone(_mod.ruff_paths_fallback(d))
+
+    def test_the_gate_no_longer_hardcodes_a_module_name(self):
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertIn("ruff_paths_for_tree(WT)", src)
+        self.assertNotIn("digiclaw/src", src)
+
 class NoRealNetwork:
     """No test in this file may reach the network or the real token file.
 

@@ -315,17 +315,17 @@ export const DIGIDEV: BannerDefinition = {
  *  travels a faint rail, drops, grips each sunk glyph and lifts it into place
  *  (one seeded grab slips and is retried). LIVE plucks one glyph now and then
  *  and sets it back, or lets it slip. The font carries four blank rows of
- *  headroom for the gantry. Accent: --accent-digiclaw. */
-export const DIGICLAW: BannerDefinition = {
-  id: "digiclaw",
-  text: "DIGICLAW",
-  label: "digiclaw",
+ *  headroom for the gantry. Accent: --accent-digibot. */
+export const DIGIBOT: BannerDefinition = {
+  id: "digibot",
+  text: "DIGIBOT",
+  label: "digibot",
   font: withHeadroom(PIXEL_7X10),
   gap: 2,
   palette: {
     ink: INK,
     ground: GROUND,
-    accent: { hex: "#B87840", cube: 137, cssVar: "--accent-digiclaw" },
+    accent: { hex: "#B87840", cube: 137, cssVar: "--accent-digibot" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
   animation: clawAnimation({
@@ -506,7 +506,7 @@ export const BANNERS = {
   digigraph: DIGIGRAPH,
   digibook: DIGIBOOK,
   digidev: DIGIDEV,
-  digiclaw: DIGICLAW,
+  digibot: DIGIBOT,
   digivault: DIGIVAULT,
   digisearch: DIGISEARCH,
   digitrace: DIGITRACE,

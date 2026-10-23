@@ -1148,6 +1148,15 @@ standard tool Result pane with mid-stream completion — display parity with a
 directly-plugged tool, no per-tool UI. `mcp_approval_request` is unmapped by
 design: trial agents auto-approve server-side.
 
+**Limits (`limits`).** The canonical gate block. Omit it and every gate is
+off. Paths, the backend matrix, and the digithings.ai, OCC, and Foundry
+trial examples are in [`docs/digichat/LIMITS.md`](../../docs/digichat/LIMITS.md).
+`guardrails` remains the alias of `limits.tokens.total.perMinute` and
+`limits.toolCalls.perTurn`. `models.costPerWindow` is the alias of one
+premium-only `limits.cost.usd` gate (`onExceed: fallback-auto`). A config
+that sets both spellings of the same gate must not disagree. Minute, hour,
+and day windows roll (60s, 3600s, 86400s).
+
 **Guardrails (`guardrails`).** Optional on a deployment. Omit the block and
 every guard is off. `tokensPerMinute` applies on every backend. `maxToolCallsPerTurn`
 is enforced on Foundry and the AI SDK backends (openai-completions,
@@ -1165,13 +1174,21 @@ guardrails:                      # omit the block and every guard is off
   maxToolCallsPerTurn: 5         # optional, 1–100
   answerAt: 0.7                  # optional; default 0.7 when a TPM is set
   pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
+  rateLimit: true                # optional; omit or true keeps the request limiter; false turns it off
   tokensPerMinute:
     deployment: 100000           # optional; match an upstream TPM
     user: 80000                  # optional; per user id, else server-derived IP
 ```
 
-The numbers in that block are the shape. No shipped yaml sets them. The
-public digithings.ai example only comments a per-user value of 80000.
+House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
+`pauseAt: 0.9`, `rateLimit: true`, and a per-visitor `tokensPerMinute.user` of
+80000. OCC sets `rateLimit: false` and clears the per-visitor minute. The
+tool-call cap and the answer guard stay. The Foundry trial clears the
+per-visitor minute and keeps the request limiter. Its shared deployment TPM
+stays unset (TODO) until the Azure number for gpt-5.6-terra in westeurope is
+known. A visitor's own key (`X-BYOK-Key`) skips the per-visitor minute and the
+request limiter. The deployment minute, the tool-call cap, and the answer
+guard stay on for that turn.
 
 `maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
 enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
@@ -1236,11 +1253,15 @@ It does not abort the upstream call, and a wrap-up instruction cannot reach a
 later round of that same request. a2a reports no tool calls, so the key is
 refused at config load.
 
-The trial yaml leaves a proposed cap of 5 (4 is the other candidate)
-and a deployment TPM commented out until the Azure number for gpt-5.6-terra in
-westeurope is confirmed. The public digithings.ai example comments a per-user
-limit of 80000 and does not enable it. OCC and the trial do not carry that
-per-user value.
+defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
+`rateLimit: true`, and a per-visitor minute of 80000 because house is public.
+OCC sets `rateLimit: false` and clears that minute. Local clears the minute
+and keeps the request limiter, the cap, and the answer guard. The Foundry
+trial clears the per-visitor minute and keeps the request limiter. Its shared
+deployment TPM stays unset (TODO) until the Azure number for gpt-5.6-terra in
+westeurope is known. A visitor's own key skips the per-visitor minute and the
+request limiter. The deployment minute, the tool-call cap, and the answer
+guard stay.
 
 A reasoning disclosure appears only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
@@ -1343,6 +1364,13 @@ the choice and closes the menu. `/models`, `/effort`, `/search-engine`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
+`/models` lists the modes first — Default, Reasoning, Fast, Light, and Router when
+configured — then a `/provider` tree built from the id path segments of each raw
+model id (every `/`-separated segment but the last is a folder, the last is the
+leaf), so ids like `deepseek/deepseek-v4.1-flash-1017` nest under `/deepseek`
+and `alpha/sub/deep` nests under `/alpha` then `/sub`. Folders and leaves sort
+alphabetically at every level, folders before leaves. Only the folders holding
+the current model start expanded, and no row carries a description.
 `/language` (alias `/lang`) plus featured English / Dutch / Italian / Spanish / French resolve
 through the mirrored ISO map (codes, English labels, and autonyms). `/provider` (aliases
 `/byok`, `/key`) opens the composer-docked provider list, then a token field, then a model
@@ -1465,7 +1493,9 @@ The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields 
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
 connected catalog + MCP tool. Where the host allows it, each row is On/Off.
-A Foundry host shows the same rows read-only ("Managed by the agent"). A locked
+A Foundry host shows the same rows on and locked: the agent owns them, so each row reads On
+and does not toggle. A catalog tool may carry `group`, which files it under a sub-header in
+the tree. A locked
 host (`lockSessionControls`) lists them and does not toggle. `/mcp` lists MCP
 servers with status Active / Disabled / Needs auth; Enter opens the session JSON and field
 editors when the host allows editing (including bearer paste). When `auth` is `oauth` and the token is empty, **Authenticate**
@@ -2006,6 +2036,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
 - Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
+- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates
@@ -2048,7 +2079,7 @@ part-driven vs chrome-driven is indexed in digiweb
 | `chrome.defaultLanguage` | curated codes (`languages.ts`) | Seeds the stock language picker |
 | `chrome.transcript.userAlign` | `right \| left` | Stock web default `right` |
 | `chrome.skin` | `base \| chatgpt \| claude \| grok \| gemini \| perplexity \| react-ink \| expo-react-native \| base-assistant-ui \| webpage-assistant \| product-page-assistant \| digichat` | The 11 assistant-ui catalog template ids plus first-party `digichat`. Overlay: `DIGICHAT_CHROME_SKIN`. Baked YAML: `/app/config/examples/skins/<id>.yaml`. Catalog / third-party default remains `base`. Unset `skin` on digithings.ai / OCC hosts (and slugs `digithings`, `digithings-ai`, `occ`) defaults to `digichat` so production `DIGICHAT_EMBED_TENANTS` without `skin` still mounts DigichatThread. |
-| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. The effective list is the merged deployment list: the tenant's curated list when it has one, else the deployment's (DIG-4589). On the embed surface the request's tenant carries that merged list, so the allowlist and the session lock come from one artefact; on the session surface the deployment config decides. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50). Presets and the router skip that group. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Auto preset (1017); the notice names Auto, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
+| `models.default` / `models.available` / `models.allowPicker` / `models.catalog` | strings + bool | BFF allowlists `available` on `POST /api/chat` (`X-Digi-Model`). A `preset:<id>` token resolves to the catalog model before that check. Empty `available` = no restriction. The effective list is the merged deployment list: the tenant's curated list when it has one, else the deployment's (DIG-4589). On the embed surface the request's tenant carries that merged list, so the allowlist and the session lock come from one artefact; on the session surface the deployment config decides. `catalog: true` fills `available`, `default`, and `picker` from `config/model-picker-catalog.json` using the newest generation of each family, then the deployment's price cap, presets, and `showFullList`. A Premium group holds models above the standard cap and at or under `premiumCapUsdPerMillion` (catalog default $2.50) — in the picker they stay under their own provider and carry a `premium` flag, with no separate group. Presets and the router skip them. `models.costPerWindow` meters premium picks in USD per rolling window. The trace path records that charge in a `finally` block, including when the visitor disconnects after the answer. digithings.ai sets $0.0125565 per day. A model outside the premium picker group is not metered (known limit). A spent window answers with the Default preset (1017); the notice names Default, including when `models.default` is a different id. OCC sets no `costPerWindow` and no token budget (Chris, 21 Oct 2026, 22:51 Rome: the invite link is the gate). The #6182 tool-call cap and answer guard stay on OCC; they are stability guardrails, not token limits. OCC `models.occPicker` is on for 2.6.6 after Chris's sign-off (21 Oct 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I sign off on overriding the DIG-4488 lock". The flag stays the off switch. Tool and MCP locks (`lockSessionControls`) are unchanged. digithings.ai and the OCC embed set the catalog policy (default DeepSeek V4.1 Flash 1017, Reasoning GLM 5.3 Flash). The dashboard keeps an explicit three-slug list. Foundry backends publish no house catalog. OpenRouter appears only as the Router preset when `OPENROUTER_API_KEY` is set at load, never as `:free` rows. Connecting BYOK replaces `/models` with that provider’s presets (#3829). |
 | `features.attachments` | bool | Default **true** (composer attach). Product / DataTap / dashboard YAML set false. |
 | `gate.showLanguageSelector` | bool | Reserved; language chrome is not mounted on the stock baseline |
 | `cli.enabled` | bool (default `false`) | Documents / gates the Ink CLI (see below) |
@@ -2266,8 +2297,8 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_TOKEN` | Alternative to legacy flag: gate unregistered `/embed` on `X-Embed-Token` | Optional |
 | `DIGICHAT_EMBED_TENANTS` | Optional JSON registry of embed tenants (see "Embed tenant registry & external backends"). Unset = no external embed tenants; first-party embeds behave exactly as before. Runtime-only — never pass as a Docker build-arg, it carries every tenant's secret `token` and build-args persist in image layer history / cloud-build logs (#1360). Each entry requires a `token` — the embed snippet passes it back as `?token=` / `X-Embed-Token`; a registered host alone is not sufficient authorization (#1339). | Optional |
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
-| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
-| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
+| `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms). Skipped when `guardrails.rateLimit` is false or the request carries `X-BYOK-Key` | Optional |
+| `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`). Same skip as the row above | Optional |
 | `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose stamped socket peers may supply `cf-connecting-ip` or `X-Forwarded-For`. Required for a Cloudflare Container release: set it to the container ingress or overlay peer the entrypoint logs on the first request (`x-digichat-peer-ip`), never Cloudflare's published edge ranges. The address is not in this repo. Unset, the entrypoint still stamps the socket and logs a startup warning. Guardrail and premium keys use that socket when it is the client. The embed limiter and trial quota follow develop (the raw trimmed `cf-connecting-ip`, then the raw trimmed first `X-Forwarded-For` hop, else `unknown`, including a value that is not an IP); a header-less request collapses the embed limiter onto `embed_ip:unknown` and the trial quota skips it. An unstamped peer header is never a key. The entrypoint always isolates Next on loopback and strips a caller-supplied peer header. A client disconnect destroys that loopback request so Next aborts the turn. | Required on the Cloudflare Container release |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`infra/docker/Dockerfile.digichat-cloudflare`) and the app image (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
@@ -2311,8 +2342,8 @@ only; auth, config, embed-tenant, health, and all other routes keep answering.
 
 ### OpenClaw gateway integration
 
-digiclaw (`digiclaw/`) provides heartbeat, audit, and gateway functionality. digichat
-currently has no integration with digiclaw. Planned work includes routing all chat
+digibot (`digibot/`) provides heartbeat, audit, and gateway functionality. digichat
+currently has no integration with digibot. Planned work includes routing all chat
 requests through an OpenClaw gateway for rate limiting, audit logging, and policy
 enforcement at the BFF boundary.
 

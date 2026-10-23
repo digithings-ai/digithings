@@ -206,3 +206,55 @@ describe("the container hop when the platform closes the Durable Object instance
     expect(stub.calls()).toBe(0);
   });
 });
+
+describe("the container hop rejects with a value that is not an Error", () => {
+  it("answers 503 with Retry-After when the hop rejects with a Date", async () => {
+    // The @cloudflare/containers package rethrows a non-Error rejection
+    // verbatim, so it used to escape the Durable Object and reach the Worker
+    // as it is: a bare date, with no guard able to read it (run-watch
+    // DIG-4928).
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let attempts = 0;
+    let res: Response;
+    try {
+      const stub = stubFactory(async () => {
+        attempts += 1;
+        throw new Date("2026-10-21T11:51:44.000Z");
+      });
+      res = await handle(heartbeat(), env(), stub.connect);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RECONNECT_RETRY_AFTER_SECONDS));
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+    // The request is not replayed: a value that came out of the hop says
+    // nothing about whether it reached the container.
+    expect(attempts).toBe(1);
+  });
+
+  it("answers 503 with Retry-After when the hop rejects with a plain object", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let attempts = 0;
+    let res: Response;
+    try {
+      const stub = stubFactory(async () => {
+        attempts += 1;
+        throw { code: "container_hop_failed" };
+      });
+      res = await handle(heartbeat(), env(), stub.connect);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(String(RECONNECT_RETRY_AFTER_SECONDS));
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+    expect(attempts).toBe(1);
+  });
+});

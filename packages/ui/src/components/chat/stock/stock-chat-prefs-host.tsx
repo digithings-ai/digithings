@@ -44,7 +44,7 @@ export type StockChatPrefsConfig = {
   availableModels: readonly string[];
   /** Catalog presets and groups. The menu falls back to raw ids when absent. */
   modelPicker?: {
-    presets: readonly { id: string; label: string; description: string; model: string }[];
+    presets: readonly { id: string; label: string; model: string }[];
     groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
     showFullList: boolean;
   };

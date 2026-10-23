@@ -14,9 +14,9 @@ describe("toolRowTitle", () => {
     expect(toolRowTitle("digisearch_research")).toBe("digisearch_research");
   });
 
-  it("titles tenant per-index digisearch tools readably (DIG-3269)", () => {
-    expect(toolRowTitle("digisearch_zammad_tickets")).toBe("DigiSearch Zammad Tickets");
-    expect(toolRowTitle("digisearch_occ_help")).toBe("DigiSearch OCC Help");
+  it("keeps tenant per-index digisearch tool ids verbatim (raw backend ids)", () => {
+    expect(toolRowTitle("digisearch_zammad_tickets")).toBe("digisearch_zammad_tickets");
+    expect(toolRowTitle("digisearch_occ_help")).toBe("digisearch_occ_help");
   });
 
   it("falls back to 'tool' for a blank id", () => {

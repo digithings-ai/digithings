@@ -163,6 +163,17 @@ FORK_DESC = "fork code never runs on this Mac; maintainer: re-push to a same-rep
 GATED_NOTE = "static gates passed (pytest/audits not gated, see DIG-3605)"
 TYPES = "feat|fix|docs|chore|refactor|perf|test|ci|build|revert|style"
 
+# Ruff path list used by the lint gate. The gate reads the list from the tree
+# under test (its own .github/workflows/ci.yml) so a module rename cannot leave
+# the gate naming a directory that no longer exists (DIG-4602). The list below
+# is the fallback only: it is used when the tree's ci.yml cannot be read, and
+# every entry that does not exist in the tree is dropped. ruff 0.16 fails on a
+# missing path (E902), so naming a directory that is not there turns every
+# other PR red; linting fewer paths only under-lints.
+RUFF_PATHS_CANDIDATES = ("digibase/src", "digibot/src", "digigraph/src",
+                         "digiquant/src", "digisearch/src", "digitrace/src",
+                         "tests")
+
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
 WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
@@ -885,6 +896,85 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
+def _ruff_paths_from_ci_yml(text):
+    """Path list of the `ruff check` step in a ci.yml, or None.
+
+    Pure text, no YAML dependency: the daemon runs under /usr/bin/python3 and
+    must not depend on a package it may not have. Backslash line
+    continuations are joined, comment lines are skipped, and the path tokens
+    that follow `ruff check` are collected. Returns None when the file has no
+    ruff step, when it has two different path lists, or when a path leaves the
+    tree. Ambiguity is never guessed.
+    """
+    joined = []
+    pending = ""
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            continue
+        if pending:
+            s = pending + " " + s
+            pending = ""
+        if s.endswith("\\"):
+            pending = s[:-1].strip()
+            continue
+        joined.append(s)
+    if pending:
+        joined.append(pending)
+    found = []
+    for line in joined:
+        m = re.search(r"(?:^|\s)ruff\s+check\b(.*)$", line)
+        if not m:
+            continue
+        rest = re.split(r"&&|\|\||[|;&]", m.group(1), maxsplit=1)[0]
+        paths = []
+        for tok in rest.split():
+            if tok.startswith("-"):
+                continue
+            if tok.startswith("/") or ".." in tok.split("/"):
+                return None
+            paths.append(tok)
+        if paths:
+            found.append(tuple(paths))
+    if not found:
+        return None
+    if len(set(found)) > 1:
+        return None
+    return list(found[0])
+
+
+def ruff_paths_for_tree(wt):
+    """Ruff path list for the tree under test, or None with the reason.
+
+    The gate lints the same paths the tree's own ci.yml lints. A rename
+    (digiclaw -> digibot, DIG-4602) moved a path out from under a hardcoded
+    list, and ruff 0.16 fails on a missing path (E902), so a stale list
+    turns every other PR red.
+    """
+    path = os.path.join(wt, ".github", "workflows", "ci.yml")
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        return None, "ci.yml not readable (%s)" % e
+    paths = _ruff_paths_from_ci_yml(text)
+    if paths is None:
+        return None, "no single ruff check path list in ci.yml"
+    return paths, "read from .github/workflows/ci.yml"
+
+
+def ruff_paths_fallback(wt):
+    """The fallback ruff path list: the candidates that exist in this tree.
+
+    ruff 0.16 fails on a path that does not exist (E902), so a candidate that
+    the tree does not have is dropped rather than named. Linting fewer paths
+    only under-lints. Returns None when no candidate exists, so the caller
+    fails closed instead of linting nothing.
+    """
+    paths = [p for p in RUFF_PATHS_CANDIDATES if os.path.exists(os.path.join(wt, p))]
+    return paths or None
+
+
 def run_checks(pr, out):
     """Run every gate on the PR. Returns the list of failed gate names."""
     _guard()
@@ -931,7 +1021,20 @@ def run_checks(pr, out):
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
     if "uv-sync" not in fails:
         U = "uv run --frozen --no-sync "
-        step("ruff", U + "ruff check digibase/src digiclaw/src digigraph/src digiquant/src digisearch/src digitrace/src tests", 600)
+        rpaths, rnote = ruff_paths_for_tree(WT)
+        if rpaths is None:
+            rpaths = ruff_paths_fallback(WT)
+            if rpaths is None:
+                out.write("\n===== ruff\nno ruff path list: ci.yml unavailable (%s) and no candidate path exists in this tree\n" % rnote)
+                fails.append("ruff")
+                rpaths = []
+            else:
+                out.write("\nruff-paths: ci.yml unavailable (%s); using the fallback list: %s\n" % (rnote, " ".join(rpaths)))
+                log("ruff: path list from ci.yml unavailable (%s); using the fallback list" % rnote)
+        else:
+            out.write("\nruff-paths: %s: %s\n" % (rnote, " ".join(rpaths)))
+        if rpaths:
+            step("ruff", U + "ruff check " + " ".join(rpaths), 600)
         step("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200)
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:

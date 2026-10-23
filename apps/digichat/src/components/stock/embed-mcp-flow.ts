@@ -28,7 +28,7 @@ export type ConnectedToolRow = {
   label: string;
   kind: "catalog" | "mcp";
   /** Individual tools under this row (per-tool session toggles). */
-  tools?: ReadonlyArray<{ id: string; label?: string }>;
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
   /**
    * The built-in tools a house service always offers, listed under it when the
    * deployment names none. They follow the service's switch; they are not
@@ -56,7 +56,7 @@ export const DIGIVAULT_BUILTIN_TOOLS = [
 type CatalogRef = {
   id: string;
   label?: string;
-  tools?: ReadonlyArray<{ id: string; label?: string }>;
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
 };
 
 export function emptyMcpConfig(): SessionMcpConfig {

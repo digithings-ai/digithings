@@ -29,7 +29,7 @@ SIBLING_COPY = (
     "COPY digigraph",
     "COPY digillm",
     "COPY digitrace",
-    "COPY digiclaw",
+    "COPY digibot",
     "COPY digisearch",
     "COPY digivault",
     "COPY packages/design",
@@ -88,7 +88,7 @@ def test_stack_installs_nine_modules_and_keeps_bakes() -> None:
         "digillm==0.1.0",
         "digigraph[mcp]==0.1.0",
         "digifetch==0.1.0",
-        "digiclaw==0.1.0",
+        "digibot==0.1.0",
         "digivault[service]==0.1.0",
     ):
         assert package in text

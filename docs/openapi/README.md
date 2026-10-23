@@ -28,4 +28,4 @@ Source of truth is this directory — not live FastAPI `/docs` on localhost. The
 
 Local FastAPI Swagger remains available when the stack is up: `http://127.0.0.1:<port>/docs`.
 
-digiclaw has no HTTP OpenAPI (CLI / heartbeat container only).
+digibot has no HTTP OpenAPI (CLI / heartbeat container only).

@@ -1,14 +1,15 @@
 version: 1
-# Local / first-party app (Auth.js session + server persistence)
+# Local / first-party app (Auth.js session + server persistence).
+# House catalog, meter, prompt, and the per-visitor TPM are cleared.
+# The request limiter, the tool-call cap, and the answer guard stay.
+extends: defaults
+hosts: null
 deployment:
   slug: local-app
+  aliases: null
   chrome:
     mode: app
     theme: light
-    # Official assistant-ui templates (11 catalog ids): base | chatgpt | claude |
-    # grok | gemini | perplexity | react-ink | expo-react-native |
-    # base-assistant-ui | webpage-assistant | product-page-assistant.
-    # Overlay: DIGICHAT_CHROME_SKIN.
     skin: base
     title: digichat
     welcome: How can I help you today?
@@ -16,6 +17,7 @@ deployment:
     suggestions:
       - Summarize my last conversation
       - What can you search?
+    launcher: null
   persistence: server
   auth: session
   features:
@@ -27,8 +29,22 @@ deployment:
     sources: true
     branchPicker: true
     modelPicker: false
+  models:
+    catalog: false
+    allowPicker: false
+    default: null
+    priceCapUsdPerMillion: null
+    costPerWindow: null
+    presets: null
+    showFullList: null
   backend:
     type: digigraph
+    digisearchIndex: null
+    vaultPathPrefix: null
+  guardrails:
+    tokensPerMinute: null
+  prompt: null
+  tokenEnv: null
   tools:
     allowUserToggle: true
     catalog:
@@ -51,4 +67,5 @@ deployment:
     llmAccess: operator
     showByok: true
     showLanguageSelector: true
+    showContextMeter: null
     webSearch: true

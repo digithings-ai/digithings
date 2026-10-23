@@ -122,7 +122,7 @@ describe("applySessionTool", () => {
       agent,
     );
     expect(agentResult.ok).toBe(false);
-    expect(agentResult.message).toBe("Managed by the agent.");
+    expect(agentResult.message).toBe("Tools are locked for this host.");
     expect(agent.setExtraTool).not.toHaveBeenCalled();
   });
 

@@ -29,7 +29,7 @@ describe("toCanonRows — tool calls", () => {
     expect(row).toEqual({
       kind: "tool",
       key: "tool:digisearch|auth",
-      name: "Search the knowledge base",
+      name: "digisearch",
       args: "auth",
       status: "running",
       lines: ["Searching…"],
@@ -42,7 +42,7 @@ describe("toCanonRows — tool calls", () => {
     const row = onlyRow([{ kind: "tool_call", name: "digivault_get_note", query: "docs/auth.md" }]);
     expect(row).toMatchObject({
       kind: "tool",
-      name: "Load vault note",
+      name: "digivault_get_note",
       status: "running",
       lines: ["Working…"],
     });
@@ -126,17 +126,17 @@ describe("toCanonRows — tool calls", () => {
     expect(rows[0]).not.toHaveProperty("sources");
   });
 
-  it("shows human labels, not raw tool ids", () => {
+  it("shows raw backend tool ids, not human labels", () => {
     const search = onlyRow([{ kind: "tool_call", name: "digisearch", query: "jwt" }]);
-    expect(search).toMatchObject({ name: "Search the knowledge base" });
+    expect(search).toMatchObject({ name: "digisearch" });
     const docs = onlyRow([
       { kind: "tool_result", name: "digivault_search_notes", query: "jwt", count: 0, hits: [] },
     ]);
-    expect(docs).toMatchObject({ name: "Vault" });
+    expect(docs).toMatchObject({ name: "digivault_search_notes" });
     const load = onlyRow([
       { kind: "tool_result", name: "digivault_get_note", query: "1 note", count: 1, hits: [] },
     ]);
-    expect(load).toMatchObject({ name: "Load vault note" });
+    expect(load).toMatchObject({ name: "digivault_get_note" });
   });
 
   it("does not echo the same query on the following row", () => {
@@ -433,7 +433,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
     expect(row).toEqual({
       kind: "tool",
       key: "status-0",
-      name: "Search the knowledge base",
+      name: "digisearch",
       args: "jwt",
       status: "error",
     });
@@ -454,7 +454,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
     expect(row).toEqual({
       kind: "tool",
       key: "status-0",
-      name: "Search the knowledge base",
+      name: "digisearch",
       args: "jwt",
       status: "ok",
     });
@@ -474,7 +474,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
     expect(row).toEqual({
       kind: "tool",
       key: "status-0",
-      name: "Vault",
+      name: "digivault",
       args: "auth",
       status: "error",
     });
@@ -495,7 +495,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
     expect(rows[1]).toEqual({
       kind: "tool",
       key: "status-1",
-      name: "Search the knowledge base",
+      name: "digisearch",
       args: "jwt",
       status: "error",
     });
@@ -532,7 +532,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
     ]);
     expect(row).toMatchObject({
       kind: "tool",
-      name: "Search the knowledge base",
+      name: "digisearch",
       args: "jwt",
       status: "ok",
       meta: "no hits",

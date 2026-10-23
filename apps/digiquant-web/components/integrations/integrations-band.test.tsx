@@ -37,7 +37,7 @@ describe("IntegrationsBand", () => {
     for (const name of ["digigraph", "digichat", "digillm", "digikey", "digibase", "digifetch"]) {
       expect(html).toContain(`>${name}<`);
     }
-    for (const name of ["digisearch", "digitrace", "digivault", "digiclaw", "digivoice", "digidev", "digibook"]) {
+    for (const name of ["digisearch", "digitrace", "digivault", "digibot", "digivoice", "digidev", "digibook"]) {
       expect(html).not.toContain(`>${name}<`);
     }
     expect(html).toContain('aria-label="digiquant calls"');

@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of
@@ -787,13 +787,11 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
-    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
     "deepseek/deepseek-v3.1": "deepseek-v3.1",
     "deepseek/deepseek-v3.2": "deepseek-v3.2",
     "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
     "deepseek/deepseek-r1": "deepseek-r1",
-    "google/gemini-3.7-flash": "gemini-3.7-flash",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",

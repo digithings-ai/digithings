@@ -65,14 +65,14 @@ VERSION_SOURCES: dict[str, str] = {
     "digichat": "apps/digichat/package.json",
     "digikey": "digikey/pyproject.toml",
     "digitrace": "digitrace/pyproject.toml",
-    "digiclaw": "digiclaw/pyproject.toml",
+    "digibot": "digibot/pyproject.toml",
     "digibase": "digibase/pyproject.toml",
     "digivault": "digivault/pyproject.toml",
     "digiskills": "digiskills/pyproject.toml",
 }
 
 # module id -> the OpenAPI spec stem under docs/openapi/. Only the services that
-# publish a spec; digiclaw is a CLI, digibase is a library, and digistore and
+# publish a spec; digibot is a CLI, digibase is a library, and digistore and
 # digilink are roadmap, so none of the four has one (docs/openapi/README.md).
 SPEC_SOURCES: dict[str, str] = {
     "digigraph": "digigraph",
