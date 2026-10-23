@@ -12,7 +12,7 @@ import { VELA_SYMBOL, VELA_TIMEFRAME, VELA_UNAVAILABLE, velaWorkspaceOptions } f
 
 /**
  * The defect this pins: the desk registered Vela's browser-side Binance and
- * Coinbase providers, so `/tools/charts` rendered `binance:BTCUSDT` and fetched it
+ * Coinbase providers, so `/tools/vela` rendered `binance:BTCUSDT` and fetched it
  * from api.binance.com / fapi.binance.com (CORS, and not house data). Every
  * assertion here is about the vendor path being gone.
  */
