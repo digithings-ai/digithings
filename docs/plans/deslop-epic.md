@@ -184,3 +184,54 @@ pages (static apps) and a TUI frame export diff (terminal clients).
 
 Every slice posts a findings record to the epic issue: skill, finding, file:line,
 severity, fix or "no change warranted". No slice merges without one.
+
+## Scope decision — 2026-10-23 (user, after surface review)
+
+Screenshots reviewed: `apps/digithings-web` (landing, `/chat`, `/docs`, `/variants`),
+`apps/digiquant-web` (home, `/app`, `/pipeline`, `/strategies`), `apps/digiquant-app`
+(`/`, `/blocks`), `apps/digichat` (`/`, `?mode=product`, `?mode=catalog`).
+
+**Keep and review**
+
+| # | Surface | Slice |
+|---|---|---|
+| 1 | digithings-web landing + hero banner | U8 |
+| 2 | digithings-web `/chat` | U2 |
+| 3 | digithings-web `/docs` | U9 |
+| 4 | digithings-web `/variants` | U10 |
+| 5 | digiquant-web home | U6 |
+| — | hero-banner package | U11 |
+| — | packages/ui + digichat-ui | U14, U15, U16 |
+
+**Consolidate**
+
+`/app` (6), the parked `apps/digiquant-app` (8) and its `/blocks` gallery (10)
+are three expressions of one surface. They are merged into one canonical desk
+before any polish. New slice **UC** owns the consolidation:
+`apps/digiquant-web/app/app/**` + `apps/digiquant-app/**` + the shared block
+boundary. Until UC lands, U5/U7 are suspended.
+
+**Drop as review targets**
+
+`apps/digichat` `/`, `?mode=product`, `?mode=catalog` (9, 11, 12) are being
+replaced by the **digichat devkit UI** (`clients/digichat-devkit`), the surface
+where skins, colors, tools and behavior are configured. New slice **UD** owns
+the devkit; U1/U2-digichat are cancelled. `clients/digichat-tui` is in scope only
+where the devkit shares code with it.
+
+**Also dropped**
+
+- `apps/dashboard` — replaced by `/app` (already dropped).
+- digiquant-web `/pipeline`, `/strategies`, `/changelog`, `/contact`,
+  `/subsystems/**` — not selected. `/app` routes remain in UC.
+- Do not live-verify the deployed old digiquant.io pages.
+
+### Revised wave order
+
+1. **Wave 1**: U8 landing, U9 docs, U10 variants.
+2. **Wave 2**: U2 website `/chat`, U6 digiquant home, U11 hero-banner.
+3. **Wave 3**: UC digiquant consolidation, UD digichat devkit, U12 TUI clients
+   (digiquant + digivoice only).
+4. **Wave 4**: U14/U15/U16 shared kit, U13 TUI shell.
+5. **Wave 5**: C1–C6 Python, C7 TS app code.
+6. **Wave 6**: D1 docs, then convergence.
