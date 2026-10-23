@@ -134,7 +134,9 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 /* ── widget-frame action buttons (ChatWidgetButton) ─────────────────── */
 
 .cw-btn {
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+  transition:
+    border-color var(--dur-tap, 120ms) var(--ease),
+    background var(--dur-tap, 120ms) var(--ease);
 }
 
 .cw-btn:disabled {

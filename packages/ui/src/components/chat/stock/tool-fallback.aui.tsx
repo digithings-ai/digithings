@@ -139,7 +139,7 @@ function ToolFallbackDuration({
     <span
       data-slot="tool-fallback-duration"
       className={cn(
-        "aui-tool-fallback-duration text-muted-foreground text-xs tabular-nums",
+        "aui-tool-fallback-duration text-ink-mute text-xs tabular-nums",
         className,
       )}
       {...props}
@@ -185,7 +185,7 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-ink-mute hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
@@ -199,7 +199,7 @@ function ToolFallbackTrigger({
         data-slot="tool-fallback-trigger-label"
         className={cn(
           "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-foreground",
-          isCancelled && "text-muted-foreground line-through",
+          isCancelled && "text-ink-mute line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
@@ -265,7 +265,7 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-args-header text-muted-foreground text-xs font-medium">
+      <p className="aui-tool-fallback-args-header text-ink-mute text-xs font-medium">
         Arguments:
       </p>
       <JsonView
@@ -292,7 +292,7 @@ function ToolFallbackResult({
       className={cn("aui-tool-fallback-result", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
+      <p className="aui-tool-fallback-result-header text-ink-mute text-xs font-medium">
         Result:
       </p>
       <JsonView
@@ -318,7 +318,7 @@ function ToolFallbackAttribution({
     <div
       data-slot="tool-fallback-attribution"
       className={cn(
-        "aui-tool-fallback-attribution text-muted-foreground flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs",
+        "aui-tool-fallback-attribution text-ink-mute flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs",
         className,
       )}
       {...props}
@@ -615,7 +615,7 @@ function ToolFallbackApproval({
           {confirmMeta?.title ?? `${approvalOptionLabel(confirming)}?`}
         </p>
         {confirmDescription && (
-          <p className="aui-tool-fallback-approval-confirm-description text-muted-foreground">
+          <p className="aui-tool-fallback-approval-confirm-description text-ink-mute">
             {confirmDescription}
           </p>
         )}
@@ -623,7 +623,7 @@ function ToolFallbackApproval({
           <ul className="aui-tool-fallback-approval-confirm-grants flex flex-col gap-1">
             {confirming.grants.map((grant) => (
               <li key={grant}>
-                <code className="aui-tool-fallback-approval-confirm-grant bg-muted rounded px-1.5 py-0.5 text-xs">
+                <code className="aui-tool-fallback-approval-confirm-grant bg-surface-2 rounded-none px-1.5 py-0.5 text-xs">
                   {grant}
                 </code>
               </li>
