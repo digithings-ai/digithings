@@ -56,20 +56,19 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
-- `guardrails` (optional) is off unless a key is set. `maxToolCallsPerTurn`
-  follows the per-adapter matrix in `toolCallCapSupport`
+- `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 5`,
+  `answerAt: 0.7`, `pauseAt: 0.9`. The per-visitor house minute is cleared.
+  `tokensPerMinute.deployment` is the trial's one shared allowance.
+  TODO: it stays unset until the Azure TPM for gpt-5.6-terra in westeurope
+  is known. The request limiter stays on.
+  `maxToolCallsPerTurn` follows the per-adapter matrix in `toolCallCapSupport`
   (`src/lib/deploy-config/schema.ts`) and the Guardrails section of
   `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
   (openai-completions, openai-responses, anthropic, google-vertex) enforce
   it and stop the tool loop. langgraph and ag-ui stop forwarding the next
   call (notice/best-effort, no `tool_choice: none` follow-up). digigraph is
   notice only. a2a is refused at config load. `backend.maxToolCalls` remains
-  the Foundry alias and the shared key wins. `tokensPerMinute.deployment`
-  matches an upstream TPM and `tokensPerMinute.user` is a per-person limit.
-  The trial yaml leaves a proposed cap of `5` (alternative `4`) and the
-  deployment TPM commented out until the Azure number for gpt-5.6-terra in
-  westeurope is filled in. See the Guardrails section in
-  `apps/digichat/ARCHITECTURE.md`.
+  the Foundry alias and the shared key wins.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on
   `GET /indexes/<name>`, and the tool is refused with "Access denied. Check
@@ -176,6 +175,69 @@ az containerapp create \
    connections JSON (args pane + Result pane).
 3. Unauthenticated `tools/list` on the MCP server shows the base set; the
    keyed container sees the Search tools — scope gating intact.
+
+## Secret custody and rotation
+
+Two independent credentials back this chat, both held as inline Azure Container App
+secrets on `digichat-datatap-trial` (resource group `1d0a8149-9387-4574-9d10-e83948e7fcd5`,
+subscription `Datatap Trials`; measured 2026-10-22, `keyVaultUrl: null`):
+
+| Container App secret | Bound env var | What it gates |
+|---|---|---|
+| `embed-token` | `DIGICHAT_EMBED_TOKEN` | the single-install `/api/chat` gate: `apps/digichat/src/lib/deploy-config/loader.ts:261-264` copies it into `deployment.token`, and `apps/digichat/src/lib/embed-chat-tenant.ts:118-125` (`installAuthorized`) matches it on the single-install path (`apps/digichat/src/app/api/chat/route.ts:209`; `installAuthorized` is consulted only when no embed tenants are configured — `apps/digichat/src/lib/embed-chat-tenant.ts:159`) |
+| `auth-secret` | `AUTH_SECRET` | this app's Auth.js session secret |
+
+The V1 sketch above does not set `embed-token`; the live app carries it (measured
+2026-10-22).
+
+- **Readback: yes, but only through `az containerapp secret list --show-values`.**
+  Any principal holding `Microsoft.App/containerApps/listSecrets/action` reads an
+  inline Container App secret in cleartext that way (`docs/ops/credential-ownership.md`).
+  `az containerapp show` and `az containerapp secret show` redact, so "write-only"
+  is false for this pair (measured on the sibling ACAs of the same shape —
+  `docs/ops/digichat-datatap-aca.md`).
+- **Custody: the client's Azure only.** No copy is held in our repo or in our local
+  host secret store, and none is needed: the value can be read back with the command
+  above, so a rotation does not depend on anyone supplying it out of band (the same
+  conclusion the sibling ACAs reached — `docs/ops/credential-ownership.md`).
+- **Rotation blast radius.** `embed-token`: without a matching `DIGICHAT_EMBED_TOKEN`
+  the single-install path refuses every `/api/chat`. `auth-secret`: every session on
+  the app is invalidated.
+- **Handing a value to the client stays a human act** — person to person, never
+  pasted into a chat, a ticket or a link. The Azure write is a human step. The
+  trial lane's own rule is the one the runbook states at the top of its promotion
+  steps: every command there is a write to a customer's Azure, and none of it runs
+  without the approval named at the top of that step
+  (`docs/ops/digichat-datatap-aca.md`); DevOps owns the trial deploy lane and this
+  guide, and the client-facing handoff is Chris's act.
+- **This is not the OCC invite key.** The pair is the tenant's own credential and the
+  two must not be confused. The client's own `datatap-dev` MCP `X-API-Key` stays
+  theirs (R18) and is not in the container: in the V1 Foundry setup the MCP tool
+  sits server-side in the tenant's Foundry agent.
+- **Open: no recorded fingerprint and no staleness detector for this pair.** The
+  sibling ACA detector (`scripts/digichat_aca_secret_detector.py`, DIG-1344) has no
+  binding for this app. Owner: Security & Risk Lead, 2026-10-22. Closing it needs a
+  read of the client's Azure secrets, which the trial lane gates behind the named
+  approval (`docs/ops/digichat-datatap-aca.md`), so it rides with DevOps and Chris.
+- **Why this file and not `docs/ops/SECRETS_INVENTORY.md`.** The R0 client-literals
+  gate (DIG-3689) checks `docs/ops/SECRETS_INVENTORY.md` — it carries a grandfathered
+  count of 4 there, and the allowance may only shrink (DIG-4577); the growth check's
+  failure message asks the author to remove the literal from the source instead of
+  allowlisting it, while the DIG-3689 check's own message offers to grandfather a new
+  path or remove the literals. The gate does not check this file, so the record can
+  live here without touching that allowance. No credential value or fingerprint of
+  this pair is written down here; the identifiers it names (the trial app, its
+  resource group and its subscription) are the ones the sibling runbook
+  `docs/ops/digichat-datatap-aca.md` already carries.
+- **Open: this path's R-class is contested in the repo's own artifacts.** The
+  canonical split map (`scripts/split/manifest.py`, DIG-3690) assigns **R0 (public)**
+  to this guide, to `docs/ops/SECRETS_INVENTORY.md` and to
+  `docs/ops/digichat-datatap-aca.md`; the older move lists
+  (`scripts/repo-split/move-lists/r5.paths`) put the inventory and the ACA runbook in
+  R5, and the DIG-3689 gate's prefix table treats this guide as private — while the
+  gate's own docstring says the manifest supersedes that table. Raised with the R0
+  owner on DIG-3689; the classification is the split owner's call, not this
+  record's.
 
 ## Traps worth knowing before the demo
 

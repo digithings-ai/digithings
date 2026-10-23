@@ -18,8 +18,15 @@ import {
   SEARCH_ENGINES,
   toolCallCapIssue,
   type GuardrailsConfig,
+  type ModelOffer,
   type PageContextMode,
 } from "@/lib/deploy-config/schema";
+import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  LimitsSchema,
+  type LimitsConfig,
+} from "@/lib/limits/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
@@ -139,6 +146,8 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   /** Same block as the deployment YAML. Omit and every guard is off. */
   guardrails?: GuardrailsConfig;
+  /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
+  limits?: LimitsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -291,32 +300,16 @@ export type EmbedTenantConfig = {
       default?: boolean;
       label?: string;
       /** Individual tools under this catalog entry (per-tool session toggles). */
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
-  models?: {
-    default?: string;
-    available?: string[];
-    allowPicker?: boolean;
-    catalog?: boolean;
-    /** OCC visitor picker. Off unless true. Other hosts ignore it. */
-    occPicker?: boolean;
-    priceCapUsdPerMillion?: number;
-    premiumCapUsdPerMillion?: number;
-    costPerWindow?: { usd: number; windowSeconds?: number };
-    presets?: Array<"auto" | "reasoning" | "fast" | "light" | "router">;
-    showFullList?: boolean;
-    minContextTokens?: number;
-    picker?: {
-      presets: Array<{ id: string; label: string; description: string; model: string }>;
-      groups: Array<{
-        provider: string;
-        models: Array<{ id: string; label: string }>;
-        premium?: boolean;
-      }>;
-      showFullList: boolean;
-    };
-  };
+  /**
+   * The model offer, in the SAME shape the deployment config uses
+   * (`ModelOffer`, DIG-4589): one artefact, one shape, whichever source the
+   * offer came from. The registry leaves `available` optional; an absent list
+   * means "no restriction", the same as an empty one.
+   */
+  models?: ModelOffer;
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
@@ -918,12 +911,31 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   );
   if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
 
+  let limits: LimitsConfig | undefined;
+  if (v.limits !== undefined) {
+    const parsed = LimitsSchema.safeParse(v.limits);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid limits";
+      throw new Error(`${ctx}: limits ${message}`);
+    }
+    const backendType = typeof backendCfg.type === "string" ? backendCfg.type : "unknown";
+    const issues = collectLimitIssues(parsed.data, backendType);
+    if (issues.length) {
+      throw new Error(`${ctx}: ${issues[0]?.message ?? "invalid limits"}`);
+    }
+    limits =
+      (parsed.data.onUnsupported ?? "reject") === "warn"
+        ? applyUnsupportedPolicy(parsed.data, backendType).limits
+        : parsed.data;
+  }
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
     ...(guardrails ? { guardrails } : {}),
+    ...(limits ? { limits } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:
@@ -1014,7 +1026,11 @@ function parseTenantTools(
           if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
             throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
           }
-          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+          return {
+            id: st.id,
+            ...(typeof st.label === "string" ? { label: st.label } : {}),
+            ...(typeof st.group === "string" && st.group.trim() ? { group: st.group.trim() } : {}),
+          };
         })
       : undefined;
     return {

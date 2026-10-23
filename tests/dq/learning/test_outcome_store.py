@@ -219,7 +219,7 @@ def test_exact_retry_of_episode_is_idempotent() -> None:
     store = OutcomeLearningStore()
     episode = _episode()
     assert store.append_episode(episode) is store.append_episode(episode)
-    assert len(store._episodes) == 1
+    assert len(store.list_episode_versions()) == 1
 
 
 def test_changed_content_appends_new_episode_version() -> None:
@@ -229,7 +229,7 @@ def test_changed_content_appends_new_episode_version() -> None:
     store.append_episode(first)
     store.append_episode(second)
     assert first.episode_version_id != second.episode_version_id
-    assert len(store._episodes) == 2
+    assert len(store.list_episode_versions()) == 2
 
 
 def test_episode_supersession_requires_parent() -> None:
@@ -253,8 +253,9 @@ def test_episode_supersession_appends_child() -> None:
         ),
     )
     store.append_episode(child)
-    assert parent.episode_version_id in store._episodes
-    assert child.episode_version_id in store._episodes
+    stored = {episode.episode_version_id for episode in store.list_episode_versions()}
+    assert parent.episode_version_id in stored
+    assert child.episode_version_id in stored
 
 
 def test_report_requires_existing_episode() -> None:
@@ -407,15 +408,13 @@ def test_load_episode_with_reports_never_fabricates() -> None:
     assert loaded.reports == (report,)
 
 
-def test_conflict_on_seeded_hash_mismatch() -> None:
+def test_conflict_on_hash_mismatch_with_existing_version_id() -> None:
     store = OutcomeLearningStore()
     episode = _episode()
     store.append_episode(episode)
-    tainted = OutcomeEpisode.model_construct(**episode.model_dump())
-    object.__setattr__(tainted, "content_hash", "0" * 64)
-    store._episodes[episode.episode_version_id] = tainted
+    tainted = episode.model_copy(update={"content_hash": "0" * 64})
     with pytest.raises(OutcomeLearningConflict):
-        store.append_episode(episode)
+        store.append_episode(tainted)
 
 
 def test_load_missing_raises() -> None:
@@ -443,6 +442,12 @@ def test_lesson_rejects_report_for_unlisted_episode() -> None:
 
 
 def test_load_episode_with_reports_fails_on_broken_index() -> None:
+    """Deliberate fault injection: a dangling report id must fail loudly.
+
+    The append-only public API can never produce a dangling index entry, so the
+    private map is seeded on purpose to prove the loader raises instead of
+    fabricating a report row.
+    """
     store = OutcomeLearningStore()
     episode = _episode()
     report = _report(episode)

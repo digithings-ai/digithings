@@ -1,5 +1,5 @@
 {
-  "source": "Cheaper Inference public markets page https://api.cheaperinference.com/markets fetched 2026-10-21. No API key. No chat/completions call. Prices are ourInputPerM and ourOutputPerM in USD per million tokens. Cheaper Inference publishes no router model on that listing (the only router hit was a page-router key, not a model id), so this catalog has no Cheaper Inference router. Each row has a family and a generation. The resolver keeps the newest latestGenerationsPerFamily generations of each family before the price cap. Superseded rows stay in this file so that rule drops them. Models above the standard cap and at or under premiumCapUsdPerMillion are a manual Premium group. Presets and the router do not select them. reasoningScore only orders presets inside the standard cap; it is not a published benchmark. maxAgeDays is null, so a release date does not drop a row unless a caller sets a max age. asOf is the markets fetch date. A later markets HTML differed on six non-premium rows; that drift is deferred and this snapshot was not regenerated.",
+  "source": "Cheaper Inference public markets page https://api.cheaperinference.com/markets fetched 2026-10-21. No API key. No chat/completions call. Prices are ourInputPerM and ourOutputPerM in USD per million tokens. Cheaper Inference publishes no router model on that listing (the only router hit was a page-router key, not a model id), so this catalog has no Cheaper Inference router. Each row has a family and a generation. The resolver keeps the newest latestGenerationsPerFamily generations of each family before the price cap. Superseded rows stay in this file so that rule drops them. Models above the standard cap and at or under premiumCapUsdPerMillion stay under their own provider and carry premium: true. Presets and the router do not select them. reasoningScore only orders presets inside the standard cap; it is not a published benchmark. maxAgeDays is null, so a release date does not drop a row unless a caller sets a max age. asOf is the markets fetch date. A later markets HTML differed on six non-premium rows; that drift is deferred and this snapshot was not regenerated.",
   "policy": {
     "priceCapUsdPerMillion": 2,
     "premiumCapUsdPerMillion": 2.5,
@@ -22,29 +22,24 @@
   "presets": [
     {
       "id": "auto",
-      "label": "Auto",
-      "description": "DeepSeek V4.1 Flash, our default.",
+      "label": "Default",
       "model": "deepseek/deepseek-v4.1-flash"
     },
     {
       "id": "reasoning",
-      "label": "Reasoning",
-      "description": "{label}. Best reasoning in this list."
+      "label": "Reasoning"
     },
     {
       "id": "fast",
-      "label": "Fast",
-      "description": "{label}. Fastest model in this list."
+      "label": "Fast"
     },
     {
       "id": "light",
-      "label": "Light",
-      "description": "{label}. Lowest price in this list."
+      "label": "Light"
     },
     {
       "id": "router",
       "label": "Router",
-      "description": "OpenRouter picks from this list.",
       "requires": "openrouter"
     }
   ],
@@ -73,7 +68,11 @@
       "reasoningScore": 74,
       "ttftSamples": 17868,
       "ttftP50Ms": 3228,
-      "tags": ["deepseek", "default", "reasoning"]
+      "tags": [
+        "deepseek",
+        "default",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4.1-flash",
@@ -89,7 +88,10 @@
       "reasoningScore": 68,
       "ttftSamples": 1117293,
       "ttftP50Ms": 4344,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-flash",
@@ -105,7 +107,10 @@
       "reasoningScore": 64,
       "ttftSamples": 64754,
       "ttftP50Ms": 4892,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-flash-0731",
@@ -122,7 +127,10 @@
       "reasoningScore": 62,
       "ttftSamples": 26581,
       "ttftP50Ms": 4610,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-flash-0731-fast",
@@ -139,23 +147,10 @@
       "reasoningScore": 63,
       "ttftSamples": 5,
       "ttftP50Ms": 4519,
-      "tags": ["deepseek", "reasoning"]
-    },
-    {
-      "id": "deepseek/deepseek-v4-pro",
-      "label": "DeepSeek V4 Pro",
-      "provider": "DeepSeek",
-      "family": "deepseek",
-      "generation": 4,
-      "inputPerM": 0.5209762734,
-      "outputPerM": 1.5629288202,
-      "context": 1000000,
-      "tools": true,
-      "reasoning": true,
-      "reasoningScore": 94,
-      "ttftSamples": 32148,
-      "ttftP50Ms": 6082,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-pro-0813",
@@ -172,7 +167,10 @@
       "reasoningScore": 91,
       "ttftSamples": 11900,
       "ttftP50Ms": 6455,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v3.2",
@@ -188,7 +186,10 @@
       "reasoningScore": 50,
       "ttftSamples": 3,
       "ttftP50Ms": 3635,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-v3.1",
@@ -204,7 +205,9 @@
       "reasoningScore": 0,
       "ttftSamples": 5,
       "ttftP50Ms": 2866,
-      "tags": ["deepseek"]
+      "tags": [
+        "deepseek"
+      ]
     },
     {
       "id": "deepseek/deepseek-r1-0528",
@@ -221,7 +224,10 @@
       "reasoningScore": 88,
       "ttftSamples": 2,
       "ttftP50Ms": 3164,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "deepseek/deepseek-r1",
@@ -237,7 +243,10 @@
       "reasoningScore": 85,
       "ttftSamples": 6,
       "ttftP50Ms": 3228,
-      "tags": ["deepseek", "reasoning"]
+      "tags": [
+        "deepseek",
+        "reasoning"
+      ]
     },
     {
       "id": "openai/gpt-oss-120b",
@@ -253,7 +262,9 @@
       "reasoningScore": 0,
       "ttftSamples": 2342,
       "ttftP50Ms": 4892,
-      "tags": ["light"]
+      "tags": [
+        "light"
+      ]
     },
     {
       "id": "openai/gpt-6-luna",
@@ -269,7 +280,9 @@
       "reasoningScore": 76,
       "ttftSamples": 152794,
       "ttftP50Ms": 3934,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "openai/gpt-5.6-luna",
@@ -285,7 +298,9 @@
       "reasoningScore": 86,
       "ttftSamples": 55012,
       "ttftP50Ms": 4431,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "openai/gpt-5-mini",
@@ -301,7 +316,9 @@
       "reasoningScore": 74,
       "ttftSamples": 1365,
       "ttftP50Ms": 6082,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "openai/gpt-6.1-sol",
@@ -317,7 +334,9 @@
       "reasoningScore": 100,
       "ttftSamples": 53450,
       "ttftP50Ms": 4519,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "openai/gpt-5.6-sol",
@@ -333,7 +352,9 @@
       "reasoningScore": 100,
       "ttftSamples": 7665,
       "ttftP50Ms": 3292,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "google/gemini-3.8-flash",
@@ -349,23 +370,9 @@
       "reasoningScore": 90,
       "ttftSamples": 8793,
       "ttftP50Ms": 7127,
-      "tags": ["reasoning"]
-    },
-    {
-      "id": "google/gemini-3.7-flash",
-      "label": "Gemini 3.7 Flash",
-      "provider": "Google",
-      "family": "gemini-flash",
-      "generation": 3.7,
-      "inputPerM": 0.4875,
-      "outputPerM": 2.4375,
-      "context": 1048576,
-      "tools": true,
-      "reasoning": true,
-      "reasoningScore": 50,
-      "ttftSamples": 4603,
-      "ttftP50Ms": 6850,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "google/gemini-3.5-flash-lite",
@@ -381,7 +388,9 @@
       "reasoningScore": 58,
       "ttftSamples": 1110,
       "ttftP50Ms": 2923,
-      "tags": ["fast"]
+      "tags": [
+        "fast"
+      ]
     },
     {
       "id": "google/gemini-3.1-flash-lite",
@@ -413,7 +422,9 @@
       "reasoningScore": 94,
       "ttftSamples": 19754,
       "ttftP50Ms": 8350,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "z-ai/glm-5.3-flash",
@@ -429,7 +440,9 @@
       "reasoningScore": 84,
       "ttftSamples": 371458,
       "ttftP50Ms": 7714,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "z-ai/glm-4.7-flash",
@@ -461,7 +474,9 @@
       "reasoningScore": 70,
       "ttftSamples": 3227,
       "ttftP50Ms": 8026,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "qwen/qwen3.8-27b",
@@ -477,7 +492,9 @@
       "reasoningScore": 62,
       "ttftSamples": 416,
       "ttftP50Ms": 7868,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "qwen/qwen3.8-max",
@@ -493,7 +510,9 @@
       "reasoningScore": 88,
       "ttftSamples": 1198,
       "ttftP50Ms": 3494,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "qwen/qwen3.8-2.4t-a95b",
@@ -509,7 +528,9 @@
       "reasoningScore": 86,
       "ttftSamples": 283,
       "ttftP50Ms": 6082,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "qwen/qwen3.8-max-0902",
@@ -526,7 +547,9 @@
       "reasoningScore": 85,
       "ttftSamples": 66,
       "ttftP50Ms": 2923,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "xiaomi/mimo-v2.6-flash",
@@ -542,7 +565,9 @@
       "reasoningScore": 64,
       "ttftSamples": 22047,
       "ttftP50Ms": 5191,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "xiaomi/mimo-v2.6-pro",
@@ -558,7 +583,9 @@
       "reasoningScore": 66,
       "ttftSamples": 21745,
       "ttftP50Ms": 5846,
-      "tags": ["reasoning"]
+      "tags": [
+        "reasoning"
+      ]
     },
     {
       "id": "minimax/minimax-m3",

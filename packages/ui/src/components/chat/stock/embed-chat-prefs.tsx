@@ -134,7 +134,7 @@ export type CatalogToolRow = {
   label?: string;
   default?: boolean;
   /** Individual tools under this entry (per-tool session toggles). */
-  tools?: Array<{ id: string; label?: string }>;
+  tools?: Array<{ id: string; label?: string; group?: string }>;
 };
 
 export type EmbedChatPrefsApi = {

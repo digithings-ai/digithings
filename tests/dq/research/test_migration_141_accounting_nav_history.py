@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION = MIGRATIONS / "141_accounting_nav_history_house_scope.sql"
+MIGRATION = MIGRATIONS / "prod" / "141_accounting_nav_history_house_scope.sql"
 HOUSE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
 
@@ -42,7 +42,7 @@ def _view_body(sql: str, view: str) -> str:
 
 
 def test_migration_141_is_only_141() -> None:
-    assert sorted(MIGRATIONS.glob("141_*.sql")) == [MIGRATION]
+    assert sorted(MIGRATIONS.rglob("141_*.sql")) == [MIGRATION]
 
 
 def test_history_view_is_security_invoker(sql: str) -> None:

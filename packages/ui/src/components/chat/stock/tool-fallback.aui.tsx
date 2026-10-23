@@ -3,6 +3,7 @@
 import { memo, useCallback, useRef, useState } from "react";
 import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
+import { useTurnOutcome } from "../turn-outcome";
 import {
   toolApprovalAcceptsText,
   useScrollLock,
@@ -767,7 +768,17 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
-  const effectiveStatus = resolveToolStatus(status, isError, result);
+  const outcome = useTurnOutcome();
+  const resolved = resolveToolStatus(status, isError, result);
+  // A call still waiting on a result when the turn was stopped will never
+  // get one: show it cancelled, not "Waiting on tool". A call that waits on
+  // the visitor (approval, interrupt) keeps its controls.
+  const effectiveStatus: ToolCallMessagePartStatus | undefined =
+    outcome === "stopped" &&
+    resolved?.type === "requires-action" &&
+    !offersInterruptAction(resolved, approval, interrupt)
+      ? { type: "incomplete", reason: "cancelled" }
+      : resolved;
   const isCancelled =
     effectiveStatus?.type === "incomplete" &&
     effectiveStatus.reason === "cancelled";

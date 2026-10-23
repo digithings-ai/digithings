@@ -103,11 +103,12 @@ components:
     arch_doc: digitrace/ARCHITECTURE.md
     test_cmd: "pytest tests/dsm/ -m unit -v --tb=short"
 
-  - name: digiclaw
+  - name: digibot
     port: null
-    description: "Heartbeat runner + append-only JSONL audit log"
-    agents_doc: digiclaw/AGENTS.md
-    arch_doc: digiclaw/ARCHITECTURE.md
+    status: parked  # see docs/PARKED_MODULES.md (formerly digiclaw)
+    description: "Parked: future bot-runtime wrapper; today a heartbeat runner + JSONL audit log"
+    agents_doc: digibot/AGENTS.md
+    arch_doc: digibot/ARCHITECTURE.md
     test_cmd: "pytest tests/dc/ -m unit -v --tb=short"
 
   - name: digibase

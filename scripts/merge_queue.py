@@ -185,6 +185,44 @@ PROVENANCE_READ_TIMEOUT_SHADOW = 2.0
 #: hangs is a tick that hangs, and the queue reads one commit per pull request.
 PROVENANCE_STATUS_TIMEOUT = 10.0
 
+#: How many times one URL is read before the read is called a failed read. A
+#: dropped connection says nothing about the build behind the URL, so the read
+#: is tried again: one dropped connection used to refuse a pull request on a
+#: transport fact that had nothing to do with the build. The read is a GET, so
+#: the question is the same every time, and a question that was not answered
+#: is not an answer.
+PROVENANCE_READ_ATTEMPTS = 3
+
+#: The pause before the next attempt, in seconds. The pause is short because
+#: the queue has a tick to finish, and it is there so the second attempt does
+#: not arrive while the first one is still being answered.
+PROVENANCE_RETRY_BACKOFF = 0.5
+
+#: The whole cost of one URL, attempts and pauses together. The pause before
+#: an attempt and the attempt itself both happen inside it, so one path costs
+#: the budget once and not once per attempt. It is a deadline and not only a
+#: sum of timeouts: the body is read in chunks and the read gives up when the
+#: deadline has passed, so a server that answers the headers and then trickles
+#: the body cannot hold the read open past the budget. It is the budget of ONE
+#: URL read, not of the tick.
+PROVENANCE_READ_BUDGET = 20.0
+
+#: How long a host that could not be read is remembered, in seconds. The queue
+#: asks the same host about every pull request of the tick, so a host that
+#: could not be read is asked once more - briefly - and the rest of the tick
+#: is answered from the memory instead of waiting for a host that is not
+#: answering. The memory does not outlive its minute: after it the host is
+#: read again with the whole budget.
+PROVENANCE_HOST_COOLDOWN = 60.0
+
+#: How long the host is asked again after it did not answer, in seconds. The
+#: ask is one attempt and not three, and it is brief: the host either answers
+#: or it does not, and a host that was asleep for a moment answers at once.
+#: The queue asks the host once per pull request, so this is the cost of a
+#: dead host per pull request, and it has to stay small: the tick has an
+#: interval to keep.
+PROVENANCE_REPROBE_TIMEOUT = 2.0
+
 #: The provenance log grows by one line per pull request per tick, so it is
 #: capped: the oldest file is dropped when the log passes this size.
 PROVENANCE_LOG_MAX_BYTES = 1_000_000
@@ -210,6 +248,11 @@ PROVENANCE_INDEX_MAX_AGE_DAYS = 14
 #: request.
 _TOKEN_CACHE: dict[tuple[str, str], str] = {}
 _READ_CACHE: dict[str, tuple[int, Any]] = {}
+#: The hosts that could not be read, with the answer they gave and the moment
+#: they gave it. The key is the scheme and the host, because two services on
+#: one machine are two hosts and one of them can answer while the other does
+#: not.
+_HOST_FAILURE: dict[str, tuple[float, tuple[int, Any]]] = {}
 #: The allowed hosts, read once per queue run from the deployment's own files.
 _HOST_CACHE: dict[tuple[Any, ...], tuple[tuple[str, ...], str]] = {}
 #: The log index, by the path it is written to.
@@ -238,10 +281,15 @@ class Authority:
     note: str = ""
 
 
-#: The three ways the reviewer-independence gate can run. `shadow` measures what
-#: the gate would refuse and merges anyway; `enforce` refuses. DIG-4809 named the
-#: two-step rollout: 48 hours of shadow, then a separate small PR that flips the
-#: switch to `enforce`.
+#: The three ways the reviewer-independence gate can run. `off` reads no
+#: provenance at all. `shadow` and `enforce` both refuse a marker the gate
+#: dropped; `shadow` additionally records the refusal (and what the row would
+#: have said with every comment counted) in the shadow log, while `enforce`
+#: decides without it. DIG-4809 named the two-step rollout: 48 hours of shadow,
+#: then a separate small PR that flips the switch to `enforce`. The flip shipped
+#: in DIG-5220 (22 Oct 2026), and the same change closed the shadow loophole:
+#: #6277 and #6197 merged while an author-lane write-up stood in for the
+#: non-author review, because shadow merged what it had just measured.
 REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
 
 
@@ -1105,7 +1153,7 @@ _WOODPECKER_OPENER = urllib.request.build_opener(_NoRedirect)
 def _woodpecker_read(
     url: str, token: str, timeout: float = PROVENANCE_READ_TIMEOUT
 ) -> tuple[int, Any]:
-    """One read-only GET against the Woodpecker API.
+    """One read-only GET against the Woodpecker API, read again if it is dropped.
 
     Returns the HTTP status and the decoded body. A transport failure is
     reported as status 0, because "the API could not be read" and "the build is
@@ -1114,38 +1162,161 @@ def _woodpecker_read(
     Nothing a posted status can put in the URL may kill the tick: the read
     catches everything, because a queue that dies on a crafted `target_url`
     stops merging for everybody.
+
+    Three things are true of a read that could not be made, and each of them
+    used to be false:
+
+    - A dropped connection is not an answer about the build, so the read is
+      tried again before it is believed.
+    - A host that could not be read is remembered for a short while, so the
+      queue does not ask a dead host three times per pull request of the tick.
+      One dropped connection used to refuse every pull request of the tick,
+      for a reason that had nothing to do with them.
+    - A failed read is not cached as the answer for that URL, so the URL is
+      read again once the memory of the failure has passed. The memory is of
+      that host and not of the queue: it keeps that host unasked for a minute,
+      and after that the host is asked again.
+
+    An answer the API gave - any status code, and a refused redirect - is
+    cached for the tick: the API answered, and its answer is the same until
+    the next tick.
     """
     cached = _READ_CACHE.get(url)
     if cached is not None:
         return cached
+    host = _read_host(url)
+    remembered = _HOST_FAILURE.get(host)
+    if remembered is not None:
+        failed_at, answer = remembered
+        if time.monotonic() - failed_at < PROVENANCE_HOST_COOLDOWN:
+            # The host did not answer a moment ago. It is asked once more, and
+            # briefly: a host that was asleep for a moment answers, and the
+            # tick carries on with the build instead of with the memory of a
+            # failure that is no longer true. One ask and not three, so a host
+            # that is down costs the tick one short read per pull request.
+            status, payload, dropped = _woodpecker_read_once(
+                url, token, PROVENANCE_REPROBE_TIMEOUT
+            )
+            if not dropped:
+                _HOST_FAILURE.pop(host, None)
+                _READ_CACHE[url] = (status, payload)
+                return (status, payload)
+            return (
+                0,
+                f"{answer[1]} (the host was asked once more and did not answer)",
+            )
+        # The memory of the failure has run out: the host is read again with
+        # the whole budget.
+        _HOST_FAILURE.pop(host, None)
+    status, payload, dropped = _woodpecker_read_attempts(url, token, timeout)
+    if dropped:
+        _HOST_FAILURE[host] = (time.monotonic(), (status, payload))
+    else:
+        _READ_CACHE[url] = (status, payload)
+    return (status, payload)
+
+
+def _read_host(url: str) -> str:
+    """The scheme and the host of a URL, which is what a read of it shares.
+
+    Two URLs on one host are one host for the queue: a host that could not be
+    read could not be read for either of them. The key is normalised the way
+    the allow-list is - the host in lower case, with its port - so that two
+    spellings of one address do not each pay their own retry storm.
+    """
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    host = (parts.hostname or "").lower()
+    if port:
+        return f"{parts.scheme}://{host}:{port}"
+    return f"{parts.scheme}://{host}"
+
+
+def _woodpecker_read_attempts(
+    url: str, token: str, timeout: float
+) -> tuple[int, Any, bool]:
+    """The read, tried again while the API cannot be reached.
+
+    The third value says whether the API could not be reached at all, which is
+    the only failure worth trying again: a server that answered 404 answered,
+    and its answer is the same until the next tick.
+
+    The budget bounds the attempts of one read, so one path costs the budget
+    once and not once per attempt. It is a deadline and not a sum of timeouts:
+    the deadline is handed to the attempt, so a server that answers the
+    headers and then trickles the body cannot hold the read open past it.
+    """
+    deadline = time.monotonic() + PROVENANCE_READ_BUDGET
+    reason = ""
+    attempts = 0
+    for attempt in range(1, PROVENANCE_READ_ATTEMPTS + 1):
+        if attempt > 1:
+            time.sleep(
+                min(PROVENANCE_RETRY_BACKOFF, max(0.0, deadline - time.monotonic()))
+            )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        attempts = attempt
+        status, payload, dropped = _woodpecker_read_once(
+            url, token, min(timeout, remaining), deadline
+        )
+        if not dropped:
+            return (status, payload, False)
+        reason = f"{payload} (tried {attempt} times)"
+    return (0, reason, True) if attempts else (0, "the read was not attempted", True)
+
+
+def _woodpecker_read_once(
+    url: str, token: str, timeout: float, deadline: float | None = None
+) -> tuple[int, Any, bool]:
+    """One attempt at the read.
+
+    The third value says whether the API could not be reached, so that the
+    caller can tell a dropped connection from an answer the API gave.
+
+    The body is read in chunks and the deadline is checked between them. The
+    timeout of a socket is the timeout of one operation on it, so a server
+    that answers the headers and then trickles the body would hold the read
+    open for as long as it liked.
+    """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            body = response.read().decode("utf-8", "replace")
+            chunks: list[bytes] = []
+            while True:
+                if deadline is not None and time.monotonic() > deadline:
+                    raise TimeoutError("the read exceeded its budget")
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            body = b"".join(chunks).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
         code = int(exc.code)
         if code in (301, 302, 303, 307, 308):
             # The redirect was refused: the answer of another host is not the
-            # answer of ours, and the token would have gone with it.
-            result = (0, "the request was redirected")
-        else:
-            result = (code, None)
+            # answer of ours, and the token would have gone with it. The answer
+            # is the same every time, so the read is not tried again.
+            return (0, "the request was redirected", False)
+        return (code, None, False)
     except Exception as exc:  # a status must never kill a tick
-        result = (0, f"{type(exc).__name__}: {exc}")
-    else:
-        if final_url != url:
-            result = (0, "the request was redirected")
-        else:
-            try:
-                result = (status, json.loads(body or "null"))
-            except json.JSONDecodeError:
-                result = (status, None)
-    _READ_CACHE[url] = result
-    return result
+        # The API could not be reached. This is the one failure that says
+        # nothing about the build, so it is the one failure worth trying again.
+        return (0, f"{type(exc).__name__}: {exc}", True)
+    if final_url != url:
+        return (0, "the request was redirected", False)
+    try:
+        return (status, json.loads(body or "null"), False)
+    except json.JSONDecodeError:
+        return (status, None, False)
 
 
 def _build_steps(pipeline: Mapping[str, Any]) -> dict[str, frozenset[str]]:
@@ -2102,6 +2273,8 @@ def _gate_checks(pr: dict[str, Any], policy: Policy, repo: str | None = None) ->
 _MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
 _MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
 _SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+# The `scope=` key itself, present or not, whatever its value looks like.
+_SCOPE_KEY_RE = re.compile(r"(?:^|\s)scope\s*=", re.IGNORECASE)
 
 # `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
 # discipline named the two verdicts "approve" and "changes needed"; a reviewer
@@ -2115,8 +2288,12 @@ def _normalise_verdict(value: str) -> str:
     return value.strip().strip("'\";").lower().replace("-", "_")
 
 
-def _marker_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, scope_sha)` from a review marker in `body`, or None.
+def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
+    """`(verdict, scope_sha, names_scope)` from a review marker in `body`, or None.
+
+    `names_scope` is True when the marker carries a `scope=` field at all, even
+    one whose value is not a readable sha. The field's presence, not its parse,
+    decides whether the marker names a head of its own.
 
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
@@ -2131,7 +2308,8 @@ def _marker_verdict(body: str) -> tuple[str, str] | None:
         if verdict not in READABLE_VERDICTS:
             continue
         scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
-        return verdict, (scope_sha.group("sha") if scope_sha else "")
+        names_scope = _SCOPE_KEY_RE.search(marker.group("fields")) is not None
+        return verdict, (scope_sha.group("sha") if scope_sha else ""), names_scope
     return None
 
 
@@ -2230,8 +2408,9 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     prose = _prose_verdict(text)
     if marker is None and prose is None:
         return None
+    named_scope = False
     if marker is not None:
-        verdict, scope = marker
+        verdict, scope, named_scope = marker
         source = "a `verdict=` marker"
         # The marker's `scope=` is the head the verdict is about. The prose around
         # it may name any number of commits, so it is not read as a binding.
@@ -2247,7 +2426,17 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         claims = [found.group("sha") for found in _PROSE_SHA_RE.finditer(text)]
     provenance = _provenance_fields(body)
     provenance_head = str(provenance.get("head") or "")
-    if provenance_head:
+    if provenance_head and not named_scope:
+        # A marker verdict names the head it is about through its own `scope=`.
+        # The provenance marker's `head=` is the fallback for a marker that names
+        # no scope, and never a second binding for one that does: an approve
+        # whose `scope=` names a stale head says nothing about the head the PR
+        # stands at, and must not clear a block just because the provenance
+        # marker names the newer head. "Names a scope" is the field's presence:
+        # a `scope=` that does not parse as a sha (uppercase, short, no `@`)
+        # binds nothing, and must not fall back to the provenance head. The
+        # prose path has no `scope=`, so it keeps every sha in the comment as a
+        # candidate, the provenance head included.
         claims.append(provenance_head)
     bindings: list[str] = []
     for binding in claims:
@@ -3634,10 +3823,11 @@ def _log_shadow(
     repo: str | None,
     lines: Sequence[str],
 ) -> None:
-    """Write what the gate would have refused, to the shadow log.
+    """Write what the gate refused, and what the row would have merged on.
 
     A shadow log that cannot be written is a lost measurement, not a reason to
-    stop merging: the gate is measuring, so it keeps its hands off the merge.
+    change a verdict: the gate already decided, so it keeps its hands off the
+    merge.
     """
     if cfg is None:
         return
@@ -3690,8 +3880,13 @@ def _review_coverage(
     * This is the review gate. Both reopen cases merged attested by `qa` with
       zero reviews and zero comments; attestation is an assertion, and an
       assertion with no artifact is exactly what the promotion gate refuses.
-      `--attest-review` is gone (2026-10-17), and no non-author approval is
-      required on top of this evidence (Chris's 2026-10-15 definition).
+      `--attest-review` is gone (2026-10-17), and no separate formal approval is
+      demanded on top of the evidence (Chris's 2026-10-15 definition). But an
+      in-session pass is only evidence when another seat wrote it: the reviewer
+      independence gate (DIG-4795) drops a comment whose provenance marker names
+      the PR's author seat or cannot be checked at all, and DIG-5220 shipped that
+      gate in `enforce` mode after #6277 and #6197 merged on the authoring lane's
+      own write-up.
     * The comments this gate scores are supplied by `fetch_queue` and, when the
       row arrives without them, completed by `_ensure_comments` — which runs
       before this function precisely because an unreadable review record must
@@ -3751,14 +3946,15 @@ def _review_coverage(
         )
         return state
 
-    if mode == "enforce":
-        reviewed, why = crc.verdict_for(state_for(kept))
-    else:
-        # Shadow mode scores the row as it stands, then scores it again without the
-        # markers the gate would drop. The difference between the two answers is the
-        # measurement: "this PR would have been refused".
-        reviewed, why = crc.verdict_for(state_for(counted))
-        would_review, would_why = crc.verdict_for(state_for(kept))
+    # The gate always decides on the comments it accepted. Shadow mode keeps the
+    # measurement — it records what the gate refused, and what the row would have
+    # said with every comment counted — but it is no longer a licence to merge on
+    # the marker the gate just refused. DIG-5220 made that change after #6277 and
+    # #6197: in both, the authoring lane's own write-up was counted as the review
+    # and the PR merged with no other seat's look at the final head.
+    reviewed, why = crc.verdict_for(state_for(kept))
+    if mode == "shadow":
+        would_review, would_why = crc.verdict_for(state_for(counted))
         if independence.unverifiable:
             _log_shadow(
                 cfg,
@@ -3766,18 +3962,13 @@ def _review_coverage(
                 repo,
                 [f"could not check the review seats: {independence.unverifiable}"],
             )
-        elif independence.problems and not would_review:
-            _log_shadow(cfg, pr, repo, list(independence.problems))
         elif independence.problems:
-            _log_shadow(
-                cfg,
-                pr,
-                repo,
-                [
-                    f"dropped {len(independence.disqualified)} review marker(s) that "
-                    f"did not count; the PR would still have merged on {would_why}"
-                ],
-            )
+            lines = list(independence.problems)
+            if would_review:
+                # The measurement that matters: without this gate the row would
+                # have merged on the evidence it just refused.
+                lines.append(f"without this gate the row would have merged on {would_why}")
+            _log_shadow(cfg, pr, repo, lines)
 
     if reviewed:
         evidence = why
@@ -3790,9 +3981,9 @@ def _review_coverage(
             )
         return [], evidence
 
-    if mode == "enforce" and independence.unverifiable:
+    if independence.unverifiable:
         return [f"reviewer independence: {independence.unverifiable}"], ""
-    if mode == "enforce" and independence.problems:
+    if independence.problems:
         head = str(pr.get("headRefOid") or "")[:12]
         return [
             "reviewer independence: "

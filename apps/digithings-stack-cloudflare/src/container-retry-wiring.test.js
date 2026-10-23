@@ -86,11 +86,15 @@ describe("the container wrapper separates a failed container from a booting one"
   it("branches to the failed-container answer in every container catch block", () => {
     // Each container has TWO guarded sites (startAndWaitForPorts catch +
     // containerFetch catch); exactly 2 each proves neither collapsed back to
-    // the uniform boot 503 (a presence-only check cannot tell).
+    // the uniform boot 503 (a presence-only check cannot tell). The boot catch
+    // reads the message out of the thrown value, the hop catch reads it out
+    // of the classification (DIG-4928).
     const source = stackSource();
     for (const service of ["stack", "mcp"]) {
-      const needle = `return containerFailedResponse("${service}", message);`;
-      expect(source.split(needle).length - 1).toBe(2);
+      const boot = `return containerFailedResponse("${service}", message);`;
+      const hop = `return containerFailedResponse("${service}", failure.message);`;
+      expect(source.split(boot).length - 1).toBe(1);
+      expect(source.split(hop).length - 1).toBe(1);
     }
   });
 
@@ -104,8 +108,10 @@ describe("the container wrapper separates a failed container from a booting one"
   it("keeps the evicted 410 for a confirmed eviction", () => {
     const source = stackSource();
     for (const service of ["stack", "mcp"]) {
-      const needle = `return containerEvictedResponse("${service}", message);`;
-      expect(source.split(needle).length - 1).toBe(2);
+      const boot = `return containerEvictedResponse("${service}", message);`;
+      const hop = `return containerEvictedResponse("${service}", failure.message);`;
+      expect(source.split(boot).length - 1).toBe(1);
+      expect(source.split(hop).length - 1).toBe(1);
     }
   });
 });

@@ -1040,13 +1040,49 @@ class EnforceCacheTests(unittest.TestCase):
 
     The runner asks the guard at every entry point that does work, and the
     facts cannot change under it, so the guard asks the system once.
+
+    The home is a temporary one here too: the guard records every decision in
+    the forensic log under `$HOME`, so a test that decides with synthetic facts
+    and the real home writes a fake "allowed" record into the production log
+    of the machine the suite runs on. The log is the evidence that tells a
+    launchd daemon from a run nobody trusted, so it must hold decisions and
+    nothing else.
     """
 
     def setUp(self):
         _guard.reset_decisions()
+        self._home = tempfile.mkdtemp(prefix="launch-guard-home-")
+        self._old_home = os.environ.get("HOME")
+        os.environ["HOME"] = self._home
 
     def tearDown(self):
         _guard.reset_decisions()
+        if self._old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self._old_home
+        shutil.rmtree(self._home, ignore_errors=True)
+
+    def _recorded(self):
+        """The decisions the guard wrote, from the log under the temporary home."""
+        path = os.path.join(self._home, ".config", "digithings", "logs", "local-ci",
+                            "launch-guard.jsonl")
+        self.assertTrue(os.path.exists(path),
+                        "the decision was not recorded under the test home")
+        with open(path, "r", encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_the_decision_is_recorded_in_the_test_home(self):
+        """The record lands in the home the test owns, not in the real one."""
+        original = _guard.collect_facts
+        _guard.collect_facts = lambda runner_path: _launchd_facts()
+        try:
+            self.assertTrue(_guard.enforce(_RUNNER, "local-ci"))
+        finally:
+            _guard.collect_facts = original
+        records = self._recorded()
+        self.assertEqual(len(records), 1)
+        self.assertTrue(records[0]["allowed"])
 
     def test_the_second_ask_does_not_ask_the_system_again(self):
         calls = []

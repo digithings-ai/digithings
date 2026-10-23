@@ -40,7 +40,7 @@ def infer_row(
         "component:digiquant": "digiquant",
         "component:digikey": "digikey",
         "component:digismith": "digismith",
-        "component:digiclaw": "digiclaw",
+        "component:digibot": "digibot",
         "component:digibase": "digibase",
         "component:digivault": "digivault",
     }

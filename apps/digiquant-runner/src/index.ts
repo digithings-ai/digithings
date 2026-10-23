@@ -10,7 +10,7 @@ import {
 } from "@digithings/durable-object-reconnect";
 import { assertKnownCommand } from "./commands";
 import type { Env } from "./env";
-import { COMMANDS } from "./runner-session";
+import { COMMANDS, RUNNER_UNAVAILABLE_DETAIL } from "./runner-session";
 import { DigiQuantRunnerContainer, RUNNER_CONTAINER_ID } from "./runner";
 
 export { DigiQuantRunnerContainer };
@@ -86,9 +86,7 @@ async function durableFetch(env: Env, makeRequest: () => Request): Promise<Respo
     return await fetchDurableObject(() => stub(env), makeRequest);
   } catch (error) {
     if (error instanceof DurableObjectUnavailableError) {
-      return durableObjectUnavailableResponse(
-        "the runner's Durable Object instance was not available; retry later",
-      );
+      return durableObjectUnavailableResponse(RUNNER_UNAVAILABLE_DETAIL);
     }
     throw error;
   }

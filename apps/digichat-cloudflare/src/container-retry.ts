@@ -143,12 +143,151 @@ export const CONTAINER_UNAVAILABLE_BODY = JSON.stringify({
 });
 
 /**
- * The cause, for the Worker log only. Never returned to the client.
+ * A URL inside free text.
+ *
+ * The scheme, the host and the path are kept; the query string and the
+ * fragment are not, because that is where a secret rides (an embed token, a
+ * signed link).
+ *
+ * The run of characters that follows the scheme ends at the first whitespace
+ * and at nothing else. The charset of a token is the operator's choice and
+ * nothing in the repository pins it, so a run that stopped at a comma or a
+ * quote would leave the tail of the token in the text. What follows the
+ * query string inside that run goes with it: a period that ends the sentence
+ * is part of the tail and is dropped with it.
+ *
+ * The scheme is matched whatever its case, because a request line that a
+ * proxy wrote in upper case is still a URL.
  */
-function causeDetail(cause: unknown): string {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  const inner = (cause as { cause?: unknown })?.cause;
-  const detail = inner instanceof Error ? inner.message : "";
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s]+/gi;
+
+/**
+ * The credentials of the authority of a URL: what stands before the `@` of
+ * `https://user:token@host/path`. A credential is a secret like the one in
+ * a query string, so it does not stay in the text either.
+ */
+const AUTHORITY_CREDENTIALS = /^(https?:\/\/)[^/?#\s]*@/i;
+
+/**
+ * A relative request target inside free text, such as the request line of
+ * the request that failed: `GET /v1/embed?token=... HTTP/1.1`.
+ *
+ * The target starts a word, so a slash that belongs to a word (as in `3/4`)
+ * is not a target.
+ */
+const RELATIVE_TARGET_IN_TEXT = /(^|\s)(\/[^\s]*[?#][^\s]*)/g;
+
+/**
+ * The text of a description, with the query string of every URL removed.
+ *
+ * The value of a rejected hop can be the request line of the request that
+ * failed, and the embed token of that request rides in the query string
+ * (run-watch DIG-4928, 2026-10-21: 16 error rows on digithings-digichat whose
+ * message was the raw value). The description goes into the Worker log, so the
+ * query string is removed before the text is written: the log store is not the
+ * place for a token.
+ *
+ * The scheme, the host and the path stay, so the operator still reads which
+ * request failed.
+ */
+export function stripUrlQuery(text: string): string {
+  return text
+    .replace(URL_IN_TEXT, (url) => {
+      const withoutCredentials = url.replace(AUTHORITY_CREDENTIALS, "$1[redacted]@");
+      const cut = withoutCredentials.search(/[?#]/);
+      if (cut === -1) return withoutCredentials;
+      return `${withoutCredentials.slice(0, cut)}${withoutCredentials[cut]}[redacted]`;
+    })
+    .replace(RELATIVE_TARGET_IN_TEXT, (_match, space: string, target: string) => {
+      const cut = target.search(/[?#]/);
+      if (cut === -1) return target;
+      return `${space}${target.slice(0, cut)}${target[cut]}[redacted]`;
+    });
+}
+
+/**
+ * A description of a thrown value, for the Worker log only.
+ *
+ * `String(value)` is what the platform shows for a value it cannot classify,
+ * but it can throw (a hostile `toString`, a revoked proxy) and a description
+ * that throws inside the catch would turn a caught failure back into an
+ * uncaught one. So the description falls back.
+ *
+ * Only the description is logged, never the value: the cause of a non-Error
+ * stays inside the Worker, the same way the Worker log handles the cause of
+ * a container that could not be reached. The description never carries the
+ * query string of a URL: see `stripUrlQuery`.
+ */
+export function describeValue(value: unknown): string {
+  try {
+    return stripUrlQuery(String(value));
+  } catch {
+    try {
+      return Object.prototype.toString.call(value);
+    } catch {
+      return "[unreadable value]";
+    }
+  }
+}
+
+/**
+ * The message of a thrown value, or a description of it when it carries none.
+ *
+ * Total on purpose: an Error gives its own message, and anything else is
+ * described by `describeValue` — which cannot throw. The question is asked in
+ * a way that cannot throw either: `instanceof` walks the prototype chain, and
+ * a value that cannot be inspected throws there.
+ */
+function safeErrorMessage(value: unknown): string {
+  try {
+    if (value instanceof Error) {
+      const message = value.message;
+      return typeof message === "string" ? stripUrlQuery(message) : describeValue(message);
+    }
+  } catch {
+    // A value that cannot be inspected is described by describeValue below.
+  }
+  return describeValue(value);
+}
+
+/**
+ * The inner cause of a thrown value, or an empty string.
+ *
+ * Read in a way that cannot throw: a revoked proxy and a hostile getter both
+ * throw when the property is read, and this runs inside a catch.
+ */
+function innerCauseDetail(cause: unknown): string {
+  let inner: unknown;
+  try {
+    inner = (cause as { cause?: unknown })?.cause;
+  } catch {
+    return "";
+  }
+  if (inner === undefined || inner === null) {
+    return "";
+  }
+  try {
+    if (inner instanceof Error) {
+      const message = inner.message;
+      return typeof message === "string" ? stripUrlQuery(message) : "";
+    }
+  } catch {
+    // Not an Error we can read: no inner detail.
+  }
+  return "";
+}
+
+/**
+ * The cause, for the Worker log only. Never returned to the client.
+ *
+ * Total: a cause that cannot be described (a hostile `toString`, a revoked
+ * proxy) must not throw here, because this runs INSIDE the catch of
+ * `fetchContainerWithRetry` — a throw here would leave the helper rejecting
+ * with a TypeError instead of answering the retryable 503 (DIG-4928).
+ */
+export function causeDetail(cause: unknown): string {
+  const message = safeErrorMessage(cause);
+  const detail = innerCauseDetail(cause);
   return detail ? `${message}: ${detail}` : message;
 }
 

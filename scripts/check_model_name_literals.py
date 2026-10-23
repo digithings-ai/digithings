@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import sys
 from collections.abc import Iterator
@@ -215,6 +216,62 @@ def _is_exempt(path: Path) -> bool:
     return GENERATED_BANNER in first
 
 
+def _pruned_dirnames(dirnames: list[str]) -> list[str]:
+    """The subdirectories the walk is allowed to enter.
+
+    Two rules, both of them the ones the old flat walk applied after the fact:
+    a dot-prefixed directory holds tool state rather than source, and a
+    directory named in `SKIP_DIR_PARTS` holds no first-party source at all.
+    Applied while walking rather than after it, so the cost of the walk is
+    bounded by the source tree instead of by the working tree.
+    """
+    return sorted(name for name in dirnames if not name.startswith(".") and name not in SKIP_DIR_PARTS)
+
+
+def _iter_candidate_files() -> Iterator[Path]:
+    """Every source-shaped file in the repo, found without descending into the
+    trees that hold none.
+
+    The walk used to be `sorted(REPO_ROOT.rglob("*"))`: it materialised *every*
+    path in the working tree and filtered afterwards. That is 181k paths and
+    164k `stat` calls in a post-merge CI worktree, because `node_modules` and
+    `.venv` live inside the repo and nothing above them says "stop". A walk
+    that costs 181k metadata round-trips costs however long the volume takes
+    to answer them, so the guard's runtime became a property of the machine it
+    ran on rather than of the repo it guards. On a busy Mac that was the
+    difference between 7 seconds and the 600-second step timeout in
+    `local-ci`, and the guard reported a timeout for a tree that was fine.
+
+    So the walk prunes: a directory that holds no first-party source is never
+    entered, and the directories that are entered are the ones the guard was
+    going to read anyway. The same files are found, in the same order: the old
+    walk reached a file the new walk misses only if the file's path contains a
+    skipped directory name, and both versions skip those. The one difference is
+    in the order of two checks, not in what is found. The old walk asked every
+    path whether it was a file before it looked at the name, and on CPython
+    3.12 that question raises on a path the process may not stat. The new walk
+    looks at the name first, so a path it may not stat is skipped instead of
+    raising: the set of paths either version stats is the same, minus the ones
+    the old version could not answer. Either way the cost is now bounded by the
+    size of the source tree, not by the size of the working tree.
+
+    Pruning is by directory name, matching `SKIP_DIR_PARTS` and the
+    dot-prefix rule the old filter applied to every path part.
+    """
+    for dirpath, dirnames, filenames in os.walk(REPO_ROOT):
+        dirnames[:] = _pruned_dirnames(dirnames)
+        base = Path(dirpath)
+        for name in filenames:
+            if name.startswith("."):
+                continue
+            path = base / name
+            if path.suffix not in SOURCE_SUFFIXES:
+                continue
+            if not path.is_file():
+                continue
+            yield path
+
+
 def iter_source_files() -> Iterator[Path]:
     """Every production source file in the repo, in a stable order.
 
@@ -225,15 +282,12 @@ def iter_source_files() -> Iterator[Path]:
     rule here, because a restore from `/tmp/opencode/` has already left
     production files reverted twice) otherwise turns every revert check into a
     guard failure that is about the scratch file rather than the revert.
+
+    The order is the same one the old tree-wide walk produced: the paths are
+    sorted, so two runs over the same tree report the same files in the same
+    order and a diff of two guard logs is readable.
     """
-    for path in sorted(REPO_ROOT.rglob("*")):
-        if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:
-            continue
-        parts = path.relative_to(REPO_ROOT).parts
-        if any(part.startswith(".") for part in parts):
-            continue
-        if SKIP_DIR_PARTS & set(parts):
-            continue
+    for path in sorted(_iter_candidate_files()):
         if _is_exempt(path) or _is_test_path(path):
             continue
         yield path
@@ -567,7 +621,7 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # alias to the 1017 checkpoint. The guard counts a house slug and its bare
     # id when both match the id shape. Generating this map from config is the
     # follow-up that shrinks the ceiling (#5029).
-    "digillm/src/digillm/client.py": _Allowance(63, 58),
+    "digillm/src/digillm/client.py": _Allowance(59, 53),
     # The OCC session model picker (2026-10-13, DIG-1210): the default of
     # `env.DIGI_SESSION_MODEL_ALLOWLIST` in the stack Worker, i.e. the list
     # digigraph binds against per session when the var is unset. The live worker
@@ -580,6 +634,9 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # literal as a routing table -- the same reasoning #5046 applied when it
     # replaced digigraph's per-provider refusal examples.
     "scripts/validate_model_routing.py": _Allowance(1, 1),
+    # Names the house default and the retired picker ids so the drift check
+    # can refuse them. The ids live in the catalog; this list only compares.
+    "scripts/check_digichat_house_defaults.py": _Allowance(12, 7),
 }
 
 

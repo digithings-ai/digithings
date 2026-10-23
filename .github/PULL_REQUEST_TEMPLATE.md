@@ -4,6 +4,9 @@
 Every PR must trace to a backlog issue on the Project board.
 Either use a branch named  task/<N>-<slug>  (created by `make task ISSUE=N`),
 or add a line below like:  Fixes #123   (also accepts Closes / Resolves).
+A PR that traces to a Paperclip issue and has no GitHub issue writes
+Fixes DIG-1234 instead: the pr-template gate accepts that form, and the bare
+`Fixes #` this template starts with fails it ("names no issue number").
 CI check: .github/workflows/ci-pr-hygiene.yml
 -->
 
@@ -18,7 +21,7 @@ Fixes #
 - [ ] digiquant
 - [ ] digisearch
 - [ ] digitrace
-- [ ] digiclaw
+- [ ] digibot
 - [ ] digibase
 - [ ] digikey
 - [ ] digichat

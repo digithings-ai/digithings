@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of
@@ -789,13 +789,11 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
-    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
     "deepseek/deepseek-v3.1": "deepseek-v3.1",
     "deepseek/deepseek-v3.2": "deepseek-v3.2",
     "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
     "deepseek/deepseek-r1": "deepseek-r1",
-    "google/gemini-3.7-flash": "gemini-3.7-flash",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
@@ -931,6 +929,87 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     if ":online" in model:
         return None
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
+
+
+# Chat reasoning (Chris, 2026-10-22): reasoning is on for every chat. A chat's
+# /effort (low/medium/high, ``X-Digi-Effort``) maps to ``reasoning_effort`` on
+# models whose level is configurable; with no /effort set the model keeps its
+# own default level. Models without levels reason (or not) as they always do.
+REASONING_EFFORTS: frozenset[str] = frozenset({"low", "medium", "high"})
+
+
+@dataclass(frozen=True)
+class ReasoningEffortPolicy:
+    """Which models take ``reasoning_effort``, and which need their default sent.
+
+    The ids live in ``config/model-policy.json`` (``reasoning_effort``), not here:
+    model names belong in config (#5029), and digillm reads no files at runtime,
+    so the application loads the policy and registers it with
+    :func:`set_reasoning_effort_policy` (digigraph does this in ``llm_client``).
+
+    ``default_sent`` maps a bare catalog id to the level sent when the chat set
+    no /effort, for models that only reason when a level is sent.
+    ``configurable_prefixes`` are bare-id prefixes of models that take a level
+    and already reason at their default when the field is omitted. The empty
+    default policy sends the field to no model, so a process that registers
+    nothing keeps every request unchanged.
+    """
+
+    default_sent: dict[str, str] = field(default_factory=dict)
+    configurable_prefixes: tuple[str, ...] = ()
+
+
+_reasoning_effort_policy = ReasoningEffortPolicy()
+
+
+def set_reasoning_effort_policy(policy: ReasoningEffortPolicy) -> None:
+    """Register the process-wide chat reasoning policy (see :class:`ReasoningEffortPolicy`)."""
+    global _reasoning_effort_policy
+    _reasoning_effort_policy = policy
+
+
+def get_reasoning_effort_policy() -> ReasoningEffortPolicy:
+    """Return the registered chat reasoning policy (empty until one is registered)."""
+    return _reasoning_effort_policy
+
+
+def _reasoning_wire_id(model: str) -> str:
+    """Catalog id the reasoning policy keys on.
+
+    An ``openrouter/`` prefix is stripped first. A house slug then maps to its
+    Cheaper Inference bare id; anything else keeps its last slug segment, without
+    a ``:variant`` suffix.
+    """
+    slug = model.removeprefix("openrouter/")
+    bare = cheaperinference_bare_id_for_house_slug(slug)
+    if bare is not None:
+        return bare
+    return slug.split(":", 1)[0].rsplit("/", 1)[-1]
+
+
+def reasoning_effort_configurable(model: str) -> bool:
+    """True when ``model`` takes a ``reasoning_effort`` level (house slug or bare id)."""
+    policy = _reasoning_effort_policy
+    wire = _reasoning_wire_id(model)
+    return wire in policy.default_sent or (
+        bool(policy.configurable_prefixes) and wire.startswith(policy.configurable_prefixes)
+    )
+
+
+def chat_reasoning_effort(model: str, requested: str | None = None) -> str | None:
+    """``reasoning_effort`` a chat turn sends for ``model``, or ``None`` to omit it.
+
+    ``requested`` is the chat's /effort. It is sent only to models with
+    configurable levels; anything other than low/medium/high counts as unset.
+    Unset keeps the model's default: omitted, except where the default has to be
+    sent to turn reasoning on at all (the policy's ``default_sent``).
+    """
+    if not reasoning_effort_configurable(model):
+        return None
+    effort = (requested or "").strip().lower()
+    if effort in REASONING_EFFORTS:
+        return effort
+    return _reasoning_effort_policy.default_sent.get(_reasoning_wire_id(model))
 
 
 def _cheaperinference_api_base() -> str:
@@ -2230,6 +2309,7 @@ def _stream_completion_one_turn(
     tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, list[ToolCallDict] | None]:
     """Run one ``stream=True`` completion, accumulating content and tool calls.
 
@@ -2241,6 +2321,10 @@ def _stream_completion_one_turn(
     models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
     model called no tool (caller returns the content), else the accumulated calls
     for the caller to run before looping.
+
+    ``reasoning_effort`` is the chat's /effort; :func:`chat_reasoning_effort`
+    decides what goes on the wire. A 400 that names the field drops it once and
+    retries, so a provider that refuses levels still answers.
     """
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
@@ -2256,32 +2340,35 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    wire_effort = chat_reasoning_effort(model, reasoning_effort)
+    if wire_effort is not None:
+        kwargs["reasoning_effort"] = wire_effort
 
     usage_started = time.perf_counter()
-    try:
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
-    except BadRequestError as error:
-        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
-        # field rather than ignoring it. Retry once without the field so streaming
-        # still works there; usage then simply arrives only if that provider reports
-        # it some other way. Only a 400 that names the field is treated as this
-        # dialect mismatch — every other bad request propagates untouched.
-        if "stream_options" not in str(error).lower():
-            raise
-        kwargs.pop("stream_options", None)
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
+    # Strict OpenAI-compatible endpoints 400 on an unknown optional field rather
+    # than ignoring it, and name one field per refusal. ``stream_options`` (usage
+    # then arrives only if the provider reports it some other way) and
+    # ``reasoning_effort`` (the model then reasons at its default) are each
+    # dropped once when a 400 names them, so at most one retry per field. Every
+    # other bad request, or a field already dropped, propagates untouched.
+    droppable = ("stream_options", "reasoning_effort")
+    while True:
+        try:
+            stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+                client,
+                _provider=provider,
+                _requested_model=model,
+                _defer_success=True,
+                **kwargs,
+            )
+            break
+        except BadRequestError as error:
+            message = str(error).lower()
+            named = [field for field in droppable if field in kwargs and field in message]
+            if not named:
+                raise
+            for field in named:
+                kwargs.pop(field, None)
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
     evidence = _StreamEvidence()
@@ -2582,6 +2669,7 @@ def run_tools(
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
     final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -2633,6 +2721,9 @@ def run_tools(
             retry path and discards the grounding this loop just gathered. The
             wrap-up runs with ``turn_tools=None``, so it is the one legal place
             to enforce a schema; providers without json_schema support ignore it.
+        reasoning_effort: The chat's /effort (low/medium/high) for streamed turns.
+            ``None`` keeps the model's default level; see
+            :func:`chat_reasoning_effort`.
 
     Returns:
         The model's final response content.
@@ -2723,6 +2814,7 @@ def run_tools(
                 tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
+                reasoning_effort=reasoning_effort,
             )
             if gate_required and on_tool_step is not None and tool_calls:
                 # Requirement satisfied this round -- release the buffered narration in

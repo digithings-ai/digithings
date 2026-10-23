@@ -117,7 +117,7 @@ describe("premium spend budget", () => {
     expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash");
     expect(blocked.modelId).not.toBe("google/gemini-3.8-flash");
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
-    expect(blocked.notice).toMatch(/Answering with Auto instead/);
+    expect(blocked.notice).toMatch(/Answering with Default instead/);
   });
 
   it("drops to Auto when the configured default is a non-premium model other than 1017", () => {

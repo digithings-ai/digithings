@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { TRACE_DENSITIES } from "@digithings/ui/chat/trace-spacing";
-import { DensitySchema, parseDigichatConfig, type DigichatDeployment } from "./schema";
+import { DensitySchema, type DigichatDeployment } from "./schema";
+import { materializeDigichatConfig } from "./loader";
 
 const configDir = resolve(__dirname, "../../../config");
 
@@ -20,7 +21,7 @@ const SHIPPED = [
 ];
 
 function deployments(doc: unknown, name: string): DigichatDeployment[] {
-  const cfg = parseDigichatConfig(doc, name);
+  const cfg = materializeDigichatConfig(doc, name);
   return [cfg.deployment, ...Object.values(cfg.hosts ?? {})].filter(
     (dep): dep is DigichatDeployment => dep != null,
   );

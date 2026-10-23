@@ -77,7 +77,7 @@
       "description": "Never propose changes to the intra-monorepo path dependencies; they resolve locally, not from an index.",
       "matchPackageNames": [
         "digibase",
-        "digiclaw",
+        "digibot",
         "digifetch",
         "digigraph",
         "digikey",

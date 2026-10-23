@@ -408,6 +408,23 @@
   text-align: left;
 }
 
+/* Right-aligned timers. The digichat skin sizes each trace row to its text
+   (`width: fit-content`, label `flex: 0 1 auto`), so in the boot list every
+   row had its own width and each timer sat right after its label. Inside the
+   boot list only, rows span the list and the timer is pinned to the row's
+   right edge, so every timer shares one right-aligned column; a long label
+   truncates instead of pushing past the edge on a phone. Transcript tool
+   rows are untouched. */
+.dboot-lab .dboot-lab-tools [data-slot="tool-fallback-trigger"] {
+  width: 100%;
+}
+
+.dboot-lab .dboot-lab-tools .aui-tool-fallback-duration {
+  margin-left: auto;
+  flex-shrink: 0;
+  text-align: right;
+}
+
 /* Handoff switch: `drift` lifts the overlay as it fades so the swap reads as
    one motion with the chat entering underneath. */
 .dboot-overlay[data-drift="true"] {

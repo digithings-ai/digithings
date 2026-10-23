@@ -104,7 +104,7 @@ export const guides: Guide[] = [
         items: [
           "`digichat` — digichat + Postgres",
           "`digivault` — digivault",
-          "`heartbeat` — digiclaw loop",
+          "`heartbeat` — digibot loop",
           "`litellm-cache` — Redis for LiteLLM",
           "`observability` — Prometheus + Grafana",
         ],
@@ -113,7 +113,7 @@ export const guides: Guide[] = [
       {
         kind: "list",
         items: [
-          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).",
+          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digibot (pin `sha-<12>` in production).",
           "`DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.",
         ],
       },
@@ -137,7 +137,7 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.7 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.7 .",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.8 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.8 .",
       },
       {
         kind: "list",

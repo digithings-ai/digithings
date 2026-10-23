@@ -23,7 +23,7 @@ WORKFLOW_BY_COMPONENT = {
     "digiquant": "test-digiquant.yml",
     "digisearch": "test-digisearch.yml",
     "digitrace": "test-digitrace.yml",
-    "digiclaw": "test-digiclaw.yml",
+    "digibot": "test-digibot.yml",
     "digibase": "test-digibase.yml",
     "digikey": "test-digikey.yml",
     "digichat": "test-digichat.yml",

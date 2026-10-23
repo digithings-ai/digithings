@@ -10,8 +10,7 @@ import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
-import { parseDigichatConfig } from "./deploy-config/schema";
-import { deploymentToEmbedTenant } from "./deploy-config/loader";
+import { deploymentToEmbedTenant, materializeDigichatConfig } from "./deploy-config/loader";
 import { toEmbedClientConfig } from "./embed-client-config";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";
 import {
@@ -102,7 +101,7 @@ describe("house host context meter", () => {
       resolve(__dirname, "../../config/examples/digithings-ai-embed.yaml"),
       "utf8",
     );
-    const host = parseDigichatConfig(loadYaml(raw), "digithings-ai-embed.yaml").hosts?.[
+    const host = materializeDigichatConfig(loadYaml(raw), "digithings-ai-embed.yaml").hosts?.[
       "digithings.ai"
     ];
     expect(host?.gate.showContextMeter).toBe(true);
@@ -116,6 +115,8 @@ describe("house host context meter", () => {
     expect(model).toBe(FLASH);
     expect(contextMeterModel({ sessionModel: model })).toBe(FLASH);
     expect(client.models.available).toContain(FLASH);
+    expect(client.models.available).toContain("google/gemini-3.8-flash");
+    expect(client.models.available).toContain("z-ai/glm-5.3");
     expect(client.models.default).toBe(FLASH);
     const enabled = contextMeterEnabled(host?.gate.showContextMeter, host?.slug);
     expect(enabled).toBe(true);
@@ -194,10 +195,11 @@ describe("house host context meter", () => {
 
   it("renders no meter for occ when the flag is off, even with a known window", () => {
     const occRaw = readFileSync(resolve(__dirname, "../../config/examples/occ-embed.yaml"), "utf8");
-    const occ = parseDigichatConfig(loadYaml(occRaw), "occ-embed.yaml").hosts![
+    const occ = materializeDigichatConfig(loadYaml(occRaw), "occ-embed.yaml").hosts![
       "occ.digithings.ai"
     ]!;
     expect(occ.gate.showContextMeter).toBeUndefined();
+    expect(occ.features.modelPicker).toBe(true);
     const occClient = clientConfigFromEmbedTenant(
       toEmbedClientConfig(deploymentToEmbedTenant(occ)),
     );
@@ -246,7 +248,7 @@ describe("house host context meter", () => {
     const trialName = readdirSync(configDir).find((entry) => entry.endsWith("-trial-foundry.yaml"));
     if (!trialName) throw new Error("foundry trial config is missing");
     const trialRaw = readFileSync(resolve(configDir, trialName), "utf8");
-    const trial = parseDigichatConfig(loadYaml(trialRaw), trialName).deployment!;
+    const trial = materializeDigichatConfig(loadYaml(trialRaw), trialName).deployment!;
     expect(trial.gate.showContextMeter).toBeUndefined();
     const trialClient = clientConfigFromEmbedTenant(
       toEmbedClientConfig(deploymentToEmbedTenant(trial)),
@@ -260,7 +262,7 @@ describe("house host context meter", () => {
     expect(container.querySelector(".aui-context-meter")).toBeNull();
   });
 
-  it("keeps the OCC picker closed when models are omitted and the catalog is inherited", () => {
+  it("opens the OCC picker when models are omitted and the catalog is inherited", () => {
     const client = clientConfigFromEmbedTenant({
       slug: "occ",
       gateMode: "ungated",
@@ -278,7 +280,7 @@ describe("house host context meter", () => {
         featureModelPicker: client.features.modelPicker,
         available: client.models.available,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       sessionModelSeed({
         available: client.models.available,

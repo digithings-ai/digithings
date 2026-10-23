@@ -71,10 +71,10 @@ mq = _load()
 def reviewer_gate_off(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the reviewer-independence gate out of every other test in this file.
 
-    The shipped policy turns the gate on in shadow mode, and shadow mode reads
+    The shipped policy turns the gate on in enforce mode, and the gate reads
     the Paperclip API. A unit test must not talk to the live control plane, so
     the gate is off by default here and switched on explicitly by the tests
-    that are about it.
+    that are about it (or by deleting the override to read the shipped policy).
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "off")
 
@@ -351,7 +351,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     """Two repos in this org report different names, so one global list cannot serve both.
 
     `digithings` runs every test suite through reusable workflows, so GitHub reports
-    each as `<caller> / test` — `digibase / test`, `digiclaw / test`, and eleven more —
+    each as `<caller> / test` — `digibase / test`, `digibot / test`, and eleven more —
     and names nothing `test`. `twelve-x` runs one job and does report a bare `test`.
     A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
     which: 28 PRs blocked, every one of them on `required check 'test' has not
@@ -514,8 +514,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
-    near = mq._near_misses(("test",), ("digibase / test", "digiclaw / test", "path-filter"))
-    assert near[:2] == ["digibase / test", "digiclaw / test"]
+    near = mq._near_misses(("test",), ("digibase / test", "digibot / test", "path-filter"))
+    assert near[:2] == ["digibase / test", "digibot / test"]
     assert "path-filter" not in near, "no shared word; listing it would be noise"
     # Word-based, so an unrelated check that merely contains the letters is excluded.
     assert mq._near_misses(("mypy",), ("mypy — digibase + digikey", "npm-audit")) == [
@@ -1514,17 +1514,26 @@ def _seat_verdict_comment(
     head_sha: str,
     created: str,
     comment_id: str = "",
+    scope_sha: str = "",
+    provenance_head: str = "",
 ) -> dict[str, Any]:
     """A verdict comment as the fleet posts it: both markers and a prose line.
 
     The seat is the provenance marker's `agent=` field. Every seat on this org
     pushes under one GitHub login, so the marker is the only place the seat is
     written — and it is the only place the queue can read it from.
+
+    `scope_sha` is the marker's own `scope=`, and `provenance_head` the
+    provenance marker's `head=`. Both default to `head_sha`, which is what the
+    fleet writes; they are separate arguments so a comment whose marker names a
+    different head than its provenance marker can be built.
     """
+    scope = scope_sha or head_sha
+    provenance = provenance_head or head_sha
     body = (
         f"<!-- digithings-review agent={seat} "
-        f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
-        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
+        f"run=00000000-0000-0000-0000-000000000000 head={provenance} -->\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{scope} -->\n\n"
         f"Review verdict: {verdict.replace('_', ' ')}\n"
     )
     return {
@@ -1739,6 +1748,180 @@ def test_a_seats_approve_naming_another_head_does_not_clear_its_block() -> None:
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any(SECURITY_SEAT in r for r in verdict.reasons)
+
+
+def test_a_stale_scoped_approve_does_not_clear_a_block_through_the_provenance_head() -> None:
+    """A marker verdict binds to its own `scope=`, and to nothing else.
+
+    The finding the review raised on #6177: seat R blocks on head A, then
+    approves with `scope=@A` while its provenance marker names the head the PR
+    stands at. The provenance head used to be read as a second binding, so the
+    approve covered the current head and cleared the block — while the approve
+    itself said it was about the stale commit. A verdict that names a stale head
+    says nothing about the current one, so the block stands.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=stale,
+                scope_sha=stale,
+                provenance_head=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        REVIEWER_SEAT in r and "changes_requested" in r and stale[:12] in r
+        for r in verdict.reasons
+    )
+
+
+def test_an_approve_whose_scope_names_the_head_clears_its_own_block() -> None:
+    """The control: the marker's own `scope=` naming the head clears the block.
+
+    The same seat blocks on the stale head and approves the head the PR stands
+    at, in a marker whose `scope=` names that head. That approve is about this
+    head, so it clears the block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=head,
+                scope_sha=head,
+                provenance_head=head,
+                created="2026-10-21T14:50:24Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_marker_with_no_scope_still_binds_the_provenance_head() -> None:
+    """The fallback stays: a marker that names no head binds the provenance one.
+
+    A marker verdict that carries no `scope=` says which head it is about only
+    through the provenance marker's `head=`. That is still a binding, so the
+    approve clears the seat's block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            {
+                "id": "IC_kwDOscopeless",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "body": (
+                    f"<!-- digithings-review agent={REVIEWER_SEAT} "
+                    "run=00000000-0000-0000-0000-000000000000 "
+                    f"head={head} -->\n"
+                    "<!-- opencode-power-pack:code-review verdict=approve -->\n\n"
+                    "Review verdict: approve\n"
+                ),
+                "createdAt": "2026-10-21T14:50:24Z",
+            },
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize(
+    "scope_field",
+    [
+        "@" + "D" * 40,  # uppercase: not a sha the queue reads
+        "@dddd",  # too short to bind a head
+        "d" * 40,  # no `@`
+        "@",  # empty
+    ],
+)
+def test_a_scope_that_does_not_parse_does_not_fall_back_to_the_provenance_head(
+    scope_field: str,
+) -> None:
+    """A `scope=` the queue cannot read binds nothing; it does not fall back.
+
+    The field's presence decides whether a marker names a head. A stale approve
+    whose `scope=` is written in a form the sha pattern misses used to lose its
+    scope, fall back to the provenance marker's `head=`, and clear the block.
+    """
+    head = "c" * 40
+    stale = "d" * 40
+    approve = {
+        "id": "IC_unparsed_scope",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": (
+            f"<!-- digithings-review agent={REVIEWER_SEAT} "
+            "run=00000000-0000-0000-0000-000000000000 "
+            f"head={head} -->\n"
+            f"<!-- opencode-power-pack:code-review verdict=approve scope={scope_field} -->\n\n"
+            "Review verdict: approve\n"
+        ),
+        "createdAt": "2026-10-21T14:50:24Z",
+    }
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=stale,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(REVIEWER_SEAT in r and "changes_requested" in r for r in verdict.reasons)
 
 
 def test_a_block_whose_seat_cannot_be_read_is_judged_by_the_newest_verdict() -> None:
@@ -2873,6 +3056,7 @@ def _provenance_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     mq._TOKEN_CACHE.clear()
     mq._READ_CACHE.clear()
     mq._HOST_CACHE.clear()
+    mq._HOST_FAILURE.clear()
     mq._INDEX_CACHE.clear()
     mq._LOG_CACHE.clear()
 
@@ -4030,6 +4214,451 @@ def test_a_redirect_is_refused_and_the_token_stays_home() -> None:
     assert seen == ["Bearer the-token"], "the token reached the server that answered"
 
 
+class _FakeWoodpeckerResponse:
+    """The answer of the Woodpecker API, as the read sees it."""
+
+    def __init__(self, status: int, body: str, url: str) -> None:
+        self.status = status
+        self._body = body.encode("utf-8")
+        self._url = url
+
+    def read(self, size: int | None = None) -> bytes:
+        """The body, in chunks of `size` when one is asked for.
+
+        The read of the production code asks for a chunk at a time, because
+        the timeout of a socket is the timeout of one operation on it and a
+        body that trickles in has to be given up on.
+        """
+        if size is None:
+            return self._body
+        chunk, self._body = self._body[:size], self._body[size:]
+        return chunk
+
+    def geturl(self) -> str:
+        return self._url
+
+    def __enter__(self) -> "_FakeWoodpeckerResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+
+class _FakeOpenerExhausted(BaseException):
+    """The fake had no answer left for a call the read made.
+
+    A `BaseException` on purpose: the read catches `Exception`, so an
+    `AssertionError` here would be folded into the reason string and the test
+    would carry on with a confusing payload instead of failing.
+    """
+
+
+class _FakeOpener:
+    """The opener the read uses, with the answers it was told to give.
+
+    `answers` is the list of answers, one per call: an answer that is an
+    exception is raised instead of returned, and the list running out is a
+    failure of the test, not of the read.
+
+    The calls are recorded with the timeout they were given and the headers
+    they carried, because a read that is clamped by a budget and a read that
+    keeps its token are both claims about the call, not about the answer.
+    """
+
+    def __init__(self, answers: list[Any]) -> None:
+        self.answers = list(answers)
+        self.calls: list[str] = []
+        self.timeouts: list[float | None] = []
+        self.headers: list[dict[str, str]] = []
+
+    def open(self, request: Any, timeout: float | None = None) -> Any:
+        self.calls.append(request.full_url)
+        self.timeouts.append(timeout)
+        self.headers.append(dict(getattr(request, "headers", {}) or {}))
+        if not self.answers:
+            raise _FakeOpenerExhausted(f"the read asked again: {request.full_url}")
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+class _FakeClock:
+    """`time` with a sleep that counts instead of waiting.
+
+    The clock only moves when something moves it: a sleep, or a body that
+    arrives. The read's budget is measured against it.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+class _TriclingResponse:
+    """A body that arrives a byte at a time, slowly.
+
+    The server answers the headers and then trickles the body: the timeout of
+    a socket is the timeout of one operation on it, so a read that is not
+    given up on can be held open for as long as the server likes.
+    """
+
+    def __init__(self, clock: _FakeClock, url: str) -> None:
+        self.status = 200
+        self._clock = clock
+        self._url = url
+        self._sent = 0
+
+    def read(self, size: int | None = None) -> bytes:
+        self._clock.now += 0.02
+        self._sent += 1
+        if self._sent > 50:
+            return b""
+        return b"x"
+
+    def geturl(self) -> str:
+        return self._url
+
+    def __enter__(self) -> "_TriclingResponse":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        return False
+
+
+def _authorization(headers: dict[str, str]) -> str | None:
+    """The token a request carried, whatever case the header was stored in."""
+    for key, value in headers.items():
+        if key.lower() == "authorization":
+            return value
+    return None
+
+
+def test_a_dropped_connection_is_read_again_and_the_build_is_still_the_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dropped connection says nothing about the build behind the URL.
+
+    The read is tried again before it is believed, so a connection that drops
+    once - a busy host, a laptop that woke up - does not refuse a pull request
+    on a fact about the network.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), url),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 200, payload
+    assert isinstance(payload, dict) and payload.get("commit") == "a" * 40
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS
+    assert opener.calls == [url] * mq.PROVENANCE_READ_ATTEMPTS, (
+        "the retry asked another URL than the one that was dropped"
+    )
+    assert all(_authorization(h) == "Bearer the-token" for h in opener.headers), (
+        "a retry went out without the token"
+    )
+
+
+def test_a_host_that_did_not_answer_is_asked_once_more_and_not_three_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dead host is asked once per pull request, and not three times.
+
+    The queue asks the same host about every pull request of the tick, so a
+    host that did not answer is asked once more - briefly - and the answer it
+    gave is repeated with it. One dropped connection used to refuse every pull
+    request of the tick for a reason that had nothing to do with them, and a
+    host that is down used to cost the tick three reads per pull request.
+    The memory is of that host and not of the queue, so a host that did answer
+    is still asked.
+    """
+    other_host = "http://ci-host.test:8000/api/repos/6/pipelines/260"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/lookup/digithings-local/ci",
+        "the-token",
+        timeout=5,
+    )
+    assert first[0] == 0, first
+    assert "timed out" in str(first[1])
+    assert f"tried {mq.PROVENANCE_READ_ATTEMPTS} times" in str(first[1])
+    asked = len(opener.calls)
+    assert asked == mq.PROVENANCE_READ_ATTEMPTS
+    second = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/259", "the-token", timeout=5
+    )
+    assert second[0] == 0, second
+    assert "timed out" in str(second[1])
+    assert "asked once more" in str(second[1])
+    assert len(opener.calls) == asked + 1, "the host that did not answer was asked again"
+    # Another host is another host: it is read with the whole budget and not
+    # with the one short ask that follows a failure somewhere else.
+    third = _REAL_WOODPECKER_READ(other_host, "the-token", timeout=5)
+    assert third[0] == 0, third
+    assert len(opener.calls) == asked + 1 + mq.PROVENANCE_READ_ATTEMPTS, (
+        "the memory of one host's failure was used against another host"
+    )
+
+
+def test_a_failed_read_is_not_the_answer_for_that_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed read is not the answer for that URL.
+
+    The URL is asked again - once more, briefly - instead of being answered
+    from the memory of the failure. And the memory has a life of its own: once
+    it has run out the URL is read with the whole budget again, and not with
+    the one short ask that follows a failure.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first[0] == 0, first
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second[0] == 0, second
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the URL was answered from the memory of the failure instead of being asked"
+    )
+    # The memory has run out: the URL is read with the whole budget again.
+    monkeypatch.setattr(mq, "PROVENANCE_HOST_COOLDOWN", 0.0)
+    third = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert third[0] == 0, third
+    assert len(opener.calls) == 2 * mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the expired memory did not give the read back to the whole budget"
+    )
+
+
+def test_a_host_that_comes_back_answers_the_one_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that was asleep for a moment answers the ask that follows.
+
+    The memory of a failure is not the answer for the rest of the tick: the
+    host is asked once more, and a host that answers is read against its build
+    and not against the memory of a failure that is no longer true.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            TimeoutError("timed out"),
+            _FakeWoodpeckerResponse(200, json.dumps(_pipeline(commit="a" * 40)), url),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first[0] == 0, first
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second[0] == 200, second
+    assert len(opener.calls) == mq.PROVENANCE_READ_ATTEMPTS + 1, (
+        "the host that came back was not asked"
+    )
+
+
+def test_the_memory_of_a_failure_is_of_the_service_and_not_of_the_spelling() -> None:
+    """Two spellings of one address are one host for the queue.
+
+    The key is the scheme and the host in lower case with its port, so a
+    status that spells the same address two ways does not pay two retry
+    storms, and two services on one machine stay two hosts.
+    """
+    assert mq._read_host("http://LocalHost:8000/api/repos/6/pipelines/1") == (
+        "http://localhost:8000"
+    )
+    assert mq._read_host("http://localhost:8000/api") == mq._read_host(
+        "http://LOCALHOST:8000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "http://localhost:9000/api"
+    )
+    assert mq._read_host("http://localhost:8000/api") != mq._read_host(
+        "https://localhost:8000/api"
+    )
+
+
+def test_a_body_that_trickles_in_does_not_hold_the_read_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The budget is a deadline, and not a sum of timeouts.
+
+    The timeout of a socket is the timeout of one operation on it: a server
+    that answers the headers and then trickles the body keeps the read open
+    for as long as it likes, unless the read gives up when the deadline has
+    passed.
+    """
+    clock = _FakeClock()
+    monkeypatch.setattr(mq, "time", clock)
+    monkeypatch.setattr(mq, "PROVENANCE_READ_BUDGET", 0.05)
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([_TriclingResponse(clock, url)])
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert "the read exceeded its budget" in str(payload), payload
+
+
+@pytest.mark.parametrize("code", [404, 503])
+def test_a_status_code_is_an_answer_and_is_not_read_again(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    """A server that answered 404 answered, and one that answered 503 answered.
+
+    The answer is cached for the tick and the read is not tried again: only a
+    connection that never arrived says nothing about the build. Any status
+    code is an answer, not only the ones that read well.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [urllib.error.HTTPError(url, code, "no such build", {}, None)]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert first == (code, None), first
+    second = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert second == (code, None), second
+    assert len(opener.calls) == 1, "the answer of the API was asked for again"
+
+
+def test_a_refused_redirect_does_not_make_the_host_look_sick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A redirect is refused by the gate, not lost by the network.
+
+    The refusal is the same every time, so the read is not tried again, and
+    the host is not remembered as a host that could not be read: it answered.
+    """
+    opener = _FakeOpener(
+        [
+            urllib.error.HTTPError(
+                "http://localhost:8000/api/repos/6/pipelines/259", 302, "found", {}, None
+            ),
+            _FakeWoodpeckerResponse(
+                200,
+                json.dumps(_pipeline(commit="a" * 40)),
+                "http://localhost:8000/api/repos/6/pipelines/260",
+            ),
+        ]
+    )
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    first = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/259", "the-token", timeout=5
+    )
+    assert first == (0, "the request was redirected"), first
+    assert len(opener.calls) == 1, "the redirect was followed after it was refused"
+    second = _REAL_WOODPECKER_READ(
+        "http://localhost:8000/api/repos/6/pipelines/260", "the-token", timeout=5
+    )
+    assert second[0] == 200, second
+    assert len(opener.calls) == 2, "the host that answered was treated as a dead host"
+
+
+def test_the_read_budget_bounds_the_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One read costs the budget once, not once per attempt.
+
+    The attempt is given the time that is left of the budget, never the
+    timeout it was asked with: a read that ignores the budget waits for every
+    attempt the whole timeout, and a tick of them waits for hours.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=100)
+    assert status == 0, payload
+    assert opener.timeouts, "the read was made with no timeout at all"
+    assert max(opener.timeouts) <= mq.PROVENANCE_READ_BUDGET, opener.timeouts
+
+
+def test_a_read_with_no_budget_left_is_not_attempted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read with no budget left is not made.
+
+    The budget is what stops the loop. Without it the attempts would go on
+    until the attempts ran out, and the tick would keep a pull request waiting
+    on a host that is not there.
+    """
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    monkeypatch.setattr(mq, "PROVENANCE_READ_BUDGET", 0.0)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert payload == "the read was not attempted", payload
+    assert not opener.calls, "the read was made with no budget left"
+
+
+def test_the_attempts_are_paused_between_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two attempts without a pause are a busy loop against a struggling host.
+
+    The pause is what lets a host that was busy for a moment answer the next
+    attempt, and what keeps a host that is down from being asked three times
+    in the same breath.
+    """
+    clock = _FakeClock()
+    monkeypatch.setattr(mq, "time", clock)
+    url = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener([TimeoutError("timed out")] * 12)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    status, payload = _REAL_WOODPECKER_READ(url, "the-token", timeout=5)
+    assert status == 0, payload
+    assert len(clock.slept) == mq.PROVENANCE_READ_ATTEMPTS - 1, clock.slept
+    assert all(0 < s <= mq.PROVENANCE_RETRY_BACKOFF for s in clock.slept), clock.slept
+
+
+def test_a_dropped_connection_refuses_the_pull_request_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal names the read that failed, not a fault of the build.
+
+    The gate reads the build through the same read as everything else, so a
+    dropped connection is refused with the reason of a read that could not be
+    made. A pull request is refused for what is wrong with it, and a network
+    that dropped a connection is not a fault of the build.
+    """
+    lookup = "http://localhost:8000/api/repos/lookup/digithings-local/ci"
+    build = "http://localhost:8000/api/repos/6/pipelines/259"
+    opener = _FakeOpener(
+        [
+            _FakeWoodpeckerResponse(200, json.dumps({"id": 6}), lookup),
+            *[TimeoutError("timed out")] * 30,
+        ]
+    )
+    monkeypatch.setattr(mq, "_woodpecker_read", _REAL_WOODPECKER_READ)
+    monkeypatch.setattr(mq, "_WOODPECKER_OPENER", opener)
+    monkeypatch.setenv("WOODPECKER_TOKEN", "test-token")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    pr = _pr(1, local_ci_target_url=GOOD_TARGET_URL, reviews=_approved())
+    verdict = _evaluate(pr)
+    assert not verdict.eligible, verdict.reasons
+    assert any("the Woodpecker API could not be read" in r for r in verdict.reasons), (
+        verdict.reasons
+    )
+    assert not any("could not be resolved" in r for r in verdict.reasons), (
+        "the refusal names the lookup of the repository and not the read of the build"
+    )
+    assert opener.calls == [lookup] + [build] * mq.PROVENANCE_READ_ATTEMPTS, opener.calls
+
+
 def test_the_gate_verifies_the_check_it_was_asked_about(
     monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any]
 ) -> None:
@@ -4692,6 +5321,27 @@ def _bare_comment() -> dict[str, Any]:
     }
 
 
+def _placeholder_comment() -> dict[str, Any]:
+    """The write-up #6197 merged on: the markers, but placeholder ids.
+
+    The author pasted the house marker without filling it in, so it names no
+    seat and no run the Paperclip API could resolve. It is the second case the
+    queue has to refuse: a claim with no non-author seat marker at all.
+    """
+    return {
+        "id": "IC_kwDOplaceholder_9001",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "body": (
+            "<!-- in-session-review -->\n"
+            "<!-- digithings-review agent=your-seat-uuid run=your-run-uuid "
+            f"head={'a' * 40} -->\n\n"
+            "Review verdict: approve\n\nThe blocker is fixed.\n"
+        ),
+    }
+
+
 def _reviewed_pr(
     comments: list[dict[str, Any]],
     *,
@@ -4776,6 +5426,91 @@ def test_the_reviewed_agent_label_does_not_carry_the_author_seats_own_review(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     assert not any("in-session review" in reason for reason in verdict.reasons)
+
+
+def test_the_shipped_gate_refuses_an_author_lane_write_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6277: the authoring lane's own pass named the author seat and the head.
+
+    The write-up carried a real house marker, resolved through Paperclip to the
+    seat whose commits are on the PR, and it named the current head. Under the
+    old shadow setting the queue counted it as the non-author review and merged
+    `723b48de` with no other seat's look. The shipped gate has to refuse it.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    assert mq.load_policy().review_independence.mode == "enforce"
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "author's own seat" in reason
+    assert AUTHOR_AGENT[:8] in reason
+    assert "a review from a different seat" in reason
+
+
+def test_the_shipped_gate_refuses_a_write_up_with_no_seat_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6197: the author's fix write-up carried no checkable non-author seat.
+
+    It had the in-session marker and a prose approve, and no provenance marker
+    at all. GitHub says `chrizefan` wrote it — the same login as every seat — so
+    the queue cannot show another seat reviewed the head, and it must not count
+    the comment as coverage.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_bare_comment()])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "carries neither a seat nor a run" in reason
+    assert "a review from a different seat" in reason
+
+
+def test_a_placeholder_house_marker_is_not_real_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#6197 again: the marker was pasted, not filled in.
+
+    The house marker is a claim only when its `agent=` and `run=` are records the
+    Paperclip API can resolve. A placeholder is refused by name and never sent to
+    the API — asking about a value that is not an id turns a fact about the
+    comment into a failed read.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
+    pr = _reviewed_pr([_placeholder_comment()])
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "reviewer independence" in reason
+    assert "is not a run id" in reason
+    assert prov.asked_runs == []
+
+
+def test_a_non_author_seats_pass_on_the_head_is_review_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive half: another seat's pass with real ids clears the gate.
+
+    `agent` and `run` resolve through Paperclip to the reviewer seat, and `head`
+    is the head the PR stands at. That is the evidence the queue now requires;
+    the verdict gate separately refuses a head the reviewer still blocks.
+    """
+    monkeypatch.delenv("MQ_REVIEW_INDEPENDENCE", raising=False)
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert REVIEWER_AGENT[:8] in verdict.review_evidence
 
 
 def test_the_seat_that_wrote_the_code_is_the_author_without_a_trailer(
@@ -6216,14 +6951,15 @@ def test_two_server_errors_name_the_code_and_the_attempts(
     assert len(calls) == 2
 
 
-def test_shadow_mode_merges_and_records_what_it_would_refuse(
+def test_shadow_mode_records_the_refusal_and_does_not_count_it(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The rollout DIG-4809 named: measure first, refuse later.
+    """Shadow is a log, not a licence to count a marker the gate refused.
 
-    Shadow mode is the 48-hour window. The PR merges as it would have merged
-    before, and the log says what the gate would have said — so the flip to
-    `enforce` is a switch, not a leap.
+    DIG-4809 named the 48-hour window and DIG-5220 closed it: #6277 and #6197
+    merged on the author lane's own write-up because shadow merged what it had
+    just measured. The measurement stays in the log; the merge no longer
+    happens on the refused marker, in shadow or in enforce.
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
     log = tmp_path / "reviewer-independence.log"
@@ -6234,7 +6970,8 @@ def test_shadow_mode_merges_and_records_what_it_would_refuse(
     prov = _paperclip(author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)])
     pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=AUTHOR_RUN)])
     verdict = mq.evaluate(pr, policy, acting_role="cto", base="develop", prov=prov)
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert "reviewer independence" in " ".join(verdict.reasons)
     text = log.read_text(encoding="utf-8")
     assert "would refuse" in text
     assert "author's own seat" in text
@@ -6253,15 +6990,16 @@ def test_the_gate_off_reads_no_provenance_at_all(monkeypatch: pytest.MonkeyPatch
     assert verdict.eligible, verdict.reasons
 
 
-def test_the_shipped_policy_turns_the_reviewer_gate_on() -> None:
-    """The gate must not ship off.
+def test_the_shipped_policy_enforces_the_reviewer_gate() -> None:
+    """The gate must not ship off, and it must not ship measuring.
 
     DIG-4809 named a 48-hour shadow window and a later flip to `enforce`. That
-    is a rollout, not a gate that never runs: the shipped policy has to have the
-    gate on in one of its two working modes.
+    flip shipped in DIG-5220 on 22 Oct 2026, after #6277 and #6197 merged on the
+    authoring lane's own in-session write-up: the shipped policy has to enforce,
+    or the refusals it logs are only a measurement.
     """
     mode = mq.load_policy().review_independence.mode
-    assert mode in ("shadow", "enforce"), mode
+    assert mode == "enforce", mode
 
 
 def test_a_policy_with_an_unreadable_reviewer_mode_is_refused(tmp_path: Path) -> None:

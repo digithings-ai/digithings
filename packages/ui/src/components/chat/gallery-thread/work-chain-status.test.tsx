@@ -7,11 +7,26 @@ import { cleanup, render, screen } from "@testing-library/react";
  * `@assistant-ui/react`: the header only reads `message.parts`, so a plain
  * object is a truer fixture than a mounted runtime.
  */
-const aui = vi.hoisted(() => ({ parts: [] as readonly WorkStatusPart[] }));
+const aui = vi.hoisted(() => ({
+  parts: [] as readonly WorkStatusPart[],
+  status: undefined as { type: string; reason?: string } | undefined,
+  threadRunning: false,
+}));
+
+type StubState = {
+  message: { parts: readonly WorkStatusPart[] };
+  optional: { message?: { status?: { type: string; reason?: string } }; thread?: { isRunning: boolean } };
+};
 
 vi.mock("@assistant-ui/react", () => ({
-  useAuiState: <T,>(selector: (state: { message: { parts: readonly WorkStatusPart[] } }) => T) =>
-    selector({ message: { parts: aui.parts } }),
+  useAuiState: <T,>(selector: (state: StubState) => T) =>
+    selector({
+      message: { parts: aui.parts },
+      optional: {
+        ...(aui.status ? { message: { status: aui.status } } : {}),
+        thread: { isRunning: aui.threadRunning },
+      },
+    }),
 }));
 
 import { WorkChain } from "./work-chain";
@@ -19,6 +34,8 @@ import { workStatusText, type WorkStatusPart } from "./work-status";
 
 afterEach(() => {
   cleanup();
+  aui.status = undefined;
+  aui.threadRunning = false;
 });
 
 const runningTool = (toolName: string) => ({
@@ -146,5 +163,41 @@ describe("WorkChain header", () => {
     // announced the title twice.
     const trigger = screen.getByRole("button", { name: "Used 1 tool" });
     expect(trigger.querySelector('[role="img"]')).toBeNull();
+  });
+});
+
+describe("WorkChain header after the turn ends early", () => {
+  it.each([
+    [{ type: "incomplete", reason: "error" }, "Failed", "error"],
+    [{ type: "incomplete", reason: "cancelled" }, "Stopped", "stop"],
+    [{ type: "requires-action", reason: "tool-calls" }, "Stopped", "stop"],
+  ])("status %j reads %s with a still %s marker", (status, title, marker) => {
+    aui.parts = [runningReasoning, runningTool("digisearch")] as unknown as WorkStatusPart[];
+    aui.status = status;
+    const { container } = render(
+      <WorkChain indices={[0, 1]}>
+        <div />
+      </WorkChain>,
+    );
+    expect(headerText(container)).toBe(title);
+    expect(
+      container
+        .querySelector('[data-slot="aui_work-status-marker"] [data-slot="dot-matrix"]')
+        ?.getAttribute("data-state"),
+    ).toBe(marker);
+    expect(container.querySelector('[data-slot="aui_work-chain"]')?.getAttribute("data-outcome")).toBe(
+      status.reason === "error" ? "failed" : "stopped",
+    );
+  });
+
+  it("a stop after the answer started still reads Worked", () => {
+    aui.parts = [doneTool("digisearch"), answer] as unknown as WorkStatusPart[];
+    aui.status = { type: "incomplete", reason: "cancelled" };
+    const { container } = render(
+      <WorkChain indices={[0]} followedByText>
+        <div />
+      </WorkChain>,
+    );
+    expect(container.querySelector('[data-slot="aui_work-chain"]')?.getAttribute("data-outcome")).toBe("done");
   });
 });
