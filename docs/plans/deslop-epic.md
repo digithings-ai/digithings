@@ -14,6 +14,16 @@ the new digiquant desk, digichat, the dashboard, and the terminal clients.
 This epic spends nothing on the old generation. It fixes the new generation against
 the design language the new code actually uses — not against the stale docs.
 
+## Scope amendments
+
+- **2026-10-23 — `apps/dashboard` is out of scope.** It is being replaced by
+  `digiquant.io/app` (the `/app` desk in `apps/digiquant-web`). Do not audit,
+  polish, screenshot or verify the old dashboard page. Slices U3 and U4 are
+  cancelled.
+- The old deployed digiquant.io pages are not verification targets. The current
+  operator surface is `/app`; the parked new digiquant app is
+  `apps/digiquant-app`.
+
 ## Design invariants (apply to every UI slice)
 
 1. Preserve the **ASCII terminal feel**, hero-banner designs, wordmarks and
@@ -88,8 +98,6 @@ and the per-surface differences. It also records what the old docs got wrong.
 |---|---|---|---|
 | U1 | `feat/deslop-u1-digichat-core` | `apps/digichat/src/app/**`, `apps/digichat/src/components/{chat-shell,transcript,composer,message}*` | impeccable, baseline-ui, avoid-ai-design, make-interfaces-feel-better |
 | U2 | `feat/deslop-u2-digichat-surfaces` | `apps/digichat/src/components/{settings,tools,sidebar,onboarding,empty}*` | impeccable, baseline-ui, ui-skills/accessibility, fixing-metadata |
-| U3 | `feat/deslop-u3-dashboard-desk` | `apps/dashboard/app/**/{desk,charts,strategies,portfolio,markets}/**`, `apps/dashboard/components/{desk,charts,data}/**` | impeccable, emil-design-eng, web-quality/performance, review-animations |
-| U4 | `feat/deslop-u4-dashboard-shell` | `apps/dashboard/app/**/{settings,account,onboarding,login}/**`, `apps/dashboard/components/{shell,nav,account}/**` | impeccable, baseline-ui, make-interfaces-feel-better |
 | U5 | `feat/deslop-u5-digiquant-desk` | `apps/digiquant-web/app/app/**` | impeccable, baseline-ui, avoid-ai-design, fixing-motion-performance |
 | U6 | `feat/deslop-u6-digiquant-marketing` | `apps/digiquant-web/app/{page,pipeline,strategies,subsystems,changelog,contact}/**` | hallmark (audit → targeted redesign), impeccable (component audit), web-quality/seo, frontend-design |
 | U7 | `feat/deslop-u7-digiquant-atoms` | `apps/digiquant-app/**` | impeccable, baseline-ui, make-interfaces-feel-better |
@@ -137,8 +145,8 @@ D1 updates only docs that describe the current generation. Historical ADRs and
 2. **Read-only audits** (parallel with S0, 4 agents): impeccable/avoid-ai-design
    across web apps; web-quality/accessibility/metadata; deslop/karpathy survey of
    Python + `packages/ui`; docs writing audit. Findings to `.agent-tmp/audit/`.
-3. **Wave 1 UI** (3 concurrent): U1, U3, U5, U8, U11, U14.
-4. **Wave 2 UI** (3 concurrent): U2, U4, U6, U9, U12, U15.
+3. **Wave 1 UI** (3 concurrent): U1, U5, U8, U11, U14.
+4. **Wave 2 UI** (3 concurrent): U2, U6, U9, U12, U15.
 5. **Wave 3 UI** (3 concurrent): U7, U10, U13, U16.
 6. **Wave 4 code** (3 concurrent): C1, C4, C5, C6 → then C2, C3, C7.
 7. **Wave 5 docs**: D1.
