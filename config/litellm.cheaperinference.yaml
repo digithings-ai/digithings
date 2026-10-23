@@ -36,7 +36,8 @@ model_list:
   - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
     litellm_params: *ci_ds_v41_flash_1017
 
-  # House chat default: the bare v4.1-flash id, which streams reasoning.
+  # Not the house default: house runs the 1017 checkpoint above (Chris, 23 Oct
+  # 2026). The bare id stays routable for the catalog and the picker.
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
       model: openai/deepseek-v4.1-flash

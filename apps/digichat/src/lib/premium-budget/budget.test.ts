@@ -70,7 +70,7 @@ describe("premium spend budget", () => {
     first.charge?.({ inputTokens: 3550, outputTokens: 600 });
     first.charge?.({ inputTokens: 3550, outputTokens: 600 });
     const blocked = applyPremiumBudget({ ...base, nowMs: Date.now() });
-    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash");
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
     expect(blocked.charge).toBeUndefined();
     const later = applyPremiumBudget({ ...base, nowMs: Date.now() + 86_400_000 + 1_000 });
@@ -93,7 +93,7 @@ describe("premium spend budget", () => {
       userKey: "digithings:anon",
       nowMs: Date.now(),
     });
-    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash");
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(blocked.modelId).not.toBe("z-ai/glm-5.3");
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
   });
@@ -114,7 +114,7 @@ describe("premium spend budget", () => {
       userKey: "digithings:anon",
       nowMs: Date.now(),
     });
-    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash");
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(blocked.modelId).not.toBe("google/gemini-3.8-flash");
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
     expect(blocked.notice).toMatch(/Answering with Default instead/);
@@ -136,7 +136,7 @@ describe("premium spend budget", () => {
       userKey: "digithings:anon",
       nowMs: Date.now(),
     });
-    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash");
+    expect(blocked.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(blocked.modelId).not.toBe("openai/gpt-oss-120b");
     expect(blocked.notice).toBe(PREMIUM_BUDGET_MESSAGE);
   });
@@ -186,7 +186,7 @@ describe("premium spend budget", () => {
         userKey: stamped[0]!,
         nowMs: Date.now(),
       });
-      expect(shared.modelId).toBe("deepseek/deepseek-v4.1-flash");
+      expect(shared.modelId).toBe("deepseek/deepseek-v4.1-flash-1017");
       const spoofed = applyPremiumBudget({
         modelId: "z-ai/glm-5.3",
         premium: true,
