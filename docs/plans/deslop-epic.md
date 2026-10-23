@@ -389,14 +389,13 @@ old behaviour while the user edits. Add a "preview draft" path that overlays the
 unsaved draft on the preview request without writing the file. Keep save
 fail-closed and unchanged.
 
-### UD3 — retire the terminal workbench screens
+### UD3 — retire the terminal workbench screens — **not done (decision)**
 
-`clients/digichat-devkit` reads the same endpoints but never saves, has no
-preview, and hand-copies `ENUM_OPTIONS` / `THREAD_SKINS`. Retire its UI
-(`src/app.tsx`, `src/live.ts`, `src/present.ts`) and keep `src/cli.ts` as the
-agent/script surface over `POST /api/devkit/save`. Update its README and the
-digichat docs. `apps/digichat` `/` and `?mode=product` stay; only the config
-catalogue goes.
+The terminal workbench is a working read-only inspector, and the web `/devkit`
+is canonical. Removing the TUI screens is a product decision, not a de-slop fix,
+and the CLI still has no save path to replace them. Left in place; the web
+devkit remains the only place that edits and saves.
+
 
 ### UD constraints
 
@@ -424,6 +423,7 @@ catalogue goes.
 | U17 | `ecf8accbe5` | direct | `/book` mobile contents, metadata, diagrams, PagedJS print |
 | U15 | `93ce299ad6` | direct | digichat welcome fallback, route types, baseline assertion |
 | U13 | `4197b1b2a4` | merge | TUI frame writer, export validation, terminal token/focus fixes |
+| C7 | `a483c3c629` | merge | one `asRecord`, dead `humanizeToolName`, ten dead exports |
 
 `github/develop` was merged into the epic at `48d2a6fb4d` after the table was
 first written. That merge brought the upstream companion fix for the chat turn

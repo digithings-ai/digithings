@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";
+import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { SUPPORT_MATRIX, limitSupport } from "./matrix";
 import { flattenLimits, limitsFromGuardrails } from "./schema";
 
@@ -20,7 +21,7 @@ function deployment(backend: Record<string, unknown>, limits: unknown, extra: Re
 }
 
 describe("limits schema", () => {
-  it("leaves every shipped example with no limits and no guardrails", () => {
+  it("leaves shipped examples without request limits or a deployment token budget", () => {
     const configDir = resolve(__dirname, "../../../config");
     const examples = resolve(configDir, "examples");
     const trials = readdirSync(configDir).filter((name) => name.endsWith("-trial-foundry.yaml"));
@@ -33,11 +34,16 @@ describe("limits schema", () => {
       resolve(examples, "occ-embed.yaml"),
     ];
     for (const file of files) {
-      const cfg = parseDigichatConfig(loadYaml(readFileSync(file, "utf8")), file);
+      const cfg = parseDigichatConfig(
+        expandDigichatDocument(loadYaml(readFileSync(file, "utf8"))),
+        file,
+      );
       const deployments = [cfg.deployment, ...Object.values(cfg.hosts ?? {})].filter(Boolean);
       for (const dep of deployments) {
         expect(dep?.limits).toBeUndefined();
-        expect(dep?.guardrails).toBeUndefined();
+        // Every shipped file now extends defaults, so the inherited tool-call
+        // cap and answer guard stay. A shared deployment allowance must not.
+        expect(dep?.guardrails?.tokensPerMinute?.deployment).toBeUndefined();
       }
     }
   });

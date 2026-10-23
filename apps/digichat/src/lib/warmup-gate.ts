@@ -9,7 +9,6 @@ import { p } from "@/lib/base-path";
 import {
   setDigichatWarmupPhase,
   signalDigichatBootStep,
-  type DigichatWarmupPhase,
 } from "@digithings/ui/chat/boot-signal";
 
 /** Services sleep after ~3 min idle; re-check a bit before that. */
