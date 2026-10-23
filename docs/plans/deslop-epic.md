@@ -487,3 +487,23 @@ Approved shared change: `pages/pane.tsx` gained an optional
 `body?: ReactNode` slot. It overrides only the painted face; `blocks` still size
 the tile, and every existing caller is unchanged. UC2c/UC2d should use it rather
 than adding more slots.
+
+### U6 — landed
+
+Commit `f28f5c7295`, merged `6d75bb3845`. Digiquant **home only**: canonical + full
+Twitter card, `<main tabIndex={-1}>` so the skip link lands, hero veil literal
+moved to `.dq-hero-veil`, rail tick animated with transform instead of width,
+`body { overflow-x: clip }`, card index numbers removed, dead imports removed.
+Canon/lint/test/tsc green; 337 tests.
+
+Note: the `overflow-x: clip` change is in `apps/digiquant-web/app/globals.css`,
+so it affects `/app` too. It is the layout-safe choice, but verify the desk's
+sticky/focus behaviour visually at convergence.
+
+Cross-ownership follow-ups:
+
+1. `packages/design/site/site.css` still sets `body { overflow-x: hidden }` and
+   `body { transition: background, color }`. Fix once for every app.
+2. `apps/digiquant-web/app/globals.css` has no Hallmark stamp/critique/waiver
+   header. Epic-level decision, not a per-page fix.
+3. `components/tearsheet/asset-logo.tsx` has a pre-existing `<img>` lint warning.
