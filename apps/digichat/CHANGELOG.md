@@ -8,7 +8,7 @@ the 1017 checkpoint. Limits move into YAML per deployment.
 
 ### Bug Fixes
 
-* **digichat:** raw backend tool ids everywhere — the streaming trace, `/tools`, the model toolbar, exports and mobile show `digisearch_zammad_tickets`, not "DigiSearch Zammad Tickets". The humanising layer is deleted, not bypassed ([#6320](https://github.com/digithings-ai/digithings/pull/6320), [#6324](https://github.com/digithings-ai/digithings/pull/6324))
+* **digichat:** raw backend tool ids everywhere — the streaming trace, `/tools`, the model toolbar, exports and mobile show the id the backend calls (`<service>_<tool>`), not a humanised label. The humanising layer is deleted, not bypassed ([#6320](https://github.com/digithings-ai/digithings/pull/6320), [#6324](https://github.com/digithings-ai/digithings/pull/6324))
 * **digichat:** one density token set across the thread. The phone keeps its airy default after a prefs reset, the floating action bar no longer paints over the next turn's first line, and the reference composer resolves `--composer-padding` instead of falling back to 0 ([#6304](https://github.com/digithings-ai/digithings/pull/6304))
 * **digichat:** the trial deployment's tool list had lost eight of the agent's 42 tools in a merge. All 42 are back, in the agent's groups, with raw ids ([#6334](https://github.com/digithings-ai/digithings/pull/6334))
 * **digichat:** the model chip and the lock agree. No open-models button over a locked, one-model list ([#6335](https://github.com/digithings-ai/digithings/pull/6335))
