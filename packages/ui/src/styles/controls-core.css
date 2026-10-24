@@ -1890,6 +1890,7 @@
   .ctl-slider {
     /* component tokens — composite slider rhythm */
     --ctl-slider-head-gap: 0.8rem;
+    --ctl-slider-head-mb: 0.6rem;
     --ctl-slider-label-font: 0.6rem;
     --ctl-slider-value-font: 0.86rem;
     --ctl-slider-ticks-top: 0.55rem;
@@ -1908,7 +1909,7 @@
     align-items: baseline;
     justify-content: space-between;
     gap: var(--ctl-slider-head-gap, 0.8rem);
-    margin-bottom: var(--ctl-slider-head-gap, 0.6rem);
+    margin-bottom: var(--ctl-slider-head-mb, 0.6rem);
   }
 
   .ctl-slider-label {
