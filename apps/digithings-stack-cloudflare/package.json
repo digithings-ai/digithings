@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "agents": "^0.28.1",
     "dashboard-api": "*",
     "hyparquet": "^1"
   },
