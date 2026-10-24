@@ -4,7 +4,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDigichatEmbedSrc,
-  buildDigichatHandshakeMessages,
   buildPageContextMessage,
   buildPageContextSignature,
   buildPlanTierMessage,
@@ -386,47 +385,5 @@ describe('mergeDigichatChromeIntoPopup', () => {
     expect(merged.launcherCloseLabel).toBe('minimize');
     expect(merged.launcherHotkey).toBe('meta+i');
     expect(merged.mobileFullscreen).toBe(true);
-  });
-});
-
-describe('digichat handshake messages (DIG-5139)', () => {
-  it('sends nothing for a baseline tier', () => {
-    expect(
-      buildDigichatHandshakeMessages({
-        tier: 'brief',
-        accessToken: 'tok',
-        theme: 'dark',
-      }),
-    ).toEqual([]);
-  });
-
-  it('sends the theme only when there is no session token', () => {
-    const messages = buildDigichatHandshakeMessages({
-      tier: 'desk',
-      accessToken: null,
-      theme: 'light',
-    });
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toMatchObject({
-      type: 'digichat:theme',
-      theme: 'light',
-    });
-  });
-
-  it('sends the plan tier with the access token for an entitled tier', () => {
-    const messages = buildDigichatHandshakeMessages({
-      tier: 'desk',
-      accessToken: 'tok',
-      theme: 'dark',
-    });
-    expect(messages.map((message) => message.type)).toEqual([
-      'digichat:theme',
-      'digichat:plan-tier',
-    ]);
-    expect(messages[1]).toMatchObject({
-      type: 'digichat:plan-tier',
-      tier: 'desk',
-      accessToken: 'tok',
-    });
   });
 });
