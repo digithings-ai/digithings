@@ -186,10 +186,12 @@ def test_api_base_host_is_not_a_substring(
 
 
 def test_house_chat_v41_flash_keeps_its_reasoning_id() -> None:
-    """House chats default to v4.1-flash, which streams reasoning_content.
+    """The bare v4.1-flash slug maps to its own id, never to 1017.
 
-    The 1017 id answers without reasoning (live check 2026-10-22), so this slug
-    must not alias to it or the chat chain loses its reasoning rows.
+    House chats run the 1017 checkpoint (Chris, 23 Oct 2026) and 1017 reasons
+    only when asked — the digichat chain sends reasoning_effort for it — while
+    the bare id reasons unprompted (live check 2026-10-22). The alias is a
+    rename, not a substitution: a picker selection must reach the model it names.
     """
     assert (
         client_mod.cheaperinference_bare_id_for_house_slug("deepseek/deepseek-v4.1-flash")

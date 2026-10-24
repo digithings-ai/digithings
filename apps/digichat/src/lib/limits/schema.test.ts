@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
-import { parseDigichatConfig } from "@/lib/deploy-config/schema";
 import { expandDigichatDocument } from "@/lib/deploy-config/loader";
+import { parseDigichatConfig } from "@/lib/deploy-config/schema";
 import { SUPPORT_MATRIX, limitSupport } from "./matrix";
 import { flattenLimits, limitsFromGuardrails } from "./schema";
 
@@ -21,31 +21,39 @@ function deployment(backend: Record<string, unknown>, limits: unknown, extra: Re
 }
 
 describe("limits schema", () => {
-  it("leaves shipped examples without request limits or a deployment token budget", () => {
+  it("leaves every shipped config with no limits, and only house with the per-visitor minute", () => {
+    // Every shipped config now extends `defaults`, so `guardrails` arrives
+    // pre-filled (tool-call cap, answer guard, and — for house, which is
+    // public — the 80k per-visitor minute). What none of them may carry is a
+    // spend `limits` block, and the two that replace the house minute (the
+    // Foundry trial with one shared deployment allowance, OCC with none) must
+    // have cleared it.
     const configDir = resolve(__dirname, "../../../config");
     const examples = resolve(configDir, "examples");
     const trials = readdirSync(configDir).filter((name) => name.endsWith("-trial-foundry.yaml"));
     expect(trials).toHaveLength(1);
     const trialName = trials[0];
     if (!trialName) throw new Error("foundry trial overlay missing");
-    const files = [
-      resolve(configDir, trialName),
-      resolve(examples, "digithings-ai-embed.yaml"),
-      resolve(examples, "occ-embed.yaml"),
-    ];
+    const occFile = resolve(examples, "occ-embed.yaml");
+    const files = [resolve(configDir, trialName), resolve(examples, "digithings-ai-embed.yaml"), occFile];
+    const parsed = new Map<string, ReturnType<typeof parseDigichatConfig>>();
     for (const file of files) {
-      const cfg = parseDigichatConfig(
-        expandDigichatDocument(loadYaml(readFileSync(file, "utf8"))),
-        file,
-      );
+      const cfg = parseDigichatConfig(expandDigichatDocument(loadYaml(readFileSync(file, "utf8"))), file);
+      parsed.set(file, cfg);
       const deployments = [cfg.deployment, ...Object.values(cfg.hosts ?? {})].filter(Boolean);
       for (const dep of deployments) {
         expect(dep?.limits).toBeUndefined();
-        // Every shipped file now extends defaults, so the inherited tool-call
-        // cap and answer guard stay. A shared deployment allowance must not.
-        expect(dep?.guardrails?.tokensPerMinute?.deployment).toBeUndefined();
       }
     }
+    const trial = parsed.get(resolve(configDir, trialName));
+    expect(trial?.deployment?.guardrails?.tokensPerMinute).toBeUndefined();
+    const occ = parsed.get(occFile);
+    for (const dep of Object.values(occ?.hosts ?? {})) {
+      expect(dep?.guardrails?.tokensPerMinute).toBeUndefined();
+    }
+    // House is public, so it is the one that keeps the per-visitor minute.
+    const house = parsed.get(resolve(examples, "digithings-ai-embed.yaml"));
+    expect(house?.deployment?.guardrails?.tokensPerMinute?.user).toBe(80_000);
   });
 
   it("accepts an empty limits block and enables nothing", () => {

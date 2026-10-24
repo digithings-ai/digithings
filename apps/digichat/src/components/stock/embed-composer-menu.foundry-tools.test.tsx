@@ -14,6 +14,7 @@ import {
   type EmbedChatPrefsApi,
 } from "@digithings/ui/chat/stock";
 import { toDigichatClientConfig } from "@/lib/deploy-config/client-projection";
+import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";
 import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { toolControlFor } from "@/lib/tool-control";

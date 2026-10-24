@@ -326,7 +326,7 @@ export function App() {
   }, [STATUS, layout, path, page, reads]);
 
   useEffect(() => {
-    if (path === "/tools/chat") return;
+    if (path === "/tools/digichat") return;
     setChatThreads([]);
     chatTypingRef.current = false;
     setChatTyping(false);
@@ -455,7 +455,7 @@ export function App() {
   };
 
   const catalog = isCatalogPath(path);
-  const chat = path === "/tools/chat";
+  const chat = path === "/tools/digichat";
   const undrawn = isWebSlot(path) && !chat;
   const view = chat ? (
     <ChatPage
@@ -547,7 +547,7 @@ export function App() {
               </box>
             ),
           )}
-          {path === "/tools/chat" && chatThreads.length > 0 ? (
+          {path === "/tools/digichat" && chatThreads.length > 0 ? (
             <box flexDirection="column">
               <box height={1} paddingLeft={1}>
                 <text fg={MUTE}>threads</text>

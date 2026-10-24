@@ -432,8 +432,9 @@ def test_digichat_public_picker_is_ci_cheap_only() -> None:
     product = defaults["deployment"]["models"]
     assert product["catalog"] is True
     assert product["allowPicker"] is True
-    # v4.1-flash streams reasoning; 1017 does not (2026-10-22).
-    assert product["default"] == "deepseek/deepseek-v4.1-flash"
+    # House runs the 1017 checkpoint on the CheaperInference API (Chris, 23 Oct
+    # 2026). The bare id stays in the catalog; it is not the deployment default.
+    assert product["default"] == "deepseek/deepseek-v4.1-flash-1017"
     assert product["priceCapUsdPerMillion"] == 2
     assert "available" not in product
     assert "auto" in product["presets"]

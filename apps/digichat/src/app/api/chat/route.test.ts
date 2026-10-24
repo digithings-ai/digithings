@@ -724,11 +724,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         upstreamHeaders?: Record<string, string>;
       };
       expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
-      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
       expect(call?.preface).toMatch(/premium budget/);
       expect(call?.onUsage).toBeUndefined();
       expect(call?.upstreamHeaders?.["X-Digi-House-Model"]).toBe(
-        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-1017",
       );
     } finally {
       resetDigichatConfigForTests();
@@ -832,7 +832,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         preface?: string;
         responseHeaders?: Record<string, string>;
       };
-      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+      expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
       expect(call?.preface).toMatch(/premium budget/);
       expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
     };
@@ -896,7 +896,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           model?: string;
           responseHeaders?: Record<string, string>;
         };
-        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash");
+        expect(call?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
         expect(call?.responseHeaders?.["X-Digi-Premium-Fallback"]).toBe("auto");
       }
     } finally {
@@ -944,7 +944,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       const sent = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
         headers?: Record<string, string>;
       };
-      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash");
+      expect(sent?.headers?.["X-Digi-House-Model"]).toBe("deepseek/deepseek-v4.1-flash-1017");
       const streamArg = vi.mocked(createUIMessageStreamResponse).mock.calls.at(-1)?.[0] as {
         stream: ReadableStream<unknown>;
       };

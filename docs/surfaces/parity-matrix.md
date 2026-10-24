@@ -2,7 +2,7 @@
 
 Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-1-0.md`](adr-surfaces-1-0.md).
 
-- **Basis:** code presence on `cursor/ui-surfaces-d8c5` at `35ee78cf8` (PR #4986). Not run-tested. That branch has since merged: `clients/` (all four packages) and `digivoice/tui/` are on `develop` (checked 2026-10-23). A row's status changes only on run evidence (a screenshot or a test) posted to its owner ticket.
+- **Basis:** code presence on `cursor/ui-surfaces-d8c5` at `35ee78cf8` (PR #4986). Not run-tested. A row's status changes only on run evidence (a screenshot or a test) posted to its owner ticket.
 - **Status words:** `yes` = drawn and wired. `stub` = drawn, not wired. `none` = absent. `n/a` = out of scope by design.
 - **Data/API** and **MCP** name the endpoint each side reads. Endpoint names (`desk`, `chat`, `mcp`, `graph`) are the services in ADR D5.
 - **Owner ticket** is the sibling that closes the gap. The ticket owns the ETA.
@@ -26,19 +26,19 @@ Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-
 
 ## 2. digiquant: `clients/digiquant-tui` ↔ the Brief desk (`apps/digiquant-web` `/app/*`)
 
-The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `/app` (`/app/brief` redirects there). `apps/digiquant-app` was parked on 2026-10-11, not deleted: its keyboard map moved to the desk (`docs/surfaces/digiquant-app-shortcuts.md`), and the package is an input to the consolidation (`docs/plans/deslop-epic.md`, slice UC). The Web column below was audited on `apps/digiquant-app`; every `yes` there that the desk lacks is a carry-over for the desk (`/fx/*`, `/settings`, `/settings/paper`, the access/tier ladder). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
+The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `/app` (`/app/brief` redirects there). `apps/digiquant-app` was deleted on 2026-10-11; its keyboard map moved to the desk (`docs/surfaces/digiquant-app-shortcuts.md`). The Web column below was audited on `apps/digiquant-app`, which folds into the desk and then retires: every `yes` there that the desk lacks is a carry-over for the desk (`/fx/*`, `/settings`, `/settings/paper`, the access/tier ladder). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
 
-| # | Page / feature | TUI | Web (audited on the parked `digiquant-app`; target: the desk) | Data / API | MCP | Gap | Owner ticket |
+| # | Page / feature | TUI | Web (audited on `digiquant-app`; target: the desk) | Data / API | MCP | Gap | Owner ticket |
 |---|---|---|---|---|---|---|---|
 | Q0 | Page/block catalog | `src/catalog.ts` | desk imports it; `digiquant-app` hand copy in `lib/pages.ts`, `lib/nav.ts` | — | — | one catalog for TUI + desk; hand copy retires with the app (ADR D2) | DIG-2700 |
 | Q1 | Brief | yes (`brief.tsx`) | yes | `desk` | `mcp` brief tool | check that the blocks match | DIG-2700 |
 | Q2 | Portfolio, holdings, attribution, ledger, theses, tearsheet | yes (#5047: as-of, staleness) | yes | `desk` | `mcp` per route | check that the blocks match | DIG-2700 |
-| Q2b | Performance page | yes (`/performance`) | yes, inside the portfolio tearsheet (`components/desk/pages/portfolio.tsx:488,599`); no standalone page | `desk` | `mcp` | standalone page only if the desk needs one | DIG-2700 |
+| Q2b | Performance page | yes (`/performance`) | none | `desk` | `mcp` | add to the web | DIG-2700 |
 | Q3 | Pipeline | yes | yes | `desk` | `mcp` | check that the blocks match | DIG-2700 |
 | Q4 | Strategies, detail, deploy | yes; detail has `st-tearsheet`; deploy is plan/draft only | yes; **no `st-tearsheet`** (4 blocks vs 5) | `desk` | `mcp` | add tearsheet to the web; confirm deploy scope matches | DIG-2700 |
 | Q5 | FX Hub (summary, ideas, watch, rates, settings) + twelve-x group lock | yes (`access` in rail + command) | yes (locked by access) | `desk` | `mcp` | check the lock behaves the same | DIG-2700 |
-| Q6 | Chat (`/tools/chat`) | page + rail threads | "wip" (`ch-*` ×4) | `chat` BFF (ADR D3) | — | both on the DigiChat BFF | DIG-2699 + DIG-2700 |
-| Q7 | Terminal (Gloomberb), Charts (Vela/LuxAlgo, `mk-*` ×9) | none ("browser pages") | terminal page ships (`app/app/tools/terminal/page.tsx` → `components/desk/gloomberb-terminal.tsx:1,12`); Gloomberb default-off (#5245). Charts page ships (`app/app/tools/charts/page.tsx`) | vendor | — | TUI links out (ADR D8). Web featuring gated on legal | DIG-2704 |
+| Q6 | Chat (`/tools/digichat`) | page + rail threads | "wip" (`ch-*` ×4) | `chat` BFF (ADR D3) | — | both on the DigiChat BFF | DIG-2699 + DIG-2700 |
+| Q7 | Terminal (Gloomberb), Charts (Vela/LuxAlgo, `mk-*` ×9) | none ("browser pages") | "soon"; Gloomberb default-off (#5245) | vendor | — | TUI links out (ADR D8). Web featuring gated on legal | DIG-2704 |
 | Q8 | Settings, paper trading (`se-*` ×4) | `/fx/settings` only | `/settings`, `/settings/paper` | `desk` | — | add a TUI settings page | DIG-2700 |
 | Q9 | Integrations band, MCP band (`McpCli`), live portfolio island | none | yes | `desk`, `mcp` | `mcp` | MCP endpoint → DIG-2703; integrations → DIG-2704 | DIG-2703, DIG-2704 |
 | Q10 | Command search | yes (`command.ts`) | yes (`desk-command-search`) | — | — | probably equal | DIG-2700 |
@@ -81,8 +81,8 @@ The dashboard has no TUI. Its parity question is real data (DIG-2697) and previe
 
 | # | Item | TUI | Web | Config / endpoint | Gap | Owner ticket |
 |---|---|---|---|---|---|---|
-| X1 | Hero banners (DIGICHAT, DIGIQUANT, DIGIVOICE, DIGITHINGS) | `clients/digichat-tui/src/hero-banner.tsx` paints `@digithings/hero-banner`; `mark.ts` and `digivoice/tui/src/hero.js` still carry their own glyphs | `web.tsx` canvas and `ssr.ts` settled frame over the shared definitions; `PixelWordmark` and `QuantWordmark` use them, `FooterWordmark` still draws its own | definitions in `src/definitions`, `clock.ts` (pausable), `replayLoading`, `motion.json` | `FooterWordmark`, `mark.ts` and `hero.js` move onto the package | DIG-2702 |
-| X2 | Font | terminal-owned; README says Geist Mono | 4 `fonts.ts`: one loader (`packages/design/fonts.ts`, `Geist_Mono`) + three app re-exports. `Inter` still loads in `apps/digichat`'s route layouts and `apps/digiquant-app` | `packages/ui/src/styles/font-tokens.contract.test.ts`; both `Inter` consumers listed as pending (DIG-3449) | move digichat and `digiquant-app` onto the loader | DIG-2695 |
+| X1 | Hero banners (DIGICHAT, DIGIQUANT, DIGIVOICE, DIGITHINGS) | 3 painters, 2 glyph tables (`hero.js`, `mark.ts`) + shared `digichat-wordmark.ts` | 5 painters (`DigichatWordmark`, `QuantWordmark`, `PixelWordmark`, `FooterWordmark`, `digivoice-wordmark.js`) | `motion.json` `duration.build`, `frame.tick`, `ease.house` | one wordmark model, one timeline, reduced-motion final frame | DIG-2702 |
+| X2 | Font | terminal-owned; README says Geist Mono | 5 `fonts.ts`, 4 load unused `Inter` | canonical `apps/dashboard/app/fonts.ts` + contract test | drop `Inter`; byte-identical `fonts.ts` | DIG-2695 |
 | X3 | Motion tokens | literals; no reduced-motion | `tokens.css` vars + reduced-motion contract | `packages/design/motion.json` | generate/verify CSS; `DIGI_REDUCED_MOTION` in TUIs | DIG-2695 |
 | X4 | Local/cloud endpoint config | `DQ_API_URL` ×8, `DIGICHAT_DEVKIT_URL` | per-app env | `packages/surface-config/endpoints.ts`, `DIGI_ENV`, `DIGI_<SERVICE>_URL` | build the module; alias old names for one release | DIG-2703 |
 | X5 | Cloudflare API hosts | — | — | `digithings.ai/api/chat*`, `/api/embed*` (digichat worker); `graph.`, `key.digithings.ai` (stack); `dashboard-api.chris-stefan.workers.dev` | list them exactly in the `cloud` profile and the CSP | DIG-2703 |

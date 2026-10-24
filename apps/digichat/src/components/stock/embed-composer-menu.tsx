@@ -618,28 +618,44 @@ export function EmbedComposerMenu({
       byok: "provider",
       help: "help",
     };
-    return buildProductSlashCommands(api)
-      .filter((command) => command.id !== "settings")
-      .map((command) => {
-        const node = NODE_BY_ID[command.id];
-        const draft = node ? paneDraftForId(command.id) : null;
-        return {
-          id: command.id,
-          label: command.label ?? `/${command.id}`,
-          value: command.description ?? "",
-          ...(draft ? { insert: draft } : {}),
-          activate: node
-            ? () => {
-                if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
-                else setView(node);
-              }
-            : () => {
-                command.execute();
-                if (api.composerDraftBound) api.setComposerDraft?.("");
-                onClose();
-              },
-        };
-      });
+    return [
+      ...buildProductSlashCommands(api)
+        .filter((command) => command.id !== "settings")
+        .map((command) => {
+          const node = NODE_BY_ID[command.id];
+          const draft = node ? paneDraftForId(command.id) : null;
+          return {
+            id: command.id,
+            label: command.label ?? `/${command.id}`,
+            value: command.description ?? "",
+            ...(draft ? { insert: draft } : {}),
+            activate: node
+              ? () => {
+                  if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
+                  else setView(node);
+                }
+              : () => {
+                  command.execute();
+                  if (api.composerDraftBound) api.setComposerDraft?.("");
+                  onClose();
+                },
+          };
+        }),
+      // A two-state setting, so it is one row that flips rather than a page of
+      // options. The label names the state you would switch to, the value
+      // names the one you are in.
+      {
+        id: "scroll",
+        label: slashName(api.prefs.scroll === "free" ? "scroll follow" : "scroll free"),
+        value: api.prefs.scroll === "free" ? "Free" : "Follow",
+        checked: api.prefs.scroll === "follow",
+        activate: () => {
+          commitExclusive(() =>
+            api.setScroll(api.prefs.scroll === "free" ? "follow" : "free"),
+          );
+        },
+      },
+    ];
   }, [api, onClose]);
 
   const languageRows = useMemo(

@@ -238,7 +238,12 @@ describe("product chats open with the model picker", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
-          models: { catalog: true, presets: ["auto"], costPerWindow: { usd: 0.01 } },
+          models: {
+            catalog: true,
+            presets: ["auto"],
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });
@@ -277,7 +282,11 @@ describe("product chats open with the model picker", () => {
             pauseAt: 0.8,
             tokensPerMinute: { user: 1000 },
           },
-          models: { catalog: true, costPerWindow: { usd: 0.01 } },
+          models: {
+            catalog: true,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });
@@ -388,7 +397,11 @@ describe("product chats open with the model picker", () => {
           slug: "occ",
           backend: { type: "digigraph" },
           guardrails: { tokensPerMinute: { user: 1000 } },
-          models: { occPicker: false, costPerWindow: { usd: 0.01 } },
+          models: {
+            occPicker: false,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });

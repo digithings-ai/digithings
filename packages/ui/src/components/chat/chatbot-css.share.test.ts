@@ -59,3 +59,34 @@ describe("package chat-digichat.css owns the digichat grammar", () => {
     expect(css).not.toMatch(/@import[^;]*apps\/reference/);
   });
 });
+
+describe("the isolated /chatbot graph carries the shared theme toggle", () => {
+  const reference = join(here, "../../../../../apps/reference");
+  const shell = readFileSync(
+    join(reference, "app/(chatbot)/chatbot-shell.css"),
+    "utf8",
+  );
+  const layout = readFileSync(join(reference, "app/(chatbot)/layout.tsx"), "utf8");
+
+  it("mounts the kit provider and toggle, and no local copy is left", () => {
+    expect(layout).toContain('from "@digithings/ui/theme-provider"');
+    expect(layout).toContain("<ThemeToggle");
+    expect(layout).not.toContain("ChatbotThemeToggle");
+    expect(layout).not.toContain("chatbotThemeInitScript");
+    expect(
+      existsSync(join(reference, "components/chatbot/chatbot-theme.tsx")),
+    ).toBe(false);
+  });
+
+  it("scans the two kit files the toggle renders, and only those", () => {
+    // source(none) means an unlisted file's utilities are simply not emitted:
+    // ThemeToggle is ThemeProvider's IconButton, so hover:bg-ink/6 and the
+    // focus ring live in icon-button.tsx.
+    expect(shell).toContain(
+      '@source "../../../../packages/ui/src/components/ThemeProvider.tsx";',
+    );
+    expect(shell).toContain(
+      '@source "../../../../packages/ui/src/ui/icon-button.tsx";',
+    );
+  });
+});

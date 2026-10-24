@@ -483,7 +483,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.allowPicker).toBe(true);
     expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.models.catalog).toBe(true);
-    expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash");
+    expect(dt?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(dt?.models.available).toContain("deepseek/deepseek-v4.1-flash");
     expect(dt?.models.available).toContain("google/gemini-3.5-flash-lite");
@@ -596,6 +596,7 @@ describe("DigichatConfigSchema", () => {
           models: {
             catalog: true,
             occPicker: false,
+            priceCapUsdPerMillion: 2,
             costPerWindow: { usd: 0.0125565 },
           },
         },
@@ -617,7 +618,12 @@ describe("DigichatConfigSchema", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
-          models: { catalog: true, occPicker: true, costPerWindow: { usd: 0.0125565 } },
+          models: {
+            catalog: true,
+            occPicker: true,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.0125565 },
+          },
         },
       },
     });

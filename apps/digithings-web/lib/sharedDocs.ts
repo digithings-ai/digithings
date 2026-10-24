@@ -137,7 +137,7 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.8 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.8 .",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.6.9 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.6.9 .",
       },
       {
         kind: "list",

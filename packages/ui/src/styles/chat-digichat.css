@@ -522,6 +522,46 @@
   background: color-mix(in oklab, var(--ink) 35%, transparent);
 }
 
+/* Usage meter: the gate's turn budget in the same cube bar. It fills with
+   the used fraction — empty for a fresh visitor, full for a spent budget —
+   so it reads the way the context bar reads. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-usage-meter .aui-context-bar-cell.is-usage {
+  background: var(--ink);
+}
+
+/* The fill scale both bars share: amber past half spent, orange past four
+   fifths, red past nine tenths. Scoped to the lit cells so an unlit grid
+   stays quiet, and to the bar itself so the legend swatches keep the
+   colours that explain the context split. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-warn
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: var(--warn);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-hot
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: color-mix(in oklab, var(--warn) 45%, var(--danger));
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-critical
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: var(--danger);
+}
+
+/* The number in the card takes the tone of the bar it describes. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-critical
+  .aui-context-card-total
+  > span:last-child {
+  color: var(--danger);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-legend {
   display: inline-flex;
   align-items: center;
@@ -1189,6 +1229,33 @@
   color: var(--ink-mute);
   text-align: start;
   min-height: 0.75rem;
+}
+
+/* The pre-response row must not be shoved down when the work chain mounts.
+   The assistant content is a flex column with a 0.5rem gap, and the chain's
+   part comes before the indicator in the message stream: the moment the chain
+   mounts it becomes the first flow child and the gap alone pushes the marker
+   down by 8px — the visible jump at the handoff, before any tool row settles.
+   Pin the row to the content's top edge and keep the content's height while
+   the row is on its own, so the chain grows underneath the marker and the
+   swap moves nothing (#4459). Scoped to the digichat skin: the base skin
+   renders the indicator without the `hasContent` guard, so overlaying it
+   there would hide a live chain trigger. */
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]:has(
+    > [data-slot="aui_assistant-message-indicator"]
+  ) {
+  position: relative;
+  min-height: 0.75rem;
+}
+
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]
+  > [data-slot="aui_assistant-message-indicator"] {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  margin: 0;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] {

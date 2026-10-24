@@ -60,6 +60,16 @@ export function clientConfigFromEmbedTenant(
     catalog.push({ id: "web_search", default: true, label: "Web search" });
   }
 
+  // One decision for the model chip. The list and the toolbar must agree: when
+  // this is false the toolbar drew no button, and the row still resolved
+  // `allowPicker: false` on its own — but `features.modelPicker` was copied
+  // from the house base, so a locked row still rendered an open-models list.
+  const foundry = (embed.backendType ?? base.backendType) === "foundry";
+  const allowPicker = foundry
+    ? false
+    : embed.models?.allowPicker === true ||
+      (embed.models?.allowPicker !== false && base.features.modelPicker);
+
   return {
     ...base,
     slug: embed.slug || base.slug,
@@ -97,21 +107,20 @@ export function clientConfigFromEmbedTenant(
       speech: embed.speech ?? base.features.speech,
       sources: embed.sources ?? base.features.sources,
       branchPicker: embed.branchPicker ?? base.features.branchPicker,
+      modelPicker: allowPicker,
     },
     // A Foundry tenant is answered by its own agent: the model is the
     // agent's, not ours, and it cannot be enumerated. The house catalog must
     // not be inherited into it — that is what made the footer claim "auto"
     // and "cheaperinference" on a tenant served by Azure AI Foundry.
-    models: (embed.backendType ?? base.backendType) === "foundry"
+    models: foundry
       ? { available: [], allowPicker: false }
       : {
           ...(embed.models?.default
             ? { default: embed.models.default }
             : base.models),
           available: embed.models?.available ?? base.models.available,
-          allowPicker:
-            embed.models?.allowPicker === true ||
-            (embed.models?.allowPicker !== false && base.features.modelPicker),
+          allowPicker,
           // A Foundry tenant is blanked above. A catalog picker travels only
           // with the tenant that resolved it, not from the house fallback,
           // so a hand-listed tenant does not inherit another tenant's groups.

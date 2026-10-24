@@ -162,7 +162,7 @@ describe("foundry tenants do not inherit the house catalog", () => {
 
 describe("baseline embed models catalog (Cheaper Inference default)", () => {
   it("ships the deploy catalog with the V4.1 Flash default and an enabled picker", () => {
-    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash");
+    expect(DEFAULT_CLIENT_CONFIG.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(DEFAULT_CLIENT_CONFIG.models.available).toHaveLength(13);
     expect(DEFAULT_CLIENT_CONFIG.models.available).toContain("deepseek/deepseek-v4.1-flash-1017");
     expect(DEFAULT_CLIENT_CONFIG.models.allowPicker).toBe(true);
@@ -247,5 +247,22 @@ describe("client fallback matches house", () => {
       mcp: { servers: [], allowUserServers: true, allowAddForm: true },
     } as unknown as DigichatDeployment);
     expect(client.gate.searchEngine).toBeUndefined();
+  });
+});
+
+describe("chrome.scroll client projection", () => {
+  it("defaults to follow when the deployment does not say", () => {
+    const client = toDigichatClientConfig(depWithCatalog([]));
+    expect(client.chrome.scroll).toEqual({ mode: "follow" });
+    expect(DEFAULT_CLIENT_CONFIG.chrome.scroll).toEqual({ mode: "follow" });
+  });
+
+  it("carries free through to the client", () => {
+    const dep = depWithCatalog([]);
+    const free = {
+      ...dep,
+      chrome: { ...dep.chrome, scroll: { mode: "free" as const } },
+    } as DigichatDeployment;
+    expect(toDigichatClientConfig(free).chrome.scroll).toEqual({ mode: "free" });
   });
 });

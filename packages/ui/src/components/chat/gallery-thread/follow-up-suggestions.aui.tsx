@@ -4,6 +4,7 @@ import { AuiIf, useAuiState, ThreadPrimitive } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 
 import { DotMatrix } from "../DotMatrix";
+import { dismissKeyboardIfCoarse } from "./composer-keyboard";
 
 const FollowupSuggestionsRow: FC = () => {
   const suggestions = useAuiState((s) => s.thread.suggestions);
@@ -57,6 +58,7 @@ const FollowupSuggestionsRow: FC = () => {
             className="aui-thread-followup-suggestion bg-background hover:bg-surface-2 rounded-none border px-3 py-1 text-sm whitespace-nowrap transition-colors ease-in"
             prompt={suggestion.prompt}
             send
+            onClick={() => dismissKeyboardIfCoarse()}
           >
             <DotMatrix
               state="example"

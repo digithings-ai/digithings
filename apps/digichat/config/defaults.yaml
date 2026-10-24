@@ -62,9 +62,10 @@ deployment: &house
     # preset, and only when OPENROUTER_API_KEY is set at load.
     allowPicker: true
     catalog: true
-    # The bare v4.1-flash id streams reasoning by default; the 1017
-    # checkpoint answers with reasoning_tokens 0 (22 Oct 2026).
-    default: deepseek/deepseek-v4.1-flash
+    # The house default is the 1017 checkpoint on the CheaperInference API
+    # (Chris, 23 Oct 2026). The bare id stays in the catalog and in the
+    # litellm routes; it is not what house chats run.
+    default: deepseek/deepseek-v4.1-flash-1017
     priceCapUsdPerMillion: 2
     # Premium sits above that cap and at or under $2.50 (GLM 5.3, Gemini
     # 3.8 Flash). Manual picks only. costPerWindow is three typical turns
