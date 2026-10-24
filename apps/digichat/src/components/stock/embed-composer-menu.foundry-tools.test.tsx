@@ -137,6 +137,9 @@ function mountHost() {
   document.body.appendChild(wrap);
 }
 
+/** The server id the foundry deployment names, read from its own document. */
+let foundryServerId = "";
+
 function trialClient() {
   const dir = resolve(__dirname, "../../../config");
   for (const name of readdirSync(dir)) {
@@ -146,10 +149,24 @@ function trialClient() {
       name,
     );
     const client = toDigichatClientConfig(cfg.deployment!);
-    if (client.backendType === "foundry") return client;
+    if (client.backendType === "foundry") {
+      foundryServerId = client.tools.catalog[0]?.id ?? "";
+      return client;
+    }
   }
   throw new Error("no foundry deployment");
 }
+
+/**
+ * The backend prefixes each MCP tool id with its server id; the row must show
+ * that id, never the deployment's short tool label.
+ */
+const toolIdPrefix = (): string => {
+  trialClient();
+  if (!foundryServerId) throw new Error("the foundry deployment names no MCP server");
+  return `${foundryServerId}__`;
+};
+const rawToolId = (name: string) => `${toolIdPrefix()}${name}`;
 
 /** The expected page: the service, then each group heading and its tree. */
 function expectedPage(service: string, groups: readonly string[]): string {
@@ -158,7 +175,7 @@ function expectedPage(service: string, groups: readonly string[]): string {
     lines.push(`  # ${groups[g]}`);
     names.forEach((name, i) => {
       const glyph = i === names.length - 1 ? "└─" : "├─";
-      lines.push(`${`  ${glyph} ${name}`.padEnd(40)} On`);
+      lines.push(`${`  ${glyph} ${rawToolId(name)}`.padEnd(40)} On`);
     });
   });
   return lines.join("\n");
@@ -214,6 +231,8 @@ describe("Foundry trial /tools", () => {
     const groups = [...new Set(tools.map((tool) => tool.group ?? ""))];
     expect(groups).toHaveLength(AGENT_TOOLS.length);
     expect(tools.map((tool) => tool.label)).toEqual(AGENT_TOOLS.flat());
+    // The rendered row is the backend id, not the deployment's short label.
+    expect(tools.map((tool) => tool.id)).toEqual(AGENT_TOOLS.flat().map(rawToolId));
     expect(toolsPage()).toBe(expectedPage(service.id, groups));
 
     const rows = screen.getAllByRole("menuitemcheckbox");
@@ -224,11 +243,13 @@ describe("Foundry trial /tools", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("menuitemcheckbox", { name: new RegExp(`^/${service.id}`) }));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /^delete_collector/ }));
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: new RegExp(`^${rawToolId("delete_collector")}`) }),
+    );
     expect(api.setExtraTool).not.toHaveBeenCalled();
     expect(
       screen
-        .getByRole("menuitemcheckbox", { name: /^delete_collector/ })
+        .getByRole("menuitemcheckbox", { name: new RegExp(`^${rawToolId("delete_collector")}`) })
         .getAttribute("aria-checked"),
     ).toBe("true");
   });
