@@ -90,7 +90,13 @@ describe("desk slash field", () => {
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     const narrow = css.slice(css.indexOf("@media (max-width: 759px)"));
     expect(narrow).toContain(".desk-head .cmd:focus-within");
-    expect(narrow).toMatch(/\.desk-head \.cmd\s*\{[^}]*flex:\s*0 0 2\.5rem/s);
+    expect(narrow).toContain("--desk-field-collapsed-w: 2.5rem");
+    expect(narrow).toMatch(
+      /\.desk-head \.cmd\s*\{[^}]*flex:\s*0 0 var\(--desk-field-collapsed-w\)/s,
+    );
+    expect(narrow).toMatch(
+      /\.desk-head \.cmd-in\s*\{[^}]*width:\s*var\(--desk-field-collapsed-w\)/s,
+    );
     // The shell clips sideways overflow so the document stays at the
     // viewport width while the head scrolls internally.
     expect(css).toMatch(/\.desk-shell\s*\{[^}]*overflow-x:\s*hidden/s);

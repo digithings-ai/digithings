@@ -83,29 +83,33 @@ export { FAQ };
 export function FaqList() {
   const [open, setOpen] = useState<number | null>(null);
   return (
-    <div className="grid gap-0">
+    <div className="faq-list-body grid w-full min-w-0 gap-0 overflow-x-hidden">
       {FAQ.map((item, i) => (
         <details
           key={item.q}
           open={open === i}
-          className="disclosure-row group border-b border-hair last:border-b-0"
+          className="disclosure-row group w-full min-w-0 border-b border-hair last:border-b-0"
         >
           <summary
             onClick={(event) => {
               event.preventDefault();
               setOpen(open === i ? null : i);
             }}
-            className="flex items-center justify-between gap-[1rem] py-[1.1rem] text-[0.95rem] text-ink"
+            className="flex w-full min-w-0 items-center justify-between gap-[1rem] py-[1.1rem] text-[0.95rem] text-ink"
           >
-            {item.q}
-            <span
-              aria-hidden="true"
-              className="shrink-0 font-mono text-ink-mute transition-transform duration-200 ease-brand group-open:rotate-45 motion-reduce:transition-none"
-            >
-              +
+            <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{item.q}</span>
+            {/* The `+` rotates into `×` when the row opens. Rotating the glyph
+                inside a fixed cell keeps the rotated box in the column: the
+                rotated glyph measures 23px, so the 25.6px cell (`size-[1.6rem]`)
+                leaves it ~1.3px of slack. Rotating the unwrapped glyph instead
+                pushed 7px past the column and made the list scroll sideways. */}
+            <span aria-hidden="true" className="grid size-[1.6rem] shrink-0 place-items-center">
+              <span className="font-mono text-ink-mute transition-transform duration-200 ease-brand group-open:rotate-45 motion-reduce:transition-none">
+                +
+              </span>
             </span>
           </summary>
-          <p className="mt-0 mb-[1.2rem] max-w-[var(--measure-prose)] text-[0.9rem] leading-[1.75] text-ink-soft">
+          <p className="mt-0 mb-[1.2rem] w-full min-w-0 max-w-[var(--measure-prose)] break-words text-[0.9rem] leading-[1.75] text-ink-soft [overflow-wrap:anywhere]">
             {item.a}
           </p>
         </details>

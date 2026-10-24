@@ -18,13 +18,17 @@
 }
 
 .dtc-chip {
+  /* Tenant-credit chip: one size/pad pair for every credit surface. */
+  --dtc-chip-size: 0.72rem;
+  --dtc-chip-pad: 0.18rem 0.55rem;
+
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--dtc-chip-size);
   color: var(--ink-soft);
   background: var(--accent-weak);
   border: 1px solid var(--hair);
   border-radius: 0;
-  padding: 0.18rem 0.55rem;
+  padding: var(--dtc-chip-pad);
   cursor: pointer;
   transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
@@ -37,9 +41,11 @@
   cursor: default;
 }
 .dtc-error {
-  margin: 0.3rem 0 0;
-  font-size: 0.8rem;
-  /* State red, not the market-down hue. */
+  --dtc-error-gap: 0.3rem;
+  --dtc-error-size: 0.8rem;
+
+  margin: var(--dtc-error-gap) 0 0;
+  font-size: var(--dtc-error-size);
   color: color-mix(in srgb, var(--danger) 80%, var(--ink));
 }
 .dtc-error .dc-inline-link {

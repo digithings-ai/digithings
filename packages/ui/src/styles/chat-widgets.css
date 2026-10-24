@@ -23,10 +23,14 @@
 /* ── collapsible tool-call block (ChatToolCall) ─────────────────────── */
 
 .tc {
-  border-inline-start: 2px solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
+  /* component sizing tokens (chat-widgets) */
+  --tc-rail-w: 2px;
+  --tc-pad-inline: 0.75rem;
+  --tc-caret-size: 0.55rem;
+  border-inline-start: var(--tc-rail-w) solid color-mix(in srgb, var(--accent) 40%, var(--term-hair));
   /* Space between the chain rail and the tool name — lives here (not a
      Tailwind ps-*) so it still applies when the utility isn't regenerated. */
-  padding-inline-start: 0.75rem;
+  padding-inline-start: var(--tc-pad-inline);
 }
 
 .tc--err {
@@ -34,7 +38,9 @@
 }
 
 .tc-dump {
-  max-height: 8.5rem;
+  /* Own root token: the dump is not required to sit inside .tc. */
+  --tc-dump-max-h: 8.5rem;
+  max-height: var(--tc-dump-max-h);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -45,16 +51,16 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--tc-caret-size);
+  height: var(--tc-caret-size);
   color: var(--term-mute, var(--ink-mute));
   transform: none;
   transform-origin: 50% 50%;
 }
 
 .tc-caret [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--tc-caret-size);
+  height: var(--tc-caret-size);
 }
 
 .tc-caret.open,
@@ -69,6 +75,7 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 /* ── thinking / reasoning disclosure (ChatThinking) ─────────────────── */
 
 .think-chip {
+  --think-caret-size: 0.55rem;
   background: transparent;
   transition: color 0.2s var(--ease);
 }
@@ -83,16 +90,16 @@ button.tc-head[aria-expanded="true"] .tc-caret {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--think-caret-size);
+  height: var(--think-caret-size);
   margin-inline-start: auto;
   transform: none;
   transform-origin: 50% 50%;
 }
 
 .think-caret [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: var(--think-caret-size);
+  height: var(--think-caret-size);
 }
 
 .think-chip.open .think-caret {
@@ -106,7 +113,11 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 }
 
 .think-steps {
-  border-inline-start: 2px solid color-mix(in srgb, var(--accent) 30%, var(--hair));
+  /* own tokens: the list is a sibling of .think-chip, not a descendant */
+  --think-rail-w: 2px;
+  --think-bullet-size: 6px;
+  --think-bullet-inset: -1.62rem;
+  border-inline-start: var(--think-rail-w) solid color-mix(in srgb, var(--accent) 30%, var(--hair));
 }
 
 .think-steps li {
@@ -118,10 +129,10 @@ button.tc-head[aria-expanded="true"] .tc-caret {
 .think-steps li::before {
   content: "";
   position: absolute;
-  inset-inline-start: -1.62rem;
-  top: 0.5rem;
-  width: 6px;
-  height: 6px;
+  inset-inline-start: var(--think-bullet-inset);
+  top: var(--space-2, 0.5rem);
+  width: var(--think-bullet-size);
+  height: var(--think-bullet-size);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 55%, var(--hair));
 }
