@@ -12,17 +12,19 @@ result. Without a hub, every caller writes that loop again and the copies
 drift apart. digigraph owns it once, so every interface shares one routing
 behaviour, one tool contract and one streaming format.
 
-The hub is kept deliberately small. It routes, dispatches and streams,
-and leaves the real work to the verticals that own it.
+The hub is kept deliberately small. It routes, dispatches and streams, and
+leaves the real work to the verticals that own it. The price of a hub is one
+more hop on every request and one place where a routing mistake affects
+every caller.
 
 ## How it works
 
-digigraph runs each request through a state machine with stages for
-research, validation, backtesting and optional optimisation. Conditional edges
-decide which stages a given request needs. Around the machine sits a
-registry of tools. A few live inside the hub; the rest belong to the
-verticals, which publish descriptions of what they offer. The hub fetches
-those descriptions at runtime and never carries a hard-coded list.
+digigraph runs each request through a state machine built on LangGraph, with
+stages for research, validation, backtesting and optional optimisation.
+Conditional edges decide which stages a given request needs. Around the
+machine sits a registry of tools. A few live inside the hub. The verticals
+own the rest and publish their descriptions, the name, the inputs and what
+the tool does, which the hub fetches when it first needs them.
 
 ```mermaid the hub asks each vertical what it offers instead of assuming it
 flowchart LR
@@ -32,15 +34,18 @@ flowchart LR
   RUN --> OUT[streamed answer]
 ```
 
-Because the hub asks, nothing has to be registered in advance. A vertical can ship a new
-tool without a new release of the hub, and a tool server the operator adds works as soon as it describes itself. A question about a company's
-filings, for example, reaches retrieval because retrieval said it can search
-documents, not because the hub was told where documents live.
+So the description a model reads is the one the vertical ships, and a
+vertical can change it without a hub release. Adding a new first-party tool
+still means adding its handler to the hub; a tool server the operator adds
+over MCP needs nothing, because its tools are listed when it connects. A
+question about a company's filings reaches retrieval because retrieval
+described a document search, not because the hub was told where documents
+live.
 
 ## Where it fits
 
-The interfaces send the hub chat-shaped requests, and it answers in the
-streaming format ordinary chat clients already understand. Downstream it
+The hub speaks the OpenAI chat format, so digichat, Open WebUI or a short
+script can call it and read the streamed answer. Downstream it
 calls the verticals for retrieval and research, and models through the shared
 model layer. Identity arrives as a short-lived signed credential that the hub
 verifies itself rather than trusting the caller. With tracing on, every step is recorded, so a routing

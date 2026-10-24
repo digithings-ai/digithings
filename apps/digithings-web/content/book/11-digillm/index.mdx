@@ -12,9 +12,11 @@ model call costs. digillm exists so that never happens: one library, used by
 every service, with no preference for any vendor.
 
 With a shared layer, changing models is a configuration choice. digillm
-speaks the chat format that most providers, local runners and routing
-proxies already accept, so they all look the same to the calling code. Trying
-a new model changes where the traffic goes, not how the code asks for it.
+speaks the OpenAI chat format, which most providers, local runners such as
+Ollama and routing proxies such as LiteLLM accept, so they all look the same
+to the calling code. Trying a new model changes where the traffic goes, not
+how the code asks for it. The cost of one format is that a feature only one
+provider offers waits until the format can carry it.
 
 ## How it works
 
@@ -32,22 +34,21 @@ flowchart LR
   PROXY --> HOSTED[hosted models]
 ```
 
-The library keeps almost no dependencies of its own and never imports a web
-framework. So the same code can live inside a chat interface, an
-orchestration hub and a research pipeline without dragging their worlds
-along.
+The library has two hard dependencies, the OpenAI client and Pydantic, and
+never imports a web framework. So the same code can live inside an
+orchestration hub, a retrieval service and a research pipeline without
+dragging their worlds along.
 
 ## Where it fits
 
-The hub uses it for its own model calls, retrieval for web answers and checking passages, and research for usage
-records. Because the shapes are
-shared, a structured answer produced in one service can be read in another
-without translation. When tracing is configured, usage flows into the trail;
+The hub, retrieval and research all make their model calls through it.
+Because the shapes are shared, a structured answer produced in one service can
+be read in another without translation. When tracing is configured, usage flows into the trail;
 when it is not, the hooks cost nothing.
 
-A library has no home of its own. On a laptop it points at a local runner, in
-the cloud at whatever inference the deployment chose. Where models run stays
-an operator decision, never a code change.
+A library has no home of its own. In the local stack it points at LiteLLM,
+which routes each model name to Ollama on the same machine or to a hosted
+provider. Where models run stays an operator decision, never a code change.
 
 <Reference kind="architecture" href="repo:digillm/ARCHITECTURE.md" title="digillm architecture">
   The module map, the shape definitions and the dependency rules.
