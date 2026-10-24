@@ -70,6 +70,20 @@ jobs:
       - name: Render diagrams
         run: npm run render-diagrams --workspace digithings-web
 
+      # The bytes this runner produced, whether or not they match what is
+      # committed. That makes this workflow the way to regenerate the diagrams
+      # (DIG-5436): mermaid sizes every box from text metrics it measures in
+      # the browser, so only the image that also runs the check can say what
+      # the committed files must contain. Download it, replace
+      # apps/digithings-web/public/book/diagrams with it, commit.
+      - name: Upload the rendered diagrams
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-diagrams-${{ github.sha }}
+          path: apps/digithings-web/public/book/diagrams
+          if-no-files-found: error
+
       - name: Diagrams are committed
         run: git diff --exit-code -- apps/digithings-web/public/book/diagrams
 
