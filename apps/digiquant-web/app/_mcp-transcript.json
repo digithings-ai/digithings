@@ -1,109 +1,112 @@
 {
-  "capturedAt": "2026-09-30T10:41:02+00:00",
-  "command": "python -m digiquant.mcp_server --stdio --scope read",
+  "capturedAt": "2026-10-11T22:13:27+00:00",
+  "command": "python -m digiquant.mcp_server --stdio --scope full",
   "server": {
     "name": "digiquant",
     "protocolVersion": "2025-11-25"
   },
-  "toolCount": 44,
+  "toolCount": 85,
   "calls": [
     {
-      "tool": "digifetch_quotes_batch",
+      "tool": "digiquant_fetch_bitview_series",
       "args": {
-        "symbols": [
-          "SPY",
-          "QQQ",
-          "BTC-USD"
-        ]
+        "series_ids_json": "[\"asopr_24h\", \"rhodl_ratio\"]"
       },
       "envelope": {
-        "source": "gloomberb",
-        "fetched_at": "2026-09-30T10:41:02.412180Z",
-        "attribution": "Sourced from Gloomberg",
-        "delay_notice": "Data delayed up to 15 minutes"
+        "source": "bitview"
       },
       "columns": [
-        "symbol",
-        "price",
-        "change_percent",
-        "market_state",
-        "data_source"
+        "name",
+        "date_end",
+        "date_start",
+        "error",
+        "index",
+        "null_days",
+        "path",
+        "row_count",
+        "series_id",
+        "source"
       ],
       "rows": [
         {
-          "symbol": "SPY",
-          "status": "success",
-          "price": 765.0182,
-          "change_percent": 0.10706621303322866,
-          "market_state": "PRE",
-          "data_source": "delayed"
+          "name": "asopr_24h",
+          "date_end": "2026-10-13",
+          "date_start": "2009-01-05",
+          "error": null,
+          "index": "day1",
+          "null_days": 7,
+          "path": "data/onchain/bitview/asopr_24h.parquet",
+          "row_count": 6493,
+          "series_id": "asopr_24h",
+          "source": "bitview"
         },
         {
-          "symbol": "QQQ",
-          "status": "success",
-          "price": 737.77,
-          "change_percent": -0.021682273386360248,
-          "market_state": "PRE",
-          "data_source": "delayed"
-        },
-        {
-          "symbol": "BTC-USD",
-          "status": "success",
-          "price": 83767.3125,
-          "change_percent": 0.17043092126151396,
-          "market_state": "REGULAR",
-          "data_source": "delayed"
-        }
-      ]
-    },
-    {
-      "tool": "digifetch_price_history",
-      "args": {
-        "symbol": "SPY",
-        "resolution": "1d",
-        "range": "1M"
-      },
-      "envelope": {
-        "source": "gloomberb",
-        "fetched_at": "2026-09-30T10:41:02.683742Z",
-        "attribution": "Sourced from Gloomberg",
-        "delay_notice": "Data delayed up to 15 minutes"
-      },
-      "columns": [
-        "date",
-        "close",
-        "volume"
-      ],
-      "rows": [
-        {
-          "date": "2026-09-23",
-          "close": 767.8099975585938,
-          "volume": 54931700.0
-        },
-        {
-          "date": "2026-09-24",
-          "close": 767.1799926757812,
-          "volume": 43983700.0
-        },
-        {
-          "date": "2026-09-25",
-          "close": 771.3499755859375,
-          "volume": 36666700.0
-        },
-        {
-          "date": "2026-09-28",
-          "close": 765.6099853515625,
-          "volume": 42694500.0
-        },
-        {
-          "date": "2026-09-29",
-          "close": 764.2,
-          "volume": 37009343.0
+          "name": "rhodl_ratio",
+          "date_end": "2026-10-13",
+          "date_start": "2009-01-05",
+          "error": null,
+          "index": "day1",
+          "null_days": 7,
+          "path": "data/onchain/bitview/rhodl_ratio.parquet",
+          "row_count": 6493,
+          "series_id": "rhodl_ratio",
+          "source": "bitview"
         }
       ],
       "meta": {
-        "bar_count": 21,
-        "shown": "last 5"
+        "row_count": 2,
+        "shown": "first 2"
+      }
+    },
+    {
+      "tool": "digiquant_fetch_bitview_series",
+      "args": {
+        "series_ids_json": "[\"mvrv\", \"puell_multiple\"]"
+      },
+      "envelope": {
+        "source": "bitview"
+      },
+      "columns": [
+        "name",
+        "date_end",
+        "date_start",
+        "error",
+        "index",
+        "null_days",
+        "path",
+        "row_count",
+        "series_id",
+        "source"
+      ],
+      "rows": [
+        {
+          "name": "mvrv",
+          "date_end": "2026-10-13",
+          "date_start": "2010-09-28",
+          "error": null,
+          "index": "day1",
+          "null_days": 633,
+          "path": "data/onchain/bitview/mvrv.parquet",
+          "row_count": 6493,
+          "series_id": "mvrv",
+          "source": "bitview"
+        },
+        {
+          "name": "puell_multiple",
+          "date_end": "2026-10-13",
+          "date_start": "2009-01-05",
+          "error": null,
+          "index": "day1",
+          "null_days": 7,
+          "path": "data/onchain/bitview/puell_multiple.parquet",
+          "row_count": 6493,
+          "series_id": "puell_multiple",
+          "source": "bitview"
+        }
+      ],
+      "meta": {
+        "row_count": 2,
+        "shown": "first 2"
       }
     }
   ]
