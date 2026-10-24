@@ -131,6 +131,32 @@ export const AccentSchema = z.object({
   foreground: z.string().regex(HEX_COLOR, "must be #rrggbb"),
 });
 
+/**
+ * Boot animation for the chat surface. `banner` (the default) is the digichat
+ * hero banner's LOADING pass — the same cover the digithings.ai site shell
+ * shows — and every boot-lab variant can be named instead
+ * (`packages/ui/src/components/chat/boot-lab.tsx` is the runtime source of
+ * truth for the list). `classic` keeps the pre-banner welcome loader. The
+ * embed's `?boot=` parameter still overrides this per URL.
+ */
+export const BootLoadingSchema = z.enum([
+  "banner",
+  "classic",
+  "terminal",
+  "waking",
+  "booting",
+  "spinner",
+  "spinneronly",
+  "dots",
+  "bootlog",
+  "scramble",
+  "toolchain",
+  "tooltask",
+  "toolreason",
+  "toolfull",
+]);
+export type BootLoading = z.infer<typeof BootLoadingSchema>;
+
 export const LauncherSchema = z
   .object({
     hotkey: z.string().min(1).optional(),
@@ -165,6 +191,8 @@ export const ChromeSchema = z
       .optional(),
     /** Composer model/tools row. Default on. */
     toolbar: z.boolean().default(true),
+    /** Boot animation. `banner` is the standard digichat cover. */
+    loading: BootLoadingSchema.default("banner"),
     /** `always` reserves the gutter; `auto` shows bars on scroll. */
     scrollbars: ScrollbarSchema.default("always"),
     /**
@@ -833,6 +861,7 @@ export const DeploymentSchema = z
       theme: "light",
       skin: DEFAULT_THREAD_SKIN,
       toolbar: true,
+      loading: "banner",
       scrollbars: "always",
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
       transcript: { userAlign: "right" },

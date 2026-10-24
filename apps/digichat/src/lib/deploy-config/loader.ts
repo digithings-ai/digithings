@@ -175,6 +175,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       toolbar: cfg.toolbar !== false,
       scrollbars: cfg.scrollbars ?? "always",
+      loading: "banner",
       scroll: cfg.scroll ?? { mode: "follow" },
       transcript: { userAlign: "right" },
     },
