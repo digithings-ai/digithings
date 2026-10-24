@@ -137,6 +137,9 @@ function mountHost() {
   document.body.appendChild(wrap);
 }
 
+/** The server id the foundry deployment names, read from its own document. */
+let foundryServerId = "";
+
 function trialClient() {
   const dir = resolve(__dirname, "../../../config");
   for (const name of readdirSync(dir)) {
@@ -146,7 +149,10 @@ function trialClient() {
       name,
     );
     const client = toDigichatClientConfig(cfg.deployment!);
-    if (client.backendType === "foundry") return client;
+    if (client.backendType === "foundry") {
+      foundryServerId = client.tools.catalog[0]?.id ?? "";
+      return client;
+    }
   }
   throw new Error("no foundry deployment");
 }
@@ -155,8 +161,12 @@ function trialClient() {
  * The backend prefixes each MCP tool id with its server id; the row must show
  * that id, never the deployment's short tool label.
  */
-const TOOL_ID_PREFIX = "datatap__";
-const rawToolId = (name: string) => `${TOOL_ID_PREFIX}${name}`;
+const toolIdPrefix = (): string => {
+  trialClient();
+  if (!foundryServerId) throw new Error("the foundry deployment names no MCP server");
+  return `${foundryServerId}__`;
+};
+const rawToolId = (name: string) => `${toolIdPrefix()}${name}`;
 
 /** The expected page: the service, then each group heading and its tree. */
 function expectedPage(service: string, groups: readonly string[]): string {
