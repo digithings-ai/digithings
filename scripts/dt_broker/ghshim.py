@@ -798,6 +798,81 @@ def _repo_from_flag(argv: list[str]) -> str | None:
     return named
 
 
+def _pr_subcommand(argv: list[str]) -> int | None:
+    """Where the subcommand of `gh pr` sits in the arguments, if there is one.
+
+    Cobra finds a subcommand by walking the arguments and skipping every
+    flag and flag value it meets on the way, so a `gh pr` call may carry a
+    flag in front of the subcommand: `gh pr --repo owner/name create` runs
+    `create`, and against the repository named in front of it. A check that
+    read argv[1] for the subcommand never saw that shape, and a refusal it
+    never saw is a pull request it opened.
+
+    The walk uses the flag tables DIG-5415 added, exactly as the repository
+    scan does, and answers the index of the first bare argument: that is
+    where the subcommand sits. `--repo` and `-R` are the flags of `gh pr`
+    itself, so they are valid in front of the subcommand and their value is
+    skipped whatever it looks like; the other flag tables are there so a
+    known flag is still placed correctly. A flag the shim does not know
+    raises rather than is skipped: a flag the shim cannot place is a value
+    it cannot place, and whatever sits behind it -- the subcommand
+    included -- is a position the wall does not read. Verified against gh
+    2.102.0: every shape gh runs in front of the subcommand is in these
+    tables, so the refusal is not stricter than gh is.
+
+    The answer is the index, not the subcommand: `create` has the alias
+    `new`, and the caller decides what it does with the name it finds.
+    """
+    value_flags, boolean_flags = _flag_tables("pr")
+    index = 1
+    while index < len(argv):
+        argument = argv[index]
+        if argument == "--":
+            # After the terminator the arguments are positionals, so the
+            # subcommand gh will act on cannot be back there.
+            return None
+        if argument in ("--repo", "-R"):
+            # A flag of `gh pr` itself, so it is valid in front of the
+            # subcommand. It takes the next argument with it, whatever
+            # that argument looks like.
+            if index + 1 >= len(argv):
+                return None
+            index += 2
+            continue
+        if argument.startswith("--repo="):
+            index += 1
+            continue
+        if argument.startswith("--"):
+            head, separator, _ = argument.partition("=")
+            if separator:
+                # The value is inside this argument, so the next argument
+                # is still in flag position.
+                index += 1
+                continue
+            if head in value_flags:
+                # The next argument is this flag's value, whatever it looks
+                # like.
+                if index + 1 >= len(argv):
+                    return None
+                index += 2
+                continue
+            if head in boolean_flags:
+                index += 1
+                continue
+            raise Refusal(
+                f"this call uses {_safe(argument)}, a flag the shim does not know; it "
+                "cannot tell where the subcommand of the call sits, so it refuses it"
+            )
+        if argument.startswith("-") and len(argument) > 1:
+            _, consumed = _short_flag_repo(
+                argument, value_flags, boolean_flags, argv, index
+            )
+            index += consumed
+            continue
+        return index
+    return None
+
+
 def current_repo(argv: list[str], env: dict[str, str]) -> str | None:
     """The repository a call is about, as `owner/name`."""
     named = _repo_from_flag(argv)
@@ -931,15 +1006,17 @@ def check_pull_request_target(argv: list[str], env: dict[str, str]) -> list[str]
     if not argv:
         return notes
     command = argv[0]
-    if command == "pr" and len(argv) > 1 and argv[1] in ("create", "new"):
-        repo = current_repo(argv, env)
-        if not repo:
-            raise Refusal(
-                "the repository for this pull request could not be identified, so it cannot "
-                f"be checked against the {ORG} organization; pass --repo owner/name"
-            )
-        _check_org(repo, "the pull request")
-        notes.append(f"pull request against {_safe(repo)}")
+    if command == "pr":
+        subcommand = _pr_subcommand(argv)
+        if subcommand is not None and argv[subcommand] in ("create", "new"):
+            repo = current_repo(argv, env)
+            if not repo:
+                raise Refusal(
+                    "the repository for this pull request could not be identified, so it cannot "
+                    f"be checked against the {ORG} organization; pass --repo owner/name"
+                )
+            _check_org(repo, "the pull request")
+            notes.append(f"pull request against {_safe(repo)}")
         return notes
     if command != "api":
         return notes
@@ -1042,25 +1119,25 @@ def pr_number(argv: list[str]) -> int | None:
     and neither is the value of a flag -- so the search goes on rather
     than stopping at the first thing it cannot read.
     """
-    if not argv:
-        return None
-    if argv[0] == "pr" and len(argv) > 1 and argv[1] in _PR_SUBCOMMANDS:
-        skip = False
-        for argument in argv[2:]:
-            if skip:
-                skip = False
-                continue
-            if argument.startswith("-"):
-                # A flag that takes a value takes the next argument with
-                # it, so the value is not read as the pull request.
-                if argument in _PR_VALUE_FLAGS:
-                    skip = True
-                continue
-            number = _as_pr_number(argument)
-            if number is not None:
-                return number
-        return None
-    if argv[0] == "api":
+    if argv and argv[0] == "pr":
+        subcommand = _pr_subcommand(argv)
+        if subcommand is not None and argv[subcommand] in _PR_SUBCOMMANDS:
+            skip = False
+            for argument in argv[subcommand + 1:]:
+                if skip:
+                    skip = False
+                    continue
+                if argument.startswith("-"):
+                    # A flag that takes a value takes the next argument with
+                    # it, so the value is not read as the pull request.
+                    if argument in _PR_VALUE_FLAGS:
+                        skip = True
+                    continue
+                number = _as_pr_number(argument)
+                if number is not None:
+                    return number
+            return None
+    if argv and argv[0] == "api":
         for argument in argv[1:]:
             for match in _PULLS_NUMBER_RE.finditer(argument):
                 return int(match.group("number"))

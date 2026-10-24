@@ -123,7 +123,12 @@ mistake even where the expansion does not apply, and it catches a relative path
 **It refuses a pull request outside the organization.** `gh pr create` against a
 repository that is not in `digithings-ai`, `gh api repos/{owner}/{repo}/pulls`
 outside it, and the GraphQL `createPullRequest` mutation are all refused, with the
-reason on stderr. The endpoint is looked for in **every** argument, not only the
+reason on stderr. The subcommand is found by walking the arguments with the flag
+tables, not by reading the second argument: Cobra skips a flag and its value while
+it searches for the subcommand, so `gh pr --repo someone-else/their-project create`
+runs `create`, and that call is refused as well (DIG-5420). The flag list is the
+one gh 2.102.0 runs, and a flag the shim cannot place is refused rather than
+skipped. The endpoint is looked for in **every** argument, not only the
 first one, so `gh api -X POST repos/someone-else/their-project/pulls` is refused
 as well; a mutation hidden in an `--input` file is read and refused too. This
 holds in both authentication modes, and for a process that is not a seat run: no

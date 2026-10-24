@@ -639,6 +639,155 @@ def test_a_repository_flag_after_the_terminator_is_not_read() -> None:
     assert notes == [f"pull request against {REPO}"]
 
 
+# ---------------------------------------------------------------------------
+# the rules the review of DIG-5420 found (DIG-5415 was read only there)
+# ---------------------------------------------------------------------------
+
+
+def test_a_repository_flag_in_front_of_the_subcommand_is_read() -> None:
+    """Cobra skips a flag and its value while it looks for the subcommand.
+
+    `gh pr --repo someone-else/their-project create` runs `create`, so a
+    check that read argv[1] for the subcommand never saw the call at all.
+    """
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "--repo", "someone-else/their-project", "create", "--title", "x"], {}
+        )
+
+
+def test_a_short_repository_flag_in_front_of_the_subcommand_is_read() -> None:
+    """`-R owner/name` and `-Rowner/name` are hoisted shapes gh runs as well."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "-R", "someone-else/their-project", "create"], {}
+        )
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "-Rsomeone-else/their-project", "create"], {}
+        )
+
+
+def test_an_attached_repository_flag_in_front_of_the_subcommand_is_read() -> None:
+    """`--repo=owner/name` carries its value inside the argument."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "--repo=someone-else/their-project", "create"], {}
+        )
+
+
+def test_a_value_that_parses_as_a_repository_flag_in_front_of_the_subcommand() -> None:
+    """`--repo` takes the next argument whatever it looks like.
+
+    gh reads the whole argument as the repository and refuses it; so does
+    the wall, rather than decide that the subcommand was hiding behind the
+    value.
+    """
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "--repo", "-Rdigithings-ai/digithings", "create", "--title", "x"],
+            {"GH_REPO": REPO},
+        )
+
+
+def test_the_repository_in_front_of_the_subcommand_is_the_call_its_own() -> None:
+    """A hoisted repository flag is the repository gh will use."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "--repo", "digithings-ai/digithings", "create", "--title", "x"],
+        {"GH_REPO": "someone-else/their-project"},
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_the_last_repository_flag_wins_across_the_subcommand() -> None:
+    """gh's `--repo` is a plain string flag, wherever it sits in the call."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            [
+                "pr",
+                "-R",
+                "digithings-ai/digithings",
+                "create",
+                "--repo",
+                "someone-else/their-project",
+            ],
+            {},
+        )
+
+
+def test_a_boolean_flag_in_front_of_the_subcommand_leaves_the_next_argument_in_place() -> None:
+    """A boolean takes no value, so `create` is still the first bare argument.
+
+    gh 2.102.0 refuses this shape itself, but the wall reads the same way
+    whatever gh answers, and the subcommand is still where the walk says it
+    is.
+    """
+    notes = ghshim.check_pull_request_target(
+        ["pr", "--draft", "create", "--repo", "digithings-ai/digithings"], {}
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_a_flag_the_shim_does_not_know_in_front_of_the_subcommand_is_refused() -> None:
+    """A flag the walk cannot place could be carrying the subcommand."""
+    with pytest.raises(ghshim.Refusal) as excinfo:
+        ghshim.check_pull_request_target(
+            ["pr", "--frobnicate", "x", "create"], {"GH_REPO": REPO}
+        )
+    assert "frobnicate" in str(excinfo.value)
+
+
+def test_a_subcommand_is_not_found_after_the_terminator() -> None:
+    """After `--` the arguments are positionals; nothing back there runs a subcommand."""
+    assert ghshim.check_pull_request_target(
+        ["pr", "--repo", "someone-else/their-project", "--", "create"], {}
+    ) == []
+
+
+def test_a_call_without_a_subcommand_is_left_alone() -> None:
+    """`gh pr --repo owner/name` reaches the help text, not a pull request."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "--repo", "someone-else/their-project"], {}
+    )
+    assert notes == []
+
+
+def test_the_pull_request_is_read_out_of_a_call_with_a_hoisted_flag() -> None:
+    """The review token also needs to know which pull request it is for."""
+    assert ghshim.pr_number(["pr", "-R", "o/r", "review", "42"]) == 42
+    assert ghshim.pr_number(["pr", "--repo", "o/r", "view", "42"]) == 42
+    assert ghshim.pr_number(["pr", "--repo", "o/r", "view", "--json", "title", "42"]) == 42
+
+
+def test_the_new_alias_of_create_is_read() -> None:
+    """`gh pr new` is `gh pr create`.
+
+    The walker hands back a name and the wall decides: `new` is the alias
+    of `create`, and a hoisted repository flag answers for it the same way.
+    The match is exact, so a name gh itself would refuse is a shape the
+    wall does not have to answer for.
+    """
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "--repo", "someone-else/their-project", "new", "--title", "x"], {}
+        )
+
+
+def test_host_mode_still_refuses_a_hoisted_repository_flag(
+    seat_env: dict[str, str],
+    guard: Path,
+    host_mode: Path,
+    captured: list[dict[str, Any]],
+) -> None:
+    """In host mode the wall is the only control, and it holds."""
+    code = ghshim.main(
+        ["pr", "--repo", "someone-else/their-project", "create", "--title", "x"],
+        seat_env,
+    )
+    assert code == ghshim.EXIT_REFUSED
+    assert captured == []
+
+
 def test_a_relative_body_path_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The path is relative, but the mistake is the same one."""
     monkeypatch.chdir(tmp_path)
