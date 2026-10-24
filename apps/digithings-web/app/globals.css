@@ -240,7 +240,7 @@ html {
   html:has(main #why) {
     scroll-snap-type: y proximity;
   }
-  html:has(main #why) main > section[id] {
+  html:has(main #why) main > section {
     scroll-snap-align: start;
   }
   html:has(main #why) footer {
