@@ -14,8 +14,12 @@
  *   /_stack/key/*       → digikey (strip prefix)
  *
  * /_stack/mcp/{digisearch,digivault}/* → in-container MCP servers on
- * :8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
- * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
+ * :8765/:8769. Two credentials are accepted, either one grants: a digikey JWT
+ * in `Authorization: Bearer` carrying `mcp:digisearch` / `mcp:digivault`
+ * (verified against DIGIKEY_JWKS_URL), or the static `x-digi-mcp-key` header
+ * matching MCP_EDGE_KEY / MCP_EDGE_KEYS (compose and self-host, where no
+ * digikey mints a token). Fail-closed 401 otherwise, 403 for a valid token
+ * without the server's scope. See ./mcp-edge-auth.
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
  * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
@@ -48,6 +52,7 @@ import {
   safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
+import { authorizeMcpEdge } from "./mcp-edge-auth";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 // ports.ts stays a static import: the two Container subclasses below need
@@ -527,6 +532,14 @@ export interface Env {
   MCP_EDGE_KEY?: string;
   /** Optional per-server edge keys (`{"digivault":"…"}`); falls back to MCP_EDGE_KEY. */
   MCP_EDGE_KEYS?: string;
+  /**
+   * digikey JWKS endpoint the MCP edge verifies `Authorization: Bearer` JWTs
+   * against (./mcp-edge-auth). Worker-scoped: the Container's copy of this name
+   * is the loopback URL in `envVars` below, which the Worker cannot reach.
+   * Unset means the JWT path cannot verify and refuses; the static edge key is
+   * unaffected. Public URL, not a secret — it ships in wrangler.toml `[vars]`.
+   */
+  DIGIKEY_JWKS_URL?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   GLOOMBERB_SESSION_COOKIE?: string;
@@ -705,21 +718,37 @@ export default {
     // In-container MCP servers for the OCC embed, reached over secret-gated edge
     // paths. The container-internal servers cannot be resolved from the
     // Cloudflare runtime (/etc/hosts is read-only), so digigraph dials this
-    // public HTTPS path instead; the embed tenant entry carries the matching
-    // x-digi-mcp-key (#3841 authHeader). Fail closed: no secret -> 401.
+    // public HTTPS path instead. Two credentials are accepted (./mcp-edge-auth):
+    // a digikey JWT carrying `mcp:<serverId>`, or the static x-digi-mcp-key the
+    // embed tenant entry carries (#3841 authHeader) for compose/self-host. Fail
+    // closed: neither credential valid -> 401; valid JWT, wrong server -> 403.
     if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {
       const rest = url.pathname.slice(MCP_EDGE_PREFIX.length + 1);
       const slash = rest.indexOf("/");
       const serverId = slash === -1 ? rest : rest.slice(0, slash);
       const port = MCP_EDGE_SERVERS[serverId];
       if (typeof port === "number") {
-        const expected = mcpEdgeKeyFor(serverId, workerEnv);
-        const provided = request.headers.get("x-digi-mcp-key")?.trim();
-        if (!expected || !provided || provided !== expected) {
-          return new Response("digithings-stack: unauthorized", { status: 401 });
+        const decision = await authorizeMcpEdge({
+          request,
+          serverId,
+          expectedKey: mcpEdgeKeyFor(serverId, workerEnv),
+          env: workerEnv,
+        });
+        if (!decision.ok) {
+          // The body names neither the credential nor the reason: the status is
+          // the whole answer to the caller, and the decision log has the rest.
+          return new Response(
+            decision.status === 403
+              ? "digithings-stack: forbidden"
+              : "digithings-stack: unauthorized",
+            {
+              status: decision.status,
+              headers: { "www-authenticate": 'Bearer realm="digikey"' },
+            },
+          );
         }
         // Lazy ports import per route group (#4685): a failing import
-        // degrades only these paths (503); the fail-closed 401 above stays
+        // degrades only these paths (503); the fail-closed refusal above stays
         // synchronous and untouched.
         return runIsolated("mcp-edge", () => import("./ports"), async ({}) => {
           // Forward the client path unchanged: mcp>=1.26 serves `/mcp` and

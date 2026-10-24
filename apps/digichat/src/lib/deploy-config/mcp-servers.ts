@@ -163,6 +163,15 @@ export type McpServerForward = {
   /** Custom outbound header name for `token`, e.g. "X-API-Key" (#3841). */
   authHeader?: string;
   /**
+   * How this row authenticates to the MCP server (`mcp.servers[].authScheme`).
+   * `"jwt"` means the chat mints its own digikey token per request and the
+   * static `token` above is ignored (apps/digichat/src/lib/mcp-edge-token.ts).
+   * Absent means the static `token`/`tokenEnv` shape, which is what every
+   * compose and self-host deployment uses. Operator-only: a session overlay
+   * can never turn a row into a JWT row.
+   */
+  authScheme?: "static" | "jwt";
+  /**
    * MCP setup values applied when this server's tools are registered (e.g.
    * the digisearch index name or the digivault path prefix). Forwarded to
    * digigraph; the model never sees or supplies them.
@@ -202,6 +211,13 @@ export type McpUpstreamServer = {
   token?: string;
   /** Operator-only — session overlay can never set this (#3841). */
   authHeader?: string;
+  /**
+   * Operator-only (`mcp.servers[].authScheme`). `"jwt"` makes the chat mint a
+   * scoped digikey token for this row instead of sending `token`; see
+   * apps/digichat/src/lib/mcp-edge-token.ts. Never forwarded to digigraph —
+   * the minted token is what goes on the wire.
+   */
+  authScheme?: "static" | "jwt";
   /**
    * MCP setup values applied when this server's tools are registered (e.g.
    * the digisearch index name or the digivault path prefix). Forwarded to
@@ -316,6 +332,7 @@ export function operatorMcpServersForUpstream(
       row.token = token;
       if (s.authHeader?.trim()) row.authHeader = s.authHeader.trim();
     }
+    if (s.authScheme === "jwt") row.authScheme = "jwt";
     if (s.setup && Object.keys(s.setup).length) row.setup = { ...s.setup };
     // Operator tool allowlists. Re-checked here, not only in zod, exactly like
     // `token` above: the projection is the last place the bound can be enforced
@@ -383,6 +400,7 @@ export function mergeMcpSessionOverlay(opts: {
     const row: McpUpstreamServer = { id: s.id, url: s.url };
     if (s.token) row.token = s.token;
     if (s.authHeader) row.authHeader = s.authHeader;
+    if (s.authScheme === "jwt") row.authScheme = "jwt";
     if (s.setup) row.setup = { ...s.setup };
     // Re-bound here too, not just in operatorMcpServersForUpstream: this is
     // the path that trusts its input, so "enforced on every construction
