@@ -4,10 +4,15 @@ name: "Book: print the PDF"
 #
 # Its own workflow rather than a step in `test-web.yml` for three reasons:
 # it needs a browser, it needs a full `next build` (which no lane in this repo
-# runs for digithings-web), and it is not a test — nothing here can fail a PR
-# because the book is prose. It runs on pushes to `develop` that touch the book
-# and on demand, so the artifact is always available for the branch that needs
-# it.
+# runs for digithings-web), and most of it is not a test — the book is prose.
+#
+# The exception is `Diagrams are committed` (DIG-5436). That step is a
+# generated-artefact check, and a check that only runs after a merge is how the
+# diagrams drifted onto `develop` in the first place, so this workflow also runs
+# on pull requests that touch the book. The `book-diagrams-<sha>` artifact of
+# such a run is the authoritative copy of the committed SVGs: mermaid sizes
+# every box from text metrics measured in the browser, so only the image that
+# runs the check can produce bytes the check accepts.
 #
 # No paid service: Playwright downloads a Chromium, everything else is in the
 # lockfile.
@@ -15,15 +20,18 @@ name: "Book: print the PDF"
 on:
   push:
     branches: [develop]
-    paths:
+    paths: &book-paths
       - "apps/digithings-web/content/book/**"
       - "apps/digithings-web/lib/book/**"
       - "apps/digithings-web/components/book/**"
       - "apps/digithings-web/app/book/**"
       - "apps/digithings-web/scripts/book/**"
+      - "apps/digithings-web/public/book/diagrams/**"
       - "apps/digithings-web/package.json"
       - "package-lock.json"
       - ".github/workflows/book-pdf.yml"
+  pull_request:
+    paths: *book-paths
   workflow_dispatch:
 
 concurrency:
