@@ -24,7 +24,8 @@ an event stream, any answer not fully parseable, any discovery failure.
 
 One secret, no local persistence
 --------------------------------
-The embed token is read out of DataTap's own public ``/chat`` page on every run.
+The embed token is read out of the public ``/chat`` page on every run — DataTap's
+own by default, the one the operator names otherwise.
 It is not a credential and it is not treated as one: it is a client-published
 identifier scraped from a public page, and no bypass is keyed on it.
 
@@ -37,15 +38,16 @@ without the identity the check was blind for most of every 24h window. The value
 never logged, never printed, and never written to disk by this script; it is read in
 ``build_headers`` and put straight onto the wire. Unset means no header is sent.
 
-It reads one more thing from the environment, and that one is not a secret:
+It reads three more things from the environment, and none of them is a secret:
 ``ANSWER_CHECK_EMBED_HOSTS`` holds the host names this deployment allows the
-check to talk to. A host name is a hostname, and the value is configuration
-rather than a credential — but it is the difference between a check that talks
-to the host the operator meant and one that talks to whatever host a public
-page named.
+check to talk to, and ``ANSWER_CHECK_DISCOVERY_URL`` and
+``ANSWER_CHECK_EMBED_HOST`` name the page to read and the host to present. A
+host name is a hostname, and the value is configuration rather than a
+credential — but it is the difference between a check that talks to the host
+the operator meant and one that talks to whatever host a public page named.
 
-It goes to the embed host DataTap's own page names, and redirects are refused
-outright (``_RefuseRedirects``) so that a 3xx cannot carry it to some other host
+It goes to the embed host the page names — DataTap's own by default — and redirects
+are refused outright (``_RefuseRedirects``) so that a 3xx cannot carry it to some other host
 on top of that. The host itself is pinned as well, but by configuration and not
 by this file: the allowlist above holds the host names this deployment allows,
 because the embed host is the client's own hostname and it changes when they
@@ -57,6 +59,23 @@ the variable and the host it saw. Refusing the redirect stops the header
 travelling; pinning the host says where it may travel to. digichat
 ignores an allowlist entry shorter than 32 characters, so a value below that is
 sent and then refused; the same secret has to be in both places.
+
+The target is an input
+----------------------
+The page the check reads and the host it presents are named by the caller, not
+written into this file. ``--discovery-url`` and ``--embed-host`` name them on
+the command line, and ``ANSWER_CHECK_DISCOVERY_URL`` and
+``ANSWER_CHECK_EMBED_HOST`` name them for a scheduler that cannot pass a
+command line. The command line wins, then the environment, then the default
+target, and a blank value counts as unset so that an exported-but-empty
+variable cannot silently re-point a run.
+
+The allowlist above still decides where the identity may land; the named target
+only says where to look and which tenant key to present. The two are different
+questions and both are needed: the allowlist vets the host the probes are sent
+to, and the named host is the key the surface resolves the assistant with.
+A discovery URL that is not https is refused before a request is made, the same
+way a missing target is refused: the embed token would travel in clear.
 
 This script writes no local state: no file, no database, no cache. That is what makes
 it safe to point at a client production system on a schedule, and it is pinned by
@@ -146,6 +165,14 @@ COULD_NOT_RUN = 2
 
 DISCOVERY_URL = "https://datatap.stream/chat"
 EMBED_HOST = "datatap.stream"
+
+# The target, as an input. The page to read and the host to present are named
+# by the caller — on the command line, or in the environment for a scheduler
+# that cannot pass one. The two constants above are the fallback for a run that
+# names nothing: they are the surface this check was built for, and they are
+# the only target written into this file.
+DISCOVERY_URL_ENV_VAR = "ANSWER_CHECK_DISCOVERY_URL"
+EMBED_HOST_ENV_VAR = "ANSWER_CHECK_EMBED_HOST"
 
 # The only secret this script is allowed to read. It is our sanctioned
 # internal-monitor identity, presented to our own embed gate so the hourly
@@ -272,6 +299,116 @@ class EmbedTarget:
         if path.endswith("/embed"):
             path = path[: -len("/embed")]
         return urlunsplit((parsed.scheme, parsed.netloc, path + "/api/chat", "", ""))
+
+
+@dataclass(frozen=True)
+class CheckTarget:
+    """The surface this run probes: the page to read, and the host to present.
+
+    The two are named separately because they are different things. The page is
+    where the embed token is discovered; the host is the tenant key the
+    surface resolves the assistant with.
+    """
+
+    discovery_url: str
+    embed_host: str
+
+
+def _read_url_parts(url: str) -> SplitResult | None:
+    """The parts of a URL, or None when the URL cannot be read apart.
+
+    The port is asked for here, because ``urlsplit`` only raises on a port
+    that is not a number when the port is asked for. Asking for it in this one
+    place keeps that refusal on one path, the way the host vet reads its
+    URLs. None means the URL names nothing this script can check, and the
+    caller refuses the target on its own terms.
+    """
+    try:
+        parsed = urlsplit(url)
+        parsed.port
+    except ValueError:
+        return None
+    return parsed
+
+
+def _url_host(url: str) -> str:
+    """The host a URL is served from, or an empty string when it names none.
+
+    Read with the same parser the host vet uses, so the host named here is the
+    host that would be vetted there. A URL that cannot be read apart names no
+    host, and the caller refuses the target on its own terms.
+    """
+    parsed = _read_url_parts(url)
+    if parsed is None:
+        return ""
+    return parsed.hostname or ""
+
+
+def resolve_target(discovery_url: str | None, embed_host: str | None) -> CheckTarget:
+    """The target for this run: command line, then environment, then default.
+
+    A blank value on either side counts as unset, so an exported-but-empty
+    variable cannot silently re-point a run. The host falls back to the host
+    the named page is served from, so naming a page names the whole target:
+    leaving the default host beside a new page would send the tenant key of
+    one surface to another.
+    """
+    url = (discovery_url or "").strip() or (os.environ.get(DISCOVERY_URL_ENV_VAR) or "").strip()
+    host = (embed_host or "").strip() or (os.environ.get(EMBED_HOST_ENV_VAR) or "").strip()
+    if not url:
+        # Nothing named a page: the default target, host and all.
+        return CheckTarget(discovery_url=DISCOVERY_URL, embed_host=host or EMBED_HOST)
+    if not host:
+        # A named page names its own host.
+        host = _url_host(url) or EMBED_HOST
+    return CheckTarget(discovery_url=url, embed_host=host)
+
+
+def _is_bare_host(host: str) -> bool:
+    """Whether a value is a host name and nothing else.
+
+    A host name, optionally with the port it is served on, and nothing else:
+    no scheme, no path, no userinfo, no whitespace. Anything else would put a
+    URL into a header value that is read as a host.
+    """
+    if host != host.strip() or any(char.isspace() for char in host):
+        return False
+    parsed = _read_url_parts(f"//{host}")
+    if parsed is None:
+        return False
+    if not parsed.hostname or parsed.path or parsed.query or parsed.fragment:
+        return False
+    return parsed.username is None and parsed.password is None
+
+
+def _require_usable_target(target: CheckTarget) -> None:
+    """Refuse a target that cannot be probed safely.
+
+    Two rules, and both are about what would go on the wire. The discovery URL
+    has to be https: the embed token is read out of that page, and over http it
+    would travel in clear. The embed host has to be a bare host name: it goes
+    out as a header value, and a URL written into it would put a scheme and a
+    path into the tenant key.
+
+    Raises ProbeError, which is exit 2 — the check could not see, and it says
+    why. The reason names what was wrong and never the value itself: a URL can
+    carry userinfo, and this text reaches stdout.
+    """
+    parsed = _read_url_parts(target.discovery_url)
+    if parsed is None:
+        raise ProbeError("the discovery URL cannot be read as a URL")
+    if parsed.scheme != "https":
+        raise ProbeError(
+            "the discovery URL is not an https URL, so the embed token would travel in clear"
+        )
+    if not parsed.hostname:
+        raise ProbeError("the discovery URL names no host")
+    if parsed.username is not None or parsed.password is not None:
+        raise ProbeError(
+            "the discovery URL carries userinfo, which no discovery URL legitimately has"
+        )
+    if not _is_bare_host(target.embed_host):
+        raise ProbeError("the embed host is not a bare host name")
 
 
 def _to_response(status: int, headers, raw: bytes) -> HttpResponse:
@@ -585,7 +722,7 @@ def require_allowlisted_embed_host(url: str, *, what: str = "the embed URL") -> 
     )
 
 
-def build_headers(target: EmbedTarget) -> dict[str, str]:
+def build_headers(embed_target: EmbedTarget, check_target: CheckTarget) -> dict[str, str]:
     """The exact header set verified live against DataTap (spec 3.2).
 
     Dropping ``X-Embed-Host`` yields 401; losing ``Referer`` or ``Origin`` yields
@@ -620,15 +757,15 @@ def build_headers(target: EmbedTarget) -> dict[str, str]:
     quotes what it was handed, and that text reaches stdout through the exit-2
     path, so an unsendable secret would be printed rather than refused quietly.
     """
-    require_allowlisted_embed_host(target.embed_url)
-    require_allowlisted_embed_host(target.api_chat_url, what="the URL the probes are sent to")
+    require_allowlisted_embed_host(embed_target.embed_url)
+    require_allowlisted_embed_host(embed_target.api_chat_url, what="the URL the probes are sent to")
     headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
-        "X-Embed-Host": EMBED_HOST,
-        "X-Embed-Token": target.token,
-        "Referer": DISCOVERY_URL,
-        "Origin": f"https://{EMBED_HOST}",
+        "X-Embed-Host": check_target.embed_host,
+        "X-Embed-Token": embed_target.token,
+        "Referer": check_target.discovery_url,
+        "Origin": f"https://{check_target.embed_host}",
     }
     monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
     if not monitor_token:
@@ -1381,7 +1518,8 @@ def _status_reason(name: str, response: HttpResponse) -> str:
 def run_probe(
     name: str,
     text: str,
-    target: EmbedTarget,
+    embed_target: EmbedTarget,
+    check_target: CheckTarget,
     *,
     timeout: float = TIMEOUT_SECONDS,
 ) -> str:
@@ -1393,8 +1531,8 @@ def run_probe(
     """
     response = http_request(
         "POST",
-        target.api_chat_url,
-        headers=build_headers(target),
+        embed_target.api_chat_url,
+        headers=build_headers(embed_target, check_target),
         body=json.dumps(build_payload(text)).encode("utf-8"),
         timeout=timeout,
     )
@@ -1446,12 +1584,38 @@ def _check(argv: list[str] | None = None) -> int:
         default=TIMEOUT_SECONDS,
         help=f"seconds per request (default {TIMEOUT_SECONDS:.0f})",
     )
+    parser.add_argument(
+        "--discovery-url",
+        default=None,
+        help=(
+            f"the https page to read (default: ${DISCOVERY_URL_ENV_VAR}, else the built-in default)"
+        ),
+    )
+    parser.add_argument(
+        "--embed-host",
+        default=None,
+        help=(
+            "the host sent as X-Embed-Host and Origin (default: $"
+            f"{EMBED_HOST_ENV_VAR}, else the host of the page)"
+        ),
+    )
     args = parser.parse_args(argv)
     timeout = args.timeout
 
-    print(f"DataTap answer integrity check (read-only) — discovering {DISCOVERY_URL}")
+    # A target that cannot be used is refused before a request is made, the way
+    # a missing target is refused: the embed token would travel in clear, or the
+    # tenant key would carry a URL.
     try:
-        discovery = http_request("GET", DISCOVERY_URL, timeout=DISCOVERY_TIMEOUT_SECONDS)
+        check_target = resolve_target(args.discovery_url, args.embed_host)
+        _require_usable_target(check_target)
+    except ProbeError as exc:
+        return _could_not_run(exc.reason)
+
+    print(f"DataTap answer integrity check (read-only) — discovering {check_target.discovery_url}")
+    try:
+        discovery = http_request(
+            "GET", check_target.discovery_url, timeout=DISCOVERY_TIMEOUT_SECONDS
+        )
         if discovery.status != 200:
             reason = f"the public /chat page came back HTTP {discovery.status}"
             if 300 <= discovery.status < 400:
@@ -1461,13 +1625,13 @@ def _check(argv: list[str] | None = None) -> int:
                 # deliberate policy as a broken client page.
                 reason += ", a redirect we refused to follow on purpose"
             raise ProbeError(reason)
-        target = discover_embed_target(discovery.body)
+        embed_target = discover_embed_target(discovery.body)
     except ProbeError as exc:
         return _could_not_run(exc.reason)
     except Exception as exc:  # DNS, TLS, timeout — all mean we cannot see
         return _could_not_run(f"discovery raised {type(exc).__name__}: {exc}")
 
-    print(f"embed target: {_USERINFO_IN_URL.sub('://', target.embed_url)}")
+    print(f"embed target: {_USERINFO_IN_URL.sub('://', embed_target.embed_url)}")
 
     # Each answer is printed the moment it arrives, and each is scanned before
     # the next probe is sent. A finding is a fact about an answer we did receive
@@ -1480,7 +1644,7 @@ def _check(argv: list[str] | None = None) -> int:
     could_not_run: str | None = None
     for name, text in PROBES:
         try:
-            answer = run_probe(name, text, target, timeout=timeout)
+            answer = run_probe(name, text, embed_target, check_target, timeout=timeout)
         except ProbeError as exc:
             could_not_run = exc.reason
             break
