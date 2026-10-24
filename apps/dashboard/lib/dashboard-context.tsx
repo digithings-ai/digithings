@@ -85,3 +85,8 @@ export function useDashboard(): DashboardContextValue {
   if (!ctx) throw new Error('useDashboard must be used inside DashboardProvider');
   return ctx;
 }
+
+/** Convenience selector for surfaces that only care about backend reachability. */
+export function useDbStatus(): DbStatus {
+  return useDashboard().dbStatus;
+}

@@ -29,9 +29,9 @@ import { AuthContext } from '@/lib/auth-context';
 import { useCanAccessProduct, usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
-  buildDigichatHandshakeMessages,
   buildPageContextMessage,
   buildPageContextSignature,
+  buildPlanTierMessage,
   buildThemeMessage,
   canUseDigichatPopup,
   DIGICHAT_READY,
@@ -235,17 +235,15 @@ export default function DigichatPopup({
       }
       const win = iframeRef.current?.contentWindow;
       if (win) {
-        // The same handshake the D8 live preview sends (DIG-5139): both
-        // surfaces build it in one place, so they cannot drift. The iframe
-        // fetches an HMAC-signed proof from /api/plan-proof and includes it in
-        // X-Embed-Plan-Proof. Raw X-Embed-Plan-Tier headers are NEVER trusted
-        // by the chat route.
-        for (const message of buildDigichatHandshakeMessages({
-          tier,
-          accessToken,
-          theme: themeRef.current,
-        })) {
-          win.postMessage(message, config!.origin);
+        win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
+        // Send authenticated plan tier (#3662): the iframe fetches an HMAC-
+        // signed proof from /api/plan-proof and includes it in X-Embed-Plan-Proof.
+        // Raw X-Embed-Plan-Tier headers are NEVER trusted by the chat route.
+        if (entitled && accessToken) {
+          win.postMessage(
+            buildPlanTierMessage(tier, accessToken),
+            config!.origin,
+          );
         }
       }
       if (open && !digichatPageContextOffRef.current) sendPageContext();

@@ -19,7 +19,8 @@ import { ThesisStorySpine } from '@/components/portfolio/theses/ThesisStorySpine
  * latest signed analyst call + dossier / deliberation links).
  *
  * Data is wired in from PortfolioShellInner so the tab stays a pure, testable
- * render. Production uses latest-available-per-entity (`anchorDate = lastUpdated`).
+ * render. Production uses latest-available-per-entity (`anchorDate = lastUpdated`);
+ * the demo anchor (`DEMO_THESIS_ANCHOR_DATE`) is available but gated off here.
  */
 export default function ThesesTab({
   lastUpdated,
