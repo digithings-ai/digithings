@@ -249,11 +249,17 @@ unassigned paths with no CI invocation. Repair status as of this update:
   `packages/tui-frame/`. `--check` is now green (0 unassigned).
 - (d) `r0.paths` emitter added: `python3 scripts/split/manifest.py --emit-r0 r0.paths` (P3 input).
 - (e) `scripts/split/manifest.py --check` wired into the local-ci scan list.
-- (a) + (c) still open: 76 move-list entries need specific rules instead of the catch-alls, and the
-  proposal's delete set (beyond `.github/workflows/`) must be added as delete rules. Both need the
-  file:line plan table that lives on this ticket and in the private repos. Until (a) lands, the
-  manifest and `r5/r6/r2/r1/r4.paths` can still disagree on 294 paths; P3's `r0.paths` allowlist is
-  therefore provisional and must be re-derived after (a).
+- (a) done: 51 move-list entries that fell into the six broad catch-alls now have specific
+  rules (mirroring `scripts/repo-split/move-lists/rN.paths`); manifest and extraction agree on
+  0 paths within those catch-alls. The remaining R0->private disagreements (digiquant/scripts,
+  digiquant/docs, digiquant/config, infra/, tests/) are outside the defect report's six
+  catch-alls and are tracked separately; they need the file:line plan table.
+- (c) done: the proposal's delete set beyond `.github/workflows/` is now in the manifest as
+  delete rules (docs/{superpowers,agent-backlog,reviews,plans,projects,dig-2041,backlog,scoring},
+  review-5061-*.md, .claude/, .cursor/, agents/, agents.yml, opencode.json, projects/). The
+  R6-specific `docs/projects/online-compliance-center/` rule precedes the broad delete rule, so
+  OCC keeps its destination. P3's `r0.paths` allowlist is still provisional until the remaining
+  disagreements above are resolved; re-derive with `python3 scripts/split/manifest.py --emit-r0`.
 
 Rollback: each PR reverts on its own.
 
