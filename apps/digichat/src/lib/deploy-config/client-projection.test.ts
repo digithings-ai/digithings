@@ -266,3 +266,20 @@ describe("chrome.scroll client projection", () => {
     expect(toDigichatClientConfig(free).chrome.scroll).toEqual({ mode: "free" });
   });
 });
+
+describe("chrome.loading client projection", () => {
+  it("defaults to the banner cover when the deployment does not say", () => {
+    const client = toDigichatClientConfig(depWithCatalog([]));
+    expect(client.chrome.loading).toBe("banner");
+    expect(DEFAULT_CLIENT_CONFIG.chrome.loading).toBe("banner");
+  });
+
+  it("carries a chosen boot animation through to the client", () => {
+    const dep = depWithCatalog([]);
+    const chosen = {
+      ...dep,
+      chrome: { ...dep.chrome, loading: "tooltask" as const },
+    } as DigichatDeployment;
+    expect(toDigichatClientConfig(chosen).chrome.loading).toBe("tooltask");
+  });
+});

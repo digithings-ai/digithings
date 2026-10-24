@@ -5,6 +5,7 @@ import { load as loadYaml } from "js-yaml";
 import { materializeDigichatConfig } from "./loader";
 import {
   allowlistModelId,
+  BootLoadingSchema,
   disclosureDefaultOpen,
   disclosureIsLocked,
   disclosureIsVisible,
@@ -17,6 +18,7 @@ import {
   welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
+import { resolveBootLabVariant } from "@digithings/ui/chat/boot-lab";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 
 const examplesDir = resolve(__dirname, "../../../config/examples");
@@ -40,6 +42,7 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.features.effort).toBe("medium");
     expect(cfg.deployment?.chrome.toolbar).toBe(true);
     expect(cfg.deployment?.chrome.scrollbars).toBe("always");
+    expect(cfg.deployment?.chrome.loading).toBe("banner");
     expect(cfg.deployment?.chrome.palette).toBeUndefined();
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("en");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("right");
@@ -208,6 +211,46 @@ describe("DigichatConfigSchema", () => {
         },
       }),
     ).toThrow(/chrome/);
+  });
+
+  it("accepts a chrome.loading boot animation and fails closed on unknown ones", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        chrome: { loading: "tooltask" },
+        backend: { type: "digigraph" },
+      },
+    });
+    expect(cfg.deployment?.chrome.loading).toBe("tooltask");
+    // The pre-banner welcome loader stays reachable as an explicit opt-out.
+    expect(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { loading: "classic" },
+          backend: { type: "digigraph" },
+        },
+      }).deployment?.chrome.loading,
+    ).toBe("classic");
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { loading: "spinner9000" },
+          backend: { type: "digigraph" },
+        },
+      }),
+    ).toThrow(/chrome/);
+  });
+
+  it("keeps every config loading value wired to a real boot-lab variant", () => {
+    for (const value of BootLoadingSchema.options) {
+      // `classic` is the documented opt-out to the pre-banner loader.
+      expect(resolveBootLabVariant(value)).toBe(value === "classic" ? null : value);
+    }
   });
 
   it("accepts official thread skins and fails closed on unknown ones", () => {
