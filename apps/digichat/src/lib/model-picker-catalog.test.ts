@@ -120,7 +120,10 @@ describe("model picker catalog", () => {
 
   it("drops a dated checkpoint past maxAgeDays and keeps an undated one", () => {
     expect(() =>
-      resolveModelCatalog({ maxAgeDays: 3 }, { openRouterConfigured: false }),
+      resolveModelCatalog(
+        { maxAgeDays: 3, default: "deepseek/deepseek-v4.1-flash-1017" },
+        { openRouterConfigured: false },
+      ),
     ).toThrow(/current generation/);
     const aged = resolveModelCatalog(
       { maxAgeDays: 3, default: "z-ai/glm-5.3-flash", priceCapUsdPerMillion: 20 },
@@ -174,6 +177,7 @@ describe("model picker catalog", () => {
     expect([...grouped].sort()).toEqual([...resolved.available].sort());
     expect(grouped).toHaveLength(resolved.available.length);
     const deepseek = resolved.picker.groups[0]?.models ?? [];
+    // Catalog order, not default order: the 1017 checkpoint is listed second.
     expect(deepseek.map((row) => row.id)).toEqual([
       "deepseek/deepseek-v4.1-flash",
       "deepseek/deepseek-v4.1-flash-1017",

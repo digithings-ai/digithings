@@ -17,6 +17,7 @@ from typing import Any
 
 from digivault.d1_errors import D1StoreError as D1StoreError
 from digivault.models import NoteDetail, NoteRow, VaultSearchHit
+from digivault.store_helpers import escape_like
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ RETRY_JITTER_FRACTION = 0.2
 # WHERE clause has 3 placeholders: `? = ''` skips the prefix filter entirely when
 # the caller passed no prefix, `vault_path = ?` matches the prefix note itself, and
 # `vault_path LIKE ? ESCAPE '\'` matches everything under it. The LIKE pattern's
-# prefix component must be escaped with `_escape_like` before binding — `_` and `%`
+# prefix component must be escaped with `escape_like` before binding — `_` and `%`
 # are LIKE wildcards, and an unescaped client prefix containing either leaks rows from
 # a sibling corpus (e.g. prefix `clients/my_corp` would also match
 # `clients/myXcorp/...` without escaping). The `? = ''` and `vault_path = ?` legs bind
@@ -86,6 +87,50 @@ FROM notes WHERE vault_path = ?
 # Same 3-placeholder prefix filter as `_SEARCH_SQL` (see its comment for the escaping
 # requirement), plus LIMIT/OFFSET for paging: 5 params total, in order: prefix, prefix,
 # f"{escaped_prefix}/%", page_size, offset.
+_EXISTS_SQL = "SELECT vault_path FROM notes WHERE vault_path = ? LIMIT 1"
+
+# Prefix filter as in `_SEARCH_SQL` (escaped LIKE), then a bare-stem match:
+# params: prefix, prefix, f"{escaped_prefix}/%", f"%/{escaped_stem}", stem.
+_STEM_SQL = """
+SELECT vault_path FROM notes
+WHERE (? = '' OR vault_path = ? OR vault_path LIKE ? ESCAPE '\\')
+  AND (vault_path LIKE ? ESCAPE '\\' OR vault_path = ?)
+LIMIT 5
+"""
+
+# params: prefix, prefix, f"{escaped_prefix}/%", f"%{escaped_tag}%", limit.
+_TAG_SQL = """
+SELECT vault_path, title, tags FROM notes
+WHERE (? = '' OR vault_path = ? OR vault_path LIKE ? ESCAPE '\\')
+  AND lower(tags) LIKE ? ESCAPE '\\'
+ORDER BY vault_path
+LIMIT ?
+"""
+
+# params: prefix, prefix, f"{escaped_prefix}/%", f"%{escaped_stem}%", target_path.
+_LINKS_SQL = """
+SELECT vault_path, wikilinks FROM notes
+WHERE (? = '' OR vault_path = ? OR vault_path LIKE ? ESCAPE '\\')
+  AND lower(wikilinks) LIKE lower(?) ESCAPE '\\'
+  AND vault_path <> ?
+ORDER BY vault_path
+LIMIT 500
+"""
+
+
+def _wikilink_points_at(link: str, target_lower: str) -> bool:
+    raw = (link or "").strip()
+    if raw.startswith("[[") and raw.endswith("]]"):
+        raw = raw[2:-2]
+    raw = raw.split("|", 1)[0].split("#", 1)[0]
+    ref = normalize_vault_path(raw).lower()
+    if not ref:
+        return False
+    if ref == target_lower:
+        return True
+    return target_lower.endswith("/" + ref)
+
+
 _LIST_SQL = """
 SELECT vault_path, title, frontmatter, body AS body_markdown
 FROM notes
@@ -135,19 +180,6 @@ def build_fts_match(query: str) -> str:
     """
     terms = _FTS_TERM.findall(query or "")
     return " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in terms)
-
-
-def _escape_like(value: str) -> str:
-    """Escape ``\\``, ``%`` and ``_`` so ``value`` is a literal LIKE prefix, not a pattern.
-
-    ``%`` and ``_`` are LIKE wildcards; binding a caller-supplied path prefix into a
-    ``LIKE ?`` pattern without escaping them lets ``_`` in a prefix match any single
-    character and leak a sibling corpus's rows across the tenant-isolation boundary —
-    verified: an unescaped prefix ``clients/my_corp`` also matches
-    ``clients/myXcorp/...``. Must be paired with ``LIKE ? ESCAPE '\\'`` in the SQL and
-    applied only to the prefix component, never the trailing ``/%`` wildcard suffix.
-    """
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def resolve_path_prefix(path_prefix: str | None) -> str:
@@ -458,7 +490,7 @@ class D1Store:
         prefix = resolve_path_prefix(path_prefix)
         rows = self.query(
             _SEARCH_SQL,
-            [match, prefix, prefix, f"{_escape_like(prefix)}/%", limit],
+            [match, prefix, prefix, f"{escape_like(prefix)}/%", limit],
             operation="search",
         )
         return [
@@ -506,11 +538,94 @@ class D1Store:
             segment_index=(int(r["segment_index"]) if r.get("segment_index") is not None else None),
         )
 
+    def resolve_note_path(self, name: str, *, path_prefix: str | None = None) -> str | None:
+        """Resolve a note reference the way ``digivault_get_note`` addresses notes.
+
+        Accepts a vault path (with or without ``.md``) or a bare note name (the
+        filename stem). A path is used as-is after ``normalize_vault_path``; a bare
+        name is looked up as ``<anything>/<name>`` under ``path_prefix`` and only
+        resolves when exactly one note matches, so an ambiguous stem never silently
+        picks a sibling note. Returns the canonical ``vault_path`` or ``None``.
+        """
+        path = normalize_vault_path(name)
+        if not path:
+            return None
+        prefix = resolve_path_prefix(path_prefix)
+        if self.query(_EXISTS_SQL, [path], operation="resolve_note"):
+            return path
+        if "/" in path:
+            return None
+        escaped_prefix = _escape_like(prefix)
+        rows = self.query(
+            _STEM_SQL,
+            [prefix, prefix, f"{escaped_prefix}/%", f"%/{_escape_like(path)}", path],
+            operation="resolve_note",
+        )
+        paths = sorted({str(r.get("vault_path") or "") for r in rows} - {""})
+        return paths[0] if len(paths) == 1 else None
+
+    def search_tag(
+        self, tag: str, *, path_prefix: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Notes under ``path_prefix`` carrying ``tag`` (case-insensitive, ``#`` optional)."""
+        want = (tag or "").strip().lstrip("#").strip().lower()
+        if not want:
+            return []
+        prefix = resolve_path_prefix(path_prefix)
+        escaped_prefix = _escape_like(prefix)
+        rows = self.query(
+            _TAG_SQL,
+            [prefix, prefix, f"{escaped_prefix}/%", f"%{_escape_like(want)}%", limit * 4],
+            operation="search_tag",
+        )
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            tags = _json_list(r.get("tags"))
+            if any(t.strip().lstrip("#").lower() == want for t in tags):
+                out.append(
+                    {
+                        "vault_path": str(r.get("vault_path") or ""),
+                        "title": str(r.get("title") or ""),
+                        "tags": list(tags),
+                    }
+                )
+            if len(out) >= limit:
+                break
+        return out
+
+    def backlinks(self, vault_path: str, *, path_prefix: str | None = None) -> list[str]:
+        """Vault paths under ``path_prefix`` whose wikilinks point at ``vault_path``.
+
+        A wikilink matches when its target (``[[target|alias]]`` / ``#heading``
+        stripped, ``.md`` dropped) equals the note's path, its stem, or a trailing
+        path segment of it, compared case-insensitively.
+        """
+        target = normalize_vault_path(vault_path)
+        if not target:
+            return []
+        stem = target.rsplit("/", 1)[-1]
+        prefix = resolve_path_prefix(path_prefix)
+        escaped_prefix = _escape_like(prefix)
+        rows = self.query(
+            _LINKS_SQL,
+            [prefix, prefix, f"{escaped_prefix}/%", f"%{_escape_like(stem)}%", target],
+            operation="backlinks",
+        )
+        want_full = target.lower()
+        out: list[str] = []
+        for r in rows:
+            src = str(r.get("vault_path") or "")
+            for link in _json_list(r.get("wikilinks")):
+                if _wikilink_points_at(link, want_full):
+                    out.append(src)
+                    break
+        return sorted(set(out))
+
     def list_notes(self, *, path_prefix: str | None = None, page_size: int = 500) -> list[NoteRow]:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
         prefix = resolve_path_prefix(path_prefix)
-        escaped_prefix = _escape_like(prefix)
+        escaped_prefix = escape_like(prefix)
         out: list[NoteRow] = []
         offset = 0
         pages = 0

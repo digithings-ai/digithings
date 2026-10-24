@@ -25,8 +25,27 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     ul: (props) => <ul className="mb-4 ml-5 list-disc text-[1.05rem] leading-[1.7] text-ink-soft" {...props} />,
     ol: (props) => <ol className="mb-4 ml-5 list-decimal text-[1.05rem] leading-[1.7] text-ink-soft" {...props} />,
     code: (props) => <code className="font-mono text-[0.92em] text-ink" {...props} />,
-    pre: (props) => <pre className="mb-6 overflow-x-auto border-hair border p-4 font-mono text-[0.85rem] leading-[1.3] text-ink" {...props} />,
+    // Focusable because a long line scrolls horizontally; a keyboard reader
+    // needs to be able to reach that scroll container.
+    pre: (props) => (
+      <pre
+        tabIndex={0}
+        className="mb-6 overflow-x-auto border-hair border p-4 font-mono text-[0.85rem] leading-[1.3] text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink"
+        {...props}
+      />
+    ),
     a: (props) => <a className="text-accent underline decoration-[color:var(--hair)] underline-offset-2" {...props} />,
+    strong: (props) => <strong className="font-semibold text-ink" {...props} />,
+    blockquote: (props) => (
+      <blockquote className="my-6 border-l border-hair pl-4 text-[1.05rem] leading-[1.7] text-ink-soft" {...props} />
+    ),
+    hr: (props) => <hr className="my-10 border-hair" {...props} />,
+    // A wide table must scroll inside its own frame instead of widening the page.
+    table: (props) => (
+      <div className="my-6 overflow-x-auto">
+        <table className="w-full border-collapse text-[0.92rem]" {...props} />
+      </div>
+    ),
     // Routed through BookFigure, which decides by ADDRESS whether an image is a
     // book diagram (pan and zoom) or an ordinary picture (left alone). Both are
     // plain images underneath — the interaction is an addition, not a

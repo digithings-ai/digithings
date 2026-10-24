@@ -256,6 +256,44 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   check: a refused app row is logged and the head keeps the receipt it
   earned on `local-ci`.
 
+## The bun suites
+
+The bun packages (`clients/digichat-tui`, `clients/digiquant-tui`,
+`clients/digivoice-tui`, `clients/digichat-devkit`, `packages/surface-config`,
+`packages/hero-banner`, plus the pre-move `digivoice/tui`) declare
+`"test": "bun test"`. Their only lanes were `test-bun-suites.yml` and
+`test-clients-tui.yml`, both retired with Actions (DIG-3604 / DIG-4454), so
+between then and DIG-5203 the required `local-ci` check ran no bun test at all:
+PR #6271 carried a green receipt while digichat-tui's suite (70 pass, 1 fail)
+only ever ran by hand.
+
+The gate reads the suite list from `scripts/ci_paths.yaml` `bun_suites`, and
+also scans `clients/*` and `packages/*` for a manifest that declares
+`"test": "bun test"`, so a new client is gated on its first PR instead of
+waiting for somebody to edit the list. The `clients/**` entry in `bun_suites`
+is what fires the gate for those new clients. When a PR touches any of those
+paths it runs every suite, in order:
+
+- `bun --version` must equal `BUN_PIN`, or no suite runs and the receipt says
+  `bun-version` (an unpinned tool changing under a green build is the
+  #1701/#1705/#1711 failure mode);
+- a standalone bun package (the clients, `digivoice/tui`) installs from its
+  committed `bun.lock` with `--frozen-lockfile`; a package that is a workspace
+  of the root `package.json` (`packages/*`, `apps/*`) skips the install,
+  because `bun install` there would walk up to the repo root and install the
+  whole monorepo;
+- `bun run test` runs the manifest's own script, in the suite directory.
+
+One suite failing does not stop the others: the receipt names the failed gate
+(`bun:digichat-tui`) and the log carries every suite's output. On success the
+description names the suites that ran, or says `bun: none` when no `bun_suites`
+path changed. The description is capped at 140 characters, so the names are
+dropped for a count before they can be cut in half; the run log always has them
+in full.
+
+This is the runner, not the agent: the launchd job is frozen per DIG-5157, so
+the gate reaches the host when the host copy is synced, not by reloading the job.
+
 ## Invariants this script is built around
 
 - **A skip is never silence.** A memory or disk guard that forces a skip posts
@@ -283,11 +321,27 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   else, and it checks the incoming runner before it switches (DIG-5135).
 - **Fork code never executes here.** Fork PRs get a `failure` naming the re-push
   path a maintainer must use.
+- **A skipped suite names itself.** The success receipt names every bun suite
+  that ran, or says `bun: none` when no `bun_suites` path changed, so a PR that
+  proves nothing about a client says so instead of reading green (DIG-5203).
 - **Fails closed on a missing input.** If the review record or the PR body cannot
   be read, the check fails; it does not assume the best.
-- **Static gates only.** Per-package pytest suites, compose validation, npm and
-  pip audit, token canary, secret staleness, invite-key rollout and cron dispatch
-  are not gated here (DIG-3605 owns the rest).
+- **A stalled checkout is retried, not a verdict.** The checkout of the checks
+  worktree gets minutes, not a quarter of an hour, and a checkout that stalls
+  is retried in place once: a rebuild repeats the same lazy fetch that stalled,
+  so a slow network is not a broken worktree. A checkout that lands on another
+  HEAD is a broken worktree, and that one is rebuilt (DIG-5285).
+- **A worktree the runner does not own is never rebuilt.** A rebuild removes
+  files, so it is allowed only for a worktree of this repository, and only
+  when it has no uncommitted changes (DIG-5285).
+- **A rebuild keeps the caches.** `.venv` and `node_modules` are the two
+  directories the clean step protects; a rebuild moves them aside and puts them
+  back, so a repaired worktree does not turn into an hour of `uv sync` and
+  `npm ci` (DIG-5285).
+- **Static gates, plus two path-gated lanes.** The worker dry-run build and the
+  bun suites run only for the paths that need them. Per-package pytest suites,
+  compose validation, npm and pip audit, token canary, secret staleness,
+  invite-key rollout and cron dispatch are not gated here (DIG-3605 owns the rest).
 
 ## Copyright and secrets
 

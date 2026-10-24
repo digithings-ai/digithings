@@ -203,11 +203,13 @@ creates them itself from the backend-store URI. Those tables live in a dedicated
     `ALTER DEFAULT PRIVILEGES FOR ROLE digitrace_mlflow_owner IN SCHEMA mlflow GRANT
     SELECT, INSERT, UPDATE, DELETE ON TABLES TO digitrace_mlflow` and
     `ALTER DEFAULT PRIVILEGES FOR ROLE digitrace_mlflow_owner IN SCHEMA mlflow GRANT
-    USAGE, SELECT ON SEQUENCES TO digitrace_mlflow`. The sequences are not optional:
+    USAGE, SELECT ON SEQUENCES TO digitrace_mlflow`. The sequence grant is not optional:
     MLflow's `experiments` table has an autoincrementing integer key, which PostgreSQL
-    renders as a `SERIAL` and therefore as a sequence, and three of its rollup tables
-    use an identity column, so the runtime role needs `USAGE` on the sequence before it
-    can insert. A grant on `ALL TABLES IN SCHEMA mlflow` would be empty — the tables do
+    renders as a `SERIAL` and therefore as a sequence, so the runtime role needs `USAGE`
+    on that sequence before it can insert. It is the only sequence in the tracking schema
+    at MLflow 3.10.0: no tracking table declares an identity column, and
+    `experiments.experiment_id` is the one autoincrementing key. A grant on `ALL TABLES
+    IN SCHEMA mlflow` would be empty — the tables do
     not exist until the upgrade creates them — and the tables created later would
     belong to the owner role with no grant for the runtime role. The default-privileges
     statements run **as the owner role**: PostgreSQL lets a role change the default

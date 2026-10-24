@@ -3396,6 +3396,58 @@ def test_an_unknown_mode_is_treated_as_enforce(monkeypatch: pytest.MonkeyPatch) 
     assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
 
 
+def test_the_rollback_flag_puts_the_gate_back_into_shadow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`host` switches the broker off, and the gate it depends on goes with it.
+
+    The receipt this gate trusts is written by the broker. With the broker
+    off there is nothing to enforce against, so the gate measures and merges
+    instead of refusing.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("host\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_the_rollback_flag_never_raises_a_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The flag lowers a gate. It never raises one."""
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
+def test_the_rollback_flag_never_raises_a_shadowed_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`app` does not switch the shadow gate to enforce.
+
+    The flag only ever lowers a gate. A gate that is already measuring (the
+    mode the queue ships in) stays measuring when the flag says `app`, so the
+    flag can never be used to switch a gate on.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_an_unreadable_rollback_flag_leaves_the_gate_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flag that cannot be read is not a flag that says `host`."""
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", tmp_path / "not-there")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
 def test_a_build_cannot_be_read_without_a_token(
     monkeypatch: pytest.MonkeyPatch, woodpecker: dict[str, Any], tmp_path: Path
 ) -> None:

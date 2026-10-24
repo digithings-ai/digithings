@@ -32,6 +32,8 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._frames import empty_series_frame
+
 logger = logging.getLogger(__name__)
 
 FNG_BASE_URL = "https://api.alternative.me"
@@ -63,15 +65,6 @@ class FearGreedResult(BaseModel):
         return self.error is None and self.row_count > 0
 
 
-def _empty_frame() -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "date": pl.Series("date", [], dtype=pl.Date),
-            "value": pl.Series("value", [], dtype=pl.Float64),
-        }
-    )
-
-
 def fng_payload_to_frame(payload: object) -> pl.DataFrame:
     """Pure parser: alternative.me FNG JSON -> ``date``/``value`` Polars.
 
@@ -87,10 +80,10 @@ def fng_payload_to_frame(payload: object) -> pl.DataFrame:
     return an empty frame / are skipped rather than raising.
     """
     if not isinstance(payload, dict):
-        return _empty_frame()
+        return empty_series_frame()
     rows = payload.get("data")
     if not isinstance(rows, list):
-        return _empty_frame()
+        return empty_series_frame()
     dates: list[date] = []
     values: list[float] = []
     for row in rows:
@@ -108,7 +101,7 @@ def fng_payload_to_frame(payload: object) -> pl.DataFrame:
         dates.append(datetime.fromtimestamp(ts, tz=timezone.utc).date())
         values.append(value)
     if not dates:
-        return _empty_frame()
+        return empty_series_frame()
     return (
         pl.DataFrame({"date": dates, "value": values})
         .unique(subset=["date"], keep="first")
@@ -221,7 +214,9 @@ def fetch_fear_greed(
     """Fetch the FNG series. Always fail-soft. Inject ``session`` in tests (no network)."""
     if session is None and not _fetch_enabled():
         return FearGreedResult(error=f"{_ENV_FLAG} disabled (no network)")
-    client = FearGreedClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
+    client = FearGreedClient(
+        base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir
+    )
     return client.fetch(limit=limit)
 
 

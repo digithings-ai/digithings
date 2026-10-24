@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type { ModuleNode } from "../../data/modules";
 import { Reveal } from "../../motion/primitives";
@@ -53,6 +61,8 @@ export interface ModuleGridItem {
   counts?: string;
   /** Replaces the text name in the tile head, e.g. the module's hero banner. */
   mark?: ReactNode;
+  /** Optional external link shown as a small arrow beside the name mark. */
+  link?: { href: string; label: string };
 }
 
 export interface ModuleGridProps {
@@ -133,7 +143,9 @@ function sortBySize(items: ModuleGridItem[]): ModuleGridItem[] {
  * shipped module can reach zero.
  */
 function sizeWeights(ordered: ModuleGridItem[]): number[] {
-  const measured = ordered.map((item) => item.lines).filter((n): n is number => n !== null && n > 0);
+  const measured = ordered
+    .map((item) => item.lines)
+    .filter((n): n is number => n !== null && n > 0);
   if (measured.length === 0) return ordered.map(() => 1);
   const logMin = Math.min(...measured.map((n) => Math.log10(n)));
   const logMax = Math.log10(Math.max(...measured));
@@ -454,6 +466,18 @@ export function ModuleGrid({
                 {m.id.replace(/^digi/, "")}
               </span>
             )}
+            {item.link ? (
+              <a
+                className="dg-mosaic-link"
+                href={item.link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={item.link.label}
+                title={item.link.label}
+              >
+                <span aria-hidden="true">↗</span>
+              </a>
+            ) : null}
             <span className="dg-loc dg-mosaic-version">
               {item.version === null ? "roadmap" : `v${item.version}`}
             </span>
@@ -512,7 +536,16 @@ export function ModuleGrid({
     ro.observe(el);
     const stage = el.closest(".dg-stage--mosaic");
     if (stage) ro.observe(stage);
-    return () => ro.disconnect();
+    /* Browser zoom can resize the visual viewport without a ResizeObserver
+       notification on the stage in every engine; listen to both explicit
+       resize signals as a backstop so the treemap always re-solves. */
+    window.addEventListener("resize", apply);
+    window.visualViewport?.addEventListener("resize", apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", apply);
+      window.visualViewport?.removeEventListener("resize", apply);
+    };
   }, [stepper]);
 
   /* A new box re-solves every rect. That is layout, not motion: tiles jump to
@@ -631,68 +664,72 @@ export function ModuleGrid({
       <div
         ref={trackRef}
         className={className}
-        style={stepper ? undefined : { height: `${scrollyTrackHeightVh(dwellUnits(count), vhPerModule)}vh` }}
+        style={
+          stepper
+            ? undefined
+            : { height: `min(${scrollyTrackHeightVh(dwellUnits(count), vhPerModule)}vh, 4800px)` }
+        }
       >
-      <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
-        <div
-          ref={mosaicRef}
-          className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
-          role="list"
-          aria-label={label}
-        >
-          {stepper
-            ? ordered.map((item, i) => {
-                const on = reduced || i === stackActive;
-                return (
-                  <div key={item.module.id} className="dg-mosaic-row">
-                    <Reveal className="dg-stack-reveal" delay={Math.min(i * 0.05, 0.3)}>
-                      <div
-                        data-mod={item.module.id}
-                        ref={(el) => {
-                          stackRefs.current[i] = el;
-                        }}
-                        role="listitem"
-                        className={`dg-cell${on ? " on" : ""}`}
-                        aria-current={on ? "true" : undefined}
-                      >
-                        {tileContent(i, true)}
-                      </div>
-                    </Reveal>
-                  </div>
-                );
-              })
-            : ordered.map((item, i) => {
-                const r = rects?.[i];
-                const on = i === focus;
-                /* Hidden until the first solve lands, so unpositioned tiles
+        <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
+          <div
+            ref={mosaicRef}
+            className={`dg-mosaic ${stepper ? "dg-mosaic--stack" : "dg-mosaic--rows"}`}
+            role="list"
+            aria-label={label}
+          >
+            {stepper
+              ? ordered.map((item, i) => {
+                  const on = reduced || i === stackActive;
+                  return (
+                    <div key={item.module.id} className="dg-mosaic-row">
+                      <Reveal className="dg-stack-reveal" delay={Math.min(i * 0.05, 0.3)}>
+                        <div
+                          data-mod={item.module.id}
+                          ref={(el) => {
+                            stackRefs.current[i] = el;
+                          }}
+                          role="listitem"
+                          className={`dg-cell${on ? " on" : ""}`}
+                          aria-current={on ? "true" : undefined}
+                        >
+                          {tileContent(i, true)}
+                        </div>
+                      </Reveal>
+                    </div>
+                  );
+                })
+              : ordered.map((item, i) => {
+                  const r = rects?.[i];
+                  const on = i === focus;
+                  /* Hidden until the first solve lands, so unpositioned tiles
                    never flash piled at the corner. Placed by a physical
                    translate on purpose: these are the treemap's x/y in the
                    measured box, and a transform moves a tile without
                    registering as a layout shift. */
-                const style: CSSProperties = r
-                  ? {
-                      visibility: "visible",
-                      transform: `translate(${r.x + TREEMAP_GAP / 2}px, ${r.y + TREEMAP_GAP / 2}px)`,
-                      width: Math.max(r.w - TREEMAP_GAP, 0),
-                      height: Math.max(r.h - TREEMAP_GAP, 0),
-                    }
-                  : { visibility: "hidden" };
-                return (
-                  <div
-                    key={item.module.id}
-                    data-mod={item.module.id}
-                    role="listitem"
-                    className={`dg-cell${on ? " on" : ""}`}
-                    aria-current={on ? "true" : undefined}
-                    style={style}
-                  >
-                    {tileContent(i, on)}
-                  </div>
-                );
-              })}
+                  const style: CSSProperties = r
+                    ? {
+                        visibility: "visible",
+                        transform: `translate(${r.x + TREEMAP_GAP / 2}px, ${r.y + TREEMAP_GAP / 2}px)`,
+                        width: Math.max(r.w - TREEMAP_GAP, 0),
+                        height: Math.max(r.h - TREEMAP_GAP, 0),
+                      }
+                    : { visibility: "hidden" };
+                  return (
+                    <div
+                      key={item.module.id}
+                      data-mod={item.module.id}
+                      role="listitem"
+                      className={`dg-cell${on ? " on" : ""}`}
+                      aria-current={on ? "true" : undefined}
+                      style={style}
+                    >
+                      {tileContent(i, on)}
+                    </div>
+                  );
+                })}
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 }

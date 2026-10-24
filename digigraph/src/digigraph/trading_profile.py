@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class TradingProfile(BaseModel):
@@ -29,7 +32,8 @@ def trading_profile_from_state(raw: dict[str, Any] | None) -> TradingProfile | N
         return None
     try:
         return TradingProfile.model_validate(raw)
-    except Exception:
+    except Exception as exc:
+        logger.warning("ignoring invalid trading_profile: %s", exc)
         return None
 
 

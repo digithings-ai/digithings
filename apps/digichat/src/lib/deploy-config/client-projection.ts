@@ -78,6 +78,8 @@ export type DigichatClientChrome = {
   palette?: string;
   toolbar: boolean;
   scrollbars: "always" | "auto";
+  /** `follow` chases the stream after anchoring the question; `free` is inert. */
+  scroll: { mode: "follow" | "free" };
   skin: ThreadSkin;
   title?: string;
   /** Headline. Legacy YAML `welcome: "…"` still lands here. */
@@ -178,6 +180,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     theme: "dark",
     skin: "digichat",
     toolbar: true,
+    scroll: { mode: "follow" },
     scrollbars: "always",
     title: "ask digichat",
     welcome: HOUSE_WELCOME,
@@ -279,6 +282,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(dep.chrome.palette ? { palette: dep.chrome.palette } : {}),
       toolbar: dep.chrome.toolbar !== false,
       scrollbars: dep.chrome.scrollbars ?? "always",
+      scroll: { mode: dep.chrome.scroll?.mode ?? "follow" },
       skin: dep.chrome.skin ?? DEFAULT_THREAD_SKIN,
       title: dep.chrome.title,
       welcome: welcomeTitle(dep.chrome.welcome),

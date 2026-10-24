@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.digithings.container-health: the daily container health check (DIG-2910).
+
+  It probes /healthz on graph.digithings.ai, key.digithings.ai and
+  search.digithings.ai from Chris's Mac. /healthz never wakes the sleeping
+  container (wake hygiene, apps/digithings-stack-cloudflare/src/wake-hygiene.ts), so
+  the check costs nothing: it reads the container's own liveness payload when the
+  container is awake and the worker's sleeping answer when it is not. The cron job
+  smoke-stack keeps the worker only probes (/_stack/status); this is the deep half
+  that the cron cannot do.
+
+  The credential is the agent key digithings/paperclip-api-key, read from the
+  login keychain the way com.digithings.routine-watch reads it. It has to be the
+  agent key: dt-create-issue asks /api/agents/me first and refuses anything else,
+  and a board key would file the ticket and the comments in Chris's name. The board
+  key is not needed here and is not read. Each keychain item is read once: a
+  second read of the same item is a second prompt and a second failure mode.
+
+  A missing credential means the check still runs (it is read-only) but a failure
+  cannot be filed as a ticket, so the job says so in the log instead of dying
+  silently. A rotation deadline that has passed, or that is not a number at all,
+  withholds the credential: rotating it is Security's call, not this job's. Both
+  checks fail closed, so a deadline that cannot be read never exports the key.
+
+  The job runs on /usr/bin/python3, the interpreter macOS ships (3.9). The
+  repository pins 3.12, but a launchd job may not count on a Homebrew install
+  being there, so the script stays 3.9 compatible and a test keeps it so. The
+  TimeOut below is the total deadline of the job: the script has its own
+  deadlines per call, and this one is the backstop for a child that hangs.
+
+  The file in this repository is the copy of record. Install it with
+  scripts/container-health/install.sh. Loading a launchd job is Chris's call, so
+  the installer writes the plist and leaves the load to an explicit load flag.
+-->
+<plist version="1.0"><dict>
+<key>Label</key><string>com.digithings.container-health</string>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>-c</string><string>K=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key -w 2&gt;/dev/null) || K=; if [ -z "$K" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: no agent credential in the login keychain (digithings/paperclip-api-key). The check still runs, but a failure cannot be filed as a ticket."; else D=$(/usr/bin/security find-generic-password -s digithings -a paperclip-api-key-rotate-by -w 2&gt;/dev/null) || D=; case "$D" in ''|*[!0-9]*) echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: the rotation deadline of the agent credential is missing or is not a number ($D). PAPERCLIP_API_KEY withheld. Rotating the credential is Security's call; continuing read only."; K= ;; *) if [ "$D" -le "$(/bin/date +%s)" ]; then echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) container-health: the rotation deadline of the agent credential has passed. PAPERCLIP_API_KEY withheld. Rotating the credential is Security's call; continuing read only."; K= ; fi ;; esac; fi; if [ -n "$K" ]; then export PAPERCLIP_API_KEY="$K"; fi; unset K D; exec /usr/bin/python3 "__CHECKOUT__/scripts/container-health/container_health.py"</string></array>
+<key>StartCalendarInterval</key><dict>
+<key>Hour</key><integer>7</integer>
+<key>Minute</key><integer>40</integer>
+</dict>
+<key>RunAtLoad</key><false/>
+<key>ProcessType</key><string>Background</string>
+<key>TimeOut</key><integer>600</integer>
+<key>EnvironmentVariables</key><dict>
+<key>PAPERCLIP_API_URL</key><string>http://127.0.0.1:3100</string>
+<key>PAPERCLIP_COMPANY_ID</key><string>3d7a91f3-c674-4a9e-862b-11b9698f6686</string>
+</dict>
+<key>StandardOutPath</key><string>__HOME__/.config/digithings/logs/container-health/launchd.out</string>
+<key>StandardErrorPath</key><string>__HOME__/.config/digithings/logs/container-health/launchd.err</string>
+</dict></plist>

@@ -236,6 +236,7 @@ hosts:
         gateMode: "ungated",
         models: {
           catalog: true,
+          priceCapUsdPerMillion: 2,
           costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
         },
       },
@@ -406,7 +407,10 @@ deployment:
     const cfg = loadDigichatConfig({ fileContents: null, env: {} });
     expect(cfg.deployment?.slug).toBe("digithings-ai");
     expect(cfg.hosts?.["digithings.ai"]?.slug).toBe("digithings-ai");
-    expect(cfg.deployment?.chrome.mode).toBe("embed");
+    // The house tenant is the digithings.ai product surface: `app` keeps
+    // `/chat` on the product chat. `embed` here bounces `/chat` to
+    // `/chat/embed`, which is what #6356 replaced for the public surface.
+    expect(cfg.deployment?.chrome.mode).toBe("app");
     expect(cfg.deployment?.chrome.skin).toBe("digichat");
     expect(cfg.deployment?.chrome.theme).toBe("dark");
     expect(cfg.deployment?.features.attachments).toBe(false);

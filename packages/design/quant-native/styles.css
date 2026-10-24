@@ -53,17 +53,24 @@
   height: auto;
 }
 
-/* --- Ticker ------------------------------------------------------------ */
+/* --- Ticker ------------------------------------------------------------
+   Component sizing tokens: the tape's own band rhythm. The global scale has
+   no step for 0.625rem / 1.75rem, so these stay local rather than inventing
+   one. Declared on the ticker root; items inherit them. */
 .qn-ticker {
+  --qn-ticker-pad-block: 0.625rem;
+  --qn-ticker-item-gap: 0.375rem;
+  --qn-ticker-item-pad-inline: 1.75rem;
+
   position: relative;
   overflow: hidden;
   border-top: 1px solid var(--hair);
   border-bottom: 1px solid var(--hair);
   background: rgba(10, 10, 10, 0.7);
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--ink);
-  padding: 10px 0;
+  padding: var(--qn-ticker-pad-block) 0;
 }
 .qn-ticker-track {
   display: inline-flex;
@@ -73,16 +80,16 @@
 .qn-ticker-item {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 0 28px;
+  gap: var(--qn-ticker-item-gap);
+  padding: 0 var(--qn-ticker-item-pad-inline);
   border-right: 1px dashed var(--hair);
 }
 .qn-ticker-sym {
   color: var(--ink);
   letter-spacing: 0.04em;
 }
-.qn-ticker-px { margin-left: 2px; }
-.qn-ticker-delta { margin-left: 2px; }
+.qn-ticker-px { margin-left: 0.125rem; }
+.qn-ticker-delta { margin-left: 0.125rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .qn-ticker-track {

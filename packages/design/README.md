@@ -4,7 +4,7 @@ The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
 utilitarian, dark-first aesthetic with per-module accent colors.
 
-This document is the authoritative reference. The canonical implementation
+This document describes the token package. `docs/design/CURRENT_UI_LANGUAGE.md` is the current description of the shipped language; where the two disagree, `tokens.css` wins. The canonical implementation
 lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the

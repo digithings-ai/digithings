@@ -34,7 +34,7 @@ describe("stock ToolFallback source guard", () => {
 
   it("gives the trigger label the foreground token for contrast (DIG-3449)", () => {
     expect(source).toMatch(
-      /tool-fallback-trigger-label-wrapper[^"]*text-foreground/,
+      /tool-fallback-trigger-label-wrapper[^"]*text-ink/,
     );
   });
 });

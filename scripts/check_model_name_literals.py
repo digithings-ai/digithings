@@ -621,7 +621,7 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # alias to the 1017 checkpoint. The guard counts a house slug and its bare
     # id when both match the id shape. Generating this map from config is the
     # follow-up that shrinks the ceiling (#5029).
-    "digillm/src/digillm/client.py": _Allowance(59, 53),
+    "digillm/src/digillm/client.py": _Allowance(59, 54),
     # The OCC session model picker (2026-10-13, DIG-1210): the default of
     # `env.DIGI_SESSION_MODEL_ALLOWLIST` in the stack Worker, i.e. the list
     # digigraph binds against per session when the var is unset. The live worker

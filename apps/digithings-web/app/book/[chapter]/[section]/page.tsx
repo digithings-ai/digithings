@@ -18,7 +18,16 @@ export async function generateMetadata({
   const { chapter, section } = await params;
   const c = loadChapters(process.cwd()).find((x) => x.slug === chapter);
   const s = c?.sections.find((x) => x.slug === section);
-  return s && c ? { title: `${s.title} — ${c.title} — the digithings book`, description: s.summary } : {};
+  if (!s || !c) return {};
+  const title = `${s.title} — ${c.title} — the digithings book`;
+  const canonical = `/book/${chapter}/${section}`;
+  return {
+    title,
+    description: s.summary,
+    alternates: { canonical },
+    openGraph: { title, description: s.summary, url: canonical, type: "article" },
+    twitter: { card: "summary", title, description: s.summary },
+  };
 }
 
 export default async function SectionPage({ params }: { params: Promise<{ chapter: string; section: string }> }) {
@@ -40,6 +49,7 @@ export default async function SectionPage({ params }: { params: Promise<{ chapte
       chapters={refs}
       chapter={chapterSlug}
       section={sectionSlug}
+      chapterTitle={chapter.title}
       kicker={`${String(chapter.order).padStart(2, "0")}.${section.order} · ${chapter.title}`}
       title={section.title}
       summary={section.summary}

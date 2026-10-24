@@ -84,7 +84,7 @@ def semantic(
 
             response = SearchResponse(results=results)
         except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
-            logger.error("digisearch client query failed: %s", e)
+            logger.exception("digisearch client query failed: %s", e)
             return f"[digisearch query error: {e}]"
     else:
         allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
@@ -194,7 +194,7 @@ def web_search(
         logger.info("web_search rejected input: %s", e)
         return f"[web_search error: {e}]"
     except WebProviderError as e:
-        logger.error("web_search provider failure: %s", e)
+        logger.exception("web_search provider failure: %s", e)
         return f"[web_search error: {e}]"
 
 
@@ -288,7 +288,7 @@ def _monitor_store_or_none() -> MonitorStore | None:
     try:
         return get_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch monitor store unavailable: %s", e)
+        logger.exception("digisearch monitor store unavailable: %s", e)
         return None
 
 
@@ -422,7 +422,7 @@ def _webset_store_or_none() -> WebsetStore | None:
     try:
         return get_webset_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch webset store unavailable: %s", e)
+        logger.exception("digisearch webset store unavailable: %s", e)
         return None
 
 

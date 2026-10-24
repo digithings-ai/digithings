@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  cropMainPane,
   makeRecordedFrame,
-  railColumns,
   serializeRecordedFrame,
+} from "../../../packages/tui-frame/src/record.ts";
+import {
+  cropMainPane,
+  railColumns,
   TUI_SOURCE,
   DEFAULT_FRAME_WIDTH,
 } from "./frame";

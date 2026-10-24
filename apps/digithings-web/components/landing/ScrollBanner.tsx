@@ -32,6 +32,14 @@ export function ScrollBanner({
   useEffect(() => {
     const el = ref.current;
     if (armed || !el) return;
+    const rect = el.getBoundingClientRect();
+    /* A card already on screen (or already scrolled past) must arm immediately,
+       otherwise it stays blank when the reader arrives from the bottom or after
+       a zoom-in. Mirrors architectureEntrance. */
+    if (rect.top < window.innerHeight && rect.bottom > 0) {
+      setArmed(true);
+      return;
+    }
     if (typeof IntersectionObserver !== "function") {
       // No observer to wait on: arm on the next frame, not in the effect body.
       const raf = requestAnimationFrame(() => setArmed(true));

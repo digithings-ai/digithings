@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import BookDownloadButton from "./BookDownloadButton";
+
 import type { ChapterWithSections } from "@/lib/book/toc";
 
 /**
@@ -18,7 +20,7 @@ export default function BookSidebar({
 }) {
   return (
     <nav aria-label="Book contents" className="font-mono text-[0.78rem] leading-[1.45]">
-      <Link href="/book/" className="text-ink-soft">
+      <Link href="/book/" className="inline-block py-1 text-ink-soft hover:text-ink">
         the digithings book
       </Link>
       <ol className="mt-4 list-none p-0">
@@ -30,7 +32,7 @@ export default function BookSidebar({
               <Link
                 href={c.href}
                 aria-current={openerActive ? "page" : undefined}
-                className={chapterActive ? "text-ink" : "text-ink-soft"}
+                className={`inline-block py-1 hover:text-ink ${chapterActive ? "text-ink" : "text-ink-soft"}`}
               >
                 <span className="text-ink-soft">{String(c.order).padStart(2, "0")}</span> {c.title}
               </Link>
@@ -42,7 +44,7 @@ export default function BookSidebar({
                       <Link
                         href={s.href}
                         aria-current={active ? "page" : undefined}
-                        className={active ? "text-ink" : "text-ink-soft"}
+                        className={`inline-block py-1 hover:text-ink ${active ? "text-ink" : "text-ink-soft"}`}
                       >
                         {active ? "▸ " : ""}
                         {s.title}
@@ -55,6 +57,7 @@ export default function BookSidebar({
           );
         })}
       </ol>
+      <BookDownloadButton className="mt-5 inline-flex min-h-11 items-center border-hair border-t pt-3 text-ink-soft hover:text-ink" />
     </nav>
   );
 }

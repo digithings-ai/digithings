@@ -780,7 +780,11 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    # House chats run the 1017 checkpoint (Chris, 23 Oct 2026); this slug stays
+    # its own id so a picker selection is never silently rewritten. 1017 reasons
+    # only when asked — the digichat chain sends reasoning_effort for it — while
+    # the bare id reasons unprompted (live check 2026-10-22).
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
     "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
@@ -1589,9 +1593,14 @@ def _optional_nonnegative_int(value: Any) -> int | None:
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
+    # ``getattr``'s default covers a missing attribute only, so the except arm is a
+    # provider property that raised. Returning None keeps the call alive; the type
+    # is logged so a raising usage/cost field leaves a trace instead of vanishing.
+    # Only the exception type: a provider object may carry prompt text.
     try:
         return getattr(value, name, None)
-    except Exception:
+    except Exception as error:
+        logger.debug("optional attribute %r raised %s", name, type(error).__name__)
         return None
 
 

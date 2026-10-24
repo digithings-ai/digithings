@@ -382,7 +382,7 @@ export function ProductStockShell({
     welcome?.trim() ||
     cfg.chrome.welcome?.trim() ||
     cfg.chrome.title?.trim() ||
-    "How can I help you today?";
+    "Ask the stack.";
   const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";

@@ -12,6 +12,7 @@ would be premature here.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any  # score:allow untyped any — fake supabase client dict shapes
 
@@ -277,18 +278,20 @@ class TestUpsert:
         # All 250 landed despite 3 batched requests (100 + 100 + 50).
         assert len(client.store["t"]) == 250
 
-    def test_failure_is_caught_and_returned(self) -> None:
+    def test_failure_is_caught_and_returned(self, caplog: pytest.LogCaptureFixture) -> None:
         client = FakeSupabaseClient(raise_on_execute=RuntimeError("pgrst timeout"))
         connector = SupabaseConnector(client)
-        out = connector.upsert("t", {"a": 1}, on_conflict="a")
+        with caplog.at_level(logging.ERROR, logger="digibase.connectors.supabase"):
+            out = connector.upsert("t", {"a": 1}, on_conflict="a")
         assert out.success is False
         assert "pgrst timeout" in out.error
         assert out.rows == 0
+        # logger.exception, not logger.error: the swallowed traceback must survive.
+        record = next(r for r in caplog.records if "supabase: upsert failed" in r.message)
+        assert record.exc_info is not None
 
     def test_audit_emits_metadata_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """Audit line carries table/operation/rows/on_conflict — never row bodies."""
-        import logging
-
         client = FakeSupabaseClient()
         connector = SupabaseConnector(client)
         with caplog.at_level(logging.INFO, logger="digibase.connectors.supabase"):
@@ -425,10 +428,13 @@ class TestSelect:
         assert out.success is True
         assert out.rows == []
 
-    def test_failure_is_caught_and_returned(self) -> None:
+    def test_failure_is_caught_and_returned(self, caplog: pytest.LogCaptureFixture) -> None:
         client = FakeSupabaseClient(raise_on_execute=ValueError("bad filter"))
         connector = SupabaseConnector(client)
-        out = connector.select("t", eq={"x": 1})
+        with caplog.at_level(logging.ERROR, logger="digibase.connectors.supabase"):
+            out = connector.select("t", eq={"x": 1})
         assert out.success is False
         assert "bad filter" in out.error
         assert out.rows == []
+        record = next(r for r in caplog.records if "supabase: select failed" in r.message)
+        assert record.exc_info is not None

@@ -16,6 +16,7 @@
  * Spec: docs/superpowers/specs/2026-08-01-digichat-activity-protocol-design.md
  */
 
+import { isRecord } from "@digithings/ui/lib/record";
 import type { DigiChatActivity } from "@digithings/digichat-ui";
 import type { UIMessage } from "ai";
 
@@ -411,10 +412,6 @@ export function chatActivitySpan(
 
 const KEY_SEP = "\x1f";
 const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
 
 /**
  * Rebuild ActivitySpan[] from 2.0 standard UI parts (tool / source / reasoning /

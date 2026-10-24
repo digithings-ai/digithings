@@ -166,7 +166,7 @@ export async function readBlock(api: string, route: string, kind: BlockKind, sig
   try {
     res = await fetch(`${api}${route}`, { signal });
   } catch {
-    if (signal?.aborted) return { status: "error", lines: [], asOf: null };
+    if (signal?.aborted) return { status: "error", lines: [`${route}: read cancelled.`], asOf: null };
     return { status: "error", lines: [`${route}: the official API could not be reached.`], asOf: null };
   }
   let body: unknown = null;

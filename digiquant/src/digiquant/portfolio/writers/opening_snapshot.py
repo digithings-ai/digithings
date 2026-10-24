@@ -50,6 +50,7 @@ from digiquant.portfolio.writers.ledger_io import (
 )
 from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import opt_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -83,15 +84,6 @@ def _seed_id(kind: str, book_date: date, symbol: str = "") -> UUID:
         f"{kind}:{book_date.isoformat()}:{symbol}" if symbol else f"{kind}:{book_date.isoformat()}"
     )
     return uuid5(_SEED_ID_NAMESPACE, payload)
-
-
-def _decimal(raw: Any) -> Decimal | None:
-    if raw is None:
-        return None
-    try:
-        return Decimal(str(raw))
-    except (ArithmeticError, ValueError):
-        return None
 
 
 def _shares(value: Decimal) -> Decimal:
@@ -131,7 +123,7 @@ def _held_positions(*, client: SupabaseClient, book_date: date) -> list[dict[str
         ticker = _symbol(row.get("ticker"))
         if not ticker or ticker == _CASH:
             continue
-        weight = _decimal(row.get("weight_pct")) or Decimal(0)
+        weight = opt_decimal(row.get("weight_pct")) or Decimal(0)
         if weight <= 0:
             continue
         held.append(row)
@@ -160,7 +152,7 @@ def _nav_for_date(*, client: SupabaseClient, book_date: date) -> Decimal | None:
     rows = getattr(resp, "data", None) or []
     if not rows:
         return None
-    nav = _decimal(rows[0].get("nav"))
+    nav = opt_decimal(rows[0].get("nav"))
     if nav is None or nav <= 0:
         return None
     return nav
@@ -173,7 +165,7 @@ def _price_for_symbol(
     book_date: date,
     entry_price: Any,
 ) -> Decimal | None:
-    entry = _decimal(entry_price)
+    entry = opt_decimal(entry_price)
     if entry is not None and entry > 0:
         return entry
     if r2_backend_enabled():
@@ -183,7 +175,7 @@ def _price_for_symbol(
         rows = r2_close_rows(tickers=[symbol], since=book_date, until=book_date)
         want = symbol.strip().upper()
         raws = [r.get("close") for r in rows if str(r.get("ticker") or "").upper() == want]
-        closes = [_decimal(raw) for raw in raws]
+        closes = [opt_decimal(raw) for raw in raws]
         closes = [c for c in closes if c is not None and c > 0]
         return closes[0] if closes else None
     resp = (
@@ -198,7 +190,7 @@ def _price_for_symbol(
     rows = getattr(resp, "data", None) or []
     if not rows:
         return None
-    close = _decimal(rows[0].get("close"))
+    close = opt_decimal(rows[0].get("close"))
     if close is None or close <= 0:
         return None
     return close
@@ -261,7 +253,7 @@ def ensure_legacy_opening_snapshot(
 
     for row in sorted(held, key=lambda r: _symbol(r.get("ticker"))):
         symbol = _symbol(row.get("ticker"))
-        weight_pct = _decimal(row.get("weight_pct")) or Decimal(0)
+        weight_pct = opt_decimal(row.get("weight_pct")) or Decimal(0)
         price = _price_for_symbol(
             client=client,
             symbol=symbol,

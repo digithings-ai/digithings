@@ -1,4 +1,5 @@
 import { PAGES } from "digiquant-tui/catalog";
+import { isRecord } from "@digithings/ui/lib/record";
 import { deskHref } from "./paths";
 import { isVisibleDesk } from "./public-surface";
 import { WEB_SLOTS } from "./web-slots";
@@ -64,10 +65,6 @@ export function sectionOf(path: string): string {
   return `/${path.split("/").filter(Boolean)[0] ?? ""}`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function readAccess(value: unknown): Access | null {
   if (value === "granted" || value === "locked") return value;
   return null;
@@ -119,7 +116,7 @@ export function parseManifest(body: unknown): Manifest | null {
 /**
  * Desk pages → folder groups. A page is a child when its parent path is also
  * a page; otherwise it is top-level, grouped under its first segment when it
- * has two (`/tools/charts` → "tools").
+ * has two (`/tools/vela` → "tools").
  */
 export function navFromDesk(desk: ManifestDesk): NavGroup[] {
   const pages = desk.pages;

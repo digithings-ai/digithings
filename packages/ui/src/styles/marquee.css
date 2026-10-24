@@ -41,10 +41,13 @@
 /* one full copy of the content; padding-right doubles as the wrap gap so the
    -50% translate lands exactly one period on (see header comment) */
 .mq-group {
+  /* component tokens — loop period gap (gap + matching padding) */
+  --mq-gap: 2.2rem;
+
   display: inline-flex;
   align-items: center;
-  gap: 2.2rem;
-  padding-inline-end: 2.2rem;
+  gap: var(--mq-gap);
+  padding-inline-end: var(--mq-gap);
   white-space: nowrap;
 }
 
@@ -120,9 +123,11 @@
 }
 
 .mb-live-mark {
+  --mb-mark: 0.45rem;
+
   display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
+  width: var(--mb-mark);
+  height: var(--mb-mark);
   flex-shrink: 0;
   border-radius: 0;
   background: var(--up);
@@ -132,8 +137,8 @@
 /* Missing prices. Same square as the feed mark, in --down, with no pulse. */
 .mb-status-miss {
   display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
+  width: var(--mb-mark, 0.45rem);
+  height: var(--mb-mark, 0.45rem);
   flex-shrink: 0;
   border-radius: 0;
   background: var(--down);

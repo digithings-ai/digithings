@@ -340,7 +340,7 @@ const THINKING_LABELS: Record<string, string> = {
 // digichat-local composer menu rows (not the kit DropdownMenu). These carry
 // their own pointer cursor because the kit owns no equivalent row.
 const MCP_SUGGEST_ROW_CLASS =
-  "hover:bg-muted/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
+  "hover:bg-surface-2/50 flex w-full cursor-pointer items-baseline justify-between gap-4 rounded-none px-3 py-1.5 text-start text-sm outline-none outline-offset-[-1px]"; // canon-allow: digichat-local composer menu; kit owns no equivalent
 
 const MENU_ROW_CLASS =
   "flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"; // canon-allow: digichat-local composer menu; kit owns no equivalent
@@ -618,28 +618,44 @@ export function EmbedComposerMenu({
       byok: "provider",
       help: "help",
     };
-    return buildProductSlashCommands(api)
-      .filter((command) => command.id !== "settings")
-      .map((command) => {
-        const node = NODE_BY_ID[command.id];
-        const draft = node ? paneDraftForId(command.id) : null;
-        return {
-          id: command.id,
-          label: command.label ?? `/${command.id}`,
-          value: command.description ?? "",
-          ...(draft ? { insert: draft } : {}),
-          activate: node
-            ? () => {
-                if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
-                else setView(node);
-              }
-            : () => {
-                command.execute();
-                if (api.composerDraftBound) api.setComposerDraft?.("");
-                onClose();
-              },
-        };
-      });
+    return [
+      ...buildProductSlashCommands(api)
+        .filter((command) => command.id !== "settings")
+        .map((command) => {
+          const node = NODE_BY_ID[command.id];
+          const draft = node ? paneDraftForId(command.id) : null;
+          return {
+            id: command.id,
+            label: command.label ?? `/${command.id}`,
+            value: command.description ?? "",
+            ...(draft ? { insert: draft } : {}),
+            activate: node
+              ? () => {
+                  if (api.composerDraftBound && draft) api.setComposerDraft?.(draft);
+                  else setView(node);
+                }
+              : () => {
+                  command.execute();
+                  if (api.composerDraftBound) api.setComposerDraft?.("");
+                  onClose();
+                },
+          };
+        }),
+      // A two-state setting, so it is one row that flips rather than a page of
+      // options. The label names the state you would switch to, the value
+      // names the one you are in.
+      {
+        id: "scroll",
+        label: slashName(api.prefs.scroll === "free" ? "scroll follow" : "scroll free"),
+        value: api.prefs.scroll === "free" ? "Free" : "Follow",
+        checked: api.prefs.scroll === "follow",
+        activate: () => {
+          commitExclusive(() =>
+            api.setScroll(api.prefs.scroll === "free" ? "follow" : "free"),
+          );
+        },
+      },
+    ];
   }, [api, onClose]);
 
   const languageRows = useMemo(
@@ -1621,12 +1637,12 @@ export function EmbedComposerMenu({
               role="listbox"
               aria-labelledby="mcp-id-label"
               data-mcp-id-dropdown
-              className="border-border bg-background absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
+              className="border-hair bg-surface absolute inset-x-0 top-full z-20 mt-px max-h-40 overflow-y-auto overscroll-contain rounded-none border"
               onMouseDown={(e) => e.preventDefault()}
             >
               {mcpSuggestionGroups.map((g) => (
                 <div key={g.group}>
-                  <div className="text-muted-foreground px-3 py-1 text-xs">{g.group}</div>
+                  <div className="text-ink-mute px-3 py-1 text-xs">{g.group}</div>
                   {g.servers.map((row) => {
                     const index = mcpSuggestions.findIndex((s) => s.id === row.id);
                     const highlighted = index === mcpSuggestIndex;
@@ -1640,7 +1656,7 @@ export function EmbedComposerMenu({
                         aria-label={row.id}
                         aria-selected={highlighted}
                         data-cursor={highlighted ? "true" : undefined}
-                        className={`${MCP_SUGGEST_ROW_CLASS} ${highlighted ? "bg-muted/50" : ""}`}
+                        className={`${MCP_SUGGEST_ROW_CLASS} ${highlighted ? "bg-surface-2/50" : ""}`}
                         ref={(node) => {
                           if (!highlighted || !node) return;
                           const root = node.closest("[data-mcp-id-dropdown]");
@@ -1656,7 +1672,7 @@ export function EmbedComposerMenu({
                         <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">
                           {row.id}
                         </span>
-                        <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
+                        <span className="text-ink-mute min-w-0 truncate text-right text-xs">
                           {wellKnownMcpHost(row.url) || row.auth}
                         </span>
                       </button>
@@ -1686,7 +1702,7 @@ export function EmbedComposerMenu({
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
-              <span className="text-muted-foreground text-xs">Paste API key, then Enter</span>
+              <span className="text-ink-mute text-xs">Paste API key, then Enter</span>
               <Input
                 ref={keyInputRef}
                 id={keyFormId}
@@ -1696,7 +1712,7 @@ export function EmbedComposerMenu({
                 autoComplete="off"
                 spellCheck={false}
                 aria-invalid={Boolean(providerError)}
-                className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
+                className="border-hair bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
                 onChange={(e) => {
                   setKeyDraft(e.target.value);
                   setProviderError(null);
@@ -1712,14 +1728,14 @@ export function EmbedComposerMenu({
           ) : null}
           {view === "provider-model" && customModel ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5">
-              <span className="text-muted-foreground text-xs">Model slug, then Enter</span>
+              <span className="text-ink-mute text-xs">Model slug, then Enter</span>
               <Input
                 ref={customModelRef}
                 type="text"
                 value={modelDraft}
                 autoComplete="off"
                 spellCheck={false}
-                className="border-border bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
+                className="border-hair bg-transparent w-full rounded-none border px-2 py-1.5 font-mono text-sm outline-none h-auto"
                 onChange={(e) => {
                   setModelDraft(e.target.value);
                   setProviderError(null);
@@ -1735,11 +1751,11 @@ export function EmbedComposerMenu({
           ) : null}
           {view === "mcp-edit" ? (
             <div className="flex flex-col gap-2 px-3 py-1.5">
-              <pre className="border-border text-muted-foreground max-h-32 overflow-auto border px-2 py-1.5 font-mono text-[11px] leading-4">
+              <pre className="border-hair text-ink-mute max-h-32 overflow-auto border px-2 py-1.5 font-mono text-[11px] leading-4">
                 {mcpConfigJson(mcpDraft)}
               </pre>
               <div className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs" id="mcp-id-label">
+                <span className="text-ink-mute text-xs" id="mcp-id-label">
                   id
                 </span>
                 <div className="relative z-10" data-mcp-id-field ref={mcpIdFieldRef}>
@@ -1760,7 +1776,7 @@ export function EmbedComposerMenu({
                         ? `mcp-suggest-${mcpSuggestions[mcpSuggestIndex]!.id}`
                         : undefined
                     }
-                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
+                    className="border-hair bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none disabled:opacity-60 h-auto"
                     onFocus={() => {
                       if (mcpDraft.source !== "session") return;
                       placeMcpIdDropdown();
@@ -1814,40 +1830,40 @@ export function EmbedComposerMenu({
                 </div>
               </div>
               <Label className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs">label</span>
+                <span className="text-ink-mute text-xs">label</span>
                 <Input
                   type="text"
                   value={mcpDraft.label}
                   autoComplete="off"
                   spellCheck={false}
-                  className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                  className="border-hair bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                   onChange={(e) => commitMcpDraft({ ...mcpDraft, label: e.target.value })}
                 />
               </Label>
               {mcpDraft.source === "session" ? (
                 <Label className="flex flex-col items-stretch gap-1">
-                  <span className="text-muted-foreground text-xs">url</span>
+                  <span className="text-ink-mute text-xs">url</span>
                   <Input
                     type="url"
                     value={mcpDraft.url}
                     placeholder="https://…"
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    className="border-hair bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) => commitMcpDraft({ ...mcpDraft, url: e.target.value })}
                   />
                 </Label>
               ) : (
-                <p className="text-muted-foreground text-xs">url is operator-managed (BFF)</p>
+                <p className="text-ink-mute text-xs">url is operator-managed (BFF)</p>
               )}
               <div className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs" id="mcp-auth-label">
+                <span className="text-ink-mute text-xs" id="mcp-auth-label">
                   auth
                 </span>
                 <div
                   role="radiogroup"
                   aria-labelledby="mcp-auth-label"
-                  className="border-border flex border"
+                  className="border-hair flex border"
                   onKeyDown={(e) => {
                     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                     e.preventDefault();
@@ -1871,8 +1887,8 @@ export function EmbedComposerMenu({
                         aria-checked={selected}
                         tabIndex={selected ? 0 : -1}
                         className={`min-w-0 flex-1 px-2 py-1 font-mono text-xs outline-none outline-offset-[-1px] ${
-                          index > 0 ? "border-border border-l" : ""
-                        } ${selected ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
+                          index > 0 ? "border-hair border-l" : ""
+                        } ${selected ? "bg-surface-2 text-ink" : "text-ink-mute hover:bg-surface-2/50 hover:text-ink"}`}
                         onClick={() => commitMcpDraft({ ...mcpDraft, auth: kind })}
                       >
                         {kind}
@@ -1883,55 +1899,55 @@ export function EmbedComposerMenu({
               </div>
               {mcpDraft.auth === "oauth" ? (
                 <div className="flex flex-col items-stretch gap-1">
-                  <span className="text-muted-foreground text-xs">token / oauth client secret</span>
+                  <span className="text-ink-mute text-xs">token / oauth client secret</span>
                   <div className="flex min-w-0 items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-auto shrink-0 whitespace-nowrap border-border px-2 py-1"
+                      className="h-auto shrink-0 whitespace-nowrap border-hair px-2 py-1"
                       disabled={mcpOAuthBusy}
                       onClick={() => void authenticateMcp()}
                     >
                       {mcpOAuthBusy ? "Authenticating…" : "Authenticate"}
                     </Button>
-                    <span className="text-muted-foreground whitespace-nowrap text-xs">or</span>
+                    <span className="text-ink-mute whitespace-nowrap text-xs">or</span>
                     <Input
                       type="password"
                       value={mcpDraft.token}
                       placeholder="OAuth token"
                       autoComplete="off"
                       spellCheck={false}
-                      className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                      className="border-hair bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                       onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
                     />
                   </div>
                 </div>
               ) : mcpDraft.auth !== "none" ? (
                 <Label className="flex flex-col items-stretch gap-1">
-                  <span className="text-muted-foreground text-xs">token</span>
+                  <span className="text-ink-mute text-xs">token</span>
                   <Input
                     type="password"
                     value={mcpDraft.token}
                     placeholder="Bearer token"
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    className="border-hair bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) => commitMcpDraft({ ...mcpDraft, token: e.target.value })}
                   />
                 </Label>
               ) : null}
               <div className="flex flex-col items-stretch gap-1">
-                <span className="text-muted-foreground text-xs">other</span>
+                <span className="text-ink-mute text-xs">other</span>
                 {Object.entries(mcpDraft.extra).map(([key, value]) => (
                   <Label key={key} className="flex flex-col items-stretch gap-1">
-                    <span className="text-muted-foreground text-xs">{key}</span>
+                    <span className="text-ink-mute text-xs">{key}</span>
                     <Input
                       type="text"
                       value={value}
                       autoComplete="off"
                       spellCheck={false}
-                      className="border-border bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                      className="border-hair bg-transparent w-full rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                       onChange={(e) =>
                         commitMcpDraft({
                           ...mcpDraft,
@@ -1948,7 +1964,7 @@ export function EmbedComposerMenu({
                     placeholder="field"
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    className="border-hair bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) => setMcpFieldName(e.target.value)}
                   />
                   <Input
@@ -1957,7 +1973,7 @@ export function EmbedComposerMenu({
                     placeholder="value"
                     autoComplete="off"
                     spellCheck={false}
-                    className="border-border bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
+                    className="border-hair bg-transparent min-w-0 flex-1 rounded-none border px-2 py-1 font-mono text-sm outline-none h-auto"
                     onChange={(e) => setMcpFieldValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
@@ -1984,7 +2000,7 @@ export function EmbedComposerMenu({
                 </div>
               </div>
               {mcpError ? (
-                <p className="text-destructive text-xs" role="alert">
+                <p className="text-danger text-xs" role="alert">
                   {mcpError}
                 </p>
               ) : null}
@@ -1992,12 +2008,12 @@ export function EmbedComposerMenu({
           ) : null}
           {view === "help" ? (
             <div className="flex flex-col gap-2 px-3 py-2 text-xs leading-relaxed" data-embed-help>
-              <p className="text-muted-foreground">
+              <p className="text-ink-mute">
                 Ask about OCC policies, procedures and help articles, search internal notes, or
                 check live support tickets.
               </p>
               <div className="flex flex-col gap-1">
-                <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                <span className="text-ink-mute text-[11px] uppercase tracking-wide">
                   Try asking
                 </span>
                 <span>How do I raise a support ticket?</span>
@@ -2005,14 +2021,14 @@ export function EmbedComposerMenu({
                 <span>Summarise my open support tickets.</span>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                <span className="text-ink-mute text-[11px] uppercase tracking-wide">
                   Commands
                 </span>
                 <span className="font-mono">
                   /models · /language · /tools · /mcp · /settings · /theme · /new
                 </span>
               </div>
-              <span className="text-muted-foreground">Enter sends · Shift+Enter adds a line</span>
+              <span className="text-ink-mute">Enter sends · Shift+Enter adds a line</span>
               <span>
                 Need a person?{" "}
                 <a className="underline underline-offset-2" href="mailto:contact@digithings.ai">
@@ -2031,7 +2047,7 @@ export function EmbedComposerMenu({
                     <div
                       key={row.id}
                       role="presentation"
-                      className="text-muted-foreground flex items-baseline gap-2 px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
+                      className="text-ink-mute flex items-baseline gap-2 px-2 pt-2 pb-0.5 text-[11px] uppercase tracking-wide"
                     >
                       <span>{row.label}</span>
                       {row.value ? (
@@ -2075,7 +2091,7 @@ export function EmbedComposerMenu({
                     {row.branch ? (
                       <span
                         data-slot="tools-tree-branch"
-                        className="text-muted-foreground shrink-0 ps-3 font-mono whitespace-pre"
+                        className="text-ink-mute shrink-0 ps-3 font-mono whitespace-pre"
                         aria-hidden
                       >
                         {(row.treePrefix ?? "") + treeBranchGlyph(row.branch)}
@@ -2091,7 +2107,7 @@ export function EmbedComposerMenu({
                       {row.label}
                     </span>
                     {row.value || (exclusive && row.checked) ? (
-                      <span className="text-muted-foreground ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
+                      <span className="text-ink-mute ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
                         {row.value ? <span className="truncate">{row.value}</span> : null}
                         {exclusive && row.checked ? (
                           <span
@@ -2115,17 +2131,17 @@ export function EmbedComposerMenu({
               })
             : null}
           {providerPending ? (
-            <p className="text-muted-foreground px-3 py-1 text-xs">Checking key…</p>
+            <p className="text-ink-mute px-3 py-1 text-xs">Checking key…</p>
           ) : null}
           {providerError ? (
-            <p className="text-destructive px-3 py-1 text-xs" role="alert">
+            <p className="text-danger px-3 py-1 text-xs" role="alert">
               {providerError}
             </p>
           ) : null}
         </div>
         <MenuScrollbar targetRef={menuBodyRef} />
       </div>
-      <div className="text-muted-foreground px-3 py-1 font-mono text-[0.68rem]">
+      <div className="text-ink-mute px-3 py-1 font-mono text-[0.68rem]">
         {title} · {canNavigate ? "↑↓ navigate · ⏎/→ submit · " : ""}esc/← back
       </div>
     </div>

@@ -45,6 +45,7 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._frames import empty_series_frame
 from digiquant.data.onchain._url_guard import is_allowed_base_url
 
 logger = logging.getLogger(__name__)
@@ -110,15 +111,6 @@ class BgeometricsSeriesResult(BaseModel):
         return self.error is None and self.row_count > 0
 
 
-def _empty_frame() -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "date": pl.Series("date", [], dtype=pl.Date),
-            "value": pl.Series("value", [], dtype=pl.Float64),
-        }
-    )
-
-
 def _row_value(row: dict[str, Any]) -> float | None:
     """Pick the metric's value out of a ``{"d", "unixTs", "<metric>": v}`` row.
 
@@ -154,7 +146,7 @@ def bgeometrics_rows_to_frame(payload: object) -> pl.DataFrame:
     elif isinstance(payload, list):
         rows = payload
     else:
-        return _empty_frame()
+        return empty_series_frame()
     dates: list[date] = []
     values: list[float] = []
     for row in rows:
@@ -173,7 +165,7 @@ def bgeometrics_rows_to_frame(payload: object) -> pl.DataFrame:
         dates.append(parsed)
         values.append(value)
     if not dates:
-        return _empty_frame()
+        return empty_series_frame()
     return pl.DataFrame({"date": dates, "value": values}).sort("date")
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from pydantic import BaseModel, Field
 
 
@@ -15,8 +17,6 @@ class EmbeddingModelSpec(BaseModel):
 
 def active_embedding_spec() -> EmbeddingModelSpec | None:
     """Return spec from env when configured (DIGISEARCH_EMBEDDING_MODEL, DIGISEARCH_EMBEDDING_DIM)."""
-    import os
-
     mid = (os.environ.get("DIGISEARCH_EMBEDDING_MODEL") or "").strip()
     if not mid:
         return None

@@ -13,8 +13,6 @@ idempotent identity, content hashes.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -29,6 +27,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 # Stable namespaces — do not change; existing prospective IDs would diverge.
 _FORECAST_OUTCOME_ID_NAMESPACE = UUID("c6e0a13d-4f91-705c-bd28-3bae6f9c4c12")
@@ -90,10 +90,6 @@ class SessionPriceSnapshot(ForecastCalibrationModel):
             if value.utcoffset() != timedelta(0):
                 raise ValueError(f"{field_name} must be timezone-aware UTC")
         return self
-
-
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
 # ``ReturnFraction`` is ``decimal_places=8`` — the canonical spelling of a return
@@ -163,7 +159,7 @@ def _canonicalize_payload_decimals(
 
 def forecast_outcome_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of outcome economic identity fields."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def forecast_outcome_id(
@@ -187,7 +183,7 @@ def forecast_calibration_content_hash(*, payload: dict[str, object]) -> str:
         payload,
         scalar_keys=_FORECAST_CALIBRATION_DECIMAL_SCALARS,
     )
-    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
+    return sha256_hex(canonical)
 
 
 def forecast_calibration_id(
@@ -212,7 +208,7 @@ def calibrated_forecast_content_hash(*, payload: dict[str, object]) -> str:
         scalar_keys=_CALIBRATED_FORECAST_DECIMAL_SCALARS,
         sequence_keys=_CALIBRATED_FORECAST_DECIMAL_SEQUENCES,
     )
-    return hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
+    return sha256_hex(canonical)
 
 
 def calibrated_forecast_id(

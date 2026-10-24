@@ -80,6 +80,44 @@ and the agent carries the search index + MCP tool server-side.
   container's managed identity is refused. A key connection is the same for
   every caller, which is why the trial uses one.
 
+## MCP schema proxy (V1, DC-18)
+
+The .NET MCP SDK publishes every `int?` tool parameter (`pageSize`,
+`minSizeBytes`) as `{"type":["string","integer","null"],"default":0}`. The
+server's own argument check (DCE-152) reads only the first member, so a
+numeric `pageSize` on a call that fails for ANY reason is reported as
+"'pageSize' must be a string, but a number was provided" — the real error is
+replaced. digichat can sit between the agent and the MCP to fix this without
+touching the server:
+
+1. Set on the Container App (server-only env, not a secret — no credential in it):
+   `DIGICHAT_MCP_SCHEMA_PROXY={"datatap":{"url":"https://datatap-dev-mcp.azurewebsites.net/","toolErrorsAsResults":true}}`
+2. Set the proxy's own caller secret, also server-only:
+   `DIGICHAT_MCP_PROXY_KEY=<random string>`. Without it the proxy answers **503**
+   and forwards nothing — a configured proxy is a relay to a URL only the server
+   picks, so it is never left open. With the env set but the header missing or
+   wrong the answer is **401**.
+3. Point the agent's MCP tool `server_url` at
+   `https://<this-app-fqdn>/api/mcp-proxy/datatap`, and have the caller send
+   `x-digi-mcp-key: <that same string>`. The header is consumed at the route and
+   stripped before the hop upstream, so it never reaches the MCP server. The
+   custom-keys connection (`X-API-Key`) is unchanged: the proxy forwards the
+   caller's header and adds nothing.
+
+Every `tools/list` reply is normalized (`integer|null`, mismatched defaults
+dropped), every `tools/call` is coerced back onto the server's original schema
+(a number becomes the string the server leads with; an optional `null` is
+omitted), and with `toolErrorsAsResults` an `isError` tool result reaches the
+model as a normal result that names the error, so the agent can retry or
+explain instead of the turn ending. Unset the env var (or point `server_url`
+back) to remove it.
+
+**Exposure.** The route adds no credentials: it forwards the caller's own auth
+headers, so all authorisation is the upstream's. Publish it only behind the
+same edge gate as `/api/mcp/zammad` (`x-digi-mcp-key`), and treat a loopback
+target (`http://127.0.0.1:<port>`) as a development setting — it would publish
+an internal, unauthenticated MCP to whoever can reach the app.
+
 ## Container environment (V2 — DigiGraph harness, parked)
 
 | Variable | Value / source |

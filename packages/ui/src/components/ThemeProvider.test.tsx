@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDocumentTheme } from "../theme/apply-theme";
-import { ThemeProvider, useTheme } from "./ThemeProvider";
+import { ThemeProvider, ThemeToggle, useTheme } from "./ThemeProvider";
 
 type MediaStub = {
   matches: boolean;
@@ -101,6 +101,21 @@ describe("ThemeProvider", () => {
     expect(localStorage.getItem("dt-theme")).toBe("dark");
     expect(localStorage.getItem("dt-palette")).toBe("aura");
     expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
+  });
+
+  it("the shared toggle names the stop it is on in its title, and a click moves it", () => {
+    render(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+    // /chatbot's top bar renders this toggle. Its title is the cycle stop it is
+    // on, so the cycle in the top bar is pinned, not just described.
+    const toggle = screen.getByRole("button", { name: "Toggle colour theme" });
+    expect(toggle.getAttribute("title")).toBe("default · dark");
+    fireEvent.click(toggle);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(toggle.getAttribute("title")).toBe("default · light");
   });
 
   it("auto clears dt-theme and follows the OS, keeping the palette", () => {

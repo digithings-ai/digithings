@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from digisearch.core.models import Chunk, Document
 from digisearch.ingestion.chunkers.base import Chunker
 from digisearch.ingestion.chunkers.recursive import RecursiveChunker
@@ -93,7 +95,6 @@ class SemanticChunker(Chunker):
             return self._fallback.chunk(doc)
 
     def _cosine(self, a: list[float], b: list[float]) -> float:
-        import math
         dot = sum(x * y for x, y in zip(a, b))
         na = math.sqrt(sum(x * x for x in a))
         nb = math.sqrt(sum(x * x for x in b))

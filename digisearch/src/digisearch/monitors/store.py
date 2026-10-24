@@ -65,6 +65,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from digisearch.core.timeutil import utc_iso
 from digisearch.monitors.dedup import result_fingerprint
 from digisearch.monitors.models import MonitorRun, Watch
 from digisearch.web_search.citation import normalize_url
@@ -174,7 +175,7 @@ class MonitorStore:
         with self._conn:
             self._conn.execute(
                 "INSERT INTO watches (watch_id, body, updated_at, workspace_id) VALUES (?, ?, ?, ?)",
-                (created.watch_id, created.model_dump_json(), _utc_iso(now), created.workspace_id),
+                (created.watch_id, created.model_dump_json(), utc_iso(now), created.workspace_id),
             )
         return created
 
@@ -221,7 +222,7 @@ class MonitorStore:
         with self._conn:
             self._conn.execute(
                 "UPDATE watches SET body = ?, updated_at = ?, workspace_id = ? WHERE watch_id = ?",
-                (updated.model_dump_json(), _utc_iso(now), updated.workspace_id, watch_id),
+                (updated.model_dump_json(), utc_iso(now), updated.workspace_id, watch_id),
             )
         return updated
 
@@ -278,8 +279,8 @@ class MonitorStore:
                         run.watch_id,
                         run.status,
                         run.trigger,
-                        _utc_iso(run.started_at),
-                        _utc_iso(run.finished_at),
+                        utc_iso(run.started_at),
+                        utc_iso(run.finished_at),
                         run.model_dump_json(),
                     ),
                 )
@@ -376,9 +377,3 @@ def _default_db_path() -> str:
     workspace = os.environ.get(_ENV_WORKSPACE)
     base = Path(workspace) if workspace else Path()
     return str(base / _WORKSPACE_DB_DIR / _DB_FILENAME)
-
-
-def _utc_iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat(timespec="microseconds")

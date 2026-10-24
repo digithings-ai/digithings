@@ -10,6 +10,7 @@ import {
   embedThemeColor,
   embedThemePick,
   embedUserThemeKey,
+  resolveEmbedPalette,
   resolveEmbedTheme,
   readEmbedUserTheme,
   writeEmbedUserTheme,
@@ -77,6 +78,31 @@ describe("embed-theme-messages", () => {
         data: buildThemeMessage("dark", Date.now() - MAX_THEME_AGE_MS - 1),
       } as MessageEvent;
       expect(parseThemeMessage(stale, allowed)).toBeNull();
+    });
+
+    it("carries a known palette and drops an unknown or default one", () => {
+      const event = {
+        origin: "https://digithings.ai",
+        data: buildThemeMessage("dark", Date.now(), "dracula"),
+      } as MessageEvent;
+      expect(parseThemeMessage(event, allowed)?.palette).toBe("dracula");
+
+      const unknown = {
+        origin: "https://digithings.ai",
+        data: { ...buildThemeMessage("dark"), palette: "nope" },
+      } as MessageEvent;
+      const parsed = parseThemeMessage(unknown, allowed);
+      // An unknown palette costs the palette, never the theme.
+      expect(parsed?.theme).toBe("dark");
+      expect(parsed && "palette" in parsed).toBe(false);
+
+      const fallback = {
+        origin: "https://digithings.ai",
+        data: { ...buildThemeMessage("dark"), palette: "default" },
+      } as MessageEvent;
+      const fallbackParsed = parseThemeMessage(fallback, allowed);
+      expect(fallbackParsed?.theme).toBe("dark");
+      expect(fallbackParsed && "palette" in fallbackParsed).toBe(false);
     });
   });
 
@@ -253,6 +279,17 @@ describe("embed /theme pick (2.6.6)", () => {
         tenant: "light",
       }),
     ).toBe("light");
+  });
+
+  it("resolves the one palette channel: pick > parent > default", () => {
+    const pick = { mode: "dark" as const, palette: "aura" as const };
+    expect(resolveEmbedPalette({ pick, parent: "nord" })).toBe("aura");
+    expect(resolveEmbedPalette({ pick: null, parent: "nord" })).toBe("nord");
+    expect(resolveEmbedPalette({ pick: null, parent: null })).toBe("default");
+    // A default-palette pick still beats the parent, so /theme "default" works.
+    expect(
+      resolveEmbedPalette({ pick: { mode: "dark", palette: "default" }, parent: "nord" }),
+    ).toBe("default");
   });
 
   it("paints the palette and keeps theme-color in step", () => {

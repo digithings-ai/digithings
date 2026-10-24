@@ -69,7 +69,7 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
           extra={
             <>
               {code || (rawDetail && !detail) ? (
-                <div className="aui-message-error-details mt-1 text-muted-foreground">
+                <div className="aui-message-error-details mt-1 text-ink-mute">
                 {code ? <p className="mt-1 font-mono">code: {code}</p> : null}
                 {rawDetail && !detail ? <ChatNoticeDetail text={rawDetail} /> : null}
               </div>
@@ -80,7 +80,7 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-destructive/25 bg-transparent text-destructive hover:bg-destructive/10"
+                  className="aui-message-error-retry mt-2 shrink-0 items-center self-start border-danger/25 bg-transparent text-danger hover:bg-danger/10"
                 >
                   Retry
                 </Button>

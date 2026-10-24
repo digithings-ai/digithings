@@ -7,7 +7,7 @@ from typing import Any
 
 import polars as pl
 
-from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
 
 
@@ -63,8 +63,8 @@ def correlation_matrix(
         pass  # matplotlib optional; correlation matrix still returned
     else:
         arr = [[matrix.get(c1, {}).get(c2, 0) for c2 in numeric] for c1 in numeric]
-        out_dir = _artifacts_dir(dataset_path)
-        path = _next_filename(out_dir, "corr")
+        out_dir = artifacts_dir(dataset_path)
+        path = next_filename(out_dir, "corr")
         fig, ax = plt.subplots(figsize=(8, 6))
         im = ax.imshow(arr, cmap="RdYlBu_r", vmin=-1, vmax=1)
         ax.set_xticks(range(len(numeric)))

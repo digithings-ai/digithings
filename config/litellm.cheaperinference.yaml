@@ -36,10 +36,11 @@ model_list:
   - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
     litellm_params: *ci_ds_v41_flash_1017
 
-  # legacy alias → 1017 (2026-10-21)
+  # Not the house default: house runs the 1017 checkpoint above (Chris, 23 Oct
+  # 2026). The bare id stays routable for the catalog and the picker.
   - model_name: deepseek/deepseek-v4.1-flash
     litellm_params: &ci_ds_v41_flash
-      model: openai/deepseek-v4.1-flash-1017
+      model: openai/deepseek-v4.1-flash
       api_base: os.environ/CHEAPERINFERENCE_API_BASE
       api_key: os.environ/CHEAPERINFERENCE_API_KEY
       allowed_openai_params:

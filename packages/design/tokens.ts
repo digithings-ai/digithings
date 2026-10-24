@@ -191,6 +191,26 @@ export const designTokens = {
       "hex": "#04201C",
       "rgb24": 270364
     },
+    "status-add": {
+      "hex": "#1EC98A",
+      "rgb24": 2017674
+    },
+    "status-closed": {
+      "hex": "#9AA0A6",
+      "rgb24": 10133670
+    },
+    "status-exit": {
+      "hex": "#E5533E",
+      "rgb24": 15029054
+    },
+    "status-open": {
+      "hex": "#5AD4F0",
+      "rgb24": 5952752
+    },
+    "status-trim": {
+      "hex": "#E0B341",
+      "rgb24": 14725953
+    },
     "surface": {
       "hex": "#121417",
       "rgb24": 1184791
@@ -422,6 +442,26 @@ export const designTokens = {
     "on-accent": {
       "hex": "#FFFFFF",
       "rgb24": 16777215
+    },
+    "status-add": {
+      "hex": "#187E58",
+      "rgb24": 1605208
+    },
+    "status-closed": {
+      "hex": "#5C636A",
+      "rgb24": 6054762
+    },
+    "status-exit": {
+      "hex": "#B2452E",
+      "rgb24": 11683118
+    },
+    "status-open": {
+      "hex": "#1B798E",
+      "rgb24": 1800590
+    },
+    "status-trim": {
+      "hex": "#8F6220",
+      "rgb24": 9396768
     },
     "surface": {
       "hex": "#FFFFFF",

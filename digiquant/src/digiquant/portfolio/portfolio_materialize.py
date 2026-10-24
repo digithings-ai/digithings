@@ -57,6 +57,7 @@ from digiquant.research.supabase_io import (
     load_prior_book,
     query_price_deltas,
 )
+from digiquant.scalars import is_cash, opt_float
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +100,6 @@ def _coerce_float(val: Any) -> float:
         return 0.0
 
 
-def _is_cash(ticker: Any) -> bool:
-    return isinstance(ticker, str) and ticker.strip().upper() == "CASH"
-
-
 # Map the analyst stance onto a valid `theses.status` (migration 002 CHECK:
 # ACTIVE | MONITORING | CHALLENGED | CLOSED | INVALIDATED | PAUSED | NEW).
 _THESIS_STATUS_BY_STANCE = {
@@ -137,15 +134,15 @@ def _default_invalidation(analyst: dict[str, Any]) -> str:
     The result is always non-empty so ACTIVE theses satisfy the non-empty
     invalidation contract (#814).
     """
-    stop = _opt_float(analyst.get("stop_loss_pct"))
+    stop = opt_float(analyst.get("stop_loss_pct"))
     if stop is not None and stop < 0:
         # stop_loss_pct is stored as a negative percentage (e.g. -5.0 means −5%)
         return f"Close if price falls {abs(stop):.1f}% below entry"
     # Volatility-scaled stop from ATR (#953 — Pillar 2E).
-    atr = _opt_float(analyst.get("atr_pct"))
+    atr = opt_float(analyst.get("atr_pct"))
     if atr is not None and atr > 0:
         vol_stop = round(_ATR_STOP_MULT * atr, 1)
-        entry = _opt_float(analyst.get("entry_price"))
+        entry = opt_float(analyst.get("entry_price"))
         if entry is not None and entry > 0:
             threshold = round(entry * (1.0 - vol_stop / 100.0), 2)
             return (
@@ -153,7 +150,7 @@ def _default_invalidation(analyst: dict[str, Any]) -> str:
                 f"({vol_stop:.1f}% volatility-scaled advisory stop from entry {entry:.2f})"
             )
         return f"Close if price falls {vol_stop:.1f}% below entry (volatility-scaled advisory stop)"
-    entry = _opt_float(analyst.get("entry_price"))
+    entry = opt_float(analyst.get("entry_price"))
     if entry is not None and entry > 0:
         # Derive a simple -8% advisory stop from entry
         threshold = entry * (1.0 - 0.08)
@@ -271,7 +268,7 @@ def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[s
     held = {
         str(r.get("ticker")): _coerce_float(r.get("weight_pct"))
         for r in prior_book
-        if r.get("ticker") and not _is_cash(r.get("ticker"))
+        if r.get("ticker") and not is_cash(r.get("ticker"))
     }
     if not held:
         # No held names (first run, prior book all-cash, or positions pruned
@@ -427,13 +424,6 @@ def _upsert_portfolio_metrics(
     )
 
 
-def _opt_float(value: Any) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _clamp_conviction(value: float) -> float:
     return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
 
@@ -441,10 +431,10 @@ def _clamp_conviction(value: float) -> float:
 def _effective_conviction(analyst: Any, debate: Any) -> float | None:
     """Analyst conviction_score + debate conviction_delta, clamped −5..+5; None when the
     ticker has no fresh analyst payload (don't fabricate a grade for a carried holding)."""
-    base = _opt_float((analyst or {}).get("conviction_score"))
+    base = opt_float((analyst or {}).get("conviction_score"))
     if base is None:
         return None
-    delta = _opt_float((debate or {}).get("conviction_delta")) or 0.0
+    delta = opt_float((debate or {}).get("conviction_delta")) or 0.0
     return round(_clamp_conviction(base + delta), 2)
 
 
@@ -496,7 +486,7 @@ def _latest_values(
     for row in getattr(resp, "data", None) or []:
         ticker = row.get("ticker")
         if isinstance(ticker, str) and ticker not in out:
-            value = _opt_float(row.get(value_col))
+            value = opt_float(row.get(value_col))
             if value is not None:
                 out[ticker] = value
     if len(out) < len(tickers):
@@ -528,7 +518,7 @@ def _enrich_positions(
     stop_loss_pct / target_pct_gain are ATR-derived (advisory, NOT orders); horizon_days uses
     the dedicated risk preference. All best-effort — a missing input just leaves that field unset.
     """
-    tickers = [str(r["ticker"]) for r in pos_rows if not _is_cash(r.get("ticker"))]
+    tickers = [str(r["ticker"]) for r in pos_rows if not is_cash(r.get("ticker"))]
     if not tickers:
         return
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
@@ -538,10 +528,10 @@ def _enrich_positions(
 
     for row in pos_rows:
         ticker = row.get("ticker")
-        if not isinstance(ticker, str) or _is_cash(ticker):
+        if not isinstance(ticker, str) or is_cash(ticker):
             continue
         prev = prior.get(ticker) or {}
-        prev_entry = _opt_float(prev.get("entry_price"))
+        prev_entry = opt_float(prev.get("entry_price"))
         if prev_entry is not None and prev_entry > 0:  # held → carry the original entry
             row["entry_price"] = round(prev_entry, 6)
             row["entry_date"] = prev.get("entry_date") or date_str
@@ -592,7 +582,7 @@ def build_materialize_node(deps: MaterializeDeps):
             if not isinstance(row, dict):
                 continue
             ticker = row.get("ticker")
-            if not isinstance(ticker, str) or not ticker or _is_cash(ticker):
+            if not isinstance(ticker, str) or not ticker or is_cash(ticker):
                 continue
             weight = _coerce_float(row.get("target_pct"))
             if weight <= 0:
@@ -716,9 +706,7 @@ def build_materialize_node(deps: MaterializeDeps):
         # Assertion (#814): every non-CASH row must carry a thesis_id before the upsert.
         # This guards against a partial-enrichment regression silently nulling the FK.
         _non_cash_missing_thesis = [
-            r["ticker"]
-            for r in pos_rows
-            if not _is_cash(r.get("ticker")) and not r.get("thesis_id")
+            r["ticker"] for r in pos_rows if not is_cash(r.get("ticker")) and not r.get("thesis_id")
         ]
         if _non_cash_missing_thesis:
             # Log as error but do not crash the book — a missing thesis_id is a data-quality
