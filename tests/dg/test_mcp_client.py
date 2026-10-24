@@ -743,33 +743,79 @@ def test_mcp_server_failures_reports_the_unreachable_server(
 
 @pytest.mark.unit
 def test_a_recovered_server_is_listed_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server that comes back is dialled again once the failure window closes.
+
+    The failure window keeps a downed server from being dialled on every call
+    of the same turn. It must not keep it down for the life of the process:
+    once the window closes the server is dialled again, its tools come back and
+    the failure is no longer reported. The public ``list_tools_cached`` is the
+    path under test — the private blocker would not exercise the window at all.
+    """
     from digigraph.orchestration import mcp_client
 
-    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+    server = {
+        "id": "helpdesk",
+        "url": "https://mcp.example.test/mcp",
+        "allowedTools": ["helpdesk_search"],
+    }
     calls: list[int] = []
 
     async def flaky(_server: dict[str, str]) -> list[dict[str, object]]:
         calls.append(1)
         if len(calls) == 1:
             raise RuntimeError("down")
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "helpdesk_search",
-                    "description": "",
-                    "parameters": {},
-                },
-            }
-        ]
+        return [mcp_client._tool_record("helpdesk", "helpdesk_search")]
 
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr(mcp_client, "time", SimpleNamespace(monotonic=lambda: clock["now"]))
     monkeypatch.setattr(mcp_client, "_list_tools_async", flaky)
     monkeypatch.setattr(mcp_client, "_cache", {})
     monkeypatch.setattr(mcp_client, "_failures", {})
-    monkeypatch.setattr(mcp_client, "_FAILURE_TTL_S", 0.0)
+
+    # The server is down: no tools, and the failure is visible.
+    assert mcp_client.list_tools_cached(server) == []
+    assert "helpdesk" in mcp_client.mcp_server_failures([server])
+    assert len(calls) == 1
+
+    # Inside the failure window the server is not dialled again for this turn.
+    assert mcp_client.list_tools_cached(server) == []
+    assert "helpdesk" in mcp_client.mcp_server_failures([server])
+    assert len(calls) == 1
+
+    # After the window closes the server is dialled again and its tools come back.
+    clock["now"] += mcp_client._FAILURE_TTL_S + 1
+    tools = mcp_client.list_tools_cached(server)
+    assert [str((t.get("function") or {}).get("name") or "") for t in tools] == [
+        "helpdesk_helpdesk_search"
+    ]
+    assert len(calls) == 2
+    assert mcp_client.mcp_server_failures([server]) == {}
+
+
+@pytest.mark.unit
+def test_an_expired_failure_is_pruned(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure entry does not outlive its window.
+
+    The key carries the token fingerprint, so a rotated token would leave an
+    entry behind that no lookup reads again. The map is pruned so it cannot
+    grow for the life of the process.
+    """
+    from digigraph.orchestration import mcp_client
+
+    server = {"id": "helpdesk", "url": "https://mcp.example.test/mcp"}
+
+    def boom(_server: dict[str, str]) -> list[dict[str, object]]:
+        raise RuntimeError("connection refused")
+
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr(mcp_client, "time", SimpleNamespace(monotonic=lambda: clock["now"]))
+    monkeypatch.setattr(mcp_client, "_list_tools_async", boom)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
 
     assert mcp_client.list_tools_cached(server) == []
-    assert mcp_client.mcp_server_failures([server]) == {}
+    assert len(mcp_client._failures) == 1
 
-    assert mcp_client._list_tools_blocking(server)
+    clock["now"] += mcp_client._FAILURE_TTL_S + 1
     assert mcp_client.mcp_server_failures([server]) == {}
+    assert mcp_client._failures == {}

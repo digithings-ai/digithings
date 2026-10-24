@@ -861,6 +861,22 @@ def expand_mcp_disabled_tokens(
     return frozenset(out)
 
 
+def _prune_failures(now: float) -> None:
+    """Drop failure entries whose window has closed.
+
+    The key carries the token fingerprint, so a rotated token leaves behind an
+    entry that no lookup will ever read again. Without a prune the map grows
+    for the life of the process.
+
+    The prune runs where a failure is *read*, never where the window is
+    enforced: ``list_tools_cached`` decides on its own whether the window is
+    still open, and that decision must not be taken away from it.
+    """
+    for key, entry in list(_failures.items()):
+        if now - entry[0] >= _FAILURE_TTL_S:
+            _failures.pop(key, None)
+
+
 def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
     """Listed tools for one server, narrowed to what that row allows.
 
@@ -921,6 +937,7 @@ def mcp_server_failures(servers: list[dict[str, str]]) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     now = time.monotonic()
+    _prune_failures(now)
     for s in servers:
         entry = _failures.get(mcp_list_cache_key(s))
         if entry and now - entry[0] < _FAILURE_TTL_S:

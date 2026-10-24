@@ -64,12 +64,18 @@ def _mcp_tools_for_skills(skill_ids, context, *args: object, **kwargs: object):
     return list(openai_tools_for_servers(context.extra_mcp_servers or []))
 
 
+def _text(messages: list[dict[str, Any]]) -> str:
+    return "\n".join(str(m.get("content") or "") for m in messages if isinstance(m, dict))
+
+
 def _run_turn(state: dict[str, Any]) -> dict[str, Any]:
     cfg = DigiProjectConfig({"agents": {"enabled": ["research"]}})
     captured: dict[str, Any] = {}
 
     def fake_run_tools(*, model, messages, tools, execute_tool, on_tool_step=None, **kw):
         captured["tools"] = tools
+        captured["messages"] = list(messages)
+        captured["request"] = _text(list(messages))
         captured["user"] = "\n\n".join(
             str(m.get("content") or "")
             for m in messages
@@ -85,7 +91,7 @@ def _run_turn(state: dict[str, Any]) -> dict[str, Any]:
         patch.object(research_mod, "run_tools", fake_run_tools),
         patch("digigraph.orchestration.execute", exploding_execute),
     ):
-        research_mod._run_document_rag_path(
+        captured["out"] = research_mod._run_document_rag_path(
             state=state,
             cfg=cfg,
             system_prompt="You are the helpdesk assistant.",
@@ -155,3 +161,73 @@ def test_a_healthy_mcp_server_leaves_the_turn_unchanged(
     assert captured["user"] == _PROMPT
     assert "Unreachable integrations" not in captured["user"]
     assert "helpdesk_search" in _tool_names(captured["tools"])
+
+
+@pytest.mark.unit
+def test_a_recovered_server_is_not_still_called_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The note describes the request, not the conversation.
+
+    A server that comes back must not keep looking unreachable for the rest of
+    the chat: the note belongs to the request that carried it, and the
+    persisted history the next turn replays must not carry it. Two turns
+    through the real state plumbing pin that.
+    """
+    monkeypatch.setattr("digigraph.run_storage.get_run_data_dir", lambda: None)
+
+    def boom(_server: dict[str, str]) -> list[dict[str, Any]]:
+        raise RuntimeError("HTTP 421 Misdirected Request")
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", boom)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+
+    state = _state_with_server(_SERVER)
+    state["mcp_servers"][0]["allowedTools"] = ["search"]
+    first = _run_turn(state)
+
+    # The request says the integration is down.
+    assert "Unreachable integrations" in first["request"]
+    # The persisted history does not: it outlives the outage.
+    persisted = first["out"].get("llm_messages") or []
+    assert "Unreachable integrations" not in _text(persisted)
+
+    # Turn two: the server answers again.
+    async def healthy(_server: dict[str, str]) -> list[dict[str, Any]]:
+        return _catalog()
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", healthy)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+
+    state["llm_messages"] = persisted
+    second = _run_turn(state)
+
+    assert "Unreachable integrations" not in second["request"]
+    assert "helpdesk_search" in _tool_names(second["tools"])
+
+
+@pytest.mark.unit
+def test_a_disabled_mcp_server_is_not_reported_as_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server the operator switched off is not an outage.
+
+    The session toggle names the server, so the note would tell the user that
+    an integration they turned off on purpose is broken.
+    """
+    monkeypatch.setattr("digigraph.run_storage.get_run_data_dir", lambda: None)
+
+    def boom(_server: dict[str, str]) -> list[dict[str, Any]]:
+        raise RuntimeError("HTTP 421 Misdirected Request")
+
+    monkeypatch.setattr(mcp_client, "_list_tools_async", boom)
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(mcp_client, "_failures", {})
+
+    state = _state_with_server(_SERVER)
+    state["disabled_tools"] = ["helpdesk"]
+    captured = _run_turn(state)
+
+    assert "Unreachable integrations" not in captured["request"]

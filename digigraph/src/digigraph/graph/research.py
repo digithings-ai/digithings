@@ -50,13 +50,65 @@ def mcp_failure_note(failures: dict[str, str]) -> str:
 
     The server ids only: the reason stays in the log, so a prompt can never
     carry an internal URL or a token out of a failed call.
+
+    Nothing to say is the empty string, not a note about no integrations: a
+    caller that passes an empty mapping gets silence, so the next caller
+    cannot put "Unreachable integrations: ." in front of a user.
     """
+    if not failures:
+        return ""
     ids = ", ".join(sorted(failures))
     return (
         f"Unreachable integrations: {ids}. Their tools could not be loaded because the "
         f"integration did not answer. Say the integration is unavailable. Do not report "
         f"an absence of data."
     )
+
+
+def _mcp_server_disabled_by_session(server_id: str, disabled_tokens: object) -> bool:
+    """True when the session toggle switched this MCP server off for this turn.
+
+    Every offered name of a server starts with the server id, so a token that
+    names the id, or one of its tools, switches the whole server off. A server
+    that was switched off is not an outage: reporting one would tell the user
+    that an integration they turned off on purpose is broken.
+    """
+    sid = str(server_id or "").strip().lower()
+    if not sid:
+        return False
+    for raw in disabled_tokens or []:
+        key = str(raw).strip().lower()
+        if not key:
+            continue
+        if key == sid or key.startswith(f"{sid}_"):
+            return True
+    return False
+
+
+def _with_turn_note(
+    messages: list[dict[str, Any]], note: str, user_content: str
+) -> list[dict[str, Any]]:
+    """Put the per-request note in front of the current user turn.
+
+    The note is a fact about this request, not a turn of the conversation. It is
+    added to the copy that goes to the model and never to the compacted list
+    that is persisted, so a server that comes back does not keep looking
+    unreachable for the rest of the chat (DIG-5187).
+    """
+    if not note:
+        return messages
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        if str(m.get("content") or "") != user_content:
+            continue
+        out = list(messages)
+        out[i] = {**m, "content": f"{note}\n\n{user_content}"}
+        return out
+    # The turn's own message is gone from the list (a summary replaced it):
+    # the note still has to reach the model.
+    return [*messages, {"role": "user", "content": note}]
 
 
 def _tool_def_name(tool: object) -> str:
@@ -473,8 +525,14 @@ def _run_document_rag_path(
         )
     # A server that could not be listed is not a server with no tools. The
     # difference has to reach the model, or an outage is answered as an
-    # absence of data (DIG-5187).
-    mcp_failures = mcp_server_failures(mcp_servers) if mcp_servers else {}
+    # absence of data (DIG-5187). A server the session switched off is not
+    # reported at all: it was not supposed to answer, and an operator who
+    # turned it off must not read "that integration is down".
+    mcp_failures = {
+        sid: reason
+        for sid, reason in (mcp_server_failures(mcp_servers) if mcp_servers else {}).items()
+        if sid == mcp_force or not _mcp_server_disabled_by_session(sid, state.get("disabled_tools"))
+    }
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
@@ -570,8 +628,6 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
-    if mcp_failures:
-        user_content = mcp_failure_note(mcp_failures) + "\n\n" + user_content
     if mcp_force:
         # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
         # the trailing separator is the id boundary, not the retired ``__`` form.
@@ -653,6 +709,12 @@ def _run_document_rag_path(
         session_id=state.get("session_id"),
     )
     llm_messages = list(compaction.llm_messages)
+    # The failure note goes into the request, not into the persisted history:
+    # `compaction.llm_messages` is what the next turn replays, and a note
+    # about an outage that has ended would keep telling the model to report an
+    # absence of data (DIG-5187).
+    if mcp_failures:
+        llm_messages = _with_turn_note(llm_messages, mcp_failure_note(mcp_failures), user_content)
     forced = resolve_force_tool(state.get("force_tool"))
     force_query = last_user_turn(str(prompt))
     # Skip inject when the tenant allowlist excludes the tool. execute() would

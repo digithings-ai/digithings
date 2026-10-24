@@ -801,10 +801,24 @@ what survives a failure.
 **How the failure reaches the model.** `mcp_server_failures(servers)` returns
 the servers whose listing failed, with the reason. `graph/research.py` reads it
 in `_run_document_rag_path` — the only turn path that offers MCP tools — and
-`mcp_failure_note()` turns it into a short "Unreachable integrations" line that
-is prepended to the **user message**. The model then reports an outage instead
-of an absence of data. The read has to happen after the listing that records the
-failure; `extra_tool_names_for_servers()` is what dials the server.
+`mcp_failure_note()` turns it into a short "Unreachable integrations" line. The
+line is placed in front of the current turn's user message in the **request
+copy** of the message list, and nowhere else. The model then reports an outage
+instead of an absence of data. The read has to happen after the listing that
+records the failure; `extra_tool_names_for_servers()` is what dials the server.
+
+**The note is per-request and is never persisted.** The turn's user message is
+persisted as `out_state["llm_messages"]` and replayed as `prior` on every later
+turn, so a note written into `user_content` outlives the outage: the model
+would keep reading "the integration is unreachable" on every later turn, after
+the server had recovered and its tools were back. A note that cannot be
+retracted is a second outage, and it breaks the acceptance criterion the note
+exists to satisfy — a healthy server must change nothing. So the note is built
+per request and put in front of the current turn's user message
+(`_with_turn_note`), on a copy of the message list: the persisted history stays
+clean, and a recovered server is silent again on the next turn. Compaction does
+not rescue this: tier 1 never drops a message and tier 2 only summarises above
+80k tokens, so a persisted note would survive dozens of turns.
 
 **Why the user message and not the system prompt.** The system prompt is a
 tenant-wide constant: the tenant `researchSystemPrompt` in
@@ -816,7 +830,9 @@ tenant-wide constant: the tenant `researchSystemPrompt` in
 `infra/digichat-release/DIG-3556-staged-prod-tenant-config.json`). A per-request
 fact does not belong in a constant that has to be edited in six places to stay
 true; the user message is per-turn by construction. The note is prepended, so the
-model reads it before the question.
+model reads it before the question — into the request copy of that message, not
+into `user_content` itself, because `user_content` is the part that is
+persisted and replayed (see above).
 
 **Why the note names servers and not reasons.** The reason is the failed call's
 exception text, and it can carry an internal URL or a token. The prompt goes to
@@ -824,17 +840,51 @@ a model provider and is kept in the debug log; the reason stays in the
 `log.warning("remote MCP list_tools failed for %s: %s", ...)` line, which is
 where an operator goes looking for the cause.
 
-**A healthy server changes nothing.** With no failure recorded, `mcp_failures` is
-empty, no note is built, and the user message is byte-identical to the prompt
-the turn would have had before.
+**A server switched off for the turn is not an outage.** A session can disable
+an operator MCP server for one turn (`disabled_tools`, by server id or by the
+`{id}_` prefix). Such a server is still dialled, still fails or answers, and
+still leaves a failure behind — but the model must not be told "the integration
+is unreachable" for an integration the operator deliberately switched off. The
+failure is filtered against the disabled tokens
+(`_mcp_server_disabled_by_session`) before the note is built. The exception is
+the force-tool target: if the turn explicitly asks for that server, it is
+wanted, and a failure to reach it is still an outage worth reporting.
 
-**What pins it.** `tests/dg/test_mcp_client.py` pins the cache and the reader.
-`tests/dg/test_research_mcp_failure_note.py` pins the turn: an unreachable
-server puts "Unreachable integrations: helpdesk" into the turn's user message;
-a healthy server leaves the user message exactly as it was and still gets its
-tool. The turn test is the one that matters — without it the note could be
-dropped from `research.py` and the whole suite would stay green, which is how
+**The failure window is enforced on the way in.** `list_tools_cached()` returns
+the failure early while it is younger than `_FAILURE_TTL_S`: the turn does not
+dial a server it already knows is down, and the window is what makes a
+recovered server dialled again on the next turn. The failure map is pruned
+where a failure is read (`mcp_server_failures()`), and nowhere else: pruning it
+in `list_tools_cached()` as well would make the TTL comparison there
+redundant, and the window would stop being the thing that lets a server
+recover.
+
+**A healthy server changes nothing.** With no failure recorded, `mcp_failures` is
+empty, no note is built, and the request's user message is byte-identical to the
+prompt the turn would have had before — on the turn of the outage and on every
+later turn, because nothing was persisted.
+
+**What pins it.** `tests/dg/test_mcp_client.py` pins the cache and the reader: a
+failed listing is not cached as an empty catalog, a failed listing is visible
+with its reason, the failure map is pruned once the window has passed, and a
+server that recovers is listed again — through the public
+`list_tools_cached()`, against a faked clock, so the window itself is
+load-bearing and not the private dial. `tests/dg/test_research_mcp_failure_note.py`
+pins the turn: an unreachable server puts "Unreachable integrations: helpdesk"
+into the turn's request; a healthy server leaves the request exactly as it was
+and still gets its tool; a server that recovers is not still called unreachable
+on the next turn; a server switched off for the turn is not reported as
+unreachable. The turn test is the one that matters — without it the note could
+be dropped from `research.py` and the whole suite would stay green, which is how
 the wiring would have rotted.
+
+**Residual risks.** The failure map is keyed by the catalog cache key, which
+fingerprints the server token, so a rotated token orphans its entry; the prune
+bounds that to one window. A server that answers and lists no tools is
+indistinguishable from a server that has no tools — that is the server's own
+truth, not an outage, and the note stays silent for it. The note carries server
+ids only, so the model can say which integration is down but not why; the
+reason is in the log line.
 
 ### 6.3 Code Execution Gate
 
