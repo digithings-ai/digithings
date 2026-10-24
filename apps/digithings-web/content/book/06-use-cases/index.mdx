@@ -27,16 +27,15 @@ For a team, the pipeline moves to a shared server, backtests run on a timetable,
 
 Speech is the input people are least willing to share, and the usual way to
 process it is to stream it to someone else's servers. digivoice starts from
-the opposite default: capture, transcription, an optional rewrite for where
-the text is going, and speech back, all done where the speaker can see it
-happen. A hosted model can fill any of those stations when the operator
-chooses one, in the same way it can fill a model call anywhere else.
+the opposite default: capture, transcription with whisper, an optional rewrite
+by a small local model, and speech back with Piper, all on the speaker's own
+Mac. There is no cloud option, on purpose: the audio never leaves the machine.
 
 Because the output is ordinary text, voice becomes a way into the rest of the
 stack. A finished transcript pastes into whatever is in focus: a question in the
-chat, a research brief, made out loud while the hands are busy. The same loop
-also runs inside the chat surface, so a question can be spoken and an answer
-read back without leaving the conversation.
+chat, a research brief, made out loud while the hands are busy. digichat can
+also switch on the browser's own dictation and read-aloud, which is convenient
+but uses whatever speech engine the browser ships.
 
 ## Retrieval over your own documents
 
@@ -54,23 +53,27 @@ folder on a laptop and against a department's archive on managed storage.
 
 ## Agents and exploration
 
-An agent needs tools, a loop that decides what to do next, a way to ask a
-person before doing anything risky, and a record of what it did. digigraph
-runs the loop, MCP describes the tools, a per-server gate decides what may run unattended, and digitrace keeps the trail.
+An agent is a model that is allowed to act. It is given tools, such as search
+this index or open a ticket, and it picks one, reads the result and picks
+again until the task is done. It needs the tools, the loop, a way to ask a
+person before anything risky, and a record. digigraph runs the loop, MCP
+carries the tools, a gate per tool server decides what may run unattended, and
+digitrace keeps the trail.
 
-Agents gain most from sharing one environment. The first agent is usually a handful of scripts a team already has, each
-given a name, an input schema and a description. Outside agents and editors connect to the same tools through
-the same protocol, with the same permissions. Exploring a new idea means
-adding a tool, not building a new agent framework around it.
+The first agent is usually a handful of scripts a team already has, each
+given a name, an input schema and a description and served from a small MCP
+server. Claude Desktop or a code editor can connect to the same server, so the
+tools a team writes once work in the stack and outside it. Exploring a new idea
+means adding a tool, not building a new agent framework around it.
 
 ## At a glance
 
 | Use case | Modules it runs | Starts on | Grows into |
 | --- | --- | --- | --- |
 | Financial research | digiquant, digigraph, digisearch, digichat | One analyst's machine | A shared research server with scheduled runs and access by role |
-| Voice | digivoice, digichat | The machine with the microphone | Wherever the conversation already happens, with dictation and read-back in the chat |
+| Voice | digivoice, digichat | The Mac with the microphone | Any app on that machine: the transcript pastes wherever the cursor is |
 | Retrieval | digisearch, digivault, digillm, digichat | A folder on a laptop | A department's archive on managed storage, with access rules per query |
-| Agents | digigraph, MCP tools, digitrace | Your own tools, described over MCP | Many tool servers under one approval gate, shared with outside agents |
+| Agents | digigraph, digitrace, your MCP servers | Your own scripts as MCP tools | Many tool servers under one approval gate, shared with outside agents |
 
 ## One question, four modules
 
@@ -81,7 +84,7 @@ returns the filing passages behind the position, and digiquant reruns the
 backtest under the stated parameters. The answer cites both, and with tracing
 on, the trail shows every step that produced it.
 
-Nothing in that chain was written for it. Each module did its one job, and the
+No code was written for that question. Each module did its one job, and the
 application is the set of parts that were switched on. The same chain runs
 unchanged when the research moves to a shared server, and that is how an idea
 proved on one machine grows without starting again.

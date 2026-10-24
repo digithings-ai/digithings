@@ -7,9 +7,8 @@ summary: >-
 
 An AI application is more than a model call. It needs a way to reach models,
 route work between them, find the right context, call tools, identify who is
-asking, show an interface and explain afterwards what happened. Most projects
-spend their first months rebuilding that scaffolding before they get to the
-part that is actually theirs.
+asking, show an interface and record afterwards what happened. Most projects
+build that scaffolding themselves before they reach the part that is theirs.
 
 digithings is that scaffolding, built once. Each module has one job and a
 published contract, so you can run one of them, a few, or all of them.
@@ -18,18 +17,28 @@ published contract, so you can run one of them, a few, or all of them.
 | --- | --- |
 | digigraph | The hub. Routes each request to the right tools and streams the answer. |
 | digillm | The model layer. One way for every service to call any model. |
-| MCP | The tool protocol. Every capability is a tool any client can discover. |
 | digisearch | Retrieval. Indexes your documents and finds the passages that matter. |
-| digivault | Documents. A linked markdown vault, readable by people and tools. |
+| digivault | Documents. A folder of linked markdown notes, readable by people and tools. |
 | digiquant | Research. Data, strategies, backtests and optimisation, in order. |
-| digivoice | Voice. Dictation, rewriting and speech, all on your machine. |
+| digivoice | Voice. Dictation, rewriting and speech, all on your own machine. |
 | digichat | The interface. Where people ask, read answers and see artifacts. |
 | digikey | Identity. Short-lived credentials every service checks itself. |
 | digitrace | Tracing. A record of what every request did. |
-| digibase | The shared base. Error shapes, request ids, service sign-in. |
+| digibase | The shared base. Error shapes, request ids, audit redaction. |
+
+MCP, the Model Context Protocol, is missing from the table on purpose: it is
+not something you run. It is the open standard for telling an AI model which
+tools it may call. digigraph, digisearch, digiquant, digivault and digillm each
+publish their tools over it, so Claude Desktop, a code editor or an agent you
+wrote can use them directly. In the other direction, digigraph can call any MCP
+server you add. That is why the table is not a closed list.
 
 ## How the parts fit
 
-Requests come in through the interface or an outside caller and go to the
-hub. The hub asks the verticals what tools they offer, runs the ones the
-request needs and reaches models through the model layer. Identity can be checked at every boundary and every step traced. None of it is fixed: any part can be replaced by one of your own that keeps the same contract. After the use cases, the chapters take the main parts one at a time.
+Requests come in through the chat or an outside caller and go to the hub. The
+hub asks the verticals which tools they offer, runs the ones the request needs
+and reaches models through the model layer. digikey signs the credentials and
+each service checks them itself; with tracing on, every step is recorded. Each
+seam is a standard: the OpenAI chat format into the hub, MCP for tools, signed
+tokens for identity. Replace a part with your own that keeps its seam and the
+rest carry on. After the use cases, the chapters take the main parts one at a time.

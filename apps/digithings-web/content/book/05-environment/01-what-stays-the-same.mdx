@@ -6,9 +6,10 @@ summary: >-
 ---
 
 A module can move without becoming a different module. The setting names, the
-service boundaries and the protocol at each edge stay fixed. A laptop supplies
-a local model runner and an embedded store; a cloud account supplies managed
-versions of the same interfaces.
+service boundaries and the protocol at each edge stay fixed; what changes is
+what sits behind them. On a laptop the model runner is Ollama and the index is
+Chroma on disk. In a cloud account the same settings point at hosted models and
+a managed vector store.
 
 That is why the stack can be adopted one piece at a time. Start with the model
 layer, add retrieval, then add a vertical. Each step is a deployment choice,
