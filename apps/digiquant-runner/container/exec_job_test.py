@@ -63,6 +63,7 @@ def main() -> int:
     _check_busy_gate_and_publish_bound()
     _check_publish_if_present(commands)
     _check_house_run(commands)
+    _check_pipeline_env_layouts()
     for mod_name in (
         "house_chain_step_test",
         "wake_stack_test",
@@ -694,6 +695,32 @@ def _check_house_run(commands: dict[str, Any]) -> None:
     if "Pipeline: digiquant research" in source:
         raise SystemExit("exec_job must not hardcode the house workflow name")
 
+
+
+def _check_pipeline_env_layouts() -> None:
+    """The pipeline env must be found in the image layout and in a checkout.
+
+    The image copies exec_job.py to /opt/runner/, so a fixed parent index
+    for the checkout root raises IndexError there. This path does not
+    exist on the host, so it keeps the same three ancestors.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        (workdir / ".github").mkdir()
+        (workdir / ".github" / "digiquant-pipeline.yml").write_text(
+            'env:\n  DIGIQUANT_MODEL_TIER: "cheap"\n', encoding="utf-8"
+        )
+        spec = {"pipeline_env": ".github/digiquant-pipeline.yml"}
+        with mock.patch.object(exec_job, "__file__", "/probe/runner/exec_job.py"):
+            got = exec_job._pipeline_env_for(spec, workdir=workdir)
+        if got.get("DIGIQUANT_MODEL_TIER") != "cheap":
+            raise SystemExit(f"image layout lost the pipeline env: {got}")
+
+    checkout = exec_job._pipeline_env_for({"pipeline_env": ".github/digiquant-pipeline.yml"})
+    if "DIGIQUANT_MODEL_TIER" not in checkout:
+        raise SystemExit(f"checkout layout lost the pipeline env: {checkout}")
 
 if __name__ == "__main__":
     raise SystemExit(main())

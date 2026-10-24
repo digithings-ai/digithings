@@ -240,17 +240,33 @@ def load_pipeline_env(text: str) -> dict[str, str]:
     return out
 
 
+def _pipeline_env_roots(rel: str, workdir: Path | None = None) -> list[Path]:
+    """Roots to read the pipeline env file from, in priority order.
+
+    The workdir comes first: the image ships the file at
+    /app/.github/digiquant-pipeline.yml. The checkout root comes next, and
+    it is found by looking for the file rather than by a fixed parent
+    index: the image copies this module to /opt/runner/exec_job.py, which
+    has no fourth ancestor, so indexing parents[3] raised IndexError and
+    killed every house-run step before the file was ever read.
+    """
+    roots = [workdir or WORKDIR]
+    for parent in Path(__file__).resolve().parents:
+        if (parent / rel).is_file():
+            roots.append(parent)
+            break
+    return roots
+
+
 def _pipeline_env_for(spec: dict[str, Any], workdir: Path | None = None) -> dict[str, str]:
     rel = spec.get("pipeline_env")
     if not isinstance(rel, str) or not rel.strip():
         return {}
-    roots = [workdir or WORKDIR, Path(__file__).resolve().parents[3]]
-    for root in roots:
+    for root in _pipeline_env_roots(rel, workdir):
         path = root / rel
         if path.is_file():
             return load_pipeline_env(path.read_text(encoding="utf-8"))
     return {}
-
 
 def step_wait_seconds(remaining: float, step_timeout_seconds: int | None) -> float:
     """Cap one step at min(step timeout, remaining job deadline)."""
