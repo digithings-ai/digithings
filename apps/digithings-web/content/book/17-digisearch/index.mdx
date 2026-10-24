@@ -18,10 +18,13 @@ default shape of every answer that touches private knowledge.
 
 ## How it works
 
-Two paths stay strictly apart. Ingestion splits documents into passages and
-stores them in an index built for meaning, so a question about staff turnover finds a passage that only says attrition. Answering takes a question, retrieves the
-passages most likely to matter and hands them to the model with the question,
-so the model reasons over supplied evidence instead of recalling.
+Two paths stay strictly apart. Ingestion splits documents into passages,
+turns each into an embedding, a list of numbers that places text by meaning,
+and stores them in an index, so a question about staff turnover finds a
+passage that only says attrition. Answering takes a question, runs a keyword
+search and a meaning search together, reranks the results and hands the best
+passages to the model with the question, so the model reasons over supplied
+evidence instead of recalling.
 
 ```mermaid two paths share an index but never logic: indexing cannot change how a question is answered
 flowchart LR
@@ -32,10 +35,12 @@ flowchart LR
   RET --> ANS[cited answer]
 ```
 
-The paths share storage and nothing else. A document being indexed cannot
-change how a question is answered, and answering never writes to the index.
-A workspace filter can ride along with every query, so one index can hold
-documents for several workspaces.
+The paths share storage and nothing else, and they need different
+permissions: a key with `digisearch:query` can ask but cannot add documents,
+which takes `digisearch:ingest`. When a workspace is set, its filter is added
+to every query by the service, not by the caller, so one index can hold
+several workspaces without one reading another. The cost of the split is a
+step: nothing is searchable until someone ingests it.
 
 ## Where it fits
 
@@ -45,9 +50,9 @@ on it for grounded answers and the research pipeline calls it for
 background. Ingestion runs on demand, and either way it lands
 in the index the answering path reads.
 
-The index backend is the main thing that changes between homes: an embedded
-index on a laptop, managed vector storage in the cloud, whatever fits the
-corpus on your own hardware. In every home, ingestion is an explicit act, so
+The index backend is the main thing that changes between homes and is one
+setting: Chroma on local disk by default, pgvector in Postgres, Cloudflare
+Vectorize or Azure AI Search. In every home, ingestion is an explicit act, so
 no document crosses a boundary you did not approve.
 
 <Reference kind="architecture" href="repo:digisearch/ARCHITECTURE.md" title="digisearch architecture">

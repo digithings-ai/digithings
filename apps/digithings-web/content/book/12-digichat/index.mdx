@@ -16,44 +16,45 @@ documents and visuals render beside the chat rather than inside a wall of
 text. The same interface can be embedded in another site, so a host can offer
 the experience to its own visitors with the same backend behind it.
 
-Voice belongs to this surface rather than to a product of its own: dictation
-and read-back are two more ways into the same conversation, and the model
-behind either is chosen the way every other model call is chosen.
+Dictation and read-aloud are two more ways into the same conversation. They
+use the browser's own speech support, are off by default, and are not a
+digithings model.
 
 ## How it works
 
 digichat is two parts that travel together: a request layer and a surface.
-The request layer signs the person in, works out which conversation they are
-in, and forwards the message to the hub with a short-lived identity. The
+The request layer signs the person in through any OpenID Connect provider,
+swaps that session for a short-lived digikey token and forwards the message
+to the hub with it. The
 surface renders the streaming answer, the history and the artifacts.
 
 Neither half holds anything worth stealing. Sessions are verified on every
-request. Conversation content is kept in the data layer when one is
-configured, not in the server.
+request. Conversations live in the browser, and in Postgres when one is
+configured, never in the server.
 Embedded visitors are authorised per host before they see anything, and a
 registered host alone authorises nothing: the credential for that visit
 does.
 
 ## Where it fits
 
-digichat is the hub's most demanding caller and the data layer's steadiest
-writer. It relies on the identity service for sessions, on the hub for
-answers and on the data layer for history. Artifacts render with the same
-design components as the rest of the surfaces, so the chat looks like part
-of one product.
+digichat relies on digikey for identity and on the hub for answers. The hub
+is its default backend, not its only one: one setting points it at an
+OpenAI-compatible endpoint, Anthropic, Google Vertex or Azure AI Foundry
+instead, which is useful for a plain chat with no tools behind it.
 
-Because the interface speaks the standard chat format to the hub, it is also
-replaceable. Any client that speaks that format and carries a valid identity
-can sit where digichat sits.
+It works the other way too. The hub speaks the standard chat format, so any
+client that speaks that format and carries a valid token can sit where
+digichat sits.
 
 ## Where it runs
 
 On a laptop the interface runs beside the stack it talks to, which keeps
-development to a single checkout. In the cloud it runs as a container in front of the hub and verticals. On your own servers it runs
+development to a single checkout. In the cloud it runs as a container in front of the hub and verticals. On
+your own servers it runs
 wherever you already serve web traffic.
 
 In every home it stays stateless. Stop it, move it or run ten copies, and
-conversations survive, because the server never held them. 
+conversations survive, because the server never held them.
 
 <Reference kind="guide" href="repo:apps/digichat/INSTALL.md" title="digichat install guide">
   Running the interface locally and connecting it to the stack.

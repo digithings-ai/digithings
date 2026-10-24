@@ -7,19 +7,21 @@ summary: >-
 
 A system that cannot explain itself cannot be operated. When an answer looks
 wrong, someone has to be able to ask which tools ran, in what order, what each
-one saw and how long it took. digitrace is how digithings answers. Once switched on, it records the trail of every request as it happens, so nobody has to piece
-it together from log lines afterwards.
+one saw and how long it took. digitrace is how digithings answers. Once switched on, it records the trail
+of every request as it happens, so nobody has to piece it together from log
+lines afterwards.
 
 The trail serves several readers. An operator uses it to debug a bad answer.
 A reviewer uses it to audit a research number. Anyone deciding whether to
-trust the system can see the steps behind a result. And once tracing is switched on, the trail shows where to improve: a tool that takes four seconds, or a call
-that fails one time in ten, stands out at once.
+trust the system can see the steps behind a result. And the trail shows where to improve: a tool that takes four seconds, or a
+call that fails one time in ten, stands out at once.
 
 ## How it works
 
 digitrace has two faces. As a library, it gives every service a thin helper
-that records when tracing is configured and costs nothing when it is not.
-Services adopt it without depending on any tracing vendor. It also reports
+that sends OpenTelemetry data when an endpoint is set and does nothing when
+it is not. OpenTelemetry is the open standard for traces, so services depend
+on no tracing vendor. As a small service, it reports
 whether tracing is active and healthy, so the hub and the
 dashboards can show its status without touching sensitive configuration.
 
@@ -31,22 +33,23 @@ flowchart LR
   TRAIL --> OP[operator]
 ```
 
-The trail follows a request across service boundaries, so a step in the hub
-and the step it triggered in a vertical appear in one story rather than in
-two logs that have to be matched by timestamp.
+The trail follows a request across service boundaries: each call carries
+the standard `traceparent` header, so a step in the hub and the step it
+triggered in a vertical appear in one story rather than in two logs that have
+to be matched by timestamp.
 
 ## Where it fits
 
-Everything that acts is traced. The hub records routing and tool calls, the
-verticals record their pipeline stages, and the model layer records usage
-through its hooks. Because the library is vendor-neutral, switching to a
-different tracing backend changes configuration, not service code.
+Every service that acts carries the helper, so turning tracing on is one
+setting, not a code change. Tracing is off until you set it: the local stack
+starts a collector only with its `trace` profile. Because the format is
+OpenTelemetry, switching to a different tracing backend changes
+configuration, not service code.
 
 The trail goes wherever you point it: a backend on your own machine, one
 beside your cloud workers, or one on your own servers with the retention you
-choose. Tracing every request costs some storage and a little time per request.
-That costs far less than debugging a multi-service answer from scattered
-logs, and you never pay another vendor to watch your own system.
+choose. Tracing every request costs some storage and a little time per request,
+far less than debugging a multi-service answer from scattered logs.
 
 <Reference kind="architecture" href="repo:digitrace/ARCHITECTURE.md" title="digitrace architecture">
   The library, the status service and the backend options.

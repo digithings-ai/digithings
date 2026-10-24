@@ -18,9 +18,10 @@ engine and build that produced it, so it can be checked later.
 
 ## How it works
 
-The unit of work is the whole pipeline. A caller asks for a research
-task; digiquant plans the stages, runs them through an established
-backtesting engine and returns the result with its provenance attached.
+The unit of work is the whole pipeline. A caller asks for a research task;
+digiquant runs the stages in order on NautilusTrader, an open trading engine
+with a Rust core pinned to one exact version, and returns the result with its
+provenance attached.
 
 ```mermaid each arrow is a contract: a stage reads only what the stage before it wrote
 flowchart LR
@@ -30,19 +31,22 @@ flowchart LR
   OPT --> EXP[export]
 ```
 
-That single rule keeps look-ahead bias out: a
-strategy only sees what earlier stages wrote. The honesty checks are part of
-the pipeline itself. An estimate the checks refuse comes back empty, with no
-plausible number to mislead anyone, and a partial result is labelled partial.
+The engine replays history one bar at a time, so a strategy cannot read a
+price before its moment; that is what keeps look-ahead bias out. The fixed
+order keeps the rest out: nothing is optimised before it has been validated
+and backtested. A result whose engine cannot be identified comes back marked
+partial and not citable, with no plausible number to mislead anyone. The price
+is one engine: a strategy written for another has to be ported.
 
 ## Where it fits
 
-digiquant publishes its tasks as tools, so the hub can ask for research
-without knowing how quant work is ordered. Market history comes in from the
-data layer; results go out to whoever asked, whether that is the
-chat, a scheduled session or a dashboard. Model calls go through the shared
-model layer, and every run is traced, so a Sharpe ratio on a
-dashboard leads back to the run and engine build behind it.
+digiquant publishes its tasks as tools, to the hub and over MCP, so a caller
+can ask for research without knowing how quant work is ordered. Results go out
+to whoever asked, whether that is the chat, a scheduled session or a
+dashboard. The stack has one rule here: no other service may state a Sharpe
+ratio, a profit or a trade count unless it came from digiquant. Each result
+names the engine version, the pin and the lockfile it ran on, so a number on a
+dashboard leads back to the build behind it.
 
 The pipeline runs wherever compute is cheapest for you: beside the data on
 one machine for fast backtests, on a timetable in the cloud, or on hardware

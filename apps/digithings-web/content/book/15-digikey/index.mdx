@@ -12,8 +12,8 @@ other service checks them for itself, and no service ever
 takes a caller at its word.
 
 Two kinds of caller need access. Services and outside callers hold long-lived
-keys, issued once and shown once, and exchange them for short-lived signed
-credentials. People sign in through the interface, and the request layer
+access keys (they start `dgk_live_`), shown once when issued, and exchange them
+for a signed token that lasts 15 minutes. People sign in through the interface, and the request layer
 trades their session for the same short-lived credential. Both come from the
 same issuer.
 
@@ -22,10 +22,10 @@ same issuer.
 Issuing is central and checking is local. The identity service looks at what
 it is shown, an operator credential, a session or a machine credential, and
 returns a short-lived signed credential carrying identity, tenant and scopes.
-Every other service holds the issuer's public signing keys and checks each
-incoming credential itself: issuer, audience, expiry and scopes. No call home
-is needed, so if the issuer goes quiet for a few minutes, requests in flight
-keep working.
+Every other service fetches the issuer's public signing keys, keeps them for
+five minutes, and checks each incoming token itself: issuer, audience, expiry
+and scopes. No call home is needed per request, so if the issuer goes quiet
+for a few minutes, requests keep working.
 
 ```mermaid one service signs; every other service verifies locally with the public keys
 flowchart LR
@@ -35,10 +35,10 @@ flowchart LR
   SVC --> OK[verifies locally]
 ```
 
-Long-lived credentials are stored only as one-way hashes, so a lost one is
-replaced, never recovered. Scopes keep every credential narrow: a credential
-that can read research results cannot spend anything, because it was never
-granted that scope.
+Access keys are stored only as bcrypt hashes, so a lost one is replaced, never
+recovered. Scopes keep every credential narrow: a key with `digisearch:query`
+can search documents but cannot add them, because it was never granted
+`digisearch:ingest`.
 
 ## Where it fits
 
@@ -47,9 +47,11 @@ paths. Each service declares which scopes its routes need, and shared code
 enforces them the same way everywhere. Outside callers come in through the
 same exchange, so there is no side door with different rules.
 
-Central issuing is a single point of trust, and the design contains it.
-Credentials expire quickly, scopes are narrow and keys can be rotated, so a
-mistake expires before it spreads. Because checking is local, identity works
+Identity is a service of its own, rather than code in each service, so there
+is one place to issue, list and revoke. That makes it a single point of trust,
+and the design contains it. Tokens expire in minutes, scopes are narrow, and
+revoking a key also blocks the tokens already issued from it. The price is
+another service to run, and rotating the signing key today means a redeploy. Because checking is local, identity works
 the same on one machine, on your own servers and in a cloud account.
 
 <Reference kind="architecture" href="repo:digikey/ARCHITECTURE.md" title="digikey architecture">
