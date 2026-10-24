@@ -1,0 +1,1435 @@
+{
+  "checked": 200,
+  "findings": [
+    {
+      "issue": "DIG-4847",
+      "id": "801303de-caec-4dd5-80f3-e3bf1439680b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "71687485-322d-4283-a444-f496ffa984c5",
+      "createdAt": "2026-10-21T05:42:48.922Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4846",
+      "id": "5fbf2420-9d3a-4f0b-bc61-fef9f71aa2ad",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "fd71b58a-df32-481f-91bd-33e9e6791dc9",
+      "createdAt": "2026-10-21T05:39:43.380Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4842",
+      "id": "07aa358e-d0bf-4235-8a1a-8a89f9f16361",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "932edafe-b712-4fa3-b2f0-9da20d8f7d2c",
+      "createdAt": "2026-10-21T05:30:18.734Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4841",
+      "id": "fcc173ef-8201-4089-a2fe-043c1fbdea53",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7cd3f1b2-5a4d-4d43-8ec1-738f0e36b492",
+      "createdAt": "2026-10-21T05:27:40.134Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4840",
+      "id": "0d302147-f62b-4d44-a9be-ba1f4320060b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "a46d7a08-694c-4041-8020-8f2eea7f73fb",
+      "createdAt": "2026-10-21T05:25:18.713Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4838",
+      "id": "3bf6b078-befd-424a-82f2-982a112ab196",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "ff9a2d92-05c3-45d6-b859-37b4e9422df3",
+      "createdAt": "2026-10-21T05:24:24.238Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4836",
+      "id": "0e051cf4-81cb-4541-98a2-3848fc5f652f",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "f8f3c4a4-700c-4e23-afcc-f1e20eb766e0",
+      "createdAt": "2026-10-21T05:24:03.023Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4835",
+      "id": "dc0f820b-a4ab-4cd6-bbf9-db91fe936560",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c4517563-36a0-4832-8099-7b439c8759b0",
+      "createdAt": "2026-10-21T05:11:48.499Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4824",
+      "id": "0900cb30-008b-4de1-8e87-911f5636a1e4",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b0242947-c3cc-45a6-95f7-836ae6f52b73",
+      "createdAt": "2026-10-21T03:58:54.999Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4823",
+      "id": "61257b60-b3f2-4ad6-bb3a-d4b1d19f1cf1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "6029e263-876e-4d64-af57-faee1c47280e",
+      "createdAt": "2026-10-21T03:58:32.853Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4821",
+      "id": "8cb217c5-02b7-47ec-8e06-87ffa4839150",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7ff24049-f9d8-4be9-b4a3-b060eb44c11a",
+      "createdAt": "2026-10-21T03:56:57.603Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4820",
+      "id": "eb101425-e503-4d88-91a4-84dd8326aea7",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "1208217b-e1ac-4570-906d-da91454b7aa0",
+      "createdAt": "2026-10-21T03:52:02.334Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4819",
+      "id": "6dc0cdb6-728c-4dcc-9c06-50b3ba947a13",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "49ab253a-0a48-443b-84dc-332ec8d39ed0",
+      "createdAt": "2026-10-21T03:48:24.638Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4818",
+      "id": "1ad7ad19-9c7a-493c-a4c5-4d9e3900fc6a",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "5a8a4e83-12f0-44c6-a5cf-7955b4deecd0",
+      "createdAt": "2026-10-21T03:43:01.242Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4817",
+      "id": "fc5ccf13-2de1-444e-b45a-cf935b980eea",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "30fe671d-7e02-492a-88bf-910202df8182",
+      "createdAt": "2026-10-21T03:30:18.754Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4815",
+      "id": "0fa4d31f-4c9e-445f-96e4-3d637cf8b21b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "30e18967-b2b9-4df4-8ea3-6e44a88ff591",
+      "createdAt": "2026-10-21T03:27:42.101Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4814",
+      "id": "9d4bfce1-025d-4876-8921-8d29925f742b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "5aec8682-ea9a-459b-83a0-72c8002acfc3",
+      "createdAt": "2026-10-21T03:27:41.378Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4813",
+      "id": "fc7cd28c-1ced-4956-80ff-e7d2a87df8a8",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "a978a707-4824-4532-a661-38d55a77680e",
+      "createdAt": "2026-10-21T03:27:37.148Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4812",
+      "id": "4c99ca3f-579c-4afb-ac51-b69c09ecaa81",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7e7a4119-54da-4868-bf41-4ef249f979fb",
+      "createdAt": "2026-10-21T03:24:24.208Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4810",
+      "id": "e400b4cc-7618-4b8d-85c8-68ed0c18ddae",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "e731859d-5b59-4ad2-b4a2-800d7994d315",
+      "createdAt": "2026-10-21T03:10:34.993Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4801",
+      "id": "5c9ad7e5-8d40-490d-96a5-8f562f8f54f3",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "3ca55ade-9e19-42bc-b589-2f19b4145da1",
+      "createdAt": "2026-10-21T03:03:57.580Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4800",
+      "id": "6be6b75c-e121-45d2-ab84-4520173fe00f",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "fc3013fc-456e-4502-b5e2-d0d793d7da2c",
+      "createdAt": "2026-10-21T03:02:03.011Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4799",
+      "id": "7f478e88-18a3-46e4-bbb1-45c4a2ff78f1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c51ae7a0-1e85-4267-86ab-788d543b5f76",
+      "createdAt": "2026-10-21T03:01:58.130Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4794",
+      "id": "e2110bda-c557-4eab-a9d4-17222fb469ec",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "14193170-e0ed-409d-ab86-b1cbdbfa8d71",
+      "createdAt": "2026-10-21T02:48:14.394Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4788",
+      "id": "041bd3a2-21ff-4c6e-8595-3e6135630ae9",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b1b4fa86-b47b-4981-95c0-b9f81a50923f",
+      "createdAt": "2026-10-21T02:34:53.069Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4780",
+      "id": "247434f1-d150-40ad-8cc8-de04bc73d2d5",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7bff5369-ac0c-42cc-901f-12442bdae23a",
+      "createdAt": "2026-10-21T00:55:48.126Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4778",
+      "id": "7fecf610-2647-4fd0-ba86-e558e071d796",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "45ed9633-b2e3-4fa7-a12c-b2758a10692f",
+      "createdAt": "2026-10-21T00:26:22.554Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4768",
+      "id": "e8718075-8879-401a-80bd-b8764acef062",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:44.458Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4767",
+      "id": "4ac20f41-e42e-403d-827c-70b3522dfc04",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:42.966Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4766",
+      "id": "7748f846-1593-4962-8747-e2ea447e5f3f",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:41.928Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4765",
+      "id": "43a90308-0bcd-4de2-ab33-5d4752be9669",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:40.353Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4764",
+      "id": "ca1b82e1-8840-4f1b-a085-abd0df6f0385",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:37.719Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4763",
+      "id": "44ce2ec1-25a9-4da2-bd6e-9bc16d24d793",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-21T00:06:36.952Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4760",
+      "id": "81c8120a-f79a-4ba3-89fe-c75f296ccf89",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "f899436a-3a64-4eee-bbc6-ca81ee0307ed",
+      "createdAt": "2026-10-20T23:59:16.538Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4759",
+      "id": "3ff4c633-717c-40fa-af34-d6506fec40fd",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T23:51:17.159Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4758",
+      "id": "3811931f-e944-43e3-b0bc-02072915e75b",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T23:49:46.344Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4757",
+      "id": "94cf69b5-785b-4e37-bf23-b8177944a31b",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T23:49:35.054Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4756",
+      "id": "f873a556-748e-4e2e-b2d5-cf3929b8f707",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T23:49:20.552Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4755",
+      "id": "09c235e3-26f8-4e2d-a09e-f4b6a1fa88bd",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T23:48:32.776Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4754",
+      "id": "75b37fcd-b982-4e73-bcfc-7d45914000a3",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "be555d25-86e8-4804-a745-dac893caa8f0",
+      "createdAt": "2026-10-20T23:46:49.897Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4753",
+      "id": "5f647e66-852c-487b-9d98-930664e8c52c",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "29b20aaf-8920-4a68-bf19-a490c34fc59b",
+      "createdAt": "2026-10-20T23:46:25.100Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4752",
+      "id": "000cf8fb-5fe5-4155-843d-b306a4ae0f11",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "158d96e2-6250-4979-a30e-40f3f0644420",
+      "createdAt": "2026-10-20T23:31:11.160Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4750",
+      "id": "baf24206-8c42-46e0-a129-5e6bad86dc40",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "0b765b8d-9c6b-4588-956d-801afa53b2a6",
+      "createdAt": "2026-10-20T22:39:10.251Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4745",
+      "id": "d5efd323-87cf-47a1-8061-67317cb26154",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T22:24:18.217Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4744",
+      "id": "d0c04a60-4e57-43ff-8b6b-03e59b982d27",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T22:23:58.643Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4741",
+      "id": "c4d96ce3-b762-4409-aea1-f190547b34f7",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:47:41.557Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4740",
+      "id": "b1234ad6-3410-4602-8053-d955f4a753cd",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "761d47f7-391d-4b05-8b96-a2b65f10187f",
+      "createdAt": "2026-10-20T21:47:29.527Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4739",
+      "id": "1b02a14b-8d1a-4611-ab9e-275544ae40c4",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7a7cc19f-aa38-4460-81fd-5fc513a44837",
+      "createdAt": "2026-10-20T21:47:12.881Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4736",
+      "id": "4c64497b-b7f4-42b8-9c92-d757908f7a31",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "86acf5b0-4c30-4fa0-ae56-f0c29197219b",
+      "createdAt": "2026-10-20T21:38:34.998Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4735",
+      "id": "3954fef8-034a-4f81-8c00-4783fbf73b5e",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:38:28.460Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4734",
+      "id": "1a6b6a71-c819-4bc5-a68b-1a99e6c11051",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:38:19.440Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4733",
+      "id": "bcf3bd64-82a0-438c-b71f-a3cf361d74aa",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:37:59.464Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4732",
+      "id": "d15656cf-7e22-4ca1-aa0a-149b08f255f5",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:32:34.214Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4731",
+      "id": "e72590fa-1ce1-4929-839f-6e4ea063064c",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:32:16.705Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4730",
+      "id": "c2e51b6a-6faf-4b66-9e72-c913004ebbdb",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:31:43.419Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4729",
+      "id": "f76bf763-5343-4bae-8b10-ded1a1adab91",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:31:38.511Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4727",
+      "id": "e0d0d6b5-4617-46c4-bf6c-b6f3ec40a894",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:30:58.811Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4726",
+      "id": "acb40897-8f12-4dea-a200-5740f7481999",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:24:13.974Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4725",
+      "id": "e59ea501-daef-464e-82cf-8d246aeea133",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T21:03:10.201Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4723",
+      "id": "06ee568e-54a0-44c1-be5f-39af37a11666",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "2ac69991-bbf5-431d-adea-8138da7d3638",
+      "createdAt": "2026-10-20T20:59:58.277Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4718",
+      "id": "b8478ac7-8528-4731-b857-a67b19aab9b4",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "6fc6f873-ada0-4a37-b0d2-1ae38ca2f6cc",
+      "createdAt": "2026-10-20T20:25:02.236Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4714",
+      "id": "9deebeaf-5d09-485c-8e51-d54fbdda0472",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "113f28f2-4803-4abb-ba47-a2563b26f0c4",
+      "createdAt": "2026-10-20T20:13:29.872Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4713",
+      "id": "6c900934-c00a-421b-911a-90e8d8daf819",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "de3bfad5-ab39-4460-986e-dc9c8066299c",
+      "createdAt": "2026-10-20T20:13:04.483Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4712",
+      "id": "3976f839-a266-4417-9e17-6c488da61781",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "e28d3366-7bde-44e8-b5cb-2344a17a6f05",
+      "createdAt": "2026-10-20T20:12:16.251Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4711",
+      "id": "e3ac3184-f540-4d89-a662-944ecbe7a8eb",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "11ed5e6a-1e7d-4795-9c34-a8a02debc41a",
+      "createdAt": "2026-10-20T20:07:33.193Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4708",
+      "id": "e268703c-a072-40e2-a87f-ef9cc1972734",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "53d009d3-353d-4dc5-b290-88ab32aea180",
+      "createdAt": "2026-10-20T19:49:42.441Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4704",
+      "id": "84562da1-a4e3-45a1-9cb2-5a889e37f20a",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T19:40:32.030Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4702",
+      "id": "cb117e34-809c-4498-9fd7-cb6ddc20561b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "eb7ba8f3-81c4-4758-8bcc-ea247dffb634",
+      "createdAt": "2026-10-20T19:07:59.934Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4699",
+      "id": "23233c6b-21be-4193-8de2-44cdf0239918",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "39bee865-fce5-4532-a8d4-da519db01635",
+      "createdAt": "2026-10-20T18:48:11.175Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4684",
+      "id": "b91b657f-d897-4a33-b30e-ba1f5009171d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d3eb124a-7094-4fc9-903b-d70bca381868",
+      "createdAt": "2026-10-20T18:21:52.997Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4682",
+      "id": "5a2952c1-aa0a-4aee-9e72-9963cf781738",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "19650f5d-711b-49b3-b56e-55094ed8a41e",
+      "createdAt": "2026-10-20T18:12:03.113Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4681",
+      "id": "fbb5304d-fb44-4868-9c18-f5717e7705f6",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "2e82d404-a6ec-4b86-acce-b80f99fa61af",
+      "createdAt": "2026-10-20T18:11:34.778Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4680",
+      "id": "632c5ada-e57a-424f-917f-2207352073ed",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "4324c4fb-701d-41fb-927e-4068f9561967",
+      "createdAt": "2026-10-20T18:11:25.831Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4678",
+      "id": "0933fbbb-b6d2-4786-a6ec-44878fda4317",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "162b4cc6-14b8-4b9e-a181-6628130c1b6a",
+      "createdAt": "2026-10-20T17:52:45.659Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4677",
+      "id": "cb68e39e-1773-4463-84e0-c31e4d93c2c9",
+      "code": "DROP",
+      "preference": null,
+      "mode": "isolated_workspace",
+      "workspaceId": null,
+      "createdAt": "2026-10-20T17:52:30.716Z",
+      "why": "preference is null; the creation request did not carry the field"
+    },
+    {
+      "issue": "DIG-4675",
+      "id": "a028b96a-0fad-428c-8d17-d046287c190d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "26df2f11-b369-46d2-b193-fb84b8277fa6",
+      "createdAt": "2026-10-20T17:49:53.456Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4670",
+      "id": "95ae88aa-903c-4f4f-be9a-06892dfa90f1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "9dfc7c45-0a7d-48ec-ba86-94c408378dc1",
+      "createdAt": "2026-10-20T17:25:04.889Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4669",
+      "id": "8acf8ae2-6d84-4808-b8ca-e8113f357932",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "17f60c65-a222-4ce3-8fef-2a5d7bbfbd07",
+      "createdAt": "2026-10-20T17:24:41.027Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4668",
+      "id": "275f5ad4-0b4c-45ea-9015-cba1f1ce0e71",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7a6f7c49-366d-465a-9162-bfd4472a0935",
+      "createdAt": "2026-10-20T17:24:28.703Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4667",
+      "id": "a5a33ae5-70a5-4589-83fa-a44016a2e07b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "68eac1ff-a06b-4c17-aca0-a7483cadc636",
+      "createdAt": "2026-10-20T17:24:21.907Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4666",
+      "id": "8999df21-f317-49c3-9930-5e60409406c1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "1acca358-dcdb-4cec-947e-1c57e69cde15",
+      "createdAt": "2026-10-20T17:24:09.668Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4665",
+      "id": "1bab100d-3749-4bb6-be84-1e4a590c7c49",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "ccbbb908-add1-4c34-978d-4e7c7a8df692",
+      "createdAt": "2026-10-20T17:23:08.554Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4664",
+      "id": "99d27b36-4335-4707-a692-d830fb678524",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "9b5a0724-dff6-4077-8f67-9402af28d2dc",
+      "createdAt": "2026-10-20T17:17:42.037Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4663",
+      "id": "e48a6f0c-9b26-4be2-9408-05d2b2fd4545",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b3d2b73d-f913-43b1-856f-9dbd09206b55",
+      "createdAt": "2026-10-20T17:16:32.551Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4662",
+      "id": "8e5976c6-fe82-417d-b3ca-1688ede66d39",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "6b3306d4-42fb-40e1-aaea-c1583efdd97a",
+      "createdAt": "2026-10-20T17:15:29.861Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4661",
+      "id": "b3ecf229-d069-46f8-8470-2a9ae0a43b7b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d295942e-0934-458d-bc7f-fd814ec775d3",
+      "createdAt": "2026-10-20T17:15:28.612Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4660",
+      "id": "4e57d2c7-3b8c-4356-a487-b9883a8f7569",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "ea06a8b8-c223-4371-a298-cbd1fc734861",
+      "createdAt": "2026-10-20T17:15:27.877Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4658",
+      "id": "5364ca15-a05c-429b-85d7-c6e1758360fa",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d7cd0e2a-972e-4cf3-957e-a82bef96b68c",
+      "createdAt": "2026-10-20T17:13:08.231Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4657",
+      "id": "3f0266fb-97bf-459a-b020-a37121d8ab67",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "dc095ce1-d938-4572-b7fe-517030d14e4a",
+      "createdAt": "2026-10-20T17:13:02.795Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4656",
+      "id": "999b2324-e494-4d08-87df-bc11b4828b0d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "dd682464-9493-4c1c-ac97-c482d108f46a",
+      "createdAt": "2026-10-20T17:08:43.406Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4654",
+      "id": "e9789175-dd3b-4bed-9a61-793b61a7c521",
+      "code": "BOUND",
+      "preference": "isolated_workspace",
+      "mode": "isolated_workspace",
+      "workspaceId": "6c0d6779-4db6-44b1-903f-0d828d5a7409",
+      "createdAt": "2026-10-20T16:56:20.295Z",
+      "why": "preference isolated_workspace but executionWorkspaceId=6c0d6779-4db6-44b1-903f-0d828d5a7409 is set"
+    },
+    {
+      "issue": "DIG-4652",
+      "id": "02cf98df-b71f-4f01-8406-b8e9c2082e07",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "41196200-9884-43e8-99a0-062b6fa11a93",
+      "createdAt": "2026-10-20T16:56:19.927Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4651",
+      "id": "5339e86a-f217-44e2-abef-64ac8c69642c",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "31c86eae-c9c6-444e-9d46-5e03757aff02",
+      "createdAt": "2026-10-20T16:56:19.858Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4650",
+      "id": "1ab70f63-98a6-423e-9c34-697e4f4adfdc",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7413906f-0e69-403e-9373-dd59036b1e40",
+      "createdAt": "2026-10-20T16:56:19.652Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4647",
+      "id": "522de2a1-27a4-471e-ae7c-a98fa9cd227d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d4818279-bb22-4a35-9364-41b6f2b9112c",
+      "createdAt": "2026-10-20T16:25:11.086Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4646",
+      "id": "dee29f4c-3ddb-43ca-8de9-971cfbec6695",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c2efa9cb-d914-4013-884f-497be4621ae6",
+      "createdAt": "2026-10-20T16:11:41.614Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4645",
+      "id": "69852603-a4f0-4d96-8193-a059fe0b06ca",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b879f1b4-2a40-4622-9704-4a0fc88d0638",
+      "createdAt": "2026-10-20T16:06:13.148Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4642",
+      "id": "9cde00a8-4f3d-4286-a090-6c5cbb06d4fd",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "199c1649-313a-4b00-9bae-65d5d6791a14",
+      "createdAt": "2026-10-20T15:51:22.554Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4635",
+      "id": "bbe4b743-d9d1-41c6-abaf-6c2264b3316a",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "8b84a0ca-5827-4222-9c73-f9d2780dd778",
+      "createdAt": "2026-10-20T15:19:11.701Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4634",
+      "id": "31873f63-0dbf-409e-aeab-d1762025052b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "9b9bab67-d1c3-4991-8b80-66160b673dcc",
+      "createdAt": "2026-10-20T15:19:10.204Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4631",
+      "id": "eab6f409-9334-4110-a1c0-a1287ad32d84",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c6c2bd42-6cc6-43db-9e71-5be02cf0f78b",
+      "createdAt": "2026-10-20T14:01:21.507Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4629",
+      "id": "bba0dc5c-dc8e-46e5-ad8e-630e66443eb4",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "122381d6-f62c-45d0-b86b-1809f965c2c0",
+      "createdAt": "2026-10-20T13:46:30.032Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4627",
+      "id": "cd753756-1f0a-4bbc-9ec2-2e064016409b",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "506ee041-7fc3-44ba-b4cf-78122541d6ba",
+      "createdAt": "2026-10-20T13:25:01.953Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4621",
+      "id": "caa3801f-dfd9-44f5-9213-6bf9966f7755",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "00b87891-b568-46fe-bd77-439c19650c1f",
+      "createdAt": "2026-10-20T12:25:01.448Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4618",
+      "id": "7510f678-6389-402f-a150-1bd9d9fb6e1e",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b5a96518-95c2-4f71-9130-51afc27c590c",
+      "createdAt": "2026-10-20T11:25:01.318Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4616",
+      "id": "04eddef4-e388-4abe-870b-0ad6ca7bb73a",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "7c994459-ffa2-4a56-a583-879cd8f49173",
+      "createdAt": "2026-10-20T10:40:26.405Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4612",
+      "id": "f7138909-f33d-4798-89d3-ad7794813e5a",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "2bb6c902-d197-4313-a07d-adfb1abef4de",
+      "createdAt": "2026-10-20T09:50:44.399Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4611",
+      "id": "537e103c-cf2a-4106-9897-ce3bc7c4bfbe",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "8a70afb9-3917-433a-bbe0-f9643d00eb14",
+      "createdAt": "2026-10-20T09:33:19.752Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4609",
+      "id": "e4f1dd9a-d78b-40a0-bafa-8a64f8cc4d32",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d95c012c-8688-448b-a55a-49c05c658816",
+      "createdAt": "2026-10-20T09:25:01.044Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4608",
+      "id": "e5a5cbd1-f42c-4d2b-a680-16fa2e168676",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "bde6390d-4056-4475-ac3a-acb83b1a552a",
+      "createdAt": "2026-10-20T09:16:59.464Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4605",
+      "id": "9d339c01-64f4-4d4e-8d95-76afba63669e",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "3718ce04-9a22-43a7-b69e-c2d71882ba07",
+      "createdAt": "2026-10-20T08:35:42.800Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4604",
+      "id": "d85f92a5-83a1-49e2-bbb6-387a6b19cab1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "51a19594-88c5-404f-b234-033b04f7376a",
+      "createdAt": "2026-10-20T08:35:00.949Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4602",
+      "id": "1d8e2b1f-05db-467e-8da8-fa0e2a7d60ba",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "34628bfa-68ce-4284-b2b7-a50c6c0faf0d",
+      "createdAt": "2026-10-20T08:29:11.642Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4601",
+      "id": "06300642-9528-472d-bd16-3ef241275239",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "12a36255-e2b1-4e04-9534-472a01f66861",
+      "createdAt": "2026-10-20T08:27:34.331Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4600",
+      "id": "364132f4-5bf4-404d-84eb-bf9f3bb6ba33",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "6bfd751e-1b66-4787-895a-d57b444c8c2f",
+      "createdAt": "2026-10-20T08:27:33.804Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4599",
+      "id": "a029e7e7-e49a-4e5f-bdee-fd29466977cb",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "e31f8461-89f8-491b-bbe1-5642b26554c9",
+      "createdAt": "2026-10-20T08:27:33.129Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4598",
+      "id": "05e8694f-8b42-42bc-82c1-07c55ea5634d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "733a0b5f-10b7-499c-a997-e7cce1cf8591",
+      "createdAt": "2026-10-20T08:27:32.407Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4597",
+      "id": "3685e560-b0ec-4846-969a-9b36a789d0fc",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "e4a42348-8737-47ee-a935-38277f067514",
+      "createdAt": "2026-10-20T08:27:31.871Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4596",
+      "id": "0f5ea0ac-553b-4ed1-9d0b-9250c5a6ba5d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "ee4c4e15-2a94-49ac-82a3-2eab3a29c206",
+      "createdAt": "2026-10-20T08:27:31.407Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4595",
+      "id": "9e446664-cf05-457b-9fb0-7a5fcbc8f661",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "b0563f96-4aec-4e7c-a41f-872bc27f5ea3",
+      "createdAt": "2026-10-20T08:25:00.900Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4593",
+      "id": "0261cc2e-4b00-46fa-b315-f3c0f9b308a9",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "f7c87cd5-a354-4e2c-b261-08bdec4cb2c5",
+      "createdAt": "2026-10-20T08:19:57.483Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4592",
+      "id": "1e538327-adab-4bfc-8772-d7e92526d1c0",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "03176996-633c-48ef-817e-73daa3678124",
+      "createdAt": "2026-10-20T08:19:56.700Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4591",
+      "id": "2d2f207c-7cfe-4b9b-8e45-88674969a8e1",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "dcb3b738-940b-4741-98ae-4581c0d99287",
+      "createdAt": "2026-10-20T08:19:55.866Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4590",
+      "id": "bc451d8b-eba3-4f9c-b9da-3350fc1c3983",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c3b30fd1-4532-4bbd-afbc-17adf70e485a",
+      "createdAt": "2026-10-20T08:19:55.157Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4589",
+      "id": "2a1eb110-6a65-4ef5-afa8-3c297724b793",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "38da1275-ba52-44b5-bd1d-9674da6eb00a",
+      "createdAt": "2026-10-20T08:19:54.519Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4588",
+      "id": "b3dbe38b-b361-44a9-bfbb-e0eae1e0c1a0",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d40593be-24ea-4701-a635-9ecd0185c36e",
+      "createdAt": "2026-10-20T08:19:53.849Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4587",
+      "id": "0c8ec77a-50d7-4fa4-b449-8c7584e366a2",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "c47da884-5ab7-4244-ad50-fce28cb451de",
+      "createdAt": "2026-10-20T08:19:53.302Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4586",
+      "id": "52b1581b-befc-49ff-9db9-a7d33366fc7c",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "313c0c53-e5bd-498b-9a0d-ae1bd6219caf",
+      "createdAt": "2026-10-20T08:16:39.016Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4585",
+      "id": "cb570785-d8cc-464f-99b8-e3960b6cd638",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "dd6be7a0-c312-45a7-844c-5ef5222e78e8",
+      "createdAt": "2026-10-20T08:13:17.473Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4584",
+      "id": "bc590c3d-1ac3-4808-9a54-4fb33fb99109",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "360a51f1-90f9-4c02-8b8b-de9f7ca844ba",
+      "createdAt": "2026-10-20T08:13:14.929Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4582",
+      "id": "b29be61e-10ea-4e90-a27d-bc4a3e77f941",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "27ddc670-38be-4ecf-8081-945437d99550",
+      "createdAt": "2026-10-20T08:13:01.204Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4579",
+      "id": "73c1c7f6-b170-414f-b193-541a30b4c13d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "8f9eb332-0f4a-4e77-9b5a-f69d51610143",
+      "createdAt": "2026-10-20T07:53:24.636Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4578",
+      "id": "7a832b1d-80ce-4b00-b483-21ebf771a294",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "92a31a67-745d-4e67-9030-f0aeb42df228",
+      "createdAt": "2026-10-20T07:53:24.445Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4577",
+      "id": "787bb636-b336-405f-a276-a79aa7a0f0b4",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "df6dfae3-c5fd-4d1a-9bae-22ab71fcc97e",
+      "createdAt": "2026-10-20T07:53:24.351Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4575",
+      "id": "44e39fe7-3953-4643-ae22-c54e02ce3b1d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "73651fe4-779a-4117-9bb2-b5015790cc6c",
+      "createdAt": "2026-10-20T07:53:11.213Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4573",
+      "id": "aef1f81f-9276-4168-bbb7-79289da4ea8d",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "610ffff8-9687-4fab-aa6a-f4f11699506c",
+      "createdAt": "2026-10-20T07:31:10.425Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4571",
+      "id": "1022758d-d5d0-4fcd-8697-ccaa431364fb",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "2dd13044-448b-4af7-a305-045fb787e5fd",
+      "createdAt": "2026-10-20T07:30:00.627Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4570",
+      "id": "7033135c-5946-4805-afbe-b976b362a32c",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "512337bb-0888-47dd-88c7-b30cb0dc93dd",
+      "createdAt": "2026-10-20T07:26:44.729Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4569",
+      "id": "367e30a0-10b4-47db-bbf3-fe04c8aa3b96",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "e3a94e00-ecd5-4004-a3ea-a690fc6ac6fd",
+      "createdAt": "2026-10-20T07:26:43.643Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4568",
+      "id": "c12dd385-712c-47e7-8108-15d3a735526e",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "543bc8e0-02aa-4585-824a-b09f97de66e3",
+      "createdAt": "2026-10-20T07:26:33.061Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4567",
+      "id": "e718bcfc-14b1-4d30-9121-4ebbf73fc2e3",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "3e5ad083-e8e6-4c53-9d30-df1e3fb2c568",
+      "createdAt": "2026-10-20T07:25:00.617Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4566",
+      "id": "6466c2f4-eaf3-4b18-85e7-99a59b9442d3",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "ff9f1ced-ea1d-495f-8773-c03ccae3c502",
+      "createdAt": "2026-10-20T07:19:43.151Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    },
+    {
+      "issue": "DIG-4562",
+      "id": "5d042b28-7252-4a27-911e-0cecc54beb9a",
+      "code": "TRAP-WRITEBACK",
+      "preference": "reuse_existing",
+      "mode": "isolated_workspace",
+      "workspaceId": "d639d70b-ee6d-46dd-9f55-a18689f670a8",
+      "createdAt": "2026-10-20T06:40:00.529Z",
+      "why": "preference reuse_existing with settings.mode isolated_workspace on a bound issue; the platform write-back wrote it, not the creation request"
+    }
+  ]
+}
