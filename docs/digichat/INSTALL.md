@@ -112,13 +112,16 @@ Browser → digichat → digigraph → digillm/LiteLLM
                            └─ digivault_hub → digivault
 ```
 
-Pull **all** Profile A services from GHCR (digichat + digikey + digigraph + digivault).
-LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
+Pull **all** Profile A services from GHCR (digichat + digikey + digigraph + digivault +
+LiteLLM). LiteLLM is published by digithings from the MIT PyPI wheel — the image
+published by BerriAI is not licensed for production use. Pin stack, digichat and
+LiteLLM tags separately:
 
 | Variable | Example | Services |
 |---|---|---|
 | `DIGICHAT_VERSION` | `2.3.2` | digichat → `…/digichat:v2.3.2` |
 | `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
+| `LITELLM_IMAGE_TAG` | `1.72.6` | litellm (root compose + `make up-ghcr`; Profile A pins it inline) |
 
 ```bash
 cp infra/digichat-release/.env.profile-a.example \

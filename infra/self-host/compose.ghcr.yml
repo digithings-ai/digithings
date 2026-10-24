@@ -15,6 +15,7 @@
 #   DIGI_IMAGE_TAG=sha-<12-char-sha>   # preferred
 #   DIGI_IMAGE_TAG=v0.1.0              # pyproject version tag
 #   DIGICHAT_IMAGE_TAG=v1.0.0          # digichat release-please / hand-cut versions
+#   LITELLM_IMAGE_TAG=1.72.6           # litellm pin; build a digest pin for production
 #   # DataTap / existing clients may keep v0.9.3 — that GHCR tag remains published.
 #
 # See docs/DEPLOYMENT.md § "Pull from GHCR" and RELEASES.md.
@@ -63,5 +64,14 @@ services:
 
   digichat:
     image: ghcr.io/digithings-ai/digichat:${DIGICHAT_IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  # LiteLLM proxy. digithings-published since DIG-1780: built by Dockerfile.litellm
+  # from the MIT PyPI wheel, because the vendor image ships BerriAI's proprietary
+  # enterprise/ tree under a licence that permits dev/test use only. The default tag
+  # is the litellm pin, not `latest` — see scripts/check_litellm_vendor_boundary.sh.
+  litellm:
+    image: ghcr.io/digithings-ai/litellm:${LITELLM_IMAGE_TAG:-1.72.6}
     build: !reset null
     pull_policy: always

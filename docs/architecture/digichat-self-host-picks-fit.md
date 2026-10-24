@@ -62,7 +62,7 @@ Keep these stable across all three plans.
 |---|---|---|
 | `ghcr.io/digithings-ai/digichat:vX.Y.Z` | `publish-digichat-image.yml` | Pick 1 changes CSP wiring only; stack publish must **not** absorb digichat. |
 | `ghcr.io/digithings-ai/{digikey,digigraph,digivault}:…` | `publish-service-images.yml` | Pick 2. Also publishes other Python services; Profile A only needs these three. |
-| LiteLLM | Public `docker.litellm.ai/berriai/litellm:main-stable` | digithings does **not** republish. |
+| `ghcr.io/digithings-ai/litellm:1.72.6` | `Dockerfile.litellm` (DIG-1780) | Pick 1. Rebuilt from the MIT PyPI wheel; the BerriAI-published image is not licensed for production. |
 
 ### Volumes / compose overlays
 

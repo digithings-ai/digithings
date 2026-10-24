@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part (2026-10-07, DIG-1780):** this plan's LiteLLM decisions are no longer current. digithings now publishes its own LiteLLM image from the MIT PyPI wheel, because the BerriAI-published image bundles their proprietary `enterprise/` tree and is licensed for development and testing only. Statements below about leaving LiteLLM as the vendor image are kept as the historical record, marked **[superseded]**. See [`docs/architecture/litellm-pypi-image.md`](../../architecture/litellm-pypi-image.md).
+
 **Goal:** Finish Pick 2 so clients run Profile A (digichat + digikey + digigraph + LiteLLM + digivault) by **pulling** GHCR images — no monorepo `docker compose build` for those services.
 
 **Architecture:** [#2023](https://github.com/digithings-ai/digithings/pull/2023) already added a publish workflow + root Compose GHCR overlay. Remaining work glues that overlay into the digichat-release Profile A path, publishes the first GHCR packages (workflow is main-only), and documents pin/upgrade + config packaging so INSTALL no longer requires `--build`.
@@ -16,7 +18,7 @@
 - Pick 2 does **not** change digichat CSP (Pick 1) or ingest pipelines (Pick 3).
 - digichat keeps its own publish workflow (`publish-digichat-image.yml`); stack publish must not absorb digichat.
 - Production pins: never `:latest` for client installs; prefer `DIGI_IMAGE_TAG=sha-<12>` (stack) and `DIGICHAT_VERSION` / `DIGICHAT_IMAGE_TAG=vX.Y.Z` (digichat).
-- LiteLLM stays the public upstream image (`docker.litellm.ai/berriai/litellm:main-stable`) — digithings does **not** republish LiteLLM.
+- **[superseded — DIG-1780]** LiteLLM stays the public upstream image — digithings does **not** republish LiteLLM. (Reversed: digithings now builds `ghcr.io/digithings-ai/litellm` from the MIT PyPI wheel.)
 - Every shipping PR links a GitHub Issue (`task/<N>-slug` or `Fixes #<N>`).
 
 ---
@@ -32,7 +34,7 @@
 | Compose overlay usable without monorepo **image** build | **Partial** | `infra/self-host/compose.ghcr.yml` + `make pull-ghcr` / `make up-ghcr` reset `build:` and set `image: ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG:-latest}`. Still needs a **repo clone** for `docker-compose.yml`, `config/`, and `.env`. |
 | Profile A / INSTALL path without monorepo build | **Fail (glue)** | `infra/digichat-release/compose.profile-a.yml` still `build:` digikey / digigraph / digivault. `INSTALL.md` and `infra/digichat-release/README.md` still say “clone + `--build`”. |
 | Version pin compatible with digichat GHCR tags | **Pass (design)** | Separate vars: `DIGI_IMAGE_TAG` (stack) vs `DIGICHAT_IMAGE_TAG` / `DIGICHAT_VERSION` (digichat release-please). Documented in `compose.ghcr.yml` header + `docs/templates/self-host/README.md`. |
-| LiteLLM handling | **Pass** | Not in publish matrix. Overlay leaves LiteLLM as `docker.litellm.ai/berriai/litellm:main-stable` (root compose). |
+| LiteLLM handling | **[superseded — DIG-1780]** | Was: **Pass**, LiteLLM outside the publish matrix on the vendor image. Now: LiteLLM *is* in the publish matrix, built by `Dockerfile.litellm` from the MIT PyPI wheel. |
 | Two overlays / glue | **Gap** | Root path: `docker-compose.yml` + `compose.ghcr.yml` (full stack; digivault behind `--profile digivault`). Client path: self-contained `compose.profile-a.yml` (minimal Profile A, still builds Python). No documented “Profile A = release compose + GHCR pins” recipe. |
 | Conflict with Pick 1 (runtime CSP) | **None** | #2023 does not touch digichat CSP / `embed-hosts` / Next headers. digichat image publish remains separate. |
 | Conflict with Pick 3 (ingest → digivault) | **None** | digivault image + `DIGIVAULT_URL` / `DIGIVAULT_ROOT` volume contracts unchanged. Ingest can target the same URL/volume once Profile A pulls GHCR digivault. |
@@ -204,8 +206,10 @@ Leave `litellm` as:
 
 ```yaml
   litellm:
-    image: docker.litellm.ai/berriai/litellm:main-stable
+    image: ghcr.io/digithings-ai/litellm:1.72.6
 ```
+
+> **[superseded — DIG-1780]** Was the vendor image, left un-republished by design.
 
 Leave digichat as:
 
@@ -256,7 +260,7 @@ rg -n 'ghcr.io/digithings-ai/(digikey|digigraph|digivault|digichat)|build:' /tmp
 
 Expected:
 - digikey / digigraph / digivault / digichat images are `ghcr.io/digithings-ai/…`
-- LiteLLM remains `docker.litellm.ai/…`
+- **[superseded — DIG-1780]** LiteLLM remains the vendor image (now: `ghcr.io/digithings-ai/litellm:1.72.6`)
 - No `build:` context for digikey / digigraph / digivault / digichat
 
 - [ ] **Step 5: Commit**
@@ -333,7 +337,7 @@ Full monorepo stack (all Python services) alternative: [`docs/templates/self-hos
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| litellm | **GHCR** `ghcr.io/digithings-ai/litellm:1.72.6` **[superseded — DIG-1780]** |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 ```
 
