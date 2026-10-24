@@ -18,9 +18,10 @@ project.
 
 digithings takes the opposite position. The same code runs on a laptop, on a
 server you own and in a cloud account, with the same service contracts, the
-same setting names and the same identity model in each. You build locally,
-prove the application end to end on real data, and move it when the work
-needs more capacity. The move is a deployment choice, not a rewrite.
+same setting names and the same identity model in each. The cloud home in
+production today is Cloudflare, where the same services run in containers
+behind its edge. You build locally, prove the application on real data, and
+move it when the work needs more capacity.
 
 ```mermaid one application, three homes: the contracts between modules are the same in each
 flowchart LR
@@ -30,10 +31,10 @@ flowchart LR
 ```
 
 This is not an argument against the cloud. A cloud account is often the
-right home for a production service, and digithings runs there well. The
-argument is against choosing infrastructure before you know what the
-application needs, and against infrastructure that makes the choice hard to
-revisit.
+right home for a production service. The argument is against choosing
+infrastructure before you know what the application needs, and against
+infrastructure that makes the choice hard to revisit. The price is that you
+run the stack yourself: updates, backups and the machine are yours to keep.
 
 Three things keep the choice open. The code is open source, so nothing is
 hidden behind an account. The seams between modules are standard protocols,
@@ -41,7 +42,8 @@ so any module can run on a different machine from its neighbours. And no
 module assumes where the others live: each finds its neighbours through
 configuration, never through a hard-coded address.
 
-The result is that location stops being an architectural commitment. Stay on
-one machine while the work is small. Move to a cloud account when it needs
-more capacity. Split one module onto its own hardware when it grows faster
-than the rest. At every step it is the code you started with.
+So location stops being an architectural commitment. Stay on one machine
+while the work is small. Move to a cloud account when it needs more capacity.
+Put one module on its own hardware when it grows faster than the rest, say an
+index that outgrows the laptop's disk. At every step it is the code you
+started with.

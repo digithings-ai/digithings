@@ -32,19 +32,21 @@ licence that does not expire.
 Open code is not enough if the boundaries are proprietary. A stack can publish
 every module and still lock you in through the way they talk to each other.
 
-digithings keeps its seams on standards that existed before it and will exist
-after it. Models are reached through the chat format most providers and local
-runners already speak. Tools are described with the Model Context Protocol, so
-any client that speaks it can use them. Identity is carried in standard signed
-credentials that any service can verify. Replace one module with your own and
-the others do not notice.
+digithings keeps its seams on standards it did not write. Models are reached
+through the OpenAI chat format, which Ollama, LiteLLM and most providers
+accept. Tools are described with the Model Context Protocol, so any client that
+speaks it can use them. Identity travels as signed JSON Web Tokens that any
+service can verify with a published key, and traces leave as OpenTelemetry.
+Replace a module with your own that keeps its seam and the others do not
+notice.
 
 ## What stays closed
 
-The closed part is narrow and has a rule. Anything a person would reasonably want to self-host for their
-own work stays open. What is closed is the commercial layer built on top: the
-finance workflows that run research cycles and portfolio decisions, the layer
-that turns research into live orders, the machinery for running many tenants
-on one deployment, and managed hosting.
+The closed part is narrow and has a rule. Anything a person would reasonably
+want to self-host for their own work stays open. What is closed is the
+commercial layer built on top: the finance workflows that run research cycles
+and portfolio decisions, the layer that turns research into live orders, the
+machinery for running many tenants on one deployment, and managed hosting.
+That layer is being moved into private repositories of its own.
 
 That line can move as the project grows. The rule behind it does not.
