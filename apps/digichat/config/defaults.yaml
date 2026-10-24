@@ -113,17 +113,39 @@ deployment: &house
   mcp:
     allowUserServers: false
     allowAddForm: false
+    # Per-row MCP credentials. Two shapes, and the precedence is not a fallback
+    # chain:
+    #
+    #   authScheme: jwt   the chat mints its own digikey token, scoped
+    #                     `mcp:<server id>`, server-side, once per scope set and
+    #                     reused until 60s before exp. Sent as
+    #                     `Authorization: Bearer <token>` and verified at the
+    #                     MCP edge (apps/digithings-stack-cloudflare/src/
+    #                     mcp-edge-auth.ts), which refuses a token that does not
+    #                     carry this server's scope. Wins over token/tokenEnv on
+    #                     the same row; if minting fails the row gets NO
+    #                     credential — never the static one.
+    #   token / tokenEnv  the static shape: `tokenEnv` names an env var resolved
+    #                     at load, sent under `authHeader` (or as
+    #                     `Authorization: Bearer` when authHeader is absent).
+    #                     This is what compose and self-host use, and what a row
+    #                     with no authScheme means. Unchanged by this document.
+    #
+    # Neither shape ever reaches the browser: only id/url/label/setup reach the
+    # client projection.
     servers:
       - id: digisearch
         url: http://digisearch-mcp:8765/mcp
         label: Search
         default: true
+        authScheme: jwt
         setup:
           index_name: digithings_docs
       - id: digivault
         url: http://digivault-mcp:8769/mcp
         label: Vault
         default: true
+        authScheme: jwt
         setup:
           path_prefix: clients/digithings
   gate:

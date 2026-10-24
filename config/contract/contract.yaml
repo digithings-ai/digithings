@@ -849,11 +849,14 @@ env:
   description: JWKS endpoint every protected service fetches to verify JWTs.
   secret: false
   sources:
-    wrangler_workers: []
+    wrangler_workers:
+    - digithings-stack
     compose_files:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+  wrangler_values:
+    digithings-stack: https://key.digithings.ai/.well-known/jwks.json
 - name: DIGIKEY_LITELLM_PROXY_KEY
   description: digikey's key into LiteLLM; falls back to LITELLM_MASTER_KEY.
   secret: true

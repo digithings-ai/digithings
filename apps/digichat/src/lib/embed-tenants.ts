@@ -261,6 +261,12 @@ export type EmbedTenantConfig = {
       setup?: Record<string, string>;
       authHeader?: string;
       /**
+       * Mirrors the YAML `mcp.servers[].authScheme` (defaults.yaml). `"jwt"`
+       * makes the chat mint its own digikey token, scoped `mcp:<id>`, instead of
+       * sending `token`/`tokenEnv`. Absent means the static shape.
+       */
+      authScheme?: "static" | "jwt";
+      /**
        * Operator tool allowlist for this row (DIG-284). RAW MCP tool names,
        * matched exactly by digigraph — bare `list_tickets`, never the
        * `zammad_`-prefixed form. Omit to deny every tool on this row; the same
@@ -838,6 +844,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      if (
+        server.authScheme !== undefined &&
+        server.authScheme !== "static" &&
+        server.authScheme !== "jwt"
+      ) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authScheme must be "static" or "jwt"`,
+        );
+      }
       if (server.allowedTools !== undefined && !Array.isArray(server.allowedTools)) {
         throw new Error(
           `embed tenant "${hostKey}": mcp.servers[${index}].allowedTools must be an array`,
@@ -872,6 +887,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         // Empty maps are legal and simply omitted — nothing to forward.
         if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
       }
+      // Narrowed once here: the shape check above guarantees the value, but a
+      // spread cannot carry the narrowing into the literal's inferred type.
+      const authScheme: "static" | "jwt" | undefined =
+        server.authScheme === "jwt" || server.authScheme === "static"
+          ? server.authScheme
+          : undefined;
       return {
         id: server.id,
         url: server.url,
@@ -881,6 +902,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(authScheme ? { authScheme } : {}),
         ...(allowedTools ? { allowedTools } : {}),
         ...(mutatingTools ? { mutatingTools } : {}),
       };

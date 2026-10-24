@@ -9,6 +9,7 @@
     "DIGIKEY_ALLOW_EPHEMERAL_KEY": "0",
     "DIGIKEY_AUDIENCE": "digi-ecosystem",
     "DIGIKEY_ISSUER": "https://key.digithings.ai",
+    "DIGIKEY_JWKS_URL": "https://key.digithings.ai/.well-known/jwks.json",
     "DIGIQUANT_MARKET_DATA_BACKEND": "r2",
     "DIGIQUANT_URL": "",
     "DIGISEARCH_EMBEDDING_PROVIDER": "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
