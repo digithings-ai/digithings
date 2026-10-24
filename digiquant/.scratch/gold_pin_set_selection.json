@@ -1,0 +1,1712 @@
+{
+  "symbol": "GLD-USD",
+  "calendar": "2004-11-18..2026-09-29 (5499 daily bars)",
+  "metric": "separation = mean(z | trough windows) - mean(z | peak windows); positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)",
+  "metric_read": "higher is better; positive = the z runs HIGHER in the pinned trough windows and LOWER in the pinned peak windows, i.e. it votes cheap at bottoms; abs() is never applied to this metric",
+  "in_sample": true,
+  "in_sample_label": "IN-SAMPLE: every number here is fitted on the SAME price history it is scored against. Each row is a MAX over the frozen grid, scored against cycle windows derived from that same series, so capture counts and capture depths are a PARTLY-SELECTED UPPER BOUND \u2014 not out-of-sample predictive skill and not a performance claim. Windows are a scoring target, not execution periods: no exposure floor, no return, no Sharpe, no trade count.",
+  "upper_bound_caveat": "UPPER-BOUND CAVEAT: every per-indicator row is the maximum over a frozen grid, scored against windows derived from the same price history the z-series are built from. The maximum is chosen knowing the scores, so the capture count and capture depth reported for each pin set are a partly-selected upper bound. Read them as 'the best this grid can do on its own history', never as out-of-sample evidence.",
+  "pin_set_label": "The two gold pin sets are comparable rather than competing: gold_v1() (Set A, six hand-approved close-based pins) is a PROPER SUBSET of gold_v2() (20 algorithmic turns at min_move_pct=15.0), same turns and same kinds. gold_v2 therefore REFINES the same target by interpolating the turns between Set A's picks \u2014 it is not a rival target, and a separation that moves between them is the granularity speaking, not a contradiction.",
+  "comparison_rule": "WHICH SET FITS BETTER is decided by capture DEPTH, not headcount \u2014 the owner's frozen ranking key (0.5 bar), applied across pin sets instead of across min_move_pct levels. depth = the summed |separation| of the capturing indicators. Headcount is reported beside it, never ranked on. A depth tie goes to the COARSER pin set (fewer windows, more robust), the same tie-break the granularity choice uses.",
+  "capture_bar": 0.5,
+  "capture_rule": "An indicator's row is the grid row maximising |separation|. It CAPTURES a level iff |separation| >= 0.5 z-units AND is not degenerate (neither window side's mean inside +/-0.06). abs() IS applied to the bar \u2014 this REVERSES the earlier 'abs() is forbidden' rule, because direction is now FITTED per indicator and recorded as +1 (trough-high / peak-low) or -1 (inverted) rather than imposed. DIRECTION STABILITY: an indicator capturing at more than one level must carry the SAME fitted direction at every level where it captures; a flip is flagged direction_unstable, captures nowhere, and the flip is recorded. An unscoreable leg never captures.",
+  "degenerate_mean_abs": 0.06,
+  "frozen_knobs": {
+    "grids": {
+      "level_z_windows": [
+        90,
+        180,
+        270,
+        378,
+        504,
+        756,
+        1260
+      ],
+      "roc_days": [
+        90,
+        180,
+        365,
+        730
+      ],
+      "roc_windows": [
+        180,
+        378,
+        756,
+        1260
+      ],
+      "rsi_lengths": [
+        14,
+        21
+      ],
+      "macd_spans": [
+        [
+          12,
+          26
+        ],
+        [
+          8,
+          34
+        ]
+      ],
+      "macd_z_windows": [
+        90,
+        378
+      ],
+      "sma_band_windows": [
+        200,
+        378,
+        1000
+      ],
+      "sma_band_min_samples": [
+        30,
+        60
+      ]
+    },
+    "medium_band": "window_days <= 378",
+    "long_band": "window_days >= 504",
+    "anchor": "valuation = rolling_z 90d / z 1.0 at equal weight 1.0",
+    "source": "every grid, band and anchor constant is re-exported BY REFERENCE from digiquant/scripts/fit_gold_indicators.py; the bar and dead zone come from digiquant.strategies.sdca.sensitivity_consolidate. Only the WINDOW SET differs between the two runs."
+  },
+  "comparison": {
+    "rows": [
+      {
+        "name": "uup",
+        "by_set": {
+          "gold_v1": {
+            "name": "uup",
+            "params": {
+              "window": 270
+            },
+            "window_days": 270,
+            "separation": -2.4225121353180508,
+            "abs_separation": 2.4225121353180508,
+            "direction": -1,
+            "mean_peak_z": 0.8178723371414528,
+            "mean_trough_z": -1.6046397981765979,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "uup",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -1.562481956742705,
+            "abs_separation": 1.562481956742705,
+            "direction": -1,
+            "mean_peak_z": 0.520543098710503,
+            "mean_trough_z": -1.0419388580322022,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.8966639544344996,
+            "scored_days": 1102,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "real_rate",
+        "by_set": {
+          "gold_v1": {
+            "name": "real_rate",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "separation": 3.741401595515696,
+            "abs_separation": 3.741401595515696,
+            "direction": 1,
+            "mean_peak_z": -1.6699145512999178,
+            "mean_trough_z": 2.0714870442157785,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "real_rate",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": 1.561734597757514,
+            "abs_separation": 1.561734597757514,
+            "direction": 1,
+            "mean_peak_z": -0.3625332182543927,
+            "mean_trough_z": 1.1992013795031213,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": 1
+        },
+        "flipped": false
+      },
+      {
+        "name": "gvz",
+        "by_set": {
+          "gold_v1": {
+            "name": "gvz",
+            "params": {
+              "window": 270
+            },
+            "window_days": 270,
+            "separation": -1.451491988253848,
+            "abs_separation": 1.451491988253848,
+            "direction": -1,
+            "mean_peak_z": 1.4394461925680009,
+            "mean_trough_z": -0.012045795685847066,
+            "degenerate": true,
+            "captures": false,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "gvz",
+            "params": {
+              "window": 90
+            },
+            "window_days": 90,
+            "separation": -0.4252209187380916,
+            "abs_separation": 0.4252209187380916,
+            "direction": -1,
+            "mean_peak_z": 0.1878723275341576,
+            "mean_trough_z": -0.23734859120393398,
+            "degenerate": false,
+            "captures": false,
+            "coverage": 0.8454027664768105,
+            "scored_days": 1039,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": false,
+          "gold_v2": false
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "hy_oas",
+        "by_set": {
+          "gold_v1": {
+            "name": "hy_oas",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -0.694089068753136,
+            "abs_separation": 0.694089068753136,
+            "direction": -1,
+            "mean_peak_z": -0.27052441877448297,
+            "mean_trough_z": -0.964613487527619,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.32978723404255317,
+            "scored_days": 124,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "hy_oas",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -0.694089068753136,
+            "abs_separation": 0.694089068753136,
+            "direction": -1,
+            "mean_peak_z": -0.27052441877448297,
+            "mean_trough_z": -0.964613487527619,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.10089503661513426,
+            "scored_days": 124,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "ig_oas",
+        "by_set": {
+          "gold_v1": {
+            "name": "ig_oas",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -0.18457781213055768,
+            "abs_separation": 0.18457781213055768,
+            "direction": -1,
+            "mean_peak_z": -0.26854084340615353,
+            "mean_trough_z": -0.4531186555367112,
+            "degenerate": false,
+            "captures": false,
+            "coverage": 0.32978723404255317,
+            "scored_days": 124,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "ig_oas",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -0.18457781213055768,
+            "abs_separation": 0.18457781213055768,
+            "direction": -1,
+            "mean_peak_z": -0.26854084340615353,
+            "mean_trough_z": -0.4531186555367112,
+            "degenerate": false,
+            "captures": false,
+            "coverage": 0.10089503661513426,
+            "scored_days": 124,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": false,
+          "gold_v2": false
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "breakeven_5y",
+        "by_set": {
+          "gold_v1": {
+            "name": "breakeven_5y",
+            "params": {
+              "window": 378
+            },
+            "window_days": 378,
+            "separation": -1.076889631298606,
+            "abs_separation": 1.076889631298606,
+            "direction": -1,
+            "mean_peak_z": 0.10176598277666393,
+            "mean_trough_z": -0.9751236485219421,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "breakeven_5y",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -1.0276889101430264,
+            "abs_separation": 1.0276889101430264,
+            "direction": -1,
+            "mean_peak_z": 0.3516038077825922,
+            "mean_trough_z": -0.6760851023604342,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "nfci",
+        "by_set": {
+          "gold_v1": {
+            "name": "nfci",
+            "params": {
+              "window": 756
+            },
+            "window_days": 756,
+            "separation": 1.315741994001843,
+            "abs_separation": 1.315741994001843,
+            "direction": 1,
+            "mean_peak_z": -0.559306763539155,
+            "mean_trough_z": 0.756435230462688,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "nfci",
+            "params": {
+              "window": 90
+            },
+            "window_days": 90,
+            "separation": -0.6793298351385954,
+            "abs_separation": 0.6793298351385954,
+            "direction": -1,
+            "mean_peak_z": 0.2514316349882058,
+            "mean_trough_z": -0.42789820015038954,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": -1
+        },
+        "flipped": true
+      },
+      {
+        "name": "gdx_gld",
+        "by_set": {
+          "gold_v1": {
+            "name": "gdx_gld",
+            "params": {
+              "window": 756
+            },
+            "window_days": 756,
+            "separation": -2.181210943444345,
+            "abs_separation": 2.181210943444345,
+            "direction": -1,
+            "mean_peak_z": 1.3146548328178003,
+            "mean_trough_z": -0.8665561106265447,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "gdx_gld",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "separation": -1.2349289909801673,
+            "abs_separation": 1.2349289909801673,
+            "direction": -1,
+            "mean_peak_z": 0.29107817385019286,
+            "mean_trough_z": -0.9438508171299745,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.9536208299430431,
+            "scored_days": 1172,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "gld_slv",
+        "by_set": {
+          "gold_v1": {
+            "name": "gld_slv",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "separation": 2.102433512368002,
+            "abs_separation": 2.102433512368002,
+            "direction": 1,
+            "mean_peak_z": -1.4872881221853902,
+            "mean_trough_z": 0.6151453901826118,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "gld_slv",
+            "params": {
+              "window": 90
+            },
+            "window_days": 90,
+            "separation": 0.995808901479201,
+            "abs_separation": 0.995808901479201,
+            "direction": 1,
+            "mean_peak_z": -0.5993520192687289,
+            "mean_trough_z": 0.39645688221047204,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.9666395443449959,
+            "scored_days": 1188,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": 1
+        },
+        "flipped": false
+      },
+      {
+        "name": "m2",
+        "by_set": {
+          "gold_v1": {
+            "name": "m2",
+            "params": {
+              "roc_days": 730,
+              "window": 378
+            },
+            "window_days": 378,
+            "separation": -2.47644054727549,
+            "abs_separation": 2.47644054727549,
+            "direction": -1,
+            "mean_peak_z": 2.120516972141974,
+            "mean_trough_z": -0.35592357513351636,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "m2",
+            "params": {
+              "roc_days": 730,
+              "window": 378
+            },
+            "window_days": 378,
+            "separation": -0.7438192648220336,
+            "abs_separation": 0.7438192648220336,
+            "direction": -1,
+            "mean_peak_z": 1.4150230438543716,
+            "mean_trough_z": 0.671203779032338,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.8966639544344996,
+            "scored_days": 1102,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": -1
+        },
+        "flipped": false
+      },
+      {
+        "name": "walcl",
+        "by_set": {
+          "gold_v1": {
+            "name": "walcl",
+            "params": {
+              "roc_days": 180,
+              "window": 378
+            },
+            "window_days": 378,
+            "separation": -2.2116537713634306,
+            "abs_separation": 2.2116537713634306,
+            "direction": -1,
+            "mean_peak_z": 1.7534693461508244,
+            "mean_trough_z": -0.458184425212606,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "walcl",
+            "params": {
+              "roc_days": 365,
+              "window": 378
+            },
+            "window_days": 378,
+            "separation": 0.5041801259283466,
+            "abs_separation": 0.5041801259283466,
+            "direction": 1,
+            "mean_peak_z": 0.17423677251798775,
+            "mean_trough_z": 0.6784168984463343,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 0.9609438567941416,
+            "scored_days": 1181,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": -1,
+          "gold_v2": 1
+        },
+        "flipped": true
+      },
+      {
+        "name": "weekly_rsi",
+        "by_set": {
+          "gold_v1": {
+            "name": "weekly_rsi",
+            "params": {
+              "rsi_length": 14
+            },
+            "window_days": 105,
+            "separation": 0.7182954873408246,
+            "abs_separation": 0.7182954873408246,
+            "direction": 1,
+            "mean_peak_z": -0.7182954873408246,
+            "mean_trough_z": 0.0,
+            "degenerate": true,
+            "captures": false,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": "no grid row in the long (>=504d) band \u2014 frozen windows for weekly_rsi are [105, 154]"
+          },
+          "gold_v2": {
+            "name": "weekly_rsi",
+            "params": {
+              "rsi_length": 14
+            },
+            "window_days": 105,
+            "separation": 0.4739377674171752,
+            "abs_separation": 0.4739377674171752,
+            "direction": 1,
+            "mean_peak_z": -0.44408975980339416,
+            "mean_trough_z": 0.02984800761378103,
+            "degenerate": true,
+            "captures": false,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": "no grid row in the long (>=504d) band \u2014 frozen windows for weekly_rsi are [105, 154]"
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": false,
+          "gold_v2": false
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": 1
+        },
+        "flipped": false
+      },
+      {
+        "name": "weekly_macd",
+        "by_set": {
+          "gold_v1": {
+            "name": "weekly_macd",
+            "params": {
+              "macd_fast": 8,
+              "macd_slow": 34,
+              "macd_z_window": 90
+            },
+            "window_days": 90,
+            "separation": 0.7556718642651518,
+            "abs_separation": 0.7556718642651518,
+            "direction": 1,
+            "mean_peak_z": -0.7498078766096246,
+            "mean_trough_z": 0.005863987655527236,
+            "degenerate": true,
+            "captures": false,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": "no grid row in the long (>=504d) band \u2014 frozen windows for weekly_macd are [90, 378]"
+          },
+          "gold_v2": {
+            "name": "weekly_macd",
+            "params": {
+              "macd_fast": 8,
+              "macd_slow": 34,
+              "macd_z_window": 90
+            },
+            "window_days": 90,
+            "separation": 0.4238690341336661,
+            "abs_separation": 0.4238690341336661,
+            "direction": 1,
+            "mean_peak_z": -0.2941621611070045,
+            "mean_trough_z": 0.12970687302666162,
+            "degenerate": false,
+            "captures": false,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": "no grid row in the long (>=504d) band \u2014 frozen windows for weekly_macd are [90, 378]"
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": false,
+          "gold_v2": false
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": 1
+        },
+        "flipped": false
+      },
+      {
+        "name": "sma_band",
+        "by_set": {
+          "gold_v1": {
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "separation": 3.345021716982406,
+            "abs_separation": 3.345021716982406,
+            "direction": 1,
+            "mean_peak_z": -2.111373235023282,
+            "mean_trough_z": 1.233648481959124,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 376,
+            "status": "scored",
+            "reason": null
+          },
+          "gold_v2": {
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "separation": 2.4315953247082787,
+            "abs_separation": 2.4315953247082787,
+            "direction": 1,
+            "mean_peak_z": -1.3969956969581654,
+            "mean_trough_z": 1.034599627750113,
+            "degenerate": false,
+            "captures": true,
+            "coverage": 1.0,
+            "scored_days": 1229,
+            "status": "scored",
+            "reason": null
+          }
+        },
+        "captures_by_set": {
+          "gold_v1": true,
+          "gold_v2": true
+        },
+        "direction_by_set": {
+          "gold_v1": 1,
+          "gold_v2": 1
+        },
+        "flipped": false
+      }
+    ],
+    "flips": [
+      {
+        "name": "nfci",
+        "changes": [
+          "direction"
+        ],
+        "gold_v1_separation": 1.315741994001843,
+        "gold_v2_separation": -0.6793298351385954,
+        "gold_v1_direction": 1,
+        "gold_v2_direction": -1,
+        "gold_v1_captures": true,
+        "gold_v2_captures": true
+      },
+      {
+        "name": "walcl",
+        "changes": [
+          "direction"
+        ],
+        "gold_v1_separation": -2.2116537713634306,
+        "gold_v2_separation": 0.5041801259283466,
+        "gold_v1_direction": -1,
+        "gold_v2_direction": 1,
+        "gold_v1_captures": true,
+        "gold_v2_captures": true
+      }
+    ],
+    "verdict": {
+      "better_label": "gold_v1",
+      "tied": false,
+      "depth_margin": -10.131737939868003,
+      "count_margin": 0,
+      "reason": "capture_depth 11.4357 < 21.5674 (-10.1317); depth is the ranking key, headcount is reported only"
+    }
+  },
+  "sets": {
+    "gold_v1": {
+      "factory": "SdcaCycleWindows.gold_v1()",
+      "windows": "SdcaCycleWindows.gold_v1() \u00b145d",
+      "pins": 6,
+      "greedy_kept": [],
+      "greedy_dropped": [
+        "real_rate",
+        "sma_band",
+        "gld_slv",
+        "nfci",
+        "ig_oas"
+      ],
+      "selection": {
+        "symbol": "GLD-USD",
+        "calendar": "2004-11-18..2026-09-29 (5499 daily bars)",
+        "windows": "SdcaCycleWindows.gold_v1() \u00b145d",
+        "metric": "separation = mean(z | trough windows) - mean(z | peak windows); positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)",
+        "metric_read": "higher is better; positive = the z runs HIGHER in the pinned trough windows and LOWER in the pinned peak windows, i.e. it votes cheap at bottoms; abs() is never applied to this metric",
+        "in_sample": true,
+        "in_sample_label": "IN-SAMPLE: separation is fit against the same pinned gold_v1 windows it is measured on (every bar with a valid z) \u2014 it calibrates indicator windows to pinned history and is NOT out-of-sample predictive skill; the holdout stays spent and untouched.",
+        "rule": "base = equal-weight {valuation: 1.0} on rolling90/z1.0 rails (the no-trend anchor). Candidates = every indicator whose individual best-fit separation > 0, ordered by separation descending (frozen order). For each candidate: add at equal weight alongside all kept-so-far, recompute equal-weight aggregate separation; keep if aggregate separation STRICTLY improves, else drop (record the delta for every candidate \u2014 that table IS the deliverable). Report also the pure equal-weight-of-individual-passers aggregate as a cross-check (never used for selection).",
+        "rule_notes": [
+          "Candidate pool = `verdict == 'keep'` from the fits file, which is the rule's 'individual separation > 0' MINUS Ruling 1's degenerate oscillator passes. Filtering on `separation > 0` alone would admit weekly_rsi / weekly_macd, whose passes rest on a dead side \u2014 the very legs Ruling 1 holds out of every keep list.",
+          "Frozen order = individual separation DESC, ties to the SHORTER window, then the name (the same parsimony tie-break Task 1 uses). The kept list is therefore a function of this order, not of a global optimum; greedy_select() refuses a pool whose separations are not non-increasing.",
+          "Kept iff the aggregate separation STRICTLY improves: a delta of exactly 0.0 is a DROP. The aggregate is the SHIPPED equal-weight blend (compute_composite_risk at weight 1.0 == mean(z).clip(-3, 3)), scored with the same frozen separation metric \u2014 no separate aggregate metric exists.",
+          "NULL HAZARD: compute_composite_risk sums with ignore_nulls=False, so a candidate whose warm-up leaves PINNED-window days null removes those days from the scored sample. Every step therefore records scored_days/coverage before and after next to the delta: a shrinking sample is visible and is never silently credited (or blamed) as a vote change.",
+          "The cross-check aggregate (equal weight over anchor + every non-degenerate passer, no greedy pruning) is reported for the owner and NEVER used to select."
+        ],
+        "order": "frozen: individual best-fit separation DESC, ties to the shorter window then the name; the kept list is a function of this order, not of a global optimum",
+        "anchor": {
+          "name": "valuation",
+          "form": "rolling_z",
+          "rolling_window": 90,
+          "rolling_z": 1.0,
+          "trend_rails": "none (no time trend)",
+          "weight": 1.0,
+          "built_by": "resolve_sdca_risk_model('rolling_z', dates=, price=, rolling_window=90, rolling_z=1.0) + build_risk_index(..., extra_indicators=None, valuation_weight=1.0)['valuation_z'] \u2014 shipped code, zero production edits",
+          "aggregate_separation": 5.044715450143613,
+          "scored_days": 376
+        },
+        "aggregate": {
+          "function": "digiquant.strategies.sdca.composite_risk.compute_composite_risk",
+          "weights": {
+            "valuation": 1.0
+          },
+          "clip": [
+            -3.0,
+            3.0
+          ],
+          "null_rule": "ignore_nulls=False \u2014 a null in any member nulls that day, so a candidate's warm-up shrinks the scored sample (see scored_days)"
+        },
+        "candidate_pool": [
+          {
+            "order": 1,
+            "name": "real_rate",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 3.741401595515696
+          },
+          {
+            "order": 2,
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "individual_separation": 3.345021716982406
+          },
+          {
+            "order": 3,
+            "name": "gld_slv",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 2.102433512368002
+          },
+          {
+            "order": 4,
+            "name": "nfci",
+            "params": {
+              "window": 756
+            },
+            "window_days": 756,
+            "individual_separation": 1.315741994001843
+          },
+          {
+            "order": 5,
+            "name": "ig_oas",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.17924446398534377
+          }
+        ],
+        "kept": [],
+        "kept_params": {},
+        "dropped": [
+          "real_rate",
+          "sma_band",
+          "gld_slv",
+          "nfci",
+          "ig_oas"
+        ],
+        "dropped_deltas": {
+          "real_rate": {
+            "individual_separation": 3.741401595515696,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 4.393058522829655,
+            "delta": -0.6516569273139581,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "kept": false
+          },
+          "sma_band": {
+            "individual_separation": 3.345021716982406,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 4.19486858356301,
+            "delta": -0.8498468665806032,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "kept": false
+          },
+          "gld_slv": {
+            "individual_separation": 2.102433512368002,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 3.573574481255808,
+            "delta": -1.4711409688878052,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "kept": false
+          },
+          "nfci": {
+            "individual_separation": 1.315741994001843,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 3.1802287220727283,
+            "delta": -1.8644867280708848,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "kept": false
+          },
+          "ig_oas": {
+            "individual_separation": 0.17924446398534377,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 2.519614141557661,
+            "delta": -2.525101308585952,
+            "scored_days_before": 376,
+            "scored_days_after": 124,
+            "days_delta": -252,
+            "kept": false
+          }
+        },
+        "delta_table": [
+          {
+            "step": 1,
+            "name": "real_rate",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 3.741401595515696,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 4.393058522829655,
+            "delta": -0.6516569273139581,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 2,
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "individual_separation": 3.345021716982406,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 4.19486858356301,
+            "delta": -0.8498468665806032,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 3,
+            "name": "gld_slv",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 2.102433512368002,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 3.573574481255808,
+            "delta": -1.4711409688878052,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 4,
+            "name": "nfci",
+            "params": {
+              "window": 756
+            },
+            "window_days": 756,
+            "individual_separation": 1.315741994001843,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 3.1802287220727283,
+            "delta": -1.8644867280708848,
+            "scored_days_before": 376,
+            "scored_days_after": 376,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 5,
+            "name": "ig_oas",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.17924446398534377,
+            "aggregate_before": 5.044715450143613,
+            "aggregate_after": 2.519614141557661,
+            "delta": -2.525101308585952,
+            "scored_days_before": 376,
+            "scored_days_after": 124,
+            "days_delta": -252,
+            "coverage_before": 1.0,
+            "coverage_after": 0.32978723404255317,
+            "kept": false
+          }
+        ],
+        "aggregate_trajectory": [
+          {
+            "step": 0,
+            "added": null,
+            "kept": null,
+            "members": [
+              "valuation"
+            ],
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          },
+          {
+            "step": 1,
+            "added": "real_rate",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 4.393058522829655,
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          },
+          {
+            "step": 2,
+            "added": "sma_band",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 4.19486858356301,
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          },
+          {
+            "step": 3,
+            "added": "gld_slv",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 3.573574481255808,
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          },
+          {
+            "step": 4,
+            "added": "nfci",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 3.1802287220727283,
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          },
+          {
+            "step": 5,
+            "added": "ig_oas",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.519614141557661,
+            "separation": 5.044715450143613,
+            "scored_days": 376
+          }
+        ],
+        "final": {
+          "members": [
+            "valuation"
+          ],
+          "separation": 5.044715450143613
+        },
+        "cross_check": {
+          "label": "cross-check: equal weight over the anchor + EVERY non-degenerate passer at once (no greedy pruning). Reported only \u2014 it never feeds a keep/drop decision.",
+          "members": [
+            "valuation",
+            "real_rate",
+            "sma_band",
+            "gld_slv",
+            "nfci",
+            "ig_oas"
+          ],
+          "separation": 2.0406718740448504,
+          "mean_peak_z": -1.7593103059067108,
+          "mean_trough_z": 0.2813615681381394,
+          "scored_days": 124,
+          "coverage": 0.32978723404255317,
+          "used_for_selection": false
+        },
+        "degenerate_owner_review": [
+          {
+            "name": "weekly_rsi",
+            "params": {
+              "rsi_length": 14
+            },
+            "window_days": 105,
+            "separation": 0.7182954873408246,
+            "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
+          },
+          {
+            "name": "weekly_macd",
+            "params": {
+              "macd_fast": 8,
+              "macd_slow": 34,
+              "macd_z_window": 90
+            },
+            "window_days": 90,
+            "separation": 0.7556718642651518,
+            "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
+          }
+        ],
+        "not_in_pool": {
+          "drop": [
+            {
+              "name": "uup",
+              "separation": -1.6720885475089622
+            },
+            {
+              "name": "gvz",
+              "separation": -0.9385464827584928
+            },
+            {
+              "name": "hy_oas",
+              "separation": -0.22494106907414146
+            },
+            {
+              "name": "breakeven_5y",
+              "separation": -0.3101594024767048
+            },
+            {
+              "name": "gdx_gld",
+              "separation": -0.7433559511335104
+            },
+            {
+              "name": "m2",
+              "separation": -0.3858563331087576
+            },
+            {
+              "name": "walcl",
+              "separation": -0.0241176841800525
+            }
+          ],
+          "unscoreable": []
+        }
+      }
+    },
+    "gold_v2": {
+      "factory": "SdcaCycleWindows.gold_v2()",
+      "windows": "SdcaCycleWindows.gold_v2() \u00b145d",
+      "pins": 20,
+      "greedy_kept": [],
+      "greedy_dropped": [
+        "sma_band",
+        "real_rate",
+        "gld_slv",
+        "walcl",
+        "weekly_macd",
+        "nfci",
+        "ig_oas"
+      ],
+      "selection": {
+        "symbol": "GLD-USD",
+        "calendar": "2004-11-18..2026-09-29 (5499 daily bars)",
+        "windows": "SdcaCycleWindows.gold_v2() \u00b145d",
+        "metric": "separation = mean(z | trough windows) - mean(z | peak windows); positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)",
+        "metric_read": "higher is better; positive = the z runs HIGHER in the pinned trough windows and LOWER in the pinned peak windows, i.e. it votes cheap at bottoms; abs() is never applied to this metric",
+        "in_sample": true,
+        "in_sample_label": "IN-SAMPLE: separation is fit against the same pinned gold_v1 windows it is measured on (every bar with a valid z) \u2014 it calibrates indicator windows to pinned history and is NOT out-of-sample predictive skill; the holdout stays spent and untouched.",
+        "rule": "base = equal-weight {valuation: 1.0} on rolling90/z1.0 rails (the no-trend anchor). Candidates = every indicator whose individual best-fit separation > 0, ordered by separation descending (frozen order). For each candidate: add at equal weight alongside all kept-so-far, recompute equal-weight aggregate separation; keep if aggregate separation STRICTLY improves, else drop (record the delta for every candidate \u2014 that table IS the deliverable). Report also the pure equal-weight-of-individual-passers aggregate as a cross-check (never used for selection).",
+        "rule_notes": [
+          "Candidate pool = `verdict == 'keep'` from the fits file, which is the rule's 'individual separation > 0' MINUS Ruling 1's degenerate oscillator passes. Filtering on `separation > 0` alone would admit weekly_rsi / weekly_macd, whose passes rest on a dead side \u2014 the very legs Ruling 1 holds out of every keep list.",
+          "Frozen order = individual separation DESC, ties to the SHORTER window, then the name (the same parsimony tie-break Task 1 uses). The kept list is therefore a function of this order, not of a global optimum; greedy_select() refuses a pool whose separations are not non-increasing.",
+          "Kept iff the aggregate separation STRICTLY improves: a delta of exactly 0.0 is a DROP. The aggregate is the SHIPPED equal-weight blend (compute_composite_risk at weight 1.0 == mean(z).clip(-3, 3)), scored with the same frozen separation metric \u2014 no separate aggregate metric exists.",
+          "NULL HAZARD: compute_composite_risk sums with ignore_nulls=False, so a candidate whose warm-up leaves PINNED-window days null removes those days from the scored sample. Every step therefore records scored_days/coverage before and after next to the delta: a shrinking sample is visible and is never silently credited (or blamed) as a vote change.",
+          "The cross-check aggregate (equal weight over anchor + every non-degenerate passer, no greedy pruning) is reported for the owner and NEVER used to select."
+        ],
+        "order": "frozen: individual best-fit separation DESC, ties to the shorter window then the name; the kept list is a function of this order, not of a global optimum",
+        "anchor": {
+          "name": "valuation",
+          "form": "rolling_z",
+          "rolling_window": 90,
+          "rolling_z": 1.0,
+          "trend_rails": "none (no time trend)",
+          "weight": 1.0,
+          "built_by": "resolve_sdca_risk_model('rolling_z', dates=, price=, rolling_window=90, rolling_z=1.0) + build_risk_index(..., extra_indicators=None, valuation_weight=1.0)['valuation_z'] \u2014 shipped code, zero production edits",
+          "aggregate_separation": 4.310020565767255,
+          "scored_days": 1229
+        },
+        "aggregate": {
+          "function": "digiquant.strategies.sdca.composite_risk.compute_composite_risk",
+          "weights": {
+            "valuation": 1.0
+          },
+          "clip": [
+            -3.0,
+            3.0
+          ],
+          "null_rule": "ignore_nulls=False \u2014 a null in any member nulls that day, so a candidate's warm-up shrinks the scored sample (see scored_days)"
+        },
+        "candidate_pool": [
+          {
+            "order": 1,
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "individual_separation": 2.4315953247082787
+          },
+          {
+            "order": 2,
+            "name": "real_rate",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "individual_separation": 1.561734597757514
+          },
+          {
+            "order": 3,
+            "name": "gld_slv",
+            "params": {
+              "window": 90
+            },
+            "window_days": 90,
+            "individual_separation": 0.995808901479201
+          },
+          {
+            "order": 4,
+            "name": "walcl",
+            "params": {
+              "roc_days": 365,
+              "window": 378
+            },
+            "window_days": 378,
+            "individual_separation": 0.5041801259283466
+          },
+          {
+            "order": 5,
+            "name": "weekly_macd",
+            "params": {
+              "macd_fast": 8,
+              "macd_slow": 34,
+              "macd_z_window": 90
+            },
+            "window_days": 90,
+            "individual_separation": 0.4238690341336661
+          },
+          {
+            "order": 6,
+            "name": "nfci",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.22861896268756332
+          },
+          {
+            "order": 7,
+            "name": "ig_oas",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.17924446398534377
+          }
+        ],
+        "kept": [],
+        "kept_params": {},
+        "dropped": [
+          "sma_band",
+          "real_rate",
+          "gld_slv",
+          "walcl",
+          "weekly_macd",
+          "nfci",
+          "ig_oas"
+        ],
+        "dropped_deltas": {
+          "sma_band": {
+            "individual_separation": 2.4315953247082787,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 3.3708079452377673,
+            "delta": -0.9392126205294877,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "kept": false
+          },
+          "real_rate": {
+            "individual_separation": 1.561734597757514,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.935877581762385,
+            "delta": -1.37414298400487,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "kept": false
+          },
+          "gld_slv": {
+            "individual_separation": 0.995808901479201,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.6260184248729272,
+            "delta": -1.6840021408943278,
+            "scored_days_before": 1229,
+            "scored_days_after": 1188,
+            "days_delta": -41,
+            "kept": false
+          },
+          "walcl": {
+            "individual_separation": 0.5041801259283466,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.3775826447670836,
+            "delta": -1.9324379210001714,
+            "scored_days_before": 1229,
+            "scored_days_after": 1181,
+            "days_delta": -48,
+            "kept": false
+          },
+          "weekly_macd": {
+            "individual_separation": 0.4238690341336661,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.3669447999504607,
+            "delta": -1.9430757658167943,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "kept": false
+          },
+          "nfci": {
+            "individual_separation": 0.22861896268756332,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.2693197642274097,
+            "delta": -2.0407008015398453,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "kept": false
+          },
+          "ig_oas": {
+            "individual_separation": 0.17924446398534377,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.519614141557661,
+            "delta": -1.790406424209594,
+            "scored_days_before": 1229,
+            "scored_days_after": 124,
+            "days_delta": -1105,
+            "kept": false
+          }
+        },
+        "delta_table": [
+          {
+            "step": 1,
+            "name": "sma_band",
+            "params": {
+              "sma_band_window": 200,
+              "sma_band_min_samples": 30
+            },
+            "window_days": 200,
+            "individual_separation": 2.4315953247082787,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 3.3708079452377673,
+            "delta": -0.9392126205294877,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 2,
+            "name": "real_rate",
+            "params": {
+              "window": 180
+            },
+            "window_days": 180,
+            "individual_separation": 1.561734597757514,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.935877581762385,
+            "delta": -1.37414298400487,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 3,
+            "name": "gld_slv",
+            "params": {
+              "window": 90
+            },
+            "window_days": 90,
+            "individual_separation": 0.995808901479201,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.6260184248729272,
+            "delta": -1.6840021408943278,
+            "scored_days_before": 1229,
+            "scored_days_after": 1188,
+            "days_delta": -41,
+            "coverage_before": 1.0,
+            "coverage_after": 0.9666395443449959,
+            "kept": false
+          },
+          {
+            "step": 4,
+            "name": "walcl",
+            "params": {
+              "roc_days": 365,
+              "window": 378
+            },
+            "window_days": 378,
+            "individual_separation": 0.5041801259283466,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.3775826447670836,
+            "delta": -1.9324379210001714,
+            "scored_days_before": 1229,
+            "scored_days_after": 1181,
+            "days_delta": -48,
+            "coverage_before": 1.0,
+            "coverage_after": 0.9609438567941416,
+            "kept": false
+          },
+          {
+            "step": 5,
+            "name": "weekly_macd",
+            "params": {
+              "macd_fast": 8,
+              "macd_slow": 34,
+              "macd_z_window": 90
+            },
+            "window_days": 90,
+            "individual_separation": 0.4238690341336661,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.3669447999504607,
+            "delta": -1.9430757658167943,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 6,
+            "name": "nfci",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.22861896268756332,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.2693197642274097,
+            "delta": -2.0407008015398453,
+            "scored_days_before": 1229,
+            "scored_days_after": 1229,
+            "days_delta": 0,
+            "coverage_before": 1.0,
+            "coverage_after": 1.0,
+            "kept": false
+          },
+          {
+            "step": 7,
+            "name": "ig_oas",
+            "params": {
+              "window": 504
+            },
+            "window_days": 504,
+            "individual_separation": 0.17924446398534377,
+            "aggregate_before": 4.310020565767255,
+            "aggregate_after": 2.519614141557661,
+            "delta": -1.790406424209594,
+            "scored_days_before": 1229,
+            "scored_days_after": 124,
+            "days_delta": -1105,
+            "coverage_before": 1.0,
+            "coverage_after": 0.10089503661513426,
+            "kept": false
+          }
+        ],
+        "aggregate_trajectory": [
+          {
+            "step": 0,
+            "added": null,
+            "kept": null,
+            "members": [
+              "valuation"
+            ],
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 1,
+            "added": "sma_band",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 3.3708079452377673,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 2,
+            "added": "real_rate",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.935877581762385,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 3,
+            "added": "gld_slv",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.6260184248729272,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 4,
+            "added": "walcl",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.3775826447670836,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 5,
+            "added": "weekly_macd",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.3669447999504607,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 6,
+            "added": "nfci",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.2693197642274097,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          },
+          {
+            "step": 7,
+            "added": "ig_oas",
+            "kept": false,
+            "members": [
+              "valuation"
+            ],
+            "separation_if_kept": 2.519614141557661,
+            "separation": 4.310020565767255,
+            "scored_days": 1229
+          }
+        ],
+        "final": {
+          "members": [
+            "valuation"
+          ],
+          "separation": 4.310020565767255
+        },
+        "cross_check": {
+          "label": "cross-check: equal weight over the anchor + EVERY non-degenerate passer at once (no greedy pruning). Reported only \u2014 it never feeds a keep/drop decision.",
+          "members": [
+            "valuation",
+            "sma_band",
+            "real_rate",
+            "gld_slv",
+            "walcl",
+            "weekly_macd",
+            "nfci",
+            "ig_oas"
+          ],
+          "separation": 1.9007885655711734,
+          "mean_peak_z": -1.1305127636001002,
+          "mean_trough_z": 0.7702758019710731,
+          "scored_days": 124,
+          "coverage": 0.10089503661513426,
+          "used_for_selection": false
+        },
+        "degenerate_owner_review": [
+          {
+            "name": "weekly_rsi",
+            "params": {
+              "rsi_length": 14
+            },
+            "window_days": 105,
+            "separation": 0.4739377674171752,
+            "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
+          }
+        ],
+        "not_in_pool": {
+          "drop": [
+            {
+              "name": "uup",
+              "separation": -1.1360129721411951
+            },
+            {
+              "name": "gvz",
+              "separation": -0.1096839725757921
+            },
+            {
+              "name": "hy_oas",
+              "separation": -0.22494106907414146
+            },
+            {
+              "name": "breakeven_5y",
+              "separation": -0.4592649822089597
+            },
+            {
+              "name": "gdx_gld",
+              "separation": -0.6450330328898465
+            },
+            {
+              "name": "m2",
+              "separation": -0.07156976604648504
+            }
+          ],
+          "unscoreable": []
+        }
+      }
+    }
+  }
+}

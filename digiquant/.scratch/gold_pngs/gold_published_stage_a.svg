@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="2035" viewBox="0 0 1680 2035" font-family="Helvetica, Arial, sans-serif">
+<title>Gold PUBLISHED Stage A — in-sample vs-flat-DCA keep/drop (NOT vs-lump, NOT Sharpe)</title>
+<desc>IN-SAMPLE, and a SELECTED UPPER BOUND. Every in-sample figure is the MAXIMUM over the shipped frozen weight grid, scored against the same in-sample folds it was fitted on. This chart is NOT a performance claim and NOT a validated result: no return, Sharpe or edge is asserted beyond the metrics the shipped search returned. OOS is printed for information only — nothing was selected on it.</desc>
+<rect x="0" y="0" width="1680" height="2035" fill="white"/>
+<defs><pattern id="hatch-nokeep" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c62828" stroke-width="2.2" stroke-opacity="0.85"/></pattern></defs>
+<text x="840.0" y="26.0" font-size="15" fill="#1c1c1c" text-anchor="middle" font-weight="bold">Gold PUBLISHED Stage A — in-sample vs-flat-DCA keep/drop (NOT vs-lump, NOT Sharpe)</text>
+<text x="840.0" y="44.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">GLD-USD · objective: mean IN-SAMPLE vs_flat_dca_pct · floor 10% deployed, cap 50% drawdown · curve gold_reselect · rails rolling_z 90d/z1.0</text>
+<text x="214.0" y="76.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">4 PANELS — keep/drop, the two rails, then OOS BELOW A RULE — plus the shape comparison</text>
+<text x="214.0" y="96.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">JOINT SWEEP searched 6 of 13 allowlist names in 2,186 evaluations on the SHIPPED frozen grids. FEASIBILITY CALL: the full allowlist projects to</text>
+<text x="214.0" y="109.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">4,782,969 evaluations at the measured 33.0 ms/eval = 43.8 h, which does not fit a session. The narrowing is a COVERAGE budget, a data property, never</text>
+<text x="214.0" y="122.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">a score.</text>
+<text x="214.0" y="141.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">THE OBJECTIVE CONSUMES NO CYCLE WINDOWS — it cuts its own folds from the calendar, so this is ONE run, and the gold pin sets are not an input. The</text>
+<text x="214.0" y="154.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">preceding diagnostic scored cycle-window overlap instead: a DIFFERENT OBJECTIVE, and the two results must not be blended into a single claim.</text>
+<text x="214.0" y="173.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">IMPORTANT: the shipped Stage A rank does NOT gate on the floor or the cap. The frozen objective records the feasibility flag per fold and Stage B</text>
+<text x="214.0" y="186.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">enforces it, but the Stage A argmax is the plain mean in-sample vs_flat_dca_pct. Nothing here may claim a row was vetoed for breaching the floor or</text>
+<text x="214.0" y="199.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">the cap. Read the feasibility flag as recorded fact, not as a filter that ran.</text>
+<text x="214.0" y="218.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">OUT-OF-SAMPLE IS VOID IN THIS RUN — every OOS window deployed zero capital, so every OOS figure is the same all-cash book. The shipped no-trend</text>
+<text x="214.0" y="231.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">rolling-z rails are refit per fold on the in-sample window, and RollingZRiskModel.rails() left-joins a stored history, so every later date returns</text>
+<text x="214.0" y="244.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">null rails, null risk and no trades. A trend rail would extrapolate; this one cannot. In-sample panels are unaffected. Panel 4 says so at the point of</text>
+<text x="214.0" y="257.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">use.</text>
+<text x="214.0" y="262.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">1 · KEEP / NO-KEEP PER EXTRA — in-sample vs-flat-DCA, against the valuation-only baseline (bar RIGHT = the leg beat it)</text>
+<line x1="274.0" y1="292.0" x2="274.0" y2="682.0" stroke="#ececec"/>
+<text x="274.0" y="284.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-100.954</text>
+<line x1="528.0" y1="292.0" x2="528.0" y2="682.0" stroke="#ececec"/>
+<text x="528.0" y="284.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-50.4769</text>
+<line x1="782.0" y1="292.0" x2="782.0" y2="682.0" stroke="#ececec"/>
+<text x="782.0" y="284.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">0</text>
+<line x1="1036.0" y1="292.0" x2="1036.0" y2="682.0" stroke="#ececec"/>
+<text x="1036.0" y="284.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">50.4769</text>
+<line x1="1290.0" y1="292.0" x2="1290.0" y2="682.0" stroke="#ececec"/>
+<text x="1290.0" y="284.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">100.954</text>
+<line x1="334.0" y1="292.0" x2="334.0" y2="682.0" stroke="#1c1c1c" stroke-width="1.2"/>
+<text x="214.0" y="311.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">gvz</text>
+<rect x="334.0" y="300.5" width="1.0" height="13" fill="url(#hatch-nokeep)" stroke="#c62828" stroke-width="1"/>
+<text x="854.0" y="311.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS +16.71%  (Δ +0.00%)  weight 0</text>
+<text x="1430.0" y="311.0" font-size="9" fill="#c62828" text-anchor="end" font-weight="normal">· flat · held out (coverage) · worst window 82.5% (fold0_is)</text>
+<text x="214.0" y="341.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">walcl</text>
+<rect x="334.0" y="330.5" width="70.3" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="341.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +31.56%  (Δ +14.85%)  weight 1</text>
+<text x="1430.0" y="341.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · held out (coverage) · worst window 35.3% (fold0_is)</text>
+<text x="214.0" y="371.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">hy_oas</text>
+<rect x="334.0" y="360.5" width="1.0" height="13" fill="url(#hatch-nokeep)" stroke="#c62828" stroke-width="1"/>
+<text x="854.0" y="371.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS +16.71%  (Δ +0.00%)  weight 0</text>
+<text x="1430.0" y="371.0" font-size="9" fill="#c62828" text-anchor="end" font-weight="normal">· flat · held out (coverage) · worst window 100.0% (fold2_oos)</text>
+<text x="214.0" y="401.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">ig_oas</text>
+<rect x="334.0" y="390.5" width="1.0" height="13" fill="url(#hatch-nokeep)" stroke="#c62828" stroke-width="1"/>
+<text x="854.0" y="401.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS +16.71%  (Δ +0.00%)  weight 0</text>
+<text x="1430.0" y="401.0" font-size="9" fill="#c62828" text-anchor="end" font-weight="normal">· flat · held out (coverage) · worst window 100.0% (fold2_oos)</text>
+<text x="214.0" y="431.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">breakeven_5y</text>
+<rect x="334.0" y="420.5" width="12.5" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="431.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +19.35%  (Δ +2.64%)  weight 1</text>
+<text x="1430.0" y="431.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 1.7% (fold0_is)</text>
+<text x="214.0" y="461.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">nfci</text>
+<rect x="334.0" y="450.5" width="20.3" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="461.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +20.99%  (Δ +4.28%)  weight 0.5</text>
+<text x="1430.0" y="461.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 1.8% (fold0_is)</text>
+<text x="214.0" y="491.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">gdx_gld</text>
+<rect x="334.0" y="480.5" width="53.5" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="491.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +28.00%  (Δ +11.29%)  weight 1</text>
+<text x="1430.0" y="491.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · held out (coverage) · worst window 36.1% (fold0_is)</text>
+<text x="214.0" y="521.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">gld_slv</text>
+<rect x="334.0" y="510.5" width="30.0" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="521.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +23.05%  (Δ +6.33%)  weight 1</text>
+<text x="1430.0" y="521.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · held out (coverage) · worst window 34.6% (fold0_is)</text>
+<text x="214.0" y="551.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">uup</text>
+<rect x="334.0" y="540.5" width="86.1" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="551.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +34.89%  (Δ +18.17%)  weight 1</text>
+<text x="1430.0" y="551.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · held out (coverage) · worst window 53.7% (fold0_is)</text>
+<text x="214.0" y="581.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">real_rate</text>
+<rect x="334.0" y="570.5" width="60.8" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="581.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +29.55%  (Δ +12.84%)  weight 1</text>
+<text x="1430.0" y="581.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 1.7% (fold0_is)</text>
+<text x="214.0" y="611.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">weekly_rsi</text>
+<rect x="334.0" y="600.5" width="415.7" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="611.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +104.50%  (Δ +87.79%)  weight 0.5</text>
+<text x="1430.0" y="611.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 5.7% (fold0_is)</text>
+<text x="214.0" y="641.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">weekly_macd</text>
+<rect x="334.0" y="630.5" width="335.8" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="641.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +87.64%  (Δ +70.93%)  weight 0.5</text>
+<text x="1430.0" y="641.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 11.0% (fold0_is)</text>
+<text x="214.0" y="671.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">sma_band</text>
+<rect x="334.0" y="660.5" width="1.4" height="13" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="854.0" y="671.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">IS +17.00%  (Δ +0.29%)  weight 0.5</text>
+<text x="1430.0" y="671.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">✓ keep · in joint sweep · worst window 2.6% (fold0_is)</text>
+<text x="214.0" y="704.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">NO-KEEP IS NOT A DROP. A one-name sweep shares its grid with the valuation-only row, so its best can never fall below the baseline: a leg that</text>
+<text x="214.0" y="717.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">actively hurts and a leg that merely does not help are the same observation here, and both read as 'no keep earned'. For whether the joint winner</text>
+<text x="214.0" y="730.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">actually carries a leg, read panel 5.</text>
+<text x="214.0" y="773.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">2 · DEPLOYED CAPITAL vs THE 10% FLOOR — peak-deployed share per fold, on the joint-sweep winner</text>
+<line x1="414.0" y1="803.0" x2="414.0" y2="893.0" stroke="#ececec"/>
+<text x="414.0" y="795.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">0%</text>
+<line x1="644.0" y1="803.0" x2="644.0" y2="893.0" stroke="#ececec"/>
+<text x="644.0" y="795.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">25%</text>
+<line x1="874.0" y1="803.0" x2="874.0" y2="893.0" stroke="#ececec"/>
+<text x="874.0" y="795.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">50%</text>
+<line x1="1104.0" y1="803.0" x2="1104.0" y2="893.0" stroke="#ececec"/>
+<text x="1104.0" y="795.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">75%</text>
+<line x1="1334.0" y1="803.0" x2="1334.0" y2="893.0" stroke="#ececec"/>
+<text x="1334.0" y="795.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">100%</text>
+<line x1="506.0" y1="803.0" x2="506.0" y2="893.0" stroke="#1565c0" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="511.0" y="887.0" font-size="9" fill="#1565c0" text-anchor="start" font-weight="bold">floor 10%</text>
+<line x1="414.0" y1="818.0" x2="1334.0" y2="818.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="1334.0" cy="818.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<line x1="414.0" y1="833.0" x2="414.0" y2="833.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="414.0" cy="833.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<text x="214.0" y="826.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 0</text>
+<text x="274.0" y="826.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 100.0% / OOS 0.0%</text>
+<text x="1430.0" y="826.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">feasible flag True (recorded, not enforced at Stage A)</text>
+<line x1="414.0" y1="848.0" x2="1334.0" y2="848.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="1334.0" cy="848.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<line x1="414.0" y1="863.0" x2="414.0" y2="863.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="414.0" cy="863.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<text x="214.0" y="856.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 1</text>
+<text x="274.0" y="856.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 100.0% / OOS 0.0%</text>
+<text x="1430.0" y="856.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">feasible flag True (recorded, not enforced at Stage A)</text>
+<line x1="414.0" y1="878.0" x2="1334.0" y2="878.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="1334.0" cy="878.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<line x1="414.0" y1="893.0" x2="414.0" y2="893.0" stroke="#1c1c1c" stroke-width="3"/>
+<circle cx="414.0" cy="893.0" r="3.4" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="1.6"/>
+<text x="214.0" y="886.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 2</text>
+<text x="274.0" y="886.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 100.0% / OOS 0.0%</text>
+<text x="1430.0" y="886.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">feasible flag True (recorded, not enforced at Stage A)</text>
+<text x="214.0" y="913.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">The 10% floor is a RAIL to read against, not a filter that ran: the shipped Stage A rank is the plain mean in-sample vs_flat_dca_pct and does not gate</text>
+<text x="214.0" y="926.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">on it. A fold left of the rail is a recorded fact, not a vetoed row.</text>
+<text x="214.0" y="937.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">3 · DRAWDOWN vs THE 50% CAP — per fold, on the joint-sweep winner</text>
+<line x1="414.0" y1="967.0" x2="414.0" y2="1057.0" stroke="#ececec"/>
+<text x="414.0" y="959.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">0%</text>
+<line x1="589.6" y1="967.0" x2="589.6" y2="1057.0" stroke="#ececec"/>
+<text x="589.6" y="959.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">10%</text>
+<line x1="853.1" y1="967.0" x2="853.1" y2="1057.0" stroke="#ececec"/>
+<text x="853.1" y="959.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">25%</text>
+<line x1="1292.2" y1="967.0" x2="1292.2" y2="1057.0" stroke="#ececec"/>
+<text x="1292.2" y="959.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">50%</text>
+<line x1="1292.2" y1="967.0" x2="1292.2" y2="1057.0" stroke="#ef6c00" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="1297.2" y="1051.0" font-size="9" fill="#ef6c00" text-anchor="start" font-weight="bold">cap 50%</text>
+<line x1="414.0" y1="982.0" x2="891.6" y2="982.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="891.6" cy="982.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<line x1="414.0" y1="997.0" x2="414.0" y2="997.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="414.0" cy="997.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<text x="214.0" y="990.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 0</text>
+<text x="274.0" y="990.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 27.19% / OOS 0.00%</text>
+<line x1="414.0" y1="1012.0" x2="1053.8" y2="1012.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="1053.8" cy="1012.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<line x1="414.0" y1="1027.0" x2="414.0" y2="1027.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="414.0" cy="1027.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<text x="214.0" y="1020.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 1</text>
+<text x="274.0" y="1020.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 36.43% / OOS 0.00%</text>
+<line x1="414.0" y1="1042.0" x2="1202.5" y2="1042.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="1202.5" cy="1042.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<line x1="414.0" y1="1057.0" x2="414.0" y2="1057.0" stroke="#ef6c00" stroke-width="3"/>
+<circle cx="414.0" cy="1057.0" r="3.4" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.6"/>
+<text x="214.0" y="1050.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">fold 2</text>
+<text x="274.0" y="1050.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">IS 44.89% / OOS 0.00%</text>
+<text x="214.0" y="1077.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">The 50% cap is likewise a rail, not a Stage A filter. Both rails are drawn because the objective is DEFINED with them, and they are drawn because a</text>
+<text x="214.0" y="1090.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">reader should be able to see the margin — not because any row was rejected for crossing one.</text>
+<text x="214.0" y="1133.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">5 · THE WINNER'S SHAPE vs the published btc_sdca reference — shape comparison only, not a tuning target</text>
+<text x="214.0" y="1169.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">gold joint-sweep winner: valuation 0.5 + weekly_rsi 1, weekly_macd 1</text>
+<text x="214.0" y="1189.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">published btc_sdca reference: valuation 1, m2 0.5, dxy 0.5, weekly_macd 0.5, weekly_rsi 0.25</text>
+<text x="214.0" y="1209.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">legs: gold 3 vs btc_sdca 5 · partial-weight legs: gold 0 vs btc_sdca 4 (0.5 / 0.5 / 0.5 / 0.25)</text>
+<text x="214.0" y="1229.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">The reference is the precedent for what a real multi-leg composite looks like. It is reported here for shape only: nothing was copied from it, tuned</text>
+<text x="214.0" y="1243.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">toward it, or benchmarked against it.</text>
+<line x1="194" y1="1271.0" x2="1450" y2="1271.0" stroke="#6a1b9a" stroke-width="2.4"/>
+<text x="214.0" y="1287.0" font-size="13" fill="#6a1b9a" text-anchor="start" font-weight="bold">OUT-OF-SAMPLE — REPORTED, NEVER USED FOR SELECTION</text>
+<text x="1430.0" y="1287.0" font-size="12" fill="#c62828" text-anchor="end" font-weight="bold">*** VOID — every window below deployed ZERO capital, so these bars are one all-cash book repeated ***</text>
+<line x1="274.0" y1="1317.0" x2="274.0" y2="1707.0" stroke="#ececec"/>
+<text x="274.0" y="1309.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-29.5693</text>
+<line x1="782.0" y1="1317.0" x2="782.0" y2="1707.0" stroke="#ececec"/>
+<text x="782.0" y="1309.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">0</text>
+<line x1="1290.0" y1="1317.0" x2="1290.0" y2="1707.0" stroke="#ececec"/>
+<text x="1290.0" y="1309.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">29.5693</text>
+<line x1="334.0" y1="1317.0" x2="334.0" y2="1707.0" stroke="#1c1c1c" stroke-width="1.2"/>
+<text x="214.0" y="1336.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">gvz</text>
+<rect x="334.0" y="1325.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1336.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1366.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">walcl</text>
+<rect x="334.0" y="1355.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1366.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1396.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">hy_oas</text>
+<rect x="334.0" y="1385.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1396.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1426.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">ig_oas</text>
+<rect x="334.0" y="1415.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1426.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1456.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">breakeven_5y</text>
+<rect x="334.0" y="1445.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1456.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1486.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">nfci</text>
+<rect x="334.0" y="1475.5" width="171.3" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1486.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS +4.10%  (Δ +10.60%)</text>
+<text x="214.0" y="1516.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">gdx_gld</text>
+<rect x="334.0" y="1505.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1516.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1546.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">gld_slv</text>
+<rect x="334.0" y="1535.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1546.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1576.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">uup</text>
+<rect x="334.0" y="1565.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1576.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1606.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">real_rate</text>
+<rect x="334.0" y="1595.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1606.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1636.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">weekly_rsi</text>
+<rect x="334.0" y="1625.5" width="415.7" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1636.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS +19.22%  (Δ +25.71%)</text>
+<text x="214.0" y="1666.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">weekly_macd</text>
+<rect x="334.0" y="1655.5" width="396.4" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1666.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS +18.03%  (Δ +24.52%)</text>
+<text x="214.0" y="1696.0" font-size="11" fill="#5f5f5f" text-anchor="start" font-weight="normal">sma_band</text>
+<rect x="334.0" y="1685.5" width="1.0" height="13" fill="#6a1b9a" fill-opacity="0.45" stroke="#6a1b9a" stroke-width="1"/>
+<text x="854.0" y="1696.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">OOS -6.49%  (Δ +0.00%)</text>
+<text x="214.0" y="1729.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">THIS PANEL IS VOID AND THE BARS MUST NOT BE READ AS EVIDENCE. Every out-of-sample window in this run deployed zero capital: the shipped no-trend</text>
+<text x="214.0" y="1742.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">rolling-z rails are refit on each fold's in-sample window, and RollingZRiskModel.rails() left-joins a stored (date, mu, sigma) table, so every date</text>
+<text x="214.0" y="1755.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">outside that fit window comes back null. Null rails give null risk, null risk gives no trades, and the fold is all cash. A trend rail would</text>
+<text x="214.0" y="1768.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">extrapolate and this would not. The in-sample panels above are unaffected — in-sample dates are inside the fit window. Stage B must score these folds</text>
+<text x="214.0" y="1781.0" font-size="10" fill="#c62828" text-anchor="start" font-weight="normal">through the concatenated-history rolling loop the gold curve search already carries, or use rails that extrapolate.</text>
+<rect x="214" y="1778.0" width="1216" height="257.0" fill="#fbfbfb" stroke="#dcdcdc"/>
+<text x="226.0" y="1796.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">HOW TO READ THIS</text>
+<circle cx="232.0" cy="1812.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1816.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">BARS LENGTH = the change in in-sample vs_flat_dCA_pct against the valuation-only baseline, on the same folds. A leg that cannot beat valuation-only</text>
+<text x="244.0" y="1829.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">alone reads as 'no keep' — not as a drop, because a one-name sweep shares its grid with the baseline row and so can never score below it.</text>
+<circle cx="232.0" cy="1842.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1846.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">THE RAILS DID NOT GATE. The 10% floor and the 50% cap define the objective and are drawn so the margin is visible, but the shipped Stage A rank is</text>
+<text x="244.0" y="1859.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">the plain mean in-sample vs_flat_dCA_pct and vetoes nothing. The per-fold feasible flag is recorded, not enforced.</text>
+<circle cx="232.0" cy="1872.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1876.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">OOS IS IN ITS OWN PANEL BELOW A RULE because it was reported and never used to select. Nothing on this figure was chosen by an out-of-sample number.</text>
+<circle cx="232.0" cy="1889.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1893.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">FEASIBILITY: 6 of 13 names in the joint sweep; every excluded name is named with its measured coverage in the console and the JSON, and every</text>
+<text x="244.0" y="1906.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">allowlist name still carries a single-leg probe row — so no name is silently absent.</text>
+<circle cx="232.0" cy="1919.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1923.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">NO GOLD PROFILE EXISTS in asset_profile.py; this run builds one from the module's own public surface and edits no source file. The rails are the</text>
+<text x="244.0" y="1936.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">shipped no-trend rolling-z anchor; the curve is the shipped gold_reselect preset resolved by name. No power-law and no generic log-linear /</text>
+<text x="244.0" y="1949.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">log-quadratic steer for gold appears anywhere.</text>
+<rect x="232" y="1958.0" width="1180" height="63" fill="#ffffff" stroke="#c62828" stroke-width="1.4"/>
+<text x="244.0" y="1979.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">IN-SAMPLE, and a SELECTED UPPER BOUND. Every in-sample figure is the MAXIMUM over the shipped frozen weight grid, scored against the same in-sample</text>
+<text x="244.0" y="1994.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">folds it was fitted on. This chart is NOT a performance claim and NOT a validated result: no return, Sharpe or edge is asserted beyond the metrics the</text>
+<text x="244.0" y="2009.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">shipped search returned. OOS is printed for information only — nothing was selected on it.</text>
+<text x="1444.0" y="1796.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">held out of the joint sweep: uup, gvz, walcl, hy_oas, ig_oas, gdx_gld, gld_slv</text>
+</svg>

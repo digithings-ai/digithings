@@ -1,0 +1,588 @@
+{
+  "symbol": "GLD-USD",
+  "risk_model": "rolling_z",
+  "rails": "valuation rails = the shipped no-trend rolling_z anchor, rolling 90d / z 1.0 \u2014 a trailing mean-reversion rail, refit per fold on the in-sample window only (never a full-history fit). No power-law and no time-trend fit is used for gold anywhere in this file.",
+  "curve_preset": "gold_reselect",
+  "curve_source": "load_preset('gold_reselect').shape \u2014 the SHIPPED gold curve personality from strategies/sdca/presets.json, resolved by name rather than restated, so the curve cannot drift from the preset the rest of the gold work already uses",
+  "objective": "objective = maximize mean IN-SAMPLE vs_flat_dca_pct across the walk-forward folds, with each fold's floor flag measured at the 10% capital-deployed floor and the 50% drawdown cap recorded per fold. Not vs-lump, not Sharpe, not cycle overlap.",
+  "rank_not_gated_label": "IMPORTANT: the shipped Stage A rank does NOT gate on the floor or the cap. The frozen objective records the feasibility flag per fold and Stage B enforces it, but the Stage A argmax is the plain mean in-sample vs_flat_dca_pct. Nothing here may claim a row was vetoed for breaching the floor or the cap. Read the feasibility flag as recorded fact, not as a filter that ran.",
+  "in_sample": true,
+  "in_sample_label": "IN-SAMPLE. These numbers are fitted on the same GLD calendar the folds are cut from: the winning weights are a MAXIMUM over the frozen weight grid, scored against those in-sample folds. A selected upper bound, not a skill estimate. No performance claim of any kind is made here \u2014 no return, no Sharpe, no edge \u2014 beyond what the returned metrics literally say.",
+  "oos_label": "OUT-OF-SAMPLE, REPORTED AND NOT USED FOR SELECTION. Every OOS number below is printed for the owner's information only. Nothing was chosen on it: the Stage A argmax reads in-sample vs_flat_dca_pct exclusively. Do not read an OOS figure as validation of the weights, and do not pick a row by it.",
+  "oos_is_degenerate": true,
+  "oos_void_label": "MEASURED, AND IT IS A REAL DEFECT IN THE SHIPPED PATH: every OOS window in this run deployed ZERO capital, so every OOS figure below is the same all-cash book and carries no information. The cause is in the rails, not in this script. optimize_stage_a_by_backtest refits rails on each fold's IN-SAMPLE window and then evaluates OOS on those same rails \u2014 correct per the #3173 no-leak rule, and fine for a model that EXTRAPOLATES (the trend rails do). But RollingZRiskModel is a trailing model: its rails() left-joins a stored (date, mu, sigma) table, so every date OUTSIDE the fit window comes back null. Null rails give null risk, null risk gives no trades, and the fold is all cash. So the no-trend rolling-z anchor and the engine's per-fold walk-forward are not compatible as written: Stage A in-sample numbers are sound (in-sample dates are inside the fit window), and the out-of-sample numbers are structurally void. This is reported rather than worked around. The gold curve search on this branch already carries a 'causal rolling' path that scores folds through a concatenated-history rolling loop and calls the engine walk-forward void for these rails; Stage B must use that path, or the rails must be a model that extrapolates. Not fixed here \u2014 that is a source change in walk_forward.py or rolling_z.py, which are owner territory.",
+  "floor_basis_label": "Note the floor is measured on a DIFFERENT basis in the two stages, which is worth knowing before reading either flag. Stage A's feasible flag (weight_search.py) compares NET capital_deployed_pct, while Stage B's is_feasible (walk_forward.py) compares PEAK capital_deployed_peak_pct. A book that sold into strength can net negative while capital was genuinely at risk, which is why the baseline's fold 0 is flagged infeasible here on peak-deployed 100.0%. Both flags are reported as recorded; neither gated Stage A.",
+  "not_the_diagnostic_label": "THIS IS A DIFFERENT OBJECTIVE FROM THE PRECEDING DIAGNOSTIC RUN, and the two must not be blended into a single claim. That run scored cycle-window overlap via optimize_stage_a_weights in stage_a.py; this one scores the published backtest objective via optimize_stage_a_by_backtest in weight_search.py. Cycle overlap is a shape diagnostic. A cycle-overlap winner and a backtest winner are answers to two different questions, and agreement or disagreement between them is a finding to report \u2014 never a number to merge.",
+  "feasibility_note": "FEASIBILITY CALL \u2014 the joint sweep is 3**len(names) combinations times 3 valuation values, so it is exponential in the searched name count. The published name set is stage_a_search_names(gold_profile), 13 names here, which projects to 3**13 * 3 = 4,782,969 evaluations at the MEASURED 33.0 ms/eval \u2014 about 43.9 h for one run, which does not fit a research session. The joint sweep therefore runs the subset whose legs clear a COVERAGE budget of 25% missing z in their WORST SCORED WINDOW (a data property, never a score). The window is the right granularity and the span average is not: the macro legs' missing history sits in the EARLIEST in-sample fold, so a leg can average 13% missing across the span while missing more than half of the first fold the search actually scores. Every name dropped from the joint sweep is named, with its measured coverage, in the per-extra table and in the exclusions, and every one of them still gets its own single-leg probe row \u2014 so nothing is silently absent and no name goes unreported. The projected full-allowlist cost is carried in the artifact.",
+  "profile_not_in_src_label": "NO gold profile exists in the module. asset_profile.py ships btc_v1() and eth_research_v1() only, and that src file was deliberately NOT edited for this run: adding a gold factory is a source change the owner has not asked for, and a research script is the wrong place to make one. The profile below is therefore built from the module's own public surface \u2014 the SdcaAssetProfile constructor \u2014 using the gold allowlist the module already publishes (GOLD_MACRO_NAMES plus the generic price oscillators) and the gold pin set the module already ships. If the owner later wants a first-class gold profile, that is a separate, deliberate change.",
+  "cycle_windows_inert_label": "CYCLE WINDOWS ARE INERT HERE. optimize_stage_a_by_backtest takes no cycle windows \u2014 it cuts its own folds from the calendar \u2014 so ONE run is correct and the gold_v1 / gold_v2 pin sets are not an input to this objective at all. The SdcaAssetProfile model still requires a cycle_windows field, so the profile carries gold_v1() to satisfy the schema; it does not influence any number in this artifact. The preceding diagnostic run did consume those windows, which is one reason its result differs.",
+  "single_run_because_no_cycle_windows": true,
+  "btc_sdca_reference_shape": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "dxy": 0.5,
+    "weekly_macd": 0.5,
+    "weekly_rsi": 0.25
+  },
+  "btc_reference_label": "published btc_sdca reference shape: valuation=1.0, m2=0.5, dxy=0.5, weekly_macd=0.5, weekly_rsi=0.25 (SMA band and BTC/ETH RS at 0) \u2014 five legs, four of them partial-weight. Reported for shape comparison only: not a tuning target, not a benchmark, and nothing here was copied from it or steered toward it.",
+  "frozen_knobs": {
+    "grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "valuation_grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "fold_geometry": {
+      "n_folds": 3,
+      "holdout_frac": 0.2,
+      "oos_frac": 0.25
+    },
+    "grid_source": "the frozen grids are the SHIPPED defaults of optimize_stage_a_by_backtest in strategies/sdca/weight_search.py, read from that function's own signature at run time \u2014 the sweep below never restates, widens or narrows them",
+    "null_coverage_limit_pct": 25.0
+  },
+  "allowlist": [
+    "gvz",
+    "walcl",
+    "hy_oas",
+    "ig_oas",
+    "breakeven_5y",
+    "nfci",
+    "gdx_gld",
+    "gld_slv",
+    "uup",
+    "real_rate",
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band"
+  ],
+  "search_plan": {
+    "search_names": [
+      "breakeven_5y",
+      "nfci",
+      "real_rate",
+      "weekly_rsi",
+      "weekly_macd",
+      "sma_band"
+    ],
+    "detail": "FEASIBILITY CALL. Joint sweep searched 6 of 13 allowlist names, each missing z on at most 25% of its worst SCORED WINDOW. 7 name(s) held out with their measured coverage and the window that failed; every one of them still carries a single-leg probe row, so the per-extra table covers the whole allowlist. See FEASIBILITY CALL \u2014 the joint sweep is 3**len(names) combinations times 3 valuation values, so it is exponential in the searched name count.",
+    "exclusions": [
+      {
+        "name": "uup",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 53.7% of its worst scored window (fold0_is), over the stated 25% budget; 13.4% across the whole searchable span and 10.7% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "gvz",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 82.5% of its worst scored window (fold0_is), over the stated 25% budget; 20.6% across the whole searchable span and 16.5% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "walcl",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 35.3% of its worst scored window (fold0_is), over the stated 25% budget; 8.8% across the whole searchable span and 7.1% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "hy_oas",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 100.0% of its worst scored window (fold2_oos), over the stated 25% budget; 100.0% across the whole searchable span and 86.7% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "ig_oas",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 100.0% of its worst scored window (fold2_oos), over the stated 25% budget; 100.0% across the whole searchable span and 86.7% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "gdx_gld",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 36.1% of its worst scored window (fold0_is), over the stated 25% budget; 9.0% across the whole searchable span and 7.2% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      },
+      {
+        "name": "gld_slv",
+        "reason": "calendar coverage over the feasibility limit",
+        "detail": "missing z on 34.6% of its worst scored window (fold0_is), over the stated 25% budget; 8.7% across the whole searchable span and 6.9% of the full calendar. The composite blend nulls any day one enabled leg is missing, so such a leg deletes that part of the book rather than informing it \u2014 and the fold it deletes is one of the folds that decides the winner. Excluded from the JOINT sweep only; it still gets its own single-leg probe row in the per-extra table. This is a data property, not a score."
+      }
+    ]
+  },
+  "coverage": [
+    {
+      "name": "uup",
+      "searched": false,
+      "span_null_pct": 13.431818181818182,
+      "worst_window_null_pct": 53.72727272727273,
+      "worst_window": "fold0_is",
+      "full_null_pct": 10.747408619749045
+    },
+    {
+      "name": "gvz",
+      "searched": false,
+      "span_null_pct": 20.636363636363637,
+      "worst_window_null_pct": 82.54545454545455,
+      "worst_window": "fold0_is",
+      "full_null_pct": 16.51209310783779
+    },
+    {
+      "name": "walcl",
+      "searched": false,
+      "span_null_pct": 8.818181818181818,
+      "worst_window_null_pct": 35.27272727272727,
+      "worst_window": "fold0_is",
+      "full_null_pct": 7.055828332424077
+    },
+    {
+      "name": "hy_oas",
+      "searched": false,
+      "span_null_pct": 100.0,
+      "worst_window_null_pct": 100.0,
+      "worst_window": "fold2_oos",
+      "full_null_pct": 86.68848881614839
+    },
+    {
+      "name": "ig_oas",
+      "searched": false,
+      "span_null_pct": 100.0,
+      "worst_window_null_pct": 100.0,
+      "worst_window": "fold2_oos",
+      "full_null_pct": 86.68848881614839
+    },
+    {
+      "name": "breakeven_5y",
+      "searched": true,
+      "span_null_pct": 0.4318181818181818,
+      "worst_window_null_pct": 1.7272727272727273,
+      "worst_window": "fold0_is",
+      "full_null_pct": 0.34551736679396255
+    },
+    {
+      "name": "nfci",
+      "searched": true,
+      "span_null_pct": 0.45454545454545453,
+      "worst_window_null_pct": 1.8181818181818181,
+      "worst_window": "fold0_is",
+      "full_null_pct": 0.36370249136206584
+    },
+    {
+      "name": "gdx_gld",
+      "searched": false,
+      "span_null_pct": 9.022727272727273,
+      "worst_window_null_pct": 36.09090909090909,
+      "worst_window": "fold0_is",
+      "full_null_pct": 7.219494453537007
+    },
+    {
+      "name": "gld_slv",
+      "searched": false,
+      "span_null_pct": 8.659090909090908,
+      "worst_window_null_pct": 34.63636363636363,
+      "worst_window": "fold0_is",
+      "full_null_pct": 6.928532460447354
+    },
+    {
+      "name": "real_rate",
+      "searched": true,
+      "span_null_pct": 0.4318181818181818,
+      "worst_window_null_pct": 1.7272727272727273,
+      "worst_window": "fold0_is",
+      "full_null_pct": 0.34551736679396255
+    },
+    {
+      "name": "weekly_rsi",
+      "searched": true,
+      "span_null_pct": 1.4318181818181819,
+      "worst_window_null_pct": 5.7272727272727275,
+      "worst_window": "fold0_is",
+      "full_null_pct": 1.1456628477905073
+    },
+    {
+      "name": "weekly_macd",
+      "searched": true,
+      "span_null_pct": 2.75,
+      "worst_window_null_pct": 11.0,
+      "worst_window": "fold0_is",
+      "full_null_pct": 2.200400072740498
+    },
+    {
+      "name": "sma_band",
+      "searched": true,
+      "span_null_pct": 0.6590909090909091,
+      "worst_window_null_pct": 2.6363636363636362,
+      "worst_window": "fold0_is",
+      "full_null_pct": 0.5273686124749954
+    }
+  ],
+  "projected_full_cost": {
+    "names": 13,
+    "evaluations": 4782969,
+    "ms_per_eval": 33.0,
+    "hours": 43.84388250000001
+  },
+  "runs": [
+    {
+      "label": "baseline_valuation_only",
+      "in_sample": true,
+      "weights": {
+        "valuation": 1.0,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0
+      },
+      "enabled_extras": {},
+      "mean_is_vs_flat_dca_pct": 16.71291144482127,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "num_evaluations": 2,
+      "search_names": [],
+      "feasible_folds": 2,
+      "folds": [
+        {
+          "fold": 0,
+          "is_start": "2004-11-18",
+          "is_end": "2009-04-02",
+          "oos_start": "2009-04-03",
+          "oos_end": "2013-08-15",
+          "in_sample": {
+            "vs_flat_dca_pct": 2.062333606667832,
+            "vs_lump_pct": -26.369052383635527,
+            "capital_deployed_pct": -47.32826005770242,
+            "capital_deployed_peak_pct": 99.9999997476593,
+            "max_drawdown_pct": 19.0993747096507
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -0.29911270150079217,
+            "vs_lump_pct": -33.487740364449714,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": false
+        },
+        {
+          "fold": 1,
+          "is_start": "2004-11-18",
+          "is_end": "2013-08-15",
+          "oos_start": "2013-08-16",
+          "oos_end": "2017-12-27",
+          "in_sample": {
+            "vs_flat_dca_pct": 4.4533533994614904,
+            "vs_lump_pct": -44.66866805831632,
+            "capital_deployed_pct": 100.0,
+            "capital_deployed_peak_pct": 100.0,
+            "max_drawdown_pct": 30.721091663393945
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -3.25949545195382,
+            "vs_lump_pct": 8.467641487251898,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": true
+        },
+        {
+          "fold": 2,
+          "is_start": "2004-11-18",
+          "is_end": "2017-12-27",
+          "oos_start": "2017-12-28",
+          "oos_end": "2022-05-11",
+          "in_sample": {
+            "vs_flat_dca_pct": 43.623047328334486,
+            "vs_lump_pct": -31.311546053520534,
+            "capital_deployed_pct": 99.98256899044934,
+            "capital_deployed_peak_pct": 100.0,
+            "max_drawdown_pct": 30.721091663393945
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -15.915548448766991,
+            "vs_lump_pct": -28.91448138660907,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": true
+        }
+      ]
+    },
+    {
+      "label": "joint_sweep",
+      "in_sample": true,
+      "weights": {
+        "valuation": 0.5,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0,
+        "weekly_rsi": 1.0,
+        "weekly_macd": 1.0,
+        "sma_band": 0.0
+      },
+      "enabled_extras": {
+        "weekly_rsi": 1.0,
+        "weekly_macd": 1.0
+      },
+      "mean_is_vs_flat_dca_pct": 119.96358272757077,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "num_evaluations": 2186,
+      "search_names": [
+        "breakeven_5y",
+        "nfci",
+        "real_rate",
+        "weekly_rsi",
+        "weekly_macd",
+        "sma_band"
+      ],
+      "feasible_folds": 3,
+      "folds": [
+        {
+          "fold": 0,
+          "is_start": "2004-11-18",
+          "is_end": "2009-04-02",
+          "oos_start": "2009-04-03",
+          "oos_end": "2013-08-15",
+          "in_sample": {
+            "vs_flat_dca_pct": 69.05159082360173,
+            "vs_lump_pct": 21.959085085846986,
+            "capital_deployed_pct": 99.99998331214792,
+            "capital_deployed_peak_pct": 99.99998331214792,
+            "max_drawdown_pct": 27.190154147466643
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -0.29911270150079217,
+            "vs_lump_pct": -33.487740364449714,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": true
+        },
+        {
+          "fold": 1,
+          "is_start": "2004-11-18",
+          "is_end": "2013-08-15",
+          "oos_start": "2013-08-16",
+          "oos_end": "2017-12-27",
+          "in_sample": {
+            "vs_flat_dca_pct": 132.88834837677567,
+            "vs_lump_pct": 23.366288300058315,
+            "capital_deployed_pct": 100.0,
+            "capital_deployed_peak_pct": 100.0,
+            "max_drawdown_pct": 36.4281533514011
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -3.25949545195382,
+            "vs_lump_pct": 8.467641487251898,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": true
+        },
+        {
+          "fold": 2,
+          "is_start": "2004-11-18",
+          "is_end": "2017-12-27",
+          "oos_start": "2017-12-28",
+          "oos_end": "2022-05-11",
+          "in_sample": {
+            "vs_flat_dca_pct": 157.95080898233488,
+            "vs_lump_pct": 23.366288300058315,
+            "capital_deployed_pct": 100.0,
+            "capital_deployed_peak_pct": 100.0,
+            "max_drawdown_pct": 44.894165485178014
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -15.915548448766991,
+            "vs_lump_pct": -28.91448138660907,
+            "capital_deployed_pct": 0.0,
+            "capital_deployed_peak_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": true
+        }
+      ]
+    }
+  ],
+  "timing_note": "Wall time is deliberately NOT in this artifact. It is a property of the machine, not a result, so recording it would make every diff of this record against itself show a spurious change. The console prints it, and num_evaluations \u2014 the machine-independent cost measure \u2014 is here per run.",
+  "per_extra": [
+    {
+      "name": "gvz",
+      "decision": "flat",
+      "in_joint_sweep": false,
+      "best_weight": 0.0,
+      "mean_is_vs_flat_dca_pct": 16.71291144482127,
+      "delta_is_vs_flat_dca_pct": 0.0,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "walcl",
+      "decision": "keep",
+      "in_joint_sweep": false,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 31.561126131555255,
+      "delta_is_vs_flat_dca_pct": 14.848214686733986,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "hy_oas",
+      "decision": "flat",
+      "in_joint_sweep": false,
+      "best_weight": 0.0,
+      "mean_is_vs_flat_dca_pct": 16.71291144482127,
+      "delta_is_vs_flat_dca_pct": 0.0,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "ig_oas",
+      "decision": "flat",
+      "in_joint_sweep": false,
+      "best_weight": 0.0,
+      "mean_is_vs_flat_dca_pct": 16.71291144482127,
+      "delta_is_vs_flat_dca_pct": 0.0,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "breakeven_5y",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 19.352131404901034,
+      "delta_is_vs_flat_dca_pct": 2.639219960079764,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "nfci",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 0.5,
+      "mean_is_vs_flat_dca_pct": 20.989922441018724,
+      "delta_is_vs_flat_dca_pct": 4.277010996197454,
+      "mean_oos_vs_flat_dca_pct": 4.104726366882088,
+      "delta_oos_vs_flat_dca_pct": 10.596111900955956,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "gdx_gld",
+      "decision": "keep",
+      "in_joint_sweep": false,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 28.004105328844734,
+      "delta_is_vs_flat_dca_pct": 11.291193884023464,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "gld_slv",
+      "decision": "keep",
+      "in_joint_sweep": false,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 23.04706988105703,
+      "delta_is_vs_flat_dca_pct": 6.334158436235761,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "uup",
+      "decision": "keep",
+      "in_joint_sweep": false,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 34.88748050322951,
+      "delta_is_vs_flat_dca_pct": 18.17456905840824,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "real_rate",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 1.0,
+      "mean_is_vs_flat_dca_pct": 29.548746577482877,
+      "delta_is_vs_flat_dca_pct": 12.835835132661607,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "weekly_rsi",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 0.5,
+      "mean_is_vs_flat_dca_pct": 104.49887028189795,
+      "delta_is_vs_flat_dca_pct": 87.78595883707668,
+      "mean_oos_vs_flat_dca_pct": 19.221018804760647,
+      "delta_oos_vs_flat_dca_pct": 25.712404338834514,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "weekly_macd",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 0.5,
+      "mean_is_vs_flat_dca_pct": 87.63884381805487,
+      "delta_is_vs_flat_dca_pct": 70.9259323732336,
+      "mean_oos_vs_flat_dca_pct": 18.028985836988326,
+      "delta_oos_vs_flat_dca_pct": 24.520371371062193,
+      "num_evaluations": 8,
+      "in_sample": true
+    },
+    {
+      "name": "sma_band",
+      "decision": "keep",
+      "in_joint_sweep": true,
+      "best_weight": 0.5,
+      "mean_is_vs_flat_dca_pct": 17.0030310826069,
+      "delta_is_vs_flat_dca_pct": 0.29011963778562944,
+      "mean_oos_vs_flat_dca_pct": -6.491385534073868,
+      "delta_oos_vs_flat_dca_pct": 0.0,
+      "num_evaluations": 8,
+      "in_sample": true
+    }
+  ],
+  "per_extra_note": "One row per allowlist name, each a single-leg call to the SHIPPED search, so a name held out of the joint sweep on coverage is still reported rather than silently absent. decision is keep / flat on the IN-SAMPLE delta alone; OOS is reported and was not used to decide. 'flat' means no keep earned: a one-name sweep shares its grid with the valuation-only row, so its best can never fall below the baseline and a negative delta is structurally unreachable. Whether a flat leg actively hurts is not observable from this sweep \u2014 read the joint sweep's winning weight vector for that."
+}

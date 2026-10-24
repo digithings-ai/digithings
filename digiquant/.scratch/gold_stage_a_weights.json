@@ -1,0 +1,406 @@
+{
+  "symbol": "GLD-USD",
+  "source_artifact": "gold_pin_set_fits.json",
+  "anchor": "valuation = shipped rolling_z rails, rolling 90d / z 1.0 (no time trend), equal weight 1.0",
+  "objective": "objective = cycle_overlap_score.objective = spread + 25.0 * (trough_in_accumulate_frac + peak_in_distribute_frac), where spread = mean risk in peak windows minus mean risk in trough windows, accumulate band <= 35.0 and distribute band >= 80.0. Higher is better. This is a SHAPE diagnostic \u2014 how well composite risk lines up with the pinned cycle windows.",
+  "bands": {
+    "accumulate_risk_max": 35.0,
+    "distribute_risk_min": 80.0
+  },
+  "in_sample": true,
+  "in_sample_label": "IN-SAMPLE, AND PARTLY A SELECTED UPPER BOUND. Every leg's params are a MAX over the frozen indicator grid, and the winning weights are a MAX over the weight grid, both scored against cycle windows derived from the SAME GLD history the z-series are built from. The maximums are chosen knowing the scores. Read the results as 'the best this grid can do on its own history', never as out-of-sample predictive skill. The pin-set windows are a SCORING TARGET, not execution periods: they carry no exposure floor and say nothing about time in market. No return, Sharpe, drawdown or trade count is claimed anywhere here.",
+  "diagnostic_not_keep_drop": "DIAGNOSTIC, NOT THE PUBLISHED KEEP/DROP. The published Stage A keep/drop is optimize_stage_a_by_backtest on in-sample vs_flat_dca_pct subject to a 10% capital-deployed floor and a 50% drawdown cap \u2014 NOT cycle overlap, NOT vs-lump, NOT Sharpe. This run used the cycle-overlap objective, so it does not constitute the published keep/drop and no weight here is promoted on its strength. Stage A only: Stage B (run_sdca_walk_forward) freezes weights, then regularize.",
+  "search_pool_note": "search_names = the frozen verdict == 'keep' pool of the fits artifact (the same filter candidate_pool() applies in fit_gold_indicators.py). Exclusions are recorded per name with a reason and never applied silently. The 'no non-degenerate grid row' exclusion is a hard rule \u2014 passing such a name would raise in risk_from_weighted_z. The 'frozen verdict != keep' exclusion is a FEASIBILITY decision: the shipped optimizer sweeps the full itertools.product, so 12 non-degenerate names is 3**12 * 3 = 1,594,323 evaluations at the measured ~5.6 ms each (~2.5 h per run, ~10 h for four runs). Narrowing along an already-ruled keep/drop line is preferable to a sweep that never finishes.",
+  "btc_sdca_reference_shape": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "dxy": 0.5,
+    "weekly_macd": 0.5,
+    "weekly_rsi": 0.25
+  },
+  "btc_reference_label": "published btc_sdca reference shape: valuation=1.0, m2=0.5, dxy=0.5, weekly_macd=0.5, weekly_rsi=0.25 (SMA band and BTC/ETH RS at 0) \u2014 the precedent for what a real composite looks like. It is reported for shape comparison only: nothing here is copied from it, tuned toward it, or benchmarked against it.",
+  "require_extras_rationale": "Both settings are reported for both pin sets, always. require_extras=False can return a valuation-only composite \u2014 a legitimate finding, and not the owner's aggregate. require_extras=True forces at least one extra so a real blend must win on the same objective. Reporting only the flattering row would make this experiment dishonest.",
+  "frozen_knobs": {
+    "grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "valuation_grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "accumulate_risk_max": 35.0,
+    "distribute_risk_min": 80.0,
+    "band_bonus": 25.0,
+    "grid_source": "stage_a.optimize_stage_a_weights defaults, re-exported by value here for the record only \u2014 the sweep itself is the shipped function's"
+  },
+  "pin_sets": {
+    "gold_v1": "SdcaCycleWindows.gold_v1()",
+    "gold_v2": "SdcaCycleWindows.gold_v2()"
+  },
+  "comparator": {
+    "name": "btc_sdca (published)",
+    "weights": {
+      "valuation": 1.0,
+      "m2": 0.5,
+      "dxy": 0.5,
+      "weekly_macd": 0.5,
+      "weekly_rsi": 0.25
+    },
+    "role": "shape comparison only \u2014 not an input, not a tuning target, not a benchmark"
+  },
+  "runs": [
+    {
+      "pin_set": "gold_v1",
+      "require_extras": false,
+      "weights": {
+        "valuation": 1.0,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0
+      },
+      "enabled_extras": {},
+      "score": {
+        "spread": 84.0785908357269,
+        "trough_in_accumulate_frac": 0.8404255319148937,
+        "peak_in_distribute_frac": 0.9468085106382979,
+        "mean_trough_risk": 12.737213058395435,
+        "mean_peak_risk": 96.81580389412234,
+        "objective": 128.7594418995567,
+        "trough_days": 188,
+        "peak_days": 188
+      },
+      "num_evaluations": 728,
+      "search_names": [
+        "real_rate",
+        "ig_oas",
+        "nfci",
+        "gld_slv",
+        "sma_band"
+      ],
+      "exclusions": [
+        {
+          "name": "uup",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.4225 at {'window': 270}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gvz",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.4515 at {'window': 270}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "hy_oas",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.6941 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "breakeven_5y",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.0769 at {'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gdx_gld",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.1812 at {'window': 756}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "m2",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.4764 at {'roc_days': 730, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "walcl",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.2117 at {'roc_days': 180, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "weekly_rsi",
+          "reason": "no non-degenerate grid row",
+          "detail": "2 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        },
+        {
+          "name": "weekly_macd",
+          "reason": "no non-degenerate grid row",
+          "detail": "4 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        }
+      ],
+      "risk_points": 5499
+    },
+    {
+      "pin_set": "gold_v1",
+      "require_extras": true,
+      "weights": {
+        "valuation": 1.0,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0
+      },
+      "enabled_extras": {
+        "real_rate": 0.5
+      },
+      "score": {
+        "spread": 76.83795831001623,
+        "trough_in_accumulate_frac": 0.8563829787234043,
+        "peak_in_distribute_frac": 0.9468085106382979,
+        "mean_trough_risk": 13.649880682175965,
+        "mean_peak_risk": 90.4878389921922,
+        "objective": 121.91774554405879,
+        "trough_days": 188,
+        "peak_days": 188
+      },
+      "num_evaluations": 726,
+      "search_names": [
+        "real_rate",
+        "ig_oas",
+        "nfci",
+        "gld_slv",
+        "sma_band"
+      ],
+      "exclusions": [
+        {
+          "name": "uup",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.4225 at {'window': 270}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gvz",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.4515 at {'window': 270}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "hy_oas",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.6941 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "breakeven_5y",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.0769 at {'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gdx_gld",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.1812 at {'window': 756}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "m2",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.4764 at {'roc_days': 730, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "walcl",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -2.2117 at {'roc_days': 180, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "weekly_rsi",
+          "reason": "no non-degenerate grid row",
+          "detail": "2 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        },
+        {
+          "name": "weekly_macd",
+          "reason": "no non-degenerate grid row",
+          "detail": "4 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        }
+      ],
+      "risk_points": 5499
+    },
+    {
+      "pin_set": "gold_v2",
+      "require_extras": false,
+      "weights": {
+        "valuation": 1.0,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0
+      },
+      "enabled_extras": {},
+      "score": {
+        "spread": 71.83367609612094,
+        "trough_in_accumulate_frac": 0.8173076923076923,
+        "peak_in_distribute_frac": 0.7619834710743801,
+        "mean_trough_risk": 15.83338233057028,
+        "mean_peak_risk": 87.66705842669121,
+        "objective": 111.31595518067274,
+        "trough_days": 624,
+        "peak_days": 605
+      },
+      "num_evaluations": 6560,
+      "search_names": [
+        "real_rate",
+        "ig_oas",
+        "nfci",
+        "gld_slv",
+        "walcl",
+        "weekly_macd",
+        "sma_band"
+      ],
+      "exclusions": [
+        {
+          "name": "uup",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.5625 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gvz",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.4252 at {'window': 90}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "hy_oas",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.6941 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "breakeven_5y",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.0277 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gdx_gld",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.2349 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "m2",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.7438 at {'roc_days': 730, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "weekly_rsi",
+          "reason": "no non-degenerate grid row",
+          "detail": "2 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        }
+      ],
+      "risk_points": 5499
+    },
+    {
+      "pin_set": "gold_v2",
+      "require_extras": true,
+      "weights": {
+        "valuation": 1.0,
+        "m2": 0.0,
+        "rs_eth": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5
+      },
+      "enabled_extras": {
+        "sma_band": 0.5
+      },
+      "score": {
+        "spread": 61.39798031245995,
+        "trough_in_accumulate_frac": 0.7932692307692307,
+        "peak_in_distribute_frac": 0.7256198347107438,
+        "mean_trough_risk": 21.474479177324003,
+        "mean_peak_risk": 82.87245948978395,
+        "objective": 99.37020694945932,
+        "trough_days": 624,
+        "peak_days": 605
+      },
+      "num_evaluations": 6558,
+      "search_names": [
+        "real_rate",
+        "ig_oas",
+        "nfci",
+        "gld_slv",
+        "walcl",
+        "weekly_macd",
+        "sma_band"
+      ],
+      "exclusions": [
+        {
+          "name": "uup",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.5625 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gvz",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.4252 at {'window': 90}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "hy_oas",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.6941 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "breakeven_5y",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.0277 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "gdx_gld",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -1.2349 at {'window': 180}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "m2",
+          "reason": "frozen verdict != keep",
+          "detail": "verdict 'drop' on best separation -0.7438 at {'roc_days': 730, 'window': 378}; outside the frozen keep pool Stage A searches (feasibility, see SEARCH_POOL_NOTE)."
+        },
+        {
+          "name": "weekly_rsi",
+          "reason": "no non-degenerate grid row",
+          "detail": "2 scored row(s), every one degenerate (a pass resting on a dead side); the frozen verdict is 'degenerate_pass'. Excluded rather than passed as a missing series."
+        }
+      ],
+      "risk_points": 5499
+    }
+  ],
+  "runs_note": "The composite risk curve itself is deliberately NOT serialized (5,499 floats per run); recompute it with risk_from_weighted_z at these weights.",
+  "source_fits_metric": "separation = mean(z | trough windows) - mean(z | peak windows); positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)"
+}
