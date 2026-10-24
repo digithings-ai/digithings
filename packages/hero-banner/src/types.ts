@@ -73,7 +73,7 @@ export type BannerDefinition = {
   /** Preferred columns between glyphs. Narrow surfaces drop to 1, then 0. */
   gap: number;
   palette: Palette;
-  animation: Animation<any>;
+  animation: Animation;
   /** LIVE default. The surface can override (config on/off). */
   live: boolean;
   /** Seed for every random choice the animation makes. */

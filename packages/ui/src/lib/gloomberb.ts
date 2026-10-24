@@ -7,6 +7,8 @@
  * and the `?ticker=` deep-link form in sync (spec §7).
  */
 
+import { asRecord } from "./record";
+
 export const GLOOMBERB_ATTRIBUTION = "Sourced from Gloomberb";
 export const GLOOMBERB_DELAY_NOTICE = "Data delayed up to 15 minutes";
 export const GLOOMBERB_TERMINAL_URL = "https://term.gloom.sh/";
@@ -20,12 +22,6 @@ export type GloomberbAttribution = {
 /** Deep link to the Gloomberb terminal page for *symbol*. */
 export function gloomberbTickerUrl(symbol: string): string {
   return `${GLOOMBERB_TERMINAL_URL}?ticker=${encodeURIComponent(symbol.trim())}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function parseMaybeJson(value: unknown): unknown {

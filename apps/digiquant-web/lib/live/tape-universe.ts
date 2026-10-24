@@ -23,6 +23,7 @@
  * longer the source of the universe and is deliberately short of the live
  * manifest — the live read carries symbols this list never had.
  */
+import { isRecord } from "@digithings/ui/lib/record";
 import { officialGet } from "@/lib/official-api";
 import { fetchMarketTickers } from "./market-data";
 
@@ -97,10 +98,6 @@ export function portfolioTickersFrom(body: unknown): string[] {
     const ticker = isRecord(row) ? row.ticker : undefined;
     return typeof ticker === "string" ? [ticker] : [];
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 /**

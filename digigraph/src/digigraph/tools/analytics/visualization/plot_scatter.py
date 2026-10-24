@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename
 
 
 def plot_scatter(
@@ -32,8 +32,8 @@ def plot_scatter(
         import matplotlib.pyplot as plt
     except ImportError:
         return {"error": "matplotlib not installed", "image_path": None, "summary": {"n": len(df)}}
-    out_dir = _artifacts_dir(dataset_path)
-    path = _next_filename(out_dir, "scatter")
+    out_dir = artifacts_dir(dataset_path)
+    path = next_filename(out_dir, "scatter")
     fig, ax = plt.subplots()
     x = df[x_column].to_list()
     y = df[y_column].to_list()

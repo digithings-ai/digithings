@@ -14,7 +14,16 @@ export function generateStaticParams(): Array<{ chapter: string }> {
 export async function generateMetadata({ params }: { params: Promise<{ chapter: string }> }): Promise<Metadata> {
   const { chapter } = await params;
   const c = loadChapters(process.cwd()).find((x) => x.slug === chapter);
-  return c ? { title: `${c.title} — the digithings book`, description: c.summary } : {};
+  if (!c) return {};
+  const title = `${c.title} — the digithings book`;
+  const canonical = `/book/${c.slug}`;
+  return {
+    title,
+    description: c.summary,
+    alternates: { canonical },
+    openGraph: { title, description: c.summary, url: canonical, type: "article" },
+    twitter: { card: "summary", title, description: c.summary },
+  };
 }
 
 /**
@@ -39,6 +48,7 @@ export default async function ChapterPage({ params }: { params: Promise<{ chapte
     <BookPage
       chapters={refs}
       chapter={slug}
+      chapterTitle={chapter.title}
       kicker={`chapter ${String(chapter.order).padStart(2, "0")}`}
       title={chapter.title}
       summary={chapter.summary}

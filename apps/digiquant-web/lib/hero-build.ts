@@ -47,7 +47,6 @@ export const HERO_FADE_MS = 700;
  * Axes then grid (~0.8s): X L→R, Y B→T (overlaps end of X), then faint grid.
  * Times are relative to construct t0 (axes start), not first paint.
  */
-export const AXIS_X_MS = 320;
 export const AXIS_Y_MS = 280;
 export const AXIS_Y_START_MS = 240;
 export const GRID_MS = 200;

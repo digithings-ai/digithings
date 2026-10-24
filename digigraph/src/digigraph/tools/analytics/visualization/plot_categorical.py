@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename
 
 
 def plot_categorical(
@@ -35,8 +35,8 @@ def plot_categorical(
             "image_path": None,
             "summary": {"unique": len(labels)},
         }
-    out_dir = _artifacts_dir(dataset_path)
-    path = _next_filename(out_dir, "cat")
+    out_dir = artifacts_dir(dataset_path)
+    path = next_filename(out_dir, "cat")
     fig, ax = plt.subplots()
     kind = (kind or "bar").strip().lower()
     if kind == "pie":

@@ -45,16 +45,16 @@ interface View {
 
 const IDENTITY: View = { scale: 1, x: 0, y: 0 };
 
-export function darkVariant(src: string): string {
-  return src.replace(/\.svg$/, ".dark.svg");
-}
-
 /** Keep the scaled drawing covering the box: no panning it out of view. */
 function clampView(v: View, w: number, h: number): View {
   const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale));
   const minX = w - w * scale;
   const minY = h - h * scale;
   return { scale, x: Math.min(0, Math.max(minX, v.x)), y: Math.min(0, Math.max(minY, v.y)) };
+}
+
+export function darkVariant(src: string): string {
+  return src.replace(/\.svg$/, ".dark.svg");
 }
 
 export default function SvgPanZoom({ src, alt }: SvgPanZoomProps) {

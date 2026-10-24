@@ -61,15 +61,12 @@ from digiquant.research.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.scalars import is_cash
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 logger = logging.getLogger(__name__)
-
-
-def _is_cash_ticker(ticker: str) -> bool:
-    return str(ticker).strip().upper() == "CASH"
 
 
 @dataclass(frozen=True)
@@ -433,7 +430,7 @@ def _hydrate_config(
     if current_weights:
         # Mark-to-market (#955): drift prior weights by price moves since the last run so
         # the sizing no-trade band compares against the actual current book, not stale targets.
-        held = tuple(t for t in current_weights if not _is_cash_ticker(t))
+        held = tuple(t for t in current_weights if not is_cash(t))
         try:
             deltas = (
                 query_price_deltas(client=client, tickers=held, run_date=run_date) if held else {}

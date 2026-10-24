@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 from pathlib import Path
 from typing import (  # score:allow untyped any — Supabase client/response shapes are dynamic
     Any,
@@ -20,6 +19,7 @@ from typing import (  # score:allow untyped any — Supabase client/response sha
 from digivault import frontmatter as _fm
 from digivault import wikilinks as _wl
 from digivault.models import LinkRef, Note
+from digivault.store_helpers import first_env
 from digivault.vault import VaultError
 
 DEFAULT_TABLE = "knowledge_notes"
@@ -138,7 +138,7 @@ def _service_role_key() -> str:
     ``knowledge_notes`` is RLS service-role-only (migration 118). Anon keys
     would otherwise yield a silently empty vault.
     """
-    key = _first_env("CORE_SUPABASE_SERVICE_KEY", "SUPABASE_SERVICE_ROLE_KEY")
+    key = first_env("CORE_SUPABASE_SERVICE_KEY", "SUPABASE_SERVICE_ROLE_KEY")
     if key:
         role = _jwt_role(key)
         if role is not None and role != "service_role":
@@ -148,7 +148,7 @@ def _service_role_key() -> str:
                 "is service-role-only (migration 118)."
             )
         return key
-    if _first_env("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"):
+    if first_env("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"):
         raise PostgresStoreError(
             "PostgresStore requires a service-role key (CORE_SUPABASE_SERVICE_KEY "
             "or SUPABASE_SERVICE_ROLE_KEY); anon keys cannot access knowledge_notes "
@@ -219,7 +219,7 @@ class PostgresStore:
         Anon keys are refused: ``knowledge_notes`` is RLS service-role-only
         (migration 118), so an anon client would look like an empty vault.
         """
-        url = _first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
+        url = first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
         key = _service_role_key()
         if not url or not key:
             raise PostgresStoreError(
@@ -237,9 +237,6 @@ class PostgresStore:
     @property
     def vault(self) -> str:
         return self._vault
-
-    def _scoped(self) -> Any:
-        return self._client.table(self._table).eq("vault", self._vault)
 
     def reindex(self) -> None:
         """Rebuild the note / backlink / tag indexes from ``wikilinks`` and ``tags``.
@@ -466,11 +463,3 @@ class PostgresStore:
             "sources": frontmatter.get("sources") or [],
             "wikilinks": sorted({link.target for link in links}),
         }
-
-
-def _first_env(*names: str) -> str:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""

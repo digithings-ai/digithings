@@ -41,12 +41,21 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // site's Tailwind arbitrary values make it throw before it paginates
         // anything. See lib/book/printCss.ts.
         //
+        // A plain string is treated as a URL by pagedjs: passing PAGED_CSS
+        // directly made it fetch the stylesheet text as a path and 404. The
+        // object form is the documented way to hand it CSS text; the key is
+        // only a label.
+        //
         // `content` is ONE node (or its HTML), not a list: pagedjs hands it
         // straight to `createTreeWalker`, and an array is not a Node. There is
         // one paginated element on this route, so it is that element.
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
-        const chunker = await previewer.preview(content, [PAGED_CSS], document.documentElement);
+        const chunker = await previewer.preview(
+          content,
+          [{ "book-print.css": PAGED_CSS }],
+          document.documentElement,
+        );
         if (cancelled) return;
         // The chunker allocates pages; they have to be cleaned up when the
         // route is left, or a second visit doubles the document.
@@ -58,6 +67,14 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // for boxes printed the table of contents with every reference still
         // empty. Measured, not assumed.
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
+        // Paged.js leaves the source document in place beside the page boxes.
+        // In print that would emit the source as extra pages before the book —
+        // measured as two blank pages, one carrying the running header. The
+        // paginated copy is the only thing that should reach paper.
+        content.hidden = true;
+        cleanups.current.push(() => {
+          content.hidden = false;
+        });
         setStatus("done");
       } catch (err) {
         console.error("book: pagination failed", err);

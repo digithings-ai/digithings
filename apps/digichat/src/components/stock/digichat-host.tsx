@@ -226,7 +226,7 @@ export function DigiChatHost({
             >
               {!bootVisible || bootHidden ? null : (
                 <div
-                  className="dboot-overlay bg-background"
+                  className="dboot-overlay bg-surface"
                   data-done={bootDone ? "true" : "false"}
                   data-instant={bootVariant && !handoffLive ? "true" : "false"}
                   data-drift={handoff?.drift ? "true" : "false"}

@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from digigraph.tools.analytics._artifacts import sanitize_node_id
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _sanitize_node_id
 
 
 def generate_mermaid_diagram(
@@ -42,8 +42,8 @@ def generate_mermaid_diagram(
             edge_df[target_column].to_list(),
             edge_df["_w"].to_list(),
         ):
-            sid = _sanitize_node_id(r[0])
-            tid = _sanitize_node_id(r[1])
+            sid = sanitize_node_id(r[0])
+            tid = sanitize_node_id(r[1])
             w = r[2]
             lines.append(f"    {sid} {dir_arrow}|{w}| {tid}")
         mermaid_source = "\n".join(lines[:80])
@@ -57,8 +57,8 @@ def generate_mermaid_diagram(
         df = df.drop_nulls([source_column, target_column])
         lines = ["sequenceDiagram"]
         for row in df.head(30).iter_rows(named=True):
-            a = _sanitize_node_id(row.get(source_column, ""))
-            b = _sanitize_node_id(row.get(target_column, ""))
+            a = sanitize_node_id(row.get(source_column, ""))
+            b = sanitize_node_id(row.get(target_column, ""))
             lab = str(row.get(label_column, ""))[:30] if label_column else "message"
             lines.append(f"    {a}->>{b}: {lab}")
         return {"mermaid_source": "\n".join(lines)}
@@ -68,7 +68,7 @@ def generate_mermaid_diagram(
         lines = ["erDiagram"]
         uniq = df[source_column].drop_nulls().unique().to_list()[:15]
         for u in uniq:
-            ent = _sanitize_node_id(u)
+            ent = sanitize_node_id(u)
             lines.append(f"    {ent} {{")
             lines.append("        string id")
             lines.append("    }")

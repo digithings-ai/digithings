@@ -33,7 +33,7 @@ const VARIANTS: Variant[] = [
     hero: "claim + lede",
     stack: "bento + travelling focus",
     motion: "focus follows scroll",
-    note: "The pick: Registry's narrow card page with Specimen's frame rhythm. The stack leads; as you scroll, focus moves module to module and a detail card beside the grid changes with it — role, real dependency chips, the compose command that starts it.",
+    note: "The pick: Registry's narrow card page with Specimen's frame rhythm. The stack leads; as you scroll, focus moves module to module and a detail card beside the grid changes with it: role, real dependency chips, the compose command that starts it.",
   },
   {
     slug: "command-bar",
@@ -73,7 +73,7 @@ const VARIANTS: Variant[] = [
     hero: "claim + prose",
     stack: "ls-style listing",
     motion: "none",
-    note: "No cards anywhere. The quietest, most utilitarian register — one line per module.",
+    note: "No cards anywhere. The quietest, most utilitarian register, one line per module.",
   },
   {
     slug: "split",
@@ -90,7 +90,7 @@ const VARIANTS: Variant[] = [
     name: "V6 · Registry",
     width: "document 1180",
     bar: "standard nav",
-    hero: "none — bento leads",
+    hero: "none, bento leads",
     stack: "accordion",
     motion: "expand",
     note: "A stack browser rather than a pitch: the install lives in the hero cell, then every module opens in place.",
@@ -118,8 +118,8 @@ export default function VariantsIndex() {
             Seven ways to open the page.
           </h1>
           <p className="mt-[1.1rem] mb-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            The same real content — the claim, the install command, the eleven modules, the counted
-            figures, the repository snapshot and three crops of real files — composed seven
+            The same real content (the claim, the install command, the eleven modules, the counted
+            figures, the repository snapshot and three crops of real files) composed seven
             different ways. Nothing here is wired into <span className="text-ink">/</span>. Look at
             them, then name the pieces you want and I will assemble the real page from exactly
             those.
@@ -129,7 +129,7 @@ export default function VariantsIndex() {
             {VARIANTS.map((v) => (
               <Specimen key={v.slug}>
                 <div className="flex flex-wrap items-baseline justify-between gap-[0.8rem]">
-                  <a href={`/variants/${v.slug}`} className="font-mono text-[0.95rem] text-ink underline-offset-[3px] hover:underline">
+                  <a href={`/variants/${v.slug}`} className="font-mono text-[0.95rem] text-ink underline-offset-[3px] hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-ink">
                     {v.name}
                   </a>
                   <span className="font-mono text-[var(--type-meta)] text-ink-mute">
@@ -147,14 +147,17 @@ export default function VariantsIndex() {
             <BlockLabel>the pick sheet</BlockLabel>
             <div className="mt-[1rem] overflow-x-auto border border-hair">
               <table className="w-full border-collapse text-left font-mono text-[0.78rem]">
+                <caption className="sr-only">
+                  Eight home page compositions compared by width, top bar, hero, stack and motion.
+                </caption>
                 <thead>
                   <tr className="text-ink-mute">
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">variant</th>
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">width</th>
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">top bar</th>
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">hero</th>
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">stack</th>
-                    <th className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">motion</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">variant</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">width</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">top bar</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">hero</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">stack</th>
+                    <th scope="col" className="border-b border-hair p-[0.6rem] font-normal uppercase tracking-[var(--tracking-meta)]">motion</th>
                   </tr>
                 </thead>
                 <tbody>

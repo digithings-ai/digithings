@@ -21,12 +21,21 @@ export interface BookFigureProps {
   title?: string;
 }
 
-export default function BookFigure({ src = "", alt = "" }: BookFigureProps) {
+export default function BookFigure({ src = "", alt = "", title }: BookFigureProps) {
   if (src.startsWith(DIAGRAM_URL_PREFIX)) {
     return <SvgPanZoom src={src} alt={alt} />;
   }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className="my-6 w-full" src={src} alt={alt} />;
+  if (!title) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="my-6 h-auto w-full" src={src} alt={alt} />;
+  }
+  return (
+    <figure className="my-6">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="h-auto w-full" src={src} alt={alt} />
+      <figcaption className="mt-2 font-mono text-[0.75rem] text-ink-soft">{title}</figcaption>
+    </figure>
+  );
 }
 
 export type { SvgPanZoomProps };

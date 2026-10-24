@@ -158,8 +158,14 @@ def serve(
     port: int = typer.Option(8002, "--port", "-p"),
 ) -> None:
     """Start HTTP API server."""
+    import os
+
     import uvicorn
 
+    # The server reads its config through DIGISEARCH_CONFIG_PATH at import time,
+    # so the flag has to be exported before uvicorn imports the app module.
+    if config is not None:
+        os.environ["DIGISEARCH_CONFIG_PATH"] = str(config)
     uvicorn.run("digisearch.server:app", host="0.0.0.0", port=port)
 
 
@@ -186,10 +192,8 @@ index_app = typer.Typer(help="Index operations")
 
 
 @index_app.command("build")
-def index_build(
-    config: Path = typer.Option(..., "--config", "-c"),
-) -> None:
-    """Build or re-index from config."""
+def index_build() -> None:
+    """No-op placeholder: documents are written by ``ingest``."""
     typer.echo("Index build: use ingest to add documents to indexes")
 
 

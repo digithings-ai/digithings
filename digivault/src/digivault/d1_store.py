@@ -17,6 +17,7 @@ from typing import Any
 
 from digivault.d1_errors import D1StoreError as D1StoreError
 from digivault.models import NoteDetail, NoteRow, VaultSearchHit
+from digivault.store_helpers import escape_like
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ RETRY_JITTER_FRACTION = 0.2
 # WHERE clause has 3 placeholders: `? = ''` skips the prefix filter entirely when
 # the caller passed no prefix, `vault_path = ?` matches the prefix note itself, and
 # `vault_path LIKE ? ESCAPE '\'` matches everything under it. The LIKE pattern's
-# prefix component must be escaped with `_escape_like` before binding — `_` and `%`
+# prefix component must be escaped with `escape_like` before binding — `_` and `%`
 # are LIKE wildcards, and an unescaped client prefix containing either leaks rows from
 # a sibling corpus (e.g. prefix `clients/my_corp` would also match
 # `clients/myXcorp/...` without escaping). The `? = ''` and `vault_path = ?` legs bind
@@ -179,19 +180,6 @@ def build_fts_match(query: str) -> str:
     """
     terms = _FTS_TERM.findall(query or "")
     return " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in terms)
-
-
-def _escape_like(value: str) -> str:
-    """Escape ``\\``, ``%`` and ``_`` so ``value`` is a literal LIKE prefix, not a pattern.
-
-    ``%`` and ``_`` are LIKE wildcards; binding a caller-supplied path prefix into a
-    ``LIKE ?`` pattern without escaping them lets ``_`` in a prefix match any single
-    character and leak a sibling corpus's rows across the tenant-isolation boundary —
-    verified: an unescaped prefix ``clients/my_corp`` also matches
-    ``clients/myXcorp/...``. Must be paired with ``LIKE ? ESCAPE '\\'`` in the SQL and
-    applied only to the prefix component, never the trailing ``/%`` wildcard suffix.
-    """
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def resolve_path_prefix(path_prefix: str | None) -> str:
@@ -502,7 +490,7 @@ class D1Store:
         prefix = resolve_path_prefix(path_prefix)
         rows = self.query(
             _SEARCH_SQL,
-            [match, prefix, prefix, f"{_escape_like(prefix)}/%", limit],
+            [match, prefix, prefix, f"{escape_like(prefix)}/%", limit],
             operation="search",
         )
         return [
@@ -637,7 +625,7 @@ class D1Store:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
         prefix = resolve_path_prefix(path_prefix)
-        escaped_prefix = _escape_like(prefix)
+        escaped_prefix = escape_like(prefix)
         out: list[NoteRow] = []
         offset = 0
         pages = 0

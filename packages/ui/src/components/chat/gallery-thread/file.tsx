@@ -7,13 +7,13 @@ import { DotMatrix } from "../DotMatrix";
 import { cn } from "./cn";
 
 const fileVariants = cva(
-  "aui-file-root inline-flex items-center gap-3 rounded-lg transition-colors",
+  "aui-file-root inline-flex items-center gap-3 rounded-none transition-colors",
   {
     variants: {
       variant: {
-        outline: "border-border hover:bg-muted/50 border",
-        ghost: "hover:bg-muted/50",
-        muted: "bg-muted/50 hover:bg-muted/70",
+        outline: "border-hair hover:bg-surface-2/50 border",
+        ghost: "hover:bg-surface-2/50",
+        muted: "bg-surface-2/50 hover:bg-surface-2",
       },
       size: {
         sm: "px-2.5 py-1.5 text-xs",
@@ -95,7 +95,7 @@ function FileIconDisplay({
   return (
     <span
       data-slot="file-icon"
-      className={cn("text-muted-foreground shrink-0", className)}
+      className={cn("text-ink-mute shrink-0", className)}
       {...props}
     >
       {children ?? (
@@ -133,7 +133,7 @@ function FileSize({ bytes, className, ...props }: FileSizeProps) {
   return (
     <span
       data-slot="file-size"
-      className={cn("text-muted-foreground shrink-0", className)}
+      className={cn("text-ink-mute shrink-0", className)}
       {...props}
     >
       {formatFileSize(bytes)}
@@ -170,7 +170,7 @@ function FileDownload({
       download={filename || "download"}
       {...(kind === "url" && { target: "_blank", rel: "noopener noreferrer" })}
       className={cn(
-        "text-muted-foreground hover:bg-accent hover:text-accent-foreground shrink-0 rounded-md p-1 transition-colors",
+        "text-ink-mute hover:bg-accent hover:text-accent-foreground shrink-0 rounded-none p-1 transition-colors",
         className,
       )}
       {...props}

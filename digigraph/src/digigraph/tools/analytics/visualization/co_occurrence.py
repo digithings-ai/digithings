@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from digigraph.tools.analytics._artifacts import sanitize_node_id
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _sanitize_node_id
 
 
 def entity_co_occurrence(
@@ -52,8 +52,8 @@ def entity_co_occurrence(
     if include_mermaid and pairs:
         lines = ["flowchart LR"]
         for p in pairs[:30]:
-            sid = _sanitize_node_id(p["source"])
-            tid = _sanitize_node_id(p["target"])
+            sid = sanitize_node_id(p["source"])
+            tid = sanitize_node_id(p["target"])
             lines.append(f"    {sid} -->|{p['count']}| {tid}")
         mermaid_source = "\n".join(lines)
     return {"pairs": pairs, "image_path": None, "mermaid_source": mermaid_source}

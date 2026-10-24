@@ -11,8 +11,6 @@ content hashes.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import date, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -28,6 +26,7 @@ from pydantic import (
 )
 
 from digiquant.portfolio.action_cost_inputs import ActionCostSide
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 _ACTION_COST_ESTIMATE_ID_NAMESPACE = UUID("a903c14e-6d2f-7a18-9e4b-1c2d3e4f5a60")
 _LIQUIDITY_SNAPSHOT_ID_NAMESPACE = UUID("b014d25f-7e30-8b29-af5c-2d3e4f607b71")
@@ -284,12 +283,8 @@ class ActionCostOutcome(CostLiquidityModel):
         return self
 
 
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def liquidity_snapshot_content_hash(*, payload: dict[str, object]) -> str:
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def liquidity_snapshot_id(
@@ -308,7 +303,7 @@ def liquidity_snapshot_id(
 
 
 def action_cost_estimate_content_hash(*, payload: dict[str, object]) -> str:
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def action_cost_estimate_id(
@@ -326,7 +321,7 @@ def action_cost_estimate_id(
 
 
 def action_cost_outcome_content_hash(*, payload: dict[str, object]) -> str:
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def action_cost_outcome_id(

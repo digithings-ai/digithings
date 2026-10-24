@@ -16,6 +16,7 @@ import {
 import { toDigichatClientConfig } from "@/lib/deploy-config/client-projection";
 import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";
+import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { toolControlFor } from "@/lib/tool-control";
 
 // The trial's /tools page, rendered from its real Foundry deployment yaml.

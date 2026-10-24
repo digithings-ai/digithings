@@ -1,6 +1,7 @@
 # digiweb utilitarian rollout
 
 **Status:** v0.1 approved for promotion · **2026-08-30**  
+**Superseded 2026-10-23.** What shipped is the pixel-terminal generation, not this plan: heroes are a canvas pixel field with no mesh composition, `apps/reference` is no longer a live surface, and the phase table below is a record. Kept as the rollout log for the 2026-08-30 round — [`docs/design/CURRENT_UI_LANGUAGE.md`](../../docs/design/CURRENT_UI_LANGUAGE.md) §6.
 **Goal:** one cohesive utilitarian-terminal language across digiweb → every live product surface.
 
 Canon: [`BLEND.md`](BLEND.md) · [`packages/ui/DESIGN.md`](../ui/DESIGN.md) · reference `/iterate`
