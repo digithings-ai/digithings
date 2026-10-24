@@ -30,16 +30,25 @@ function parseTokenPayload(data: TokenJson): DigikeyTokenExchange | null {
 
 /**
  * Exchange a digikey-issued API key for a short-lived JWT (Authorization: Bearer … to digigraph).
+ *
+ * `requestedScopes` narrows the minted token to the scopes asked for; digikey
+ * refuses (non-OK) when the key does not grant them. Omitted entirely when
+ * empty, so existing callers send exactly the body they always did.
  */
 export async function exchangeDigikeyApiKey(
   digikeyBaseUrl: string,
-  apiKey: string
+  apiKey: string,
+  requestedScopes?: readonly string[],
 ): Promise<DigikeyTokenExchange | null> {
   const base = digikeyBaseUrl.replace(/\/$/, "");
   const res = await fetch(`${base}/v1/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ grant_type: "api_key", api_key: apiKey }),
+    body: JSON.stringify({
+      grant_type: "api_key",
+      api_key: apiKey,
+      ...(requestedScopes?.length ? { requested_scopes: [...requestedScopes] } : {}),
+    }),
   });
   if (!res.ok) return null;
   const data = (await res.json()) as TokenJson;
@@ -123,12 +132,20 @@ export type DigikeyBffSessionOutcome =
 
 /**
  * OIDC-backed session exchange (digichat BFF → digikey). Requires DIGIKEY_BFF_TOKEN on digikey.
+ *
+ * `requestedScopes` narrows the minted token to the scopes asked for. digikey
+ * checks them against the scopes the BFF grant carries
+ * (`DEFAULT_BFF_SESSION_SCOPES`) and rejects the request with 400 when they are
+ * not covered — the `rejected` outcome, not a silent narrower token. Omitted
+ * entirely when empty, so existing callers send exactly the body they always
+ * did.
  */
 export async function exchangeDigikeyBffSession(
   digikeyBaseUrl: string,
   bffToken: string,
   tenantSlug: string,
-  subject: string
+  subject: string,
+  requestedScopes?: readonly string[],
 ): Promise<DigikeyBffSessionOutcome> {
   const base = digikeyBaseUrl.replace(/\/$/, "");
   // digikey runs in a sleep-on-idle container: the first call after idle can
@@ -172,6 +189,7 @@ export async function exchangeDigikeyBffSession(
           grant_type: "bff_session",
           tenant_slug: tenantSlug,
           subject,
+          ...(requestedScopes?.length ? { requested_scopes: [...requestedScopes] } : {}),
         }),
       });
     } catch {

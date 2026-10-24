@@ -55,13 +55,20 @@ describe("MCP edge paths", () => {
     expect(mapBody.split("\n").filter((line) => /^\s*\w+\s*:\s*\d+/.test(line))).toHaveLength(2);
   });
 
-  it("routes every mapped prefix fail-closed on a missing or wrong key", () => {
+  it("routes every mapped prefix fail-closed on a missing or wrong credential", () => {
     expect(source).toContain("url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)");
     expect(source).toContain("workerEnv.MCP_EDGE_KEY?.trim()");
     expect(source).toContain("x-digi-mcp-key");
-    expect(source).toContain("if (!expected || !provided || provided !== expected)");
+    // The credential decision moved into ./mcp-edge-auth when the digikey JWT
+    // identity was added: index.ts delegates and answers 401/403, it does not
+    // compare secrets itself. The comparison itself is pinned by
+    // mcp-edge-auth.test.ts, which drives the real verifier.
+    expect(source).toContain("const decision = await authorizeMcpEdge({");
+    expect(source).toContain("expectedKey: mcpEdgeKeyFor(serverId, workerEnv),");
+    expect(source).toContain("if (!decision.ok) {");
     expect(source).toContain("digithings-stack: unauthorized");
-    expect(source).toContain("status: 401");
+    expect(source).toContain("digithings-stack: forbidden");
+    expect(source).toContain("status: decision.status");
   });
 
   it("strips the prefix, forwards the path unchanged, and forwards to the mapped port", () => {
@@ -85,7 +92,9 @@ expect(source).toContain("function stackContainer(workerEnv: Env)");
     expect(source).toContain(
       "function mcpEdgeKeyFor(serverId: string, workerEnv: Env): string {",
     );
-    expect(source).toContain("const expected = mcpEdgeKeyFor(serverId, workerEnv);");
+    // The key is still resolved per server and handed to the verifier; the
+    // comparison now lives in ./mcp-edge-auth (see the fail-closed test above).
+    expect(source).toContain("expectedKey: mcpEdgeKeyFor(serverId, workerEnv),");
   });
 });
 
