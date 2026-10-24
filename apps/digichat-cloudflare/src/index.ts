@@ -102,6 +102,11 @@ export class DigiChatContainer extends Container {
     // Read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets).
     ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
+    // Edge key for the digithings-stack `/_stack/mcp/<id>` routes that front
+    // digisearch/digivault; matches the stack Worker's MCP_EDGE_KEY secret and
+    // reaches the container as the `x-digi-mcp-key` header value. Set with
+    // `wrangler secret put DIGICHAT_MCP_EDGE_KEY`, never in a document.
+    DIGICHAT_MCP_EDGE_KEY: workerVars.DIGICHAT_MCP_EDGE_KEY ?? "",
   };
 
   /** One boot = one KV read of both the tenant registry and the config document. */
@@ -220,6 +225,12 @@ export interface Env {
   ZAMMAD_BASE_URL?: string;
   /** Worker-only gate for /api/mcp/zammad*; never forwarded to the container. */
   ZAMMAD_EDGE_KEY?: string;
+  /**
+   * Key for the digithings-stack `/_stack/mcp/<id>` edge (digisearch/digivault);
+   * forwarded to the container as `x-digi-mcp-key`. Same value as the stack
+   * Worker's MCP_EDGE_KEY secret; set with `wrangler secret put`.
+   */
+  DIGICHAT_MCP_EDGE_KEY?: string;
   /**
    * Worker-only key for the container reset lever; never forwarded to the
    * container. Unset means the lever is off (the route answers 404).

@@ -75,6 +75,11 @@ _KNOWN_ENTRY_KEYS = frozenset(
         "research_system_prompt",
         "lockSessionControls",
         "lock_session_controls",
+        # DIG-3269 dedicated per-index digisearch tools. The parser honours
+        # both spellings, so both are known keys - an OCC map that carries
+        # digisearchTools must not be warned about as unknown.
+        "digisearchTools",
+        "digisearch_tools",
     }
 )
 

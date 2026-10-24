@@ -106,10 +106,10 @@ deployment: &house
     catalog:
       - id: digisearch
         default: true
-        label: Search
+        label: digisearch
       - id: digivault
         default: true
-        label: Vault
+        label: digivault
   mcp:
     allowUserServers: false
     allowAddForm: false
@@ -134,16 +134,22 @@ deployment: &house
     # Neither shape ever reaches the browser: only id/url/label/setup reach the
     # client projection.
     servers:
+      # The shipped default is the compose/self-host topology: these hostnames
+      # resolve on the compose network and nowhere else. A deployment that is
+      # not compose (the Cloudflare container included) overrides this document
+      # from its own config source — the KV `config-yaml` key — with that
+      # environment's endpoints. Keeping the edge URLs here instead would send
+      # every self-hosted install at our Worker, where it has no key.
       - id: digisearch
         url: http://digisearch-mcp:8765/mcp
-        label: Search
+        label: digisearch
         default: true
         authScheme: jwt
         setup:
           index_name: digithings_docs
       - id: digivault
         url: http://digivault-mcp:8769/mcp
-        label: Vault
+        label: digivault
         default: true
         authScheme: jwt
         setup:
