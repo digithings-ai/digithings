@@ -564,7 +564,7 @@ const ThreadRoot: FC<{
   return (
     <ThreadPrimitive.Root
       className={cn(
-        "aui-root aui-thread-root digichat-thread bg-background @container flex h-full flex-col",
+        "aui-root aui-thread-root digichat-thread bg-surface @container flex h-full flex-col",
         className,
       )}
       data-user-align="left"
@@ -625,7 +625,7 @@ const ThreadRoot: FC<{
       <OverlayScrollbar targetRef={viewportRef} width={10} />
       </div>
         <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
-          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-surface relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -762,7 +762,7 @@ const ThreadWelcome: FC = () => {
       data-slot="aui_thread-welcome"
       className="aui-thread-welcome-root flex flex-col items-start text-start"
     >
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-(--duration-hover)">
         {welcome}
       </h1>
       <TypedWelcomeCopy lines={welcomeBody} />
@@ -776,7 +776,7 @@ const ThreadWelcome: FC = () => {
  * they came from the runtime or from `chrome.suggestions`.
  */
 const SUGGESTION_BUTTON_CLASS =
-  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200";
+  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-(--duration-hover)";
 
 const ThreadSuggestions: FC = () => {
   const { suggestions } = useContext(ThreadChromeContext);
@@ -1086,7 +1086,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-dictate text-ink-mute hover:text-foreground size-7 rounded-none"
+              className="aui-composer-dictate text-ink-mute hover:text-ink size-7 rounded-none"
               aria-label="Start voice input"
             >
               <DotMatrix
@@ -1105,7 +1105,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-stop-dictation text-destructive size-7 rounded-none"
+              className="aui-composer-stop-dictation text-danger size-7 rounded-none"
               aria-label="Stop voice input"
             >
               <DotMatrix
@@ -1232,11 +1232,11 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-(--dur-fast)"
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
+        className="aui-assistant-message-content text-ink min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
           groupBy={chainGroupBy}
@@ -1439,7 +1439,7 @@ const AssistantActionBar: FC = () => {
       // the bar is 24px tall and the gap is 12/8/20px by density, so a float
       // paints over the next turn's first line. The empty-footer collapse in
       // chat-digichat.css keeps the un-hovered turns at one message gap.
-      className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
+      className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-(--duration-hover)"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -1560,7 +1560,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-(--dur-fast)"
       data-role="user"
     >
       <span className="aui-msg-marker" aria-hidden="true">
@@ -1568,7 +1568,7 @@ const UserMessage: FC = () => {
       </span>
       <div className="aui-user-message-content-wrapper relative min-w-0">
         <UserMessageAttachments />
-        <div className="aui-user-message-content text-foreground wrap-break-word empty:hidden">
+        <div className="aui-user-message-content text-ink wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />

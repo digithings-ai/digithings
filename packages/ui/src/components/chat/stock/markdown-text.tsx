@@ -76,10 +76,10 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       </span>
       <TooltipIconButton tooltip="Copy" onClick={onCopy}>
         {!isCopied && (
-          <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
+          <CopyIcon className="animate-in zoom-in-75 fade-in duration-(--dur-fast)" />
         )}
         {isCopied && (
-          <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
+          <CheckIcon className="animate-in zoom-in-50 fade-in duration-(--duration-hover) ease-out" />
         )}
       </TooltipIconButton>
     </div>
@@ -166,7 +166,7 @@ export const defaultComponents = memoizeMarkdownComponents({
     ) : (
       <a
         className={cn(
-          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+          "aui-md-a text-accent hover:text-accent/80 underline underline-offset-2",
           className,
         )}
         href={href}

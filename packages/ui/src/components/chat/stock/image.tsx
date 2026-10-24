@@ -328,7 +328,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
             data-slot="image-zoom-overlay"
             role="dialog"
             aria-modal="true"
-            className="aui-image-zoom-overlay fade-in animate-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 duration-200"
+            className="aui-image-zoom-overlay fade-in animate-in fixed inset-0 z-50 flex items-center justify-center bg-black/80 duration-(--duration-hover)"
             onClick={handleClose}
             aria-label="Zoomed image"
           >
@@ -336,7 +336,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
               data-slot="image-zoom-content"
               src={src}
               alt={alt}
-              className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain duration-200"
+              className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain duration-(--duration-hover)"
               onClick={(e) => {
                 e.stopPropagation();
                 handleClose();
@@ -350,7 +350,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
                 e.stopPropagation();
                 handleClose();
               }}
-              className="text-ink-mute hover:text-foreground bg-background/80 absolute end-4 top-4 cursor-pointer rounded-none p-2"
+              className="text-ink-mute hover:text-ink bg-surface/80 absolute end-4 top-4 cursor-pointer rounded-none p-2"
             >
               <XIcon className="size-5" />
             </button>

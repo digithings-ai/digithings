@@ -55,7 +55,7 @@ const FollowupSuggestionsRow: FC = () => {
         {suggestions.map((suggestion, idx) => (
           <ThreadPrimitive.Suggestion
             key={idx}
-            className="aui-thread-followup-suggestion bg-background hover:bg-surface-2 rounded-none border px-3 py-1 text-sm whitespace-nowrap transition-colors ease-in"
+            className="aui-thread-followup-suggestion bg-surface hover:bg-surface-2 rounded-none border px-3 py-1 text-sm whitespace-nowrap transition-colors ease-in"
             prompt={suggestion.prompt}
             send
             onClick={() => dismissKeyboardIfCoarse()}

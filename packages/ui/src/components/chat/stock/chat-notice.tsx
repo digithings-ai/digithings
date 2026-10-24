@@ -17,8 +17,8 @@ export type ChatNoticeTone = "error" | "status";
 
 const TONE_CLASS: Record<ChatNoticeTone, string> = {
   error:
-    "border-destructive/20 bg-destructive/[0.04] text-foreground [&_.aui-chat-notice-title]:text-destructive",
-  status: "border-hair bg-surface-2/40 text-foreground",
+    "border-danger/20 bg-danger/[0.04] text-ink [&_.aui-chat-notice-title]:text-danger",
+  status: "border-hair bg-surface-2/40 text-ink",
 };
 
 export function chatNoticeRootProps(
@@ -69,7 +69,7 @@ export const ChatNoticeContent: FC<{
       label={tone === "error" ? "Error" : "Status"}
       className={cn(
         "aui-chat-notice-marker !size-3 mt-0.5 shrink-0",
-        tone === "error" ? "text-destructive/60" : "text-ink-mute",
+        tone === "error" ? "text-danger/60" : "text-ink-mute",
       )}
     />
     <div className="min-w-0 flex-1">

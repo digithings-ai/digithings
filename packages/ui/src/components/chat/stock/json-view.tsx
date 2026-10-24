@@ -126,7 +126,7 @@ export const JsonView: FC<{
     <pre
       data-slot={slot}
       className={cn(
-        "aui-json-view bg-surface-2/50 text-foreground/90 max-h-72 overflow-auto overscroll-contain rounded-none p-2.5 font-mono text-xs whitespace-pre-wrap break-words",
+        "aui-json-view bg-surface-2/50 text-ink/90 max-h-72 overflow-auto overscroll-contain rounded-none p-2.5 font-mono text-xs whitespace-pre-wrap break-words",
         className,
       )}
     >

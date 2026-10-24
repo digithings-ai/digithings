@@ -171,7 +171,7 @@ export function ArtifactsPanel({
         <button
           type="button"
           onClick={onClose}
-          className="text-ink-mute hover:text-foreground text-sm"
+          className="text-ink-mute hover:text-ink text-sm"
         >
           Close
         </button>
@@ -286,7 +286,7 @@ export function ArtifactLink({
     <>
       <a
         className={cn(
-          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+          "aui-md-a text-accent hover:text-accent/80 underline underline-offset-2",
           className,
         )}
         href={href}

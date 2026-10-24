@@ -185,7 +185,7 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-ink-mute hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-ink-mute hover:text-ink flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
@@ -198,7 +198,7 @@ function ToolFallbackTrigger({
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-foreground",
+          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-ink",
           isCancelled && "text-ink-mute line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}
@@ -330,7 +330,7 @@ function ToolFallbackAttribution({
           href={attribution.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="aui-tool-fallback-attribution-link text-foreground/90 underline-offset-2 hover:underline"
+          className="aui-tool-fallback-attribution-link text-ink/90 underline-offset-2 hover:underline"
         >
           Open in Gloomberb
         </a>
@@ -559,7 +559,7 @@ function ToolFallbackApproval({
   const question = isQuestion(approval);
 
   const promptText = approval?.prompt ? (
-    <p className="aui-tool-fallback-approval-prompt text-foreground">
+    <p className="aui-tool-fallback-approval-prompt text-ink">
       {approval.prompt}
     </p>
   ) : null;
@@ -567,7 +567,7 @@ function ToolFallbackApproval({
   const errorText = error ? (
     <p
       role="alert"
-      className="aui-tool-fallback-approval-error text-destructive text-xs"
+      className="aui-tool-fallback-approval-error text-danger text-xs"
     >
       {error}
     </p>

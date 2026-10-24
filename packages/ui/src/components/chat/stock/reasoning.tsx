@@ -179,7 +179,7 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-ink-mute hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]",
+        "aui-reasoning-trigger group/trigger text-ink-mute hover:text-ink flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
