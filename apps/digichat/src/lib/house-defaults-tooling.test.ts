@@ -49,37 +49,28 @@ describe("house document tool/MCP naming", () => {
 });
 
 describe("house document MCP endpoints", () => {
-  it("points digisearch and digivault at the stack edge routes", () => {
+  it("keeps the compose hostnames in the shipped default", () => {
+    // The document baked into the image is the compose/self-host topology:
+    // these hostnames resolve on the compose network and nowhere else. A
+    // deployment that is not compose (the Cloudflare container included)
+    // overrides this document from its own config source — the KV
+    // `config-yaml` key — with that environment's endpoints. Putting the edge
+    // URLs here instead would send every self-hosted install at our Worker,
+    // where it holds no key.
     const urls = Object.fromEntries(servers.map((entry) => [entry.id, entry.url]));
     expect(urls).toEqual({
-      digisearch: "https://search.digithings.ai/_stack/mcp/digisearch/mcp",
-      digivault: "https://graph.digithings.ai/_stack/mcp/digivault/mcp",
+      digisearch: "http://digisearch-mcp:8765/mcp",
+      digivault: "http://digivault-mcp:8769/mcp",
     });
   });
 
-  it("names no compose hostname", () => {
-    // `digisearch-mcp:8765` resolves only inside the compose network; a URL of
-    // that shape reaches the Cloudflare deployment as "unavailable".
-    const compose = servers
-      .filter((entry) => /^[a-z]+:\/\/[a-z0-9-]+-mcp:\d+/.test(entry.url ?? ""))
-      .map((entry) => `${entry.id ?? "?"} → ${entry.url ?? ""}`);
-    expect(compose, `compose-only hostname(s) in the house document: ${compose.join(", ")}`).toEqual(
-      [],
-    );
-  });
-
-  it("sends the edge key from DIGICHAT_MCP_EDGE_KEY as x-digi-mcp-key", () => {
-    // The edge answers 401 without the key. `tokenEnv` names the container
-    // secret (the value is never in the document) and `authHeader` is the name
-    // digithings-stack's gate reads; without both the forwarded key is inert.
-    const wired = servers.map((entry) => ({
-      id: entry.id,
-      tokenEnv: entry.tokenEnv,
-      authHeader: entry.authHeader,
-    }));
-    expect(wired).toEqual([
-      { id: "digisearch", tokenEnv: "DIGICHAT_MCP_EDGE_KEY", authHeader: "x-digi-mcp-key" },
-      { id: "digivault", tokenEnv: "DIGICHAT_MCP_EDGE_KEY", authHeader: "x-digi-mcp-key" },
-    ]);
+  it("ships no edge key reference, so a bare install is not pointed at our stack", () => {
+    // `tokenEnv` names a container secret and `authHeader` names the header the
+    // stack gate reads. Both belong to a deployment that actually talks to the
+    // edge; the shipped default must not claim them.
+    const wired = servers
+      .filter((entry) => entry.tokenEnv !== undefined || entry.authHeader !== undefined)
+      .map((entry) => entry.id);
+    expect(wired, `shipped default wires an edge credential for: ${wired.join(", ")}`).toEqual([]);
   });
 });

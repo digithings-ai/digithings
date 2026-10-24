@@ -114,28 +114,22 @@ deployment: &house
     allowUserServers: false
     allowAddForm: false
     servers:
+      # The shipped default is the compose/self-host topology: these hostnames
+      # resolve on the compose network and nowhere else. A deployment that is
+      # not compose (the Cloudflare container included) overrides this document
+      # from its own config source — the KV `config-yaml` key — with that
+      # environment's endpoints. Keeping the edge URLs here instead would send
+      # every self-hosted install at our Worker, where it has no key.
       - id: digisearch
-        # Edge route on the digithings-stack Worker, not the compose hostname:
-        # `digisearch-mcp:8765` only resolves inside the compose network, so the
-        # Cloudflare deployment answers "unavailable". The Worker maps
-        # /_stack/mcp/<id>/* to the in-container port and gates it with
-        # `x-digi-mcp-key` (its MCP_EDGE_KEY secret), which the container
-        # receives as DIGICHAT_MCP_EDGE_KEY.
-        url: https://search.digithings.ai/_stack/mcp/digisearch/mcp
+        url: http://digisearch-mcp:8765/mcp
         label: digisearch
         default: true
-        # The stack gate reads the key from this header; tokenEnv names the
-        # container secret, the value is never in this document (#3841).
-        tokenEnv: DIGICHAT_MCP_EDGE_KEY
-        authHeader: x-digi-mcp-key
         setup:
           index_name: digithings_docs
       - id: digivault
-        url: https://graph.digithings.ai/_stack/mcp/digivault/mcp
+        url: http://digivault-mcp:8769/mcp
         label: digivault
         default: true
-        tokenEnv: DIGICHAT_MCP_EDGE_KEY
-        authHeader: x-digi-mcp-key
         setup:
           path_prefix: clients/digithings
   gate:
