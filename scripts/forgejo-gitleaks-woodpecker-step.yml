@@ -1,0 +1,6 @@
+  gitleaks:
+    image: zricethezav/gitleaks:v8.30.1
+    commands:
+      - gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --exit-code 1
+    when:
+      - event: [push, pull_request]
