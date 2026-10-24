@@ -1,0 +1,10 @@
+QA evidence (from the DIG-5134 acceptance run, develop tip 2a7e1ac74a):
+
+- apps/dashboard/components/digichat-live-preview.tsx: the component builds the iframe src and renders it. There is no ref, no effect and no postMessage anywhere in the file, so the frame is never addressed after mount.
+- apps/dashboard/components/digichat-popup.tsx:238-244 (the shipped popup) does address it: it sends buildThemeMessage(theme) and, for entitled tiers with a session access token, buildPlanTierMessage(tier, accessToken) to the iframe.
+- apps/digichat/src/app/(digichat)/embed/embed-client.tsx:350-399: the embed listens for the digichat:plan-tier message (only from the parent origin), exchanges the access token at /api/plan-proof and keeps the HMAC proof; every chat request then carries X-Embed-Plan-Proof. The code comment says it plainly: chat will 403 without proof, which is correct.
+- apps/digichat/src/app/api/chat/route.ts:344-379: when the tenant config declares requiredPlanTier the route returns 403 plan_tier_required unless a valid proof is presented or the caller has an authenticated digichat session with plan_tier claims. The digiquant dashboard embed host contract (apps/digichat/src/lib/embed-tenants.ts:1207-1264, DIG-3662) documents requiredPlanTier: desk for host=digiquant.io with that fail-closed 403.
+
+So the two dashboard surfaces that embed host=digiquant.io behave differently: the popup can mint a proof, the live preview never can.
+
+Confidence and limits: this is a code-level parity finding, not a screen observation, and the 403 was not reproduced locally. The local digichat dev registry has no requiredPlanTier for digiquant.io, and the production registry is composed at apply time from the host secret store, so it is not readable from the repo (infra/digichat-release/DIG-3556-staged-prod-tenant-config.json is only an overlay, holding digithings.ai and occ.digithings.ai). Even under an ungated tenant the preview still loses the proof, so the safe direction is the same handshake the popup performs, which keeps the two surfaces from drifting.

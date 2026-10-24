@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+content-security-policy: frame-ancestors 'self' https://digithings.ai https://www.digithings.ai https://digiquant.io http://localhost:* http://127.0.0.1:*;
+x-content-type-options: nosniff
+Cache-Control: no-store
+Vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding
+Link: </_next/static/media/797e433ab948586e-s.p.0r6juujl39pe6.woff2>; rel=preload; as="font"; crossorigin=""; type="font/woff2", </_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2>; rel=preload; as="font"; crossorigin=""; type="font/woff2", </_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2>; rel=preload; as="font"; crossorigin=""; type="font/woff2", </_next/static/media/effe91970fc4db64-s.p.0oace-s_gkfks.woff2>; rel=preload; as="font"; crossorigin=""; type="font/woff2", </_next/static/chunks/%5Broot-of-the-server%5D__0e3-n2bwy8mhg._.css>; rel=preload; as="style"
+X-Powered-By: Next.js
+Content-Type: text/html; charset=utf-8
+Date: Thu, 22 Oct 2026 03:03:34 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
