@@ -2,17 +2,50 @@
 title: Why this book exists
 order: 1
 summary: >-
-  The docs explain how to run the software. This book explains why owning the infrastructure is worth the work.
+  What digithings stands for, in the order it was decided. The docs explain how to run the software; this book explains why it is built the way it is.
 ---
 
-Most of what gets written about AI infrastructure is written by whoever is
-renting it to you. This book is written from the other side of that
-relationship: what changes when you run the thing yourself, and why
-self-hosting is a position worth choosing rather than an inconvenience to
-tolerate until you can afford otherwise.
+Most of what gets written about AI infrastructure is written by whoever rents
+it to you. This comes from the other side of that arrangement.
 
-It is not a tour of digithings' internals, the docs on this site already
-cover that, endpoint by endpoint. This is shorter, and argues a position about
-infrastructure in general: why it matters, how it scales, and what it costs.
-Where it needs an example, it reaches for the nearest one, which happens to be
-this project, but the argument is not about digithings.
+What follows is what digithings believes about building AI software, the
+principles the codebase follows, and what that makes possible for the people
+who use it. Setup and every endpoint live in the documentation; the reasoning
+behind those decisions lives here.
+
+## What we hold to
+
+**Own the stack.** The software that runs your work should be software you
+can read, run and change. Renting is a choice you should be able to make
+later, not a condition of starting.
+
+**Location is a deployment decision.** The same application runs on a laptop,
+on a server you own and in a cloud account. Moving it changes configuration,
+not code.
+
+**Open by default.** The components are open source. The boundaries between
+them are open protocols, so no part of the stack can hold the rest hostage.
+
+**Small parts, one job each.** Model access, orchestration, retrieval,
+identity, tracing and the interface are separate modules. You run the ones the
+work needs and leave the rest switched off.
+
+**Grow in place.** A solo builder and an organisation use the same contracts.
+Capability and cost are dials you turn up as the work proves itself.
+
+**Show the working.** Answers cite their sources, research results keep
+their provenance, and every request can leave a trail. Trust comes from what the
+system records, not from what it claims.
+
+## How to read it
+
+The case comes first: software that can live anywhere, an open core, a stack
+that scales without a rewrite. Then the modules themselves, in the order the
+work arrives. It ends where every project should start, on your own machine,
+with the first thing to build.
+
+It is written for whoever has to decide where their AI software runs, and for
+whoever maintains it afterwards. The argument holds the same for one machine
+or a thousand.
+
+Read it through in one sitting, or open the chapter your question lives in.

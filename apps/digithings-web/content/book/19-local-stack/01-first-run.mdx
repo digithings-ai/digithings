@@ -16,9 +16,9 @@ When something does not start, the order of inspection is fixed. First the
 composition's own status: which service is unhealthy, and what did it log
 last? Then dependencies: did storage and the model runner come up before
 the services that need them? Then resources: is there memory and disk to
-spare? Nine first runs in ten end at one of those three steps. The tenth —
-a genuinely new failure — is worth reporting, because it improves the
-composition for everyone after.
+spare? Most first runs end at one of those three steps. A failure that is none of
+them is worth reporting, because it improves the composition for everyone
+after.
 
 <Reference kind="guide" href="repo:docs/LOCAL_STACK.md" title="Local stack guide">
   The commands and the troubleshooting checklist.

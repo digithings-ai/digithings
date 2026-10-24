@@ -1,0 +1,50 @@
+---
+title: Open source, open core
+order: 3
+summary: >-
+  The components are MIT licensed and the seams between them are open protocols. What stays closed is narrow, and the rule for it is written down.
+---
+
+digithings is open core. The components you would build an AI application
+from are published under the MIT licence: the orchestration hub, the model
+layer, retrieval, backtesting and optimisation, the chat interface, identity,
+tracing and the shared libraries. You can read them, run them,
+change them and ship them inside your own product.
+
+## Why open
+
+Open source is usually argued on price. The stronger reasons are practical.
+
+**You can inspect it.** When an answer looks wrong, you can follow the request
+through code you can read, down to the line that made the decision. A closed
+component turns that question into a support ticket.
+
+**You can move it.** Portability depends on knowing every assumption a
+component makes about where it runs. In a closed component, those assumptions
+are exactly what you cannot see.
+
+**It outlives the vendor.** Software you build on keeps working whatever
+happens to the company that wrote it. The code is in your hands, under a
+licence that does not expire.
+
+## Open at the seams
+
+Open code is not enough if the boundaries are proprietary. A stack can publish
+every module and still lock you in through the way they talk to each other.
+
+digithings keeps its seams on standards that existed before it and will exist
+after it. Models are reached through the chat format most providers and local
+runners already speak. Tools are described with the Model Context Protocol, so
+any client that speaks it can use them. Identity is carried in standard signed
+credentials that any service can verify. Replace one module with your own and
+the others do not notice.
+
+## What stays closed
+
+The closed part is narrow and has a rule. Anything a person would reasonably want to self-host for their
+own work stays open. What is closed is the commercial layer built on top: the
+finance workflows that run research cycles and portfolio decisions, the layer
+that turns research into live orders, the machinery for running many tenants
+on one deployment, and managed hosting.
+
+That line can move as the project grows. The rule behind it does not.

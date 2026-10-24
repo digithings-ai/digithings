@@ -75,7 +75,7 @@ const { chromium } = await import("playwright");
 const browser = await chromium.launch();
 
 try {
-  const page = await browser.newPage({ deviceScaleFactor: 1.25 });
+  const page = await browser.newPage({ deviceScaleFactor: 2.5 });
   // emulatedMedia "screen" on purpose: Paged.js paginates into fixed boxes and
   // its own stylesheet, and Chrome's print media would restyle on top of it.
   await page.emulateMedia({ media: "screen" });
@@ -113,7 +113,7 @@ try {
   pdf.setCreator("digithings.ai/book");
   for (let i = 0; i < pages; i += 1) {
     const shot = await page.locator(".pagedjs_page").nth(i).screenshot();
-    const jpeg = await sharp(shot).jpeg({ quality: 78 }).toBuffer();
+    const jpeg = await sharp(shot).jpeg({ quality: 85 }).toBuffer();
     const image = await pdf.embedJpg(jpeg);
     const sheet = pdf.addPage([A4.width, A4.height]);
     // Full bleed: the page box already carries the site's light background

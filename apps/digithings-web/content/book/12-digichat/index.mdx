@@ -5,57 +5,56 @@ summary: >-
   The chat surface, its request path and the embed story. Credentials and conversation state stay out of the interface.
 ---
 
-Most people never meet the stack. They meet digichat: the chat surface where
+Most people never meet the stack. They meet digichat, the chat surface where
 questions go in and answers stream out. Everything behind it, the hub, the
-verticals and the models, serves that surface. The surface stays thin on
-purpose.
+verticals and the models, serves that surface, and the
+surface itself does very little.
 
-## What it is for
+A person signs in, opens a conversation and talks. Answers stream in as they
+are produced, history is kept per conversation, and artifacts such as
+documents and visuals render beside the chat rather than inside a wall of
+text. The same interface can be embedded in another site, so a host can offer
+the experience to its own visitors with the same backend behind it.
 
-digichat answers one audience question: what does it feel like to use this
-system? A person signs in, opens a conversation, and talks. The interface
-streams answers as they arrive, keeps history per conversation, and offers
-artifacts, rendered outputs like documents and visuals, beside the chat.
-It also embeds elsewhere: a host site can frame the chat experience for its
-own visitors, with the same backend serving both.
+Voice belongs to this surface rather than to a product of its own: dictation
+and read-back are two more ways into the same conversation, and the model
+behind either is chosen the way every other model call is chosen.
 
 ## How it works
 
-digichat is two things that travel together: a request layer and a surface.
-The request layer authenticates the person, resolves which conversation they
-are in, and forwards the message to the orchestration hub with a short-lived
-identity. The surface renders the streaming answer, the history and the
-artifacts. Neither half holds anything an attacker would want: sessions are
-verified per request, conversation content lives in the data layer rather
-than in the interface, and embed visitors are authorised per host before they
-see anything.
+digichat is two parts that travel together: a request layer and a surface.
+The request layer signs the person in, works out which conversation they are
+in, and forwards the message to the hub with a short-lived identity. The
+surface renders the streaming answer, the history and the artifacts.
 
-The embed path follows the same shape with one extra check: the host naming
-the visitor must itself be recognised before any conversation resolves. A
-registered host alone authorises nothing; the per-visit credential does.
+Neither half holds anything worth stealing. Sessions are verified on every
+request. Conversation content is kept in the data layer when one is
+configured, not in the server.
+Embedded visitors are authorised per host before they see anything, and a
+registered host alone authorises nothing: the credential for that visit
+does.
 
-## Where it meets the rest
+## Where it fits
 
 digichat is the hub's most demanding caller and the data layer's steadiest
-writer. It leans on the identity service for sessions and machine
-credentials, on the hub for answers, and on the data layer for conversation
-persistence. Artifact rendering reuses the shared design components, so the
-chat looks like the rest of the surfaces without sharing their code.
+writer. It relies on the identity service for sessions, on the hub for
+answers and on the data layer for history. Artifacts render with the same
+design components as the rest of the surfaces, so the chat looks like part
+of one product.
+
+Because the interface speaks the standard chat format to the hub, it is also
+replaceable. Any client that speaks that format and carries a valid identity
+can sit where digichat sits.
+
+## Where it runs
+
+On a laptop the interface runs beside the stack it talks to, which keeps
+development to a single checkout. In the cloud it runs as a container in front of the hub and verticals. On your own servers it runs
+wherever you already serve web traffic.
+
+In every home it stays stateless. Stop it, move it or run ten copies, and
+conversations survive, because the server never held them. 
 
 <Reference kind="guide" href="repo:apps/digichat/INSTALL.md" title="digichat install guide">
   Running the interface locally and connecting it to the stack.
 </Reference>
-
-## Running it in each home
-
-Locally the interface runs beside the stack it talks to, which makes
-development a single checkout. In the cloud it runs at the edge, close to
-visitors, while the hub and verticals sit behind service bindings. Self-hosted
-it runs wherever the operator serves web traffic from. In every home the
-interface stays stateless: stop it, move it, scale it, conversations survive
-because they never lived in it.
-
-> **Why digithings.** The interface is open source and stateless, so it runs
-> anywhere the operator already serves traffic. No hosted-only surface, no
-> per-seat metering in the interface itself, the chat you run is the chat
-> you own.

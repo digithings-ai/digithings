@@ -19,7 +19,12 @@
  */
 import { useEffect, useRef, useState } from "react";
 
+import { createEmbeddingSubject } from "@/components/landing/embedding-map";
+import { mountField } from "@/components/landing/pixel-field-core";
 import { PAGED_CSS } from "@/lib/book/printCss";
+
+/** One seed, so every printing draws the same cover rather than a new map. */
+const COVER_SEED = 2410;
 
 export default function PagedBoot({ enabled }: { enabled: boolean }) {
   const [status, setStatus] = useState<"idle" | "paginating" | "done" | "failed">("idle");
@@ -62,6 +67,13 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         cleanups.current.push(() => chunker.destroy());
         stampPages();
         fillTocPageRefs();
+        mountPageFields();
+        // The field reveals column by column over about a second; a screenshot
+        // taken at the ready marker caught only the first few columns and
+        // printed a stripe down the left edge. Wait for the sweep to finish.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 2200)));
+        });
         // The print step waits on THIS attribute, not on `.pagedjs_page`:
         // pagedjs creates the page boxes before the numbers exist, so waiting
         // for boxes printed the table of contents with every reference still
@@ -140,6 +152,41 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
 function stampPages(): void {
   document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page, index) => {
     page.dataset.bookPage = String(index + 1);
+    // The folio is drawn by the pagination engine on the outer edge; this
+    // imprints the edition and version on the other side, so a reader holding
+    // one page can tell which printing it came from. The title page states it
+    // already, so it is left alone.
+    if (index > 0 && !page.querySelector(".book-page-imprint")) {
+      const imprint = document.createElement("span");
+      imprint.className = "book-page-imprint";
+      imprint.textContent = "E26 · V1";
+      page.appendChild(imprint);
+    }
+  });
+}
+
+/**
+ * The cover and the contents carry the field the welcome page draws: an
+ * embedding map in pixels. It is mounted here, on the page box, and not in the
+ * source document: pagedjs copies the source into the boxes, and a canvas
+ * copied that way arrives without its bitmap, so a field mounted before
+ * pagination printed a blank page.
+ *
+ * It goes on the page box rather than inside the section so it can run edge to
+ * edge — the section sits inside the page margins. The contents page gets the
+ * same field at a lower strength and from a different seed, so the two facing
+ * pages do not read as the same wallpaper.
+ */
+function mountPageFields(): void {
+  document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page) => {
+    const cover = page.querySelector(".book-cover");
+    const contents = page.querySelector(".book-contents");
+    if ((!cover && !contents) || page.querySelector(".book-cover__field")) return;
+    const canvas = document.createElement("canvas");
+    canvas.className = cover ? "book-cover__field" : "book-cover__field book-cover__field--quiet";
+    canvas.setAttribute("aria-hidden", "true");
+    page.prepend(canvas);
+    mountField(canvas, createEmbeddingSubject(cover ? COVER_SEED : COVER_SEED + 7));
   });
 }
 

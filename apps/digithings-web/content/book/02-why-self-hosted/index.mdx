@@ -5,15 +5,43 @@ summary: >-
   An AI application should not be tied to the machine it first ran on. Build on a laptop, scale in place, move to the cloud without a rewrite.
 ---
 
-An AI application should not be tied to the machine it first ran on. The model
-endpoint, the data store and the number of users will change. The application
-should not have to change with them.
+An AI application should not be tied to the machine it first ran on. Over
+its life the model endpoint changes, the data grows and the number of people
+using it goes from one to many. The application should not have to change
+with them.
 
-digithings is built so the same code runs on a laptop and in a cloud account.
-You develop locally, prove the application end to end, then move it when the
-work needs more capacity. The migration is a deployment choice, not a rewrite.
+Most stacks decide where your software lives on day one. A hosted platform
+needs an account before the first request. A framework built around one
+vendor's runtime only runs there. By the time you know what the application
+needs, the choice has been made for you, and undoing it is a migration
+project.
 
-This is not an argument against cloud. It is an argument against choosing
-infrastructure before you know what the application needs. Open source, open
-core and standard protocols keep that choice open. No layer in the stack
-decides where the rest of it must live.
+digithings takes the opposite position. The same code runs on a laptop, on a
+server you own and in a cloud account, with the same service contracts, the
+same setting names and the same identity model in each. You build locally,
+prove the application end to end on real data, and move it when the work
+needs more capacity. The move is a deployment choice, not a rewrite.
+
+```mermaid one application, three homes: the contracts between modules are the same in each
+flowchart LR
+  APP[one application] --> L[your laptop]
+  APP --> S[a server you own]
+  APP --> C[a cloud account]
+```
+
+This is not an argument against the cloud. A cloud account is often the
+right home for a production service, and digithings runs there well. The
+argument is against choosing infrastructure before you know what the
+application needs, and against infrastructure that makes the choice hard to
+revisit.
+
+Three things keep the choice open. The code is open source, so nothing is
+hidden behind an account. The seams between modules are standard protocols,
+so any module can run on a different machine from its neighbours. And no
+module assumes where the others live: each finds its neighbours through
+configuration, never through a hard-coded address.
+
+The result is that location stops being an architectural commitment. Stay on
+one machine while the work is small. Move to a cloud account when it needs
+more capacity. Split one module onto its own hardware when it grows faster
+than the rest. At every step it is the code you started with.
