@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
   embedHostOf,
+  resolveAnonymousDeploymentChat,
   resolveAnonymousInstallChat,
   resolveEmbedChatTenant,
   resolveEmbedClientConfigForPaint,
@@ -13,6 +14,7 @@ import {
   resetDigichatConfigForTests,
   setDigichatConfigForTests,
 } from "@/lib/deploy-config/loader";
+import { parseDigichatConfig } from "@/lib/deploy-config";
 import { DEFAULT_EMBED_TENANT_CONFIG } from "@/lib/embed-client-config";
 
 const REGISTRY = JSON.stringify({
@@ -372,6 +374,109 @@ describe("client-container YAML install", () => {
     expect(ctx?.tenantSlug).toBe("client-webpage-assistant");
     expect(ctx?.embedConfig?.skin).toBe("webpage-assistant");
     expect(ctx?.embedConfig?.layout).toBe("page");
+  });
+});
+
+function hostedConfig(hosts: Record<string, Record<string, unknown>>) {
+  return parseDigichatConfig({
+    version: 1,
+    hosts: Object.fromEntries(
+      Object.entries(hosts).map(([host, dep]) => [host, { backend: { type: "digigraph" }, ...dep }]),
+    ),
+  });
+}
+
+function productRequest(headers: Record<string, string>): Request {
+  return new Request("http://localhost/api/chat", { method: "POST", headers });
+}
+
+describe("resolveAnonymousDeploymentChat", () => {
+  it("opens an anonymous turn for the host whose deployment is auth: anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        // A registry row that is NOT the one requested: its presence must not
+        // decide the answer (no hosts[0] leak).
+        "occ.digithings.ai": { slug: "occ", auth: "session" },
+        "digithings.ai": { slug: "digithings-ai", auth: "anonymous" },
+      }),
+    );
+    const ctx = resolveAnonymousDeploymentChat(
+      productRequest({ origin: "https://digithings.ai" }),
+    );
+    expect(ctx?.tenantSlug).toBe("digithings-ai");
+    expect(ctx?.ownerUserSub).toBe("embed:anonymous");
+    expect(ctx?.embedConfig?.slug).toBe("digithings-ai");
+  });
+
+  it("selects the request host from X-Forwarded-Host when no origin is sent", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        "digithings.ai": {
+          slug: "digithings-ai",
+          auth: "anonymous",
+          aliases: ["www.digithings.ai"],
+        },
+      }),
+    );
+    const ctx = resolveAnonymousDeploymentChat(
+      productRequest({ "x-forwarded-host": "www.digithings.ai, internal:3005" }),
+    );
+    // www.digithings.ai is the house alias, not its own hosts key.
+    expect(ctx?.tenantSlug).toBe("digithings-ai");
+  });
+
+  it("refuses a host-matched deployment that declares auth: session", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "session" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("refuses an unknown host even when another host is anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://evil.example" })),
+    ).toBeNull();
+    expect(resolveAnonymousDeploymentChat(productRequest({}))).toBeNull();
+  });
+
+  it("refuses a host deployment whose auth field is absent", () => {
+    const cfg = hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } });
+    const dep = { ...cfg.hosts?.["digithings.ai"], auth: undefined };
+    setDigichatConfigForTests({
+      ...cfg,
+      hosts: { "digithings.ai": dep },
+    } as unknown as typeof cfg);
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("fails closed when the config cannot be read", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_YAML", "version: 1\n");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
+  });
+
+  it("still resolves when a host registry refuses the single-install path (regression)", () => {
+    // The live bug: `config.hosts` is non-empty (OCC is registered), so
+    // `isExplicitClientInstall` refuses the anonymous install and the 401
+    // stood. Host matching must not depend on that flag.
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } }),
+    );
+    expect(resolveAnonymousInstallChat()).toBeNull();
+    const ctx = resolveAnonymousDeploymentChat(
+      productRequest({ origin: "https://digithings.ai" }),
+    );
+    expect(ctx?.tenantSlug).toBe("digithings-ai");
   });
 });
 

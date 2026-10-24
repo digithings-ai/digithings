@@ -192,6 +192,53 @@ export function resolveEmbedClientConfigForPaint(
   return cfg ? toEmbedClientConfig(cfg) : DEFAULT_EMBED_TENANT_CONFIG;
 }
 
+/**
+ * The host this request is served on, in trust order: the browser-attested
+ * `Origin`/`Referer` (page JavaScript cannot set either), then the proxy's
+ * `X-Forwarded-Host`, then `Host`, then the URL. **Selection only** — the
+ * caller decides what, if anything, a selected host may unlock.
+ */
+export function requestDeploymentHost(req: Request): string | null {
+  const attested = embedOriginHostOf(req.headers);
+  if (attested) return attested;
+  const forwarded = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwarded || req.headers.get("host")?.trim();
+  if (host) return normalizeEmbedHost(host);
+  try {
+    return normalizeEmbedHost(new URL(req.url).host);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Anonymous product chat (`/chat`) on a deployment's own host. The request
+ * host picks the deployment — never `hosts[0]`, never `config.deployment` —
+ * and only that host's explicit `auth: anonymous` opens the path.
+ *
+ * Fail closed: no host, no host match, a config read error, `auth: "session"`,
+ * or an absent `auth` all return null, so the caller keeps its 401. The turn
+ * stays inside the deployment's own gate, because `embedConfig` carries the
+ * same `gateMode`, `guardrails` and `limits` the embed surface is bounded by,
+ * under the same `embed:anonymous` identity (so the per-IP and per-deployment
+ * request limiters apply unchanged).
+ */
+export function resolveAnonymousDeploymentChat(req: Request): EmbedChatTenantContext | null {
+  const host = requestDeploymentHost(req);
+  if (!host) return null;
+  try {
+    const dep = matchHostDeployment(host, getDigichatConfig());
+    if (!dep || dep.auth !== "anonymous") return null;
+    return {
+      tenantSlug: dep.slug,
+      ownerUserSub: "embed:anonymous",
+      embedConfig: deploymentToEmbedTenant(dep),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Anonymous `chrome.mode: app` product on `/` (layout templates). */
 export function resolveAnonymousInstallChat(): EmbedChatTenantContext | null {
   const install = getAnonymousClientInstall();
