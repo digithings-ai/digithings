@@ -386,14 +386,15 @@ export async function POST(req: Request) {
             // entitlement is unverified. Bound it server-side at the trial cap (100
             // turns per IP per 24h) instead of skipping the budget, which is what an
             // outage used to do — that granted unbounded free turns to anyone
-            // presenting a chat token. Same counter and same cap as the
-            // client-asserted unlock below, so a forged header buys nothing the server
-            // did not grant.
+            // presenting a chat token.
             unlockEmbedTrial(ip);
           }
-          if (req.headers.get("x-embed-trial-unlock") === "1") {
-            unlockEmbedTrial(ip);
-          }
+          // No client-asserted unlock. The route used to raise this IP's cap
+          // when the caller sent the client-asserted unlock header, but a value
+          // the browser can set is not an entitlement: the client counter sent
+          // it and anyone could forge it (DIG-4525). Relief comes only from the
+          // server's own verdicts — the tenant's quota service, an allowlisted
+          // monitor, or the degraded bound above.
           if (isOverEmbedTrialLimit(ip)) {
             return new Response(
               JSON.stringify({

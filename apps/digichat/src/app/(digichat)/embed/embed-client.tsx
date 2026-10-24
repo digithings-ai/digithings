@@ -702,7 +702,6 @@ function EmbedChat({
     byokKey: byokIsSet ? byokKey : undefined,
     byokProvider,
     byokModel,
-    trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     // The counter moves on every submitted turn, not only on the composer's
     // own submit path — the hook is the one funnel every send passes through.
