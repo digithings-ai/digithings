@@ -10,7 +10,9 @@ import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
  * want /book, which is where we send them instead).
  */
 export const metadata: Metadata = {
+  title: "the digithings book · print edition",
   robots: { index: false, follow: false },
+  alternates: { canonical: "/book/print/" },
 };
 
 /**

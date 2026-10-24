@@ -13,11 +13,9 @@ import type { ChapterWithSections } from "@/lib/book/toc";
  */
 export default function BookToc({
   chapters,
-  activeSlug,
   withRefs = false,
 }: {
   chapters: readonly ChapterWithSections[];
-  activeSlug?: string;
   /** Print route only: reserve the column the page references land in. */
   withRefs?: boolean;
 }) {
@@ -27,15 +25,10 @@ export default function BookToc({
   return (
     <ol className="list-none p-0">
       {chapters.map((chapter) => {
-        const active = chapter.slug === activeSlug;
         return (
           <li key={chapter.slug} className="border-hair border-b py-3 last:border-b-0">
             <span className="font-mono text-[0.75rem] text-accent">{String(chapter.order).padStart(2, "0")}</span>{" "}
-            <Link
-              href={chapter.href}
-              aria-current={active ? "page" : undefined}
-              className={active ? "text-ink" : "text-ink-soft"}
-            >
+            <Link href={chapter.href} className="text-ink hover:text-accent">
               {chapter.title}
             </Link>
             {withRefs ? (
@@ -46,12 +39,12 @@ export default function BookToc({
                 </span>
               </>
             ) : null}
-            <p className="m-0 text-ink-soft">{chapter.summary}</p>
+            <p className="m-0 max-w-[var(--measure-prose)] text-ink-soft">{chapter.summary}</p>
             {chapter.sections.length > 0 ? (
               <ol className="mt-2 list-none p-0 pl-6 font-mono text-[0.82rem]">
                 {chapter.sections.map((s) => (
                   <li key={s.slug} className="py-0.5">
-                    <Link href={s.href} className="text-ink-soft">
+                    <Link href={s.href} className="text-ink-soft hover:text-ink">
                       {String(chapter.order).padStart(2, "0")}.{s.order} {s.title}
                     </Link>
                     {withRefs ? (

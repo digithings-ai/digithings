@@ -44,3 +44,39 @@ describe("the stylesheets are well-formed template literals", () => {
     expect(PRINT_CSS).toContain(".book-toc__ref");
   });
 });
+
+/**
+ * U17: the code block's affordances and the printed page's handling of the
+ * things a screen can scroll and paper cannot. A hint that is always visible
+ * teaches the reader to ignore it, a printed link with no address is a dead
+ * end, and a printed code block with `nowrap` is a block with its tail cut off.
+ */
+describe("the reading surface survives print", () => {
+  it("shows the code scroll hint only while the block overflows", () => {
+    expect(PRINT_CSS).toContain(".book-code__hint { visibility: hidden; }");
+    expect(PRINT_CSS).toContain('.book-code[data-overflow="x"] .book-code__hint { visibility: visible; }');
+  });
+
+  it("drops the code bar from the printed page", () => {
+    expect(PRINT_CSS).toContain(".book-code__bar { display: none !important; }");
+    expect(PAGED_CSS).toContain(".book-code__bar");
+  });
+
+  it("wraps printed code instead of clipping it", () => {
+    for (const css of [PRINT_CSS, PAGED_CSS]) {
+      expect(css).toContain("overflow-wrap: anywhere");
+    }
+    expect(PAGED_CSS).toContain("pre { white-space: pre-wrap;");
+  });
+
+  it("prints the address of an external link", () => {
+    for (const css of [PRINT_CSS, PAGED_CSS]) {
+      expect(css).toContain('a[href^="http"]::after');
+      expect(css).toContain("attr(href)");
+    }
+  });
+
+  it("keeps a printed table row on one page", () => {
+    expect(PAGED_CSS).toContain("tr { break-inside: avoid; }");
+  });
+});

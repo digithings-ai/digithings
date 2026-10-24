@@ -1,7 +1,7 @@
 /**
  * A "go deeper" card (DIG-2818 editorial rule).
  *
- * digibook explains the why; the reference docs carry the how — API docs,
+ * digibook explains the why; the reference docs carry the how: API docs,
  * module ARCHITECTURE.md files, the self-host and local-stack guides. A chapter
  * points at them with this card instead of reproducing env names, ports or file
  * paths in prose. Server component: plain link, prints as a link with its URL.
@@ -32,11 +32,11 @@ export default function Reference({ href, title, kind = "reference", children }:
   return (
     <a
       href={url}
-      className="book-reference my-4 block max-w-[64ch] border border-hair px-4 py-3 no-underline"
+      className="book-reference my-4 block max-w-[var(--measure-prose)] border border-hair px-4 py-3 no-underline hover:border-hair-2"
       {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
     >
-      <span className="block font-mono text-[0.7rem] uppercase tracking-[0.08em] text-ink-soft">go deeper · {kind}</span>
-      <span className="mt-1 block font-mono text-[0.95rem] text-ink">{title} →</span>
+      <span className="block font-mono text-[0.72rem] text-ink-soft">go deeper · {kind}</span>
+      <span className="mt-1 block font-mono text-[0.95rem] text-ink">{title}</span>
       {/* A div, not a span: MDX wraps the children in <p>, and <p> inside
           <span> is invalid nesting that the HTML parser rewrites before
           React hydrates. */}

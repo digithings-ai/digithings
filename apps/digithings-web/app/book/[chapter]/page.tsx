@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import BookPage from "@/components/book/BookPage";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
-import { readingOrder } from "@/lib/book/toc";
+import { chapterHref, readingOrder } from "@/lib/book/toc";
 
 /** Every chapter opener is a static page: `output: "export"` has no server. */
 export function generateStaticParams(): Array<{ chapter: string }> {
@@ -14,7 +14,13 @@ export function generateStaticParams(): Array<{ chapter: string }> {
 export async function generateMetadata({ params }: { params: Promise<{ chapter: string }> }): Promise<Metadata> {
   const { chapter } = await params;
   const c = loadChapters(process.cwd()).find((x) => x.slug === chapter);
-  return c ? { title: `${c.title} — the digithings book`, description: c.summary } : {};
+  return c
+    ? {
+        title: `${c.title} · the digithings book`,
+        description: c.summary,
+        alternates: { canonical: chapterHref(c.slug) },
+      }
+    : {};
 }
 
 /**
@@ -53,7 +59,7 @@ export default async function ChapterPage({ params }: { params: Promise<{ chapte
             <Link href={s.href} className="font-mono text-[0.9rem] text-ink">
               {String(chapter.order).padStart(2, "0")}.{s.order} {s.title}
             </Link>
-            <p className="m-0 mt-1 max-w-[64ch] text-ink-soft">{s.summary}</p>
+            <p className="m-0 mt-1 max-w-[var(--measure-prose)] text-ink-soft">{s.summary}</p>
           </li>
         ))}
       </ol>

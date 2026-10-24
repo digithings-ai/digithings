@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import BookPage from "@/components/book/BookPage";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
-import { sectionNeighbours } from "@/lib/book/toc";
+import { sectionHref, sectionNeighbours } from "@/lib/book/toc";
 
 /** One page per section: `/book/<chapter>/<section>/`. */
 export function generateStaticParams(): Array<{ chapter: string; section: string }> {
@@ -18,7 +18,13 @@ export async function generateMetadata({
   const { chapter, section } = await params;
   const c = loadChapters(process.cwd()).find((x) => x.slug === chapter);
   const s = c?.sections.find((x) => x.slug === section);
-  return s && c ? { title: `${s.title} — ${c.title} — the digithings book`, description: s.summary } : {};
+  return s && c
+    ? {
+        title: `${s.title} · ${c.title} · the digithings book`,
+        description: s.summary,
+        alternates: { canonical: sectionHref(c.slug, s.slug) },
+      }
+    : {};
 }
 
 export default async function SectionPage({ params }: { params: Promise<{ chapter: string; section: string }> }) {

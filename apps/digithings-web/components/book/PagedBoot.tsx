@@ -85,7 +85,7 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
   if (status === "failed") {
     return (
       <p className="book-paged-status book-print-only" role="status">
-        pagination failed — the printed page numbers are missing
+        pagination failed: the printed page numbers are missing
       </p>
     );
   }

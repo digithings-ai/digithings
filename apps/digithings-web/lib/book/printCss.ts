@@ -45,6 +45,30 @@ export const PRINT_CSS = `
 /* The book uses the same mono voice as the rest of digithings.ai. */
 .book-root { --font-mono: var(--font-stack-mono); }
 
+/* Code blocks (components/book/BookCode.tsx). The bar carries the copy control
+   and a "scroll" hint that is only visible while the block is actually wider
+   than the column: a hint you can see on a block that does not scroll teaches
+   the reader to distrust the next one. */
+.book-code { background: var(--surface-2); }
+.book-code pre { margin: 0; }
+.book-code__bar { background: var(--bg); }
+.book-code__hint { visibility: hidden; }
+.book-code[data-overflow="x"] .book-code__hint { visibility: visible; }
+.book-code pre:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Inline code: the chapters carry a lot of it, so it needs to sit off the
+   prose without becoming a box around every token. */
+.book-chapter :not(pre) > code { background: var(--surface-2); padding: 0.05em 0.3em; }
+
+/* A wide table scrolls inside its own box rather than widening the page. */
+.book-table { max-width: 100%; overflow-x: auto; }
+.book-table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The current page in the sidebar gets a 1px tick as well as a darker ink, so
+   the mark is not carried by colour alone. The list already draws the hairline
+   the tick sits on. */
+.book-sidebar li[data-active] { margin-left: -0.75rem; padding-left: 0.75rem; box-shadow: inset 1px 0 0 var(--accent); }
+
 
 @media print {
   html, body { background: transparent; }
@@ -86,6 +110,18 @@ export const PRINT_CSS = `
   .book-chapter:first-of-type { break-before: auto; }
   h1, h2, h3, h4 { break-after: avoid; }
   figure, pre, table, img, svg { break-inside: avoid; }
+  tr { break-inside: avoid; }
+
+  /* Printed code has no scrollbar, so it wraps instead of being clipped, and
+     the copy control stays on screen where it works. */
+  .book-code { border: 0; background: transparent; }
+  .book-code__bar { display: none !important; }
+  .book-code pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; padding-left: 0; padding-right: 0; }
+  .book-table { overflow: visible; }
+
+  /* A printed link has to say where it goes. Internal links stay bare: their
+     address is the book's own, and the chapter it points at is in this volume. */
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 0.85em; overflow-wrap: anywhere; color: var(--ink-soft); }
 
   /* The table of contents' page references are written by the print step into
      '.book-toc__ref'. Until then they must occupy no width, or every entry
@@ -115,7 +151,7 @@ export const PAGED_CSS = `
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
    block — is what decides what a page box contains. */
 .site-rails, header, footer, nav, .book-screen-only, .book-paged-status,
-[role="status"], .skip-link { display: none !important; }
+[role="status"], .skip-link, .book-code__bar { display: none !important; }
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
@@ -130,20 +166,27 @@ h1 { font-size: 20pt; margin: 0 0 6pt; line-height: 1.15; }
 h2 { font-size: 14pt; margin: 18pt 0 6pt; line-height: 1.2; }
 h3 { font-size: 11.5pt; margin: 14pt 0 4pt; }
 h4 { font-size: 9pt; margin: 12pt 0 3pt; font-family: var(--font-mono), monospace; }
-p { margin: 0 0 8pt; max-width: 92%; }
-ul, ol { margin: 0 0 8pt 18pt; }
+/* 132mm keeps the printed measure near the reading column on screen; the full
+   A4 text width at 10.5pt runs past 100 characters a line. */
+p { margin: 0 0 8pt; max-width: 132mm; }
+ul, ol { margin: 0 0 8pt 18pt; max-width: 132mm; }
 li { margin: 0 0 3pt; }
 code, pre { font-family: var(--font-mono), monospace; }
-pre { white-space: pre-wrap; font-size: 8.5pt; margin: 0 0 10pt; }
+/* Printed code has no scrollbar: it wraps rather than losing its tail. */
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; margin: 0 0 10pt; }
 img { max-width: 100%; }
 .book-figure__dark { display: none !important; }
 .book-figure__light { display: block !important; }
 table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 0 0 10pt; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 2pt 4pt; text-align: left; vertical-align: top; }
+tr { break-inside: avoid; }
 pre { line-height: 1.25; }
 h1, h2, h3, h4 { break-after: avoid; }
 p, pre, img, li { break-inside: avoid; }
 a { color: inherit; text-decoration: none; }
+/* A printed link has to say where it goes; internal ones point inside this
+   volume, so their address is redundant. */
+a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 8pt; overflow-wrap: anywhere; color: var(--ink-soft); }
 `;
 
 export default PRINT_CSS;

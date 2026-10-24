@@ -7,15 +7,18 @@ import { DtNav } from "@/components/DtNav";
 import { PRINT_CSS } from "@/lib/book/printCss";
 
 export const metadata: Metadata = {
-  title: "digibook — a book about self-hosted AI infrastructure",
+  title: "digibook · a book about self-hosted AI infrastructure",
   description:
-    "digibook: a short, philosophical book on why self-hosted AI infrastructure matters, how it " +
-    "scales, and what it costs. Read on screen or print it.",
-  alternates: { canonical: "/book" },
+    "digibook: a short book on why self-hosted AI infrastructure matters, how it scales, and what " +
+    "it costs. Read on screen or print it.",
 };
 
 /**
  * The book's chrome (DIG-2821).
+ *
+ * No `alternates.canonical` here: a layout's canonical is inherited by every
+ * route below it, so declaring it once at `/book` pointed all 200-odd chapter
+ * and section pages at the index. Each page declares its own.
  *
  * The print stylesheet is emitted here rather than linked from a `.css` file:
  * `scripts/check_frontend_canon.py` ratchets new component-class families per
