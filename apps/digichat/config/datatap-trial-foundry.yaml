@@ -53,8 +53,8 @@ deployment:
     type: foundry
     # Per-trial values — replaced by the pipeline (see
     # config/examples/datatap-trial-deploy.md).
-    projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
-    agentName: REPLACE-AGENT-NAME
+    projectEndpoint: https://dg-agentic-1d0a8149.services.ai.azure.com/api/projects/datatap-trial-chat
+    agentName: datatap-trial
     # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
     # maxToolCalls: 5
     # maxToolCalls: 4
