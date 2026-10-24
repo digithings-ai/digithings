@@ -167,12 +167,22 @@ const THEMES = [
   { name: "dark", suffix: ".dark" },
 ];
 
-// --font-render-hinting=none: on Linux, Chromium hints glyphs and rounds
-// advance widths to whole pixels (Geist Mono at 14px measures 8px, not 8.4px),
-// so mermaid sized every box differently than on macOS and the committed SVGs
-// never matched CI's render. Unhinted metrics are fractional on every OS, so
-// the output is byte-identical on Linux and macOS. No-op off Linux.
-const browser = await chromium.launch({ args: ["--font-render-hinting=none"] });
+// Every number below is written into a file that CI compares byte for byte
+// (`Diagrams are committed`) and that a reader sees in print. So each one has
+// to be a function of the diagram source alone, never of the host's text
+// stack: mermaid sizes every box from the metrics it measures in this browser,
+// and two hosts that measure a glyph 0.05px apart write different files
+// (DIG-5436). These switches take the host out of the measurement.
+//  --font-render-hinting=none: Linux otherwise hints glyphs and rounds advance
+//    widths to whole pixels (Geist Mono at 14px measures 8px, not 8.4px), so
+//    mermaid sized every box differently than on macOS. No-op off Linux.
+//  --disable-font-subpixel-positioning: without it the advance a label
+//    accumulates depends on the platform's glyph positioning, which is the
+//    0.05px-per-glyph drift that broke the gate.
+//  --force-device-scale-factor=1: a hidpi host must not measure at 2x.
+const browser = await chromium.launch({
+  args: ["--font-render-hinting=none", "--disable-font-subpixel-positioning", "--force-device-scale-factor=1"],
+});
 let written = 0;
 try {
   for (const theme of THEMES) {
@@ -224,10 +234,18 @@ try {
           root.setAttribute("width", "100%");
           if (bbox && bbox.width > 0 && bbox.height > 0) {
             const pad = 10;
-            root.setAttribute(
-              "viewBox",
-              `${bbox.x - pad} ${bbox.y - pad} ${bbox.width + pad * 2} ${bbox.height + pad * 2}`,
-            );
+            // Snap the ink box OUTWARD to whole pixels before it is written.
+            // The raw bbox is fractional and its last digits are the host's
+            // glyph rasteriser talking; rounding it here keeps the crop stable
+            // across hosts at no visible cost. `height` is rewritten from the
+            // same box because mermaid's own value is also measured (349 on
+            // one host, 345 on another) and the file must not carry both.
+            const x = Math.floor(bbox.x - pad);
+            const y = Math.floor(bbox.y - pad);
+            const w = Math.ceil(bbox.x + bbox.width + pad) - x;
+            const h = Math.ceil(bbox.y + bbox.height + pad) - y;
+            root.setAttribute("height", String(h));
+            root.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
           }
           return { svg: new XMLSerializer().serializeToString(root) };
         },
@@ -251,3 +269,10 @@ try {
 }
 
 console.log(`book: rendered ${written} diagram file(s) (light + dark) into public/book/diagrams`);
+// A local render proves the diagrams still render; it does not prove the bytes
+// are the ones CI will accept. `Book: print the PDF` re-renders and runs
+// `git diff --exit-code` on this directory, and the CI runner's text stack is
+// the authority for the committed files (DIG-5436). When they differ, take
+// them from that run's `book-diagrams` artifact instead of committing a local
+// render.
+console.log("book: commit the output of the Book: print the PDF run, not a local render");
