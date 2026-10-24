@@ -234,7 +234,12 @@ function getJwks(url: string, force: boolean): Promise<JwksState | null> {
 
 /** Normalise an issuer/audience for comparison: trimmed, no trailing slash. */
 function normalise(value: string): string {
-  return value.trim().replace(/\/+$/, "");
+  // String scan, not `/\/+$/`: a trailing-slash regex on a caller-supplied
+  // issuer is a polynomial backtracking case (CodeQL js/polynomial-redos).
+  let end = value.trim().length;
+  const s = value.trim();
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) end -= 1;
+  return s.slice(0, end);
 }
 
 function claimStrings(value: unknown): string[] {
