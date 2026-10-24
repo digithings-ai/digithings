@@ -8,6 +8,38 @@ Claude Code loads [`CLAUDE.md`](CLAUDE.md) at session start — that file is a *
 
 ---
 
+## Source control: local forge first (when available)
+
+Before any git or GitHub operation, check whether the local forge is running:
+
+```bash
+curl -s -m 2 -o /dev/null -w "%{http_code}" http://localhost:3000/api/healthz
+```
+
+| Result | What to do |
+|---|---|
+| `200` | Forgejo is up. Use `sctl` + Forgejo for **all** iterative work (change → forge PR → review → `sctl publish`). Do not open GitHub PRs for iteration. |
+| anything else | Forgejo is not available here. Use the normal GitHub flow in this file. |
+
+When Forgejo is up:
+
+```bash
+sctl change new --id DIG-1234-fix-thing --owner <seat> --base github/develop
+git checkout change/DIG-1234-fix-thing   # edit, commit
+sctl forge open --change DIG-1234-fix-thing --base develop
+sctl review record --change DIG-1234-fix-thing --from-forge --pr 7
+sctl publish --change DIG-1234-fix-thing --remote github --target develop
+```
+
+- GitHub is the **publication surface**, not the working surface. `sctl publish` is the only path to it.
+- Never push directly to `develop` or `main`. Never `git stash` (banned repo-wide; commit or `sctl durable snapshot`).
+- Never approve your own change; tier 2 (auth, crypto, brokers, migrations, workflows, the gate, new deps, ≥400 lines) needs a human.
+- Run local CI (Woodpecker) and Docker before publishing; GitHub Actions minutes are reserved for quality tooling.
+- Load the `local-source-control` skill for the full reference. The machine-wide rules are in `~/.config/opencode/AGENTS.md`.
+- This is machine-local: on a host without Forgejo the check fails and the GitHub flow below applies unchanged.
+
+---
+
 ## How to work
 
 Do **not** follow a hard-coded numbered pipeline. Pick the **skills that fit this task** from the session's available skills (and this repo's slash commands). Typical matches — skip any that do not apply:
