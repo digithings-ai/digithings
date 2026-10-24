@@ -93,13 +93,14 @@ function jsonError(
 }
 
 export async function POST(req: Request) {
+  if (process.env.DIGICHAT_LOCAL_DROP_PROXY_KEY === "1") console.log("[occdbg-hdrs]", [...req.headers.keys()].join(","), "byokProv=", req.headers.get("x-byok-provider"), "model=", req.headers.get("x-byok-model") ?? req.headers.get("x-digi-model"));
   // Revoked/expired license refuses before auth: a revoked deployment
   // refuses even an authenticated caller, and the check is cheaper.
   const refusal = licenseRefusal();
   if (refusal) return refusal;
   const authResult = await requireDigiChatAuth(req);
   const tenantCtx =
-    authResult instanceof Response && isEmbedChatRequest(req)
+    (authResult instanceof Response || (process.env.DIGICHAT_LOCAL_DROP_PROXY_KEY === "1" && !!req.headers.get("x-embed-host"))) && isEmbedChatRequest(req) // LOCAL-ONLY OCC hack
       ? resolveEmbedChatTenant(req)
       : authResult instanceof Response
         ? (resolveAnonymousInstallChat() ?? authResult)
@@ -607,6 +608,7 @@ export async function POST(req: Request) {
       allowSessionUrls: dep?.mcp?.allowUserServers === true,
     });
     const mcpHeader = mcpUpstreamHeaderValue(merged) ?? mcpServersHeaderValue(dep);
+    if (process.env.DIGICHAT_LOCAL_DROP_PROXY_KEY === "1") console.log("[occdbg-mcp]", "host=", req.headers.get("x-embed-host"), "tokOK=", req.headers.get("x-embed-token") === "2d843a82b2918f9dbc59c8", "dep=", dep?.slug ?? null, "mcpIds=", merged.map((s: { id: string }) => s.id).join("+"), "hdr=", !!mcpHeader);
     if (mcpHeader) {
       upstreamHeaders["X-Digi-Mcp-Servers"] = mcpHeader;
     }

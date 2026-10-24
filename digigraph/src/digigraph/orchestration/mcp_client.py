@@ -112,6 +112,8 @@ def _ip_is_blocked(
         return _ip_is_blocked(ip.ipv4_mapped, allow_private=allow_private)
     if ip == _ALIBABA_METADATA:
         return True
+    if allow_private and ip.is_loopback and os.environ.get("DIGIGRAPH_MCP_LOCAL_LOOPBACK") == "1":
+        return False  # LOCAL-ONLY OCC fallback hack, do not commit
     if ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
         return True
     if allow_private and ip.is_private:
