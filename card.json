@@ -1,0 +1,19 @@
+{
+  "kind": "request_confirmation",
+  "resolverPolicy": "human_only",
+  "title": "[security] Approve the merge of PR 64 and the restart of the Paperclip server?",
+  "summary": "The create path fix is ready in the digithings-ai/paperclip fork. PR 64 must be merged into master and the Paperclip server restarted. Both steps are Chris's alone.",
+  "idempotencyKey": "DIG-5177-merge-and-restart-approval",
+  "continuationPolicy": "wake_assignee",
+  "payload": {
+    "version": 1,
+    "prompt": "Approve the merge of pull request 64 into the fork master branch and the restart of the Paperclip server?",
+    "acceptLabel": "Approve",
+    "rejectLabel": "Hold",
+    "rejectRequiresReason": false,
+    "allowDeclineReason": true,
+    "declineReasonPlaceholder": "Tell us what to change first",
+    "supersedeOnUserComment": true,
+    "detailsMarkdown": "**Task:** DIG-5177. The create path leaves executionWorkspacePreference null, so a child of a bound issue inherits the parent workspace.\n\n**Branch:** `fix/birth-issues-isolated-when-project-policy-isolates` in the digithings-ai/paperclip fork. The pull request is number 64.\n\n**Asked by:** Host & Runtime Engineer.\n\n**What we were doing.** We fixed the Paperclip code that creates a new issue. A new issue now starts in its own worktree.\n\n**Which part it belongs to.** The Paperclip server. The path that creates an issue.\n\n**What is affected.** The live Paperclip server on Chris's Mac. All new issues in the projects that have an isolated workspace policy.\n\n**What we tried first.** We wrote the code and three tests. We ran the tests and 138 pass. We opened the pull request. We did not merge it. We did not restart the server. No seat may restart Paperclip.\n\n**What we need you to decide.** Approve the merge of pull request 64 into the fork master branch and the restart of the Paperclip server.\n\n**Recommendation.** Approve. The tests pass, and the fix stops a child issue from running in the worktree of its parent issue.\n\n**Options.**\n- Approve: the merge runs and Chris restarts the Paperclip server. The fix is live.\n- Hold: the pull request stays open. The server keeps the old code.\n\n**If you do nothing.** The server keeps the old code. A child issue of a bound issue still runs in the worktree of its parent issue.\n\n**How to reverse it.** Revert the merge commit. Restart the server again.\n\n**Confidence.** Measured: 138 tests pass in the changed test file. The two new tests fail on the old code. Judged: the change is safe. Not sure: pull request 51 changes the same lines. If 51 merges first, we rebase this branch.\n\n**Class.** [security] The merge and the restart touch the production Paperclip server. A merge into master is Chris's alone."
+  }
+}
