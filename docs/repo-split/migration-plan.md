@@ -240,6 +240,21 @@ Exit check: manifest has zero unassigned paths; no import crosses a repo boundar
 (`scripts/split/check_boundaries.py`: Python imports, TS relative imports, Dockerfile COPY, workflow `paths`);
 every deployed Worker has exactly one deploy workflow; `develop` → `main` promotion approved by Chris (D-14).
 
+**Manifest defect (DIG-3689 report, 2026-10-22):** the manifest's broad catch-alls
+(`docs/`, `config/`, `scripts/`, `tests/dq/`, `apps/digichat/`, `digiquant/src/digiquant/`) made
+it disagree with the extraction move-lists on 294 paths, and `--check` was red at 113 (now 126)
+unassigned paths with no CI invocation. Repair status as of this update:
+- (b) unassigned paths resolved: rules added for `.python-version`, `.sctl.yml`, `apps/corpus-index/`,
+  `apps/digiquant-app/`, `apps/twelvex-runner/`, `packages/catalog/`, `packages/durable-object-reconnect/`,
+  `packages/tui-frame/`. `--check` is now green (0 unassigned).
+- (d) `r0.paths` emitter added: `python3 scripts/split/manifest.py --emit-r0 r0.paths` (P3 input).
+- (e) `scripts/split/manifest.py --check` wired into the local-ci scan list.
+- (a) + (c) still open: 76 move-list entries need specific rules instead of the catch-alls, and the
+  proposal's delete set (beyond `.github/workflows/`) must be added as delete rules. Both need the
+  file:line plan table that lives on this ticket and in the private repos. Until (a) lands, the
+  manifest and `r5/r6/r2/r1/r4.paths` can still disagree on 294 paths; P3's `r0.paths` allowlist is
+  therefore provisional and must be re-derived after (a).
+
 Rollback: each PR reverts on its own.
 
 ---
@@ -306,7 +321,7 @@ extraction (P4) comes after, not before, to keep the exposure window short.
 
 Staging (days before cutover):
 1. Fresh `git clone --mirror` of mono at the promoted `main` tag `split-base-1`.
-2. `git filter-repo --paths-from-file r0.paths` (allowlist from the manifest) `--replace-text denylist.txt` `--replace-message denylist.txt`.
+2. `git filter-repo --paths-from-file r0.paths` (allowlist from the manifest; generate with `python3 scripts/split/manifest.py --emit-r0 r0.paths`) `--replace-text denylist.txt` `--replace-message denylist.txt`.
    The denylist (client names, tenant identifiers, prompt fragments) lives **outside** any repo (Chris's machine / private ops), never committed.
 3. Verify offline before any push:
    - `gitleaks detect --log-opts="--all"` → zero findings.

@@ -1672,7 +1672,7 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py"]:
+              "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
             scan_specs.append((s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
     scan_specs.append(("actionlint", ["actionlint"], 300, None, None, ()))

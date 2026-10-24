@@ -155,6 +155,7 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("apps/dashboard/", "R3", "Brief desk /app (private per Chris 01:26)"),
     ("apps/digiquant-web/", "R3", "digiquant.io"),
+    ("apps/digiquant-app/", "R3", "digiquant operator app (provisional; confirm in file:line plan table)"),
     # ---- R4: digithings.ai, digibook, brand ----
     ("apps/digithings-web/", "R4", "digithings.ai + digibook"),
     ("packages/brand/", "R4", "brand assets"),
@@ -168,6 +169,7 @@ RULES: list[tuple[str, str, str]] = [
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
     ("apps/digitrace-langfuse/", "R5", "langfuse"),
     ("apps/digithings-cron/", "R5", "cron"),
+    ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
     ("infra/digichat-release/", "R5", "release infra"),
     ("config/litellm.yaml", "R5", "litellm config"),
     ("config/litellm.cheaperinference.yaml", "R5", "litellm config"),
@@ -190,6 +192,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/check_tenant_corpus_map.py", "R6", "tenant corpus map check"),
     # ---- R7: client desk + digidata-api ----
     ("apps/digidata-api/", "R7", "digidata-api (D1 twelvex)"),
+    ("apps/twelvex-runner/", "R7", "twelve-x runner container (R7)"),
     # ---- R0: repo root files (open) ----
     (".coderabbit.yaml", "R0", "root config (open)"),
     (".cursorrules", "R0", "root config (open)"),
@@ -200,6 +203,8 @@ RULES: list[tuple[str, str, str]] = [
     (".gitignore", "R0", "root config (open)"),
     (".gitleaks.toml", "R0", "root config (open)"),
     (".gitleaksignore", "R0", "root config (open)"),
+    (".python-version", "R0", "root config (open)"),
+    (".sctl.yml", "R0", "root config (open)"),
     (".mcp.json", "R0", "root config (open)"),
     (".opencode/", "R0", "agent wiring (open)"),
     (".prettierignore", "R0", "root config (open)"),
@@ -265,6 +270,9 @@ RULES: list[tuple[str, str, str]] = [
     ("packages/hero-banner/", "R0", "hero banner (open)"),
     ("packages/surface-config/", "R0", "surface config (open)"),
     ("packages/contract/", "R0", "shared contract (open)"),
+    ("packages/catalog/", "R0", "shared catalog package (open)"),
+    ("packages/durable-object-reconnect/", "R0", "shared reconnect package (open)"),
+    ("packages/tui-frame/", "R0", "shared TUI frame package (open)"),
     ("clients/", "R0", "TUI clients (open)"),
     ("digibase/", "R0", "OSS module"),
     ("digikey/", "R0", "OSS module"),
@@ -568,6 +576,7 @@ def main(argv: list[str]) -> int:
     repo: str | None = None
     check = False
     stat = False
+    emit_r0: str | None = None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -575,6 +584,9 @@ def main(argv: list[str]) -> int:
             check = True
         elif a == "--stat":
             stat = True
+        elif a == "--emit-r0" and i + 1 < len(argv):
+            emit_r0 = argv[i + 1]
+            i += 1
         elif a == "--ref" and i + 1 < len(argv):
             ref = argv[i + 1]
             i += 1
@@ -584,18 +596,24 @@ def main(argv: list[str]) -> int:
         i += 1
     paths = tracked_paths(ref, repo)
     mapping, unassigned = build_manifest(paths)
+    if emit_r0 is not None:
+        r0_paths = sorted(p for p, r in mapping.items() if r == "R0")
+        with open(emit_r0, "w", encoding="utf-8") as f:
+            for pp in r0_paths:
+                f.write(pp + "\n")
+        print(f"emit-r0: wrote {len(r0_paths)} R0 paths to {emit_r0}")
     if stat or check:
         counts: dict[str, int] = {r: 0 for r in REPOS}
-        for repo in mapping.values():
-            counts[repo] += 1
-        for repo in REPOS:
-            print(f"{repo}: {counts[repo]}")
+        for r in mapping.values():
+            counts[r] += 1
+        for r in REPOS:
+            print(f"{r}: {counts[r]}")
         print(f"unassigned: {len(unassigned)}")
-        for p in unassigned[:50]:
-            print(f"  UNASSIGNED {p}")
-    else:
-        for p in paths:
-            print(f"{mapping.get(p, 'UNASSIGNED')}\t{p}")
+        for pp in unassigned[:50]:
+            print(f"  UNASSIGNED {pp}")
+    elif emit_r0 is None:
+        for pp in paths:
+            print(f"{mapping.get(pp, 'UNASSIGNED')}\t{pp}")
     if check and unassigned:
         print(f"FAIL: {len(unassigned)} unassigned paths", file=sys.stderr)
         return 1
