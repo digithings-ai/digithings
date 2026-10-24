@@ -670,6 +670,13 @@ def _short_flag_repo(
     `gh pr create` (`-f` is `--fill`), so a scan that only looked at the
     start of the argument would not see the flag gh acts on.
 
+    An attached value is whatever follows the flag letter, `=` included:
+    pflag strips one `=` only when something follows it, so `-t=` is the
+    title `=` and `-t=x` is the title `x`. Neither one eats the next
+    argument. Only a value flag with nothing attached does that, and
+    reading `-t=` as "value comes next" is how the scan lost sight of a
+    `--repo` that gh still read.
+
     The answer is the repository name (or None) and how many arguments the
     cluster consumes: 1 for the cluster alone, 2 when its last flag takes
     the next argument as its value.
@@ -686,12 +693,10 @@ def _short_flag_repo(
                 if not value:
                     raise _no_repository_named()
                 return value, 2
-            if rest.startswith("="):
-                # pflag strips one `=`: `-R=owner/name` is `-R owner/name`.
-                value = rest[1:]
-                if not value:
-                    raise _no_repository_named()
-                return value, 1
+            if len(rest) > 1 and rest.startswith("="):
+                # pflag strips one `=` only when a value follows it, so
+                # `-R=owner/name` is `-R owner/name` and `-R=` is `-R "="`.
+                return rest[1:], 1
             return rest, 1
 
         flag = f"-{char}"
@@ -699,12 +704,11 @@ def _short_flag_repo(
             chars = chars[1:]
             continue
         if flag in value_flags:
-            rest = chars[1:]
-            if rest.startswith("="):
-                rest = rest[1:]
-            if rest:
-                # The value is attached; the rest of the cluster is the
-                # value, so no later letter is a flag of its own.
+            if chars[1:]:
+                # The value is attached, `=` included; the rest of the
+                # cluster is the value, so no later letter is a flag of its
+                # own and the next argument is not consumed (`-t=` is the
+                # title `=`, not a title taken from the next argument).
                 return None, 1
             if index + 1 < len(argv):
                 return None, 2
@@ -734,9 +738,10 @@ def _repo_from_flag(argv: list[str]) -> str | None:
     `GH_REPO` or to the checkout's own remote would then answer for it.
 
     A repository flag is read only where a flag can start. The value of a
-    value-taking flag is not a flag position: `--title "-Rdigithings-ai/
-    digithings"` is a title, and reading it as the repository made the wall
-    check the title's repository while gh used `GH_REPO`. A flag this shim
+    value-taking flag is not a flag position: a title of
+    `-Rdigithings-ai/digithings` is a title, and reading it as the
+    repository made the wall check the title's repository while gh used
+    `GH_REPO`. A flag this shim
     does not know is refused, because the shim cannot place its value and a
     flag it cannot place could be the repository. The same is true after
     `--`: gh treats everything after it as a positional, so no repository

@@ -526,6 +526,35 @@ def test_a_flag_value_that_parses_as_a_repository_does_not_answer_for_the_call()
     assert notes == [f"pull request against {REPO}"]
 
 
+def test_a_short_value_flag_with_a_bare_equals_does_not_eat_the_repository_flag() -> None:
+    """`-t=` is the title `=`, not "the title is the next argument".
+
+    pflag strips the `=` only when a value follows it, so `-t=` consumes no
+    argument and the `--repo` after it is a flag gh reads. A scan that ate
+    the next argument read the call as `GH_REPO` and cleared the wall.
+    """
+    for call in (
+        ["pr", "create", "-t=", "--repo", "someone-else/their-project"],
+        ["pr", "create", "-fF=", "--repo", "someone-else/their-project"],
+        ["pr", "create", "-fF=", "-Rsomeone-else/their-project"],
+    ):
+        with pytest.raises(ghshim.Refusal):
+            ghshim.check_pull_request_target(call, {"GH_REPO": REPO})
+
+
+def test_a_short_value_flag_with_an_attached_value_is_a_value() -> None:
+    """`-tRsomeone-else/x` is a title whose first two letters are `-R`."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "-tRsomeone-else/their-project"], {"GH_REPO": REPO}
+    )
+    assert notes == [f"pull request against {REPO}"]
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "-tRsomeone-else/their-project"],
+            {"GH_REPO": "someone-else/their-project"},
+        )
+
+
 def test_every_value_flag_skips_its_value() -> None:
     """A value is not a flag position, for every flag that takes one."""
     value = "-Rdigithings-ai/digithings"
