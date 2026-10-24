@@ -19,7 +19,9 @@ const FIRST_PARTY_FRAME_ANCESTORS = [
   "'self'",
   "https://digithings.ai",
   "https://www.digithings.ai",
+  "https://occ.digithings.ai",
   "https://digiquant.io",
+  "https://www.digiquant.io",
 ] as const;
 
 /** Keep in sync with `DEV_LOOPBACK_EMBED_HOSTS` in embed-first-party.ts. */
@@ -127,12 +129,3 @@ export function embedFrameAncestors(): string[] {
 export function embedFrameAncestorsCsp(): string {
   return `frame-ancestors ${embedFrameAncestors().join(" ")};`;
 }
-
-/**
- * @deprecated Use DIGICHAT_EMBED_BAKED_SECURITY_HEADERS in next.config and
- * embedFrameAncestorsCsp() from proxy. Kept for transitional test imports.
- */
-export const DIGICHAT_EMBED_SECURITY_HEADERS: ReadonlyArray<{
-  key: string;
-  value: string;
-}> = DIGICHAT_EMBED_BAKED_SECURITY_HEADERS;

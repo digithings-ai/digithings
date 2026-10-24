@@ -28,21 +28,37 @@
   --color-warn: var(--warn);
 }
 
+/* `--font-geist-mono` is the retired name for the host surface's one mono face
+   (DIG-2375). It is declared HERE, beside the rules that read it, because every
+   surface that mounts this sheet sets only the generic `--font-mono-face` from
+   its own `fonts.ts` and none of them loads `digichat-app-theme.css`. Without it
+   `font-family: var(--font-geist-mono), …` below is invalid and the skin falls
+   back to the page font. Swap the face in the surface's config; never here. */
+:root {
+  --font-geist-mono: var(--font-mono-face, "Geist Mono");
+}
+
 [data-thread-skin="digichat"] {
   --radius: 0;
   --radius-thread: 0;
   --composer-radius: 0;
-  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  /* Gallery chatbot.css uses var(--font-mono). --font-geist-mono is the
+     retired-name alias declared below for the app's one mono face. */
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-[data-thread-skin="digichat"] .digichat-composer textarea:focus,
-[data-thread-skin="digichat"] .digichat-composer textarea:focus-visible,
-[data-thread-skin="digichat"] .aui-composer-input:focus,
-[data-thread-skin="digichat"] .aui-composer-input:focus-visible {
+[data-thread-skin="digichat"] .digichat-composer textarea:focus:not(:focus-visible),
+[data-thread-skin="digichat"] .aui-composer-input:focus:not(:focus-visible) {
   outline: none;
+  box-shadow: none;
+}
+
+[data-thread-skin="digichat"] .digichat-composer textarea:focus-visible,
+[data-thread-skin="digichat"] .aui-composer-input:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
   box-shadow: none;
 }
 
@@ -114,6 +130,105 @@
   --foreground: var(--term-ink);
 }
 
+/*
+  Density. One token set on the thread root; `data-density` only reassigns it.
+  The scale is the only length source, and `--trace-*` are aliases of the
+  density tokens so the rules that already read them keep working.
+  Values mirror `DENSITY_TOKENS` in `components/chat/trace-spacing.ts` and are
+  pinned by `styles/density-tokens.contract.test.ts`.
+*/
+.digichat-thread,
+.digichat-launcher {
+  --trace-space-1: 0.125rem;
+  --trace-space-2: 0.25rem;
+  --trace-space-3: 0.375rem;
+  --trace-space-4: 0.5rem;
+  --trace-space-5: 0.625rem;
+  --trace-space-6: 0.75rem;
+  --trace-space-7: 1rem;
+  --trace-space-8: 1.25rem;
+
+  /* default mode: four stack gaps, body padding, leading and tracking */
+  --density-gap-1: var(--trace-space-2);
+  --density-gap-2: var(--trace-space-4);
+  --density-gap-3: var(--trace-space-5);
+  --density-gap-4: var(--trace-space-6);
+  --density-pad: var(--trace-space-1);
+  --density-leading: 1.6;
+  --density-leading-tight: 1.4;
+  --density-tracking: 0em;
+  --density-tracking-mono: 0.01em;
+  --composer-padding: calc(var(--density-pad) + 0.5rem);
+
+  /* semantic aliases the chain reads */
+  --trace-title-gap: var(--density-gap-3);
+  --trace-group-gap: var(--density-gap-2);
+  --trace-within-gap: var(--density-gap-1);
+  --trace-header-gap: var(--density-gap-1);
+  --trace-body-pad: var(--density-pad);
+  --trace-body-indent: var(--trace-space-6);
+  --trace-chain-gap: var(--density-gap-4);
+  /* component sizing tokens (chat-aui) — local to the sheet, which declares
+     its own palette and does not assume tokens.css is loaded. */
+  --aui-marker-w: 1.25rem;
+  --aui-marker-offset: 0.2rem;
+  --aui-line-height: 1.375rem;
+  --aui-input-pad-y: 0.2rem;
+  --aui-input-rows: 5;
+  --aui-chip-max-w: 16rem;
+  --aui-chip-gap: 0.35rem;
+  --aui-chip-pad: 0.15rem 0.45rem;
+  --aui-chip-fs: 0.66rem;
+  --aui-trace-icon: 0.875rem;
+  --aui-chevron-size: 0.55rem;
+  --aui-loader-size: 0.75rem;
+  --aui-copy-hit: 1.5rem;
+  --aui-dump-max-h: 8.5rem;
+  --aui-json-max-h: 18rem;
+}
+
+.digichat-thread[data-density="compact"] {
+  --density-gap-1: var(--trace-space-1);
+  --density-gap-2: var(--trace-space-2);
+  --density-gap-3: var(--trace-space-3);
+  --density-gap-4: var(--trace-space-4);
+  --density-pad: 0rem;
+  --density-leading: 1.45;
+  --density-leading-tight: 1.3;
+  --density-tracking: -0.005em;
+  --density-tracking-mono: 0em;
+  --trace-header-gap: 0rem;
+  --trace-body-indent: var(--trace-space-5);
+}
+
+.digichat-thread[data-density="default"] {
+  --density-gap-1: var(--trace-space-2);
+  --density-gap-2: var(--trace-space-4);
+  --density-gap-3: var(--trace-space-5);
+  --density-gap-4: var(--trace-space-6);
+  --density-pad: var(--trace-space-1);
+  --density-leading: 1.6;
+  --density-leading-tight: 1.4;
+  --density-tracking: 0em;
+  --density-tracking-mono: 0.01em;
+  --trace-header-gap: var(--trace-space-2);
+  --trace-body-indent: var(--trace-space-6);
+}
+
+.digichat-thread[data-density="airy"] {
+  --density-gap-1: var(--trace-space-3);
+  --density-gap-2: var(--trace-space-6);
+  --density-gap-3: var(--trace-space-7);
+  --density-gap-4: var(--trace-space-8);
+  --density-pad: var(--trace-space-3);
+  --density-leading: 1.75;
+  --density-leading-tight: 1.55;
+  --density-tracking: 0.005em;
+  --density-tracking-mono: 0.02em;
+  --trace-header-gap: var(--trace-space-6);
+  --trace-body-indent: var(--trace-space-7);
+}
+
 .digichat-thread [data-role="user"],
 .digichat-thread .chat-msg--user,
 .digichat-thread .chat-msg--assistant,
@@ -146,7 +261,7 @@
 .digichat-thread .aui-composer-send:not(:disabled):hover,
 .digichat-thread .aui-composer-send:focus-visible {
   background: transparent;
-  color: var(--ink-mute);
+  color: color-mix(in oklab, var(--ink-mute) 22%, transparent);
   box-shadow: none;
 }
 
@@ -176,6 +291,7 @@
 .digichat-thread .aui-md-ul,
 .digichat-thread .aui-md-ol {
   margin-inline-start: 0;
+  /* Indents stay literal: gallery-thread.source.test.ts pins the source text. */
   padding-inline-start: 1.75rem;
   list-style-position: outside;
 }
@@ -196,16 +312,23 @@
 }
 
 .digichat-thread .chat-msg-marker {
-  margin-top: 0.2rem;
+  margin-top: var(--aui-marker-offset);
 }
 
 .digichat-thread .aui-composer-input {
   display: block;
-  min-height: calc(1.375rem + 0.4rem);
-  padding-block: 0.2rem;
-  line-height: 1.375rem;
+  min-height: calc(var(--aui-line-height) + (2 * var(--aui-input-pad-y)));
+  padding-block: var(--aui-input-pad-y);
+  line-height: var(--aui-line-height);
   field-sizing: content;
   box-sizing: border-box;
+  /* 3-5 rows then scroll (padding-block 0.2rem each side). */
+  max-height: calc(
+    var(--aui-input-rows) * var(--aui-line-height) + (2 * var(--aui-input-pad-y))
+  );
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-thread .aui-composer-input:placeholder-shown {
@@ -213,17 +336,25 @@
   white-space: nowrap;
 }
 
+/* Composer shell is a border only. The input is already transparent; the
+   wrapper must not paint --composer-bg / --surface behind it. */
+.digichat-thread [data-slot="aui_composer-shell"],
+.digichat-launcher [data-slot="aui_composer-shell"] {
+  --composer-bg: transparent;
+  background: transparent;
+}
+
 /* Popup / embed compact Thread: one row until a newline. Empty and one-line
    typed share 1lh — do not shorten :placeholder-shown vs typed. */
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] {
-  --composer-padding: 4px;
+  --composer-padding: var(--trace-space-2);
   gap: 0;
-  padding: 4px 6px;
+  padding: var(--trace-space-2) var(--trace-space-3);
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-main {
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--trace-space-2);
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input {
@@ -232,9 +363,13 @@
   field-sizing: content;
   min-height: 1lh;
   padding-block: 0;
-  line-height: 1.375rem;
+  line-height: var(--aui-line-height);
+  /* Grow to 5 rows, then scroll; long input wraps instead of running right. */
+  max-height: calc(var(--aui-input-rows) * var(--aui-line-height));
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input:placeholder-shown {
@@ -285,13 +420,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
+  width: var(--aui-marker-w);
 }
 
 .digichat-thread .chat-md-copy {
   display: inline-flex;
-  min-height: 1.5rem;
-  min-width: 1.5rem;
+  min-height: var(--aui-copy-hit);
+  min-width: var(--aui-copy-hit);
   align-items: center;
   justify-content: center;
 }
@@ -302,9 +437,13 @@
 
 /* Keep the top-anchored (trailing) user message off the top edge. The library
    pins the anchor's border-box top to the viewport top, so padding shows as a
-   gap while the previous message stays hidden one message-gap above. */
+   gap there. DENSITY: the padding is the message-gap token and the same amount
+   is taken back as margin, so in flow the turn sits exactly one message gap
+   below the previous answer (no extra spacer), and when pinned the previous
+   message ends exactly at the viewport top. */
 .digichat-thread__viewport [data-aui-top-anchor-user] {
-  padding-top: 1.5rem;
+  padding-top: var(--density-gap-4, 0.75rem);
+  margin-top: calc(-1 * var(--density-gap-4, 0.75rem));
 }
 
 .digichat-thread-list {
@@ -330,10 +469,27 @@
   --hair: rgba(12, 12, 10, 0.12);
 }
 
+/* assistant-ui puts `data-active` / `aria-current` on the item Root, not on the
+   Trigger that carries `__item`, so match the parent too. The open chat gets a
+   ▸ marker and an accent wash that reads on a transparent sidebar. */
+.digichat-thread-list__item::before {
+  content: "▸";
+  display: inline-block;
+  width: 1.1em;
+  color: transparent;
+}
 .digichat-thread-list__item[data-active],
-.digichat-thread-list__item[aria-current="true"] {
-  background: var(--term-fill);
+.digichat-thread-list__item[aria-current="true"],
+.digichat-thread-list [data-active] > .digichat-thread-list__item,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--term-ink);
+}
+.digichat-thread-list__item[data-active]::before,
+.digichat-thread-list__item[aria-current="true"]::before,
+.digichat-thread-list [data-active] > .digichat-thread-list__item::before,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item::before {
+  color: var(--accent);
 }
 
 .digichat-gate,
@@ -355,14 +511,14 @@
 /* Hairline attachment chips — same grammar as the gallery `/chatbot` chips. */
 .digichat-thread .aui-attachment-chip {
   display: inline-flex;
-  max-width: 16rem;
+  max-width: var(--aui-chip-max-w);
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.15rem 0.45rem;
+  gap: var(--aui-chip-gap);
+  padding: var(--aui-chip-pad);
   border: 1px solid var(--hair);
   background: transparent;
   font-family: var(--font-geist-mono, var(--font-mono), ui-monospace, monospace);
-  font-size: 0.66rem;
+  font-size: var(--aui-chip-fs);
   line-height: 1.3;
   color: var(--ink-soft);
 }
@@ -415,6 +571,17 @@
 }
 
 .digichat-attach-viewer {
+  /* own tokens: the viewer is fixed-position and may mount outside the thread */
+  --aui-viewer-pad: 1.25rem;
+  --aui-viewer-w: 36rem;
+  --aui-viewer-h: 36rem;
+  --aui-viewer-head-gap: 0.75rem;
+  --aui-viewer-head-pad: 0.45rem 0.7rem;
+  --aui-viewer-title-fs: 0.72rem;
+  --aui-viewer-meta-fs: 0.66rem;
+  --aui-viewer-frame-pad: 0.7rem;
+  --aui-viewer-frame-min-h: 12rem;
+  --aui-viewer-body-fs: 0.72rem;
   position: fixed;
   inset: 0;
   z-index: 110;
@@ -422,13 +589,13 @@
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--bg, #0a0e0c) 55%, transparent);
-  padding: 1.25rem;
+  padding: var(--aui-viewer-pad);
 }
 
 .digichat-attach-viewer__panel {
   display: flex;
-  max-height: min(80dvh, 36rem);
-  width: min(36rem, 100%);
+  max-height: min(80dvh, var(--aui-viewer-h));
+  width: min(var(--aui-viewer-w), 100%);
   flex-direction: column;
   border: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
   background: var(--term-bg, #08090b);
@@ -440,9 +607,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--aui-viewer-head-gap);
   border-bottom: 1px solid var(--hair, rgba(255, 255, 255, 0.09));
-  padding: 0.45rem 0.7rem;
+  padding: var(--aui-viewer-head-pad);
 }
 
 .digichat-attach-viewer__title {
@@ -450,7 +617,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.72rem;
+  font-size: var(--aui-viewer-title-fs);
   font-weight: 400;
   color: var(--ink-soft, #9aa0a6);
 }
@@ -461,7 +628,7 @@
   color: var(--ink-mute, #6b7177);
   cursor: pointer;
   font: inherit;
-  font-size: 0.66rem;
+  font-size: var(--aui-viewer-meta-fs);
 }
 
 .digichat-attach-viewer__close:hover,
@@ -471,14 +638,14 @@
 
 .digichat-attach-viewer__frame,
 .digichat-attach-viewer__pre {
-  min-height: 12rem;
+  min-height: var(--aui-viewer-frame-min-h);
   flex: 1;
   margin: 0;
   border: 0;
   background: var(--term-fill, #101317);
   color: var(--term-ink, #e7eaec);
-  padding: 0.7rem;
-  font-size: 0.72rem;
+  padding: var(--aui-viewer-frame-pad);
+  font-size: var(--aui-viewer-body-fs);
   line-height: 1.45;
   overflow: auto;
   white-space: pre-wrap;
@@ -531,26 +698,25 @@
   display: none;
 }
 
-/* Tool chain: same rhythm on website / dashboard Thread as /chatbot. */
+/* Tool chain: same rhythm on website / dashboard Thread as /chatbot.
+   One gap, on the stack: the row sets never carry their own margins. */
 .digichat-thread [data-slot="aui_tool-chain"],
 .digichat-thread [data-slot="tool-group-content"] > div,
 .digichat-launcher [data-slot="aui_tool-chain"],
 .digichat-launcher [data-slot="tool-group-content"] > div {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--density-gap-1, 0.125rem);
 }
 
-.digichat-thread [data-slot="aui_tool-chain"],
-.digichat-launcher [data-slot="aui_tool-chain"] {
-  margin-bottom: 1rem;
-}
+/* No margin-bottom here: the assistant message content is the flex stack
+   that spaces the chain against the answer below it. */
 
 .digichat-thread [data-slot="tool-fallback-root"],
 .digichat-launcher [data-slot="tool-fallback-root"] {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: var(--trace-header-gap, 0.25rem);
 }
 
 .digichat-thread [data-slot="tool-fallback-content"] > div,
@@ -571,8 +737,9 @@
 .digichat-launcher [data-slot="tool-fallback-error"] {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.75rem 0.8rem;
+  gap: var(--trace-header-gap, 0.25rem);
+  padding-block: calc(var(--density-pad, 0rem) + var(--density-gap-1, 0.125rem));
+  padding-inline: calc(var(--density-pad, 0rem) + var(--density-gap-2, 0.5rem));
 }
 
 .digichat-thread [data-slot="tool-fallback-result"],
@@ -589,14 +756,12 @@
 .digichat-thread [data-slot="tool-fallback-dump"],
 .digichat-launcher [data-slot="tool-fallback-dump"] {
   margin: 0;
-  max-height: 8.5rem;
+  /* DIG-4459: JSON views and error details sit in an 18rem scroll area (no
+     expand button); only the legacy dump keeps the short cap. */
+  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-}
-
-.digichat-thread [data-slot="aui_tool-fallback"] + [data-slot="aui_tool-fallback"] {
-  margin-top: 0.45rem;
 }
 
 .digichat-thread [data-slot="aui_thread-viewport"],
@@ -623,54 +788,102 @@
 .digichat-thread [data-slot="reasoning-trigger-icon"],
 .digichat-launcher [data-slot="reasoning-trigger-icon"] {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: var(--aui-trace-icon);
+  height: var(--aui-trace-icon);
 }
 
 .digichat-thread [data-slot="reasoning-trigger-label"],
 .digichat-thread [data-slot="tool-fallback-trigger-label"],
 .digichat-launcher [data-slot="reasoning-trigger-label"],
 .digichat-launcher [data-slot="tool-fallback-trigger-label"] {
-  flex: 1;
+  /* No grow: the disclosure arrow belongs right next to the label, not at
+     the far edge of the row. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 
-.digichat-thread [data-slot="reasoning-trigger-chevron"],
-.digichat-thread [data-slot="tool-fallback-trigger-chevron"],
-.digichat-launcher [data-slot="reasoning-trigger-chevron"],
-.digichat-launcher [data-slot="tool-fallback-trigger-chevron"] {
-  display: inline-flex;
-  width: 0.55rem;
-  height: 0.55rem;
-  align-items: center;
-  justify-content: center;
-  transform: none;
+/* One disclosure caret for every trace row. Right when closed; a quarter
+   turn down when THAT row is open. The rotate is on the cube svg
+   (`dot-matrix-grid`) only, never the wrapper, the trigger, or the label.
+   The caret
+   is a direct child of its trigger, so the open rule starts at that trigger:
+   an open chain (`data-open` on the Base UI root) must not spin the closed
+   rows inside it.
+   The low-specificity base turns the caret in every skin (stock and
+   gallery threads outside the DigiChat scopes too); the scoped rules below
+   and in chat-digichat.css win wherever they apply. */
+:where([data-slot="disclosure-chevron"]) [data-slot="dot-matrix-grid"] {
   transform-origin: 50% 50%;
-  transition: none;
-  animation: none;
+  transition: transform 150ms ease;
 }
 
-.digichat-thread [data-slot="reasoning-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-thread [data-slot="tool-fallback-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="reasoning-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="tool-fallback-trigger-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
-}
-
-.digichat-thread [data-slot="reasoning-root"][data-state="open"] [data-slot="reasoning-trigger-chevron"],
-.digichat-thread [data-slot="tool-fallback-root"][data-state="open"] [data-slot="tool-fallback-trigger-chevron"],
-.digichat-launcher [data-slot="reasoning-root"][data-state="open"] [data-slot="reasoning-trigger-chevron"],
-.digichat-launcher [data-slot="tool-fallback-root"][data-state="open"] [data-slot="tool-fallback-trigger-chevron"] {
+:where([aria-expanded="true"]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:where([data-panel-open]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:where([data-state="open"]) > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
   transform: rotate(90deg);
 }
 
-.digichat-thread [data-slot="reasoning-root"],
-.digichat-thread [data-slot="tool-fallback-root"],
-.digichat-launcher [data-slot="reasoning-root"],
-.digichat-launcher [data-slot="tool-fallback-root"] {
-  --animation-duration: 0ms;
+@media (prefers-reduced-motion: reduce) {
+  :where([data-slot="disclosure-chevron"]) [data-slot="dot-matrix-grid"] {
+    transition: none;
+  }
 }
+
+.digichat-thread [data-slot="disclosure-chevron"],
+.digichat-launcher [data-slot="disclosure-chevron"] {
+  display: inline-flex;
+  position: relative;
+  /* Width stays literal: disclosure-chevron.source.test.ts pins the string. */
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 0.55rem;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+  animation: none;
+}
+
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
+  width: var(--aui-chevron-size);
+  height: var(--aui-chevron-size);
+  max-width: var(--aui-chevron-size);
+  max-height: var(--aui-chevron-size);
+  transform: none;
+  animation: none;
+}
+
+.digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease;
+  animation: none;
+}
+
+.digichat-thread [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-thread [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .digichat-thread [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+  .digichat-launcher [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+    transition: none;
+  }
+}
+
+/* The disclosure animates at the upstream duration (200ms): switching it off
+   made the chain snap shut between two tool calls. */
 
 .digichat-thread [data-slot="reasoning-content"],
 .digichat-thread [data-slot="tool-fallback-content"],
@@ -685,6 +898,44 @@
 }
 
 /* Grouped tool-call disclosure: match the reasoning trigger rhythm. */
+.digichat-thread [data-slot="aui_work-chain"],
+.digichat-launcher [data-slot="aui_work-chain"] {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.digichat-thread [data-slot="aui_work-chain-trigger"],
+.digichat-launcher [data-slot="aui_work-chain-trigger"] {
+  display: flex;
+  width: fit-content;
+}
+
+.digichat-thread [data-slot="aui_work-chain-content"],
+.digichat-launcher [data-slot="aui_work-chain-content"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trace-group-gap, 0.5rem);
+  padding-left: var(--trace-space-2, 0.25rem);
+  /* Air between the Worked title and the first row. One gap for every sibling. */
+  padding-top: var(--trace-title-gap, 0.625rem);
+}
+
+/* A folded chain keeps its panel mounted with [hidden]; the flex display above
+   must not override it, or the collapsed chain reserves its padding and its
+   triggers stay in the tab order. */
+.digichat-thread [data-slot="aui_work-chain-content"][hidden],
+.digichat-launcher [data-slot="aui_work-chain-content"][hidden] {
+  display: none;
+}
+
+.digichat-thread [data-slot="reasoning-root"],
+.digichat-thread [data-slot="tool-group-root"],
+.digichat-launcher [data-slot="reasoning-root"],
+.digichat-launcher [data-slot="tool-group-root"] {
+  margin: 0;
+}
+
 .digichat-thread [data-slot="tool-group-trigger"],
 .digichat-launcher [data-slot="tool-group-trigger"] {
   width: 100%;
@@ -699,47 +950,31 @@
 
 .digichat-thread [data-slot="tool-group-trigger-label"],
 .digichat-launcher [data-slot="tool-group-trigger-label"] {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .digichat-thread [data-slot="tool-group-trigger-loader"],
 .digichat-launcher [data-slot="tool-group-trigger-loader"] {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: var(--aui-loader-size);
+  height: var(--aui-loader-size);
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
-.digichat-thread [data-slot="tool-group-trigger-chevron"],
-.digichat-launcher [data-slot="tool-group-trigger-chevron"] {
-  display: inline-flex;
-  width: 0.55rem;
-  height: 0.55rem;
-  align-items: center;
-  justify-content: center;
-  transform: none;
-  transform-origin: 50% 50%;
-  transition: none;
-  animation: none;
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+.digichat-thread [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"],
+.digichat-launcher [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"] {
+  width: var(--aui-loader-size);
+  height: var(--aui-loader-size);
+  max-width: var(--aui-loader-size);
+  max-height: var(--aui-loader-size);
 }
 
-.digichat-thread [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"],
-.digichat-launcher [data-slot="tool-group-trigger-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
-}
-
-.digichat-thread [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"],
-.digichat-launcher [data-slot="tool-group-root"][data-state="open"] [data-slot="tool-group-trigger-chevron"] {
-  transform: rotate(90deg);
-}
-
-.digichat-thread [data-slot="tool-group-root"],
-.digichat-launcher [data-slot="tool-group-root"] {
-  --animation-duration: 0ms;
-}
+/* Same as the reasoning and tool rows: keep the upstream 200ms collapse. */
 
 .digichat-thread [data-slot="tool-group-content"],
 .digichat-thread [data-slot="tool-group-content"] > div,
@@ -751,15 +986,22 @@
 
 .digichat-thread [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div,
 .digichat-launcher [data-slot="tool-group-root"][data-variant="ghost"] [data-slot="tool-group-content"] > div {
-  margin-top: 0.75rem;
+  margin-top: var(--trace-header-gap, 0.25rem);
 }
 
-/* Chain-of-thought runs (and the tool groups nested inside them) get a light
-   rhythm so consecutive blocks never sit flush against each other. */
+/* Chain of thought runs (and the tool groups nested inside them) take no
+   margin of their own: `aui_assistant-message-content` is the flex stack that
+   spaces every block, and the chain content spaces the rows inside it. */
 .digichat-thread [data-slot="aui_chain-of-thought"],
 .digichat-launcher [data-slot="aui_chain-of-thought"] {
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin: 0;
+}
+
+/* The pre-response loader sits flush in the message. The chain that replaces
+   it must not pick up this rhythm, or the marker jumps down on the handoff. */
+.digichat-thread [data-slot="aui_assistant-message-content"] > [data-slot="aui_chain-of-thought"]:first-child,
+.digichat-launcher [data-slot="aui_assistant-message-content"] > [data-slot="aui_chain-of-thought"]:first-child {
+  margin-top: 0;
 }
 
 /* Portaled layers (tooltips, menus, dialogs) render under <body>, outside the
@@ -783,4 +1025,33 @@ html.light:has([data-thread-skin="digichat"]) {
 /* Portaled tooltips follow the chat's mono stack instead of the page body font. */
 html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
   font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.digichat-thread [data-slot="tool-fallback-dump"],
+.digichat-launcher [data-slot="tool-fallback-dump"] {
+  max-height: var(--aui-dump-max-h);
+}
+
+.digichat-thread .aui-json-view,
+.digichat-launcher .aui-json-view,
+.digichat-thread .aui-chat-notice-detail,
+.digichat-launcher .aui-chat-notice-detail {
+  overflow: auto;
+  max-height: var(--aui-json-max-h);
+}
+
+/* Chat notices (DIG-4459), faded red (Chris, 21 Oct): danger pulled 28%
+   toward the muted ink, a 5% wash and a 24% hairline; the title mixes 20%
+   ink so it stays WCAG AA on the wash in dark and light. */
+.digichat-thread .aui-chat-notice[data-tone="error"],
+.digichat-launcher .aui-chat-notice[data-tone="error"] {
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+.digichat-thread .aui-chat-notice[data-tone="error"] .aui-chat-notice-title,
+.digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }

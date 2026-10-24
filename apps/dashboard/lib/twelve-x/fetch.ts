@@ -1,9 +1,8 @@
 /**
  * Typed fetchers for the twelve-x FX research tables.
  *
- * Mirrors the `querySupabase` retry/guard pattern in `lib/queries.ts`, but runs
- * against the dedicated twelve-x client (`./supabase`) rather than the main
- * dashboard singleton. All selects are cast to the contract row types in
+ * Each select retries against the dedicated twelve-x client (`./supabase`)
+ * rather than the main dashboard singleton. All selects are cast to the contract row types in
  * `./types.ts`.
  *
  * Empty-state philosophy (per the suite spec): the FX digest relaxes the
@@ -20,6 +19,11 @@ import {
   type SmartBiasJoinRow,
 } from './divergence';
 import { netCarriedIdeas } from './trade-history';
+import { keepNewestGenerationPerSeriesKey } from './snapshot-generation';
+import {
+  readNewestGeneration,
+  readNewestGenerationPerCurrency,
+} from './snapshot-generation-read';
 import {
   composeFixSeries,
   normalizeFixPair,
@@ -28,7 +32,6 @@ import {
   type PairFixSpec,
 } from './level-vs-fix';
 import type {
-  ConfluenceCatalyst,
   ConsensusDelta,
   ConsensusDeltaSet,
   CurrencyView,
@@ -162,6 +165,12 @@ export function normalizeKeyThemes(raw: FxDailyDigestRow['key_themes']): string[
  * All weighted (live, relevance-weighted) consensus rows across every run_date,
  * ordered oldest→newest by date then currency — ready for per-currency time
  * series. Returns `[]` when twelve-x is unconfigured.
+ *
+ * The table holds more than one generation per run: a rerun of a run_date
+ * publishes a second `as_of` stamp beside the first. This read has no limit, so
+ * the extra generations come back whole and the guard resolves them here, in the
+ * client, from the one round trip — at most one row per (run_date, currency),
+ * newest generation wins.
  */
 export async function getConsensusTimeSeries(
   timeframe: Timeframe = 'medium'
@@ -178,7 +187,7 @@ export async function getConsensusTimeSeries(
       .order('run_date', { ascending: true })
       .order('currency', { ascending: true })
   );
-  return rows ?? [];
+  return keepNewestGenerationPerSeriesKey(rows ?? []);
 }
 
 /**
@@ -187,16 +196,24 @@ export async function getConsensusTimeSeries(
  * Takes the two newest distinct run_dates; per currency in the newest run it
  * derives the score/confidence deltas and a direction-flip flag, then ranks the
  * biggest absolute score shifts as the top-6 movers.
+ *
+ * Resolves one generation per (run_date, currency) before reading, so a caller
+ * that hands over raw rows still scores every delta against the newest
+ * generation and never lists one currency twice among the movers.
  */
 export function computeConsensusDeltaSet(series: FxConsensusSnapshotRow[]): ConsensusDeltaSet {
   if (series.length === 0) {
     return { runDate: null, prevRunDate: null, byCurrency: {}, movers: [] };
   }
 
+  // The read already resolves one generation per series key. This function is
+  // exported and pure, so it cannot lean on that and resolves its own input.
+  const resolved = keepNewestGenerationPerSeriesKey(series);
+
   // Distinct run_dates present, newest-first (series is oldest→newest).
   const dates: string[] = [];
-  for (let i = series.length - 1; i >= 0; i--) {
-    const d = series[i].run_date;
+  for (let i = resolved.length - 1; i >= 0; i--) {
+    const d = resolved[i].run_date;
     if (!dates.includes(d)) {
       dates.push(d);
       if (dates.length >= 2) break;
@@ -205,10 +222,10 @@ export function computeConsensusDeltaSet(series: FxConsensusSnapshotRow[]): Cons
   const runDate = dates[0] ?? null;
   const prevRunDate = dates[1] ?? null;
 
-  const nowRows = series.filter((r) => r.run_date === runDate);
+  const nowRows = resolved.filter((r) => r.run_date === runDate);
   const prevByCcy = new Map<string, FxConsensusSnapshotRow>();
   if (prevRunDate) {
-    for (const r of series) {
+    for (const r of resolved) {
       if (r.run_date === prevRunDate) prevByCcy.set(r.currency, r);
     }
   }
@@ -279,27 +296,6 @@ export async function getLatestDigest(): Promise<
   };
 }
 
-/**
- * Top-N confluence trade ideas for a given run_date, ascending by rank
- * (rank 1 = strongest). Returns `[]` when unconfigured or none exist.
- */
-export async function getTopConfluence(
-  runDate: string,
-  limit = 6
-): Promise<FxConfluenceSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  if (!runDate) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', runDate)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
-}
-
 /** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
 async function getLatestConfluenceDate(): Promise<string | null> {
   const latest = await querySupabase<{ run_date: string }[]>((sb) =>
@@ -313,9 +309,57 @@ async function getLatestConfluenceDate(): Promise<string | null> {
 }
 
 /**
+ * The canonical "as-of" run the FX workspace reports, and the candidates it is
+ * derived from.
+ *
+ * The candidates are the latest `run_date` of each table the page reads, ordered
+ * BASE TABLE FIRST — `fx_research_history` is where every run lands its briefs
+ * before any projection is computed, so it is the only one guaranteed to have a
+ * row for a session that actually ran. Each later candidate is a derived
+ * projection that can legitimately be absent:
+ *
+ * - `fx_daily_digest` — written once per run, but a run that dies between storing
+ *   briefs and digesting leaves the digest a day behind.
+ * - `fx_consensus_snapshot` — written whenever any currency view scores.
+ * - `fx_confluence_snapshot` — the WORST clock of the four, and must never lead.
+ *   `build_confluence()` (twelve-x `intelligence.py`) only emits a setup when the
+ *   session has a directional consensus (|score| >= min_tilt 0.35), at least
+ *   `min_brokers=2` distinct desks agreeing, AND a catalyst inside
+ *   `horizon_days=14`. A legitimate flat/split session therefore writes ZERO rows.
+ *   Keying the page on it silently rewinds "Today" to the last day that happened
+ *   to produce a setup — which is exactly the Oct 7 2026 regression: 35 briefs
+ *   stored, 0 confluence setups, and the Today rail rewound to Oct 6.
+ *
+ * PURE — no client, no query. Every call site resolves through this one function
+ * so the briefs rail and the date pager can never disagree about "today" again.
+ */
+export function resolveCanonicalRunDate(candidates: {
+  /** Latest `run_date` in `fx_research_history` (the base table). */
+  research?: string | null;
+  /** Latest `run_date` in `fx_daily_digest`. */
+  digest?: string | null;
+  /** Latest `run_date` in `fx_consensus_snapshot`. */
+  consensus?: string | null;
+  /** Latest `run_date` in `fx_confluence_snapshot` — LAST resort only. */
+  confluence?: string | null;
+}): string | null {
+  return (
+    candidates.research ??
+    candidates.digest ??
+    candidates.consensus ??
+    candidates.confluence ??
+    null
+  );
+}
+
+/**
  * Ranked confluence trade ideas for the Intelligence tab. Defaults to the latest
  * run_date in `fx_confluence_snapshot`; pass `runDate` to pin a specific session.
  * Returns the full ranked set (rank 1 = strongest). `[]` when unconfigured/empty.
+ *
+ * Anchored, like every other limited reader: this read carries a limit of its
+ * own, so a superseded generation would otherwise compete for it inside
+ * PostgREST.
  */
 export async function getIntelligence(
   runDate?: string,
@@ -324,15 +368,20 @@ export async function getIntelligence(
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const date = runDate ?? (await getLatestConfluenceDate());
   if (!date) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', date)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
+  return readNewestGeneration<FxConfluenceSnapshotRow>({
+    table: 'fx_confluence_snapshot',
+    runDate: date,
+    run: querySupabase,
+    build: (sb, anchor) => {
+      const scoped = sb
+        .from('fx_confluence_snapshot')
+        .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
+        .eq('run_date', date);
+      return (anchor ? scoped.eq('as_of', anchor) : scoped)
+        .order('rank', { ascending: true })
+        .limit(limit);
+    },
+  });
 }
 
 /** Forward horizon, in days, of the "upcoming macro catalysts" window. */
@@ -373,10 +422,84 @@ export function calendarWindow(now: Date, timeZone?: string): CalendarWindow {
 }
 
 /**
+ * Logical-event join key for one `economic_calendar` row: the feed date, the country,
+ * and the whitespace-normalized lowercase event name. Mirrors the twelve-x pipeline's
+ * own join key so the dashboard groups rows exactly the way the pipeline defines "the
+ * same event". `event_time` is deliberately NOT part of the key — see
+ * {@link dedupeCalendarTwins} for why.
+ */
+function calendarEventKey(row: FxEconomicCalendarRow): string {
+  // Country is case/space-normalized: feeds disagree on casing in principle
+  // (`US` vs `us`), and the key must not let a twin through on that basis.
+  return `${row.event_date}|${(row.country ?? '').trim().toUpperCase()}|${row.event_name.trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')}`;
+}
+
+/** True for a row ingested from gloomberb, the pipeline's primary calendar source. */
+function isGloomberbRow(row: FxEconomicCalendarRow): boolean {
+  return (row.external_id ?? '').startsWith('gb-');
+}
+
+/**
+ * PURE — collapse cross-source twin rows from a raw `economic_calendar` read.
+ *
+ * ROOT CAUSE: the shared core `economic_calendar` table is append-only and receives
+ * the same logical event from TWO ingest sources — `forexfactory` (external_id `te-…`
+ * or a feed id) and `gloomberb` (`gb-` prefix). Each twin pair carries an identical
+ * `(event_date, country, event_name)` but disagrees on `event_time` (one source records
+ * the feed's ET wall clock, the other UTC — a +4h offset) while `event_datetime_utc`
+ * is nearly identical. The table currently holds 123 such twin pairs, so a raw-row
+ * read surfaces every affected event twice, as two visually identical rows in
+ * `EventsTab`.
+ *
+ * WHY THE DASHBOARD SEES RAW ROWS: `fetchCalendarWindow` reads the SHARED table
+ * through the main dashboard client with no server-side dedup (the table is not owned
+ * by this app, and `external_id` differs between sources so an id-based dedup cannot
+ * work), while the twelve-x pipeline's own read path dedups by join key upstream. A
+ * write-side fix is landing in the pipeline in parallel; this read-model defense hides
+ * the already-written twins immediately and keeps the dashboard correct while the
+ * backfill runs.
+ *
+ * GROUPING deliberately IGNORES `event_time`: the two sources record that wall clock
+ * in different zones (ET vs UTC), so including it would classify every twin as
+ * distinct. `event_datetime_utc` is not keyed either — it can drift by seconds between
+ * ingest runs — and `id`/`external_id` differ by construction.
+ *
+ * PREFERENCE: when rows share a key, the gloomberb row wins (`external_id` starting
+ * `gb-`) because gloomberb is the pipeline's primary source and its rows were written
+ * most recently; when neither side is gloomberb the incumbent is kept (first wins), so
+ * the outcome is deterministic regardless of which source sorted first.
+ *
+ * ORDER/PAGINATION SEMANTICS ARE UNCHANGED: winners are collected into a `Map` and the
+ * ORIGINAL array is then filtered against it, so every surviving row keeps its original
+ * position in the query's `event_datetime_utc` ordering — nothing is reordered, merged,
+ * or synthesised. Only duplicate rows are dropped, and only downstream local narrowing
+ * (`getUpcomingEvents` / `getTodayEvents`) ever sees the result.
+ */
+function dedupeCalendarTwins(rows: FxEconomicCalendarRow[]): FxEconomicCalendarRow[] {
+  const winners = new Map<string, FxEconomicCalendarRow>();
+  for (const row of rows) {
+    const key = calendarEventKey(row);
+    const incumbent = winners.get(key);
+    if (!incumbent || (isGloomberbRow(row) && !isGloomberbRow(incumbent))) {
+      winners.set(key, row);
+    }
+  }
+  // Filter (not map over winners): the winner must render at ITS original index so the
+  // query's ordering — and therefore pagination/grouping downstream — is preserved.
+  return rows.filter((row) => winners.get(calendarEventKey(row)) === row);
+}
+
+/**
  * The raw `economic_calendar` rows over the PADDED window, ordered by the absolute UTC
  * release instant (NULL release times — all-day rows — sort last, then by event_date).
  * Shared by `getUpcomingEvents` and `getTodayEvents` so both see the same row set and
  * only their LOCAL narrowing differs. `[]` when unconfigured or empty.
+ *
+ * Cross-source twin rows (forexfactory/gloomberb pairs for one logical event) are
+ * collapsed by {@link dedupeCalendarTwins} BEFORE either caller narrows locally, so
+ * both callers see one row per logical event while keeping the original order.
  */
 async function fetchCalendarWindow({
   queryStart,
@@ -396,7 +519,7 @@ async function fetchCalendarWindow({
       .order('event_datetime_utc', { ascending: true, nullsFirst: false })
       .order('event_date', { ascending: true })
   );
-  return rows ?? [];
+  return dedupeCalendarTwins(rows ?? []);
 }
 
 /**
@@ -425,17 +548,22 @@ export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
 export async function getEventOpinions(runDate: string): Promise<FxEventSnapshotRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
-  const rows = await querySupabase<FxEventSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_events_snapshot')
-      .select(
-        'run_date, event_key, event_name, event_date, calendar_external_id, release_at, category, currencies, mentions, brokers, citations, as_of'
-      )
-      .eq('run_date', runDate)
-      .order('mentions', { ascending: false })
-      .order('event_date', { ascending: true })
-  );
-  return rows ?? [];
+  return readNewestGeneration<FxEventSnapshotRow>({
+    table: 'fx_events_snapshot',
+    runDate,
+    run: querySupabase,
+    build: (sb, anchor) => {
+      const scoped = sb
+        .from('fx_events_snapshot')
+        .select(
+          'run_date, event_key, event_name, event_date, calendar_external_id, release_at, category, currencies, mentions, brokers, citations, as_of'
+        )
+        .eq('run_date', runDate);
+      return (anchor ? scoped.eq('as_of', anchor) : scoped)
+        .order('mentions', { ascending: false })
+        .order('event_date', { ascending: true });
+    },
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -529,20 +657,91 @@ export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
   );
 }
 
-/** Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty. */
+const TRADE_IDEA_BOARD_COLUMNS =
+  'run_date, rank, pair, direction, timeframe, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of, idea_id';
+
+/** Cap on the carried-episode fallback so one broken date can't pull the archive. */
+const CARRIED_BOARD_LIMIT = 10;
+
+/**
+ * Over-fetch the fallback so twins can't eat the board's slots: the query limit
+ * applies pre-dedupe, so without headroom distinct carried episodes past the
+ * limit would be silently dropped. Sliced back to {@link CARRIED_BOARD_LIMIT}
+ * after {@link dedupeEpisodes}.
+ */
+const CARRIED_BOARD_OVERFETCH = 50;
+
+/**
+ * Rows refreshed within this window of the latest publish count as one publish
+ * batch (a publish writes its rows within seconds; the grace covers retries).
+ */
+const CARRIED_BATCH_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Collapse rows that are the same episode published on several board dates.
+ *
+ * Ordered newest-refresh-first by the caller, so the first sighting wins. Falls
+ * back to the axis when `idea_id` is absent (pre-identity rows).
+ */
+function dedupeEpisodes(rows: FxTradeIdeaRow[]): FxTradeIdeaRow[] {
+  const seen = new Set<string>();
+  const out: FxTradeIdeaRow[] = [];
+  for (const row of rows) {
+    const key = row.idea_id || `${row.pair}|${row.direction}|${row.timeframe ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Curated trade ideas for a run_date (rank 1 = top). `[]` when unconfigured/empty.
+ *
+ * A CONTINUED episode is written back to its ORIGIN run_date (trade-episodes,
+ * 2026-09-23) so identity and revision update in place — which means an exact-date
+ * match misses an idea that originated earlier and silently empties today's board.
+ * When the exact-date query comes back empty we fall back to the latest publish's
+ * batch: the freshest `as_of` over boards on/before today, plus rows refreshed
+ * within {@link CARRIED_BATCH_WINDOW_MS} of it (one publish), deduped to one row
+ * per episode. That is precisely a carried idea the board would otherwise hide.
+ *
+ * "Today's publish" is anchored to the last-publish instant, NOT to UTC midnight:
+ * a publish that crosses midnight (late run, retry, ET-evening schedule) still
+ * counts as the run it belongs to, so yesterday's rows can never satisfy today's
+ * board by clock accident. Conversely, when nothing has published since the board
+ * date began — closed episodes, or a day when nothing ran — the guard returns `[]`
+ * instead of resurfacing stale rows.
+ */
 export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of'
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
   );
-  return rows ?? [];
+  if (rows?.length) return rows;
+  // Newest-refresh-first so the freshest rows win the over-fetch window (the
+  // query limit applies pre-dedupe; see CARRIED_BOARD_OVERFETCH).
+  const recent = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select(TRADE_IDEA_BOARD_COLUMNS)
+      .lte('run_date', runDate)
+      .order('as_of', { ascending: false })
+      .limit(CARRIED_BOARD_OVERFETCH)
+  );
+  const latest = recent && recent.length ? recent[0].as_of : undefined;
+  const latestMs = latest ? Date.parse(latest) : NaN;
+  if (!Number.isFinite(latestMs) || latestMs < Date.parse(`${runDate}T00:00:00.000Z`)) return [];
+  const batch = (recent ?? []).filter((r) => {
+    const t = Date.parse(r.as_of || '');
+    return Number.isFinite(t) && t >= latestMs - CARRIED_BATCH_WINDOW_MS;
+  });
+  return dedupeEpisodes(batch).slice(0, CARRIED_BOARD_LIMIT);
 }
 
 /**
@@ -589,9 +788,7 @@ export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of',
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .order('run_date', { ascending: false })
       .order('rank', { ascending: true }),
   );
@@ -1030,72 +1227,29 @@ export async function getIntelligenceWhy(
     getIntelligence(date, limit),
     // Canonical Tier-2 source: medium-horizon, weighted (mirrors getLatestConsensus's
     // filter), pinned to this run_date so the decomposition matches the idea's run.
-    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-      sb
-        .from('fx_consensus_snapshot')
-        .select(
-          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
-        )
-        .eq('weighted', true)
-        .eq('timeframe', 'medium')
-        .eq('run_date', date)
-    ),
+    // Unanchored, one query: this read has no limit, so the client resolves one
+    // generation per (run_date, currency) from the rows it already has.
+    readNewestGenerationPerCurrency<FxConsensusSnapshotRow>({
+      run: querySupabase,
+      build: (sb) =>
+        sb
+          .from('fx_consensus_snapshot')
+          .select(
+            'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
+          )
+          .eq('weighted', true)
+          .eq('timeframe', 'medium')
+          .eq('run_date', date),
+    }),
     getLedger(date),
   ]);
 
-  return assembleIntelligenceWhy(confluence, consensus ?? [], ledger, date);
+  return assembleIntelligenceWhy(confluence, consensus, ledger, date);
 }
 
 /* ------------------------------------------------------------------ *
  * Catalyst resolution + event-time helpers (PURE)
  * ------------------------------------------------------------------ */
-
-/**
- * PURE — resolve the catalyst a confluence idea hangs on against the events
- * feed. Honors an explicit `event_key` in the idea's components; otherwise
- * heuristically matches the earliest upcoming event touching the idea's base
- * currency (in which case `eventKey` stays null so the UI can hedge wording).
- */
-export function resolveCatalyst(
-  idea: FxConfluenceSnapshotRow,
-  events: FxEventSnapshotRow[]
-): ConfluenceCatalyst {
-  const comp = (idea.components ?? {}) as Record<string, unknown>;
-  const dtc = typeof comp.days_to_catalyst === 'number' ? comp.days_to_catalyst : null;
-  const explicitKey = typeof comp.event_key === 'string' ? comp.event_key : null;
-  const ccy = idea.currency.toUpperCase().split('/')[0];
-
-  let match: FxEventSnapshotRow | undefined;
-  if (explicitKey) {
-    match = events.find((e) => e.event_key === explicitKey);
-  } else {
-    const candidates = events
-      .filter((e) => {
-        const currencies = Array.isArray(e.currencies) ? (e.currencies as unknown[]) : [];
-        return currencies.some((c) => String(c).toUpperCase() === ccy);
-      })
-      .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
-    match = candidates[0];
-  }
-
-  if (!match) {
-    return {
-      eventKey: null,
-      eventName: null,
-      eventDate: null,
-      calendarExternalId: null,
-      daysToCatalyst: dtc,
-    };
-  }
-
-  return {
-    eventKey: explicitKey ? match.event_key : null,
-    eventName: match.event_name,
-    eventDate: match.event_date,
-    calendarExternalId: match.calendar_external_id,
-    daysToCatalyst: dtc,
-  };
-}
 
 /** PURE — the absolute release instant of an event, or null when unparseable. */
 export function eventInstant(row: { event_datetime_utc: string | null }): Date | null {
@@ -1155,16 +1309,20 @@ export async function getConsensusDivergence(
   if (!runDate) return {};
 
   const [consensus, biasRows, snapshotRows] = await Promise.all([
-    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-      sb
-        .from('fx_consensus_snapshot')
-        .select(
-          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks',
-        )
-        .eq('weighted', true)
-        .eq('timeframe', 'medium')
-        .eq('run_date', runDate),
-    ),
+    // Unanchored, one query: this read has no limit, so the client resolves one
+    // generation per (run_date, currency) from the rows it already has.
+    readNewestGenerationPerCurrency<FxConsensusSnapshotRow>({
+      run: querySupabase,
+      build: (sb) =>
+        sb
+          .from('fx_consensus_snapshot')
+          .select(
+            'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks',
+          )
+          .eq('weighted', true)
+          .eq('timeframe', 'medium')
+          .eq('run_date', runDate),
+    }),
     querySupabase<SmartBiasJoinRow[]>((sb) =>
       sb
         .from('fx_smart_bias')

@@ -14,9 +14,34 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
+from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
 from digiquant.mcp_server import READ_SCOPE_TOOLS, create_mcp_server
+from digiquant.tool_names import canonical_tool_name
+from digiquant.tool_refusals import REFUSED_TOOLS
 
 from digiquant import mcp_server
+
+
+def _advertised(names: set[str]) -> set[str]:
+    """MCP list: each ``digifetch_`` scope key is replaced by its ``gloomberb_`` name."""
+    return {canonical_tool_name(name) if name.startswith("digifetch_") else name for name in names}
+
+
+#: Entitlements retired with the Gloomberb session-cookie path (DIG-3907,
+#: keyless access only): never advertised on any scope.
+RETIRED_GLOOMBERB_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+
+
+def _expected_advertised(base: set[str]) -> set[str]:
+    """Scope keys minus refused tools minus retired cookie-gated tools."""
+    out = set()
+    for name in base:
+        if name in REFUSED_TOOLS:
+            continue
+        if TOOL_ENTITLEMENTS.get(name) in RETIRED_GLOOMBERB_ENTITLEMENTS:
+            continue
+        out.add(canonical_tool_name(name) if name.startswith("digifetch_") else name)
+    return out
 
 
 def _tool_names(server) -> set[str]:
@@ -29,8 +54,8 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
-#: The 33 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
-#: only, default-ON behind GLOOMBERB_ENABLED.
+#: The 89 digifetch x Gloomberb tools (#4069, #4110, 130-coverage through Task 8)
+#: are read-scope only, default-OFF behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
     "digifetch_quotes_batch",
@@ -50,7 +75,8 @@ DIGIFETCH_TOOLS = {
     "digifetch_yield_curve",
     "digifetch_cds",
     "digifetch_research_search",
-    "digifetch_congress_trades",
+    # `digifetch_congress_trades` is refused under 5 U.S.C. 13107(c)(1)(B)
+    # (DIG-1057) and is on no scope — see `digiquant.tool_refusals`.
     "digifetch_transcripts",
     "digifetch_statements",
     "digifetch_ticker_tweets",
@@ -66,6 +92,84 @@ DIGIFETCH_TOOLS = {
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
     "digifetch_saved_searches",
+    # calculators + compositions (130-coverage Task 2, unattributed derived math)
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+    "digifetch_dividend_yield",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
+    # options scenario (130-coverage Task 8: OSA, unattributed derived math)
+    "digifetch_options_scenario",
+    # portfolio-math compositions (130-coverage Task 3, unattributed derived math)
+    "digifetch_compare_performance",
+    "digifetch_correlation_matrix",
+    "digifetch_relationship_graph",
+    "digifetch_relative_valuation",
+    "digifetch_fundamental_graph",
+    "digifetch_valuation_graph",
+    "digifetch_custom_chart",
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5, one per Task 4 GO verdict)
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_options_flow",
+    "digifetch_cot",
+    "digifetch_crypto_markets",
+    "digifetch_iv_screen",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
+    "digifetch_session_movers",
+    "digifetch_trending",
+    "digifetch_substack",
+    "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6, venue-direct, unattributed)
+    "digifetch_fear_greed",
+    "digifetch_polls",
+    "digifetch_treasury_auctions",
+    "digifetch_market_halts",
+    "digifetch_hacker_news",
+    # Workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "digifetch_portfolio_view",
+    "digifetch_watchlist_add",
+    "digifetch_watchlist_remove",
+    "digifetch_portfolio_add",
+    "digifetch_portfolio_remove",
+    "digifetch_alert_add",
+    "digifetch_alert_list",
+    "digifetch_note_add",
+    "digifetch_thesis_add",
+    "digifetch_view_add",
+    "digifetch_broker_positions",
+    "digifetch_ibkr_preview_order",
+    "digifetch_ibkr_execute_order",
+}
+
+#: The 14 LuxAlgo hosted reads (#4779 P0 Library + #4844 edge/trackers).
+LUXALGO_TOOLS = {
+    "luxalgo_library_search",
+    "luxalgo_library_get_concept",
+    "luxalgo_library_get_indicator",
+    "luxalgo_library_list_concepts",
+    "luxalgo_library_list_indicators",
+    "luxalgo_library_list_tags",
+    "luxalgo_library_list_families",
+    "luxalgo_library_get_family",
+    "luxalgo_edge_symbols",
+    "luxalgo_edge_presets",
+    "luxalgo_edge_report",
+    "luxalgo_trackers_datasets",
+    "luxalgo_trackers_latest",
+    "luxalgo_trackers_ticker",
 }
 
 COMPUTE_TOOLS = {
@@ -89,16 +193,18 @@ COMPUTE_TOOLS = {
 @pytest.mark.unit
 def test_full_scope_is_default_and_complete():
     names = _tool_names(create_mcp_server())
-    assert READ_SCOPE_TOOLS <= names
-    assert COMPUTE_TOOLS <= names
-    assert names == READ_SCOPE_TOOLS | COMPUTE_TOOLS
+    base = set(READ_SCOPE_TOOLS) | COMPUTE_TOOLS
+    assert names == _expected_advertised(base)
+    assert not any(name.startswith("digifetch_") for name in names)
 
 
 @pytest.mark.unit
 def test_read_scope_exposes_only_read_tools():
     names = _tool_names(create_mcp_server(scope="read"))
-    assert names == set(READ_SCOPE_TOOLS)
+    base = set(READ_SCOPE_TOOLS)
+    assert names == _expected_advertised(base)
     assert not (names & COMPUTE_TOOLS)
+    assert not any(name.startswith("digifetch_") for name in names)
 
 
 @pytest.mark.unit
@@ -161,7 +267,70 @@ def test_read_scope_includes_digifetch_family():
 
 
 @pytest.mark.unit
+def test_read_scope_includes_luxalgo_family():
+    assert LUXALGO_TOOLS <= set(READ_SCOPE_TOOLS)
+    assert not (LUXALGO_TOOLS & COMPUTE_TOOLS)
+
+
+@pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 44
+    # 113 → 112: `digifetch_congress_trades` left the read scope (DIG-1057).
+    assert len(READ_SCOPE_TOOLS) == 112
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 58
+    # 126 → 85: the 41 retired session/preview/pro tools are never registered
+    # (DIG-3907). Each digifetch scope key is replaced by one gloomberb
+    # name, so the list does not grow (DIG-3313). The refused congress tool
+    # is absent under both prefixes.
+    gated = {
+        name for name, tier in TOOL_ENTITLEMENTS.items() if tier in RETIRED_GLOOMBERB_ENTITLEMENTS
+    }
+    assert len(gated) == 41
+    names = _tool_names(create_mcp_server())
+    assert len(names) == 85
+    assert not any(name.startswith("digifetch_") for name in names)
+
+
+@pytest.mark.unit
+def test_congress_trades_is_refused_on_every_scope():
+    # DIG-1057 / 5 U.S.C. 13107(c)(1)(B): Counsel's refusal list is enforced at
+    # registration, so `scope="full"` cannot reopen the tool.
+    from digiquant.tool_refusals import REFUSED_TOOLS
+
+    assert "digifetch_congress_trades" in REFUSED_TOOLS
+    assert "digifetch_congress_trades" not in READ_SCOPE_TOOLS
+    assert "digifetch_congress_trades" not in _tool_names(create_mcp_server())
+    assert "gloomberb_congress_trades" not in _tool_names(create_mcp_server())
+    assert "digifetch_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
+    assert "gloomberb_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
+
+
+@pytest.mark.unit
+def test_retired_session_tools_are_never_advertised():
+    """DIG-3907: the cookie path is retired, so the session/preview/pro tools
+    leave both scopes unconditionally — no cookie, no probe, no gate.
+
+    Counts come from ``TOOL_ENTITLEMENTS`` rather than from a literal, so this
+    follows the vocabulary instead of restating it.
+    """
+    full = _tool_names(create_mcp_server())
+    read = _tool_names(create_mcp_server(scope="read"))
+
+    gated = {
+        name for name, tier in TOOL_ENTITLEMENTS.items() if tier in {"session", "preview", "pro"}
+    }
+    gated_public = gated | {canonical_tool_name(name) for name in gated}
+    free = {
+        name
+        for name, tier in TOOL_ENTITLEMENTS.items()
+        if tier == "free" and name not in REFUSED_TOOLS
+    }
+    venue = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "venue_session"}
+    expected_public = {canonical_tool_name(name) for name in free | venue}
+
+    assert gated, "the retirement would have nothing to hide"
+    assert not (full & gated_public), sorted(full & gated_public)[:5]
+    assert not (read & gated_public), sorted(read & gated_public)[:5]
+    # The free family stays on the list under the public name only.
+    assert expected_public <= full
+    assert not (full & (free | venue))
+    assert len(full) == 126 - len(gated)

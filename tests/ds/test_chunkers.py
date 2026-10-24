@@ -288,7 +288,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     prose only; RecursiveChunker unchanged.
     Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
     mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digibot attachment prose in ARCHITECTURE.md — fixture prose only.
     Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
     develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 115 for the promotion sync union (module/digisearch <- develop):
@@ -306,44 +306,117 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     the #4306 `apps/` + `packages/` path renames blend into the merged ARCHITECTURE.md,
     so three chunk hashes differ while the count and the `<= 2000` invariant hold —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 119 for #4711 (unified web_search provider docs in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 117 for #4717 (generic Polars table-ops section in
+    ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 120 for the develop merge-forward (promotion #4745
+    prep): merged ARCHITECTURE.md carries both #4717 and #4711 prose —
+    fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 120) re-recorded for #4823 (cross-namespace
+    twin-dedupe behavior note in the POST /query section of ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 122 for #4826 (luxalgo market-trackers ingest
+    section + url_ingest JSON-helper tree note in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 125 for #4849 (luxalgo market-trackers wave-2
+    expansion table + trackers_wave2_ingest.py tree note in ARCHITECTURE.md)
+    — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 126 for merge of #4849 (luxalgo wave-2, +3) and
+    #4856 (twin-identity priority note, +1) prose — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 127 for #4756 (MultilingualEmbedder provider-table
+    row + DIGISEARCH_EMBEDDING_PROVIDER multilingual value in ARCHITECTURE.md)
+    — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for this module/digisearch <-
+    develop sync: merged ARCHITECTURE.md carries both #4756 multilingual-embedder
+    prose and the #4929 digismith→digitrace rename — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for #4756 (model-id provider
+    value in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
+    rows + module-map / digibot-attach notes in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
+    data-licence classification: the module-map row and the CC0 public-records
+    layer note now read CC0-1.0, the licence Security classified against the
+    upstream LICENSE file) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 128 for the DIG-1464 review follow-up (the
+    ARCHITECTURE.md trackers section now carries the per-family
+    congress-trades/short-volume limits, and the module-map row says
+    so). The added prose pushed one chunk over the split boundary, so
+    this is a count change as well as a hash re-record; the size
+    invariant (max chunk 1997 <= 2000) and RecursiveChunker are unchanged.
+    Re-recorded at count 132 for the batch/digiquant fold (DIG-3137): the
+    ARCHITECTURE.md trackers section now carries HEAD's DIG-1307 refusal
+    Re-recorded for the develop merge (DIG-3137 follow-up): chunk 9 covers
+    the /query route docs after #5183/#5045 prose moves — fixture prose only;
+    RecursiveChunker unchanged.
+    framing plus DIG-1464's CC0-1.0 precision and per-family limits — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 133 for DIG-3239 (searxng tag-pin record: the
+    "floats on latest" sentences corrected in the web_search sidecar section of
+    ARCHITECTURE.md) — chunks 0-111 byte-identical, 112-115 re-chunked by the
+    added prose, the 17-chunk tail after them preserved verbatim and in
+    order, net +1, max chunk 1994 of the 2000 budget — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 133) re-recorded for the http_client tree line
+    in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 134 for the DIG-2203 OCC census re-cut (PR #5937):
+    ARCHITECTURE.md now carries the multi-index fan-out paragraph and the
+    trackers-ingest CC0-1.0 row, which added one chunk — fixture prose only;
+    RecursiveChunker unchanged.
+    Re-recorded at count 135 for DIG-4657 (the per-index bge-m3 override prose in the
+    Vectorize section and the three env-table rows in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded for DIG-4602 (PR #5441) merged onto develop: the renamed
+    module's prose and develop's newer DIG-2203 / DIG-4657 paragraphs changed
+    the chunk boundaries from index 125 on — count 135, hashes re-recorded —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 116
+    assert len(chunks) == 135
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
-        "de1607a6f3e430c1",
+        "97d6dbc8aeba1662",
         "a5e3d5fc972070ef",
         "7e6b7b2044358888",
         "cea76b9e90df056e",
-        "6f61da3b9ed54d44",
-        "5c87a98eae4b4c24",
-        "27f0ca91eb93d7e1",
-        "5fc146dcd98ed469",
+        "a08e55912a60920e",
+        "e673e138be63fb36",
+        "2d89279e6be2ef3c",
+        "7b18269636061f8e",
+        "5eaa545f6fd87479",
+        "c1b340d871d4f198",
+        "35bae5b21ed48559",
         "6bb725ee96409565",
         "2496b0331a6908ca",
-        "e7597b9d03630def",
-        "cc37bd8b485e1402",
-        "a08f56ac9059ac1b",
+        "d79c9e4802601817",
+        "8135b004b65f5e71",
+        "0dc944d1f2f84fbf",
+        "601b25fe802c685b",
         "a06a6367c5f045a2",
-        "b959e75c8c4b124a",
+        "c7b7c5126c015722",
         "a94797156eb57efd",
         "58efb49707626f90",
         "cd6a3f2ea2f1a0d0",
-        "7e8464fe6a6cc067",
-        "849398c2373ea326",
-        "dc9494e06b4e9dfd",
-        "f2ac9438877a85b7",
-        "4523b0e9d213163a",
+        "48f193019781f717",
+        "b2016910798a9ca4",
+        "a97ff971bc77b148",
+        "8d09b13135b889c0",
+        "2725c7d48d4faade",
+        "17700891ffcbdd7c",
         "3850f4956a4c3be9",
         "7973399b6e155051",
         "e0ed75d4b266835e",
-        "5e1cdcae7ee033f5",
-        "866bf2f65945a727",
+        "46b2a904f9490a45",
+        "8d73d82e91867f5c",
         "62e24ed27153c8a1",
         "0ab88c4d28e41b7d",
         "ebd46ff18db018b4",
@@ -367,63 +440,77 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "6de35d68bea0e990",
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
-        "4ab2c79477f613db",
-        "bce989da61996c0f",
-        "02e5c79864269cd2",
-        "f5694c994b90e40c",
-        "2f102978f3f92316",
-        "d201d5cef8605cdf",
-        "5c929ad2654944ce",
+        "cfa29423e1c162b3",
+        "6a63644b4172ab06",
+        "ededb80c2b37cacb",
+        "ee316e7423bacefa",
+        "329e5a341505a1dd",
+        "72568219da973da4",
+        "de89c8dbadfec2f2",
+        "0829e8e08028f967",
+        "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "20b66fa9abe4d235",
-        "28bb2eddea9813a5",
-        "0f38ad6f707a76af",
-        "c64d3417a2a5f62c",
-        "a1105ad47fefbf1b",
-        "819ebadc3320ecc2",
-        "10832c167583db90",
-        "3442051d624d3623",
+        "5f32459eb46e4976",
+        "f7ef2f68779a303e",
+        "ed9fd383de98c694",
+        "cd4e7192b6baa3d3",
+        "a03c67e88e3c2999",
+        "8bb70d874a5aceb3",
+        "354bda51b13bec14",
+        "81a3302403f3eb85",
+        "0a50c275d11604aa",
+        "ef6a144c2e1e109e",
+        "f27dfd53b2cda272",
+        "d90f1ea6b18577c2",
+        "6603c2da6eeb5309",
+        "263c191decde0fc3",
+        "f0439ec87bbd8a5c",
+        "42d3db5b4b30c9c0",
         "06ba55aa13191afa",
         "533d598598a15fa9",
         "ec4e79e9d9714f36",
         "16fc77c51656b28e",
         "2ec8256cb4695f07",
-        "16bea1bbfea529fc",
-        "00bffb9020b848f5",
-        "0813ccac568b8df8",
+        "c96c954db2aeb203",
+        "2cd3dabde6c16b58",
+        "e92e969e19149e44",
+        "093be204348ac4c4",
         "8c4f082527d91953",
-        "ea4b9c63695d2f69",
+        "548549263c2a7f16",
         "367d6f1945838ddd",
-        "4187a3ee58add217",
+        "d84c7e7b4f2d53a4",
         "85cad0d45c341571",
         "d22113bcc2f23495",
         "3ec5f2b1fce1b494",
-        "66ce13f7ba2fafdc",
+        "fa14fb0b243b1919",
         "26ca223dcbe8b403",
         "ac5eea8b8b2f7820",
         "d3566df46fb1e726",
         "c0e9eb6706ab60cc",
-        "676a486feb21ee54",
+        "e33ebeedada29ae9",
         "c68c6371a8457ff8",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "8200c214c753f6dd",
         "2c221fc487c50f69",
-        "a261a5a8ca75360c",
-        "473965a9eeeb864d",
-        "70c3d41e152ffa11",
+        "beb390b4885ad1b9",
+        "316ba541e626f685",
+        "766d2cae1a246072",
         "81d310410772fb3e",
-        "7b96f76f75a29985",
-        "e8874754e8823dbd",
-        "472ca1370eb9ef1a",
+        "e46749bf5ec8f72a",
+        "33c23cc6de00eece",
+        "4bc7547f9b3e2e61",
+        "e7f2ed9b67f28f30",
         "a3987db99f2b72c5",
-        "9496728548f7cd2a",
-        "3a05c94596483aed",
-        "0f567a2b684efdf4",
+        "e35a024e63e94d4d",
+        "e9faecf827139411",
+        "625781730bb13b6b",
+        "9f5ba1e6a4571e53",
+        "001c13b0286cffd2",
         "5668e90c11bf9127",
-        "05bb8905105bc94e",
-        "d922a9899a8996a2",
+        "64d4a8d12ef0ee1f",
+        "05501c10a3d0de0f",
         "166b840aa01714e1",
         "6ffeafba73e75348",
         "79ae674b8661ea64",

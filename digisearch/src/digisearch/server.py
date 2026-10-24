@@ -13,11 +13,13 @@ import re
 import secrets
 import time as _time
 from collections import deque as _deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from threading import Lock as _Lock
+from types import MappingProxyType
 from typing import Any, Literal
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -27,8 +29,16 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.art9_screen import router as art9_screen_router
 from digisearch.backend_require import require_real_search_backend
+from digisearch.client import (
+    SURFACE_KIND_HTTP,
+    Art9SurfaceRefusal,
+    declare_art9_surface,
+    require_art9_clear,
+)
 from digisearch.core.models import Query
+from digisearch.indexes.backends.backend_errors import CorpusNotSeededError
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
 from digisearch.monitors.exa_adapter import (
@@ -50,7 +60,6 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_MONITORS_RUNS,
     TOOL_DIGISEARCH_MONITORS_TRIGGER,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
-    TOOL_DIGISEARCH_WEB_SEARCH,
     TOOL_DIGISEARCH_WEBSETS_ADD_SEARCH,
     TOOL_DIGISEARCH_WEBSETS_CREATE,
     TOOL_DIGISEARCH_WEBSETS_EVENTS,
@@ -62,8 +71,7 @@ from digisearch.orchestrator_tools import (
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
-from digisearch.search._stub import query_index
-from digisearch.web_exa import WebSearchData
+from digisearch.search._stub import query_index, unseeded_indexes
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -163,7 +171,18 @@ app = FastAPI(
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
+# Art. 9 admission floor, added BEFORE DigiAuthMiddleware on purpose: Starlette runs the
+# most recently added middleware outermost, so digikey auth rejects an unscoped caller
+# before the admission screen reads its body. Registered last it would read and screen
+# request bodies for callers the auth layer was going to turn away anyway (DIG-1083).
+install_art9_admission(app, app_name="digisearch", service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
+
+# Art. 9 transcript screening (DIG-1176). One route, mounted on the existing app.
+# The route is authenticated by default: _digisearch_path_scopes falls through to
+# digisearch:query for an unknown path, so no digikey change is needed and no
+# public-path exemption is added. The digisearch middleware mount is leaf 10's.
+app.include_router(art9_screen_router)
 
 
 _rl_windows: dict[str, _deque] = {}
@@ -181,6 +200,9 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     # § Interfaces websets statics (creation is a DoS surface); the
     # parameterized webset routes follow the same two-tier mechanism (D17).
     "/v1/websets": (10, 60),
+    # Art. 9 transcript screening (DIG-1176). The caller is digichat screening
+    # each conversation turn before it is stored, so the budget is per-transcript.
+    "/internal/art9/screen": (120, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
@@ -353,6 +375,13 @@ install_request_id_middleware(app)
 install_request_id_logging()
 
 
+def _normalize_mode(value: object) -> str:
+    """Coerce a request-level ``mode`` to a supported query mode (default hybrid)."""
+    from digisearch.embedding.factory import normalize_query_mode
+
+    return normalize_query_mode(str(value) if value is not None else "hybrid")
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -428,9 +457,7 @@ class QueryRequest(BaseModel):
     @field_validator("mode", mode="before")
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
-        from digisearch.embedding.factory import normalize_query_mode
-
-        return normalize_query_mode(str(value) if value is not None else "hybrid")
+        return _normalize_mode(value)
 
 
 class QueryResponse(BaseModel):
@@ -439,7 +466,7 @@ class QueryResponse(BaseModel):
     results: list[dict]
     query: str
     index_name: str
-    total: int
+    total: int | None
     formatted: str | None = Field(
         default=None, description="When format=table, markdown table string for display"
     )
@@ -530,22 +557,35 @@ class ResearchTurnRequest(BaseModel):
     @field_validator("mode", mode="before")
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
-        from digisearch.embedding.factory import normalize_query_mode
-
-        return normalize_query_mode(str(value) if value is not None else "hybrid")
+        return _normalize_mode(value)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    """Legacy health check for Docker and digigraph (kept for back-compat)."""
-    return {"status": "ok", "service": "digisearch"}
+def health() -> dict[str, Any]:
+    """Legacy health check for Docker and digigraph (kept for back-compat).
+
+    Reports ``degraded`` when a boot marked indexes as unseeded (#5045): their
+    collections are empty, so every query would answer "no results" and read as
+    a confident miss. HTTP stays 200 on purpose — every consumer gates on the
+    status code (``scripts/run_stack_local.sh`` uses ``curl -sf``,
+    ``tests/test_e2e.py::test_digisearch_health`` asserts 200) and none read this
+    body. ``/healthz`` stays the pure liveness probe the CI pipeline calls.
+    """
+    unseeded = sorted(unseeded_indexes())
+    body: dict[str, Any] = {
+        "status": "degraded" if unseeded else "ok",
+        "service": "digisearch",
+    }
+    if unseeded:
+        body["unseeded_indexes"] = unseeded
+    return body
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digitrace's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -571,7 +611,7 @@ def azure_status() -> dict[str, bool | str]:
     except ImportError:
         return {"configured": False, "message": "Install digisearch[azure] for Azure backend"}
     except (OSError, ValueError, RuntimeError, TypeError) as e:
-        return {"configured": True, "reachable": False, "message": str(e)[:200]}
+        return {"configured": True, "reachable": False, "message": type(e).__name__}
 
 
 def _reject_raw_filter_if_disallowed(filter_raw: str | None, index_name: str | None) -> None:
@@ -613,6 +653,44 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _twin_entry(result: Any, position: int) -> dict[str, Any]:
+    """Extract the dedupe-relevant fields from one backend ``Result``.
+
+    Identity comes from the vault namespace first (``vault_path``), then an
+    http(s) ``source_url`` (URL-ingested chunks carry a tmp-staging
+    ``metadata.path`` that must not shadow the shared URL, #4856 review),
+    then ``path``. A file-derived ``source_url`` is an ingest-location
+    artifact, never an identity. The http(s) URL doubles as the keep-signal
+    preserving the only citable link.
+    """
+    from digisearch.search.namespace_dedupe import is_http_url
+
+    chunk = getattr(result, "chunk", None)
+    metadata = dict(getattr(chunk, "metadata", None) or {})
+    source_url = metadata.get("source_url")
+    http_source = source_url if is_http_url(source_url) else None
+    return {
+        "path": metadata.get("vault_path") or http_source or metadata.get("path") or "",
+        "content": getattr(chunk, "content", "") or "",
+        "url": getattr(result, "url", None) or metadata.get("url") or http_source,
+        "position": position,
+    }
+
+
+def _drop_namespace_twins(results: list[Any]) -> list[Any]:
+    """Drop stale cross-namespace twin hits (#4823).
+
+    Full chunk bodies only exist pre-normalization, so this runs on backend
+    ``Result`` objects: entries collapse on exact body equality plus
+    suffix-related metadata paths, and survivors flow into ``normalize``.
+    """
+    from digisearch.search.namespace_dedupe import dedupe_namespace_copies
+
+    entries = [_twin_entry(result, position) for position, result in enumerate(results)]
+    keep = {entry["position"] for entry in dedupe_namespace_copies(entries)}
+    return [result for position, result in enumerate(results) if position in keep]
+
+
 def run_query(req: QueryRequest) -> QueryResponse:
     """Core query implementation; shared by ``POST /query`` and orchestrator invoke."""
     from digisearch.core.standard_hits import normalize_query_hit
@@ -644,6 +722,7 @@ def run_query(req: QueryRequest) -> QueryResponse:
     )
     response = query_index(q, index_name=req.index_name)
     results = response.results
+    results = _drop_namespace_twins(results)
     out_results: list[dict] = [normalize_query_hit(r, content_preview_max=500) for r in results]
     summary: dict[str, Any] | None = None
     use_summary = (req.response_mode or "").strip().lower() == "summary" or (
@@ -660,7 +739,13 @@ def run_query(req: QueryRequest) -> QueryResponse:
         from digisearch.http_client import format_results_table
 
         formatted = format_results_table(out_results, req.text, top_k=req.top_k)
-    total = response.total_count if response.total_count is not None else len(results)
+    total: int | None
+    if response.total_count is not None:
+        total = response.total_count
+    elif req.include_total_count:
+        total = None
+    else:
+        total = len(results)
     effective = effective_query_mode(mode, response.backend)
     if effective != mode:
         logger.info(
@@ -688,7 +773,19 @@ def run_query(req: QueryRequest) -> QueryResponse:
 @app.post("/query", response_model=QueryResponse)
 def api_query(req: QueryRequest) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
-    return run_query(req)
+    try:
+        return run_query(req)
+    except CorpusNotSeededError as exc:
+        # 503, not 500: the corpus is a dependency that is not ready yet, and
+        # the next container boot retries the seed (#5045). An unseeded index
+        # must never look like a query that legitimately matched nothing.
+        # `detail` stays a string: the registered digibase error handler renders
+        # `HTTPException.detail` verbatim into `error.message`, and a dict here
+        # would reach API consumers as a Python repr.
+        raise HTTPException(
+            status_code=503,
+            detail=f"corpus_not_seeded: {exc}",
+        ) from exc
 
 
 class OrchestratorToolsRequest(BaseModel):
@@ -705,7 +802,7 @@ class OrchestratorInvokeRequest(BaseModel):
 
     tool: str = Field(
         ...,
-        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search | digisearch_web_search",
+        description="digisearch | digisearch_fetch_all | digisearch_research_delegate | web_search",
     )
     arguments: dict[str, Any] = Field(default_factory=dict)
     default_index_name: str | None = Field(
@@ -793,7 +890,6 @@ class OrchestratorInvokeResponse(BaseModel):
         | OrchestratorFetchAllData
         | ResearchTurnOutput
         | WebSearchResponse
-        | WebSearchData
         | MonitorRun
         | MonitorRunsData
         | Webset
@@ -825,12 +921,10 @@ def _research_turn_available() -> bool:
 def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
     """Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
-    from digisearch.web_exa import is_exa_configured
 
     tools = build_orchestrator_tool_manifest(
         req.index_config,
         include_research_delegate=_research_turn_available(),
-        include_web_search=is_exa_configured(),
     )
     return OrchestratorToolsResponse(tools=tools)
 
@@ -1051,6 +1145,22 @@ def _invoke_webset_tool(tool: str, args: dict[str, Any]) -> OrchestratorInvokeRe
     return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
 
+def _orchestrator_run_query(qreq: QueryRequest, tool: str) -> OrchestratorInvokeResponse:
+    """Run a hub-dispatched query, mapping an unseeded corpus onto the error shape.
+
+    digigraph reads ``inv["ok"]`` (``digisearch_tools.py``) and surfaces
+    ``error`` when it is false, so returning ``ok=False`` here is what turns
+    "zero hits" into a diagnosable failure instead of a confident non-answer
+    (#5045). Staying on this function's own ``ok=False`` convention also keeps
+    the HTTP status 200, which is what the hub's manifest/invoke client expects.
+    """
+    try:
+        resp = run_query(qreq)
+    except CorpusNotSeededError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
+    return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=resp)
+
+
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one digisearch orchestrator tool by name (hub dispatch)."""
@@ -1073,13 +1183,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         )
         if not qreq.text.strip():
             return OrchestratorInvokeResponse(ok=False, error="query is required")
-        resp = run_query(qreq)
-        return OrchestratorInvokeResponse(
-            ok=True,
-            service="digisearch",
-            tool=tool,
-            data=resp,
-        )
+        return _orchestrator_run_query(qreq, tool)
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
         page_size = min(100, _resolve_fetch_all_max(None))
@@ -1120,7 +1224,10 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 # Exhaustive pagination must not reorder each partial page (#2441).
                 skip_rerank=True,
             )
-            resp = run_query(qreq)
+            try:
+                resp = run_query(qreq)
+            except CorpusNotSeededError as exc:
+                return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
             payload = resp.model_dump(mode="json")
             results = payload.get("results") or []
             if not results:
@@ -1216,13 +1323,16 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         )
 
     if tool == TOOL_WEB_SEARCH:
-        try:
-            from digisearch.web_search.service import run_web_search
-        except ImportError as e:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Install digisearch[web-search] for web_search: {e}",
-            ) from e
+        from digisearch.web_providers import (
+            UnknownProviderError,
+            WebProviderBadRequestError,
+            WebProviderCapabilityError,
+            WebProviderError,
+            WebProviderNotConfiguredError,
+            WebProviderUnavailableError,
+            get_provider,
+        )
+
         qtext = str(args.get("query") or "").strip()
         if not qtext:
             return OrchestratorInvokeResponse(ok=False, error="query is required")
@@ -1246,6 +1356,22 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         # ok:False rather than a silent fallback to the default (#4165).
         if args.get("recency_days") is not None:
             web_kwargs["recency_days"] = args["recency_days"]
+        # Same rule for the #4711 provider-selection args: absent means the
+        # model default ("auto" -> in-house), a present-but-invalid value is a
+        # clean ok:False, never a silent fallback to another provider.
+        if args.get("provider") is not None:
+            web_kwargs["provider"] = str(args["provider"])
+        if args.get("purpose") is not None:
+            web_kwargs["purpose"] = str(args["purpose"])
+        if args.get("effort") is not None:
+            web_kwargs["effort"] = str(args["effort"])
+        if args.get("offset") is not None:
+            start = _coerce_web_search_offset(args.get("offset"))
+            if start is None:
+                return OrchestratorInvokeResponse(
+                    ok=False, error="offset must be a non-negative integer"
+                )
+            web_kwargs["offset"] = start
         try:
             web_req = WebSearchRequest(**web_kwargs)
         except ValidationError as e:
@@ -1255,10 +1381,28 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 ok=False, error=f"invalid web_search input: {summarize_validation_error(e)}"
             )
         try:
-            resp = run_web_search(web_req)
+            resp = get_provider(web_req.provider).search(web_req)
+        except UnknownProviderError as e:
+            return OrchestratorInvokeResponse(ok=False, error=str(e))
+        except (WebProviderNotConfiguredError, WebProviderUnavailableError) as e:
+            # Missing key / missing optional extra: ok:False, never a 4xx/5xx
+            # that would cancel a caller's run.
+            return OrchestratorInvokeResponse(ok=False, error=str(e))
+        except WebProviderCapabilityError as e:
+            return OrchestratorInvokeResponse(ok=False, error=str(e))
         except WebSearchConfigError as e:
             return OrchestratorInvokeResponse(ok=False, error=f"invalid web_search config: {e}")
-        except WebSearchProviderError as e:
+        except WebProviderBadRequestError as e:
+            # Caller error, not an outage: info-level so it does not page
+            # operators as a "provider failure" (#4711 review).
+            logger.info("web_search rejected input: %s", e)
+            return OrchestratorInvokeResponse(
+                ok=False,
+                error=str(e),
+                retryable=e.retryable,
+                status_code=e.status_code,
+            )
+        except (WebProviderError, WebSearchProviderError) as e:
             # Provider failures are soft in-envelope errors, never a 500 that
             # can cancel a caller's run (#4192). The envelope is HTTP-ok, so
             # log here to keep provider outages visible to operators.
@@ -1275,45 +1419,6 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             tool=tool,
             data=resp,
         )
-
-    if tool == TOOL_DIGISEARCH_WEB_SEARCH:
-        from digisearch import web_exa
-
-        if not web_exa.is_exa_configured():
-            return OrchestratorInvokeResponse(ok=False, error="EXA_API_KEY is not set")
-        qtext = str(args.get("query") or "").strip()
-        if not qtext:
-            return OrchestratorInvokeResponse(ok=False, error="query is required")
-        stype = str(args.get("search_type") or "auto")
-        if stype not in web_exa.VALID_SEARCH_TYPES:
-            return OrchestratorInvokeResponse(ok=False, error=f"invalid search_type: {stype!r}")
-        n_raw = args.get("num_results", 8)
-        start = _coerce_web_search_offset(args.get("offset"))
-        if start is None:
-            return OrchestratorInvokeResponse(
-                ok=False, error="offset must be a non-negative integer"
-            )
-        inc = args.get("include_domains")
-        exc = args.get("exclude_domains")
-        try:
-            data = web_exa.exa_search(
-                qtext,
-                search_type=stype,  # type: ignore[arg-type]
-                num_results=n_raw if isinstance(n_raw, int) and not isinstance(n_raw, bool) else 8,
-                offset=start,
-                category=args.get("category"),
-                contents_text=bool(args.get("contents_text", False)),
-                output_schema=args.get("output_schema")
-                if isinstance(args.get("output_schema"), dict)
-                else None,
-                include_domains=inc if isinstance(inc, list) else None,
-                exclude_domains=exc if isinstance(exc, list) else None,
-            )
-        except (web_exa.ExaError, ValueError) as e:
-            # Beyond-cap pages land here as the explicit ExaPageOutOfRangeError
-            # message — ok:false, never a silently truncated page (#4241).
-            return OrchestratorInvokeResponse(ok=False, error=str(e))
-        return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
     if tool == TOOL_DIGISEARCH_MONITORS_TRIGGER:
         watch_id = str(args.get("watch_id") or "").strip()
@@ -1391,26 +1496,42 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
 
 @app.post("/v1/web_search", response_model=WebSearchResponse | WebSearchErrorResponse)
 def v1_web_search(req: WebSearchRequest) -> WebSearchResponse | WebSearchErrorResponse:
-    """Search the public web (searxng with ddgs fallback, fetch + extract enrichment).
+    """Search the public web through a swappable provider (#4711).
+
+    ``provider="auto"`` (the default) is always the in-house searxng→ddgs
+    path — no external API key can reroute it. Naming a provider selects that
+    provider fail-closed: unknown name -> 400, key missing -> 503, capability
+    the provider lacks -> 400.
 
     Provider failures (429 / 5xx / connection / timeout) return HTTP 200 with
     the soft ``{"ok": false, ...}`` envelope instead of a 500 (#4192).
     """
+    from digisearch.web_providers import (
+        UnknownProviderError,
+        WebProviderBadRequestError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+        get_provider,
+    )
+
     try:
-        from digisearch.web_search.service import run_web_search
-    except ImportError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Install digisearch[web-search] for /v1/web_search: {e}",
-        ) from e
+        provider = get_provider(req.provider)
+    except UnknownProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     try:
-        return run_web_search(req)
+        return provider.search(req)
+    except (WebProviderNotConfiguredError, WebProviderUnavailableError) as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except (WebProviderBadRequestError, WebProviderCapabilityError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except WebSearchConfigError as e:
         raise HTTPException(
             status_code=503,
             detail=f"invalid web_search config: {e}",
         ) from e
-    except WebSearchProviderError as e:
+    except (WebProviderError, WebSearchProviderError) as e:
         # HTTP 200 soft envelope; log so the failure is still visible to
         # status-based monitoring (a 5xx no longer surfaces it).
         logger.warning("web_search provider failure: %s", e)
@@ -1421,121 +1542,98 @@ def v1_web_search(req: WebSearchRequest) -> WebSearchResponse | WebSearchErrorRe
         )
 
 
-class ExaWebSearchRequest(BaseModel):
-    """Request for POST /v1/digisearch_web_search (EXA live web search, optional provider)."""
-
-    query: str = Field(..., description="Natural-language web query.")
-    search_type: str = Field(
-        default="auto", description="instant|fast|auto|deep-lite|deep|deep-reasoning."
-    )
-    num_results: int = Field(default=8, ge=1, le=100)
-    offset: int = Field(
-        default=0,
-        ge=0,
-        description=(
-            "Page start over one enlarged EXA window (EXA POST /search has no offset), so "
-            "`results[offset : offset + num_results]` come from a single window fetched with "
-            "`numResults = offset + num_results`. `offset + num_results` must stay within "
-            "EXA_MAX_RESULTS (100): a page past the cap is rejected 400, never silently "
-            "truncated. `offset=0` (default) is the unpaged call."
-        ),
-    )
-    category: str | None = None
-    contents_text: bool = False
-    output_schema: dict[str, Any] | None = None
-    system_prompt: str | None = None
-    include_domains: list[str] | None = None
-    exclude_domains: list[str] | None = None
-
-
 class WebContentsRequest(BaseModel):
-    """Request for POST /v1/web_contents (EXA page fetch for known URLs)."""
+    """Request for POST /v1/web_contents (page fetch for known URLs)."""
 
     urls: list[str] = Field(..., min_length=1, max_length=50, description="Known URLs to fetch.")
     text: bool = True
     highlights: bool = False
     summary: bool = False
     highlight_query: str | None = None
+    provider: str = Field(
+        default="exa",
+        max_length=64,
+        description="Provider that fetches the pages; only `exa` implements it today.",
+    )
 
 
 class WebAnswerRequest(BaseModel):
-    """Request for POST /v1/web_answer (EXA grounded answer)."""
+    """Request for POST /v1/web_answer (grounded live-web answer)."""
 
     question: str = Field(..., description="Question to answer from the live web.")
+    provider: str = Field(
+        default="exa",
+        max_length=64,
+        description="Provider that answers; only `exa` implements it today.",
+    )
 
 
-@app.post("/v1/digisearch_web_search", response_model=WebSearchData)
-def api_web_search(req: ExaWebSearchRequest) -> WebSearchData:
-    """Live web search via EXA (dormant without EXA_API_KEY; not the owned corpus).
+def _capability_provider(raw: str):
+    """Resolve a capability-bearing provider (contents/answer) fail-closed.
 
-    Mounted at ``/v1/digisearch_web_search`` (not ``/v1/web_search``): the first-party
-    searxng→ddgs web search owns ``/v1/web_search`` on develop.
-
-    ``offset`` pages the recall set (client-side slice of one enlarged window —
-    EXA ``POST /search`` has no offset). A window reaching past the
-    ``web_exa.EXA_MAX_RESULTS`` (100) cap is 400 with the explicit
-    :class:`digisearch.web_exa.ExaPageOutOfRangeError` message; a negative
-    offset is 422 (``ge=0``). ``offset=0`` (default) is byte-identical to the
-    unpaged call (#4234, #4241).
+    Unknown name -> 400, missing key / missing optional extra -> 503. The
+    capability check itself happens on the call: a provider without it answers
+    400 with an explicit "does not support …" instead of silently no-oping.
     """
-    from digisearch import web_exa
+    from digisearch.web_providers import UnknownProviderError, get_provider
 
-    if not web_exa.is_exa_configured():
-        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
-    if req.search_type not in web_exa.VALID_SEARCH_TYPES:
-        raise HTTPException(status_code=400, detail=f"invalid search_type: {req.search_type!r}")
     try:
-        return web_exa.exa_search(
-            req.query,
-            search_type=req.search_type,  # type: ignore[arg-type]
-            num_results=req.num_results,
-            offset=req.offset,
-            category=req.category,
-            contents_text=req.contents_text,
-            output_schema=req.output_schema,
-            system_prompt=req.system_prompt,
-            include_domains=req.include_domains,
-            exclude_domains=req.exclude_domains,
-        )
-    except ValueError as e:
+        return get_provider(raw)
+    except UnknownProviderError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except web_exa.ExaError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.post("/v1/web_contents")
 def api_web_contents(req: WebContentsRequest) -> dict[str, Any]:
-    """Fetch known URLs via EXA contents (dormant without EXA_API_KEY)."""
-    from digisearch import web_exa
+    """Fetch known URLs via the named provider (exa by default)."""
+    from digisearch.web_providers import (
+        WebProviderBadRequestError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+    )
 
-    if not web_exa.is_exa_configured():
-        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
+    provider = _capability_provider(req.provider)
     try:
-        return web_exa.exa_contents(
+        return provider.fetch_contents(
             req.urls,
             text=req.text,
             highlights=req.highlights,
             summary=req.summary,
             highlight_query=req.highlight_query,
         )
+    except (WebProviderNotConfiguredError, WebProviderUnavailableError) as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except (WebProviderBadRequestError, WebProviderCapabilityError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except web_exa.ExaError as e:
+    except WebProviderError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.post("/v1/web_answer")
 def api_web_answer(req: WebAnswerRequest) -> dict[str, Any]:
-    """Grounded answer from the live web via EXA (dormant without EXA_API_KEY)."""
-    from digisearch import web_exa
+    """Grounded answer from the live web via the named provider (exa by default)."""
+    from digisearch.web_providers import (
+        WebProviderBadRequestError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+    )
 
-    if not web_exa.is_exa_configured():
-        raise HTTPException(status_code=503, detail="EXA_API_KEY is not set")
+    provider = _capability_provider(req.provider)
     try:
-        return web_exa.exa_answer(req.question)
+        return provider.answer(req.question)
+    except (WebProviderNotConfiguredError, WebProviderUnavailableError) as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except (WebProviderBadRequestError, WebProviderCapabilityError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except web_exa.ExaError as e:
+    except WebProviderError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
@@ -1864,7 +1962,7 @@ def api_get_monitor_run(
 
 @app.post("/v1/monitors/tick")
 def api_tick_monitors(request: Request) -> dict[str, Any]:
-    """Run every due + enabled watch once (digiclaw wake-up clock, §4.8)."""
+    """Run every due + enabled watch once (digibot wake-up clock, §4.8)."""
     store = get_monitor_store()
     runs = tick_due_watches(store=store)
     return {"runs": [run.model_dump(mode="json") for run in runs]}
@@ -1912,6 +2010,29 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
     if not isinstance(payload, dict):
         return _monitor_error(
             request, 422, "exa_payload_invalid", "EXA webhook payload must be a JSON object."
+        )
+    # Art. 9 (spec DIG-912 §5.4, acceptance test 7). Two floors miss this route on
+    # purpose-and-consequence: `_digisearch_path_scopes` returns None for it, so the
+    # digikey layer treats it as public, and it sits outside every declared ingest
+    # prefix, so `check_route("digisearch", ...)` allows it and leaf 3's admission
+    # middleware passes it through unscreened. The digisearch surface registry is the
+    # only remaining place a screen can stand, which is what "an explicit mechanism,
+    # not by path" means. A route that is public but undeclared is REFUSED here rather
+    # than waved through - otherwise losing the registration would silently unscreen
+    # the webhook (finding F11).
+    surface = _auth_exempt_surface(request)
+    if surface is None:
+        return _monitor_error(
+            request,
+            403,
+            "art9:surface_unregistered",
+            "EXA webhook is an auth-exempt route with no Art. 9 surface declared for it.",
+        )
+    try:
+        require_art9_clear(surface, payload)
+    except Art9SurfaceRefusal as refusal:
+        return _monitor_error(
+            request, 403, refusal.result.reason, f"Art. 9 screening refused: {refusal}"
         )
     try:
         exa_monitor_id = exa_monitor_id_from_payload(payload)
@@ -2356,3 +2477,42 @@ def api_export_webset(
 
 register_fastapi_error_handlers(app, service="digisearch")
 setup_otel_fastapi(app, service_name="digisearch", service_version=__version__)
+
+
+# --- Art. 9 surfaces for the routes digikey leaves public ---------------------
+# Runs last, after every route above has been registered. Keys are the router's own
+# path templates read off `app.routes` - a hand-written route string is exactly how a
+# registry drifts from the app and stops covering anything (finding F3) - and exemption
+# is decided by probing the app's own `_digisearch_path_scopes`, never by a second,
+# possibly-disagreeing copy of the policy.
+def _register_auth_exempt_surfaces() -> Mapping[str, str]:
+    """Declare an Art. 9 surface for every served route digikey leaves public.
+
+    Returns path template -> surface id.
+    """
+    surfaces: dict[str, str] = {}
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if not isinstance(path, str) or not methods:
+            continue
+        if any(_digisearch_path_scopes(method, path) is None for method in sorted(methods)):
+            surface = f"{SURFACE_KIND_HTTP}:{path}"
+            declare_art9_surface(surface, SURFACE_KIND_HTTP)
+            surfaces[path] = surface
+    return MappingProxyType(surfaces)
+
+
+AUTH_EXEMPT_SURFACES: Mapping[str, str] = _register_auth_exempt_surfaces()
+
+
+def _auth_exempt_surface(request: Request) -> str | None:
+    """Surface id screening ``request``, or ``None`` when its route is not public.
+
+    Looks the route up by the template the router matched, falling back to the request
+    path (the two coincide for the literal routes that can be auth-exempt).
+    """
+    template = getattr(request.scope.get("route"), "path", None)
+    if not isinstance(template, str):
+        template = request.url.path
+    return AUTH_EXEMPT_SURFACES.get(template)

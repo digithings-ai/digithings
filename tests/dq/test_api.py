@@ -8,6 +8,10 @@ from unittest.mock import patch
 import pytest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
+from digiquant.nautilus_runner import (
+    RETURNS_SERIES_MISSING,
+    RETURNS_SERIES_MISSING_SYMBOLS,
+)
 from digiquant.server import app
 from fastapi.testclient import TestClient
 
@@ -25,6 +29,23 @@ def _api_error_message(data: dict) -> str:
     if isinstance(err, dict) and err.get("message"):
         return str(err["message"])
     return str(data.get("detail", ""))
+
+
+def _assert_chart_series_is_chartable(missing: list[str]) -> None:
+    """The chart series is not withheld for want of a verifiable analyzer alias.
+
+    It is derived from the account report's own balance path, so a run whose report
+    carries rows can chart it. ``RETURNS_SERIES_MISSING_SYMBOLS`` is the per-symbol
+    spelling of the same name and is likewise absent; whatever remains on ``missing`` is
+    a metric that was genuinely absent, pinned by the balance-path suites.
+    """
+    assert RETURNS_SERIES_MISSING not in missing, (
+        f"chart series withheld although the report carries a balance path: {missing}"
+    )
+    for name in missing:
+        assert not name.startswith(RETURNS_SERIES_MISSING_SYMBOLS), (
+            f"a symbol's chart series was withheld: {missing}"
+        )
 
 
 @pytest.fixture
@@ -101,7 +122,12 @@ class TestRunBacktest:
         data = r.json()
         for field in SAMPLE_BACKTEST_RESULT_FIELDS:
             assert field in data, f"Missing field: {field}"
-        assert data["status"] == "ok"
+        # A real run charts: the series comes off the account's own balance path, so
+        # the pinned nautilus_trader's unverifiable alias is no longer consulted.
+        assert data["status"] in {"ok", "partial"}, (
+            f"run did not complete: status={data['status']}"
+        )
+        _assert_chart_series_is_chartable(data["missing"])
         assert data["symbols"] == SAMPLE_BACKTEST_PAYLOAD["symbols"]
         # Multi-symbol runs use "multi-" prefix; single-symbol uses "nautilus-".
         assert data["run_id"].startswith(("nautilus-", "multi-"))
@@ -286,7 +312,9 @@ class TestRunPipeline:
         assert r.status_code == 200
         data = r.json()
         assert "backtest" in data and "optimize" in data and "export" in data
-        assert data["backtest"]["status"] == "ok"
+        # not withheld for the chart series — it comes off the balance path.
+        assert data["backtest"]["status"] == "partial"
+        _assert_chart_series_is_chartable(data["backtest"]["missing"])
         assert data["optimize"]["status"] == "ok"
         assert data["export"]["status"] == "ok"
 

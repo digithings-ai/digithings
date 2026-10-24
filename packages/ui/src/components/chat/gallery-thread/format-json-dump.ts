@@ -1,3 +1,20 @@
+/**
+ * Upper bound on the text repairPartialJson will scan. Tool arguments and
+ * results arrive from the model stream and nothing bounds their length, so
+ * the repair must never see an unbounded string: a long whitespace run used
+ * to cost a quadratic scan and froze the render thread (CodeQL
+ * js/polynomial-redos, alert 196, DIG-4818). Longer text is shown raw, never
+ * cut.
+ *
+ * The cap guards the repair path only. Valid JSON of any size still goes
+ * through JSON.parse and is pretty-printed as before; the one behaviour
+ * change above the cap is that partial (unparsable) JSON longer than the cap
+ * is shown raw instead of repaired and pretty-printed. The cap is defence in
+ * depth: the whitespace strip itself is linear now, but every regex in the
+ * repair stays bounded by this budget.
+ */
+export const MAX_REPAIR_INPUT_CHARS = 64 * 1024;
+
 /** Pretty-print tool args the same way results already use JSON.stringify(..., null, 2). */
 export function formatJsonDump(value: unknown): string {
   if (value === undefined) return "";
@@ -7,6 +24,14 @@ export function formatJsonDump(value: unknown): string {
     try {
       return JSON.stringify(JSON.parse(trimmed), null, 2);
     } catch {
+      const repaired = repairPartialJson(trimmed);
+      if (repaired !== undefined) {
+        try {
+          return JSON.stringify(JSON.parse(repaired), null, 2);
+        } catch {
+          /* fall through to raw text */
+        }
+      }
       return value;
     }
   }
@@ -27,7 +52,61 @@ export function formatToolDurationMs(ms: number): string {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 }
 
-export function humanizeToolName(toolName: string, _argsText?: string): string {
-  void _argsText;
-  return toolName.trim() || "tool";
+/**
+ * Close a truncated JSON prefix (streaming tool args) so it can be parsed:
+ * closes an open string, drops a dangling key / trailing comma / colon, and
+ * closes open objects and arrays. Returns undefined when the text is not a
+ * JSON object/array prefix.
+ */
+export function repairPartialJson(text: string): string | undefined {
+  const src = text.trim();
+  if (!src || (src[0] !== "{" && src[0] !== "[")) return undefined;
+  // Cap before any scan of the text: the repair below runs regexes over it.
+  // Defence in depth for those regexes, not the fix itself: the quadratic
+  // whitespace strip is gone (trimEnd below).
+  if (src.length > MAX_REPAIR_INPUT_CHARS) return undefined;
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const ch of src) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") {
+      if (stack.pop() !== (ch === "}" ? "{" : "[")) return undefined;
+    }
+  }
+  let out = src;
+  if (inString) {
+    if (escaped) out = out.slice(0, -1);
+    out += '"';
+  }
+  for (let i = 0; i < 4; i++) {
+    const before = out;
+    // trimEnd, not out.replace(/\s+$/, ""): the regex re-tries the anchor at
+    // every position of a whitespace run and costs quadratic time on a long
+    // run, which froze the render thread (CodeQL js/polynomial-redos, alert
+    // 196). Same result, one linear pass.
+    out = out.trimEnd();
+    out = out.replace(/,$/, "");
+    out = out.replace(/:$/, "");
+    // dangling key with no value inside an object: {"a":1,"b"
+    if (stack[stack.length - 1] === "{") out = out.replace(/([{,])\s*"(?:[^"\\]|\\.)*"$/, "$1");
+    out = out.replace(/,$/, "");
+    // partial literal (tru, fals, nul) or number ending in '-' / '.' / 'e'
+    // No lookbehind here: a lookbehind literal is a parse-time SyntaxError on
+    // Safari below 16.4 and on older embedded WebViews, and this module is
+    // imported by the rendered thread — one unparsable regex would take the
+    // whole thread down. The prefix is captured and written back instead.
+    out = out.replace(/([:\[,]\s*)(t|tr|tru|f|fa|fal|fals|n|nu|nul)$/, "$1");
+    out = out.replace(/(\d)[.eE+-]+$/, "$1").replace(/([:\[,]\s*)-$/, "$1");
+    if (out === before) break;
+  }
+  while (stack.length) out += stack.pop() === "{" ? "}" : "]";
+  return out;
 }

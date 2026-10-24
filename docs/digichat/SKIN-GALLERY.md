@@ -247,7 +247,11 @@ render subtly wrong with no error. These five have each caused a real bug:
 3. **The font variable.** The `digichat` theme resolves
    `--font-geist-mono`. If it is undefined the whole `font-family` declaration
    is invalid and the skin falls back to the page font — so the catalog root
-   layout loads `Geist_Mono` even though it is otherwise isolated.
+   layout must load the mono face even though it is otherwise isolated. Since
+   DIG-2375 that load lives in `src/app/fonts.ts` (the app's one font config,
+   which sets `--font-mono-face`); the layout only applies its
+   `fontVariables` class, and `digichat-app-theme.css` aliases
+   `--font-geist-mono` to that face so the skin CSS keeps resolving it.
 4. **The prefs host.** No `EmbedChatPrefsProvider` above the skin means
    `useEmbedChatPrefsOptional()` returns `null`, `enableSlash` is false, and the
    `/` palette plus `@`-mentions are silently absent.

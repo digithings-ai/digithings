@@ -25,9 +25,9 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M096 = MIGRATIONS_DIR / "096_workspaces_tenancy_tables.sql"
-M097 = MIGRATIONS_DIR / "097_workspaces_tenant_columns.sql"
-M098 = MIGRATIONS_DIR / "098_workspaces_rls_policies.sql"
+M096 = MIGRATIONS_DIR / "prod" / "096_workspaces_tenancy_tables.sql"
+M097 = MIGRATIONS_DIR / "prod" / "097_workspaces_tenant_columns.sql"
+M098 = MIGRATIONS_DIR / "prod" / "098_workspaces_rls_policies.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -131,9 +131,9 @@ def sql_098(raw_098: str) -> str:
 
 def test_migration_numbers_are_096_097_098_only(sql_096: str, sql_097: str, sql_098: str) -> None:
     """T0 allocates 096–098; must not CREATE a 099_* migration (K3 owns 099)."""
-    assert sorted(MIGRATIONS_DIR.glob("096_*.sql")) == [M096]
-    assert sorted(MIGRATIONS_DIR.glob("097_*.sql")) == [M097]
-    assert sorted(MIGRATIONS_DIR.glob("098_*.sql")) == [M098]
+    assert sorted(MIGRATIONS_DIR.rglob("096_*.sql")) == [M096]
+    assert sorted(MIGRATIONS_DIR.rglob("097_*.sql")) == [M097]
+    assert sorted(MIGRATIONS_DIR.rglob("098_*.sql")) == [M098]
     # Sibling K3 may land 099 on its own branch; assert T0 SQL never creates it.
     for sql in (sql_096, sql_097, sql_098):
         assert not re.search(r"\b099_", sql), "T0 must not reference migration 099"
@@ -143,7 +143,7 @@ def test_migration_numbers_are_096_097_098_only(sql_096: str, sql_097: str, sql_
             re.IGNORECASE,
         )
     numbers = sorted(
-        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.rglob("[0-9][0-9][0-9]_*.sql")
     )
     assert numbers.index(96) == numbers.index(95) + 1
     assert numbers.index(97) == numbers.index(96) + 1

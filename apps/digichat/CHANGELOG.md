@@ -1,4 +1,339 @@
+## [2.7.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.9...digichat-v2.7.0) (2026-10-24)
+
+The de-slop release: one canonical token set across the chat, the desk and the
+terminal; the product chat moves to `/chat` with the menu on `?mode=menu`; a
+scroll setting that can leave the stream alone; the gate budget as a cube bar;
+and the keyboard retracts on every way a turn starts.
+
+### Features
+
+* **digichat:** the product chat is served at `/chat`, the chooser stays on `?mode=menu` ([#6356](https://github.com/digithings-ai/digithings/pull/6356))
+* **digichat:** the gate's turn budget is a cube bar in the composer toolbar, sharing one fill scale with the context meter ([#6358](https://github.com/digithings-ai/digithings/pull/6358))
+* **digichat:** a scroll setting that follows the stream or leaves it alone ([#6365](https://github.com/digithings-ai/digithings/pull/6365))
+* **ui:** canonical surface/ink/hair/accent/danger roles replace the shadcn semantic utilities across the chat ([#6338](https://github.com/digithings-ai/digithings/pull/6338))
+
+### Bug Fixes
+
+* **digichat:** the keyboard retracts on every way a turn starts, and after send on a phone ([#6363](https://github.com/digithings-ai/digithings/pull/6363), [#6367](https://github.com/digithings-ai/digithings/pull/6367))
+* **digichat:** the work chain no longer pushes the loading row down at handoff ([#6361](https://github.com/digithings-ai/digithings/pull/6361))
+
+## [2.6.9](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.8...digichat-v2.6.9) (2026-10-23)
+
+One density token set across the thread, and raw backend ids everywhere: the
+trace, `/tools`, the model toolbar, exports and mobile all name the tool the
+backend actually calls. The model picker is a provider path tree, the trial
+`/tools` page lists every tool its agent is bound to, and house chats stay on
+the 1017 checkpoint. Limits move into YAML per deployment.
+
+### Bug Fixes
+
+* **digichat:** raw backend tool ids everywhere — the streaming trace, `/tools`, the model toolbar, exports and mobile show the id the backend calls (`<service>_<tool>`), not a humanised label. The humanising layer is deleted, not bypassed ([#6320](https://github.com/digithings-ai/digithings/pull/6320), [#6324](https://github.com/digithings-ai/digithings/pull/6324))
+* **digichat:** one density token set across the thread. The phone keeps its airy default after a prefs reset, the floating action bar no longer paints over the next turn's first line, and the reference composer resolves `--composer-padding` instead of falling back to 0 ([#6304](https://github.com/digithings-ai/digithings/pull/6304))
+* **digichat:** the trial deployment's tool list had lost eight of the agent's 42 tools in a merge. All 42 are back, in the agent's groups, with raw ids ([#6334](https://github.com/digithings-ai/digithings/pull/6334))
+* **digichat:** the model chip and the lock agree. No open-models button over a locked, one-model list ([#6335](https://github.com/digithings-ai/digithings/pull/6335))
+* **digichat:** house chats run the 1017 checkpoint on the CheaperInference API — it reasons only when asked, and the chain asks ([#6344](https://github.com/digithings-ai/digithings/pull/6344))
+* **digichat:** the signed trial proof is removed from the trial deployment, as ordered (DIG-5111, [#6265](https://github.com/digithings-ai/digithings/pull/6265))
+* **ui:** the overlay scrollbars come from one copy of the rule blocks, and the composer picker closes through its own scope on the back key ([#6289](https://github.com/digithings-ai/digithings/pull/6289), [#6286](https://github.com/digithings-ai/digithings/pull/6286))
+* **digichat:** the invite-only embed with no key answers the site 404 at the Worker, and the in-image helpdesk MCP sees its own loopback Host ([#6243](https://github.com/digithings-ai/digithings/pull/6243), [#6274](https://github.com/digithings-ai/digithings/pull/6274))
+
+### Features
+
+* **digichat:** `/models` is a provider path tree — models grouped by id segments, bare modes as their own rows, and a typed filter that searches collapsed providers ([#6301](https://github.com/digithings-ai/digithings/pull/6301))
+* **digichat:** the trial `/tools` page lists all 42 tools the Foundry agent is bound to, in the agent's own groups, each reading On with a checked, non-toggling switch; the house page lists DigiSearch and DigiVault ([#6297](https://github.com/digithings-ai/digithings/pull/6297), [#6298](https://github.com/digithings-ai/digithings/pull/6298))
+* **digichat:** YAML limits for every deployment gate — per-deployment token, cost and rate limits live in config, not code ([#6199](https://github.com/digithings-ai/digithings/pull/6199))
+* **digichat:** house is the checked-in default: one `defaults.yaml` that hosts extend, with trial and OCC clearing what they do not want ([#6217](https://github.com/digithings-ai/digithings/pull/6217))
+* **digichat:** the session starts on Auto when the deployment's default is the auto model ([#6326](https://github.com/digithings-ai/digithings/pull/6326))
+* **ui:** the theme toggle is shared with `/chatbot` and the embed instead of three separate controls ([#6166](https://github.com/digithings-ai/digithings/pull/6166))
+
+## [2.6.8](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.7...digichat-v2.6.8) (2026-10-22)
+
+Reasoning is on for every chat, and `/effort` sets how hard the model thinks.
+The model name and picker are back on by default on digithings.ai and the OCC
+embed. Exports save on phones and inside embeds. A stopped or failed turn stops
+animating. `/tools` lists each service with its tools again. The `/chat` page
+has proper loading, 404 and failure states. Every export path is redacted.
+
+### Bug Fixes
+
+* **digichat:** the model name and picker are on by default for the house chat and the OCC embed. The house chat keeps its per-visitor Premium window. OCC carries no Premium meter and no tokens-per-minute guardrail. A tenant can still opt out with `allowPicker: false` or `occPicker: false`. 2.6.6 had made the picker opt-in ([#6237](https://github.com/digithings-ai/digithings/pull/6237))
+* **digichat:** Markdown and HTML exports save on phones and inside embedded chats. The file link now stays valid long enough for the browser's save confirm. Phones use the share sheet where the page allows it. When the tap that started the export has expired, a Save button asks for one more tap ([#6244](https://github.com/digithings-ai/digithings/pull/6244))
+* **digichat:** a stopped or failed turn stops its animations ([#6236](https://github.com/digithings-ai/digithings/pull/6236))
+* **digichat:** `/tools` lists each service as a tree with its tools under it, as before the 2.6.6 palette change ([#6233](https://github.com/digithings-ai/digithings/pull/6233))
+* **web:** the `/chat` page shows loading, not-found and failure states instead of a blank frame ([#6223](https://github.com/digithings-ai/digithings/pull/6223))
+* **digichat:** every export path is redacted. The clipboard copy, the `mailto:` body, the `.txt` export and the minimal HTML export now go through the shared redactor, as the Markdown download already did. A `)` or a backtick inside a secret no longer leaks the rest of the value ([#6238](https://github.com/digithings-ai/digithings/pull/6238), [#6257](https://github.com/digithings-ai/digithings/pull/6257))
+* **digichat:** a trial starter asks a full question instead of a fragment ([#6185](https://github.com/digithings-ai/digithings/pull/6185))
+
+### Features
+
+* **chat:** reasoning is on for every chat, and `/effort` (low/medium/high) sets the model's reasoning level where the model has one. The house model (DeepSeek V4.1 Flash 1017) only reasons when a level is sent, so with no `/effort` it gets `medium`. Foundry backends get `/effort` as `reasoning.effort` and drop it for the turn if it's refused. Which models take a level is configured in `config/model-policy.json` ([#6245](https://github.com/digithings-ai/digithings/pull/6245))
+
+### Known limits
+
+* An embedding page must allow `web-share` on the iframe for the phone share sheet. Without it, the export falls back to a download (with the extra tap when needed).
+* In the command palette, typing `/export html` and pressing Enter runs the highlighted row, which may be the Markdown export. Tapping the row works.
+* Premium spend counters are per instance, as in 2.6.7.
+
+## [2.6.7](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.6...digichat-v2.6.7) (2026-10-22)
+
+The invite-only OCC embed loads again, a visitor who leaves or presses stop
+ends the model call, the house chat can carry a context meter, and one answer
+exports as HTML from the message menu.
+
+2.6.6 was rolled back from the digithings.ai / OCC deployment: every
+invite-token request to `/embed` answered 500.
+2.6.7 carries the fix and everything 2.6.6 shipped.
+
+### Bug Fixes
+
+* **digichat:** an embed request that carries `?token=` loads again behind the trusted-proxy entrypoint. Next now listens on `localhost`, so the token-strip rewrite stays internal and no longer becomes a 500 with no content type ([#6222](https://github.com/digithings-ai/digithings/pull/6222))
+* **digichat:** when a visitor leaves or presses stop, the entrypoint closes the upstream request, so the model call and the session's run lock end with it ([#6182](https://github.com/digithings-ai/digithings/pull/6182))
+* **digichat:** a Foundry tool-call wrapper left unclosed at the end of an answer no longer reaches the visitor ([#6182](https://github.com/digithings-ai/digithings/pull/6182))
+
+### Features
+
+* **digichat:** the composer context meter can be switched on for the house chat slugs only (`showContextMeter`, on for them unless set false, refused on any other host) ([#6213](https://github.com/digithings-ai/digithings/pull/6213))
+* **digichat:** export one answer as HTML from the message menu ([#6218](https://github.com/digithings-ai/digithings/pull/6218))
+
+### Known limits
+
+* Premium spend counters are per instance. With `DIGICHAT_TRUSTED_PROXIES` unset, anonymous visitors behind a shared ingress share one premium allowance and one guardrail bucket on that instance.
+* In the redacted `/export html`, a `)` or a backtick inside a secret leaks the rest of that value.
+* The clipboard, mailto, `.txt` and minimal-HTML exports are not redacted.
+* The live house chat publishes no models yet, so it shows no context-meter bar. Digigraph reporting the served model is a follow-up.
+
+## [2.6.6](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.5...digichat-v2.6.6) (2026-10-21)
+
+Take the chat with you and choose the model: `/export html` saves the rendered
+conversation as one self-contained HTML file, a config-driven model picker
+offers presets and a metered Premium group, one shared guardrail covers tokens
+and tool calls, one command palette, and `/theme` on
+every embedded chat.
+
+### Features
+
+* **digichat:** a config-driven model picker on digithings.ai and the OCC embed: presets first, then the newest tool-capable model of each family under the standard output-price cap, and a Premium group for manual picks metered per user per rolling day ([#6193](https://github.com/digithings-ai/digithings/pull/6193))
+* **digichat:** a shared guardrail, off unless a deployment sets it: `tokensPerMinute` on every backend and `maxToolCallsPerTurn` enforced per backend as documented; rate-limit identities come from the server-derived client IP, and `DIGICHAT_TRUSTED_PROXIES` names the ingress allowed to stamp it ([#6182](https://github.com/digithings-ai/digithings/pull/6182), shipped via [#6193](https://github.com/digithings-ai/digithings/pull/6193))
+* **digichat:** `/export html` saves the open conversation as a single self-contained HTML file, built in the browser from the rendered thread, with scripts, frames and non-http links stripped and redaction applied to the page text ([#6190](https://github.com/digithings-ai/digithings/pull/6190))
+* **digichat:** `/theme` works on every embed tenant and starts from the tenant's own theme ([#6189](https://github.com/digithings-ai/digithings/pull/6189))
+* **digichat:** worked-chain density, palette defaults and a braces tool mark ([#6180](https://github.com/digithings-ai/digithings/pull/6180))
+* **digichat:** the trial tenant's welcome and placeholder describe the sample email archive ([#6184](https://github.com/digithings-ai/digithings/pull/6184))
+
+### Bug Fixes
+
+* **digichat:** one command palette: typing `/` inside a submenu filters that pane, and tools are switched on and off only in `/tools` ([#6211](https://github.com/digithings-ai/digithings/pull/6211))
+* **ui:** the worked chain has one spacing rhythm ([#6178](https://github.com/digithings-ai/digithings/pull/6178))
+* **digichat:** MCP call arguments streamed on `mcp_call_arguments` events are shown ([#6183](https://github.com/digithings-ai/digithings/pull/6183))
+
+### Behaviour changes
+
+* **digichat:** on Container deploys the trusted-proxy entrypoint now always sits in front of Next, even with `DIGICHAT_TRUSTED_PROXIES` unset, so it can stamp the peer socket for rate-limit identity ([#6182](https://github.com/digithings-ai/digithings/pull/6182), shipped via [#6193](https://github.com/digithings-ai/digithings/pull/6193))
+
+### Known limits
+
+* Premium spend counters are per instance. With `DIGICHAT_TRUSTED_PROXIES` unset, anonymous visitors behind a shared ingress share one premium allowance and one guardrail bucket on that instance.
+* In the redacted `/export html`, a `)` or a backtick inside a secret leaks the rest of that value.
+* The clipboard, mailto, `.txt` and minimal-HTML exports are not redacted.
+* On Container deploys, a visitor who leaves or presses stop does not abort the in-flight model call: the proxy does not yet destroy the upstream request on client disconnect. The fix is in [#6182](https://github.com/digithings-ai/digithings/pull/6182) for the next release.
+* The house chat's composer context meter ([#6213](https://github.com/digithings-ai/digithings/pull/6213)) comes in the next release.
+* Exporting one answer as HTML from the message menu ([#6218](https://github.com/digithings-ai/digithings/pull/6218)) comes in the next release.
+
+## [2.6.5](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.4...digichat-v2.6.5) (2026-10-21)
+
+One caret and your own colours: every collapsible row in a turn opens with
+the same pixel chevron, and `/theme` paints the chat in any shared palette,
+light or dark.
+
+### Features
+
+* **digichat:** `/theme` picks a palette from the shared registry and a mode (`/theme aura light`); the choice paints before the first frame and persists, and pinned embeds keep their own theme ([#6122](https://github.com/digithings-ai/digithings/pull/6122))
+
+### Bug Fixes
+
+* **digichat:** the work chain, reasoning, tool group and every tool row share one caret, the square pixel chevron of the user-message mark, which turns down when its own row opens and nowhere else ([#6132](https://github.com/digithings-ai/digithings/pull/6132))
+* **chat:** the disclosure triggers announce their label once ([#6140](https://github.com/digithings-ai/digithings/pull/6140))
+* **ui:** the JSON view's whitespace repair runs in one linear pass; a partial or unparsable payload over 65,536 characters is shown raw instead of repaired ([#6135](https://github.com/digithings-ai/digithings/pull/6135))
+* **digichat:** the trial tenant's starter questions ask about the sample email archive its agent can reach ([#6179](https://github.com/digithings-ai/digithings/pull/6179))
+* **ui:** the theme provider follows every painter, and a pinned embed sets its own `theme-color` ([#6164](https://github.com/digithings-ai/digithings/pull/6164))
+* **chat:** the JSON view that renders tool arguments and results tokenizes in one pass, with no regular expression over strings ([#6129](https://github.com/digithings-ai/digithings/pull/6129))
+* **digichat:** the view-level wording has one home, so the session-preferences refusal no longer names retired command ids ([#6050](https://github.com/digithings-ai/digithings/pull/6050))
+
+## [2.6.4](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.3...digichat-v2.6.4) (2026-10-21)
+
+The chat shows the backend's own words: what the server says while it works,
+every tool argument in full, and the tool's real error under it. A turn that
+runs into the model's per-minute token limit now waits and carries on.
+
+### Bug Fixes
+
+* **chat:** the loading row shows text only when the server sent a status ("Waking up services…", a capacity countdown); a plain wait for the response is the animation alone ([#6114](https://github.com/digithings-ai/digithings/pull/6114))
+* **chat:** tool arguments and results show as full JSON in a scroll area, a tool's error sits under its arguments with the whole traceback, and server notices and errors are boxed, the errors in a faded red ([#6117](https://github.com/digithings-ai/digithings/pull/6117))
+* **digichat:** a Foundry turn that hits the model's per-minute token limit mid-stream shows a countdown, waits for the window (Retry-After, capped at 90 s) and resumes the same conversation, up to three times, then explains what happened instead of a generic outage line ([#6110](https://github.com/digithings-ai/digithings/pull/6110))
+
+## [2.6.3](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.2...digichat-v2.6.3) (2026-10-21)
+
+A turn shows one thing moving: the work block no longer appears before the
+agent has done anything, and the composer row does not open with a stray
+separator.
+
+### Bug Fixes
+
+* **chat:** a status part alone gets no work block — the loading row waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6108](https://github.com/digithings-ai/digithings/pull/6108))
+* **chat:** the composer row lists its facts without a dangling separator ([#6098](https://github.com/digithings-ai/digithings/pull/6098))
+
+## [2.6.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.1...digichat-v2.6.2) (2026-10-21)
+
+A turn shows one thing moving at a time, and a tool failure says what went
+wrong instead of looking like an outage.
+
+### Bug Fixes
+
+* **chat:** one loading affordance per turn — the dot matrix waits for the agent, and the work block takes over the moment reasoning, a tool call or the answer arrives ([#6088](https://github.com/digithings-ai/digithings/pull/6088))
+* **foundry:** a tool that refuses the call says so — the tool's own complaint reaches the failed row and the turn, not "the assistant is unavailable" ([#6086](https://github.com/digithings-ai/digithings/pull/6086))
+
 # Changelog
+
+## [2.6.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.0...digichat-v2.6.1) (2026-10-20)
+
+The trace of the agent's work gets one voice, and a tenant on an Azure AI
+Foundry agent stops advertising models it does not have.
+
+### Features
+
+* **chat:** the chain title follows the latest step — `Working — digisearch` while a tool runs, `Used 3 tools` when it is done — instead of a static word ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **foundry:** a tenant on an Azure AI Foundry agent shows no model list, names its real backend (`Azure AI Foundry`), and reports the token usage the Responses API gives it ([#6073](https://github.com/digithings-ai/digithings/pull/6073))
+* **chat:** the composer menu opens a sub-page on its current value ([#6064](https://github.com/digithings-ai/digithings/pull/6064))
+
+### Bug Fixes
+
+* **chat:** two work runs with nothing between them are one block, and the block stops working when the answer starts ([#6079](https://github.com/digithings-ai/digithings/pull/6079))
+* **chat:** the provider chip is named from the active backend ([#6025](https://github.com/digithings-ai/digithings/pull/6025))
+* **chat:** the context meter's shares stay inside the turn ([#6022](https://github.com/digithings-ai/digithings/pull/6022))
+* **digichat:** the image packages the `@digithings/catalog` workspace, so the build no longer dies on a missing module ([#6059](https://github.com/digithings-ai/digithings/pull/6059))
+* **ci:** the review-coverage check reads the check rollup through its contexts connection, so the required main check is posted again ([#6063](https://github.com/digithings-ai/digithings/pull/6063))
+
+## [2.6.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.1...digichat-v2.6.0) (2026-10-20)
+
+The composer and the trace of the agent's work, rebuilt on assistant-ui's own
+structure: one vocabulary for how much of the work a user sees, one block for
+the whole chain, and one voice across the trace.
+
+### Features
+
+* **chat:** the trace is a four-rung ladder — `hidden` folds it to one line, `quiet` shows the titles only, `balanced` opens the rows while they stream, `verbose` leaves everything open ([#6048](https://github.com/digithings-ai/digithings/pull/6048))
+* **chat:** the composer footer shows the model, the provider, the connected MCPs and the context fill, and each of them opens the right panel ([#5967](https://github.com/digithings-ai/digithings/pull/5967))
+* **chat:** `/help` opens a panel with the commands, the shortcuts and how to reach a person ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the model picker offers `auto` when the deployment pins no model, and the provider list names the in-house default beside the bring-your-own-key ones ([#5971](https://github.com/digithings-ai/digithings/pull/5971))
+* **chat:** the block cursor stands on the measured text baseline and centres on the letters ([#6034](https://github.com/digithings-ai/digithings/pull/6034))
+* **digichat:** the first turn runs on the tenant's curated default model ([#5957](https://github.com/digithings-ai/digithings/pull/5957))
+* **digichat:** a model at capacity is waited out instead of failing the turn ([#5981](https://github.com/digithings-ai/digithings/pull/5981))
+
+### Bug Fixes
+
+* **chat:** the reasoning and the tool calls live under one "Working" block that folds as one, and it stays open for the whole turn, so it no longer flickers shut between two tool calls ([#6036](https://github.com/digithings-ai/digithings/pull/6036), [#6039](https://github.com/digithings-ai/digithings/pull/6039), [#6049](https://github.com/digithings-ai/digithings/pull/6049))
+* **chat:** the trace keeps its place — the marks are always there, the counts no longer move the arrow, and every arrow sits next to its own text ([#6037](https://github.com/digithings-ai/digithings/pull/6037), [#6040](https://github.com/digithings-ai/digithings/pull/6040), [#6043](https://github.com/digithings-ai/digithings/pull/6043), [#6046](https://github.com/digithings-ai/digithings/pull/6046))
+* **chat:** the scrollbars are square everywhere, and the menu keeps its cursor in view ([#5972](https://github.com/digithings-ai/digithings/pull/5972), [#5973](https://github.com/digithings-ai/digithings/pull/5973), [#5980](https://github.com/digithings-ai/digithings/pull/5980))
+* **chat:** the composer is a single row and carries no editing chrome — Escape cancels, and an empty or unchanged edit is never sent ([#5961](https://github.com/digithings-ai/digithings/pull/5961))
+* **chat:** the menu moves with the arrow keys, the right arrow submits and the left one goes back, and the command palette matches the menu ([#5978](https://github.com/digithings-ai/digithings/pull/5978))
+
+## [2.5.1](https://github.com/digithings-ai/digithings/compare/digichat-v2.5.0...digichat-v2.5.1) (2026-10-19)
+
+Restores the OCC chat behaviour the 14 Oct build had, which the Cloudflare
+split did not carry over.
+
+### Bug Fixes
+
+* **occ:** citations are inline markdown only, deduped per turn, with a static source mark and non-web hrefs rendered as plain text ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** Allow/Deny only for an explicit approval or interrupt, not a server tool whose output was cut by a cold start ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** streaming tool args are pretty-printed from a repaired JSON prefix; DeepSeek's echoed search-template line is stripped ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** boot loader shows "Waking up services…" again ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** default model back to `deepseek/deepseek-v4.1-flash` with the six-model session allowlist and matching LiteLLM entries ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **occ:** `lockSessionControls` pins the house model and hides the session model/MCP/tool controls ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+* **digichat:** the digikey `bff_session` exchange retries a cold container with backoff ([#5950](https://github.com/digithings-ai/digithings/pull/5950))
+
+## [2.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.5.0) (2026-10-19)
+
+The first tagged digichat release after `digichat-v2.3.2`. It carries the OCC
+chat work: the OCC surface now lives on its own
+Cloudflare worker, and the improvements that were sitting behind that split are
+in this image. digichat 2.4.0 was never tagged.
+
+### Features
+
+* **digichat:** OCC chat on its own worker - `/chat/occ*`, the ticket-system MCP bridge and the
+  digichat admin surface move to `digithings-digichat` instead of the base stack ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** edit-in-composer - an answer can be edited and re-sent ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** per-tool toggles - a visitor can switch individual tools off for a session ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** session model picker, gated by the tenant allowlist ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digichat:** prompt translation, inline citations and identity paragraphs in the OCC system
+  prompt ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **ticket-mcp:** the transport security guard now matches a bare `Host` as well as `host:*` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
+### Bug Fixes
+
+* **digichat:** the grounding tool is advertised as `digisearch`, not `digisearch_semantic` ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+* **digigraph:** a per-tool toggle now also matches a tool whose registered name keeps its
+  camelCase ([#5940](https://github.com/digithings-ai/digithings/pull/5940))
+
+## [2.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.2...digichat-v2.4.0) (2026-09-29)
+
+
+### Features
+
+* **digichat:** searchEngine pref with tenant default and header forward ([d8471ec](https://github.com/digithings-ai/digithings/commit/d8471ecd5f4a872ada528bd5f5f88545eda19717))
+* **digigraph:** enforce hosted license scopes at edge ([69ca080](https://github.com/digithings-ai/digithings/commit/69ca080b2a8436c8d50405ae33c658e714ca3976))
+* **digichat:** container license verification + 24h heartbeat + healthz ([916c4b5](https://github.com/digithings-ai/digithings/commit/916c4b5d5588a2b6a0f7952cae86cbea14fafd48))
+* **digichat:** shared branding credit + catalog/product/embed parity ([abe2892](https://github.com/digithings-ai/digithings/commit/abe2892c24714b58a44de09e51338adcc5bc5984))
+* **digichat:** serve /embed through the single route via internal rewrite (single-route option B) ([0a5ac15](https://github.com/digithings-ai/digithings/commit/0a5ac15f46be4a613f078fdf65319d047022e794))
+* **digichat:** shim /baseline to /?mode=catalog, keep /embed direct (single-route step 5) ([ef99803](https://github.com/digithings-ai/digithings/commit/ef998036473c1b82fb55c815972bd2cb07c1e9e3))
+* **digichat:** mode-aware proxy for single-route framing and no-store (single-route step 4) ([9c1a67d](https://github.com/digithings-ai/digithings/commit/9c1a67d7142e34031518389e5c1be12ed1f97f11))
+* **digichat:** bare / renders a mode menu instead of the product chat ([7f1cfe4](https://github.com/digithings-ai/digithings/commit/7f1cfe40a05266e6856532a08bb03e91bb21bbc4))
+* **digichat:** single route / with ?mode= plus unified footer behavior (single-route step 3) ([02b579b](https://github.com/digithings-ai/digithings/commit/02b579b0001a90a93326f41af5003ec59d91e5fd))
+* **dashboard:** branded invite signup banner for team invite links ([51ebe31](https://github.com/digithings-ai/digithings/commit/51ebe31c7916b42f9ca606a83cc82af341baa227))
+* **ui:** add the document grammar and the install-command block ([#4424](https://github.com/digithings-ai/digithings/issues/4424), [#4470](https://github.com/digithings-ai/digithings/issues/4470)) ([63316da](https://github.com/digithings-ai/digithings/commit/63316dae365d6665084309e4b31f3e9ca5023e8a))
+* **digichat:** surface provider built-in web search and citations ([#4553](https://github.com/digithings-ai/digithings/issues/4553)) ([609d453](https://github.com/digithings-ai/digithings/commit/609d453a9614524728b4a66f8cde6e38e1de063e))
+* **digichat:** add the langgraph, ag-ui and a2a backends ([43bd2e4](https://github.com/digithings-ai/digithings/commit/43bd2e4af4fef30e85fdc89d0822b1e1bdb36093))
+* **digichat:** add the anthropic and google-vertex AI-SDK backends ([4c33771](https://github.com/digithings-ai/digithings/commit/4c337710ea34c9d87fe0d440e8ea4f3317bf4810))
+* **digichat:** add openai-compatible AI-SDK backends ([e16c625](https://github.com/digithings-ai/digithings/commit/e16c625975859722a2f4acb55ba69ae8226d3e73))
+* **digichat:** let embed tenants set the feature flags and seed language ([701e1b6](https://github.com/digithings-ai/digithings/commit/701e1b6b76cbbb0d0beb62e7add9e3d7a55ebded))
+* **digichat:** make chrome.mode modal and sidebar real presentation surfaces ([cc3d240](https://github.com/digithings-ai/digithings/commit/cc3d240b338b471fd7d9285cec9189138c2f53e9))
+* **digichat:** drive a release install from one digichat.yaml ([27ec4ef](https://github.com/digithings-ai/digithings/commit/27ec4efacf7b21cfc92aa6e4b55570afe2bc3bb2))
+
+### Bug Fixes
+
+* **digichat:** build canvas caret font from longhands so measurement uses the real font ([be447d8](https://github.com/digithings-ai/digithings/commit/be447d8207ea9abe8a096e34275368487cca50c6))
+* **digichat:** measure composer block caret in pixels so it tracks typing ([db61b61](https://github.com/digithings-ai/digithings/commit/db61b61bae3a746f66c8842748667ac5cea2b788))
+* **digichat:** cold-boot 503 retries with Retry-After and warming-up state ([37414ea](https://github.com/digithings-ai/digithings/commit/37414ea4ed0bf175e0eb4782b608eb68f52a1c31))
+* **digichat:** wire searchEngine send leg and unset semantics (review-4737) ([4fc61d8](https://github.com/digithings-ai/digithings/commit/4fc61d8a9fcff55e836d5966d6ee8a9e6f3d047e))
+* **digichat:** address license-heartbeat review findings (5) ([ced8a15](https://github.com/digithings-ai/digithings/commit/ced8a151a4bf64bba4056cd0aa1dc859e497c736))
+* **review:** refresh stale Footer slot comment + record PR #4636 in-session review ([#4636](https://github.com/digithings-ai/digithings/issues/4636)) ([4612386](https://github.com/digithings-ai/digithings/commit/4612386b202670e3741cd4c9e10c116a35dc6f88))
+* **ci:** clear PR gates after the module merge ([ea26fb7](https://github.com/digithings-ai/digithings/commit/ea26fb75a790340071edd61387430c72eae7acec))
+* **digichat:** restore default skin footer/credit behavior (owner: keep defaults, message-only change) ([81324eb](https://github.com/digithings-ai/digithings/commit/81324eb50ab1869f7bc81b1e30ad60e27ef5bbfe))
+* **digichat:** restore default skin footer layouts (undo 45fd09c41) ([8d74969](https://github.com/digithings-ai/digithings/commit/8d7496985d4a79d519885098104b4d8de2392e23))
+* **digichat:** pin the credit to the viewport bottom in all remaining skins ([45fd09c](https://github.com/digithings-ai/digithings/commit/45fd09c419743f639fb8113f3472b5cc5c2988ef))
+* **digichat:** borderless symmetric thread footer credit on all skins ([ba58d37](https://github.com/digithings-ai/digithings/commit/ba58d3701861769f08ae2430bfc8f9c4f1b28d0b))
+* **digichat:** pin the credit to the page bottom in the empty-state skins ([1ad29fa](https://github.com/digithings-ai/digithings/commit/1ad29faff63450f61df81ed86ede09fd4e0cdeeb))
+* **digichat:** guarantee the product credit, fix the / 500 and the invisible caret ([#4606](https://github.com/digithings-ai/digithings/issues/4606)) ([e06cef2](https://github.com/digithings-ai/digithings/commit/e06cef2554257cb42cf1c46e11ea08bbdd61a0d2))
+* **digichat:** make the credit legible, attribution-aware and boot-visible ([e87d6da](https://github.com/digithings-ai/digithings/commit/e87d6da8b13197a98a59a0d6fec988347f2551df))
+* **digichat:** guarantee the product credit, fix the / 500 and the invisible caret ([0fe827c](https://github.com/digithings-ai/digithings/commit/0fe827c4fd0f46e6cbfd4cbf8563126dd067fd99))
+* **digichat:** close the non-AI-SDK backend review findings ([9ee8a61](https://github.com/digithings-ai/digithings/commit/9ee8a6112eef1ac78c786b259e56babc8caf7b4c))
+* **digichat:** keep stream usage on the openai-compatible backend ([3594ca4](https://github.com/digithings-ai/digithings/commit/3594ca4e0faa121a100a908fe1a1cdae6131ac51))
+* **digichat:** surface reasoning from openai-compatible backends ([37a6cc2](https://github.com/digithings-ai/digithings/commit/37a6cc23f597e9a9cc70f9918cec04a5ed3ee2d2))
+* **digichat:** close the anthropic/vertex review findings ([25a914b](https://github.com/digithings-ai/digithings/commit/25a914b0f98c6063cc74033dfba88189696be5bd))
+* **digichat:** close the AI-SDK backend review findings ([0eedf9c](https://github.com/digithings-ai/digithings/commit/0eedf9cddd146b847d4e1a7928e412feb3635c9a))
+* **digichat:** carry the embed feature flags through the loader bridge ([c8132bc](https://github.com/digithings-ai/digithings/commit/c8132bc888bad9d64fd74e3b441d309bf85eb7a5))
+* **digichat:** tighten the backend-registry review findings ([c9e0637](https://github.com/digithings-ai/digithings/commit/c9e06372827c2a89a84fcb337d677bfa1bc47c94))
+* **digichat:** close the presentation-modes review findings ([e36f69c](https://github.com/digithings-ai/digithings/commit/e36f69cb739805394bffa8baadd89f991c2537f4))
+* **digichat:** close the session-path review findings ([962a97e](https://github.com/digithings-ai/digithings/commit/962a97e08f7a8a591fb5c92b92497f1974d1a6ab))
+* **digichat:** honour the deployment config on the authenticated-session path ([392caba](https://github.com/digithings-ai/digithings/commit/392cabafb1e2071d00120772b064ec4d2d206e7a))
+* **digichat:** close the /baseline parity review findings ([6e4974e](https://github.com/digithings-ai/digithings/commit/6e4974ed86e260674a7b4e936e4f70729708c5f2))
+* **digichat:** make the /baseline catalog render the first-party skin like /embed ([1bed163](https://github.com/digithings-ai/digithings/commit/1bed1632e2d26462da2701d8fa5b8e50a0df70f0))
+* **digichat:** keep the top anchor fully pinned after the scroll gate change ([ba8c715](https://github.com/digithings-ai/digithings/commit/ba8c7155be62fb1dac10d76c5dddd9256479984c))
+* **digichat:** gate the scroll-to-bottom button on content hidden under the composer ([e15cf1d](https://github.com/digithings-ai/digithings/commit/e15cf1dd992ef381a8a2aebfcdeedbc8f6219332))
+* **digichat:** charge the free-turn counter at send time so it stops lagging a turn ([#4468](https://github.com/digithings-ai/digithings/issues/4468)) ([44de2d0](https://github.com/digithings-ai/digithings/commit/44de2d00b26dd1e48503b9efd66659d72a6e1364))
+
+### Performance Improvements
+
+* **digichat:** per-skin React.lazy code-splitting (WS4 step 5) ([1ef394c](https://github.com/digithings-ai/digithings/commit/1ef394cbc55a26ef5a02ddadfe7e6b3eca3d41b3))
 
 ## [2.3.2](https://github.com/digithings-ai/digithings/compare/digichat-v2.3.1...digichat-v2.3.2) (2026-09-21)
 

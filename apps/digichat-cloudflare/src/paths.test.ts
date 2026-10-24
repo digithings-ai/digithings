@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { shouldProxyToDigiChat } from "./paths";
+import {
+  CONTAINER_BASE_PATH,
+  containerLocalMcpPath,
+  containerPathFor,
+  isContainerInternalPath,
+  shouldProxyToDigiChat,
+  withContainerPath,
+} from "./paths";
 
 describe("shouldProxyToDigiChat", () => {
   it("proxies embed and digichat API paths", () => {
@@ -12,14 +19,157 @@ describe("shouldProxyToDigiChat", () => {
     expect(shouldProxyToDigiChat("/api/plan-proof")).toBe(true);
     expect(shouldProxyToDigiChat("/api/plan-proof/mint")).toBe(true);
     expect(shouldProxyToDigiChat("/api/health")).toBe(true);
+    expect(shouldProxyToDigiChat("/healthz")).toBe(true);
     expect(shouldProxyToDigiChat("/_dtchat/_next/static/x.js")).toBe(true);
   });
 
-  it("leaves Pages marketing and chat shells alone", () => {
+  it("proxies the canonical /chat surface (DIG-5121)", () => {
+    expect(shouldProxyToDigiChat("/chat")).toBe(true);
+    expect(shouldProxyToDigiChat("/chat/")).toBe(true);
+    expect(shouldProxyToDigiChat("/chat/api/chat")).toBe(true);
+    expect(shouldProxyToDigiChat("/chat/_next/static/x.js")).toBe(true);
+  });
+
+  it("leaves Pages marketing and the gated OCC shell alone", () => {
     expect(shouldProxyToDigiChat("/")).toBe(false);
-    expect(shouldProxyToDigiChat("/chat")).toBe(false);
     expect(shouldProxyToDigiChat("/chat/occ")).toBe(false);
+    expect(shouldProxyToDigiChat("/chat/occ/")).toBe(false);
     expect(shouldProxyToDigiChat("/docs")).toBe(false);
     expect(shouldProxyToDigiChat("/_next/static/x.js")).toBe(false);
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    // "/chatfoo" is not under the base path: a prefix match on the string
+    // "/chat" alone would claim it and hand it to the container.
+    expect(shouldProxyToDigiChat("/chatfoo")).toBe(false);
+    expect(shouldProxyToDigiChat("/chatfoo/bar")).toBe(false);
+  });
+});
+
+describe("containerPathFor", () => {
+  it("passes a /chat path through unchanged — the base path is never doubled", () => {
+    expect(containerPathFor("/chat")).toBe("/chat");
+    expect(containerPathFor("/chat/")).toBe("/chat/");
+    expect(containerPathFor("/chat/api/chat")).toBe("/chat/api/chat");
+    expect(containerPathFor("/chat/_next/static/x.js")).toBe("/chat/_next/static/x.js");
+  });
+
+  it("moves the legacy compatibility routes under the base path", () => {
+    expect(containerPathFor("/embed")).toBe("/chat/embed");
+    expect(containerPathFor("/embed/")).toBe("/chat/embed/");
+    expect(containerPathFor("/api/chat")).toBe("/chat/api/chat");
+    expect(containerPathFor("/api/chat/stream")).toBe("/chat/api/chat/stream");
+    expect(containerPathFor("/api/embed/tenant-config")).toBe("/chat/api/embed/tenant-config");
+    expect(containerPathFor("/api/byok/test")).toBe("/chat/api/byok/test");
+    expect(containerPathFor("/api/plan-proof")).toBe("/chat/api/plan-proof");
+    expect(containerPathFor("/api/plan-proof/mint")).toBe("/chat/api/plan-proof/mint");
+    expect(containerPathFor("/api/health")).toBe("/chat/api/health");
+    expect(containerPathFor("/healthz")).toBe("/chat/healthz");
+  });
+
+  it("leaves the asset prefix and the container-local MCP prefix alone", () => {
+    expect(containerPathFor("/_dtchat/_next/static/x.js")).toBe("/_dtchat/_next/static/x.js");
+    expect(containerPathFor("/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerPathFor("/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("maps the base-path spelling of the MCP prefix back onto the container-local one", () => {
+    // The in-image trusted proxy intercepts ONLY the container-local spelling,
+    // so the base-path spelling must be mapped back onto it — otherwise the
+    // app's own Next route would answer it with no auth of its own.
+    expect(containerPathFor("/chat/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerPathFor("/chat/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("is the identity on the base path itself", () => {
+    expect(CONTAINER_BASE_PATH).toBe("/chat");
+    expect(containerPathFor(CONTAINER_BASE_PATH)).toBe(CONTAINER_BASE_PATH);
+  });
+});
+
+describe("containerLocalMcpPath", () => {
+  it("recognises the container-local spelling", () => {
+    expect(containerLocalMcpPath("/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerLocalMcpPath("/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("recognises the base-path spelling and maps it back", () => {
+    expect(containerLocalMcpPath("/chat/api/mcp/zammad")).toBe("/api/mcp/zammad");
+    expect(containerLocalMcpPath("/chat/api/mcp/zammad/tickets")).toBe("/api/mcp/zammad/tickets");
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    expect(containerLocalMcpPath("/api/mcp/zam")).toBeNull();
+    expect(containerLocalMcpPath("/api/mcp/zammadfoo")).toBeNull();
+    expect(containerLocalMcpPath("/chat/api/mcp/oauth/start")).toBeNull();
+    expect(containerLocalMcpPath("/chat/api/chat")).toBeNull();
+    expect(containerLocalMcpPath("/api/mcp")).toBeNull();
+  });
+});
+
+describe("isContainerInternalPath", () => {
+  it("refuses the dev-only container surface, in either spelling", () => {
+    expect(isContainerInternalPath("/api/devkit")).toBe(true);
+    expect(isContainerInternalPath("/api/devkit/configs")).toBe(true);
+    expect(isContainerInternalPath("/chat/api/devkit/save")).toBe(true);
+    expect(isContainerInternalPath("/api/baseline-chat")).toBe(true);
+    expect(isContainerInternalPath("/chat/api/baseline-chat")).toBe(true);
+    // The preview pages themselves are local-only too (notFound() in prod).
+    expect(isContainerInternalPath("/devkit")).toBe(true);
+    expect(isContainerInternalPath("/chat/devkit")).toBe(true);
+    expect(isContainerInternalPath("/baseline")).toBe(true);
+    expect(isContainerInternalPath("/chat/baseline")).toBe(true);
+  });
+
+  it("leaves the app's public surface alone", () => {
+    expect(isContainerInternalPath("/chat/api/chat")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/health")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/conversations")).toBe(false);
+    expect(isContainerInternalPath("/chat/api/embed/tenant-config")).toBe(false);
+    expect(isContainerInternalPath("/chat/embed")).toBe(false);
+    expect(isContainerInternalPath("/chat")).toBe(false);
+  });
+
+  it("does not claim a path that merely starts with the same letters", () => {
+    expect(isContainerInternalPath("/chat/api/devkitchen")).toBe(false);
+    expect(isContainerInternalPath("/api/dev")).toBe(false);
+    expect(isContainerInternalPath("/baselines")).toBe(false);
+  });
+});
+
+describe("withContainerPath", () => {
+  it("moves the path onto the base path and keeps everything else", async () => {
+    const request = new Request("https://digithings.ai/embed?host=occ.digithings.ai", {
+      method: "POST",
+      headers: { "x-embed-host": "occ.digithings.ai", "content-type": "application/json" },
+      body: JSON.stringify({ mode: "embed" }),
+    });
+    const mapped = withContainerPath(request, "/embed");
+    const url = new URL(mapped.url);
+    expect(url.pathname).toBe("/chat/embed");
+    expect(url.search).toBe("?host=occ.digithings.ai");
+    expect(mapped.method).toBe("POST");
+    expect(mapped.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+    expect(await mapped.text()).toBe(JSON.stringify({ mode: "embed" }));
+  });
+
+  it("leaves a path that is already under the base path alone", () => {
+    const request = new Request("https://digithings.ai/chat/api/chat?x=1");
+    const mapped = withContainerPath(request, "/chat/api/chat");
+    expect(new URL(mapped.url).pathname).toBe("/chat/api/chat");
+    expect(new URL(mapped.url).search).toBe("?x=1");
+  });
+
+  it("keeps the asset prefix and the container-local MCP prefix where they are", () => {
+    const assets = withContainerPath(
+      new Request("https://digithings.ai/_dtchat/_next/static/x.js"),
+      "/_dtchat/_next/static/x.js",
+    );
+    expect(new URL(assets.url).pathname).toBe("/_dtchat/_next/static/x.js");
+    const mcp = withContainerPath(
+      new Request("https://digithings.ai/api/mcp/zammad/tickets"),
+      "/api/mcp/zammad/tickets",
+    );
+    expect(new URL(mcp.url).pathname).toBe("/api/mcp/zammad/tickets");
   });
 });

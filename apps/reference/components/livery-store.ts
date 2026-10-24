@@ -10,6 +10,8 @@
  */
 import { modules } from "@digithings/ui";
 
+import { escapeUnsafeChars } from "@/lib/escape-unsafe-chars";
+
 export type LiveryOption = { id: string; label: string; hex: string };
 
 // Monochrome is the default (black + white); color is opt-in per product.
@@ -18,7 +20,7 @@ export type LiveryOption = { id: string; label: string; hex: string };
 // The module list itself is derived from the single modules registry
 // (@digithings/ui, also what FeaturePickerReference and the architecture
 // graph consume) rather than hand-maintained here — a prior version hardcoded
-// 7 modules, omitting digismith/digiclaw/digibase (which do have real, ruled
+// 7 modules, omitting digitrace/digibot/digibase (which do have real, ruled
 // --accent-<module> tokens) while including digistore (a roadmap-tier module
 // with no shipped surface), and FeaturePickerReference's own tour derived a
 // THIRD, different 7 by slicing the registry — three "which modules get a
@@ -115,4 +117,4 @@ const LIVERY_INIT_IDS = LIVERY_OPTIONS.map((o) => o.id);
  *  isInkCollapsingLivery's mono/research/portfolio/execution list — inlined here
  *  since this runs as a raw pre-hydration <script>, not compiled TS) — see
  *  its doc comment. */
-export const liveryInitScript = `(function(){try{var allowed=${JSON.stringify(LIVERY_INIT_IDS)};var v=localStorage.getItem('${KEY}');if(v==='default')v=null;if(!v||allowed.indexOf(v)<0)v='mono';var ink=(v==='mono'||v==='research'||v==='portfolio'||v==='execution');var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(ink){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;
+export const liveryInitScript = `(function(){try{var allowed=${escapeUnsafeChars(JSON.stringify(LIVERY_INIT_IDS))};var v=localStorage.getItem('${KEY}');if(v==='default')v=null;if(!v||allowed.indexOf(v)<0)v='mono';var ink=(v==='mono'||v==='research'||v==='portfolio'||v==='execution');var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(ink){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;

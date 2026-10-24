@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import uuid
 from queue import Full, Queue
 from threading import Event
@@ -21,6 +22,7 @@ from digigraph.tool_policy import (
     require_tool_calls_for_workflow,
     state_list_from_frozen,
 )
+from digigraph.tracing import configure_langgraph_tracing, trace_run
 
 __all__ = [
     "run_digigraph_workflow",
@@ -122,7 +124,7 @@ def _clip_scalar(val: Any) -> Any | None:
     if isinstance(val, bool):
         return val
     if isinstance(val, int | float):
-        return val if abs(val) != float("inf") and val == val else None
+        return val if math.isfinite(val) else None
     return None
 
 
@@ -372,10 +374,19 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digisearch_index"] = req.digisearch_index
     initial["vault_path_prefix"] = req.vault_path_prefix
     initial["research_system_prompt_override"] = req.research_system_prompt_override
+    # Tenant session-control lock (same corpus map entry). Unconditional so a prior
+    # turn's True never sticks on the same thread (LangGraph checkpoints are
+    # per-key last-write-wins) and so an unlocked tenant clears it to False.
+    initial["lock_session_controls"] = bool(req.lock_session_controls)
+    initial["digisearch_tools"] = req.digisearch_tools
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
     initial["enable_web_search"] = bool(req.enable_web_search)
+    # Per-request web_search engine (#4722). Raw string passthrough — the hub
+    # owns validation against its provider names; None/auto means in-house.
+    # Unconditional like effort above so a prior turn's engine never sticks.
+    initial["web_search_provider"] = req.search_engine
     # Unconditional — empty list must clear a prior tenant's MCP URLs.
     initial["mcp_servers"] = [
         s.model_dump(exclude_none=True, by_alias=True)
@@ -449,11 +460,13 @@ def _workflow_end_payload(
     return payload
 
 
+@trace_run
 def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     """
     Single custom skill entrypoint: chat idea → research (LLM + digisearch) → backtest (optional).
     When backtest disabled (e.g. Sitas): research-only, returns research output.
     """
+    configure_langgraph_tracing()
     workflow_id = str(uuid.uuid4())
     dg_audit_log(
         "workflow_start",
@@ -567,12 +580,14 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     )
 
 
+@trace_run
 def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     """
     Run the workflow using graph.stream(..., stream_mode="updates") then get_state.
     Same result as run_digigraph_workflow but exercises LangGraph native streaming.
     Use for debugging or when you want to consume per-node updates (e.g. map to SSE).
     """
+    configure_langgraph_tracing()
     workflow_id = str(uuid.uuid4())
     dg_audit_log(
         "workflow_start",
@@ -675,6 +690,7 @@ def _tool_result_error(data: dict[str, Any]) -> str | None:
     return None
 
 
+@trace_run
 def run_digigraph_workflow_streaming(
     req: WorkflowRequest,
     event_queue: Queue,
@@ -689,6 +705,7 @@ def run_digigraph_workflow_streaming(
     tool loop still emits tool/content events via the same callback.
     Intended to be run in a thread; the server consumes the queue and emits SSE.
     """
+    configure_langgraph_tracing()
     from digigraph.trace_events import TraceEventV1
 
     workflow_id = str(uuid.uuid4())
@@ -806,7 +823,7 @@ def run_digigraph_workflow_streaming(
             tool_name = data.get("name")
             name = tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else ""
             has_sources = "rag_sources" in data
-            if has_sources or name in _RETRIEVAL_TOOL_NAMES:
+            if has_sources or name in _RETRIEVAL_TOOL_NAMES or name.startswith("digisearch_"):
                 sources = data.get("rag_sources") if has_sources else []
                 if not isinstance(sources, list):
                     sources = []

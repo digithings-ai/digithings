@@ -18,8 +18,20 @@ const activeBySession = new BoundedTTLMap<string, ActiveEntry>(MAX_KEYS, ACTIVE_
 const runIdsBySession = new BoundedTTLMap<string, RunIdEntry>(MAX_KEYS, RUN_ID_TTL_MS);
 
 export type ChatRunAcquireResult =
-  | { ok: true; release: () => void }
+  | { ok: true; release: (opts?: ChatRunReleaseOptions) => void }
   | { ok: false; error: "run_in_progress" | "run_id_replay" };
+
+export type ChatRunReleaseOptions = {
+  /**
+   * Forget the run id instead of marking it done.
+   *
+   * A request that failed before it produced a turn must not block a retry of
+   * the same send: the client replays the same `X-Digi-Run-Id` when it retries,
+   * and a run id that is left behind turns that retry into a 409
+   * `run_id_replay` (DIG-4424).
+   */
+  forgetRunId?: boolean;
+};
 
 function runIdKey(sessionKey: string, runId: string): string {
   return `${sessionKey}::${runId}`;
@@ -56,12 +68,17 @@ export function acquireChatRunLock(
   }
 
   let released = false;
-  const release = () => {
+  const release = (opts?: ChatRunReleaseOptions) => {
     if (released) return;
     released = true;
     activeBySession.delete(sessionKey);
     if (runId) {
-      runIdsBySession.set(runIdKey(sessionKey, runId), { status: "done" }, RUN_ID_TTL_MS);
+      if (opts?.forgetRunId) {
+        // No turn was produced, so this run id must not refuse a retry.
+        runIdsBySession.delete(runIdKey(sessionKey, runId));
+      } else {
+        runIdsBySession.set(runIdKey(sessionKey, runId), { status: "done" }, RUN_ID_TTL_MS);
+      }
     }
   };
 

@@ -12,6 +12,7 @@ import { createAgUiStreamResponse } from "@/lib/adapters/ag-ui/stream";
 import { createA2aStreamResponse } from "@/lib/adapters/a2a/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import type { UIMessage } from "ai";
+import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 
 const USER_MESSAGE: UIMessage = {
   id: "u1",
@@ -34,6 +35,31 @@ function stubUpstream(body: string, contentType = "text/event-stream") {
 /** The UI message stream as text — enough to assert the emitted chunks. */
 async function bodyOf(res: Response): Promise<string> {
   return await res.text();
+}
+
+function uiChunks(body: string): Record<string, unknown>[] {
+  const chunks: Record<string, unknown>[] = [];
+  for (const line of body.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const raw = trimmed.slice(trimmed.indexOf(":") + 1).trim();
+    if (!raw || raw === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        chunks.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Non-JSON SSE lines are not UI chunks.
+    }
+  }
+  return chunks;
+}
+
+function textDeltas(body: string): string[] {
+  return uiChunks(body)
+    .filter((chunk) => chunk.type === "text-delta")
+    .map((chunk) => String(chunk.delta));
 }
 
 afterEach(() => {
@@ -73,6 +99,8 @@ describe("langgraph mapper (#4543)", () => {
     // The partial `tool_call_chunks` args are accumulated, so the completed row
     // carries the input even though no settled `tool_calls` frame arrived.
     expect(body).toContain("coffee");
+    // ToolMessage content stays on the tool row. It is not answer text.
+    expect(textDeltas(body)).toEqual(["Hello ", "world", "Done."]);
 
     // Stateless run: the assistant id and the chat messages go upstream.
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -116,6 +144,58 @@ describe("langgraph mapper (#4543)", () => {
     });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)["x-api-key"]).toBe("lg-secret");
+  });
+
+  it("keeps a tool_calls row open until a ToolMessage arrives", async () => {
+    stubUpstream(
+      [
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_calls":[{"id":"call_9","name":"search","args":{"q":"coffee"}}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"tool","tool_call_id":"call_9","content":"3 results"}]\n\n',
+      ].join(""),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain('"tool-output-available"');
+    expect(body).not.toContain('"tool-output-error"');
+    expect(textDeltas(body).join("")).not.toContain("3 results");
+  });
+
+  it("errors a tool_calls row that never receives a ToolMessage", async () => {
+    stubUpstream(
+      'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_calls":[{"id":"call_9","name":"search","args":{"q":"coffee"}}]}]\n\n',
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain('"tool-input-start"');
+    expect(body).toContain('"tool-output-error"');
+    expect(body).not.toContain('"tool-output-available"');
+  });
+
+  it("fails the turn when LangGraph returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("LangGraph 500");
   });
 });
 
@@ -165,6 +245,21 @@ describe("ag-ui mapper (#4543)", () => {
     expect(body).toContain("boom");
     expect(body).toContain('"data-status"');
     expect(body).toContain('"failed"');
+  });
+
+  it("fails the turn when AG-UI returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createAgUiStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("AG-UI 500");
   });
 });
 
@@ -239,6 +334,42 @@ describe("a2a mapper (#4543)", () => {
     });
     expect(await bodyOf(res)).toContain("Blocking answer.");
   });
+
+  it("fails the turn when A2A returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createA2aStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("A2A 500");
+  });
+
+  it("fails the turn when an A2A stream response has no body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(null, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          }),
+      ),
+    );
+    const res = await createA2aStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("A2A empty body");
+  });
 });
 
 describe("non-AI-SDK credential handling (#4543)", () => {
@@ -261,5 +392,127 @@ describe("non-AI-SDK credential handling (#4543)", () => {
     expect(payload.error).toBe("backend_unavailable");
     expect(payload.message).toContain("DIGICHAT_BACKEND_MISSING_KEY");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("non-AI-SDK guardrail instruction", () => {
+  function answeringGuard(released: { value: boolean }): TurnGuard {
+    return {
+      active: true,
+      async beforeRound() {
+        return { action: "answer", instruction: "WRAP NOW" };
+      },
+      recordUsage() {},
+      release() {
+        released.value = true;
+      },
+      capToolPayload(value) {
+        return value;
+      },
+      noteToolCap() {},
+    };
+  }
+
+  async function sentBody(fetchMock: ReturnType<typeof stubUpstream>): Promise<string> {
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    return String(init?.body ?? "");
+  }
+
+  it("appends the wrap-up instruction on a langgraph run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as {
+      input: { messages: { content: string }[] };
+    };
+    expect(sent.input.messages.map((message) => message.content)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
+  });
+
+  it("appends the wrap-up instruction on an ag-ui run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as { messages: { content: string }[] };
+    expect(sent.messages.map((message) => message.content)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
+  });
+
+  it("appends the wrap-up instruction on an a2a run and releases the reservation", async () => {
+    const fetchMock = stubUpstream("\n\n");
+    const released = { value: false };
+    const res = await createNonAiSdkStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      guard: answeringGuard(released),
+    });
+    await bodyOf(res);
+    const sent = JSON.parse(await sentBody(fetchMock)) as {
+      params: { message: { parts: { text: string }[] } };
+    };
+    expect(sent.params.message.parts.map((part) => part.text)).toContain("WRAP NOW");
+    expect(released.value).toBe(true);
+  });
+
+  it("stops a langgraph stream at the tool cap and does not render the next call", async () => {
+    stubUpstream(
+      [
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_call_chunks":[{"id":"call_1","name":"first","args":"{}"}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_call_chunks":[{"id":"call_2","name":"second","args":"{}"}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","content":"after"}]\n\n',
+      ].join(""),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+      guard: createTurnGuard({ slug: "public", guardrails: { maxToolCallsPerTurn: 1 } }),
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain("first");
+    expect(body).not.toContain("second");
+    expect(body).toContain("tool-call-limit");
+    expect(body).not.toContain("after");
+  });
+
+  it("stops an ag-ui stream at the tool cap and does not render the next call", async () => {
+    stubUpstream(
+      [
+        'data: {"type":"TOOL_CALL_START","toolCallId":"t1","toolCallName":"first"}\n\n',
+        'data: {"type":"TOOL_CALL_START","toolCallId":"t2","toolCallName":"second"}\n\n',
+        'data: {"type":"TEXT_MESSAGE_CONTENT","delta":"after"}\n\n',
+      ].join(""),
+    );
+    const res = await createAgUiStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+      guard: createTurnGuard({ slug: "public", guardrails: { maxToolCallsPerTurn: 1 } }),
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain("first");
+    expect(body).not.toContain("second");
+    expect(body).toContain("tool-call-limit");
+    expect(body).not.toContain("after");
   });
 });

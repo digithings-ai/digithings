@@ -28,6 +28,17 @@ describe("embed stock chrome wiring", () => {
     expect(shellSrc).not.toMatch(/resolveEmbedClientConfigFromParams/);
   });
 
+  it("resolves the embed token from the proxy header first, query as fallback (DIG-3523)", () => {
+    // The proxy strips ?token= from the render URL (flight payload echo),
+    // so the shell must read the forwarded x-embed-token header first.
+    const shellSrc = readFileSync(
+      join(__dirname, "../embed-route-shell.tsx"),
+      "utf8",
+    );
+    expect(shellSrc).toMatch(/x-embed-token/);
+    expect(shellSrc).toMatch(/resolveEmbedRenderToken/);
+  });
+
   it("does not mount language / help / new-conversation chrome", () => {
     expect(embedClientSrc).not.toMatch(/StockChromeBar/);
     expect(embedClientSrc).not.toMatch(/LanguageSelect/);
@@ -49,6 +60,19 @@ describe("embed stock chrome wiring", () => {
       /pageContextMode === "off" \? null : pageContextRef\.current/,
     );
     expect(embedClientSrc).toMatch(/buildReadyMessage\(pageContextMode\)/);
+  });
+
+  it("offers /theme on every embed tenant, keeping the other #6122 locks (2.6.6)", () => {
+    expect(embedClientSrc).not.toMatch(/themeLocked:\s*true/);
+    expect(embedClientSrc).toMatch(/openTheme: \(\) => \{\s*setComposerMenu\("theme"\);/);
+    // The api part itself is built by embedThemePrefs and tested by behaviour
+    // in product-slash-commands.theme.test.ts; here only that the embed uses it.
+    expect(embedClientSrc).toMatch(/\.\.\.embedThemePrefs\(\{\s*theme,\s*onThemePick,/);
+    expect(embedClientSrc).toMatch(/embedUserThemeKey\(tenantCfg\.slug\)/);
+    expect(embedClientSrc).toMatch(/resolveEmbedTheme\(\{\s*pick: userTheme,/);
+    // Sessions and artifacts stay closed on embeds.
+    expect(embedClientSrc).toMatch(/openSessions: \(\) => \{\}/);
+    expect(embedClientSrc).toMatch(/openArtifacts: \(\) => \{\}/);
   });
 
   it("hides the in-iframe brand header on the first-party digichat skin (#3733)", () => {

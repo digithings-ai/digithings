@@ -7,7 +7,7 @@ export const ENDPOINTS_COOKIE = "digichat-endpoints";
 export type EcosystemEndpoints = {
   digigraphUrl: string;
   digiquantUrl: string;
-  digismithUrl: string;
+  digitraceUrl: string;
   /** Optional when digisearch is not in DIGICHAT_ENABLED_SERVICES */
   digisearchUrl?: string;
 };
@@ -19,7 +19,9 @@ const DEFAULTS: EcosystemEndpoints = {
   digiquantUrl:
     process.env.DIGIQUANT_INTERNAL_URL?.replace(/\/$/, "") ??
     "http://127.0.0.1:8001",
-  digismithUrl:
+  digitraceUrl:
+    process.env.DIGITRACE_INTERNAL_URL?.replace(/\/$/, "") ??
+    // Phase 0 compat (#4929): pre-rename env honored until Phase 3.
     process.env.DIGISMITH_INTERNAL_URL?.replace(/\/$/, "") ??
     "http://127.0.0.1:8003",
   digisearchUrl:
@@ -83,7 +85,13 @@ export function parseEndpointsPayload(raw: unknown): EcosystemEndpoints | null {
   const o = raw as Record<string, unknown>;
   const dg = typeof o.digigraphUrl === "string" ? o.digigraphUrl : "";
   const dq = typeof o.digiquantUrl === "string" ? o.digiquantUrl : "";
-  const ds = typeof o.digismithUrl === "string" ? o.digismithUrl : "";
+  const ds =
+    typeof o.digitraceUrl === "string" && o.digitraceUrl
+      ? o.digitraceUrl
+      : // Phase 0 compat (#4929): cookies written before the rename carry digitraceUrl's predecessor.
+        typeof o.digismithUrl === "string"
+        ? o.digismithUrl
+        : "";
   const dsearch =
     typeof o.digisearchUrl === "string" && o.digisearchUrl.trim()
       ? o.digisearchUrl
@@ -95,7 +103,7 @@ export function parseEndpointsPayload(raw: unknown): EcosystemEndpoints | null {
   const out: EcosystemEndpoints = {
     digigraphUrl: normalizeBase(dg),
     digiquantUrl: normalizeBase(dq),
-    digismithUrl: normalizeBase(ds),
+    digitraceUrl: normalizeBase(ds),
   };
   if (dsearch) out.digisearchUrl = normalizeBase(dsearch);
   return out;

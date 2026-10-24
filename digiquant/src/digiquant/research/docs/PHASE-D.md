@@ -46,10 +46,19 @@ data — exact regulator/central-bank integers vs lossy prose summaries.
 | PR-2b (deferred) | macro, international | FRED non-US M2 (`MABMM301*`) + CB balance sheets; intl index levels (yfinance→price_history) | new FRED ids — **need live verification before ingesting** (see Known gaps) |
 | PR-3 | alt-cta-positioning | CFTC COT (Socrata SODA) | `cftc_ingest.py`, `get_cot_positioning` tool, weekly cron |
 | PR-4 | inst-institutional-flows, inst-hedge-fund-intel | SEC EDGAR (13F / 13D-G / Form 4) | `edgar_ingest.py`, `sec_filings_positions` table, 2 tools |
-| PR-5 | alt-politician-signals | House Clerk STOCK Act ZIP | `congress_ingest.py`, `congress_trades` table, tool; keep trimmed Fed/Treasury fallback search |
 | PR-6 | alt-sentiment-news | GDELT + RSS + FinBERT scoring | `news_ingest.py`, `news_sentiment_daily` table, tool |
 | PR-7 (opt) | alt-ai-portfolios | X archiver (best-effort) | `ai_portfolio_x_posts`; keep x_search fallback |
 | PR-8 | — | freshness/staleness panel + fallback-fired alert; final docs | — |
+
+**PR-5 was struck, not deferred (Counsel, DIG-1251).** The proposal — ingest the House
+Clerk STOCK Act ZIP into a `congress_trades` table and expose a `congress_trades`
+tool — was struck rather than deferred. A durable parsed-filing store relocates the
+prohibited-content path rather than curing it, and a schema built to be queried makes
+retrieval the default rather than the exception. The lawful shape for
+`alt-politician-signals` is an **official-signals** product: describe the STOCK Act
+regime and report that named officials *filed*, with **no trade-level content**,
+sourced to official Clerk/Senate sites or news — never a commercial aggregator. Any
+congressional-trades capability requires a fresh Counsel ruling first.
 
 ## Deliberately-retained paid fallbacks (the honest gaps)
 
@@ -66,7 +75,7 @@ The pipeline clears <$1/day even if both stay fully paid.
 - Put/call ratio & dealer GEX: no free source (paid search never had real GEX
   either). VIX term structure + cross-asset vol proxy it; state when absent.
 - China M2 (`MYAGM2CNM189N` discontinued — verify `MABMM301CNM189S`), Reuters/AP
-  RSS dead (use Google News RSS + GDELT tone), 13F/COT/congress freshness lags
+  RSS dead (use Google News RSS + GDELT tone), 13F/COT freshness lags
   are structural — store 2+ periods, compute deltas.
 - **Implementer must add the new data hosts to
   `scripts/claude-hooks/network-host-guard.sh`**: `api.gdeltproject.org`,

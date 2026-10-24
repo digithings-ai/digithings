@@ -1,0 +1,79 @@
+# *.digithings.localhost reverse proxy -- LOCAL ONLY, mirrors the production path routing.
+#
+# Every hostname and path below was measured in the repo, not invented:
+#   apps/digithings-stack-cloudflare/src/ports.ts      hostnames
+#   ARCHITECTURE.md                                   service ports + the /_stack/mcp/* edge routes
+#   grep of *.ts/*.mjs/*.md for "<host>.digithings.ai/<path>"  the exact prod path prefixes
+#
+# Reached at http://<host>.digithings.localhost:${DT_PROXY_PORT:-8088} (default 8088).
+# Start it with:  docker compose --profile edge up -d proxy
+#
+# Upstreams are compose service names, so each route is LIVE only when that service's
+# profile is running. Caddy dials lazily: an absent upstream returns 502 on that route
+# only, and the other hostnames keep working. That is deliberate -- `core`, `chat` and
+# `trace` are independently opt-in.
+
+{
+	auto_https off
+	# *.localhost must never reach a public resolver. Refuse DNS rebinding outright.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+# --- graph.digithings.ai -> digigraph (digigraph:8000) ---------------------------
+# Prod serves /v1/*, /healthz, /_stack/meta AND path-routes the three MCP servers
+# under /_stack/mcp/<service>/*. `handle_path` strips the prefix, leaving the /mcp the
+# servers actually expose -- so a client written for prod works against local unchanged.
+graph.digithings.localhost {
+	handle_path /_stack/mcp/digisearch/* {
+		reverse_proxy digisearch-mcp:8765
+	}
+	handle_path /_stack/mcp/digivault/* {
+		reverse_proxy digivault-mcp:8769
+	}
+	handle_path /_stack/mcp/zammad/* {
+		reverse_proxy zammad-mcp:8770
+	}
+	handle {
+		reverse_proxy digigraph:8000
+	}
+}
+
+# --- key.digithings.ai -> digikey (digikey:8005) -------------------------------
+# /v1/admin/keys, /v1/oauth/token, /healthz, /.well-known/jwks.json
+key.digithings.localhost {
+	reverse_proxy digikey:8005
+}
+
+# --- search.digithings.ai -> digisearch (digisearch:8002) ----------------------
+# /health, /healthz, /v1/orchestrator_invoke
+search.digithings.localhost {
+	reverse_proxy digisearch:8002
+}
+
+# --- chat.digithings.ai -> digichat (digichat:3000) ---------------------------
+# /api/health, /embed. The compose service publishes 3005 on the host; inside the
+# compose network it is 3000, which is what the proxy talks to.
+chat.digithings.localhost {
+	reverse_proxy digichat:3000
+}
+
+# --- trace.digithings.ai -> digitrace (digitrace:8003) ------------------------
+# /_langfuse/healthz, /_langfuse/worker-wake, /api/public/otel
+trace.digithings.localhost {
+	reverse_proxy digitrace:8003
+}
+
+# --- mcp.digithings.ai -> RESERVED, NOT ENABLED IN PROD ------------------------
+# apps/digithings-stack-cloudflare/src/index.ts: the hostname is reserved for
+# digiquant-mcp :8767 but "its route is not yet enabled (HUMAN GATE)". Local mirrors
+# prod exactly: refuse loudly instead of serving a route prod does not have.
+mcp.digithings.localhost {
+	respond "mcp.digithings.localhost is reserved in production and its route is not yet enabled (HUMAN GATE). Target: digiquant-mcp :8767.\n" 404
+}
+
+# Anything else is not a prod hostname -- do not invent one.
+:80 {
+	abort
+}

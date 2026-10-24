@@ -11,6 +11,7 @@ import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@dig
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
+import { warmFetch } from "@/lib/warmup-gate";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
@@ -19,6 +20,7 @@ import {
   messageActivities,
 } from "@/lib/chat-activity";
 import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import { dismissKeyboardIfCoarse } from "@digithings/ui/chat/composer-keyboard";
 import {
   setPendingForceTool,
   setPendingTurnMode,
@@ -30,6 +32,32 @@ import {
   shapeUserMessageParts,
   type PageContextMessage,
 } from "@/lib/embed-page-context-messages";
+
+/**
+ * Send-time charge handlers, one per embed host.
+ *
+ * Module scope for the same reason as the pending force-tool values below: the
+ * chat transport is built once and frozen (#1339), so a handler closed over at
+ * creation would be stale, and a ref cannot be read from the transport's
+ * useMemo body without tripping react-hooks/refs.
+ */
+const turnChargeHandlers = new Map<string, () => void>();
+
+/** Publish the handler for a host; returns the cleanup that removes it. */
+function publishTurnCharge(
+  host: string,
+  handler: (() => void) | undefined,
+): () => void {
+  if (handler) turnChargeHandlers.set(host, handler);
+  else turnChargeHandlers.delete(host);
+  return () => {
+    turnChargeHandlers.delete(host);
+  };
+}
+
+function turnChargeFor(host: string): (() => void) | undefined {
+  return turnChargeHandlers.get(host);
+}
 
 export {
   setPendingForceTool,
@@ -169,6 +197,13 @@ type UseEmbedDigiChatOptions = {
   trialUnlocked?: boolean;
   onGated?: () => void;
   /**
+   * Called once for every turn the visitor submits, whichever way they started
+   * it — the composer, an example question, a redo or a retry. The embed's
+   * free-turn counter hangs off this so it cannot disagree with the number of
+   * messages actually sent.
+   */
+  onTurnCharge?: () => void;
+  /**
    * Read at send time inside prepareSendMessagesRequest — same freeze reason
    * as isEmbedTrialUnlockedAtSend/chatAccessTokenAtSend (#1339): the transport
    * is built once in useMemo and useChat never adopts a rebuilt one, so a
@@ -212,6 +247,8 @@ type UseEmbedDigiChatOptions = {
   getMcpSession?: () => string | undefined;
   /** Send-time effort: low | medium | high. */
   getEffort?: () => string | undefined;
+  /** Send-time web-search engine: auto | internal | exa | tavily | parallel | firecrawl | tinyfish. */
+  getSearchEngine?: () => string | undefined;
   /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
@@ -231,12 +268,14 @@ export function useEmbedDigiChat({
   byokModel,
   trialUnlocked,
   onGated,
+  onTurnCharge,
   getResponseLanguage,
   getEnableWebSearch,
   getDisabledTools,
   getSelectedModel,
   getMcpSession,
   getEffort,
+  getSearchEngine,
   planProof,
   getPlanProof,
   allowClientTurnMutation = true,
@@ -254,11 +293,25 @@ export function useEmbedDigiChat({
   armRegenerate?: () => void;
   armEditLastUser?: () => void;
 } {
+  // The transport is built once and never adopted again (#1339), so the charge
+  // callback is published to module scope and read at send time — the same
+  // pattern as the pending force-tool and turn-mode values, and the reason this
+  // is not a ref: react-hooks/refs forbids reading a ref from a useMemo body.
+  useEffect(() => {
+    return publishTurnCharge(embedHost, onTurnCharge);
+  }, [embedHost, onTurnCharge]);
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
         api: p("/api/chat"),
+        // Hold sends made during cold boot until warm-up reports ready.
+        fetch: warmFetch as typeof fetch,
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
+          // One prepared request is one turn, whichever control started it: a
+          // typed send, an example chip, a redo, a retry or an edit. Charging
+          // here is what makes the counter agree with what was actually sent.
+          // A held question never reaches this point, so it costs nothing.
+          turnChargeFor(embedHost)?.();
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;
           const effectiveHost = urlAuth.host ?? host;
@@ -320,6 +373,18 @@ export function useEmbedDigiChat({
           const effort = getEffort?.()?.trim().toLowerCase();
           if (effort === "low" || effort === "medium" || effort === "high") {
             headers["X-Digi-Effort"] = effort;
+          }
+          const searchEngine = getSearchEngine?.()?.trim().toLowerCase();
+          if (
+            searchEngine === "auto" ||
+            searchEngine === "internal" ||
+            searchEngine === "exa" ||
+            searchEngine === "tavily" ||
+            searchEngine === "parallel" ||
+            searchEngine === "firecrawl" ||
+            searchEngine === "tinyfish"
+          ) {
+            headers["X-Digi-Search-Engine"] = searchEngine;
           }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
@@ -386,6 +451,7 @@ export function useEmbedDigiChat({
         getSelectedModel,
         getMcpSession,
         getEffort,
+        getSearchEngine,
         getPlanProof,
         allowClientTurnMutation,
       ],
@@ -433,6 +499,10 @@ export function useEmbedDigiChat({
     ) => {
       const q = question.trim();
       if (!q || busy) return;
+      // Every send fills the thread, but not every send goes through the
+      // composer's submit: an example question, a redo or a retry all land
+      // here. Dropping the keyboard at the entry point covers them together.
+      dismissKeyboardIfCoarse();
       setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
@@ -464,6 +534,9 @@ export function useEmbedDigiChat({
 
   const doRegenerate = useCallback(() => {
     if (!allowClientTurnMutation || busy) return;
+    // A redo starts a new answer just like a send, so it retracts the keyboard
+    // too — otherwise the phone shows the keyboard over the regenerated text.
+    dismissKeyboardIfCoarse();
     armRegenerate();
     void regenerate();
   }, [allowClientTurnMutation, armRegenerate, busy, regenerate]);
@@ -479,6 +552,9 @@ export function useEmbedDigiChat({
       if (!allowClientTurnMutation || busy) return;
       const next = text.trim();
       if (!next) return;
+      // Resubmitting an edited question starts a turn too; the keyboard has
+      // nothing left to type into, so it should not stay up over the answer.
+      dismissKeyboardIfCoarse();
       let lastUserIdx = -1;
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i]?.role === "user") {

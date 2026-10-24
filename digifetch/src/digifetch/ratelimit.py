@@ -1,9 +1,9 @@
 """Minimum-interval rate limiter for polite scraping.
 
-Replaces the ad-hoc ``time.sleep(pause_s)`` pauses sprinkled through twelve-x's
-TradingEconomics scraper (between "show more" clicks) and the AJAX loop in the
-primemarket node with one explicit, testable limiter: it guarantees at least
-``min_interval`` seconds between successive :meth:`RateLimiter.acquire` calls.
+Replaces the ad-hoc ``time.sleep(pause_s)`` pauses sprinkled through a consumer's
+UI scraper (between "show more" clicks) and its XHR loop with one explicit,
+testable limiter: it guarantees at least ``min_interval`` seconds between
+successive :meth:`RateLimiter.acquire` calls.
 
 YAGNI by design
 ---------------

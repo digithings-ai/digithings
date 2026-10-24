@@ -323,9 +323,14 @@ def test_wire_direction_shadow_records_manifest_and_degraded_flag(
         focus_roster=("AAPL",),
     )
     assert result.direction_decision_context is not None
+    assert result.capsule is not None
+    assert result.manifest is not None
     assert result.phase_inputs["portfolio_performance"] == incumbent["portfolio_performance"]
-    assert "context_capsule_shadow" in result.phase_inputs
-    assert "direction_decision_context_shadow" in result.phase_inputs
+    # #4609: shadow blobs no longer ride in the uncached prompt block — the
+    # capsule/manifest/direction objects on the result carry the data.
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    assert "direction_decision_context_shadow" not in result.phase_inputs
     assert (
         result.phase_inputs.get("direction_context_degraded") == "missing_versioned_prerequisites"
     )

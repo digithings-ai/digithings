@@ -38,6 +38,46 @@ _FALLBACK_RE = re.compile(
 #: The only corpus keys compared — sibling keys (research prompts, tokens) are out of scope.
 _FIELDS = ("digisearchIndex", "vaultPathPrefix")
 
+#: Single-char TS string escapes (``\\`` + key), applied in one regex pass.
+_TS_SINGLES = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "b": "\b",
+    "f": "\f",
+    "v": "\v",
+}
+
+
+_FALLBACK_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)", re.DOTALL)
+
+
+def decode_ts_string_literal(inner: str) -> str:
+    """Decode a single-quoted TS string literal's inner text (one pass).
+
+    The ``index.ts`` ``??`` fallback is TS-evaluated by the Workers runtime
+    BEFORE the container JSON-parses it, so its backslashes are doubled in
+    source (``\\\\n`` evaluates to ``\\n``, which JSON then decodes to a
+    newline). A raw ``json.loads`` of the source text is NOT the runtime value
+    (and no longer even parses once the fallback carries escapes) — decode the
+    TS escapes first, then parse the result as JSON.
+    """
+
+    def _one(match: re.Match[str]) -> str:
+        seq = match.group(1)
+        if seq in _TS_SINGLES:
+            return _TS_SINGLES[seq]
+        if seq.startswith("u") and len(seq) == 5:
+            return chr(int(seq[1:], 16))
+        if seq.startswith("x") and len(seq) == 3:
+            return chr(int(seq[1:], 16))
+        raise ValueError(f"unsupported TS escape in fallback literal: \\{seq}")
+
+    return _FALLBACK_ESCAPE_RE.sub(_one, inner)
+
 
 def default_compose_file() -> Path:
     return REPO_ROOT / _COMPOSE_REL
@@ -102,7 +142,9 @@ def load_index_ts_map(index_ts_path: Path) -> dict[str, dict[str, str]]:
     match = _FALLBACK_RE.search(src)
     if not match:
         raise ValueError(f"{_ENV_VAR} fallback literal not found in {index_ts_path}")
-    return _reduce_corpus_map(json.loads(match.group(1)))
+    # TS-evaluated by the Workers runtime before the container parses it —
+    # decode the literal first (see decode_ts_string_literal).
+    return _reduce_corpus_map(json.loads(decode_ts_string_literal(match.group(1))))
 
 
 def _canonical(source_map: dict[str, dict[str, str]]) -> list[str]:

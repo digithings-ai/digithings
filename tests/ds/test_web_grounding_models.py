@@ -68,7 +68,7 @@ def test_retrieve_seam_maps_landed_rows(monkeypatch):
             )
         ],
     )
-    monkeypatch.setattr(ret, "_live", lambda q, top_n: fake)
+    monkeypatch.setattr(ret, "_live", lambda q, top_n, effort=None: fake)
     hits = ret.live_search("q", top_n=4)
     assert hits[0].url == "https://a.com/1"
     assert hits[0].snippet == "s"  # landed rows carry snippet, never highlights
@@ -146,11 +146,13 @@ def test_live_clamps_top_n_to_landed_search_cap(monkeypatch):
 
     seen: list[WebSearchRequest] = []
 
-    def fake_search_web(req: WebSearchRequest, config=None) -> WebSearchResponse:
+    def fake_run_web_search(req: WebSearchRequest, config=None) -> WebSearchResponse:
         seen.append(req)
         return WebSearchResponse(query=req.query, provider="fake")
 
-    monkeypatch.setattr(service_mod, "search_web", fake_search_web)
+    # retrieve._live now routes through the provider registry -> internal ->
+    # service.run_web_search (#4711), so the clamp is pinned at that seam.
+    monkeypatch.setattr(service_mod, "run_web_search", fake_run_web_search)
     ret._live("q", 20)
     ret._live("q", 4)
     assert seen[0].max_results <= 10

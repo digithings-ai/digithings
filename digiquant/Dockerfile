@@ -5,6 +5,12 @@
 # Image ships digiquant[nautilus] like peer module images (digikey, digigraph):
 # install package + extras only — no network fetch of upstream Nautilus fixtures.
 # Sample market CSVs for backtests live under digiquant/data/ (compose-mounted).
+#
+# Reproducibility (DIG-2303): third-party packages install frozen from the
+# repo-root uv.lock (ADR-0033, the single authoritative lock) via
+# `uv export --frozen`, so rebuilds of an unchanged commit resolve the
+# identical package set — the same set CI installs. Only the nautilus_trader
+# engine version itself is additionally pinned in digiquant/pyproject.toml.
 
 FROM python:3.12-slim
 
@@ -18,22 +24,26 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
+# Workspace root metadata + the single authoritative lock. Only the member
+# trees this image installs are copied; `uv export --frozen` tolerates the
+# pruned workspace (measured: rc=0, --offline clean).
+COPY pyproject.toml uv.lock ./
 COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
-RUN uv pip install --system -e "./digibase"
-
 COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
-RUN uv pip install --system -e "./digikey"
-
 COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
 COPY digifetch/src ./digifetch/src
-RUN uv pip install --system -e "./digifetch"
-
-COPY digiquant/pyproject.toml ./
-COPY digiquant/src ./src
+COPY digiquant/pyproject.toml ./digiquant/
+COPY digiquant/src ./digiquant/src
 COPY digiquant/data ./data
-RUN uv pip install --system -e ".[nautilus]"
+
+# Frozen, hash-pinned install: `uv export --frozen` renders the root lock's
+# digiquant[nautilus,mcp] subset (no lock update, no network) and
+# `uv pip install -r` installs exactly those pins, hash-verified.
+RUN uv export --frozen --package digiquant --extra nautilus --extra mcp --no-dev -o /tmp/digiquant-reqs.txt \
+ && uv pip install --system -r /tmp/digiquant-reqs.txt \
+ && rm -f /tmp/digiquant-reqs.txt
 
 EXPOSE 8001
 CMD ["uvicorn", "digiquant.server:app", "--host", "0.0.0.0", "--port", "8001"]

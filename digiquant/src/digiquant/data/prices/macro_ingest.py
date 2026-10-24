@@ -1,11 +1,13 @@
-"""Macro time-series ingestion — FRED, Yahoo FX.
+"""Macro time-series ingestion — Yahoo FX.
 
 Consolidates two research scripts:
 
-* ``ingest_fred.py`` → :func:`fetch_fred`
+* ``ingest_fred.py`` → :func:`fetch_fred` (removed #4794 PR3: the sealed panel
+  refreshes from gloomberb ``econ_series``, see ``gloomberb_macro``)
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
 
-The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
+The default daily pipeline pulls gloomberb ``econ_series`` (``gloomberb_macro``)
++ Yahoo FX (:func:`fetch_fx_yahoo`).
 Frankfurter FX and crypto Fear & Greed were dropped as default sources in
 issue #328 and their fetchers removed in the deslop pass (WS4b).
 
@@ -28,13 +30,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import isfinite
+from math import isfinite, isnan
 from pathlib import Path
 from typing import Any, TypedDict
-
-FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
-
-FRED_OVERLAP_DAYS = 14
 
 
 class FredSeriesEntry(TypedDict, total=False):
@@ -44,14 +42,10 @@ class FredSeriesEntry(TypedDict, total=False):
     series_id: str
     unit: str | None
     title: str | None
-
-
-class FredRawObservation(TypedDict, total=False):
-    """Single observation dict from the FRED JSON API (SIMP-014)."""
-
-    date: str
-    value: str
-    realtime_start: str
+    # Native publication cadence ("daily" | "weekly" | "monthly" | "quarterly").
+    # A series with no cadence is treated as daily by the R2 refresh, which is
+    # the pre-#4588 behaviour. See scripts/refresh_market_data_r2.py.
+    cadence: str | None
 
 
 class MacroObservationMeta(TypedDict, total=False):
@@ -177,123 +171,6 @@ def _retrying_session(
 # Public, stable alias so other ingest modules (e.g. fed_probabilities) don't depend on the
 # underscored private name.
 retrying_session = _retrying_session
-
-
-# ─── FRED ───────────────────────────────────────────────────────────────────
-
-
-def fetch_fred_series(
-    api_key: str,
-    series_id: str,
-    observation_start: str,
-    observation_end: str | None = None,
-    *,
-    timeout: float = 120.0,
-    session: Any | None = None,
-) -> list[FredRawObservation]:
-    """Single-series FRED observations fetch. Returns raw observation dicts."""
-    params: dict[str, Any] = {
-        "series_id": series_id,
-        "api_key": api_key,
-        "file_type": "json",
-        "observation_start": observation_start,
-    }
-    if observation_end:
-        params["observation_end"] = observation_end
-    s = session if session is not None else _retrying_session()
-    r = s.get(FRED_OBS_URL, params=params, timeout=timeout)
-    r.raise_for_status()
-    return r.json().get("observations") or []
-
-
-def fred_observations_to_rows(
-    series_id: str,
-    unit: str | None,
-    title: str | None,
-    observations: list[FredRawObservation],
-) -> list[MacroObservation]:
-    rows: list[MacroObservation] = []
-    for obs in observations:
-        d = obs.get("date")
-        raw = obs.get("value")
-        if not d or raw in (None, ".", ""):
-            continue
-        try:
-            val = float(raw)
-        except (TypeError, ValueError):
-            continue
-        meta: MacroObservationMeta = {}
-        if title:
-            meta["title"] = title
-        if rs := obs.get("realtime_start"):
-            meta["realtime_start"] = rs
-        row: MacroObservation = {
-            "source": "fred",
-            "series_id": series_id,
-            "obs_date": d,
-            "value": val,
-            "unit": unit,
-        }
-        if meta:
-            row["meta"] = meta
-        rows.append(row)
-    return rows
-
-
-def fetch_fred(
-    manifest: MacroManifest,
-    api_key: str,
-    *,
-    start: str | None = None,
-    end: str | None = None,
-    only_series: str | None = None,
-) -> list[MacroObservation]:
-    """Fetch all FRED series in ``manifest`` and return unified observation rows.
-
-    Per-series error isolation: if one series fails after retries, the remaining
-    series continue. Failures are logged to stderr. The run fails only if
-    **every** series failed (upstream-down signal) — partial data beats none.
-    """
-    if not api_key:
-        raise ValueError("fetch_fred requires api_key")
-    import sys
-
-    import requests  # type: ignore[import-not-found]
-
-    rows: list[MacroObservation] = []
-    failed: list[tuple[str, str]] = []
-    attempted: list[str] = []
-    end_s = end or datetime.now(UTC).date().isoformat()
-    sess = _retrying_session()
-    for item in manifest.fred_series:
-        if not isinstance(item, dict):
-            continue
-        sid = item.get("id")
-        if not sid or (only_series and sid != only_series):
-            continue
-        attempted.append(sid)
-        start_s = start or manifest.fred_backfill_start
-        try:
-            observations = fetch_fred_series(api_key, sid, start_s, end_s, session=sess)
-        except (requests.RequestException, ValueError) as exc:
-            failed.append((sid, str(exc)[:200]))
-            print(f"  [fetch_fred] skipped {sid}: {exc}", file=sys.stderr)
-            continue
-        rows.extend(
-            fred_observations_to_rows(sid, item.get("unit"), item.get("title"), observations)
-        )
-    if attempted and len(failed) == len(attempted):
-        detail = "; ".join(f"{sid}: {msg}" for sid, msg in failed[:5])
-        raise RuntimeError(
-            f"fetch_fred: all {len(attempted)} series failed — upstream likely down. {detail}"
-        )
-    if failed:
-        print(
-            f"  [fetch_fred] partial: {len(attempted) - len(failed)}/{len(attempted)} series ok, "
-            f"{len(failed)} skipped",
-            file=sys.stderr,
-        )
-    return rows
 
 
 # ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
@@ -435,8 +312,8 @@ def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
                 fval = float(raw_val)
             except (TypeError, ValueError):
                 continue
-            # NaN check without importing pandas — NaN != NaN by definition.
-            if fval != fval:
+            # float() already coerced the cell; isnan is the NaN test for a float.
+            if isnan(fval):
                 continue
             records.append({"obs_date": obs_date, "yahoo_symbol": sym, "close": fval})
     if not records:
@@ -659,20 +536,15 @@ def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservati
 
 
 __all__ = [
-    "FRED_OBS_URL",
     "YAHOO_FX_DEFAULT",
     "CandleObservation",
-    "FredRawObservation",
     "FredSeriesEntry",
     "MacroManifest",
     "MacroObservation",
     "MacroObservationMeta",
     "dedupe_observation_rows",
-    "fetch_fred",
-    "fetch_fred_series",
     "fetch_fx_intraday",
     "fetch_fx_yahoo",
-    "fred_observations_to_rows",
     "fx_intraday_payload_to_candles",
     "yahoo_fx_payload_to_rows",
 ]

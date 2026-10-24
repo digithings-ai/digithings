@@ -276,15 +276,6 @@ export interface ConsensusDeltaSet {
   movers: Mover[];
 }
 
-/** The catalyst a confluence idea hangs on, resolved against the events feed. */
-export interface ConfluenceCatalyst {
-  eventKey: string | null;
-  eventName: string | null;
-  eventDate: string | null;
-  calendarExternalId: string | null;
-  daysToCatalyst: number | null;
-}
-
 /* ------------------------------------------------------------------ *
  * Intelligence "why" drill-down (P5) — assembled, read-only view types.
  *
@@ -373,7 +364,10 @@ export type FxLevelProvenance =
   | 'pmt_bank_trade'
   | 'pmt_seasonality_target'
   | 'pmt_position_cluster'
-  | 'computed';
+  | 'pmt_retail_book'
+  | 'computed'
+  | 'technical'
+  | 'llm';
 
 export interface FxTradeLevel {
   value: string;
@@ -416,6 +410,10 @@ export interface FxTradeIdeaRow {
   as_of: string; // timestamptz (ISO)
   trade_levels?: FxTradeLevels | Record<string, unknown> | null;
   evidence?: FxMarketEvidence[] | unknown[] | null;
+  /** Episode identity — rows sharing an idea_id are the same trade across boards. */
+  idea_id?: string | null;
+  /** Rows published before the identity rollout have no timeframe. */
+  timeframe?: string | null;
 }
 
 /**

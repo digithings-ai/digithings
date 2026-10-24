@@ -4,6 +4,7 @@ import {
   INVITE_MAX_ATTEMPTS,
   planFloorOutranks,
   redeemProductInvite,
+  resolveInviteBrand,
   sha256Hex,
   timingSafeEqualHex,
   type InviteCodeRow,
@@ -21,7 +22,7 @@ type Mem = {
   redemptions: Array<Record<string, unknown>>;
   codes: InviteCodeRow[];
   audits: Array<Record<string, unknown>>;
-  increments: string[];
+  claims: string[];
   externalSyncs: Array<{ email: string; productKey: string }>;
 };
 
@@ -33,7 +34,7 @@ function memStore(init?: Partial<Mem>): { mem: Mem; store: InviteStore } {
     redemptions: [],
     codes: [],
     audits: [],
-    increments: [],
+    claims: [],
     externalSyncs: [],
     ...init,
   };
@@ -63,8 +64,15 @@ function memStore(init?: Partial<Mem>): { mem: Mem; store: InviteStore } {
     recordRedemption: async (row) => {
       mem.redemptions.push(row);
     },
-    incrementRedemptionCount: async (id) => {
-      mem.increments.push(id);
+    claimRedemption: async (id) => {
+      const row = mem.codes.find((c) => c.id === id);
+      if (!row || row.revoked_at) return false;
+      if (row.max_redemptions != null && row.redemption_count >= row.max_redemptions) {
+        return false;
+      }
+      row.redemption_count += 1;
+      mem.claims.push(id);
+      return true;
     },
     recordAdminAudit: async (row) => {
       mem.audits.push(row);
@@ -124,7 +132,8 @@ Deno.test("table hash grants when env hash is unset", async () => {
     store,
   });
   assertEquals(result.ok, true);
-  assertEquals(mem.increments, ["code-1"]);
+  assertEquals(mem.claims, ["code-1"]);
+  assertEquals(mem.codes[0]?.redemption_count, 1);
   assertEquals(mem.redemptions[0]?.source, "table");
 });
 
@@ -257,6 +266,115 @@ Deno.test("rate limit after INVITE_MAX_ATTEMPTS in the window", async () => {
   if (!result.ok) assertEquals(result.code, "INVITE_RATE_LIMIT");
 });
 
+Deno.test("a second user cannot redeem a code capped at 1", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { mem, store } = memStore({
+    codes: [{
+      id: "code-once",
+      code_hash: hash,
+      max_redemptions: 1,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: null,
+    }],
+  });
+  const first = await redeemProductInvite({
+    userId: USER,
+    email: EMAIL,
+    productKey: "fx_hub",
+    code: PLAIN,
+    store,
+  });
+  assertEquals(first.ok, true);
+  const second = await redeemProductInvite({
+    userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    email: "other@12x.example",
+    productKey: "fx_hub",
+    code: PLAIN,
+    store,
+  });
+  assertEquals(second.ok, false);
+  if (!second.ok) assertEquals(second.code, "INVITE_INVALID");
+  assertEquals(mem.grants.size, 1);
+  assertEquals(mem.codes[0]?.redemption_count, 1);
+  assertEquals(mem.claims, ["code-once"]);
+});
+
+Deno.test("two concurrent redeems of a code capped at 1 grant once", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const code: InviteCodeRow = {
+    id: "code-once",
+    code_hash: hash,
+    max_redemptions: 1,
+    redemption_count: 0,
+    revoked_at: null,
+    plan_floor: null,
+  };
+  let listed = 0;
+  let release = (): void => {};
+  const bothListed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { mem, store } = memStore({ codes: [code] });
+  const list = store.listActiveCodes.bind(store);
+  store.listActiveCodes = async (productKey) => {
+    const rows = await list(productKey);
+    listed += 1;
+    if (listed === 2) release();
+    else await bothListed;
+    return rows;
+  };
+
+  const [first, second] = await Promise.all([
+    redeemProductInvite({
+      userId: USER,
+      email: EMAIL,
+      productKey: "fx_hub",
+      code: PLAIN,
+      store,
+    }),
+    redeemProductInvite({
+      userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      email: "other@12x.example",
+      productKey: "fx_hub",
+      code: PLAIN,
+      store,
+    }),
+  ]);
+  const granted = [first, second].filter((r) => r.ok && !r.alreadyGranted);
+  const rejected = [first, second].filter((r) => !r.ok);
+  assertEquals(granted.length, 1);
+  assertEquals(rejected.length, 1);
+  assertEquals(code.redemption_count, 1);
+  assertEquals(mem.grants.size, 1);
+});
+
+Deno.test("already granted does not consume a capped seat", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { mem, store } = memStore({
+    grants: new Map([[EMAIL, ["fx_hub"]]]),
+    codes: [{
+      id: "code-once",
+      code_hash: hash,
+      max_redemptions: 1,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: null,
+    }],
+  });
+  const result = await redeemProductInvite({
+    userId: USER,
+    email: EMAIL,
+    productKey: "fx_hub",
+    code: PLAIN,
+    store,
+  });
+  assertEquals(result.ok, true);
+  if (result.ok) assertEquals(result.alreadyGranted, true);
+  assertEquals(mem.claims, []);
+  assertEquals(mem.codes[0]?.redemption_count, 0);
+});
+
 Deno.test("revoked or exhausted table codes do not match", async () => {
   const hash = await sha256Hex(PLAIN);
   const { store } = memStore({
@@ -287,4 +405,59 @@ Deno.test("revoked or exhausted table codes do not match", async () => {
     store,
   });
   assertEquals(result.ok, false);
+});
+
+Deno.test("resolveInviteBrand returns marker and line for a branded active code", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { store } = memStore({
+    codes: [{
+      id: "code-brand",
+      code_hash: hash,
+      max_redemptions: 10,
+      redemption_count: 0,
+      revoked_at: null,
+      plan_floor: null,
+      brand_marker: "12X",
+      brand_line: "Purpose-built for the 12X desk",
+    }],
+  });
+  assertEquals(await resolveInviteBrand({ productKey: "fx_hub", code: PLAIN, store }), {
+    marker: "12X",
+    line: "Purpose-built for the 12X desk",
+  });
+});
+
+Deno.test("resolveInviteBrand returns null for unknown, revoked, and unbranded codes", async () => {
+  const hash = await sha256Hex(PLAIN);
+  const { store } = memStore({
+    codes: [
+      {
+        id: "code-revoked",
+        code_hash: hash,
+        max_redemptions: 10,
+        redemption_count: 0,
+        revoked_at: "2026-09-24T00:00:00Z",
+        plan_floor: null,
+        brand_marker: "12X",
+        brand_line: null,
+      },
+      {
+        id: "code-plain",
+        code_hash: await sha256Hex("unbranded-code-alpha"),
+        max_redemptions: 10,
+        redemption_count: 0,
+        revoked_at: null,
+        plan_floor: null,
+      },
+    ],
+  });
+  assertEquals(
+    await resolveInviteBrand({ productKey: "fx_hub", code: "totally-wrong-invite", store }),
+    null,
+  );
+  assertEquals(await resolveInviteBrand({ productKey: "fx_hub", code: PLAIN, store }), null);
+  assertEquals(
+    await resolveInviteBrand({ productKey: "fx_hub", code: "unbranded-code-alpha", store }),
+    null,
+  );
 });

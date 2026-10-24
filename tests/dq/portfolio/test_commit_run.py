@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
 import re
 from datetime import date, timedelta
@@ -1556,6 +1557,7 @@ _MIGRATION_069 = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "069_olympus_portfolio_ledger.sql"
 )
 _MIGRATION_097 = (
@@ -1563,6 +1565,7 @@ _MIGRATION_097 = (
     / "digiquant"
     / "supabase"
     / "migrations"
+    / "prod"
     / "097_workspaces_tenant_columns.sql"
 )
 
@@ -1764,7 +1767,7 @@ class TestLedgerRowsSatisfyMigration069:
             assert values, f"no {table}.{column} values emitted"
             for value in values:
                 number = float(value)
-                assert number == number, f"{table}.{column} emitted NaN"
+                assert not math.isnan(number), f"{table}.{column} emitted NaN"
                 infinite = number in (float("inf"), float("-inf"))
                 assert not infinite, f"{table}.{column} emitted infinity"
                 assert 0.0 <= number <= 1.0, f"{table}.{column}={number} violates BETWEEN 0 AND 1"
@@ -1796,7 +1799,7 @@ class TestLedgerRowsSatisfyMigration069:
             # a zero row never reaches this loop — the > 0 assert guards NaN/leak paths
             # and documents the DDL CHECK rather than proving the drop branch.
             assert quantity > 0, f"quantity {quantity} violates the > 0 CHECK"
-            assert quantity == quantity and quantity != float("inf"), "quantity is NaN/infinity"
+            assert not math.isnan(quantity) and quantity != float("inf"), "quantity is NaN/infinity"
             if row["status"] == "rejected":
                 assert row["rejection_reason"] is not None, "rejected row needs a reason"
             else:

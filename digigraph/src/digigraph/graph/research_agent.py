@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
@@ -37,6 +36,7 @@ from digigraph.compaction import (
 )
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from digigraph.research_brief_models import strip_json_fence
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +67,6 @@ Grounding with tools (when available):
 - If a tool returns an error/no data, or no `web_grounding` is present, say so in the
   relevant field and lower conviction; never invent values.
 """
-
-
-def _strip_json_fence(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
 
 
 # JSON-Schema keywords OpenAI/OpenRouter STRICT structured-output mode does not allow. Pydantic
@@ -300,7 +295,7 @@ def run_research_agent(
         {"role": "user", "content": content_parts},
     ]
 
-    def traced_execute_tool(name: str, arguments: dict[str, Any]) -> str:
+    def traced_execute_tool(name: str, arguments: dict[str, Any]) -> str | dict[str, Any]:
         assert execute_tool is not None
         started = time.perf_counter()
         try:
@@ -315,11 +310,20 @@ def run_research_agent(
                 operation=schema_name,
             )
             raise
+        # Some dispatchers answer a failed upstream call with a string instead of
+        # raising (the digifetch family, by contract). They may mark that honestly
+        # with ``ok`` on a dict result (#4556); the model still only reads the
+        # ``content`` key (see digillm's tool-result handling). An ``ok``-less dict
+        # or a bare string means the call itself succeeded.
+        ok = True
+        if isinstance(result, dict) and "ok" in result:
+            ok = bool(result["ok"])
         _usage.record_tool_call(
             name=name,
             arguments=arguments,
             result=result,
             duration_ms=round((time.perf_counter() - started) * 1000),
+            ok=ok,
             phase=phase_slug,
             operation=schema_name,
         )
@@ -369,6 +373,12 @@ def run_research_agent(
                             execute_tool=traced_execute_tool,
                             temperature=temperature,
                             max_tool_rounds=max_tool_rounds if max_tool_rounds is not None else 5,
+                            # #4556: enforce the output schema on the loop's forced tool-free
+                            # wrap-up. The tool turns cannot carry ``response_format`` (tools and
+                            # json_schema are mutually exclusive), so without this the cheap model
+                            # could answer the wrap-up in prose or return an empty body — what
+                            # forced the ungrounded tool-free retry below.
+                            final_response_format=response_format,
                         )
                         parent_call_id = call.last_call_id
                 else:
@@ -417,7 +427,7 @@ def run_research_agent(
                     # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
                     # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
                     # generic message that buries the real cause in the logs (#814).
-                    stripped = _strip_json_fence(raw or "")
+                    stripped = strip_json_fence(raw or "")
                     if not stripped:
                         raise ValueError(
                             f"empty LLM response from {effective_model!r} "
@@ -427,17 +437,28 @@ def run_research_agent(
                     return output_model.model_validate(data)
                 except (json.JSONDecodeError, ValidationError, ValueError) as exc:
                     last_error = exc
-                    logger.warning(
+                    if attempt == max_retries:
+                        logger.warning(
+                            "research_agent attempt %d/%d failed for %s: %s",
+                            attempt + 1,
+                            max_retries + 1,
+                            schema_name,
+                            exc,
+                        )
+                        if call is not None:
+                            call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
+                        break
+                    # The retry below is the designed recovery path (#1739), not an alarm:
+                    # log it at INFO so the terminal WARNING above stays the only one an
+                    # operator has to look at. Measured on run 35857376877: 15 such
+                    # first-attempt failures, every one recovered, none terminal.
+                    logger.info(
                         "research_agent attempt %d/%d failed for %s: %s",
                         attempt + 1,
                         max_retries + 1,
                         schema_name,
                         exc,
                     )
-                    if attempt == max_retries:
-                        if call is not None:
-                            call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
-                        break
                     if call is not None:
                         call.set_no_artifact_reason(NoArtifactReason.VALIDATION_REJECTED)
                     messages = messages + [

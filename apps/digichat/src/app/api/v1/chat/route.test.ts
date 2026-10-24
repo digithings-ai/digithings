@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../chat/route", () => ({
   POST: vi.fn(),
-  maxDuration: 120,
+  maxDuration: 300,
 }));
 
 import { POST as chatPost, maxDuration as chatMaxDuration } from "../../chat/route";
@@ -12,6 +12,6 @@ describe("/api/v1/chat", () => {
   it("re-exports POST and maxDuration from /api/chat", () => {
     expect(POST).toBe(chatPost);
     expect(maxDuration).toBe(chatMaxDuration);
-    expect(maxDuration).toBe(120);
+    expect(maxDuration).toBe(300);
   });
 });

@@ -13,8 +13,7 @@ try:
 except ImportError:
     _HAS_JSONSCHEMA = False
 
-ROOT = Path(__file__).resolve().parent.parent
-SCHEMAS_DIR = ROOT / "templates" / "schemas"
+from lib.roots import DELTA_REQUEST_SCHEMA, DIGEST_SNAPSHOT_SCHEMA, schema_file
 
 
 def _load_json(path: Path) -> dict:
@@ -62,18 +61,18 @@ def _schema_path_for(doc_type: str) -> Path:
     fname = mapping.get(doc_type)
     if not fname:
         raise ValueError(f"Unknown doc_type: {doc_type}")
-    return SCHEMAS_DIR / fname
+    return schema_file(fname)
 
 
 def _validate_digest_snapshot(payload: dict, label: str) -> int:
-    schema = _load_json(ROOT / "templates" / "digest-snapshot-schema.json")
+    schema = _load_json(DIGEST_SNAPSHOT_SCHEMA)
     jsonschema.validate(instance=payload, schema=schema)
     print(f"✅ valid: {label} (digest snapshot)")
     return 0
 
 
 def _validate_delta_request(payload: dict, label: str) -> int:
-    schema = _load_json(ROOT / "templates" / "delta-request-schema.json")
+    schema = _load_json(DELTA_REQUEST_SCHEMA)
     jsonschema.validate(instance=payload, schema=schema)
     print(f"✅ valid: {label} (delta request)")
     return 0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -239,7 +240,8 @@ class ChromaBackend(DigiIndex):
 
     def query(self, query: Query) -> list[Result]:
         perf_start = time.perf_counter()
-        n = min(query.top_k, 100)
+        n = min(max(int(query.top_k or 0), 0), 100)
+        offset = max(int(query.skip or 0), 0)
         filters_dict = query.filters or {}
         structured = (
             filters_dict.get("structured")
@@ -247,7 +249,10 @@ class ChromaBackend(DigiIndex):
             else None
         )
         chroma_where = structured_filters_to_chroma_where(structured)
-        fetch_n = min(100, max(n, n * 25)) if structured else n
+        # Chroma has no offset. Over-fetch skip+top_k (still capped at 100) and
+        # drop the prefix after the workspace / structured post-filter.
+        needed = n + offset
+        fetch_n = min(100, max(needed, needed * 25)) if structured else min(100, needed)
         q_kw: dict[str, Any] = {
             "n_results": fetch_n,
             "include": ["documents", "metadatas", "distances"],
@@ -301,8 +306,11 @@ class ChromaBackend(DigiIndex):
             score = 1.0 - (dist / 2.0) if dist is not None else 1.0
             rank += 1
             out.append(Result(chunk=chunk, score=score, rank=rank))
-            if len(out) >= n:
+            if len(out) >= needed:
                 break
+        out = out[offset : offset + n]
+        for index, result in enumerate(out, start=1):
+            result.rank = index
         logger.info(
             "chroma query done",
             extra={
@@ -330,8 +338,6 @@ class ChromaBackend(DigiIndex):
 
     def snapshot(self, path: str) -> None:
         """Export snapshot. For persistent client, copy to path."""
-        import shutil
-
         if self._persist_path:
             shutil.copytree(self._persist_path, path, dirs_exist_ok=True)
         else:

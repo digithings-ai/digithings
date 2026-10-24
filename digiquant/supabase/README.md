@@ -3,19 +3,54 @@
 The single Supabase CLI project dir for the suite-wide **`core`** backend (dashboard/research
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
-**one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`125` at time of writing, with `037`, `038` and `059` never used and `062`
-**burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
+**one** migration chain, layered D-Q6′ (DIG-3694): the numbered files under
+[`migrations/engine/`](migrations/engine/) apply first in filename order, then
+[`migrations/prod/`](migrations/prod/) in filename order. `engine/` holds the
+migrations for tables the open pipeline uses (R0 self-host schema: market and
+reference data, research corpus, pipeline run records and observability);
+`prod/` holds the house-only remainder (books, ledger, accounting, tenancy,
+billing, broker mirror, notifications, invites, strategy store, public
+views). NNN prefixes are globally unique across both dirs —
+`001`–`143` at time of writing, with `037`, `038` and `059` never used and `062`
+**burned — see below, do not reuse it**; new work appends the next unused prefix
+and lands in `engine/` iff every table it touches is an engine table, else in
+`prod/`. One deliberate exception: `engine/001_initial_schema.sql` also creates
+the base book-table shells (positions, nav_history, portfolio_metrics,
+position_events, benchmark_history) so the engine tables exist before any
+engine ALTER; prod migrations shape the books afterwards. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
 `digiquant/scripts/research/verify-supabase-migrations.sh` guards the chain's shape:
-`config.toml` is present, every file matches `NNN_name.sql`, and no two files share
-a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
+`config.toml` is present, every file under `migrations/engine/` and
+`migrations/prod/` matches `NNN_name.sql`, no two files share a numeric prefix
+across either dir, each dir is in version order, no stray top-level `*.sql`
+exists, and every public relation an `engine/` file reads is created by an
+`engine/` file (engine self-containment, what makes engine-first apply sound).
+It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
 supabase-migrations-check`. It does **not** check ordering, and it does not compare
 against the live schema — `digithings_schema_migrations` is what records what prod has
 actually applied. A duplicate prefix is now a **hard failure with no exemptions**,
 in both this guard and `db-migrate.yml`.
+
+**The local stack applies the chain through a generated flat view (#DIG-4449).**
+The Supabase CLI does not recurse: `supabase start` and `supabase db reset` read
+only the top level of `<project>/supabase/migrations/*.sql`. After the D-Q6′ move
+into `engine/` and `prod/` a clean bring-up therefore applied **nothing** and the
+seed then died on the missing `public.workspaces`. `dt up` / `dt reset` now run
+[`scripts/localstack/supabase_flat.py`](../../scripts/localstack/supabase_flat.py)
+first (the `supabase-workdir` plan step). It materializes a flat view of the
+chain at the git-ignored `digiquant/.supabase-local/`, and every supabase
+command runs with `--workdir digiquant/.supabase-local`. The CLI sorts that
+directory by file name and the two layers share one numbering space (engine
+holds 001..131, prod 002..143), so the generated links are numbered `001..138`
+in the apply order — `engine/` first then `prod/`, each in filename order — with
+the canonical name kept in the link stem (`077_002_schema_hardening.sql` points
+at `prod/002_schema_hardening.sql`). The order the CLI now applies is
+therefore exactly the order `scripts/self_host_migrations_check.sh` and
+`scripts/rls_proof/run.sh` use. The flat view is derived and safe to delete;
+the checked-in chain keeps its layering and this guard keeps rejecting a stray
+top-level `*.sql`.
 
 **The `025` collision is resolved (#3923).** `025_thesis_daily_fields.sql` and
 `025_trading_calendar.sql` were both applied on 2026-06-26 and both recorded in
@@ -69,7 +104,7 @@ deploy`, or the SQL editor.
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
 | `migrations/063_prices_live_table.sql` | `public.prices_live` — the quote table Realtime streams as `postgres_changes`; RLS on, one SELECT policy, no write policy, `service_role` the sole writer (#1807) |
 | `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
-| `migrations/065_atlas_run_diagnostics_attempt.sql` | `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1` |
+| `migrations/065_atlas_run_diagnostics_attempt.sql` | Historical: `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the then-live `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1`. **Current inventory:** migration **139** dropped the `atlas_run_health` compat view — use `run_health` / `run_event_trace`. |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
 | `functions/stripe-webhook/` | Deno edge function: Stripe webhooks → `workspaces` billing + Auth `plan_tier` claim sync (T2). `verify_jwt=false`. |
 | `functions/create-checkout-session/` | Deno edge function: Stripe Checkout for logged-in workspace owners (T2). |
@@ -486,10 +521,12 @@ REFERENCES, TRIGGER` schema-wide and narrows `ALTER DEFAULT PRIVILEGES` so new r
 inherit read-only. Two consequences for anyone adding a table or view here:
 
 - Follow the 050/051/052 pattern — pair every `GRANT SELECT` with an explicit `REVOKE`.
-  Migrations 041 and 018 did not, which is how `atlas_run_health` (auto-updatable and
-  `security_invoker = false`, so writes through it run as `postgres` and bypass the base
-  table's RLS) ended up accepting an unauthenticated `DELETE` of the whole
-  `atlas_run_diagnostics` history.
+  Migrations 041 and 018 did not, which is how `run_health` (then also exposed via the
+  `atlas_run_health` compat alias; auto-updatable and `security_invoker = false`, so writes
+  through it run as `postgres` and bypass the base table's RLS) ended up accepting an
+  unauthenticated `DELETE` of the whole `run_diagnostics` history. Migration 060 revoked
+  those DML grants; migration **139** dropped `atlas_run_health` — live health surfaces are
+  `run_health` / `run_event_trace` only.
 - Never widen the revoke to `REVOKE ALL` in the default-privileges statement. It would
   strip `SELECT` from the next curated view, and `safeSelect` in the frontend turns the
   resulting PostgREST 42501 into an empty panel rather than an error — a silent break.

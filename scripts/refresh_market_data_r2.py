@@ -1,7 +1,9 @@
 """Daily R2 refresh: vendor live overlap -> new immutable generations (#3780).
 
-Cron entry point (``pipeline-market-data-refresh.yml``, 13:00 UTC): fetch the
-latest bars (yfinance for prices, FRED/Yahoo-FX for macro), compare each
+Production clock is digithings-cron → digiquant-runner (``market-data-refresh``,
+13:00 and 21:30 UTC, #4761). ``pipeline-market-data-refresh.yml`` is manual
+override only. Fetch the latest bars (yfinance for prices, FRED/Yahoo-FX
+for macro), compare each
 dataset's sealed overlap against its R2 generation via
 :func:`overlap_hash`, and write a NEW generation only when data moved:
 
@@ -22,9 +24,12 @@ of the universe; outcomes are recorded per ticker and the manifest is still
 written for the datasets that succeeded.
 
 Registry conflicts (same key, different bytes) re-pull and recompute exactly
-once and put ONLY under a new key — a recompute that lands on the same key
-is reported as an ``error`` without a second put, so an existing generation
-is never overwritten. R2 generations are immutable.
+once. A recompute that lands on the same ``as_of`` with different bytes is a
+same-day vendor restatement (#4621): it is sealed under a NEW immutable
+content-hash key (``{as_of}--{sha12}.parquet``) and the ``latest`` pointer
+flips to it, so the existing generation is never overwritten and the cron
+stays green. Only a restatement put that itself conflicts is reported as an
+``error``. R2 generations are immutable.
 
 Dataset ids follow the Task 5 backfill exactly: normalized tickers for
 prices (``SPY``), ``{source}__{series}`` lowercased-source for macro
@@ -33,8 +38,45 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 ``download_ohlcv_batch``; the real adapter is ``fetch_batch`` in
 ``digiquant.data.prices.fetchers`` — used here.)
 
-Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
-SystemExit message on missing credentials/URIs (fail closed, like backfill).
+Exit codes: 0 fresh, 1 stale (gate refused, or any ticker hard-failed, or any
+slow-cadence macro series ``history-only``), SystemExit message on missing
+credentials/URIs (fail closed, like backfill).
+
+Staleness is evaluated per series *and* per leg. A monthly/quarterly macro
+series that published nothing is exempt (#4621). That exemption is per-series
+and keyed on cadence alone, so it cannot see a leg: when the whole macro panel
+comes back ``history-only`` at once, every outcome is individually exempt,
+``failed`` is empty and the run exits 0 claiming fresh while the panel stays
+frozen at the last good seal. The exemption is therefore suspended only when
+*every* exempt macro series is ``history-only`` at once
+(:func:`_macro_leg_dead`), and the run then exits 1.
+
+Scope of that guard, precisely: it closes the *unanimous* ``history-only`` shape
+only, and only over series the manifest actually declared. Two neighbouring
+freezes are *not* covered by it — a panel that keeps serving rows inside its
+live window (``up-to-date``, so not a soft fail at all), and a single retired
+series among live ones, which the ``> 1`` floor plus the #4621 exemption let
+through. Both are closed instead by measuring the seal rather than the mode:
+``_macro_as_of_stale`` (:func:`_macro_as_of_stale`, DIG-1137/DIG-2405) compares
+each macro outcome's ``as_of`` against its own cadence window, so a panel that
+has stopped advancing is named whether the vendor still answers
+(``up-to-date``) or has stopped publishing (``history-only``). One freeze is
+still open and predates both guards: an unreadable manifest
+(``_resolve_macro_specs`` returns ``[]``, leaving no ids for any of these guards
+to reason about). Partial legs stay out of reach, by design. All of this is
+recorded in ``digiquant/ARCHITECTURE.md``.
+
+No vendor API key is needed on this path: the macro panel is sealed from
+anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
+the newest page per series (``window_limit`` by cadence, a 1000-row tail on
+bootstrap) and merges it into the existing generation, keeping sealed rows
+older than the page. Only the 23 kept panel ids
+(``digiquant.data.prices.gloomberb_macro.KEPT_SERIES_IDS``) are refreshed;
+the 8 dropped ids are never fetched and their ``latest`` pointers keep
+serving the last seal. Yahoo FX, equities, and the rest of the universe
+still refresh, and the job exits 0 when they succeed. Dataset ids stay
+``fred__{SERIES}`` and the parquet ``source`` column stays ``"fred"`` — the
+prefix is the R2 dataset id, not the vendor.
 
 Core macro mirror (#3780): the writers-stop paused the Supabase macro writers,
 but ``macro_series_observations`` is a carve-out table still read directly by
@@ -46,10 +88,12 @@ refresh mirrors the sealed Yahoo FX R2 generations back into that table
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable  # score:allow untyped any — R2 JSON + callbacks
@@ -71,9 +115,11 @@ from digiquant.data.prices.r2_history import (  # noqa: E402
     R2HistoryStore,
     build_manifest,
     generation_key,
+    generation_restatement_key,
     latest_pointer_key,
     macro_key,
     macro_latest_pointer_key,
+    macro_restatement_key,
     normalize_ticker,
 )
 from digiquant.data.prices.refresh_gate import staleness_gate  # noqa: E402
@@ -94,7 +140,43 @@ MODE_ERROR = "error"
 
 _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
 
+#: Outcomes that claim the fetch *worked*. `_macro_leg_dead` reads the soft-fail
+#: modes, so the modes a vendor can be quiet on are not its business; the
+#: `as_of` age guard reads these instead, because a series the vendor has
+#: retired still comes back `full-repull` (DIG-1137).
+_MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL})
+
+#: Modes the `as_of` age guard measures, as opposed to ``_MACRO_SUCCESS_MODES``'s
+#: "the fetch worked" claim. ``MODE_HISTORY_ONLY`` is added because a *retired*
+#: slow series arrives in that mode: its vendor stops publishing, the live
+#: window comes back empty, and the outcome carries the abandoned seal. The
+#: #4621 exemption forgives that outcome on cadence alone, and
+#: ``_macro_leg_dead`` needs unanimity over the whole exempt set, so one retired
+#: series among live ones was named by nothing (DIG-2405).
+#:
+#: ``MODE_ERROR`` is left to the soft-fail reduction, which never exempts it
+#: whatever its seal says, so it is already loud and judging its age would add
+#: nothing.
+_MACRO_JUDGED_MODES = _MACRO_SUCCESS_MODES | {MODE_HISTORY_ONLY}
+
 LIVE_WINDOW_DAYS = 45
+# The live fetch window must span at least one publication period of the series
+# (#4588). LIVE_WINDOW_DAYS assumes a series that publishes inside 45 days; for a
+# monthly series the newest observation can legitimately sit ~90 days behind the
+# run (release lag plus the pending release), so the 45-day window came back empty
+# and the run was marked stale. Widening the window makes the fetch *non-empty*
+# (it contains the seal row) so the existing up-to-date path covers it; an empty
+# window is still a soft fail, since a dead feed looks the same as a slow one.
+#
+# Only ``monthly``/``quarterly`` actually widen: a weekly seal is at most ~7 days
+# old, so the 45-day default already spans several publications, and widening it
+# would only raise the age at which a dead weekly feed is noticed.
+_CADENCE_WINDOW_DAYS: dict[str, int] = {
+    "daily": LIVE_WINDOW_DAYS,
+    "weekly": LIVE_WINDOW_DAYS,
+    "monthly": 120,
+    "quarterly": 240,
+}
 FULL_HISTORY_START = "1990-01-01"
 PRICE_VALUE_COLS = ("open", "high", "low", "close", "volume")
 MACRO_VALUE_COLS = ("obs_date", "value")
@@ -102,7 +184,6 @@ MACRO_VALUE_COLS = ("obs_date", "value")
 # direct-PG SELECT of source,series_id,obs_date,value,unit — no meta).
 MACRO_COLUMNS = ("source", "series_id", "obs_date", "value", "unit")
 POSTGRES_URI_ENV = "CORE_POSTGRES_URI"
-FRED_API_KEY_ENV = "FRED_API_KEY"
 # Core Supabase REST creds for the macro mirror (same names the digiquant
 # prices workflow already uses, with the legacy fallbacks).
 CORE_SUPABASE_URL_ENV = "CORE_SUPABASE_URL"
@@ -118,6 +199,10 @@ SUPABASE_SERVICE_KEY_FALLBACK_ENV = "SUPABASE_SERVICE_ROLE_KEY"
 # deliberately excluded: its core readers moved to R2, so re-writing it would
 # resurrect a path that was retired on purpose.
 CORE_MIRROR_MACRO_SOURCES = frozenset({"yahoo"})
+# Synthetic outcome name for a ``--macro-manifest`` that could not be read
+# (DIG-1371). It is not a dataset, so it never appears in ``exempt`` and the
+# #4621 exemption cannot shield it: the macro leg is not slow, it is undeclared.
+UNREADABLE_MACRO_MANIFEST = "macro-manifest-unreadable"
 
 
 def _sibling(name: str) -> Any:
@@ -279,6 +364,29 @@ def _put_price(store: Any, ticker: str, frame: pl.DataFrame, as_of: str) -> str:
     return key
 
 
+def _put_price_restatement(store: Any, ticker: str, frame: pl.DataFrame, as_of: str) -> str:
+    """Seal a same-``as_of`` price revision under a NEW key + flip the pointer (#4621).
+
+    The base generation key is immutable, so the revised bytes go under a
+    content-hash key (:func:`generation_restatement_key`); the old generation
+    stays readable under its own registry row. Raises
+    :class:`ArchiveVerifyError` when the derived key itself conflicts — the
+    caller must report that as an ``error``, never as success.
+    """
+    norm = normalize_ticker(ticker)
+    payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="date")
+    key = generation_restatement_key(ticker, as_of, hashlib.sha256(payload).hexdigest())
+    store.put_generation(
+        key,
+        payload,
+        SOURCE_TABLE_PRICE,
+        {"ticker": norm, "as_of": as_of},
+        rows=frame.height,
+    )
+    store.swap_latest_pointer(latest_pointer_key(ticker), key)
+    return key
+
+
 def _full_repull(
     ticker: str, store: Any, run: str, sealed: bool, prior: pl.DataFrame | None
 ) -> dict[str, Any]:
@@ -349,23 +457,45 @@ def _full_repull(
                 note=f"registry conflict, re-pull failed: {exc}",
             )
         if top2 == top:
+            # Same-day restatement (#4621): same as_of, different bytes. The
+            # base key is immutable, so seal the revision under a NEW
+            # content-hash key and flip the pointer instead of erroring.
+            try:
+                new_key = _put_price_restatement(store, ticker, fresh, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=prior_as_of,
+                    rows=prior.height if prior is not None else 0,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=prior_as_of,
-                rows=prior.height if prior is not None else 0,
-                note=f"registry conflict for {generation_key(ticker, top)};"
-                " kept existing generation",
+                MODE_FULL_REPULL,
+                as_of=top2,
+                rows=fresh.height,
+                note=f"sealed overlap restated (same-day revision {new_key})",
             )
         try:
             _put_price(store, ticker, fresh, top2)
-        except ArchiveVerifyError as exc:
+        except ArchiveVerifyError:
+            try:
+                new_key = _put_price_restatement(store, ticker, fresh, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=prior_as_of,
+                    rows=prior.height if prior is not None else 0,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=prior_as_of,
-                rows=prior.height if prior is not None else 0,
-                note=f"registry conflict persists: {exc}",
+                MODE_FULL_REPULL,
+                as_of=top2,
+                rows=fresh.height,
+                note=f"sealed overlap restated (same-day revision {new_key})",
             )
         top, full = top2, fresh
     return _outcome(
@@ -455,7 +585,7 @@ def refresh_ticker(
                 rows=hist.height,
                 note=f"registry conflict, re-pull failed: {exc}",
             )
-        if not top2 or top2 == top:
+        if not top2:
             return _outcome(
                 norm,
                 MODE_ERROR,
@@ -464,15 +594,45 @@ def refresh_ticker(
                 note=f"registry conflict for {generation_key(ticker, top)};"
                 " kept existing generation",
             )
-        try:
-            _put_price(store, ticker, merged2, top2)
-        except ArchiveVerifyError as exc:
+        if top2 == top:
+            # Same-day restatement on the incremental path (#4621): seal the
+            # revised bytes under a NEW content-hash key, flip the pointer.
+            try:
+                new_key = _put_price_restatement(store, ticker, merged2, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict persists: {exc}",
+                )
             return _outcome(
                 norm,
-                MODE_ERROR,
-                as_of=seal,
-                rows=hist.height,
-                note=f"registry conflict persists: {exc}",
+                MODE_INCREMENTAL,
+                as_of=top2,
+                rows=merged2.height,
+                note=f"seal {seal} -> {top2} (same-day revision {new_key})",
+            )
+        try:
+            _put_price(store, ticker, merged2, top2)
+        except ArchiveVerifyError:
+            try:
+                new_key = _put_price_restatement(store, ticker, merged2, top2)
+            except ArchiveVerifyError as exc:
+                return _outcome(
+                    norm,
+                    MODE_ERROR,
+                    as_of=seal,
+                    rows=hist.height,
+                    note=f"registry conflict persists: {exc}",
+                )
+            return _outcome(
+                norm,
+                MODE_INCREMENTAL,
+                as_of=top2,
+                rows=merged2.height,
+                note=f"seal {seal} -> {top2} (same-day revision {new_key})",
             )
         top, merged = top2, merged2
     return _outcome(
@@ -545,6 +705,29 @@ def _normalize_macro_rows(rows: list[dict[str, Any]]) -> pl.DataFrame:
 def _put_macro(store: Any, source: str, series: str, frame: pl.DataFrame, as_of: str) -> str:
     key = macro_key(source, series, as_of)
     payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="obs_date")
+    store.put_generation(
+        key,
+        payload,
+        SOURCE_TABLE_MACRO,
+        {"source": source, "series": series, "as_of": as_of},
+        rows=frame.height,
+    )
+    store.swap_latest_pointer(macro_latest_pointer_key(source, series), key)
+    return key
+
+
+def _put_macro_restatement(
+    store: Any, source: str, series: str, frame: pl.DataFrame, as_of: str
+) -> str:
+    """Seal a same-``as_of`` macro revision under a NEW key + flip the pointer (#4621).
+
+    Macro mirror of :func:`_put_price_restatement`: the base generation key is
+    immutable, so revised bytes go under :func:`macro_restatement_key` and the
+    old generation stays readable. A conflicting derived key still raises
+    :class:`ArchiveVerifyError` for the caller to report as an ``error``.
+    """
+    payload = _backfill.to_parquet_bytes(frame.to_dicts(), date_col="obs_date")
+    key = macro_restatement_key(source, series, as_of, hashlib.sha256(payload).hexdigest())
     store.put_generation(
         key,
         payload,
@@ -634,7 +817,7 @@ def build_core_supabase_client() -> Any | None:
 
 def mirror_macro_to_core(
     store: Any,
-    specs: list[tuple[str, str]],
+    specs: list[tuple[str, str, str | None]],
     *,
     run: str,
     client: Any | None,
@@ -652,7 +835,9 @@ def mirror_macro_to_core(
     upsert error is recorded and never fails the R2 refresh.
     """
     summary: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
-    targets = [(s.lower(), sid) for s, sid in specs if s.lower() in CORE_MIRROR_MACRO_SOURCES]
+    targets = [
+        (s.lower(), sid) for s, sid, _cadence in specs if s.lower() in CORE_MIRROR_MACRO_SOURCES
+    ]
     if client is None or not targets:
         summary["skipped"] = [f"{s}__{sid}: no core client" for s, sid in targets]
         return summary
@@ -677,6 +862,153 @@ def mirror_macro_to_core(
     return summary
 
 
+#: Cadences whose empty-window ``history-only`` is benign (#4621). A slow FRED
+#: series legitimately publishes nothing for weeks, so an empty fetch window
+#: means "nothing to do", not feed death. Daily price tickers — and any
+#: ``error`` outcome at any cadence — still fail loud.
+SLOW_CADENCES = frozenset({"monthly", "quarterly"})
+
+
+def _slow_macro_exempt_ids(macro_specs: list[tuple[str, str, str | None]]) -> set[str]:
+    """Dataset ids whose ``history-only`` must not mark the run stale (#4621)."""
+    return {
+        f"{source}__{series}"
+        for source, series, cadence in macro_specs
+        if str(cadence or "").strip().lower() in SLOW_CADENCES
+    }
+
+
+def _macro_leg_dead(outcomes: list[dict[str, Any]], exempt: set[str]) -> bool:
+    """True when every exempt macro series is ``history-only`` at once (DIG-694).
+
+    The #4621 exemption is per-series and keyed on cadence alone, so it cannot
+    see a leg: when the whole macro panel comes back ``history-only`` at once,
+    each outcome is individually exempt, ``failed`` comes back empty and the
+    run exits 0 claiming fresh while the panel is frozen at the last good
+    seal. ``staleness_gate`` cannot cover it either -- it is a date-gap check
+    over the max ``as_of`` across datasets, and a whole-leg freeze leaves the
+    best ``as_of`` untouched.
+
+    ``history-only`` on a slow series has two causes that are not equally
+    strong evidence. An empty live window means the 120/240-day publication
+    window ran dry; a fetch failure means the vendor refused *that one* call,
+    and ``_fetch_macro`` builds a fresh client per series, so a rate-limit
+    blip silences an arbitrary subset of the panel. A subset is therefore not
+    evidence of anything -- a majority rule would fail the cron on a healthy
+    panel, which is how operators learn to ignore it. Only unanimity over the
+    exempt set is safe: every slow series silent at once is the feed, whatever
+    the cause. ``main`` emits exactly one outcome per macro spec, so the exempt
+    ids and their outcomes always line up.
+
+    The ``> 1`` floor is #4621 itself: with a single exempt series there is no
+    leg to judge, and its quiet window is the release calendar. It buys two
+    known limits, both recorded in ``digiquant/ARCHITECTURE.md`` -- a
+    single-series manifest can never trip this guard, and a partial leg stays
+    exempt exactly as it did before.
+
+    What the floor costs, and how it is paid back. It also means a *single*
+    retired series among live ones is not a dead leg by this guard's definition,
+    which used to leave that shape named by nothing: the #4621 exemption
+    forgives its ``history-only`` on cadence alone and the age guard skipped the
+    mode. It is now named by ``_macro_as_of_stale`` instead (DIG-2405) -- a
+    measurement of the seal, not a relaxation of unanimity. The floor stands,
+    because relaxing it would fire on every per-series vendor refusal.
+    """
+    silent = {
+        o["ticker"] for o in outcomes if o["mode"] == MODE_HISTORY_ONLY and o["ticker"] in exempt
+    }
+    return len(silent) > 1 and silent == exempt
+
+
+def _live_window_days(cadence: str | None) -> int:
+    """Live fetch window for a series' declared cadence (default: daily, 45d)."""
+    if not cadence:
+        return LIVE_WINDOW_DAYS
+    key = cadence.strip().lower()
+    try:
+        return _CADENCE_WINDOW_DAYS[key]
+    except KeyError:
+        raise ValueError(
+            f"unknown cadence {cadence!r}; expected one of {sorted(_CADENCE_WINDOW_DAYS)}"
+        ) from None
+
+
+def _macro_as_of_stale(
+    outcomes: list[dict[str, Any]],
+    macro_specs: list[tuple[str, str, str | None]],
+    run: str,
+    already: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Macro series sealed older than their own cadence window (DIG-1137).
+
+    ``_macro_leg_dead`` reads ``mode``: it catches the macro leg going
+    ``history-only`` outright. It cannot see the other way a macro panel dies --
+    the vendor stops publishing but keeps *answering*. A live fetch that returns
+    rows the store already has lands on the ``no new observations`` branch and
+    comes back ``up-to-date``, which is not a soft fail, so ``failed`` stays
+    empty and the run reports itself fresh with the panel frozen at its last
+    seal. ``staleness_gate`` cannot catch it either: it takes the newest
+    ``as_of`` across all datasets, and healthy price tickers pin that at the run
+    date no matter how dead the macro leg is.
+
+    So this reads the other field. Every macro outcome whose mode claims the
+    fetch worked is measured on ``as_of`` against the run date, in calendar
+    days, against the same ``_CADENCE_WINDOW_DAYS`` bound the live fetch used.
+    The window is the right threshold rather than the seal itself: a monthly
+    series legitimately holds a 34-day-old seal inside its 120-day window, and
+    flagging that would train operators to ignore the gate.
+
+    Orthogonal to ``_macro_leg_dead``, per outcome rather than per leg. That
+    guard needs unanimity because ``history-only`` has two indistinguishable
+    causes (an emptied window, or one vendor refusing one series) and a subset
+    is not evidence. Age has a single cause and is a measurement, so one frozen
+    series is a finding rather than a coincidence -- and it can only ever *add*
+    to ``failed``, never clear it.
+
+    Two limits, both accepted rather than hidden. ``MODE_ERROR`` is left to the
+    soft-fail reduction, which never exempts it whatever its seal says, so it is
+    already loud and judging its age would add nothing. And the windows are
+    calendar days, not open trading days like ``staleness_gate``'s bound, so a
+    monthly series is judged against months.
+
+    ``MODE_HISTORY_ONLY`` used to be excluded here too, on the argument that a
+    past-window series "has already emptied its live window, so its age adds
+    nothing to the leg test". That argument was wrong and one retired monthly
+    series is its counterexample (DIG-2405). Emptying the live window is not
+    independent of the seal: both are the same measurement of how long the
+    vendor has been silent. A series sitting out its release cycle has an empty
+    window *and a fresh seal*, so age cannot separate that from a one-call
+    vendor refusal -- which is the ambiguity ``_macro_leg_dead`` needs unanimity
+    for, and it is why this guard leaves fresh-sealed ``history-only`` outcomes
+    alone. A series whose seal is itself older than its own window has no such
+    ambiguity left: the store and the vendor agree there is nothing in-window at
+    all, the cause is a single one, and it is retirement rather than silence.
+    That is why the exclusion was dropped rather than the threshold widened --
+    the bound is still the series' own ``_CADENCE_WINDOW_DAYS`` window, and a
+    quiet release cycle at 34 days is still quiet.
+    """
+    cadence_of = {f"{source}__{series}": cadence for source, series, cadence in macro_specs}
+    # Both guards can reach the same ticker now that a retired slow series is
+    # judged here too: an exempt series caught by unanimity *and* by its own age
+    # is one finding, not two. `already` keeps the addition additive and keeps
+    # the operator-facing list free of duplicates.
+    named = {o["ticker"] for o in already or ()}
+    run_date = datetime.fromisoformat(run[:10]).date()
+    aged: list[dict[str, Any]] = []
+    for o in outcomes:
+        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_JUDGED_MODES:
+            continue
+        as_of = str(o.get("as_of") or "")
+        if not as_of:
+            # A judged outcome with no seal carries no date to measure; the fetch
+            # branches that omit `as_of` all report a soft fail.
+            continue
+        age_days = (run_date - datetime.fromisoformat(as_of[:10]).date()).days
+        if age_days > _live_window_days(cadence_of[o["ticker"]]) and o["ticker"] not in named:
+            aged.append(o)
+    return aged
+
+
 def refresh_macro_series(
     source: str,
     series: str,
@@ -684,6 +1016,7 @@ def refresh_macro_series(
     manifest: dict[str, Any] | None = None,
     *,
     as_of: str | None = None,
+    cadence: str | None = None,
 ) -> dict[str, Any]:
     """Refresh one macro series (FRED revisions use the same restatement rule)."""
     source = source.lower()
@@ -699,9 +1032,26 @@ def refresh_macro_series(
     except Exception as exc:
         return _outcome(name, MODE_ERROR, note=f"history read failed: {type(exc).__name__}: {exc}")
     seal = _max_date(hist, "obs_date") or str(manifest.get("as_of") or run)
-    start, end = _shift_days(run, -LIVE_WINDOW_DAYS), _shift_days(run, 1)
+    start, end = _shift_days(run, -_live_window_days(cadence)), _shift_days(run, 1)
 
     def _fetch_full() -> pl.DataFrame:
+        if source == "fred":
+            # Gloomberb serves one newest page (no 1990 cursor): seal the
+            # 1000-row tail only. Rows before the page are whatever was
+            # already sealed — or nothing on a fresh bucket.
+            from digiquant.data.prices.gloomberb_macro import (
+                build_ingest_client,
+                fetch_gloomberb_series,
+            )
+
+            rows = fetch_gloomberb_series(
+                build_ingest_client(), series, unit=None, title=None, limit=1000
+            )
+            if not rows:
+                raise FetchError(name, "empty gloomberb page")
+            return _normalize_macro_rows(rows).filter(
+                pl.col("obs_date") <= pl.lit(run).cast(pl.Date)
+            )
         rows = store.fetch_macro_full(source, series, end)
         if not rows:
             raise FetchError(name, "empty full-window observations")
@@ -719,9 +1069,12 @@ def refresh_macro_series(
             )
         top = _max_date(full, "obs_date")
         _put_macro(store, source, series, full, top)
-        return _outcome(name, MODE_FULL_REPULL, as_of=top, rows=full.height, note="bootstrap")
+        note = "bootstrap"
+        if source == "fred":
+            note = "bootstrap (truncated gloomberb page: 1000-row tail sealed)"
+        return _outcome(name, MODE_FULL_REPULL, as_of=top, rows=full.height, note=note)
     try:
-        rows = store.fetch_macro(source, series, start, end)
+        rows = store.fetch_macro(source, series, start, end, cadence=cadence)
     except FetchError as exc:
         return _outcome(
             name,
@@ -753,6 +1106,42 @@ def refresh_macro_series(
         seal,
         ("value",),
     ):
+        if source == "fred":
+            # Short-page merge (#4794): overwrite only the dates present in
+            # the Gloomberb page and keep older sealed rows. Never
+            # full-replace history with one 1000-row page.
+            merged = (
+                pl.concat([hist, live]).unique(subset=["obs_date"], keep="last").sort("obs_date")
+            )
+            top = _max_date(merged, "obs_date")
+            try:
+                _put_macro(store, source, series, merged, top)
+            except ArchiveVerifyError:
+                try:
+                    new_key = _put_macro_restatement(store, source, series, merged, top)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict, kept existing: {exc}",
+                    )
+                return _outcome(
+                    name,
+                    MODE_FULL_REPULL,
+                    as_of=top,
+                    rows=merged.height,
+                    note="window restatement; rows before the gloomberb page kept"
+                    f" (same-day revision {new_key})",
+                )
+            return _outcome(
+                name,
+                MODE_FULL_REPULL,
+                as_of=top,
+                rows=merged.height,
+                note="window restatement; rows before the gloomberb page kept",
+            )
         try:
             full = _fetch_full()
         except FetchError as exc:
@@ -786,7 +1175,7 @@ def refresh_macro_series(
                     note=f"registry conflict, re-pull failed: {exc}",
                 )
             top2 = _max_date(fresh, "obs_date")
-            if not top2 or top2 == top:
+            if not top2:
                 return _outcome(
                     name,
                     MODE_ERROR,
@@ -795,15 +1184,45 @@ def refresh_macro_series(
                     note=f"registry conflict for {macro_key(source, series, top)};"
                     " kept existing generation",
                 )
-            try:
-                _put_macro(store, source, series, fresh, top2)
-            except ArchiveVerifyError as exc:
+            if top2 == top:
+                # Same-day macro restatement (#4621): seal under a NEW
+                # content-hash key and flip the pointer instead of erroring.
+                try:
+                    new_key = _put_macro_restatement(store, source, series, fresh, top2)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict persists: {exc}",
+                    )
                 return _outcome(
                     name,
-                    MODE_ERROR,
-                    as_of=seal,
-                    rows=hist.height,
-                    note=f"registry conflict persists: {exc}",
+                    MODE_FULL_REPULL,
+                    as_of=top2,
+                    rows=fresh.height,
+                    note=f"sealed overlap restated (same-day revision {new_key})",
+                )
+            try:
+                _put_macro(store, source, series, fresh, top2)
+            except ArchiveVerifyError:
+                try:
+                    new_key = _put_macro_restatement(store, source, series, fresh, top2)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict persists: {exc}",
+                    )
+                return _outcome(
+                    name,
+                    MODE_FULL_REPULL,
+                    as_of=top2,
+                    rows=fresh.height,
+                    note=f"sealed overlap restated (same-day revision {new_key})",
                 )
             top, full = top2, fresh
         return _outcome(
@@ -819,13 +1238,26 @@ def refresh_macro_series(
     top = _max_date(merged, "obs_date")
     try:
         _put_macro(store, source, series, merged, top)
-    except ArchiveVerifyError as exc:
+    except ArchiveVerifyError:
+        # Same-day macro restatement on the incremental path (#4621): seal the
+        # revised bytes under a NEW content-hash key, flip the pointer. A
+        # conflicting derived key stays a loud error, never silent success.
+        try:
+            new_key = _put_macro_restatement(store, source, series, merged, top)
+        except ArchiveVerifyError as exc:
+            return _outcome(
+                name,
+                MODE_ERROR,
+                as_of=seal,
+                rows=hist.height,
+                note=f"registry conflict, kept existing: {exc}",
+            )
         return _outcome(
             name,
-            MODE_ERROR,
-            as_of=seal,
-            rows=hist.height,
-            note=f"registry conflict, kept existing: {exc}",
+            MODE_INCREMENTAL,
+            as_of=top,
+            rows=merged.height,
+            note=f"seal {seal} -> {top} (same-day revision {new_key})",
         )
     return _outcome(
         name, MODE_INCREMENTAL, as_of=top, rows=merged.height, note=f"seal {seal} -> {top}"
@@ -929,21 +1361,58 @@ class RefreshStore(_backfill.R2StoreAdapter):
             raise FetchError(ticker, "empty full-window fetch")
         return frame
 
-    def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
-        return self._fetch_macro(source, series, start, end)
+    def fetch_macro(
+        self,
+        source: str,
+        series: str,
+        start: str,
+        end: str,
+        *,
+        cadence: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._fetch_macro(source, series, start, end, cadence=cadence)
 
     def fetch_macro_full(self, source: str, series: str, end: str) -> list[dict[str, Any]]:
         return self._fetch_macro(source, series, FULL_HISTORY_START, end)
 
-    def _fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+    def _fetch_macro(
+        self,
+        source: str,
+        series: str,
+        start: str,
+        end: str,
+        *,
+        cadence: str | None = None,
+    ) -> list[dict[str, Any]]:
         if source == "fred":
-            api_key = os.environ.get(FRED_API_KEY_ENV, "").strip()
-            if not api_key:
-                raise FetchError(f"{source}__{series}", f"missing {FRED_API_KEY_ENV}")
-            from digiquant.data.prices.macro_ingest import MacroManifest, fetch_fred
+            from digiquant.data.prices.gloomberb_macro import (
+                KEPT_SERIES_IDS,
+                GloomberbMacroError,
+                build_ingest_client,
+                fetch_gloomberb,
+                window_limit,
+            )
+            from digiquant.data.prices.macro_ingest import MacroManifest
 
-            manifest = MacroManifest(fred_series=[{"id": series}], fred_backfill_start=start)
-            rows = fetch_fred(manifest, api_key, start=start, end=end, only_series=series)
+            if series not in KEPT_SERIES_IDS:
+                raise FetchError(
+                    f"{source}__{series}",
+                    "not on the gloomberb panel; serving last seal",
+                )
+            manifest = MacroManifest(
+                fred_series=[{"id": series, "cadence": cadence}],
+                fred_backfill_start=start,
+            )
+            try:
+                rows = fetch_gloomberb(
+                    manifest,
+                    build_ingest_client(),
+                    only_series=series,
+                    limit_for=lambda _cadence: window_limit(cadence),
+                )
+            except (GloomberbMacroError, RuntimeError) as exc:
+                raise FetchError(f"{source}__{series}", str(exc)) from exc
+            rows = [r for r in rows if start <= str(r["obs_date"]) <= end]
         elif source == "yahoo":
             from digiquant.data.prices.macro_ingest import (
                 YAHOO_FX_DEFAULT,
@@ -997,26 +1466,97 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
-def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> list[tuple[str, str]]:
-    """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX."""
+class MacroSpecResolution(list):
+    """The resolver's answer: resolved macro specs, plus why there are none.
+
+    A ``list`` subclass on purpose (DIG-1371). Every consumer of
+    :func:`_resolve_macro_specs` iterates the result — ``main``'s refresh loop,
+    :func:`_slow_macro_exempt_ids`, and the digiquant test doubles that replace
+    the resolver wholesale and hand back a plain ``list`` — so the return type
+    has to stay list-compatible. ``manifest_error`` is the one thing an empty
+    list cannot say: it is the only signal separating a manifest this run could
+    not read from a panel that legitimately declared nothing, and without it
+    ``main`` reported fresh while the macro panel stayed frozen at its last seal.
+    """
+
+    manifest_error: str
+
+    def __init__(
+        self,
+        specs: Iterable[tuple[str, str, str | None]] = (),
+        *,
+        manifest_error: str = "",
+    ) -> None:
+        super().__init__(specs)
+        self.manifest_error = manifest_error
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MacroSpecResolution):
+            return list(self) == list(other) and self.manifest_error == other.manifest_error
+        if isinstance(other, list):
+            return list(self) == list(other)
+        return NotImplemented
+
+    def __ne__(self, other: object) -> bool:
+        # list defines __ne__ at C level, so it does not delegate to our
+        # __eq__; override it explicitly or a != b disagrees with a == b.
+        eq = self.__eq__(other)
+        if eq is NotImplemented:
+            return eq
+        return not eq
+
+    __hash__ = None  # type: ignore[assignment] - list is unhashable; keep it so.
+
+
+def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> MacroSpecResolution:
+    """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX.
+
+    The third element is the series' native cadence (``None`` means daily), which
+    sets the live fetch window in :func:`refresh_macro_series`.
+
+    ``None`` is a deliberate reading, not a gap (DIG-2406).
+    `_live_window_days` resolves it to `LIVE_WINDOW_DAYS`, the *narrowest*
+    of the four windows in `_CADENCE_WINDOW_DAYS`, so a series nobody wrote a
+    cadence down is judged at 45 days rather than at the slowest: an
+    undeclared cadence buys no patience. Every id the shipped manifest fetches
+    declares one -- see `research/config/macro_series.yaml`. The paths that
+    cannot are the `--macro-series` override below and the Yahoo FX
+    list, both daily by construction.
+    Never raises on an unreadable manifest (DIG-1371): it resolves no specs and
+    carries the cause on ``manifest_error`` instead, so ``main`` can report it
+    loudly *after* the equity leg has run. A raise here would abort the run
+    before :func:`refresh_universe` and turn a broken macro manifest into a
+    total market-data outage.
+    """
     if cli_specs:
-        out: list[tuple[str, str]] = []
+        out: list[tuple[str, str, str | None]] = []
         for spec in cli_specs:
             source, _, series = spec.partition(":")
             if not source or not series:
                 raise SystemExit(f"--macro-series expects SOURCE:SERIES, got {spec!r}")
-            out.append((source.lower(), series))
-        return out
+            out.append((source.lower(), series, None))
+        return MacroSpecResolution(out)
     try:
+        from digiquant.data.prices.gloomberb_macro import KEPT_SERIES_IDS
         from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT, MacroManifest
 
         macro_manifest = MacroManifest.from_yaml(manifest_path)
-        fred = [("fred", str(s.get("id"))) for s in macro_manifest.fred_series if s.get("id")]
-        yahoo = [("yahoo", cfg["series_id"]) for cfg in YAHOO_FX_DEFAULT.values()]
-        return fred + yahoo
+        fred = [
+            ("fred", str(s.get("id")), s.get("cadence"))
+            for s in macro_manifest.fred_series
+            if s.get("id") and str(s.get("id")) in KEPT_SERIES_IDS
+        ]
+        yahoo = [("yahoo", cfg["series_id"], None) for cfg in YAHOO_FX_DEFAULT.values()]
+        return MacroSpecResolution(fred + yahoo)
     except Exception as exc:
-        print(f"warn: macro manifest unreadable ({exc}); skipping macro refresh")
-        return []
+        print(f"warn: macro manifest unreadable ({exc}); the macro leg will fail this run")
+        return MacroSpecResolution([], manifest_error=f"{type(exc).__name__}: {exc}")
+
+
+def _report_core_macro_mirror(mirror: dict[str, Any]) -> None:
+    """One line for the core macro mirror (#3780), whether it ran or was skipped."""
+    note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
+    print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1064,6 +1604,13 @@ def main(argv: list[str] | None = None) -> int:
     macro_specs = (
         [] if args.skip_macro else _resolve_macro_specs(args.macro_series, args.macro_manifest)
     )
+    # Read with getattr: --skip-macro hands back a plain list, and digiquant's own
+    # test doubles replace the resolver with one that does too (DIG-1371).
+    manifest_error = getattr(macro_specs, "manifest_error", "")
+    # No key skip (#4794): the macro panel fetches Gloomberb anonymously,
+    # so a missing key is normal. Dropped panel ids never reach this list
+    # (see _resolve_macro_specs); their pointers keep serving the last seal.
+    fred_skipped: list[str] = []
     print(
         f"universe: {len(universe)} tickers; {len(macro_specs)} macro series;"
         f" run={run} sealed={args.sealed}"
@@ -1072,7 +1619,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         for ticker in universe:
             print(f"plan: refresh {normalize_ticker(ticker)}")
-        for source, series in macro_specs:
+        for source, series, _cadence in macro_specs:
             print(f"plan: refresh {source}__{series}")
         return 0
     if not args.postgres_uri:
@@ -1083,9 +1630,25 @@ def main(argv: list[str] | None = None) -> int:
         universe, store, manifest, as_of=run, sealed=args.sealed, progress=print
     )
     macro_outcomes = []
-    for source, series in macro_specs:
+    # An unreadable manifest used to become an empty spec list, so the whole macro
+    # leg vanished and the run reported fresh with the panel frozen at its last
+    # seal (DIG-1371). Report it as an outcome instead — here, after
+    # refresh_universe, because raising at resolve time would abort the run
+    # before the equity leg. --skip-macro never resolves the manifest and so can
+    # never manufacture this failure.
+    if manifest_error:
+        unreadable = _outcome(
+            UNREADABLE_MACRO_MANIFEST,
+            MODE_ERROR,
+            note=f"macro manifest unreadable: {manifest_error}",
+        )
+        macro_outcomes.append(unreadable)
+        print(f"{unreadable['ticker']}: {unreadable['mode']} ({unreadable['note']})")
+    for source, series, cadence in macro_specs:
         try:
-            outcome = refresh_macro_series(source, series, store, manifest, as_of=run)
+            outcome = refresh_macro_series(
+                source, series, store, manifest, as_of=run, cadence=cadence
+            )
         except Exception as exc:
             outcome = _outcome(
                 f"{source}__{series}",
@@ -1096,7 +1659,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{outcome['ticker']}: {outcome['mode']} ({outcome['note']})")
 
     mirror: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
-    if args.core_macro_mirror and macro_specs:
+    if manifest_error:
+        # No specs meant no mirror call, so the artifact would otherwise report
+        # {"rows": 0, "series": 0, "skipped": []} — byte-identical to a healthy
+        # but empty mirror, while twelve-x's Yahoo FX pairs quietly go stale in
+        # core macro_series_observations.
+        mirror["skipped"] = [f"macro manifest unreadable: {manifest_error}"]
+        _report_core_macro_mirror(mirror)
+    elif args.core_macro_mirror and macro_specs:
         try:
             mirror = mirror_macro_to_core(
                 store, macro_specs, run=run, client=build_core_supabase_client()
@@ -1107,8 +1677,7 @@ def main(argv: list[str] | None = None) -> int:
                 "series": 0,
                 "skipped": [f"mirror raised: {type(exc).__name__}"],
             }
-        note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
-        print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
+        _report_core_macro_mirror(mirror)
 
     outcomes = ticker_outcomes + macro_outcomes
     datasets = manifest.get("datasets") or {}
@@ -1117,7 +1686,48 @@ def main(argv: list[str] | None = None) -> int:
         + [str(manifest.get("as_of") or run)],
     )
     gate = staleness_gate(new_as_of, run)
-    failed = [o for o in outcomes if o["mode"] in _SOFT_FAIL_MODES]
+    # Cadence-aware stale gate (#4621): a slow series sitting out its release
+    # cycle is expected quiet, not an outage. Real feed death — daily price
+    # errors/history-only, or any macro error — still fails loud. The exemption
+    # is suspended only when every exempt macro series is history-only at once
+    # (#694 follow-up): a partial leg is indistinguishable from per-series
+    # vendor refusals and must stay quiet. Suspending it only ever adds names
+    # to `failed`; it never turns a stale run fresh. An unreadable manifest
+    # (DIG-1371) resolves no specs, so its synthetic outcome is never in `exempt`
+    # and always reaches `failed` — the macro leg is undeclared, not slow.
+    exempt = _slow_macro_exempt_ids(macro_specs)
+    failed = [
+        o
+        for o in outcomes
+        if o["mode"] in _SOFT_FAIL_MODES
+        and not (
+            o["ticker"] in exempt
+            and o["mode"] == MODE_HISTORY_ONLY
+            and not _macro_leg_dead(outcomes, exempt)
+        )
+    ]
+    # Per-series `as_of` age guard (DIG-1137): a macro panel frozen behind a
+    # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
+    # cannot see. Measured against each series' own cadence window. Additive
+    # only, like the exemption above -- it names series, it never clears them.
+    # Wrapped like the per-series work either side of it (DIG-2406). The guard
+    # reads `macro_specs`, so a divergence here must not ride over the
+    # manifest write below; a raising guard is recorded as a macro error, which
+    # fails the run loud instead of letting a possibly-frozen panel report
+    # itself fresh.
+    # Since DIG-2405 it also judges the cadence-exempt `history-only` outcomes,
+    # which is how a *single* retired slow series gets named at all; `failed` is
+    # passed in so a series both guards reached is named once, not twice.
+    try:
+        failed += _macro_as_of_stale(outcomes, macro_specs, run, failed)
+    except Exception as exc:
+        failed.append(
+            _outcome(
+                "macro__as_of_guard",
+                MODE_ERROR,
+                note=f"as_of age guard raised: {type(exc).__name__}: {exc}",
+            )
+        )
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)
@@ -1130,6 +1740,7 @@ def main(argv: list[str] | None = None) -> int:
         "failed": [o["ticker"] for o in failed],
         "outcomes": outcomes,
         "core_macro_mirror": mirror,
+        "fred_skipped": fred_skipped,
         "manifest_sha": digest,
     }
     Path(args.manifest_out).write_text(json.dumps(artifact, indent=2, sort_keys=True))

@@ -27,9 +27,37 @@ export type ConnectedToolRow = {
   slash: string;
   label: string;
   kind: "catalog" | "mcp";
+  /** Individual tools under this row (per-tool session toggles). */
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
+  /**
+   * The built-in tools a house service always offers, listed under it when the
+   * deployment names none. They follow the service's switch; they are not
+   * per-tool toggles, because the chat route only disables configured ids.
+   */
+  builtinTools?: ReadonlyArray<{ id: string; label: string }>;
 };
 
-type CatalogRef = { id: string; label?: string };
+/**
+ * The digisearch tools that follow the digisearch switch: the set digigraph's
+ * tool policy turns on and off with it (digigraph/src/digigraph/tool_policy.py).
+ * Not every tool the service offers; keep this list in step with that policy.
+ */
+export const DIGISEARCH_BUILTIN_TOOLS = [
+  { id: "digisearch", label: "search" },
+  { id: "digisearch_fetch_all", label: "fetch_all" },
+] as const;
+
+/** The digivault tools that follow the digivault switch (same policy file). */
+export const DIGIVAULT_BUILTIN_TOOLS = [
+  { id: "digivault_search_notes", label: "search_notes" },
+  { id: "digivault_get_note", label: "get_note" },
+] as const;
+
+type CatalogRef = {
+  id: string;
+  label?: string;
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
+};
 
 export function emptyMcpConfig(): SessionMcpConfig {
   return {
@@ -198,6 +226,15 @@ export function connectedTools(input: {
   const mcpIds = new Set(mcp.map((s) => s.id));
   const labelOf = (id: string, fallback: string) =>
     input.catalogTools.find((t) => t.id === id)?.label?.trim() || fallback;
+  const subsOf = (id: string) => {
+    const hit =
+      input.catalogTools.find((t) => t.id === id)?.tools ??
+      input.mcpServers.find((t) => t.id === id)?.tools;
+    if (hit?.length) return { tools: hit };
+    if (id === "digisearch") return { builtinTools: DIGISEARCH_BUILTIN_TOOLS };
+    if (id === "digivault") return { builtinTools: DIGIVAULT_BUILTIN_TOOLS };
+    return {};
+  };
   const rows: ConnectedToolRow[] = [];
   if (input.hasDigisearch) {
     rows.push({
@@ -205,6 +242,7 @@ export function connectedTools(input: {
       slash: "digisearch",
       label: labelOf("digisearch", "Search"),
       kind: "catalog",
+      ...subsOf("digisearch"),
     });
   }
   if (input.hasVault) {
@@ -213,6 +251,7 @@ export function connectedTools(input: {
       slash: "digivault",
       label: labelOf("digivault", "Vault"),
       kind: "catalog",
+      ...subsOf("digivault"),
     });
   }
   if (input.tenantAllowsWeb) {
@@ -239,6 +278,7 @@ export function connectedTools(input: {
       slash: catalogSlashId(id),
       label: t.label?.trim() || id,
       kind: "catalog",
+      ...subsOf(id),
     });
   }
   for (const s of mcp) {
@@ -247,6 +287,7 @@ export function connectedTools(input: {
       slash: s.id,
       label: s.label || s.id,
       kind: "mcp",
+      ...subsOf(s.id),
     });
   }
   return rows;

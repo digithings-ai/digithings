@@ -18,6 +18,8 @@ import asyncio
 import importlib.util
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -42,6 +44,7 @@ if importlib.util.find_spec("nautilus_trader") is None:
     collect_ignore = [
         "test_api.py",
         "test_audit.py",
+        "test_balance_path_metrics.py",
         "test_backtest.py",
         "test_calibrations_loader.py",
         "test_nautilus_runner.py",
@@ -58,3 +61,31 @@ if importlib.util.find_spec("nautilus_trader") is None:
 def pytest_configure(config: object) -> None:
     if sys.platform != "win32":
         asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+
+@pytest.fixture(autouse=True)
+def _dq_data_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DIGIQUANT_DATA_ROOT defaults to the shared temp base (DIG-4057 batch B).
+
+    Path sinks refuse anything outside DIGIQUANT_DATA_ROOT (REM-055 / DIG-4057).
+    Defaulting to the temp base keeps every test's sink inside the temp tree
+    whether the test uses pytest's ``tmp_path`` (a subdirectory of TMPDIR) or
+    stdlib ``tempfile``. A test that needs another root (e.g. packaged fixture
+    data) sets the variable later via pytest, so the explicit value wins.
+    """
+    monkeypatch.setenv("DIGIQUANT_DATA_ROOT", tempfile.gettempdir())
+
+
+@pytest.fixture
+def coefficients_root(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point DIGIQUANT_DATA_ROOT at the packaged coefficients (DIG-4057 batch B).
+
+    Tests that read the committed example coefficients as fixture data need the
+    sink confined to the module dir instead of the temp tree. Runs at the test's
+    fixture stage (after the autouse tmp-dir root), so this value wins.
+    """
+    from digiquant.strategies.sdca.btc_power_law import _COEFFICIENTS_EXAMPLE_PATH
+
+    root = Path(_COEFFICIENTS_EXAMPLE_PATH).parent
+    monkeypatch.setenv("DIGIQUANT_DATA_ROOT", str(root))
+    return root

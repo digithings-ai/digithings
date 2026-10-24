@@ -74,6 +74,23 @@ describe("POST /api/plan-proof", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 503 license_revoked before tenant/token work when revoked", async () => {
+    const { applyHeartbeatResult, resetLicenseStateForTests } = await import(
+      "@/lib/license/state"
+    );
+    try {
+      resetLicenseStateForTests();
+      applyHeartbeatResult("denied", "heartbeat_deny_unknown");
+      vi.mocked(resolveVerifiedEmbedTenant).mockClear();
+      const res = await POST(makeReq({ authorization: "Bearer sess-token" }));
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: "license_revoked" });
+      expect(vi.mocked(resolveVerifiedEmbedTenant)).not.toHaveBeenCalled();
+    } finally {
+      resetLicenseStateForTests();
+    }
+  });
+
   it("returns 403 for non-digiquant-dashboard tenants", async () => {
     vi.mocked(resolveVerifiedEmbedTenant).mockReturnValue({
       slug: "other-tenant",

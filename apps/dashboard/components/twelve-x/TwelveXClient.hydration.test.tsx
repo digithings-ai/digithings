@@ -42,6 +42,15 @@ vi.mock('@/lib/twelve-x/fetch', () => {
     getTodayEvents: empty,
     getUpcomingEvents: empty,
     getBriefs: empty,
+    // Real precedence, restated here: this module is fully mocked, so the real
+    // pure helper cannot be imported. `resolveCanonicalRunDate` in
+    // `@/lib/twelve-x/fetch` is the single source of that order.
+    resolveCanonicalRunDate: (c: {
+      research?: string | null;
+      digest?: string | null;
+      consensus?: string | null;
+      confluence?: string | null;
+    }) => c.research ?? c.digest ?? c.consensus ?? c.confluence ?? null,
   };
 });
 vi.mock('@/lib/twelve-x/consensus-derive', () => ({

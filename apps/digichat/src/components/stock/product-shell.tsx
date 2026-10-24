@@ -12,6 +12,7 @@
  * choreography that waits for it.
  */
 
+import { startWarmup, getWarmupServiceNames } from "@/lib/warmup-gate";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
@@ -34,6 +35,7 @@ import {
 } from "@digithings/ui/chat/boot-lab";
 import {
   DIGI_CHAT_READY_EVENT,
+  getDigichatWarmupPhase,
   hasDigichatReady,
   resolveHandoff,
   signalDigichatBootStep,
@@ -42,6 +44,7 @@ import {
 } from "@digithings/ui/chat/boot-signal";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
+import { applyDeployedPalette } from "@/lib/palette-prefs";
 import {
   effectiveReasoningMode,
   effectiveToolCallsMode,
@@ -173,6 +176,10 @@ export function ProductStockShell({
   const reasoningMode = effectiveReasoningMode(view, thinking);
   const toolCallsMode = effectiveToolCallsMode(view);
 
+  useEffect(() => {
+    applyDeployedPalette(cfg.chrome.palette);
+  }, [cfg.chrome.palette]);
+
   // Boot animation lifecycle: sweep, park after BOOT_MIN_MS, fade, unmount.
   // A document that already settled (soft navigation, warm container) starts
   // skipped: replaying the boot would flash the loader over a live chat.
@@ -188,6 +195,7 @@ export function ProductStockShell({
   // ready means there is nothing to load, and a warm refresh must not flash
   // the chain before the skip lands. Lab knobs show it immediately.
   const [bootVisible, setBootVisible] = useState(false);
+  const [serviceNames, setServiceNames] = useState<string[]>(["auth", "assistant"]);
   // The tool-chain boot is the baseline now; `?boot=` still overrides it.
   const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
     resolveBootLabVariant(bootLabVariant ?? null) ?? "tooltask",
@@ -210,9 +218,33 @@ export function ProductStockShell({
   // (react-hooks/set-state-in-effect).
   const bootRevealed = bootDone;
 
+  // Boot completes once the minimum choreography time has passed AND every
+  // chat service reports ready via /api/embed/warmup. A fast ready probe
+  // (warm container) skips the loader. On timeout the chat is revealed anyway.
   useEffect(() => {
-    const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    const started = performance.now();
+    const lab = /[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search);
+    void startWarmup().then(() => {
+      if (cancelled) return;
+      setServiceNames([...getWarmupServiceNames()]);
+      const fast =
+        performance.now() - started <= 600 && getDigichatWarmupPhase() === "ready";
+      if (fast && !lab) {
+        bootSkippedRef.current = true;
+        setBootReady(true);
+        setBootDone(true);
+        setBootHidden(true);
+        return;
+      }
+      const remain = Math.max(0, BOOT_MIN_MS - (performance.now() - started));
+      window.setTimeout(() => {
+        if (!cancelled) setBootReady(true);
+      }, remain);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Ready that lands almost immediately (warm container) means the chat was
@@ -224,7 +256,7 @@ export function ProductStockShell({
     if (/[?&](boot|bootdelay|bootfail|handoff|hero)=/.test(window.location.search)) {
       return;
     }
-  if (hasDigichatReady()) {
+  if (hasDigichatReady() && getDigichatWarmupPhase() === "ready") {
     bootSkippedRef.current = true;
     // Defer setState out of the synchronous effect body -
     // react-hooks/set-state-in-effect.
@@ -236,7 +268,7 @@ export function ProductStockShell({
   }
     const startedAt = performance.now();
     const onReady = () => {
-      if (performance.now() - startedAt <= 600) {
+      if (performance.now() - startedAt <= 600 && getDigichatWarmupPhase() === "ready") {
         bootSkippedRef.current = true;
         setBootDone(true);
         setBootHidden(true);
@@ -296,10 +328,19 @@ export function ProductStockShell({
     () => ({
       reasoning: reasoningMode,
       toolCalls: toolCallsMode,
+      view,
+      thinking,
       userAlign:
         cfg.chrome.skin === "digichat" ? "left" : cfg.chrome.transcript.userAlign,
     }),
-    [reasoningMode, toolCallsMode, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
+    [
+      reasoningMode,
+      toolCallsMode,
+      view,
+      thinking,
+      cfg.chrome.skin,
+      cfg.chrome.transcript.userAlign,
+    ],
   );
 
   const skinChrome = useMemo<SkinChromeValue>(
@@ -341,7 +382,7 @@ export function ProductStockShell({
     welcome?.trim() ||
     cfg.chrome.welcome?.trim() ||
     cfg.chrome.title?.trim() ||
-    "How can I help you today?";
+    "Ask the stack.";
   const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";
@@ -356,6 +397,7 @@ export function ProductStockShell({
       toolLabels: cfg.tools.catalog.map((tool) => tool.label ?? tool.id),
       mcpServers: cfg.mcp.servers.length,
       backend: cfg.backendType,
+      services: serviceNames,
     }),
     [
       skinChrome.suggestions,
@@ -364,6 +406,7 @@ export function ProductStockShell({
       cfg.tools.catalog,
       cfg.mcp.servers,
       cfg.backendType,
+      serviceNames,
     ],
   );
 

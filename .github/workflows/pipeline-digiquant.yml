@@ -1,3 +1,7 @@
+# Do not add schedule:. repository_dispatch type digiquant-baseline is still
+# the production house clock from digithings-cron until the container flip.
+# After that flip the clock is digithings-cron → digiquant-runner, and
+# repository_dispatch stays only as a manual override.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant research"
 
@@ -122,7 +126,9 @@ jobs:
     needs: [resolve, already-committed]
     if: needs.already-committed.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    # 240 min — full-refresh worst case: 3 outer attempts x in-process LLM retry (#461).
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
+    # 240 min — full-refresh worst case: 2 outer attempts x in-process LLM retry (#461).
     timeout-minutes: 240
     env:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
@@ -162,6 +168,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # From the lockfile in the checked-out tree (`main`) — see #1717/#1721.
@@ -221,7 +228,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
-          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
+          # DIG-248: a repo variable is never readable through the `secrets.` context, so
+          # the old `secrets.CHEAPERINFERENCE_API_BASE` fallback was dead. Variable only.
+          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
           # House routing is applied in-process by validate-providers.py
           # via apply_digiquant_house_env() — same as portfolio chain startup (#2532).
         run: |
@@ -276,7 +285,7 @@ jobs:
 
       - name: Run digiquant research pipeline
         id: run
-        # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
+        # 2×100m attempts + 5m backoff. Under the 240m job so the outcome step still runs.
         timeout-minutes: 230
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
@@ -286,7 +295,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CHEAPERINFERENCE_API_KEY: ${{ secrets.CHEAPERINFERENCE_API_KEY }}
-          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || secrets.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
+          # DIG-248: a repo variable is never readable through the `secrets.` context, so
+          # the old `secrets.CHEAPERINFERENCE_API_BASE` fallback was dead. Variable only.
+          CHEAPERINFERENCE_API_BASE: ${{ vars.CHEAPERINFERENCE_API_BASE || 'https://api.cheaperinference.com/v1' }}
           # Fail-fast: provider errors surface to the caller — no models+route=fallback
           # chain. Cheap→capable pool is enforced by config/digiquant_models.yaml tiers.
           # Per-error budget (#3078): one retry only — provider attempts and
@@ -311,10 +322,10 @@ jobs:
           mkdir -p artifacts
           set -o pipefail
 
-          MAX_OUTER_ATTEMPTS=3
-          OUTER_BACKOFF=(0 300 900)
-          # Per-attempt cap so a hung attempt fails and attempts 2/3 can still run.
-          ATTEMPT_TIMEOUT=70m
+          MAX_OUTER_ATTEMPTS=2
+          OUTER_BACKOFF=(0 300)
+          # Per-attempt cap so a hung attempt fails and attempt 2 can still run.
+          ATTEMPT_TIMEOUT=100m
           attempt=1
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"

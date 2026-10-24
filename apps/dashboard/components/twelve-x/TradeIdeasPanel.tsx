@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card } from '@digithings/ui/ui';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
+import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   continuityForBoard,
   continuityKey,
@@ -97,7 +96,8 @@ export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean):
 }
 
 export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
-  const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
+  const { status, levelsPending, riskRewardLabel, levelRows, evidenceRows } =
+    buildIdeaDetailModel(idea);
   const [openEvidence, setOpenEvidence] = useState<number[]>([]);
   const toggleEvidenceDetail = (index: number) =>
     setOpenEvidence((open) =>
@@ -106,7 +106,16 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
   const showEvidence = evidenceRows.length > 0;
-  const showGrid = showLevels || showEvidence;
+  // A pending bracket keeps the column (pending state instead of a half ladder).
+  const showGrid = showLevels || levelsPending || showEvidence;
+  /**
+   * Publishability, not row count: the level-vs-fix chart's subject is
+   * published levels, and a bracket that was never published must never reach
+   * it, whatever it happens to carry in its shape. This gate is the first of
+   * two — `buildLevelFixSeries` withholds non-publishable levels at the layer
+   * they are assembled, so widening this one cannot resurrect the ladder.
+   */
+  const levelsPublished = status === 'complete';
 
   return (
     <div className="mt-2 space-y-2 border-t border-hair pt-2 text-left">
@@ -115,20 +124,43 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
         <p className="text-[11px] text-ink-mute">Catalyst: {idea.catalyst}</p>
       ) : null}
       {showGrid ? (
-        <div className={ideaDetailBlocksClass(showLevels, showEvidence)}>
-          {showLevels ? (
+        <div className={ideaDetailBlocksClass(showLevels || levelsPending, showEvidence)}>
+          {showLevels || levelsPending ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-ink-soft">Levels</span>
-                {status && status !== 'complete' ? (
-                  <span className="font-mono text-[10px] text-ink-mute">{status}</span>
-                ) : null}
               </div>
-              <div className="space-y-0.5">
-                {levelRows.map((row) => (
-                  <LadderRow key={`${row.role}-${row.label}-${row.value}`} row={row} />
-                ))}
-              </div>
+              {levelsPending ? (
+                /* One sentence, and a frame only when it has a grid position to
+                   mark: beside the evidence column the box says "one cell of two,
+                   intentionally empty", which is why the pending state is correct
+                   rather than missing. Alone in the column there is no slot, so the
+                   box would have no referent and read as a callout — the same object
+                   as the `Catalyst:` caption above, unpadded and flush with the edge.
+                   No skeleton and no reserved height either way: this surface fetches
+                   once and never refetches, so there is no arrival to hold space for. */
+                showEvidence ? (
+                  <p
+                    className="rounded-none border border-hair bg-surface/40 px-2 py-1.5 text-[11px] leading-relaxed text-ink-mute"
+                    data-testid="trade-levels-pending"
+                  >
+                    Not published — entry, stop and target appear together, or not at all.
+                  </p>
+                ) : (
+                  <p
+                    className="text-[11px] leading-relaxed text-ink-mute"
+                    data-testid="trade-levels-pending"
+                  >
+                    Not published — entry, stop and target appear together, or not at all.
+                  </p>
+                )
+              ) : (
+                <div className="space-y-0.5">
+                  {levelRows.map((row) => (
+                    <LadderRow key={`${row.role}-${row.label}-${row.value}`} row={row} />
+                  ))}
+                </div>
+              )}
               {riskRewardLabel != null ? (
                 <p className="font-mono text-[10px] text-ink-mute">R:R {riskRewardLabel}</p>
               ) : null}
@@ -179,7 +211,7 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
           ) : null}
         </div>
       ) : null}
-      {showLevels ? (
+      {levelsPublished ? (
         <div className="pt-1">
           <LevelFixSection idea={idea} />
         </div>
@@ -212,19 +244,14 @@ function ContinuityStamp({ meta }: { meta: IdeaContinuityMeta | undefined }) {
 
 export default function TradeIdeasPanel({
   ideas,
-  confluence,
   highlightRanks,
   ideaHistory = [],
 }: {
   ideas: FxTradeIdeaRow[];
-  confluence: FxConfluenceSnapshotRow[];
   highlightRanks?: ReadonlySet<number>;
   ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
 }) {
-  const { crossLink } = useTwelveX();
-  const [expanded, setExpanded] = useState(false);
-  const [openRank, setOpenRank] = useState<number | null>(null);
-  const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
+  const { crossLink, openIdea } = useTwelveX();
 
   const boardDate = ideas[0]?.run_date ?? '';
   const continuity = useMemo(() => {
@@ -299,8 +326,7 @@ export default function TradeIdeasPanel({
           top.rank,
           'block h-auto w-full justify-start whitespace-normal rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-accent/[0.06]',
         )}
-        onClick={() => toggleIdea(top.rank)}
-        aria-expanded={openRank === top.rank}
+        onClick={() => openIdea(top.run_date, top.rank)}
       >
         <div className="flex min-w-0 items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -313,17 +339,11 @@ export default function TradeIdeasPanel({
           <ContinuityStamp meta={metaFor(top)} />
         </div>
         <p className="mt-1 text-sm text-ink">{top.title}</p>
-        {openRank === top.rank ? (
-          <IdeaDetail idea={top} />
-        ) : (
-          <>
-            {top.thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{top.thesis}</p> : null}
-            {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
-          </>
-        )}
+        {top.thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{top.thesis}</p> : null}
+        {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
       </Button>
 
-      {/* #2…N rows — expand in place; ideas are run artifacts with no brief */}
+      {/* #2…N rows — clicking opens the idea sidebar */}
       {rest.map((idea) => (
         <Button
           key={`${idea.run_date}-${idea.rank}`}
@@ -333,8 +353,7 @@ export default function TradeIdeasPanel({
             idea.rank,
             'block h-auto w-full justify-start whitespace-normal rounded-none border border-hair px-3 py-2 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-transparent',
           )}
-          onClick={() => toggleIdea(idea.rank)}
-          aria-expanded={openRank === idea.rank}
+          onClick={() => openIdea(idea.run_date, idea.rank)}
         >
           <span className="flex min-w-0 items-start gap-2">
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -347,49 +366,8 @@ export default function TradeIdeasPanel({
             </span>
             <ContinuityStamp meta={metaFor(idea)} />
           </span>
-          {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}
         </Button>
       ))}
-
-      {/* Expand → confluence reads */}
-      {confluence.length > 0 ? (
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="h-auto justify-start gap-1 p-0 text-[11px] font-normal text-ink-soft hover:bg-transparent hover:text-accent"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            {expanded ? 'Hide' : 'Expand'} confluence reads ({confluence.length})
-          </Button>
-          {expanded ? (
-            <ul className="mt-2 grid gap-1">
-              {confluence.map((c) => (
-                <li
-                  key={`${c.run_date}-${c.rank}`}
-                  className="flex items-center gap-2 rounded-none border border-hair px-3 py-1.5 text-xs"
-                >
-                  <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
-                  <span className="font-semibold text-ink">{c.currency}</span>
-                  <span className={`uppercase ${dirClass(c.direction)}`}>{c.direction}</span>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="ml-auto h-auto p-0 text-accent"
-                    onClick={() => crossLink({ kind: 'currency', currency: c.currency })}
-                  >
-                    trend →
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
     </Card>
   );
 }

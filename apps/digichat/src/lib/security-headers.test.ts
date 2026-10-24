@@ -4,7 +4,6 @@ import {
   DIGICHAT_APP_SECURITY_HEADERS,
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
   DIGICHAT_EMBED_FAIL_CLOSED_CSP,
-  DIGICHAT_EMBED_SECURITY_HEADERS,
   embedFrameAncestors,
   embedFrameAncestorsCsp,
   frameAncestorOriginsForHost,
@@ -30,7 +29,9 @@ describe("security-headers", () => {
       "'self'",
       "https://digithings.ai",
       "https://www.digithings.ai",
+      "https://occ.digithings.ai",
       "https://digiquant.io",
+      "https://www.digiquant.io",
     ];
     for (const origin of firstPartyOrigins) {
       expect(csp).toContain(origin);
@@ -44,10 +45,6 @@ describe("security-headers", () => {
     );
     expect(
       DIGICHAT_EMBED_BAKED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
-        ?.value,
-    ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
-    expect(
-      DIGICHAT_EMBED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
         ?.value,
     ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
     // Runtime helper still builds the allowlist (used by proxy).
@@ -72,6 +69,8 @@ describe("registry-derived frame-ancestors", () => {
     expect(list).toContain("https://digithings.ai");
     expect(list).toContain("https://www.digithings.ai");
     expect(list).toContain("https://digiquant.io");
+    expect(list).toContain("https://www.digiquant.io");
+    expect(list).toContain("https://occ.digithings.ai");
   });
 
   it("includes www.digithings.ai in first-party frame-ancestors", () => {

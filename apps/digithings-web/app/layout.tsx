@@ -1,8 +1,9 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/ui";
+import { fontVariables } from "./fonts";
+import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager, LayoutLines } from "@digithings/ui";
+import { SCROLL_RESUME_FLAG, SCROLL_RESUME_PLACE } from "@/lib/scrollResume";
 import { LegacyByokPurge } from "@/components/LegacyByokPurge";
 
 export const metadata: Metadata = {
@@ -19,6 +20,10 @@ export const metadata: Metadata = {
     title: "digithings",
     statusBarStyle: "black-translucent",
   },
+  // `trailingSlash: true` (next.config.mjs) serves `/` and every route at one
+  // address only if the canonical says so too; `metadataBase` resolves this to
+  // the absolute URL. Per-route canonicals stay with each page's metadata.
+  alternates: { canonical: "/" },
   // Cache-busting paths ensure browsers leave the retired QR mark behind.
   // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
   // cursor artwork rather than a browser-generated initial.
@@ -50,6 +55,41 @@ export const metadata: Metadata = {
     ],
     type: "website",
   },
+  // X reads the same card as the Open Graph block; without it the link is bare.
+  twitter: {
+    card: "summary_large_image",
+    title: "digithings — AI infrastructure in a glass box",
+    description:
+      "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
+      + "stack you already run. Your own keys and providers, every step traceable.",
+    images: ["/og.png"],
+  },
+};
+
+/**
+ * Structured data for the entity that owns the site, plus the site itself:
+ * one graph, absolute URLs, the visible name, and the icon that already ships.
+ * Nothing here is a claim the page does not make — no address, rating, or
+ * sameAs list is invented to fill the block out.
+ */
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://digithings.ai/#org",
+      name: "digithings",
+      url: "https://digithings.ai",
+      logo: "https://digithings.ai/icons/digi-app-32.png",
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://digithings.ai/#site",
+      name: "digithings",
+      url: "https://digithings.ai",
+      publisher: { "@id": "https://digithings.ai/#org" },
+    },
+  ],
 };
 
 // /docs defaults to the ivory reading mode (canon §14: long-form surfaces go
@@ -78,7 +118,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // legitimately flip data-theme + meta pre-hydration; scoped to this
   // element's attributes only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${fontVariables} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}
@@ -89,13 +129,25 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
             removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
+        {/* Reload / back-forward mid-page: flag the root so the hero intro is skipped
+            (see lib/scrollResume.ts); the body-end script then lands the scroll. */}
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_FLAG }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
             Literal = tokens.css dark --bg (metas can't read CSS vars). */}
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
       </head>
       <body>
-        <div className="grain" aria-hidden="true" />
-        <div className="glow" aria-hidden="true" />
+        {/* One pair for every route. Above page paint so a full-bleed
+            surface still shows the rails; under the nav (z-index 210).
+            DocumentFrame also mounts a pair — the style hides that copy.
+            A style tag, not globals.css: Tailwind rewrites a `.line-y`
+            selector because `line-y` is an `@utility`. */}
+        <LayoutLines className="site-rails z-20" />
+        <style>{":not(.site-rails) > .line-y{display:none}"}</style>
         <LegacyByokPurge />
         <MotionProvider>
           <ThemeProvider>
@@ -103,6 +155,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             {children}
           </ThemeProvider>
         </MotionProvider>
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_PLACE }} />
       </body>
     </html>
   );

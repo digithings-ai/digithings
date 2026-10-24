@@ -123,13 +123,14 @@ def select_focus_tickers(
     ``holdings`` overrides ``portfolio.json`` when provided (e.g. from Supabase
     ``positions`` via preflight ``prior_book``).
 
-    Candidate scoring reads the newest technicals row per ticker through
-    :func:`get_price_technicals` — the helper owns the market-data backend, so
-    this rides the R2 cutover (#3780 Task 7b) with no flag check here.
-    Candidates with no row (unknown ticker, empty window) are unscored and
-    fall out of the ranking, mirroring the old bulk query's first-seen pass.
+    Candidate scoring reads the newest technicals row per ticker through one
+    :func:`get_price_technicals_batch` call for the whole candidate pool — the
+    helper owns the market-data backend, so this rides the R2 cutover (#3780
+    Task 7b) with no flag check here. Candidates with no row (unknown ticker,
+    empty window) are unscored and fall out of the ranking, mirroring the old
+    bulk query's first-seen pass.
     """
-    from digiquant.research.data.queries import get_price_technicals
+    from digiquant.research.data.queries import get_price_technicals_batch
 
     n = _focus_top_n() if top_n is None else max(0, top_n)
     holdings_list = list(holdings) if holdings is not None else load_portfolio_holdings()
@@ -143,16 +144,15 @@ def select_focus_tickers(
         logger.info("portfolio focus list (%d): %s", len(holdings_list), ", ".join(holdings_list))
         return list(holdings_list)
     try:
-        latest: dict[str, dict[str, Any]] = {}
-        for ticker in candidates:
-            tech = get_price_technicals(
-                client=client,
-                ticker=ticker,
-                lookback=price_window_days,
-                as_of=run_date,
-            )
-            if tech["latest"]:
-                latest[ticker] = tech["latest"]
+        batch = get_price_technicals_batch(
+            client=client,
+            tickers=candidates,
+            lookback=price_window_days,
+            as_of=run_date,
+        )
+        latest: dict[str, dict[str, Any]] = {
+            ticker: payload["latest"] for ticker, payload in batch.items() if payload["latest"]
+        }
         ranked = sorted(
             (t for t in candidates if t in latest),
             key=lambda t: score_technicals(latest[t]),

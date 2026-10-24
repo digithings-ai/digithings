@@ -18,4 +18,23 @@ describe("stock ToolFallback source guard", () => {
     expect(source).not.toContain("Data delayed up to 15 minutes");
     expect(source).not.toContain("https://term.gloom.sh");
   });
+
+  it("uses the shared DotMatrix as a decorative status glyph (DIG-3449, DIG-4669)", () => {
+    expect(source).toMatch(/from ["']\.\.\/DotMatrix["']/);
+    expect(source).toMatch(/<DotMatrix/);
+    // The trigger's visible text already names the status, so the glyph must
+    // not carry a second name of its own (DIG-4669).
+    expect(source).toMatch(/<DotMatrix\s+state=\{matrixState\}\s+decorative/);
+    expect(source).not.toMatch(/<DotMatrix[^>]*label=/);
+    expect(source).not.toMatch(/LoaderIcon/);
+    expect(source).not.toMatch(/CheckIcon/);
+    expect(source).not.toMatch(/XCircleIcon/);
+    expect(source).not.toMatch(/AlertCircleIcon/);
+  });
+
+  it("gives the trigger label the foreground token for contrast (DIG-3449)", () => {
+    expect(source).toMatch(
+      /tool-fallback-trigger-label-wrapper[^"]*text-ink/,
+    );
+  });
 });

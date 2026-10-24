@@ -3,16 +3,24 @@
  * Lives beside finance-tearsheet.css so the existing legend-swatch encoding
  * (CSS triangles, open-bar ring) is not rewritten. Import plainly after the
  * family sheet.
+ *
+ * Sizing: the legend/risk-label/caption dimensions below read the family's
+ * `--ts-*` sizing tokens (declared in finance-tearsheet.css) with the previous
+ * literal as a fallback, so this sheet still renders if it is loaded alone.
  */
 
 .ts-tone-mute.ts-line { stroke: var(--ink-soft); }
 .ts-tone-mute.ts-area { fill: var(--ink-soft); }
 .ts-line-dashed { stroke-dasharray: 5 4; }
+/* Round dots for the benchmark leg: zero-length dash + round caps reads as
+   dots at any stroke width, and stays dots (not dashes) when the chart
+   compresses many points into few pixels. */
+.ts-line-dotted { stroke-dasharray: 0.1 5; stroke-linecap: round; }
 
-.ts-chart-legend-line-up { width: 18px; height: 0; border-top: 2px solid var(--up); }
-.ts-chart-legend-line-down { width: 18px; height: 0; border-top: 2px solid var(--down); }
-.ts-chart-legend-line-mute { width: 18px; height: 0; border-top: 2px solid var(--ink-soft); }
-.ts-chart-legend-line-dashed { width: 18px; height: 0; border-top: 2px dashed var(--ink-soft); }
+.ts-chart-legend-line-up { width: var(--ts-legend-line-w, 1.125rem); height: 0; border-top: var(--ts-legend-stroke-w, 2px) solid var(--up); }
+.ts-chart-legend-line-down { width: var(--ts-legend-line-w, 1.125rem); height: 0; border-top: var(--ts-legend-stroke-w, 2px) solid var(--down); }
+.ts-chart-legend-line-mute { width: var(--ts-legend-line-w, 1.125rem); height: 0; border-top: var(--ts-legend-stroke-w, 2px) solid var(--ink-soft); }
+.ts-chart-legend-line-dashed { width: var(--ts-legend-line-w, 1.125rem); height: 0; border-top: var(--ts-legend-stroke-w, 2px) dashed var(--ink-soft); }
 
 .ts-risk-band-fire { fill: color-mix(in srgb, var(--up) 22%, transparent); }
 .ts-risk-band-acc { fill: color-mix(in srgb, var(--up) 12%, transparent); }
@@ -25,7 +33,8 @@
 .ts-risk-threshold-buy { stroke: var(--up); }
 .ts-risk-threshold-sell { stroke: var(--down); }
 .ts-risk-threshold-label {
-  font-size: 10px;
+  --ts-risk-label-fs: 0.625rem;   /* 10px */
+  font-size: var(--ts-risk-label-fs);
   fill: var(--ink-soft);
 }
 .ts-price-faint { stroke: var(--ink-soft); stroke-width: 1; opacity: 0.35; }
@@ -58,20 +67,23 @@
 .ts-fill-dot-buy { fill: var(--up); opacity: 0.7; }
 .ts-fill-dot-sell { fill: var(--down); opacity: 0.7; }
 .ts-indicator-grid {
+  --ts-indicator-gap: 0.75rem;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--ts-indicator-gap);
 }
 .ts-indicator-unused { opacity: 0.55; }
 .ts-indicator-caption {
-  font-size: 0.8rem;
+  --ts-caption-fs: 0.8rem;
+  font-size: var(--ts-caption-fs);
   color: var(--ink-soft);
-  margin: 0 0 4px;
+  margin: 0 0 var(--space-1, 0.25rem);
 }
 
 .ts-position-dca-band {
+  --ts-dca-band-fs: 1.05rem;
   font-family: var(--font-display, var(--font-sans));
-  font-size: 1.05rem;
+  font-size: var(--ts-dca-band-fs);
   color: var(--ink);
   letter-spacing: -0.02em;
 }

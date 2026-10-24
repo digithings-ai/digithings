@@ -8,8 +8,8 @@ description: Run global macro analysis as part of the daily digest. Covers econo
 ## Grounding Tools (use first)
 
 - **`get_macro_series`** — your **primary** grounding. Fetch real values before classifying
-  the regime. Call with the FRED ids: `M2SL`, `DFF`, `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`,
-  `T10YIE`, `T5YIE`, `DFII10`, `VIXCLS`, `DTWEXBGS`, `CPIAUCSL`, `PCEPI`, `UNRATE`. Do not
+  the regime. Call with the panel ids: `M2SL`, `DFF`, `DGS10`, `DGS2`, `T10Y2Y`, `T10Y3M`,
+  `T10YIE`, `T5YIE`, `DFII10`, `VIXCLS`, `CPIAUCSL`, `PCEPI`, `UNRATE`. Do not
   assert a level or spread you did not retrieve. These series carry the 4-factor regime.
 - A pre-fetched **`web_grounding`** block is now a **stale-only fallback** (#711): it is
   injected *only* when the ingested FRED layer is stale/broken, and then covers central-bank

@@ -8,7 +8,7 @@
 
 **Tech Stack:** GHCR (`ghcr.io/digithings-ai/{digikey,digigraph,digivault}`), Docker Compose overlays, Makefile targets, digichat release docs under `infra/digichat-release/` + `docs/digichat/INSTALL.md`.
 
-**Related:** Parent self-host plan [`2026-08-09-digichat-self-hosted-release.md`](2026-08-09-digichat-self-hosted-release.md) Follow-up #3. Architecture gaps: [`docs/architecture/digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) §5. Partial precursor [#2023](https://github.com/digithings-ai/digithings/pull/2023) (**merged** to **develop** 2026-08-09; **not** on `main` yet — packages unpublished until promote + workflow run).
+**Related:** Parent self-host plan `2026-08-09-digichat-self-hosted-release.md` (removed DIG-3399; git history keeps it) Follow-up #3. Architecture gaps: [`docs/architecture/digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) §5. Partial precursor [#2023](https://github.com/digithings-ai/digithings/pull/2023) (**merged** to **develop** 2026-08-09; **not** on `main` yet — packages unpublished until promote + workflow run).
 
 ## Global Constraints
 
@@ -27,7 +27,7 @@
 
 | Pick 2 requirement | #2023 status | Evidence |
 |---|---|---|
-| Publish digikey / digigraph / digivault to GHCR | **Workflow only** | `.github/workflows/publish-service-images.yml` builds those three (+ digiquant, digisearch, digismith, digiclaw). Tags: `:sha-<12>`, `:latest`, `:v<pyproject>`. |
+| Publish digikey / digigraph / digivault to GHCR | **Workflow only** | `.github/workflows/publish-service-images.yml` builds those three (+ digiquant, digisearch, digismith, digibot). Tags: `:sha-<12>`, `:latest`, `:v<pyproject>`. |
 | Images actually pullable today | **Fail (ops)** | `gh api orgs/digithings-ai/packages/container/{digikey,digigraph,digivault}` → **404**. digichat packages exist (`v0.9.3`). Workflow `on.push.branches: [main]`; #2023 merge target was **develop** only (`3345a577`). PR test plan still has “after merge to main: run Publish once”. |
 | Compose overlay usable without monorepo **image** build | **Partial** | `infra/self-host/compose.ghcr.yml` + `make pull-ghcr` / `make up-ghcr` reset `build:` and set `image: ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG:-latest}`. Still needs a **repo clone** for `docker-compose.yml`, `config/`, and `.env`. |
 | Profile A / INSTALL path without monorepo build | **Fail (glue)** | `infra/digichat-release/compose.profile-a.yml` still `build:` digikey / digigraph / digivault. `INSTALL.md` and `infra/digichat-release/README.md` still say “clone + `--build`”. |
@@ -322,7 +322,7 @@ Until a config bundle ships (see stack-ghcr plan Task 4), this compose still mou
 `config/` from a digithings checkout for LiteLLM / digigraph. You need the **files**,
 not a local image build.
 
-Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../templates/self-host/README.md) (`make up-ghcr` + `--profile digivault --profile digichat`).
+Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../templates/self-host/README.md) (`make up-ghcr` + `--profile digivault --profile digichat`).
 ```
 
 - [ ] **Step 2: Update `infra/digichat-release/README.md` inventory**

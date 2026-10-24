@@ -1,24 +1,21 @@
 ---
-type: quickstart
-title: digiquant Quickstart
-description: Run digiquant CLI backtest and optimize smokes, run the safe unit subset, and understand the data layout.
-tags: [digiquant, quickstart, backtest]
+type: "Reference"
+title: "digiquant Quickstart"
+openwiki_generated: true
+generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-09T14:37:17.158Z
-sources:
-  - id: openwiki-source-3cca7b16d985d38458390d9a
-    resource: repo://digiquant/AGENTS.md
-  - id: openwiki-source-f049bd9504f8ed6c09ceb7ff
-    resource: repo://digiquant/ARCHITECTURE.md
-generated: { by: "opencode", at: "2026-09-07T22:38:58.074Z" }
+    at: 2026-09-23T13:25:31.068Z
 ---
+
 
 # digiquant Quickstart
 
-digiquant (port 8001) needs OHLCV data and (for real engine runs) the
-Nautilus extra. Everything below stays on research/backtest paths —
-**never touch `brokers/` live-trading code without a human gate.**
+digiquant (port 8001) is the deterministic quant engine. It needs OHLCV CSV
+data and (for real engine runs) the `nautilus` extra
+(`pip install -e "digiquant[nautilus]"`). Everything below stays on
+research/backtest paths — **never touch `brokers/` live-trading code without
+a human gate.**
 
 ## 1. Smoke tests
 
@@ -31,20 +28,35 @@ Strategies resolve through the alias map (`ema`, `s`,
 `mean_reversion_tech` → `ema_cross`); six registered families ship in
 `strategies/` plus the SDCA engine.
 
-## 2. Service and tests
+## 2. Data
+
+Default CSVs in `digiquant/data/` are **synthetic** (deterministic
+oscillator pattern), which is adversarial to momentum strategies. Use
+real market data for meaningful results:
 
 ```bash
-make stack-local     # digiquant on :8001 (or make up)
+python digiquant/scripts/fetch_real_ohlcv.py --symbols AAPL MSFT \
+  --start 2024-01-01 --end 2024-12-31
+```
+
+CSV format: `timestamp, open, high, low, close, volume, symbol`.
+
+## 3. Service and tests
+
+```bash
+make stack-local  # digiquant on :8001 (host, no Docker)
+# or: make up      # Docker Compose stack
 curl -s http://localhost:8001/healthz
 pytest tests/ -m unit -k "digiquant" -v
 ```
 
 **Linux caveat (#42):** real `BacktestEngine` runs can SIGABRT under
-pytest on Linux (uvloop/signal-handler clash). Prefer `make
-test-baseline` plus targeted `tests/dq` unit files; engine integration
-tests skip on Linux CI.
+pytest on Linux (uvloop/signal-handler clash: Nautilus's Rust runtime and
+uvloop both claim POSIX signal handlers). Prefer `make test-baseline`
+plus targeted `tests/dq` unit files; the three engine integration tests
+skip on Linux CI (`CI=true`).
 
-## 3. Gates
+## 4. Gates
 
 ```bash
 ruff check digiquant/ && ruff format --check digiquant/

@@ -8,27 +8,28 @@ from pathlib import Path
 import click
 
 
+def _coerce_param_value(v: str) -> float | int | str:
+    """Parse one --param value: int, then float, then keep the raw string."""
+    for convert in (int, float):
+        try:
+            return convert(v)
+        except ValueError:
+            # This conversion does not apply to v, so try the next one; a value
+            # that is neither an int nor a float is kept as the raw string.
+            continue
+    return v
+
+
 def _parse_params(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> dict[str, float | int | str]:
-    """Parse repeated --param key=value into a dict. Tries float, then int, then str."""
+    """Parse repeated --param key=value into a dict. Tries int, then float, then str."""
     out: dict[str, float | int | str] = {}
     for s in value:
         if "=" not in s:
             raise click.BadParameter(f"Invalid param: {s!r}. Use key=value.")
         k, v = s.split("=", 1)
-        k = k.strip()
-        try:
-            out[k] = int(v)
-            continue
-        except ValueError:
-            pass
-        try:
-            out[k] = float(v)
-            continue
-        except ValueError:
-            pass
-        out[k] = v
+        out[k.strip()] = _coerce_param_value(v)
     return out
 
 
@@ -50,6 +51,16 @@ def _register_subgroups() -> None:
     main.add_command(_strategy_group)
     main.add_command(_web_search_group)
     main.add_command(_policy_replay_group)
+
+    # Repo-split 1.2 (DIG-3691): SDCA subcommands (sdca-stage0,
+    # sdca-optimize-curve) register through the ``digiquant.cli`` entry-point
+    # group. Fail-closed (warn-and-skip).
+    try:
+        from digiquant import plugin as _plugin
+
+        _plugin.register_plugin_cli(main)
+    except Exception:
+        pass
 
 
 _register_subgroups()
@@ -200,6 +211,51 @@ def optimize(
     click.echo(f"Best params: {json.dumps(opt.best_params)}")
 
 
+@main.command("sdca-stage0")
+@click.option(
+    "--data-path",
+    "-d",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="BTC OHLCV CSV; FRED/ETH siblings load from the same directory",
+)
+@click.option(
+    "--out-dir",
+    type=click.Path(path_type=Path),
+    default=Path("digiquant/src/digiquant/strategies/sdca"),
+    help="Provenance sidecar directory",
+)
+@click.option(
+    "--stage0-only",
+    is_flag=True,
+    help="Skip Stage 1 / Stage B even if extras survive",
+)
+@click.option(
+    "--persist-settings",
+    is_flag=True,
+    help=(
+        "Overwrite strategies/settings.json only when combined OOS is not worse. "
+        "Default writes sidecars only."
+    ),
+)
+def sdca_stage0(
+    data_path: Path | None, out_dir: Path, stage0_only: bool, persist_settings: bool
+) -> None:
+    """Solo-indicator SDCA Stage 0 (curve_simulator). Gate extras on OOS vs power law."""
+    from digiquant.strategies.sdca.stage_0 import operator_stage_0
+
+    path = data_path or Path("data/price-history/BTC-USD.csv")
+    if not path.exists():
+        raise click.UsageError(f"OHLCV not found: {path}")
+    result = operator_stage_0(
+        data_path=path,
+        out_dir=out_dir,
+        combine=not stage0_only,
+        persist_settings=persist_settings,
+    )
+    click.echo(result.model_dump_json(indent=2))
+
+
 @main.command()
 @click.option("--strategy", "-s", required=True, help="Strategy name")
 @click.option(
@@ -245,7 +301,7 @@ def export(
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=Path("data/price-history"),
     show_default=True,
-    help="Coinbase/FRED cache (BTC-USD.csv plus M2SL/DTWEXBGS siblings)",
+    help="Coinbase/extra cache (BTC-USD.csv plus the M2SL sibling)",
 )
 @click.option("--signal-delay-days", type=int, default=3, show_default=True)
 @click.option("--trade-start", type=str, default="2018-01-01", show_default=True)

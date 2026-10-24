@@ -34,3 +34,33 @@
   letter-spacing: 0.08em;
   color: var(--ink-mute);
 }
+
+/* Invite recognition banner — sits above the default signup card (never
+   inside it) so an invitee knows their team link was recognized. Same
+   380px measure as the card; mono marker, muted line. */
+.acct-invite-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  max-width: 380px;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 0.8rem 1rem;
+}
+
+.acct-invite-banner-marker {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.acct-invite-banner-line {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}

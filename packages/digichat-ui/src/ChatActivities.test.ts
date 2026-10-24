@@ -1,3 +1,5 @@
+// Contract for DigiChatActivity, which lives in @digithings/ui/chat/transcript.
+// ChatActivities the component is gone; this file only pins the wire union.
 import { describe, it, expect } from "vitest";
 import type {
   DigiChatActivity,

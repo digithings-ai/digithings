@@ -25,11 +25,13 @@ them:
 - ``evidence`` — REQUIRED. Itemize your evidence honestly; ``conviction_score`` is
   **computed from this block by the system** (#1672 — the number you write is ignored
   when ``evidence`` is present, so spend your effort on the counts, not the score):
-  - ``independent_confirming_signals`` (0–5): how many INDEPENDENT families confirm the
-    thesis today — technicals, fundamentals, flows/positioning, macro regime,
-    sentiment/news. Count a family only when you cite concrete evidence for it in this
-    payload.
-  - ``contradicting_signals`` (0–5): families actively contradicting the thesis. Be
+  - ``independent_confirming_signals`` (0–5): how many INDEPENDENT families confirm
+    **your call** (the ``stance`` you declare) today — technicals, fundamentals,
+    flows/positioning, macro regime, sentiment/news. Count a family only when you cite
+    concrete evidence for it in this payload. Count against your call, not against the
+    market thesis you are mapped to: if you would sell a bullish thesis, the bearish
+    families are the ones confirming your call.
+  - ``contradicting_signals`` (0–5): families actively contradicting **your call**. Be
     critical — a zero here with a mixed tape is a miscount, and inflating confirmations
     while hiding contradictions produces a conviction the deliberation will tear apart.
   - ``catalyst_within_horizon``: true ONLY for a specific, dated/window-bound catalyst
@@ -39,6 +41,8 @@ them:
     conviction; grade honestly.
   High conviction is structurally rare: it requires ≥4 confirming families, ≤1
   contradiction, a dated catalyst, high-quality evidence, and not fighting the trend.
+  A balanced call legitimately derives 0 — a directional stance at 0 is a weak call,
+  not a missing one.
 - ``sources`` — the specific data artifacts you consulted (ticker, date, field).
 
 Stance hysteresis: if the underlying data is materially unchanged from your prior read on

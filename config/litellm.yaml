@@ -55,6 +55,26 @@ model_list:
       configurable_clientside_auth_params: *byok_auth_openrouter
   - model_name: openrouter/openai/gpt-oss-120b
     litellm_params: *or_openai_gpt_oss_120b
+  # House DeepSeek flash pin (2026-10-21). Cheaper Inference serves the 1017
+  # checkpoint (config/litellm.cheaperinference.yaml) and that checkpoint is the
+  # house default (Chris, 23 Oct 2026); OpenRouter has no separate 1017 id, so
+  # this non-CI route uses OpenRouter's deepseek-v4.1-flash.
+  - model_name: deepseek/deepseek-v4.1-flash-1017
+    litellm_params: &or_deepseek_deepseek_v4_1_flash_1017
+      model: openrouter/deepseek/deepseek-v4.1-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
+    litellm_params: *or_deepseek_deepseek_v4_1_flash_1017
+  # The bare id is not the house default; it stays routable because the catalog
+  # lists it and docker-compose runs without the Cheaper Inference overlay.
+  - model_name: deepseek/deepseek-v4.1-flash
+    litellm_params: &or_deepseek_deepseek_v4_1_flash
+      model: openrouter/deepseek/deepseek-v4.1-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: *byok_auth_openrouter
+  - model_name: openrouter/deepseek/deepseek-v4.1-flash
+    litellm_params: *or_deepseek_deepseek_v4_1_flash
   - model_name: deepseek/deepseek-v4-flash-0731
     litellm_params: &or_deepseek_deepseek_v4_flash_0731
       model: openrouter/deepseek/deepseek-v4-flash-0731
@@ -536,48 +556,48 @@ model_list:
       model: openrouter/anthropic/claude-sonnet-4
       api_key: os.environ/OPENROUTER_API_KEY
       configurable_clientside_auth_params: *byok_auth_openrouter
-  - model_name: google/gemini-2.0-flash
+  - model_name: google/gemini-2.5-flash
     litellm_params:
-      model: openrouter/google/gemini-2.0-flash
+      model: openrouter/google/gemini-2.5-flash
       api_key: os.environ/OPENROUTER_API_KEY
       configurable_clientside_auth_params: *byok_auth_openrouter
-  - model_name: claude-sonnet-4-20250514
+  - model_name: claude-sonnet-4-6
     litellm_params:
-      model: anthropic/claude-sonnet-4-20250514
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
       configurable_clientside_auth_params: &byok_auth_anthropic
         - api_key
         - api_base: "^https://api\\.anthropic\\.com/v1/?$"
-  - model_name: claude-haiku-4-20250514
+  - model_name: claude-haiku-4-5
     litellm_params:
-      model: anthropic/claude-haiku-4-20250514
+      model: anthropic/claude-haiku-4-5
       api_key: os.environ/ANTHROPIC_API_KEY
       configurable_clientside_auth_params: *byok_auth_anthropic
-  - model_name: claude-opus-4-20250514
+  - model_name: claude-opus-4-5
     litellm_params:
-      model: anthropic/claude-opus-4-20250514
+      model: anthropic/claude-opus-4-5
       api_key: os.environ/ANTHROPIC_API_KEY
       configurable_clientside_auth_params: *byok_auth_anthropic
-  - model_name: gemini/gemini-2.0-flash
+  - model_name: gemini/gemini-3.5-flash-lite
     litellm_params:
-      model: gemini/gemini-2.0-flash
+      model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY
       configurable_clientside_auth_params: &byok_auth_gemini
         - api_key
         - api_base: "^https://generativelanguage\\.googleapis\\.com/v1beta/openai/?$"
-  - model_name: gemini/gemini-2.5-flash
+  - model_name: gemini/gemini-3.5-flash
     litellm_params:
-      model: gemini/gemini-2.5-flash
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY
       configurable_clientside_auth_params: *byok_auth_gemini
-  - model_name: gemini/gemini-2.5-pro
+  - model_name: gemini/gemini-3.7-flash
     litellm_params:
-      model: gemini/gemini-2.5-pro
+      model: gemini/gemini-3.7-flash
       api_key: os.environ/GEMINI_API_KEY
       configurable_clientside_auth_params: *byok_auth_gemini
-  - model_name: grok-4-3
+  - model_name: grok-4.3
     litellm_params:
-      model: xai/grok-4-3
+      model: xai/grok-4.3
       api_key: os.environ/XAI_API_KEY
       configurable_clientside_auth_params: &byok_auth_xai
         - api_key

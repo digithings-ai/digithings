@@ -39,3 +39,7 @@ accounts:
 recency_days: 7
 # Per-source live-search billing; 16 -> 8 halves this pre-pass's search cost.
 max_search_results: 8
+# Search engine for the X-leg search, digisearch vocabulary end-to-end
+# (auto/internal/exa/tavily/parallel/firecrawl/tinyfish); the hub validates.
+# Omitted or auto keeps the in-house engine (#4723).
+provider: auto

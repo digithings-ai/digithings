@@ -1,19 +1,28 @@
 {
   "name": "digithings-stack-cloudflare",
+  "description": "Cloudflare worker for the digithings service stack.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digithings-stack-cloudflare"
+  },
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/deploy.mjs",
     "dev": "wrangler dev",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "dashboard-api": "*",
     "hyparquet": "^1"
   },
   "devDependencies": {
     "@cloudflare/containers": "^0.3.7",
-    "@cloudflare/workers-types": "^4.20250801.0",
+    "@cloudflare/workers-types": "^5.20261021.1",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0",
     "wrangler": "^4.133.0"

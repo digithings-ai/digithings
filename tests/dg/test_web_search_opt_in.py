@@ -66,13 +66,14 @@ def test_apply_mcp_extra_tools_materializes_unrestricted_session() -> None:
     assert MCP_WEB_SEARCH not in got
     assert MCP_QUERY in got
     assert "digisearch" in got  # registered tools still admitted
-    # No proxied web search discovered → unrestricted stays unrestricted.
-    assert (
-        apply_mcp_extra_tools(
-            None, frozenset({"datatap_list"}), frozenset(), enable_web_search=False
-        )
-        is None
-    )
+    # An unrestricted session is concrete here too. This entry point is only
+    # reached when operator MCP servers are configured, so `None` never escapes
+    # to mean "no restriction" — that conditional was CTO bar item 1's hole:
+    # an unrestricted session with an operator row present admitted whatever
+    # the provider offered. DIG-412.
+    no_extras = apply_mcp_extra_tools(None, frozenset(), frozenset(), enable_web_search=False)
+    assert no_extras is not None
+    assert MCP_WEB_SEARCH not in no_extras
 
 
 def test_apply_mcp_extra_tools_disabled_tokens_still_subtract() -> None:

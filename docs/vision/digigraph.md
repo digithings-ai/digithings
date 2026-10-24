@@ -28,7 +28,7 @@ digigraph provides this as a pre-built, extensible foundation. The plumbing is d
 
 ## How it fits in the ecosystem
 
-digigraph sits at the centre of the digithings stack. All inbound requests — from digichat, from MCP clients, from REST callers — enter through digigraph. It dispatches to digiquant for quantitative tasks, digisearch for retrieval, and digikey for auth decisions. digismith records spans for every workflow.
+digigraph sits at the centre of the digithings stack. All inbound requests — from digichat, from MCP clients, from REST callers — enter through digigraph. It dispatches to digiquant for quantitative tasks, digisearch for retrieval, and digikey for auth decisions. digitrace records spans for every workflow.
 
 ### Sub-graph registry pattern
 
@@ -55,8 +55,8 @@ Shipped and in production:
 - JWT authentication via digikey
 - Per-IP rate limiting
 - Checkpoint persistence via `DIGI_CHECKPOINTER` (memory / SQLite / Postgres today; migrates to digistore once that module ships)
-- LLM routing — model selection, caching, cost controls (LiteLLM today; the in-tree `digigraph.llm` module is superseded by the shared [[digillm|digillm]] library, to which digigraph migrates)
-- digismith tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
+- LLM routing — model selection, caching, cost controls, through the shared [[digillm|digillm]] library, a hard dependency (`digillm>=0.1.0`). `digigraph.llm_client`, `llm_auth` and `llm_errors` are thin in-tree wrappers that delegate to digillm; they are the seam, not a second implementation. LiteLLM runs as the digillm *service* (OpenAI-compatible proxy), not as an in-process library
+- digitrace tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
 - MCP server — digigraph capabilities available as MCP tools for Claude Desktop and similar clients
 - Parallel tool execution
 - Planning executor (multi-step plan before execution)
@@ -88,7 +88,7 @@ Shipped and in production:
 - LangGraph integration layer
 - OpenAI-compatible API surface
 - MCP server implementation
-- digismith integration and tracing decorators
+- digitrace integration and tracing decorators
 
 **Proprietary (commercial):**
 - Specific sub-graph implementations with domain logic: research cycles, portfolio deliberation, strategy execution

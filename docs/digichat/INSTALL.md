@@ -22,22 +22,39 @@ chat app.
 
 ## Install unit
 
-Primary install unit: a **pinned GHCR image** — not npm (`private: true`), not
-`:latest` in production.
+> **Correction (2026-10-21): an image is published.** `publish-digichat-image.yml`
+> publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` on a `digichat-vX.Y.Z` tag
+> (the trigger is the `digichat-v*` glob, but a tag that is not exactly
+> `digichat-v<major>.<minor>.<patch>` is refused). `v2.6.4` and `:latest` were
+> pushed on 2026-10-21 (run 94); the package is private, so pull with a
+> `ghcr.io` credential. The `v2.4.x`–`v2.6.3` tags still have no image behind
+> them. Without registry access, build from the repo root and record the digest
+> you deploy.
+> See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
+>
+> The **intended** primary install unit is a pinned published image — not npm
+> (`private: true`), not `:latest` in production.
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+# local build (works without registry access)
+docker build -f apps/digichat/Dockerfile \
+  --build-arg DIGICHAT_VERSION=2.7.0 \
+  --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
+  -t digichat:2.7.0 .
 ```
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
+| Published image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` from `v2.6.4` on (private; earlier `v2.4.x`–`v2.6.3` tags have none) — or build locally (see above) |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `2.3.2` |
+| Current app version | `2.7.0` (`develop`) |
 
-**Existing clients (DataTap and others) stay on `v0.9.3`.** That GHCR tag remains
-published and is not deleted — only new installs / digithings’ own cut should move
+**Existing clients (DataTap and others) are pinned to a digichat image already
+imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
+Those registries are copies, so they keep working independently of GHCR; the
+claim that `ghcr.io/digithings-ai/digichat:v0.9.3` "remains published" can no
+longer be verified from this repo and should not be relied on.
 to `v2.3.2` until those clients choose to upgrade.
 
 Compose overlays and env templates live under
@@ -123,7 +140,7 @@ Production must set `DIGIKEY_PRIVATE_KEY_PEM` to a stable RS256 private key
 (multiline PEM or base64) and set `DIGIKEY_ALLOW_EPHEMERAL_KEY=0`; digikey then
 fails closed at startup if the PEM is missing.
 
-Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
 
 **Local / digithings website parity:** one supervisord image (same as Cloudflare
 Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
@@ -246,7 +263,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+docker run --rm -p 3005:3000 digichat:2.7.0   # local build, see § Install unit
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

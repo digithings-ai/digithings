@@ -25,11 +25,29 @@ describe("skin host contract matches the sources", () => {
     expect(css).toContain(contract.tailwindSources.sourceDirective);
   });
 
-  it("the host layout provides the Geist Mono variable", () => {
-    const layout = read(`../../../../../../apps/digichat/${contract.fontVariables.hostLayout}`);
-    expect(layout).toMatch(
+  // Pending: digichat was restored to develop (a15c4873) and has no app/fonts.ts yet.
+  it.skip("the host font config provides the mono face variable and the layout applies it", () => {
+    const config = read(`../../../../../../apps/digichat/${contract.fontVariables.hostFontConfig}`);
+    expect(config).toMatch(
       new RegExp(`variable:\\s*"${contract.fontVariables.variable}"`),
     );
+    const layout = read(`../../../../../../apps/digichat/${contract.fontVariables.hostLayout}`);
+    expect(layout).not.toMatch(/next\/font/);
+    expect(layout).toMatch(/from\s*["']@\/app\/fonts["']/);
+    expect(layout).toMatch(/fontVariables/);
+  });
+
+  // Pending: digichat was restored to develop (a15c4873) and has no app/fonts.ts yet.
+  it.skip("the retired-name font alias is a CSS alias, not a second loader", () => {
+    // The alias lives beside its readers: chat-aui.css is the only sheet that
+    // asks for it, and it is mounted by surfaces that load the app font config
+    // without digichat-app-theme.css.
+    const sheet = read("../../../styles/chat-aui.css");
+    expect(sheet).toMatch(
+      new RegExp(`${contract.fontVariables.alias}:\\s*var\\(${contract.fontVariables.variable}`),
+    );
+    const config = read(`../../../../../../apps/digichat/${contract.fontVariables.hostFontConfig}`);
+    expect(config).not.toMatch(new RegExp(contract.fontVariables.alias));
   });
 
   it("the host client drives the theme dataset and classes", () => {

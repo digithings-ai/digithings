@@ -280,10 +280,23 @@ def test_query_maps_matches_to_results() -> None:
 
     assert [r.chunk.id for r in results] == ["c1", "c2"]
     assert results[0].score == 0.91
-    assert results[0].rank == 0
+    assert results[0].rank == 1
+    assert results[1].rank == 2
     assert results[0].chunk.content == "first chunk"
     assert results[0].chunk.doc_id == "d1"
     assert results[0].chunk.metadata["segment_label"] == "page:12"
+
+
+@pytest.mark.unit
+def test_query_rejects_positive_skip_before_http() -> None:
+    """Vectorize has no offset. skip>0 used to return the first page with no error."""
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(RuntimeError, match="skip"):
+        backend.query(DsQuery(text="hello", top_k=5, skip=1, embedding=[0.2] * 384))
+    assert post.calls == []
 
 
 @pytest.mark.unit
@@ -458,13 +471,16 @@ def test_default_embedder_singleton_is_thread_safe() -> None:
     minilm_module.MiniLMEmbedder = _SlowStubEmbedder  # type: ignore[misc]
     minilm_module._default_minilm_singleton = None
     results: list[object] = []
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def _worker() -> None:
         try:
             barrier.wait(timeout=5)
             results.append(vectorize_module._get_default_embedder())
-        except BaseException as exc:
+        except Exception as exc:
+            # Exception (not BaseException): worker threads never receive
+            # KeyboardInterrupt/SystemExit, and every failure a barrier or a
+            # stub constructor can raise derives from Exception.
             errors.append(exc)
 
     threads = [threading.Thread(target=_worker) for _ in range(8)]

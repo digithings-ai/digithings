@@ -23,11 +23,14 @@ describe("baseline preview isolation", () => {
     expect(layout).not.toMatch(/data-theme/);
     // The shared theme bridge is the only package import allowed here —
     // it carries the stock shadcn tokens both entry sheets used to duplicate.
+    // The canon token @reference is also allowed: it registers the web-theme
+    // @theme keys for utility generation and emits no CSS of its own.
     const bridge = "@digithings/ui/styles/digichat-app-theme.css";
+    const themeRef = "@digithings/ui/styles/web-theme.css";
     expect(css).toContain(bridge);
     const rest = css
       .split("\n")
-      .filter((l) => !l.includes(bridge))
+      .filter((l) => !l.includes(bridge) && !l.includes(themeRef))
       .join("\n");
     expect(rest).not.toMatch(/@digithings\//);
     expect(css).not.toMatch(/assistant-ui-cli/);
@@ -48,7 +51,7 @@ describe("baseline preview isolation", () => {
       "../../../../../packages/ui/src/styles/digichat-app-theme.css",
     );
     expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
-    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-sans-face,\s*"Inter"\)/);
   });
 
   it("mounts ThreadSkinView for the official assistant-ui templates", () => {
@@ -57,7 +60,8 @@ describe("baseline preview isolation", () => {
     expect(client).toMatch(/ThreadSkinView/);
     expect(client).toMatch(/@digithings\/ui\/chat\/skins/);
     expect(client).toMatch(/THREAD_SKINS/);
-    expect(thread).toContain("How can I help you today?");
+    expect(thread).toContain("Ask the stack.");
+    expect(thread).not.toContain("How can I help you today?");
     expect(thread).toContain("aui-thread-root");
     expect(thread).not.toContain("ask digichat");
     expect(client).not.toMatch(/StockChromeBar|ToolCatalogBar|ProductStockShell/);

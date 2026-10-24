@@ -7,7 +7,7 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 - **`tests/`** (root) – All tests.
   - **`tests/dq/`** – Unit + API tests for digiquant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
   - **`tests/dg/`** – Unit + API tests for digigraph (models, workflow, graph, LLM, FastAPI).
-  - **`tests/dc/`** – Unit tests for digiclaw (audit). Phase 3.
+  - **`tests/dc/`** – Unit tests for digibot (audit). Phase 3.
   - **`tests/fixtures/`** – Shared doubles (canonical `FakeSupabaseClient` in `fake_supabase.py`; #1196).
   - **`tests/contracts/`** – Cross-service HTTP surface contracts (CORS / `/healthz` / `/metrics`; #1196).
   - **`tests/test_e2e.py`** – E2E tests (require stack: `docker compose up` or local servers).
@@ -78,7 +78,6 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 |-----|----------|-------|
 | Component tests | `test-digibase.yml`, `test-digikey.yml`, … | Path-filtered; callable via `workflow_call` |
 | Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
-| Score gate | `test-score.yml` | Heuristic diff scan via `scripts/score.py` |
 | Nautilus smoke | `test-nautilus.yml` | Linux `digiquant[nautilus]` parser tests |
 | Dashboard | `test-dashboard.yml` | Vitest + static export build (`apps/dashboard/`) |
 | Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
@@ -91,6 +90,5 @@ Run locally before push:
 ```bash
 make test-unit
 make test-baseline
-python3 scripts/score.py
 python3 scripts/agents_init.py --check
 ```

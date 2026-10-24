@@ -207,12 +207,14 @@ def build_grounding(
     one place.
     """
     tools: list[dict[str, Any]] | None = None
-    execute_tool: Callable[[str, dict[str, Any]], str] | None = None
+    execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]] | None = None
     web_grounding: dict | None = None
     # (tool names, executor) per configured family, composed into one dispatcher
     # below. One family → its executor directly (the historical behavior); two or
     # more → a name-routing combined executor.
-    executors: list[tuple[frozenset[str], Callable[[str, dict[str, Any]], str]]] = []
+    executors: list[
+        tuple[frozenset[str], Callable[[str, dict[str, Any]], str | dict[str, Any]]]
+    ] = []
     if use_data_tools and _data_tools_enabled():
         try:
             from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
@@ -284,7 +286,7 @@ def build_grounding(
             execute_tool = executors[0][1]
         else:
 
-            def _combined_execute(name: str, args: dict[str, Any]) -> str:
+            def _combined_execute(name: str, args: dict[str, Any]) -> str | dict[str, Any]:
                 for names, executor in executors:
                     if name in names:
                         return executor(name, args)

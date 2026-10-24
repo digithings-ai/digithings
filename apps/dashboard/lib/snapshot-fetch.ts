@@ -18,16 +18,15 @@
  * host the dashboard on a Node runtime with your own `/api/snapshots` handler. Static
  * export (`output: 'export'` on digiquant.io) cannot ship App Router API routes.
  */
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from './supabase';
-import type { Database } from './database.types';
+import { apiDb, type ApiDb } from './api-query';
+import { isApiConfigured } from './api-client';
 import type {
   DigestPayload,
   SnapshotEnvelope,
   SnapshotFetchResult,
 } from './snapshot-types';
 
-type SB = SupabaseClient<Database>;
+type SB = ApiDb;
 
 /** Browser opt-in: fetch `/api/snapshots` instead of anon Supabase (REM-036 BFF path). */
 export function isBffSnapshotEnabled(): boolean {
@@ -135,8 +134,8 @@ interface FetchOpts {
   /** Override "now" for tests. */
   now?: Date;
   /**
-   * Inject a Supabase client for tests. Defaults to the module-level
-   * singleton from `lib/supabase.ts`. When the caller passes an explicit
+   * Inject a query root for tests. Defaults to the module-level Workers-API
+   * query root from `lib/api-query.ts`. When the caller passes an explicit
    * client (even if `null`), the env-var configuration check is skipped —
    * the explicit value is treated as the source of truth.
    */
@@ -211,15 +210,15 @@ export async function fetchLatestSnapshot(
   // When the caller injected a client (even `null`), trust it. Otherwise
   // fall back to the module singleton, which itself is `null` when the
   // public env vars are missing.
-  const client = explicitClient ? opts.client ?? null : supabase;
+  const client = explicitClient ? (opts.client ?? null) : isApiConfigured() ? apiDb : null;
   if (!client) {
     // No production client and no env-configured singleton → ask the user
     // to set the public env vars. (Tests inject `null` directly to exercise
     // this branch.)
-    if (!explicitClient && isSupabaseConfigured()) {
+    if (!explicitClient && isApiConfigured()) {
       // Defensive — should never happen since the singleton is null when
       // unconfigured, but keep an explicit error rather than silent miss.
-      return { kind: 'error', message: 'Supabase singleton missing despite configured env.' };
+      return { kind: 'error', message: 'Dashboard API missing despite configured env.' };
     }
     return { kind: 'empty', reason: 'unconfigured' };
   }
@@ -231,7 +230,12 @@ export async function fetchLatestSnapshot(
       .limit(1)
       .maybeSingle();
     if (error) {
-      return { kind: 'error', message: error.message ?? String(error) };
+      // The shim resolves `{ data, error }` with `error: unknown`: it can be an
+      // ApiError (an Error), a plain `{ message }` object, or anything else.
+      const maybeMessage = (error as { message?: unknown } | null)?.message;
+      const message =
+        typeof maybeMessage === 'string' && maybeMessage ? maybeMessage : String(error);
+      return { kind: 'error', message };
     }
     return resultFromRow(data as SnapshotRowPick | null, now);
   } catch (err) {

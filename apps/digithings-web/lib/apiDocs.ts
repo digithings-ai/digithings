@@ -126,7 +126,7 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       {
         method: "POST",
         path: "/workflow",
-        summary: "Run the full research + backtest graph (digiclaw custom skill).",
+        summary: "Run the full research + backtest graph (digibot custom skill).",
         auth: "digigraph:workflow (optional)",
         rateLimit: "10/min/IP",
         request: [
@@ -269,7 +269,7 @@ resp = client.chat.completions.create(
           { name: "total_pnl", type: "number", description: "Total P&L." },
           { name: "sharpe_ratio", type: "number | null", description: "Sharpe ratio." },
           { name: "num_trades", type: "integer", description: "Number of trades executed." },
-          { name: "status", type: "string", description: '"completed" | "failed".' },
+          { name: "status", type: "string", description: '"ok" | "partial" | "error".' },
         ],
         examples: [
           {
@@ -516,12 +516,12 @@ for hit in r.json()["results"]:
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  digismith: {
-    baseUrlVar: "DIGISMITH_URL",
+  digitrace: {
+    baseUrlVar: "DIGITRACE_URL",
     authNote: "Status and metrics are public diagnostics. Tracing is a library wrapper, not an HTTP surface.",
     run: {
-      compose: "docker compose up -d digismith",
-      standalone: "uvicorn digismith.server:app",
+      compose: "docker compose up -d digitrace",
+      standalone: "uvicorn digitrace.server:app",
     },
     env: [
       { name: "LANGSMITH_API_KEY", description: "Enable LangSmith trace export; absent = no-op." },
@@ -541,18 +541,18 @@ for hit in r.json()["results"]:
   "langsmith_host": "api.smith.langchain.com",
   "request_id": "..."
 }`,
-        examples: [{ lang: "bash", code: `curl $DIGISMITH_URL/v1/status` }],
+        examples: [{ lang: "bash", code: `curl $DIGITRACE_URL/v1/status` }],
       },
       { method: "GET", path: "/metrics", summary: "Prometheus metrics (text/plain 0.0.4).", auth: "none" },
     ],
     publicInterface: [
       {
-        signature: "from digismith.trace import traceable",
+        signature: "from digitrace.trace import traceable",
         description:
           "@traceable(\"name\") wraps a function with langsmith.traceable when LANGSMITH_API_KEY is set; otherwise a no-op. PII is redacted from span inputs/outputs.",
       },
       {
-        signature: "from digismith.config import tracing_enabled",
+        signature: "from digitrace.config import tracing_enabled",
         description: "Returns True when tracing is configured (key set + SDK importable).",
       },
     ],
@@ -640,25 +640,25 @@ for hit in r.json()["results"]:
     ],
     notes: [
       "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
-      "Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).",
+      "Self-host: the publish workflow builds a private GHCR image per digichat-vX.Y.Z tag, published from v2.6.4 on (2026-10-21); without a ghcr.io credential, digichat builds from source. See infra/self-host/compose.ghcr.yml.",
     ],
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  digiclaw: {
-    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digiclaw (Compose profile heartbeat).",
+  digibot: {
+    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digibot (Compose profile heartbeat).",
     run: {
-      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
+      cli: "python -m digibot            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
     },
     env: [
       { name: "DIGIGRAPH_URL", description: "digigraph base URL for health checks." },
       { name: "DIGIQUANT_URL", description: "digiquant base URL for health + drift checks." },
-      { name: "DIGICLAW_DIGIKEY_API_KEY", description: "Key (digiquant:backtest+optimize) for auth-gated drift checks." },
+      { name: "DIGIBOT_DIGIKEY_API_KEY", description: "Key (digiquant:backtest+optimize) for auth-gated drift checks." },
       { name: "AUDIT_LOG_PATH", def: "digiquant/results/audit/events.jsonl", description: "Append-only JSONL audit destination." },
       { name: "REOPTIMIZE_STRATEGY", def: "mean_reversion_tech", description: "Strategy id for the drift check." },
     ],
     publicInterface: [
-      { signature: "python -m digiclaw", description: "Run one heartbeat cycle: health-check services, run an auth-gated drift check, and (on drift) trigger re-optimization." },
+      { signature: "python -m digibot", description: "Run one heartbeat cycle: health-check services, run an auth-gated drift check, and (on drift) trigger re-optimization." },
       { signature: "audit_log(event_type, agent_id, payload)", description: "Append one redacted JSON line to the audit log." },
     ],
     notes: [

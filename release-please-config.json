@@ -14,6 +14,16 @@
           "type": "json",
           "path": "/package-lock.json",
           "jsonpath": "$.packages['apps/digichat'].version"
+        },
+        {
+          "type": "json",
+          "path": "/apps/digithings-web/lib/module-counts.json",
+          "jsonpath": "$.versions.digichat"
+        },
+        {
+          "type": "json",
+          "path": "/docs/openapi/digichat.json",
+          "jsonpath": "$.info.version"
         }
       ]
     }

@@ -27,6 +27,7 @@ from typing import (
 )
 from uuid import uuid4
 
+from digibase.audit import emit_event as _emit_audit_event
 from digillm import (  # telemetry + message types for the wrappers below
     CacheStatus,
     CallPurpose,
@@ -47,13 +48,17 @@ from digillm import (
     provider_call_context as _digillm_provider_call_context,
 )
 from digillm import run_tools as _digillm_run_tools
+from digillm import set_egress_observer as _set_egress_observer
 from digillm import set_fan_out_detach_hook as _set_fan_out_detach_hook
 from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
+from digillm.client import ReasoningEffortPolicy as _ReasoningEffortPolicy
+from digillm.client import set_reasoning_effort_policy as _set_reasoning_effort_policy
+from digillm.egress_record import EgressRecord
 from openai.types.chat import ChatCompletion
 
 from digigraph import usage as _usage
-from digigraph.model_config import resolve_request_model
+from digigraph.model_config import reasoning_effort_policy, resolve_request_model
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,22 @@ __all__ = [
 _set_usage_observer(_usage.record)
 _set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
 
+
+# Chat reasoning policy (DIG-4459): the model ids live in config/model-policy.json;
+# digillm reads no files, so the policy is registered here, once, at import.
+def _register_reasoning_policy() -> None:
+    """Hand ``reasoning_effort`` from ``config/model-policy.json`` to digillm."""
+    configured = reasoning_effort_policy()
+    _set_reasoning_effort_policy(
+        _ReasoningEffortPolicy(
+            default_sent=dict(configured.default_sent),
+            configurable_prefixes=tuple(configured.configurable_prefixes),
+        )
+    )
+
+
+_register_reasoning_policy()
+
 # Drop digigraph's own logical-call description inside every digillm parallel tool worker.
 # digillm's fan-out copies the caller's context so the request's BYOK credentials reach the
 # pool, and ``detach_provider_call_context`` clears digillm's own logical-call var in each
@@ -81,6 +102,38 @@ _set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
 # handle and interleave their telemetry. Registered alongside the observers above, and for
 # the same reason: llm_client is the module every digigraph LLM call imports.
 _set_fan_out_detach_hook(_usage.detach_logical_call_context)
+
+# ``event_type`` an egress record carries in the fleet audit stream. Callers reconstructing
+# the stream filter on this, so it is deliberately distinct from digibase's own event types.
+_EGRESS_AUDIT_EVENT_TYPE = "digillm.egress"
+
+
+def _record_egress_to_audit_stream(record: EgressRecord) -> None:
+    """Mirror one digillm egress record into the fleet audit stream.
+
+    digillm builds an :class:`~digillm.egress_record.EgressRecord` for every physical
+    outbound attempt but only persists it to its own process-local JSONL sink, which no
+    fleet-wide reader consumes. Routing it through ``digibase.audit.emit_event`` -- the
+    documented sole fleet emitter -- is what makes the record reconstructable after the
+    fact from the shared audit log.
+
+    Two deliberate choices:
+
+    - The payload is ``record.model_dump(mode="json")``, so the audit line cannot drift
+      from the record shape digillm defines: adding or renaming a field there changes this
+      line too, by construction.
+    - This is deliberately NOT wrapped in a ``try``/``except``. digillm already swallows a
+      raising observer, and a second swallow here would both duplicate that contract and
+      hide a broken audit destination behind the same debug-level log. Letting it propagate
+      keeps ``emit_event``'s own failure mode observable.
+    """
+    _emit_audit_event(_EGRESS_AUDIT_EVENT_TYPE, payload=record.model_dump(mode="json"))
+
+
+# Registered alongside the observers above, and for the same reason: llm_client is the
+# module every digigraph LLM call imports, so this covers every outbound attempt digigraph
+# makes without any call site having to opt in.
+_set_egress_observer(_record_egress_to_audit_stream)
 
 
 @contextmanager
@@ -207,6 +260,8 @@ def run_tools(
     max_tool_rounds: int = 5,
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
+    final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run digillm's agentic tool-calling loop with digigraph's parallel-safe set + streaming.
 
@@ -216,6 +271,16 @@ def run_tools(
     every turn ("auto" default; "required" forces a tool call every round — see
     :func:`digigraph.tool_policy.require_tool_calls_for_workflow`). Returns the
     model's final answer.
+
+    ``final_response_format`` is forwarded to digillm and enforces the caller's
+    output schema on the forced tool-free wrap-up completion only (#4556) — the
+    tool-enabled turns cannot carry it, since function-calling and json_schema are
+    mutually exclusive provider modes.
+
+    ``reasoning_effort`` is the chat's /effort (``X-Digi-Effort``), forwarded to
+    digillm, which maps it to the model's ``reasoning_effort`` where the level is
+    configurable (the ``reasoning_effort`` policy in ``config/model-policy.json``,
+    registered above) and keeps the model's default when it is ``None``.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -234,6 +299,8 @@ def run_tools(
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
             stream_deltas=on_tool_step is not None,
+            final_response_format=final_response_format,
+            reasoning_effort=reasoning_effort,
         )
 
 
@@ -245,13 +312,16 @@ def digifetch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 8,
     usage_kind: str = "web_search",
+    provider: str | None = None,
     context: Any | None = None,
 ) -> tuple[str, list[str]]:
     """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
     ``model`` is accepted for caller compat but unused — the tool path needs no
     synthesis model. ``usage_kind`` is likewise retained for compat (telemetry
-    retires in a later task). The bearer threads via ``context`` (Task 2 seam:
+    retires in a later task). ``provider`` names the search engine and is
+    forwarded only when set and not ``auto`` (see ``call_digisearch_web_search``,
+    #4722). The bearer threads via ``context`` (Task 2 seam:
     ``ToolContext.state["digi_bearer"]``).
     """
     del model, usage_kind
@@ -262,6 +332,7 @@ def digifetch_web_search(
         include_domains=include_domains,
         exclude_domains=exclude_domains,
         max_results=max_results,
+        provider=provider,
         context=context,
     )
     rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []

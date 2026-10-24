@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any
 
@@ -82,6 +85,26 @@ def _load_byok_catalog() -> list[dict[str, Any]]:
     raw = json.loads((CONFIG / "byok-providers.json").read_text(encoding="utf-8"))
     assert isinstance(raw, list) and raw
     return raw
+
+
+@functools.lru_cache(maxsize=1)
+def _model_catalog_generator() -> Any:
+    """The catalog generator, which owns the BYOK -> models.dev provider map.
+
+    Imported by path because ``scripts/`` is not a package — the same
+    ``importlib`` dance tests/scripts/test_refresh_model_routes.py uses, and
+    the same one tests/config/test_model_catalog.py::_load_generator uses.
+    Duplicated as a two-line loader rather than shared, because the sibling is a
+    test module, not an importable package.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "refresh_model_catalog", REPO_ROOT / "scripts" / "refresh_model_catalog.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["refresh_model_catalog"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _model_entries(path: Path) -> dict[str, dict[str, Any]]:
@@ -211,6 +234,33 @@ def test_digillm_catalog_api_bases_match_byok_providers_json() -> None:
     assert catalog == set(_BYOK_CATALOG_API_BASES)
 
 
+def test_every_base_url_digillm_trusts_has_rows_in_the_model_catalog() -> None:
+    """Close the loop from digillm's trust boundary to the catalog (#4994).
+
+    ``_BYOK_CATALOG_API_BASES`` is the set of upstream hosts digillm will
+    clientside-auth a caller key against. The test above already pins those
+    hosts to ``config/byok-providers.json``; this one pins the providers they
+    name to actual rows in the generated ``config/model-catalog.json``, so a
+    host digillm trusts cannot be one the catalog knows nothing about.
+
+    The catalog deliberately carries no base URL (spec D1 -- it is a module
+    import, so there is no URL to validate), which is exactly why the
+    connection has to be made here, by provider identity, rather than by
+    comparing URLs. Extended into this file rather than added as a separate
+    test so the digillm constant has exactly one pin site.
+    """
+    generator = _model_catalog_generator()
+    catalog = json.loads((CONFIG / "model-catalog.json").read_text(encoding="utf-8"))
+    catalogued = set(catalog["_meta"]["providers"])
+
+    unmapped = []
+    for entry in _load_byok_catalog():
+        provider = generator.byok_provider_to_catalog_provider(str(entry["id"]))
+        if provider is None or provider not in catalogued:
+            unmapped.append(f"{entry['id']} -> {provider!r}")
+    assert not unmapped, f"BYOK hosts digillm trusts with no catalogued provider: {unmapped}"
+
+
 def test_omniroute_overlay_parses_and_is_optional() -> None:
     overlay = CONFIG / "litellm.omniroute.yaml"
     assert overlay.is_file()
@@ -240,10 +290,13 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
     assert overlay.is_file()
     names = _model_names(overlay)
     expected = {
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-release",
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-release",
         "deepseek/deepseek-v4-flash-0731",
-        "deepseek/deepseek-v4-pro",
-        "google/gemini-3.7-flash",
+        "deepseek/deepseek-v4-flash-0731-release",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
@@ -263,11 +316,85 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
 
 
+def test_ci_overlay_lets_reasoning_effort_reach_configurable_models() -> None:
+    """drop_params strips reasoning_effort on openai/ routes unless allowed per route.
+
+    Chats send reasoning_effort (the /effort level, or 1017's default) to every
+    model digillm treats as configurable; each such overlay route must allow it
+    or the proxy silently drops it.
+    """
+    from digillm.client import (
+        ReasoningEffortPolicy,
+        get_reasoning_effort_policy,
+        reasoning_effort_configurable,
+        set_reasoning_effort_policy,
+    )
+
+    configured = json.loads((CONFIG / "model-policy.json").read_text(encoding="utf-8"))[
+        "reasoning_effort"
+    ]
+    previous = get_reasoning_effort_policy()
+    set_reasoning_effort_policy(
+        ReasoningEffortPolicy(
+            default_sent=dict(configured["default_sent"]),
+            configurable_prefixes=tuple(configured["configurable_prefixes"]),
+        )
+    )
+    try:
+        _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable)
+    finally:
+        set_reasoning_effort_policy(previous)
+
+
+def _assert_overlay_allows_reasoning_effort(reasoning_effort_configurable: Any) -> None:
+    overlay = CONFIG / "litellm.cheaperinference.yaml"
+    data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    routes = [
+        entry
+        for entry in data["model_list"]
+        if reasoning_effort_configurable(str(entry["litellm_params"]["model"]))
+    ]
+    assert any(
+        entry["litellm_params"]["model"] == "openai/deepseek-v4.1-flash-1017" for entry in routes
+    )
+    missing = sorted(
+        entry["model_name"]
+        for entry in routes
+        if "reasoning_effort" not in (entry["litellm_params"].get("allowed_openai_params") or [])
+    )
+    assert not missing, f"routes drop reasoning_effort: {missing}"
+
+
+def test_picker_catalog_models_are_on_the_ci_overlay() -> None:
+    """Every catalog house id routes on the CI overlay. The router does not."""
+    catalog = json.loads(
+        (REPO_ROOT / "apps/digichat/config/model-picker-catalog.json").read_text(encoding="utf-8")
+    )
+    names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
+    missing = sorted(model["id"] for model in catalog["models"] if model["id"] not in names)
+    assert not missing, f"catalog ids missing from CI overlay: {missing}"
+    assert "openrouter/auto" not in names
+
+
+def test_picker_catalog_models_map_to_ci_bare_ids() -> None:
+    """Direct digillm clients resolve every catalog house id to a CI bare id."""
+    from digillm.client import cheaperinference_bare_id_for_house_slug
+
+    catalog = json.loads(
+        (REPO_ROOT / "apps/digichat/config/model-picker-catalog.json").read_text(encoding="utf-8")
+    )
+    missing = sorted(
+        model["id"]
+        for model in catalog["models"]
+        if cheaperinference_bare_id_for_house_slug(model["id"]) is None
+    )
+    assert not missing, f"catalog ids missing from the CI slug map: {missing}"
+
+
 # Cheap CI house slugs for the default product picker. Must exist on both the
 # overlay and ``_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE``. Never OpenRouter ``:free``.
 _PRODUCT_CI_CHEAP_PICKER = (
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4.1-flash-1017",
     "openai/gpt-oss-120b",
     "z-ai/glm-5.3-flash",
 )
@@ -279,7 +406,7 @@ def _assert_ci_only_product_picker(models: dict) -> None:
     overlay_names = _model_names(CONFIG / "litellm.cheaperinference.yaml")
     available = list(models["available"])
     assert models["allowPicker"] is True
-    assert models["default"] == "deepseek/deepseek-v4-flash"
+    assert models["default"] == "deepseek/deepseek-v4.1-flash-1017"
     assert models["default"] in available
     assert available == list(_PRODUCT_CI_CHEAP_PICKER)
     assert not any(str(m).endswith(":free") for m in available)
@@ -290,17 +417,31 @@ def _assert_ci_only_product_picker(models: dict) -> None:
 
 
 def test_digichat_public_picker_is_ci_cheap_only() -> None:
-    """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
+    """Dashboard keeps the three-slug list. digithings.ai uses the catalog policy."""
     embed = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml").read_text(
+            encoding="utf-8"
+        )
     )
-    _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
+    # #6217 moved the house policy into the default document; the example only
+    # inherits it, so read the values from the document that declares them.
+    assert embed.get("extends") == "defaults"
+    defaults = yaml.safe_load(
+        (REPO_ROOT / "apps/digichat/config/defaults.yaml").read_text(encoding="utf-8")
+    )
+    product = defaults["deployment"]["models"]
+    assert product["catalog"] is True
+    assert product["allowPicker"] is True
+    # House runs the 1017 checkpoint on the CheaperInference API (Chris, 23 Oct
+    # 2026). The bare id stays in the catalog; it is not the deployment default.
+    assert product["default"] == "deepseek/deepseek-v4.1-flash-1017"
+    assert product["priceCapUsdPerMillion"] == 2
+    assert "available" not in product
+    assert "auto" in product["presets"]
     dashboard = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     _assert_ci_only_product_picker(dashboard["deployment"]["models"])
 
@@ -336,7 +477,12 @@ def test_merge_litellm_cheaperinference_replaces_mapped_drops_retired() -> None:
     by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
     flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
     assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
-    assert flash["model"] == "openai/deepseek-v4-flash"
+    # Legacy flash slugs and the *-release names all alias to 1017.
+    assert flash["model"] == "openai/deepseek-v4.1-flash-1017"
+    release = by_name["deepseek/deepseek-v4-flash-release"]["litellm_params"]
+    assert release["model"] == "openai/deepseek-v4.1-flash-1017"
+    checkpoint = by_name["deepseek/deepseek-v4.1-flash-1017"]["litellm_params"]
+    assert checkpoint["model"] == "openai/deepseek-v4.1-flash-1017"
     resurrected = sorted(_RETIRED_OPENROUTER_ROUTES & by_name.keys())
     assert not resurrected, f"merge resurrected retired OpenRouter routes: {resurrected}"
 

@@ -2,8 +2,10 @@
 """Throwaway historical check for docs/research/equity-valuation-for-sdca.md (#3176).
 
 Fetches public FRED *graph* CSVs (current vintage, no API key) and prints Buffett-indicator
-levels at known US equity tops/bottoms. Not a production ingest — production stays
-``digiquant.data.prices.macro_ingest.fetch_fred`` + ``FRED_API_KEY``.
+levels at known US equity tops/bottoms. Not a production ingest — research one-off.
+The sealed macro panel moved to gloomberb ``econ_series`` in
+docs/superpowers/plans/2026-09-29-gloomberb-macro-ingest.md (#4794 PR3); this
+script intentionally still reads keyless fredgraph.csv — do not switch it.
 
 CAPE prints in the markdown were read once from Shiller's public ``ie_data.xls`` and are
 not recomputed here (that workbook is xls; this script stays Polars/stdlib-only).

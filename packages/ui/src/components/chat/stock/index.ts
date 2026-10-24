@@ -1,7 +1,7 @@
 /**
- * Skin-support primitives (WS4). Pure moves first; the NEEDS-INTERFACE modules
- * (skin-chrome, message-error, embed-chat-prefs, prefs-host) get their cuts in
- * Step 3. Skins + the rest of stock/ move here in Step 4.
+ * Skin-support primitives (WS4): catalog primitives, prefs shell, skin
+ * chrome, Thread and tool UI. Hosts import ThreadSkinView from
+ * `@digithings/ui/chat/skins` and the prefs host from here.
  */
 
 export {
@@ -25,11 +25,21 @@ export {
   useStockSendGate,
   type StockSendGateHandlers,
 } from "./stock-send-gate";
-export type {
-  ChainDisclosureMode,
-  ChromeMode,
-  PageContextMode,
-  UserAlign,
+// The prefs twin of the view ids. Hosts keep their own id contract
+// (`apps/digichat/src/lib/view-modes.ts`) and this normaliser is the other
+// half of it, so a host can check that both name the same levels instead of
+// trusting that they do. The alias map is exported under a name of its own:
+// it is the twin's map to compare against the host's, not the host's.
+export {
+  LEGACY_VIEW_MODE_ALIASES as PREFS_LEGACY_VIEW_MODE_ALIASES,
+  normalizeViewPref,
+  type ChainDisclosureMode,
+  type ChromeMode,
+  type PageContextMode,
+  type UserAlign,
+  type ViewMode,
+  isStockComposerMenuKind,
+  type StockComposerMenuKind,
 } from "./skin-types";
 export {
   SkinRuntime,
@@ -48,6 +58,12 @@ export {
   useEmbedChatPrefsOptional,
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
+  persistDensity,
+  useStoredDensityAfterMount,
+  persistScroll,
+  useStoredScrollAfterMount,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,
@@ -61,12 +77,39 @@ export {
   type StockChatPrefsConfig,
   type StockChatPrefsDeps,
 } from "./stock-chat-prefs-host";
+// DIG-2882: the session artifact panel and the artifact `a:` override.
+export {
+  ArtifactsPanel,
+  ArtifactLink,
+  artifactListPath,
+  artifactBlobPath,
+  isArtifactBlobHref,
+  formatArtifactSize,
+  formatArtifactDate,
+  type ArtifactRow,
+  type ArtifactIo,
+} from "./artifacts-panel";
 export { SkinCredit, SKIN_CREDIT_TEXT } from "./skin-credit";
 export { Thread } from "./thread.aui";
 export {
   ToolFallback,
+  ToolFallbackArgs,
   ToolFallbackAttribution,
+  ToolFallbackContent,
+  ToolFallbackResult,
+  ToolFallbackRoot,
+  ToolFallbackTrigger,
   formatToolDuration,
   type ToolFallbackRootProps,
 } from "./tool-fallback.aui";
 export { toolRowTitle } from "./tool-display";
+
+export {
+  DEFAULT_SCROLL_MODE,
+  SCROLL_MODES,
+  normalizeScrollMode,
+  resolveScrollMode,
+  scrollModeProps,
+  type ScrollMode,
+  type ScrollViewportProps,
+} from "../gallery-thread/scroll-mode";

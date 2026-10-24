@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("openai")
 
-from digiquant.research.data import web_grounding
+from digiquant.research.data import search_refusals, web_grounding
 
 # Saved so the bearer-threading tests below exercise the real tool call (#3859 Task 2).
 _real_call_web_search_tool = web_grounding.call_web_search_tool
@@ -510,6 +510,80 @@ def test_out_of_range_recency_days_is_clamped_not_sent(
         assert "recency_days" in caplog.text
 
 
+@pytest.mark.unit
+def test_fetch_web_grounding_passes_config_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``search_domains.yaml``'s ``provider`` must reach the tool call (#4723)."""
+    seen: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"summary": "s", "sources": ["https://u"]}
+
+    monkeypatch.setattr(
+        web_grounding,
+        "_config",
+        lambda: {"web_allowed_websites": ["reuters.com"], "provider": "exa"},
+    )
+    monkeypatch.setattr(web_grounding, "call_web_search_tool", _fake)
+    web_grounding.fetch_web_grounding(model="cheap", segment="macro", run_date=date(2026, 6, 9))
+    assert seen["provider"] == "exa"
+
+
+@pytest.mark.unit
+def test_provider_reaches_the_digigraph_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The plumbing seam: ``call_web_search_tool`` -> ``call_digisearch_web_search`` (#4723).
+
+    Patches the public digigraph entry point (looked up at call time by
+    ``call_web_search_tool``'s lazy import), so this pins what digiquant sends
+    regardless of which digigraph version is installed.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+
+    def _fake_hub_entry(query: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw)
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [{"doc_id": "https://a.com/1", "content": "s"}],
+        }
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _fake_hub_entry)
+    _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, provider="tavily"
+    )
+    assert seen["provider"] == "tavily"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", [None, "auto", "AUTO", "  auto  ", "", "   "])
+def test_provider_kwarg_omitted_when_unset_or_auto(
+    monkeypatch: pytest.MonkeyPatch, provider: Any
+) -> None:
+    """Unset/auto must not ship the kwarg at all: a pre-#4722 digigraph has no
+    ``provider`` parameter and would TypeError on an unexpected keyword (#4723)."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+
+    def _fake_hub_entry(query: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw)
+        return {
+            "content": "- [t](https://a.com/1): s",
+            "results": [{"doc_id": "https://a.com/1", "content": "s"}],
+        }
+
+    monkeypatch.setattr(ws_mod, "call_digisearch_web_search", _fake_hub_entry)
+    _real_call_web_search_tool(
+        query="etf flows", include_domains=[], max_results=4, provider=provider
+    )
+    assert "provider" not in seen, provider
+
+
 def _digisearch_bound(field_name: str, attr: str) -> Any:
     """Read a bound straight from digisearch's request model (drift alarm only)."""
     from digisearch.web_search.models import WebSearchRequest
@@ -576,12 +650,15 @@ def test_pipeline_bearer_auth_error_propagates(
 
 
 @pytest.mark.unit
-def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scoped_empty_retries_unscoped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """A zero-row scoped search retries without the allowlist (#4086).
 
     The hosted ddgs provider post-filters by domain (it cannot bias), so a
     narrow allowlist can empty the result set; the retry keeps real grounding
-    flowing instead of aborting the pipeline.
+    flowing instead of aborting the pipeline. It is routine, so it is logged
+    at debug level rather than as a warning.
     """
     import digibase.service_auth as sa_mod
     import digigraph.orchestration.web_search_tools as ws_mod
@@ -604,18 +681,21 @@ def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
         }
 
     monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
-    out = _real_call_web_search_tool(
-        query="etf flows",
-        include_domains=["reuters.com"],
-        exclude_domains=["spam.example"],
-        max_results=4,
-    )
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        out = _real_call_web_search_tool(
+            query="etf flows",
+            include_domains=["reuters.com"],
+            exclude_domains=["spam.example"],
+            max_results=4,
+        )
+    assert "retrying unscoped" not in caplog.text
     assert out["sources"] == ["https://b.com/1"]
     assert out["relaxed_domains"] is True
     assert len(calls) == 2
     assert calls[0]["include_domains"] == ["reuters.com"]
     assert calls[1]["include_domains"] == []
-    assert calls[1]["exclude_domains"] == ["spam.example"]
+    # The operator's own exclusion survives; DIG-1133's refusals ride along.
+    assert calls[1]["exclude_domains"][-1] == "spam.example"
     assert calls[1]["max_results"] == 4
 
 
@@ -680,3 +760,197 @@ def test_scoped_and_unscoped_empty_raises_with_context(
         _real_call_web_search_tool(
             query="etf flows", include_domains=["reuters.com"], max_results=4
         )
+
+
+# --- DIG-1133: congressional-trades material never reaches the tool call -------
+
+
+@pytest.mark.unit
+def test_refused_domains_never_reach_the_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #4086 retry is the hole narrowing the yaml alone leaves open.
+
+    A scoped search that returns nothing retries *without* ``include_domains``,
+    so an allowlist edit by itself is not a control: the refused hosts must ride
+    in ``exclude_domains`` on both calls.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    calls: list[dict[str, Any]] = []
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        calls.append({"query": query, **kw})
+        return {"results": []}  # force the unscoped retry
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match="no rows"):
+        _real_call_web_search_tool(
+            query="congressional trades",
+            include_domains=["capitoltrades.com", "reuters.com"],
+            max_results=4,
+        )
+    assert len(calls) == 2
+    assert calls[0]["include_domains"] == ["reuters.com"]
+    assert calls[1]["include_domains"] == []  # the retry, un-scoped
+    for call in calls:
+        assert not any(
+            search_refusals.is_refused_search_domain(d) for d in call["include_domains"]
+        )  # never asked for
+        for refused in search_refusals.REFUSED_SEARCH_DOMAINS:
+            assert refused in call["exclude_domains"]
+
+
+@pytest.mark.unit
+def test_rows_from_refused_hosts_are_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Defence in depth: the hosted providers post-filter, so a row can still
+    arrive from a refused host. It must not reach the summary."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "doc_id": "https://www.capitoltrades.com/senators/ticker/AAPL",
+                    "content": "bought",
+                    "metadata": {"title": "trades"},
+                },
+                {
+                    "doc_id": "https://data.quiverquant.com/feed.json",
+                    "content": "bought",
+                    "metadata": {"title": "feed"},
+                },
+                {
+                    "doc_id": "https://www.federalreserve.gov/newsevents/pressreleases.htm",
+                    "content": "held rates",
+                    "metadata": {"title": "FOMC"},
+                },
+            ]
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    out = _real_call_web_search_tool(
+        query="alt-politician-signals", include_domains=[], max_results=4
+    )
+    assert out["sources"] == ["https://www.federalreserve.gov/newsevents/pressreleases.htm"]
+    assert "capitoltrades" not in out["summary"]
+    assert "quiverquant" not in out["summary"]
+
+
+@pytest.mark.unit
+def test_a_refused_only_result_set_fails_loud(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Filtering everything out raises rather than shipping a thin memo — the
+    fail-loud contract of this module is unchanged by the deny."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "doc_id": "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/2025FD.zip",
+                    "content": "STOCK Act report",
+                    "metadata": {"title": "clerk"},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match="no rows"):
+        _real_call_web_search_tool(query="congressional trades", include_domains=[], max_results=4)
+
+
+@pytest.mark.unit
+def test_a_refused_domain_in_the_yaml_allowlist_is_stripped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A caller naming a refused host must not get it, and must hear about it."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        _real_call_web_search_tool(
+            query="etf flows",
+            include_domains=["capitoltrades.com", "reuters.com"],
+            max_results=4,
+        )
+    assert seen["include_domains"] == ["reuters.com"]
+    assert "refused" in caplog.text
+
+
+@pytest.mark.unit
+def test_the_refusal_is_a_code_constant_not_yaml() -> None:
+    """The deny must not be tunable from an operator-edited file.
+
+    Pins the enforcement point itself: re-adding capitoltrades to
+    ``search_domains.yaml`` cannot re-enable the search, and the frozenset stays
+    a module constant with no env-var seam.
+    """
+    assert isinstance(search_refusals.REFUSED_SEARCH_DOMAINS, tuple)
+    assert "capitoltrades.com" in search_refusals.REFUSED_SEARCH_DOMAINS
+    assert "quiverquant.com" in search_refusals.REFUSED_SEARCH_DOMAINS
+    # The shipped yaml for this segment names none of them (the scoping half).
+    cfg = web_grounding._config()
+    shipped = cfg.get("per_segment", {}).get("alt-politician-signals", [])
+    for refused in search_refusals.REFUSED_SEARCH_DOMAINS:
+        assert refused not in shipped
+        assert refused not in cfg.get("web_allowed_websites", [])
+    # Even if the yaml were re-edited, the call-site guard still strips it.
+    scoped, excluded = web_grounding._apply_search_refusals(
+        list(shipped) + ["capitoltrades.com"], []
+    )
+    assert "capitoltrades.com" not in scoped
+    assert "capitoltrades.com" in excluded
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value,refused",
+    [
+        ("capitoltrades.com", True),
+        ("CAPITOLTRADES.COM", True),
+        ("https://www.capitoltrades.com/a/b?c=d", True),
+        ("data.quiverquant.com", True),
+        ("disclosures-clerk.house.gov", True),
+        ("https://disclosures-clerk.house.gov/public_disc/x.zip", True),
+        ("", False),
+        ("   ", False),
+        ("reuters.com", False),
+        ("notcapitoltrades.com", False),
+        ("quiverquant.com.evil.example", False),
+    ],
+)
+def test_refused_matching_is_host_exact(value: str, refused: bool) -> None:
+    """Subdomains match, lookalikes do not — a matcher loose enough to catch
+    ``capitoltrades.com.evil.example`` would break unrelated grounding."""
+    assert search_refusals.is_refused_search_domain(value) is refused
+
+
+@pytest.mark.unit
+def test_the_operator_exclude_cap_cannot_truncate_the_refusals(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch caps ``exclude_domains`` at 20. Refused entries lead the list
+    so a full operator list cannot push the gate out of the request."""
+    monkeypatch.setattr(
+        web_grounding,
+        "REFUSED_SEARCH_DOMAINS",
+        tuple(f"refused{i}.example" for i in range(25)),
+    )
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        _, excluded = web_grounding._apply_search_refusals(
+            ["reuters.com"], [f"d{i}.example" for i in range(20)]
+        )
+    assert len(excluded) == web_grounding._MAX_EXCLUDED_DOMAINS
+    assert excluded[:25] == [f"refused{i}.example" for i in range(20)]
+    assert "exclude_domains" in caplog.text

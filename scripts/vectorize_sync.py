@@ -50,7 +50,7 @@ Apply::
 One Cloudflare account + token now covers both the D1 read and the Vectorize write
 (#2239 credential rename) -- ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` are
 canonical; the legacy ``D1_ACCOUNT_ID``/``D1_API_TOKEN``/``VECTORIZE_ACCOUNT_ID``/
-``VECTORIZE_API_TOKEN`` names still work as a fallback (see ``_first_env`` below).
+``VECTORIZE_API_TOKEN`` names still work as a fallback (see ``digivault.store_helpers.first_env``).
 """
 
 from __future__ import annotations
@@ -94,7 +94,9 @@ def _mutation_capturing_post(
                 if mutation_id:
                     mutation_ids.append(str(mutation_id))
             except json.JSONDecodeError:
-                pass
+                # Non-JSON upsert response: no mutation id to collect; the
+                # status code above is still what the caller acts on.
+                logger.debug("upsert response was not JSON; skipping mutation-id capture")
         return status, text
 
     return post
@@ -349,20 +351,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
+    from digisearch.embedding.factory import resolve_backend_embedding_provider
     from digisearch.indexes.backends.vectorize import DEFAULT_BATCH_SIZE, VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
     from digivault.d1_errors import D1StoreError
     from digivault.d1_store import D1Store
-    from digivault.supabase_store import _first_env
+    from digivault.store_helpers import first_env
 
     # Canonical-first, legacy-fallback (#2239 credential rename): D1 and Vectorize
     # now share one Cloudflare account + token, so this single resolution feeds both
     # the D1 read below and the Vectorize sink further down -- CLOUDFLARE_ACCOUNT_ID/
     # CLOUDFLARE_API_TOKEN first, then the legacy VECTORIZE_*/D1_* names, whichever
     # the operator still has set.
-    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    account_id = first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
         # Checked before the D1 read below, not only before the Vectorize write
         # further down: D1 is read on every invocation, `--dry-run` included, so
@@ -415,15 +417,26 @@ def main(argv: list[str] | None = None) -> int:
             http_post=_mutation_capturing_post(_default_http_post, mutation_ids),
         )
 
+    # Embedder comes from env/config (DIGISEARCH_EMBEDDING_PROVIDER), not a
+    # hardcoded model: the same process must embed, stamp, and — at query
+    # time — embed queries, or same-dim vectors silently miss (#4756).
+    # Resolved even for --dry-run (construction is lazy; no model loads and
+    # no inference runs) so a misconfigured provider fails fast and the
+    # printed embedding_model is always the real one.
+    embedder = resolve_backend_embedding_provider()
+    model_id = (
+        str(getattr(embedder, "model_id", None) or getattr(embedder, "model", "")).strip()
+        or "unknown"
+    )
     if not args.dry_run:
-        assert_index_model(sink, model_id=MINILM_MODEL_ID, dimensions=384)
+        assert_index_model(sink, model_id=model_id, dimensions=embedder.dimensions)
 
     total = sync_corpus(
         notes,
         SegmentAwareChunker(),
-        None if args.dry_run else MiniLMEmbedder(),
+        None if args.dry_run else embedder,
         sink,
-        model_id=MINILM_MODEL_ID,
+        model_id=model_id,
         embed=not args.dry_run,
         # Single source of truth for the flush threshold — VectorizeBackend's own
         # batch size — so this can never drift from what the backend actually sends
@@ -432,6 +445,7 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=DEFAULT_BATCH_SIZE,
     )
     print(f"{'would upsert' if args.dry_run else 'upserted'} {total} vectors → {args.index}")
+    print(f"embedding_model={model_id}")
     if not args.dry_run:
         completed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
         print(f"sync_completed_at={completed_at}", file=sys.stderr)

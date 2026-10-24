@@ -28,7 +28,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "060_lock_public_write_grants.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "engine"
+    / "060_lock_public_write_grants.sql"
 )
 SCHEMA_DOC_PATH = REPO_ROOT / "digiquant" / "supabase" / "SCHEMA.md"
 
@@ -98,6 +103,9 @@ class TestUnderGrantedViewsAreNamedExplicitly:
             if "ALL TABLES" not in revoke:
                 return revoke
         pytest.fail("no per-relation REVOKE — coverage of the two views rests on ALL TABLES")
+        # pytest.fail always raises (NoReturn); the explicit raise documents
+        # that no path may fall through and return None implicitly.
+        raise AssertionError("unreachable: pytest.fail always raises")
 
     @pytest.mark.parametrize("view", UNDER_GRANTED_VIEWS)
     def test_names_the_view(self, view_revoke: str, view: str) -> None:

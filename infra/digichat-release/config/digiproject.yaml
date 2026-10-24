@@ -3,7 +3,7 @@
 #
 # Intentional omissions:
 #   - digiquant / backtest / optimize (no DIGIQUANT_DATA_DIR, no :8001)
-#   - digismith HTTP (tracing library only)
+#   - digitrace HTTP (tracing library only)
 #
 # Multi-tenant corpus routing (digithings vs OCC) uses digichat headers
 # (X-Digi-Corpus-Index / X-Digi-Vault-Prefix) and DIGI_TENANT_CORPUS_MAP —
@@ -35,6 +35,14 @@ agents:
     - digisearch_web_search
     - digivault_search_notes
     - digivault_get_note
+    # Read-only vault lookups the OCC prompt tells the model to ground answers
+    # in (digivault_search_tag, digivault_backlinks). They must be listed here
+    # rather than arriving per request: digivault is a builtin of the stack, not
+    # a per-request MCP server, so the live-union path that carries the OCC
+    # zammad row cannot carry these. Reach stays bounded by each tenant's own
+    # vaultPathPrefix — this permits the call, it does not widen the corpus.
+    - digivault_search_tag
+    - digivault_backlinks
     # Zammad tools are deliberately NOT in this shared allowlist: the digithings
     # website chat must not offer them. OCC reaches them per request through the
     # live MCP union (X-Digi-Mcp-Servers carries the occ tenant's zammad server).
@@ -42,8 +50,10 @@ agents:
     - web_search
   # research_brief still false below — web_search is never ambient on corpus RAG.
   # Serves BOTH tenants. A per-tenant override exists (researchSystemPrompt inside
-  # DIGI_TENANT_CORPUS_MAP, read by corpus_routing.py), but the deployed map sets it for
-  # neither, so this text is what digithings AND OCC users get — keep it corpus-neutral.
+  # DIGI_TENANT_CORPUS_MAP, read by corpus_routing.py) and the deployed maps carry
+  # it: the stack Worker's map sets it for `occ`, and the self-host compose map sets
+  # it for `digithings` and `occ` (measured on develop, DIG-3232). This text is the
+  # fallback for a slug the map does not carry, so keep it corpus-neutral.
   #
   # Rewritten for #2306. The previous version escalated to digivault_get_note only
   # "when a hit's excerpt isn't enough", which is a judgment the model cannot make: it
@@ -105,8 +115,8 @@ agents:
     ## Style
 
     Write digi product names in lowercase always, including at the start of a sentence:
-    digithings, digichat, digigraph, digiquant, digisearch, digikey, digismith,
-    digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
+    digithings, digichat, digigraph, digiquant, digisearch, digikey, digitrace,
+    digivault, digibot, digibase, digiskills, digiweb, digillm, digifetch.
 
     Wrap every diagram and code sample in a fenced Markdown code block with a
     language tag — ```mermaid for diagrams, ```python / ```bash / etc. for code.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# set-branch-protection.sh — Configure required status checks on `develop`.
+# set-branch-protection.sh — apply develop's required status checks.
 #
 # main is deliberately NOT supported here — its gate is a single dedicated
 # check ("Every commit reaching main was reviewed", from ci-review-coverage.yml)
@@ -9,45 +9,74 @@
 # already develop-specific, so pointing it at main would have overwritten main's
 # one check with develop's three.
 #
+# ── WHAT OWNS WHAT (DIG-2223) ────────────────────────────────────────────────
+#
+# Two scripts could write develop's required contexts, and nothing coupled them:
+#
+#   * this file, carrying a hardcoded four-context payload (develop's three plus
+#     `gitleaks-scan`), and
+#   * `scripts/enable_branch_protection.py apply --check ...`, which is what
+#     docs/BRANCH_PROTECTION.md documents.
+#
+# They disagreed. `gitleaks-scan` was required nowhere live and is declared
+# `advisory` in .github/policy-checks.yml, yet running this script would have
+# added it — a fourth gate, applied by hand, from a list no check consulted. So:
+#
+#   * `scripts/enable_branch_protection.py` is the ONLY script that PUTs branch
+#     protection. It owns the preflight, the plan-blocked diagnosis, and the
+#     union that stops a narrower apply from silently dropping a live gate.
+#   * `.github/required-contexts.txt` is the single committed source of the
+#     context SET. This file reads it and holds no list of its own, so there is
+#     no second copy to drift.
+#   * `scripts/check_required_policy_checks.py` EXECUTES this file
+#     (`--print-contexts`) and fails on any difference from the snapshot. The
+#     coupling is checked, not assumed — so re-adding a hardcoded context is a
+#     red CI lane rather than a fourth gate applied a year from now.
+#
+# Adding a gate is therefore: edit the snapshot, declare it in
+# .github/policy-checks.yml, prove its workflow reports on a docs-only PR, then
+# run this. Not: edit a shell script.
+#
+# `gitleaks-scan` left this file on 2026-10-14. Its old PRE-APPLY NOTE warned that
+# security-gitleaks.yml carried a workflow-level `paths-ignore: ["**.md",
+# "docs/**"]`, and a workflow skipped that way reports no check run at all — so
+# requiring it would have wedged every docs-only PR forever. PR #5318 (merged
+# 2026-10-10) deleted that filter, so the hazard is gone; the inventory still
+# calls the check `advisory` until DIG-1983's branch-protection write is
+# sequenced. See docs/BRANCH_PROTECTION.md.
+#
 # Usage:
-#   bash scripts/set-branch-protection.sh [--dry-run]
+#   bash scripts/set-branch-protection.sh --print-contexts
+#   bash scripts/set-branch-protection.sh --dry-run
+#   bash scripts/set-branch-protection.sh [--replace-checks]
 #
 # Options:
-#   --dry-run         Print the payload without calling the GitHub API
-#
-# Required status checks configured (verified live and applied 2026-08-19, #2469;
-# gitleaks-scan added #3922):
-#   - "Required checks passed"     — ci.yml aggregator job, fans in every
-#                                    path-gated component job
-#   - "doc-links + agents-init"    — ci-docs.yml (unconditional on pull_request
-#                                    since fd6de617f)
-#   - "mypy — digibase + digikey"  — ci-type-check.yml (unconditional on
-#                                    pull_request since fd6de617f)
-#   - "gitleaks-scan"              — security-gitleaks.yml secrets scan (#3922).
-#                                    PRE-APPLY NOTE: that workflow skips
-#                                    markdown/doc-only PRs with a workflow-level
-#                                    `paths-ignore`, and a workflow skipped that
-#                                    way leaves its required check "Pending" —
-#                                    GitHub then blocks the merge forever. Before
-#                                    running this script, relocate that skip to a
-#                                    job-level conditional (a skipped *job*
-#                                    reports Success) or drop the PR trigger
-#                                    filter. See docs/BRANCH_PROTECTION.md.
-#
-# Prerequisites:
-#   - gh CLI installed and authenticated (gh auth login)
+#   --print-contexts   Print the contexts this script would apply, one per line,
+#                      then exit. Reads no API and needs no gh auth, so the
+#                      drift guard can execute it in CI.
+#   --dry-run          Print the payload without calling the GitHub API.
+#   --replace-checks   Write exactly the snapshot's contexts, dropping any the
+#                      branch already requires. Off by default: the writer
+#                      unions the live contexts instead, so a stale snapshot
+#                      cannot quietly weaken the branch.
 
 set -euo pipefail
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
-BRANCH="develop"
-DRY_RUN=false
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SNAPSHOT="$REPO_ROOT/.github/required-contexts.txt"
+WRITER="$REPO_ROOT/scripts/enable_branch_protection.py"
 REPO="digithings-ai/digithings"
+BRANCH="develop"
+PYTHON="${PYTHON:-python3}"
 
-# ── Argument parsing ──────────────────────────────────────────────────────────
+MODE="apply"
+REPLACE_CHECKS=false
+
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --dry-run) DRY_RUN=true; shift ;;
+    --print-contexts) MODE="print-contexts"; shift ;;
+    --dry-run)        MODE="dry-run"; shift ;;
+    --replace-checks) REPLACE_CHECKS=true; shift ;;
     --branch)
       if [[ $# -lt 2 || "$2" == --* ]]; then
         echo "ERROR: --branch requires a value" >&2; exit 1
@@ -68,56 +97,71 @@ if [[ "$BRANCH" != "develop" ]]; then
   exit 1
 fi
 
-# ── Prerequisite check ────────────────────────────────────────────────────────
-if ! command -v gh &>/dev/null; then
-  echo "ERROR: gh CLI not found. Install: https://cli.github.com" >&2
-  exit 1
-fi
-if ! gh auth status &>/dev/null; then
-  echo "ERROR: Not authenticated. Run: gh auth login" >&2
+if [[ ! -f "$SNAPSHOT" ]]; then
+  echo "ERROR: $SNAPSHOT is missing." >&2
+  echo "It is the single source of develop's required contexts; this script" >&2
+  echo "deliberately holds no list of its own, so there is nothing to fall" >&2
+  echo "back to. See the ownership note at the top of this file." >&2
   exit 1
 fi
 
-# ── Build payload ─────────────────────────────────────────────────────────────
-# required_status_checks.strict=true  — branch must be up-to-date before merge.
-# contexts                            — these exact check names must pass.
-# enforce_admins=false                — admins can bypass in emergencies (use sparingly).
-# required_pull_request_reviews=null  — not "0 approvals": null means no pull
-#                                       request is required on develop at all.
-#                                       main differs — it sends an object with
-#                                       required_approving_review_count: 0, which
-#                                       *does* require a PR. Verified live
-#                                       2026-08-19; revisit as the team grows.
-# restrictions=null                   — no push restrictions beyond the checks above.
-PAYLOAD=$(cat <<'EOF'
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": [
-      "Required checks passed",
-      "doc-links + agents-init",
-      "mypy — digibase + digikey",
-      "gitleaks-scan"
-    ]
-  },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null
-}
-EOF
-)
+# The snapshot is prose plus a list. Comment lines are documentation, not gates.
+CONTEXT_LINES="$(
+  awk '
+    { line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line) }
+    line == "" || line ~ /^#/ { next }
+    { print line }
+  ' "$SNAPSHOT"
+)"
 
-# ── Execute or dry-run ────────────────────────────────────────────────────────
-if [[ "$DRY_RUN" == "true" ]]; then
-  echo "DRY RUN: Would set protection on branch '$BRANCH' of $REPO with:"
-  echo "$PAYLOAD"
-else
-  echo "Setting branch protection on '$BRANCH'..." >&2
-  gh api "repos/$REPO/branches/$BRANCH/protection" \
-    -X PUT \
-    --input - <<< "$PAYLOAD"
-  echo "Branch protection set on '$BRANCH'."
-  echo ""
-  echo "Verify with:"
-  echo "  gh api repos/$REPO/branches/$BRANCH/protection | python3 -m json.tool"
+if [[ -z "$CONTEXT_LINES" ]]; then
+  echo "ERROR: $SNAPSHOT lists no required contexts." >&2
+  exit 1
 fi
+
+CONTEXTS=()
+while IFS= read -r ctx; do
+  if [[ -n "$ctx" ]]; then
+    CONTEXTS+=("$ctx")
+  fi
+done <<< "$CONTEXT_LINES"
+
+if [[ "$MODE" == "print-contexts" ]]; then
+  printf '%s\n' "${CONTEXTS[@]}"
+  exit 0
+fi
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+  echo "ERROR: $PYTHON not found." >&2
+  exit 1
+fi
+
+# --dry-run prints the payload and calls nothing, so it must not demand a
+# credential it will not use.
+if [[ "$MODE" != "dry-run" ]]; then
+  if ! command -v gh &>/dev/null; then
+    echo "ERROR: gh CLI not found. Install: https://cli.github.com" >&2
+    exit 1
+  fi
+  if ! gh auth status &>/dev/null; then
+    echo "ERROR: Not authenticated. Run: gh auth login" >&2
+    exit 1
+  fi
+fi
+
+APPLY_ARGS=(apply --repo "$REPO" --branch "$BRANCH" --mode classic)
+for ctx in "${CONTEXTS[@]}"; do
+  APPLY_ARGS+=(--check "$ctx")
+done
+if [[ "$MODE" == "dry-run" ]]; then
+  APPLY_ARGS+=(--dry-run)
+fi
+if [[ "$REPLACE_CHECKS" == "true" ]]; then
+  APPLY_ARGS+=(--replace-checks)
+fi
+
+echo "Applying $REPO:$BRANCH required contexts, read from $SNAPSHOT:" >&2
+printf '  - %s\n' "${CONTEXTS[@]}" >&2
+exec "$PYTHON" "$WRITER" "${APPLY_ARGS[@]}"

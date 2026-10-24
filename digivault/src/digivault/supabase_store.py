@@ -13,7 +13,6 @@ behind the optional ``digivault[supabase]`` extra — ``import digivault`` never
 
 from __future__ import annotations
 
-import os
 from typing import (  # score:allow untyped any — Supabase client/response shapes are dynamic
     Any,
     Protocol,
@@ -27,6 +26,7 @@ from digivault.models import NoteRow, VaultConfig
 # imports (e.g. `local_search.py`) keep working. The redundant `as VaultSearchHit`
 # marks the re-export deliberate so ruff's F401 doesn't flag it as unused.
 from digivault.models import VaultSearchHit as VaultSearchHit
+from digivault.store_helpers import escape_like, first_env
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -51,6 +51,39 @@ class SupabaseStoreError(RuntimeError):
 def _rows(response: Any) -> list[dict[str, Any]]:
     """PostgREST responses expose decoded rows on ``.data``."""
     return list(getattr(response, "data", None) or [])
+
+
+def _normalize_prefix(path_prefix: str | None) -> str:
+    """Strip whitespace/slashes; empty means unscoped (no server-side filter)."""
+    return (path_prefix or "").strip().strip("/")
+
+
+def _iter_pages(
+    client: Any,
+    table: str,
+    select: str,
+    prefix: str,
+    page_size: int,
+) -> Any:
+    """Yield raw row dicts page by page (stops on the first short page)."""
+    if page_size <= 0:
+        raise ValueError(f"page_size must be positive, got {page_size}")
+    start = 0
+    while True:
+        query = client.table(table).select(select)
+        if prefix:
+            query = query.like("vault_path", f"{escape_like(prefix)}%")
+        page = query.order("vault_path").range(start, start + page_size - 1).execute()
+        rows = _rows(page)
+        yield rows
+        if len(rows) < page_size:
+            return
+        start += page_size
+
+
+def _in_scope(vault_path: str, prefix: str) -> bool:
+    """Client-side re-check: exact match or a full path segment below ``prefix``."""
+    return vault_path == prefix or vault_path.startswith(prefix + "/")
 
 
 class SupabaseStore:
@@ -83,8 +116,8 @@ class SupabaseStore:
         Reads prefer the anon key (the vault is anon-readable via RLS); the service
         role also works for trusted callers (e.g. the self-hosted MCP server).
         """
-        url = _first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
-        key = _first_env(
+        url = first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
+        key = first_env(
             "CORE_SUPABASE_ANON_KEY",
             "CORE_SUPABASE_SERVICE_KEY",
             "SUPABASE_ANON_KEY",
@@ -128,28 +161,18 @@ class SupabaseStore:
         server-side row cap. This pages explicitly with ``.range()`` and stops on
         the first short page.
         """
-        if page_size <= 0:
-            raise ValueError(f"page_size must be positive, got {page_size}")
-        prefix = (path_prefix or "").strip().strip("/")
+        prefix = _normalize_prefix(path_prefix)
         out: list[NoteRow] = []
-        start = 0
-        while True:
-            query = self._client.table(self._table).select(_SELECT)
-            if prefix:
-                query = query.like("vault_path", f"{prefix}%")
-            page = query.order("vault_path").range(start, start + page_size - 1).execute()
-            rows = list(getattr(page, "data", None) or [])
+        for rows in _iter_pages(self._client, self._table, _SELECT, prefix, page_size):
             for row in rows:
                 note = NoteRow.model_validate(row)
                 vault_path = note.vault_path.strip()
                 if not vault_path:
                     continue
-                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                if prefix and not _in_scope(vault_path, prefix):
                     continue
                 out.append(note)
-            if len(rows) < page_size:
-                return out
-            start += page_size
+        return out
 
     def list_raw(
         self,
@@ -174,27 +197,17 @@ class SupabaseStore:
         the columns it asked for. Does not read or change ``_SELECT``/``NoteRow``/
         ``list_notes`` at all -- existing callers of those are unaffected.
         """
-        if page_size <= 0:
-            raise ValueError(f"page_size must be positive, got {page_size}")
-        prefix = (path_prefix or "").strip().strip("/")
+        prefix = _normalize_prefix(path_prefix)
         out: list[dict[str, Any]] = []
-        start = 0
-        while True:
-            query = self._client.table(self._table).select(select)
-            if prefix:
-                query = query.like("vault_path", f"{prefix}%")
-            page = query.order("vault_path").range(start, start + page_size - 1).execute()
-            rows = list(getattr(page, "data", None) or [])
+        for rows in _iter_pages(self._client, self._table, select, prefix, page_size):
             for row in rows:
                 vault_path = str(row.get("vault_path") or "").strip()
                 if not vault_path:
                     continue
-                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                if prefix and not _in_scope(vault_path, prefix):
                     continue
                 out.append(row)
-            if len(rows) < page_size:
-                return out
-            start += page_size
+        return out
 
     def load_vault(self, *, config: VaultConfig | None = None) -> Vault:
         """Materialize a read-only :class:`Vault` from the table."""
@@ -219,11 +232,3 @@ class SupabaseStore:
         return [h for h in hits if h.vault_path == prefix or h.vault_path.startswith(prefix + "/")][
             :limit
         ]
-
-
-def _first_env(*names: str) -> str:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""

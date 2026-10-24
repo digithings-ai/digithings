@@ -11,7 +11,7 @@ Scripts listed here are **do not remove or rename casually**: GitHub Actions, [`
 | Step | Script / command |
 |------|------------------|
 | Smoke test | `bash scripts/smoke-test.sh` |
-| Pytest | `python -m pytest tests/` — imports [`scripts/generate-snapshot.py`](../../scripts/generate-snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) via [`tests/test_etl.py`](../../tests/test_etl.py) |
+| Pytest | `python -m pytest tests/` — imports [`scripts/generate_snapshot.py`](../../scripts/generate_snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) via [`tests/test_etl.py`](../../tests/test_etl.py) |
 | DB types | `bash scripts/check-types-sync.sh` |
 | Supabase migrations | `bash digiquant/scripts/research/verify-supabase-migrations.sh` — via `test-digiquant.yml`, not `ci.yml` directly |
 | Skill frontmatter | `bash scripts/validate-frontmatter.sh` |
@@ -46,7 +46,7 @@ All `scripts/*.sh` except `smoke-test.sh` itself are invoked with `--help` (or n
 
 **Python `--help` list** (must stay valid or CI breaks):
 
-`audit_config_references.py`, `backfill_execution_prices.py`, `backfill-supabase.py`, `execute_at_open.py`, `fill-entry-prices.py`, `generate-snapshot.py`, `materialize_snapshot.py`, `publish_document.py`, `refresh_performance_metrics.py`, `repair_supabase_portfolio_data.py`, `run_db_first.py`, `update_tearsheet.py`, `validate_artifact.py`, `validate_db_first.py`, `verify_supabase_canonical.py`.
+`audit_config_references.py`, `backfill_execution_prices.py`, `backfill-supabase.py`, `execute_at_open.py`, `fill_entry_prices.py`, `generate_snapshot.py`, `materialize_snapshot.py`, `publish_document.py`, `refresh_performance_metrics.py`, `repair_supabase_portfolio_data.py`, `run_db_first.py`, `update_tearsheet.py`, `validate_artifact.py`, `validate_db_first.py`, `verify_supabase_canonical.py`.
 
 > Note: `compute-technicals.py`, `fetch-macro.py`, `fetch-quotes.py`, `preload-history.py`,
 > `ingest_fred.py`, `ingest_fx_frankfurter.py`, `ingest_crypto_fng.py`, `ingest_treasury_curve.py`,
@@ -66,7 +66,7 @@ Operational truth: [`RUNBOOK.md`](../../RUNBOOK.md) and [`SCRIPTS.md`](SCRIPTS.m
 
 | Test file | Depends on |
 |-----------|------------|
-| [`tests/test_etl.py`](../../tests/test_etl.py) | [`scripts/generate-snapshot.py`](../../scripts/generate-snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) |
+| [`tests/test_etl.py`](../../tests/test_etl.py) | [`scripts/generate_snapshot.py`](../../scripts/generate_snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) |
 
 ---
 

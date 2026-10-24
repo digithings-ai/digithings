@@ -26,6 +26,13 @@ _logger = logging.getLogger(__name__)
 # constant, so it's inlined here rather than re-introducing the dropped manifest field.
 _YAHOO_FX_BACKFILL_START = "1999-01-04"
 
+# Rows per upsert POST for `prices fetch-fx-intraday`. The writer's DEFAULT_CHUNK is 500,
+# which on core (measured 2026-10-06) produced ~2,209 POSTs to fx_intraday_observations in
+# 12 hours. Request COUNT is the lever here — a wider chunk is strictly fewer round trips
+# for the same rows — so the CLI default is 4x the writer's (DIG-1835). Full-history
+# re-upserts are unchanged: this cuts requests per run, not rows per run.
+_FX_UPSERT_CHUNK = 2_000
+
 
 @click.group()
 def prices() -> None:
@@ -90,11 +97,13 @@ def _resolve_universe(tickers: str, watchlist: Path | None, include_sectors: boo
     """Shared universe resolution for the Supabase-sourced commands."""
     from digiquant.data.prices.fetchers import parse_watchlist
 
-    if tickers:
-        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-    elif watchlist:
+    raw = tickers or ""
+    universe = [t.strip().upper() for t in raw.split(",") if t.strip()]
+    if raw.strip() and not universe:
+        raise click.UsageError("--tickers did not contain any symbols.")
+    if not universe and watchlist:
         universe = parse_watchlist(watchlist)
-    else:
+    elif not universe:
         raise click.UsageError("Provide --watchlist or --tickers.")
     if include_sectors:
         from digiquant.research.sectors_config import sector_universe
@@ -241,8 +250,12 @@ def compute_technicals_cmd(
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
-    if tickers:
+    if tickers.strip():
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+        if not universe:
+            raise click.UsageError("--tickers did not contain any symbols.")
+    elif tickers:
+        raise click.UsageError("--tickers did not contain any symbols.")
     else:
         # Scan cache_dir for <TICKER>.csv files.
         d = Path(cache_dir)
@@ -488,13 +501,19 @@ def fetch_macro_cmd(
     dry_run: bool,
     supabase: bool,
 ) -> None:
-    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
+    """Ingest macro series (Gloomberb econ panel + Yahoo FX) into macro_series_observations.
+
+    The ``fred`` source seals the kept panel ids
+    (``digiquant.data.prices.gloomberb_macro.KEPT_SERIES_IDS``) from anonymous
+    Gloomberb ``econ_series`` pages — no vendor API key is read. ``--dry-run``
+    prints the series ids without constructing a client. ``--backfill`` seals a
+    1000-row tail per series, not history back to 1990.
+    """
     import concurrent.futures
 
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
-        fetch_fred,
         fetch_fx_yahoo,
     )
     from digiquant.data.prices.supabase_writer import (
@@ -512,23 +531,34 @@ def fetch_macro_cmd(
         # generation (get_fed_rate_probabilities stays Supabase-backed).
     mani = MacroManifest.from_yaml(manifest)
 
-    # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
-    # ThreadPoolExecutor spins up.
-    fred_api_key: str | None = None
-    if "fred" in sources_set:
-        fred_api_key = os.environ.get("FRED_API_KEY", "").strip() or None
-        if fred_api_key is None and not dry_run:
-            raise click.ClickException("FRED_API_KEY required unless --dry-run")
-
     # Run the independent upstream fetchers in parallel. Each call is a
     # network-bound HTTP loop, so threads (not processes) are the right tool.
     from collections.abc import Callable
 
     tasks: dict[str, Callable[[], list[dict]]] = {}
-    if "fred" in sources_set and fred_api_key is not None:
-        fred_start = mani.fred_backfill_start if backfill else None
-        key = fred_api_key  # bind for closure
-        tasks["fred"] = lambda: fetch_fred(mani, key, start=fred_start)
+    if "fred" in sources_set:
+        from digiquant.data.prices.gloomberb_macro import (
+            KEPT_SERIES_IDS,
+            build_ingest_client,
+            fetch_gloomberb,
+            window_limit,
+        )
+
+        kept = [s for s in mani.fred_series if s.get("id") in KEPT_SERIES_IDS]
+        panel = MacroManifest(fred_series=kept, fred_backfill_start=mani.fred_backfill_start)
+        if dry_run:
+            click.echo(
+                "fred panel (dry-run, gloomberb econ series): "
+                + ", ".join(str(s.get("id")) for s in kept)
+            )
+        else:
+            if backfill:
+                # A 1000-row tail per series, not 1990: econ_series has no cursor.
+                limit_for = lambda _cadence: 1000  # noqa: E731
+            else:
+                limit_for = window_limit
+            client = build_ingest_client()
+            tasks["fred"] = lambda: fetch_gloomberb(panel, client, limit_for=limit_for)
     if "yahoo" in sources_set:
         # Yahoo FX backfill starts at the ECB series origin (1999-01-04). This was
         # previously read from the Frankfurter manifest field; Frankfurter was removed
@@ -598,9 +628,24 @@ def fetch_macro_cmd(
     show_default=True,
     help="yfinance lookback window for the candle download.",
 )
+@click.option(
+    "--chunk",
+    # IntRange (not plain int) so a non-positive value is refused as a bad VALUE: _chunks()
+    # steps by chunk, so a zero or negative chunk never terminates the writer loop.
+    type=click.IntRange(min=1),
+    default=_FX_UPSERT_CHUNK,
+    show_default=True,
+    help=(
+        "Rows per upsert POST. Fewer, larger requests mean fewer round trips for the "
+        "same rows — the measured lever is request count, not bytes. The writer's own "
+        "default is 500."
+    ),
+)
 @click.option("--dry-run", is_flag=True)
 @click.option("--supabase", is_flag=True)
-def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: bool) -> None:
+def fetch_fx_intraday_cmd(
+    interval: str, period: str, chunk: int, dry_run: bool, supabase: bool
+) -> None:
     """Ingest intraday FX candles (Yahoo) into fx_intraday_observations.
 
     The twelve-x trade grader reads this table with the core service key to
@@ -647,7 +692,7 @@ def fetch_fx_intraday_cmd(interval: str, period: str, dry_run: bool, supabase: b
     )
     if client is None:
         raise click.ClickException("Supabase credentials not set.")
-    res = upsert_fx_intraday_observations(client, rows)
+    res = upsert_fx_intraday_observations(client, rows, chunk=chunk)
     click.echo(f"  upserted {res.rows} rows into fx_intraday_observations")
 
 

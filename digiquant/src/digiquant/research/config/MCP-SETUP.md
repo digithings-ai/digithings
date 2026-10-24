@@ -9,9 +9,12 @@
 
 1. Copy [`mcp.secrets.env.example`](mcp.secrets.env.example) → **`config/mcp.secrets.env`**.
 2. Fill in values (same names as environment variables).
-3. **Ingest scripts** (`ingest_fred.py`, etc.) load `config/supabase.env` then **`config/mcp.secrets.env`** automatically (via `scripts/lib/macro_ingest.py`).
+3. **Ingest scripts** load `config/supabase.env` then **`config/mcp.secrets.env`** automatically (via `scripts/lib/macro_ingest.py`).
 
-So **`FRED_API_KEY`** lives once in `mcp.secrets.env` for local runs and matches the variable name expected by GitHub Actions (set the same value as a repo secret for CI).
+`FRED_API_KEY` is retired (DIG-335) and its `mcp.secrets.env.example` row is a
+placeholder only — leave it unset locally and out of GitHub Actions. Macro series
+come from anonymous Gloomberb `econ_series` pages, so no key is needed on any
+path.
 
 ## Cursor
 
@@ -38,5 +41,5 @@ Templates use `uvx` and `npx` on your `PATH`. On macOS Homebrew, ensure GUI apps
 
 ## Related
 
-- [RUNBOOK.md](../RUNBOOK.md) — `FRED_API_KEY` for GitHub Actions.
+- [RUNBOOK.md](../RUNBOOK.md) — macro ingest sources and their credentials.
 - [docs/ops/data-sources.md](../docs/ops/data-sources.md) — data sources and ingest scripts.

@@ -18,6 +18,7 @@
  *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
  *                                + public Alpaca OAuth client id (never the secret)
  *   POST   /access/redeem-invite — hashed FX Hub invite → client_product_grants
+ *   GET    /access/twelvex-session — twelve-x-native session mint, gated on fx_hub grant
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -67,6 +68,7 @@ import {
   FX_HUB_PRODUCT,
   planFloorOutranks,
   redeemProductInvite,
+  resolveInviteBrand,
   type InviteStore,
 } from "./invite.ts";
 
@@ -1564,7 +1566,7 @@ function postgrestInviteStore(
     async listActiveCodes(productKey) {
       const { data, error } = await admin
         .from("product_invite_codes")
-        .select("id, code_hash, max_redemptions, redemption_count, revoked_at, plan_floor")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at, plan_floor, brand_marker, brand_line")
         .eq("product_key", productKey);
       if (error || !Array.isArray(data)) return [];
       return data.filter((row): row is {
@@ -1574,6 +1576,8 @@ function postgrestInviteStore(
         redemption_count: number;
         revoked_at: string | null;
         plan_floor: string | null;
+        brand_marker: string | null;
+        brand_line: string | null;
       } => typeof row.id === "string" && typeof row.code_hash === "string");
     },
     async hasGrant(email, productKey) {
@@ -1636,18 +1640,34 @@ function postgrestInviteStore(
         throw new Error("invite redemption write failed");
       }
     },
-    async incrementRedemptionCount(id) {
-      const { data } = await admin
-        .from("product_invite_codes")
-        .select("redemption_count")
-        .eq("id", id)
-        .maybeSingle();
-      const current =
-        data && typeof data.redemption_count === "number" ? data.redemption_count : 0;
-      await admin
-        .from("product_invite_codes")
-        .update({ redemption_count: current + 1 })
-        .eq("id", id);
+    async claimRedemption(id) {
+      // Compare-and-set. Two redeems that both read 0 must not both write 1
+      // and both insert a grant. The UPDATE ... WHERE redemption_count = observed
+      // is one statement, so the loser matches zero rows and retries or stops.
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const { data, error } = await admin
+          .from("product_invite_codes")
+          .select("redemption_count, max_redemptions, revoked_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error || !data || data.revoked_at) return false;
+        const count = Number(data.redemption_count);
+        if (!Number.isInteger(count) || count < 0) return false;
+        const max = data.max_redemptions == null ? null : Number(data.max_redemptions);
+        if (max != null && (!Number.isInteger(max) || count >= max)) return false;
+        const { data: updated, error: updateError } = await admin
+          .from("product_invite_codes")
+          .update({ redemption_count: count + 1 })
+          .eq("id", id)
+          .eq("redemption_count", count)
+          .is("revoked_at", null)
+          .select("id")
+          .maybeSingle();
+        if (updated && typeof updated.id === "string") return true;
+        // Lost the compare-and-set (no row, or PGRST116). A real write error stops.
+        if (updateError && updateError.code !== "PGRST116") return false;
+      }
+      return false;
     },
     async recordAdminAudit(row) {
       if (!row.workspace_id) return;
@@ -1659,6 +1679,33 @@ function postgrestInviteStore(
       });
     },
   };
+}
+
+/**
+ * GET /access/invite-brand — PUBLIC (no session). Returns the display
+ * branding of an invite code so the signup card can show the client's
+ * marker before the visitor has an account. Always 200 with
+ * `{ marker, line }` (nulls = default card): unknown, revoked, exhausted,
+ * and unbranded codes are indistinguishable here, and nothing returned
+ * grants access or reveals PII.
+ */
+export async function getInviteBrand(
+  req: Request,
+  deps: { admin?: AdminClient; inviteStore?: InviteStore; inviteHash?: string | null },
+): Promise<Response> {
+  const url = new URL(req.url);
+  const store = deps.inviteStore ??
+    (deps.admin
+      ? postgrestInviteStore(deps.admin, () => crypto.randomUUID(), undefined)
+      : null);
+  if (!store) return jsonOk({ marker: null, line: null });
+  const brand = await resolveInviteBrand({
+    productKey: url.searchParams.get("product_key"),
+    code: url.searchParams.get("code"),
+    envHash: deps.inviteHash,
+    store,
+  });
+  return jsonOk({ marker: brand?.marker ?? null, line: brand?.line ?? null });
 }
 
 async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response> {

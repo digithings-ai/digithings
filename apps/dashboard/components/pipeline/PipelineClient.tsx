@@ -21,6 +21,8 @@ import PipelineNodeDetail from './PipelineNodeDetail';
 import PipelineArtifactLedger from './PipelineArtifactLedger';
 import PipelineTraceLedger from './PipelineTraceLedger';
 import PipelineRunHealth from './PipelineRunHealth';
+import { apiDb } from '@/lib/api-query';
+import { isApiConfigured } from '@/lib/api-client';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -108,19 +110,8 @@ export default function PipelineClient() {
       setDayLoading(true);
 
       try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        if (!url || !key) return;
+        if (!isApiConfigured()) return;
 
-        // Secondary client — do not share GoTrue storage with the auth singleton.
-        const supabase = createClient(url, key, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-          },
-        });
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
         // Independent reads — run them together instead of one round-trip at a time.
@@ -129,12 +120,12 @@ export default function PipelineClient() {
           // Deriving them from `documents` selects EVERY row (~40-60/day), and
           // the PostgREST 1000-row default cap silently truncated the oldest
           // dates out of the 30-day window.
-          supabase
+          apiDb
             .from('daily_snapshots')
             .select('date')
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
-          supabase
+          apiDb
             .from('documents')
             .select('document_key,title,doc_type,phase,category,segment,sector,run_type')
             .eq('date', selectedDate),

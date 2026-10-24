@@ -23,7 +23,7 @@ need a file that lives elsewhere, take it from the path given.
 | **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
 
 The same bytes are previewed on the local design-reference at `/brand`
-(`npm run dev --workspace design-reference` → http://127.0.0.1:4013/brand/).
+(`npm run dev --workspace @digithings/reference` → http://127.0.0.1:4013/brand/).
 That page is a `--check` mirror, not a second set of logos, and it is **not**
 shipped on digithings.ai.
 
@@ -93,8 +93,11 @@ python3 packages/brand/build-og.py           # rebuild both
 python3 packages/brand/build-og.py --check    # verify, write nothing
 ```
 
-The rendered PNGs are copied into each app's `public/og.png` and wired through
-`openGraph.images` with explicit width, height and alt.
+The rendered PNGs are the bytes each app serves as `public/og.png`.
+`build-header.py --check` verifies both live copies
+(`apps/digithings-web/public/og.png` and `apps/digiquant-web/public/og.png`)
+stay identical to `og/`. They are wired through `openGraph.images` with
+explicit width, height and alt.
 
 **The wordmark is outlined to paths, not set as SVG `<text>`.** There is no Geist
 installed for librsvg, so a `<text>` element would rasterise in whatever fallback

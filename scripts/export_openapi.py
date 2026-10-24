@@ -25,7 +25,7 @@ SERVICES: dict[str, str] = {
     "digigraph": "digigraph.server:app",
     "digiquant": "digiquant.server:app",
     "digisearch": "digisearch.server:app",
-    "digismith": "digismith.server:app",
+    "digitrace": "digitrace.server:app",
     "digivault": "digivault.server:app",
 }
 

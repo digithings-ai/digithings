@@ -17,7 +17,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-MODULES=(digigraph digiquant digisearch digichat digikey digismith digiclaw digibase)
+# NOTE (#4929 Phase 0): the service is renamed to digitrace, but the remote
+# module branch is still `module/digismith` (renaming it needs a push + PR).
+# Keep this entry until the branch itself is renamed.
+MODULES=(digigraph digiquant digisearch digichat digikey digismith digibot digibase)
 
 die()    { echo "ERROR: $*" >&2; exit 1; }
 header() { echo ""; echo "── $* ──"; }
@@ -138,7 +141,6 @@ $COMMITS
 
 ## Test plan
 - [ ] Module unit tests pass: \`pytest -m unit -k $mod -v\`
-- [ ] Score gate: \`make score\`
 - [ ] End-to-end smoke: \`make test-e2e\` (if stack up)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -145,3 +145,58 @@ class TestDryRun:
         out = capsys.readouterr().out
         assert "nav_history rows:" in out
         assert "decision_log rows:" in out
+
+
+class _RecordingClient:
+    """Stands in for the Supabase client; records each upsert's conflict target."""
+
+    def __init__(self) -> None:
+        self.conflicts: dict[str, set[str]] = {}
+
+    def table(self, name: str):
+        client = self
+
+        class _Table:
+            def upsert(self, row, on_conflict: str):
+                client.conflicts.setdefault(name, set()).add(on_conflict)
+                return self
+
+            def execute(self):
+                return self
+
+        return _Table()
+
+
+def test_decision_log_upsert_targets_the_live_unique_constraint(mod, monkeypatch) -> None:
+    """ON CONFLICT must name a unique constraint the schema still has.
+
+    Migration 044 replaced (run_id, ticker) with (run_date, ticker); the seeder
+    kept the old target, so every run against a migrated database failed with
+    42P10 "no unique or exclusion constraint matching the ON CONFLICT".
+    """
+    migration = (
+        REPO_ROOT / "digiquant/supabase/migrations/engine/044_decision_log_rundate_unique.sql"
+    ).read_text()
+    # Control: the constraint this test pins is the one 044 actually defines.
+    assert "UNIQUE (run_date, ticker)" in migration
+    assert "DROP CONSTRAINT IF EXISTS decision_log_run_ticker_unique" in migration
+
+    client = _RecordingClient()
+    monkeypatch.setattr(mod, "_build_client", lambda: client)
+    monkeypatch.setattr(sys, "argv", ["seed_digiquant_demo.py"])
+    mod.main()
+    assert client.conflicts["decision_log"] == {"run_date,ticker"}
+
+
+def test_metrics_row_uses_post_035_column_names(mod) -> None:
+    """035 dropped portfolio_metrics.cash_pct and renamed total_invested."""
+    migration = (
+        REPO_ROOT / "digiquant/supabase/migrations/prod/035_drop_derived_duplicate_columns.sql"
+    ).read_text()
+    # Control: the schema change this test pins is the one 035 makes.
+    assert "ALTER TABLE portfolio_metrics DROP COLUMN IF EXISTS cash_pct" in migration
+    assert "RENAME COLUMN total_invested TO invested_pct" in migration
+
+    row = mod.generate_metrics_row(mod.generate_nav_rows())
+    assert not {"cash_pct", "total_invested"} & row.keys()
+    assert "invested_pct" in row

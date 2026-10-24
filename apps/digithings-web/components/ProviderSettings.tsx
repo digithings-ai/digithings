@@ -94,6 +94,7 @@ export function ProviderSettingsForm({
           "content-type": "application/json",
           "X-BYOK-Key": inputKey,
           "X-BYOK-Provider": inputProvider,
+          "X-BYOK-Model": inputModel,
         },
         body: JSON.stringify({}),
       });
@@ -103,7 +104,7 @@ export function ProviderSettingsForm({
     } finally {
       setTesting(false);
     }
-  }, [inputKey, inputProvider]);
+  }, [inputKey, inputProvider, inputModel]);
 
   const handleSave = useCallback(() => {
     const err = validateProviderKey(inputKey, inputProvider);

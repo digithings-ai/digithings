@@ -66,6 +66,13 @@ Usage:
     scripts/check_review_coverage.py                 # main..develop
     scripts/check_review_coverage.py --base main --head develop
     scripts/check_review_coverage.py --json          # machine-readable
+    scripts/check_review_coverage.py --commits-json compare.json
+                                                     # judge a GitHub compare payload
+
+A shallow clone cannot express the promotion range: `git log` stops at the graft
+boundary and can see one commit where the promotion has hundreds. The gate
+refuses to answer over such a range (exit 2) rather than report false green;
+`--commits-json` lets a caller supply the commit set from GitHub's compare API.
 """
 
 from __future__ import annotations
@@ -81,6 +88,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# 2026-10-12: moved from e03c7095 to b17877ac (develop tip covered by
+# promotion #5506) per Chris 12 Oct 22:44: risky commits (workflows, deploy,
+# secrets, auth) were retro-reviewed under DIG-3144; the rest is accepted as
+# unreviewed. Original note follows.
+#
 # The gate starts here. e03c7095 is develop at the time this script landed;
 # everything up to and including it predates the rule.
 #
@@ -95,7 +107,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # today and needs no change. Orphaned pre-gate commits like these need their own
 # hatch label (reviewed:owner) applied directly -- there is no
 # baseline value that retroactively covers a severed-ancestry commit.
-BASELINE_SHA = "e03c7095"
+BASELINE_SHA = "b17877ac"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
 # "Merge pull request #1234 from ...". Child commits preserved by a merge commit
@@ -187,7 +199,9 @@ _REST_POOL = 8
 
 
 def _run(args: list[str]) -> str:
-    return subprocess.check_output(args, text=True, cwd=REPO_ROOT).strip()
+    # rstrip newline only. `str.strip()` treats \x1f and \x1e as whitespace, so it
+    # eats the field/record separators `commits_in_range` depends on (DIG-4389).
+    return subprocess.check_output(args, text=True, cwd=REPO_ROOT).rstrip("\n")
 
 
 def _gh_json(args: list[str]) -> dict | list:
@@ -195,14 +209,38 @@ def _gh_json(args: list[str]) -> dict | list:
 
 
 def _gh_graphql(query: str, variables: dict | None = None) -> dict:
-    """One `gh api graphql` round-trip. Tests mock this; CI never hits live GitHub."""
+    """One `gh api graphql` round-trip. Tests mock this; CI never hits live GitHub.
+
+    stderr is CAPTURED, not inherited. GitHub answers a field it does not know
+    with one error per occurrence, and the batch query repeats the same field
+    for every PR alias -- so a broken query printed one error line per alias
+    of the rejected chunk, straight past the caller, while the caller only saw
+    a non-zero exit and fell back to REST. The text is kept on the exception
+    instead, so `prefetch_pr_states` can name the cause ONCE.
+    """
     args = ["api", "graphql", "-f", f"query={query}"]
     if variables:
         args.extend(["-F", f"variables={json.dumps(variables)}"])
-    data = _gh_json(args)
+    proc = subprocess.run(["gh", *args], capture_output=True, text=True, cwd=REPO_ROOT)
+    if proc.returncode != 0:
+        # The command is named with its `gh` prefix, so the message says which
+        # command failed rather than starting at "api".
+        raise subprocess.CalledProcessError(
+            proc.returncode, ["gh", *args], proc.stdout, proc.stderr
+        )
+    data = json.loads(proc.stdout)
     if not isinstance(data, dict):
         raise json.JSONDecodeError("graphql envelope was not an object", "", 0)
     return data
+
+
+def _graphql_failure_reason(exc: BaseException) -> str:
+    """One line naming why the GraphQL path failed, for a human reading a log."""
+    stderr = getattr(exc, "stderr", "") or ""
+    lines = stderr.strip().splitlines()
+    if lines:
+        return lines[0].strip()
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _chunks(items: list, size: int) -> list[list]:
@@ -211,7 +249,11 @@ def _chunks(items: list, size: int) -> list[list]:
 
 @lru_cache(maxsize=1)
 def _repo_slug() -> str:
-    return _run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    # `_run` only trims newlines, so strip the single-token result here. Safe:
+    # a slug never contains \x1f/\x1e, the characters `strip()` would eat.
+    return _run(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
+    ).strip()
 
 
 def _repo_owner_name() -> tuple[str, str]:
@@ -228,7 +270,7 @@ _PR_GRAPHQL_FIELDS = """
 number
 title
 labels(first: 40) { nodes { name } }
-reviews(last: 80) { nodes { state author { login } } }
+reviews(last: 80) { nodes { state author { login __typename } } }
 comments(last: 100) { nodes { author { login } body createdAt url } }
 timelineItems(last: 80, itemTypes: [LABELED_EVENT]) {
   nodes {
@@ -243,15 +285,42 @@ commits(last: 1) {
   nodes {
     commit {
       statusCheckRollup {
-        contexts {
-          ... on CheckRun { name conclusion }
-          ... on StatusContext { context state }
+        state
+        contexts(first: 100) {
+          nodes {
+            __typename
+            ... on CheckRun { name conclusion }
+            ... on StatusContext { context state }
+          }
         }
       }
     }
   }
 }
 """
+# `StatusCheckRollup` is an OBJECT, not a union: it has the fields `commit`,
+# `contexts`, `id` and `state`, and it has NO `nodes` field -- asking for one
+# is `undefinedField, fieldName nodes, typeName StatusCheckRollup`. Its
+# `contexts` field is a `StatusCheckRollupContextConnection`, and that
+# connection's `nodes` are of the union type
+# `StatusCheckRollupContext = CheckRun | StatusContext`. The fragments must
+# sit inside `nodes`: spreading `... on CheckRun` on the connection itself is
+# `cannotSpreadFragment, parentName StatusCheckRollupContextConnection`. The
+# one form GitHub accepts is
+#
+#     statusCheckRollup { contexts(first: 100) { nodes { ... on CheckRun { ... } } } }
+#
+# and the reader below must then walk `contexts.nodes`, not `nodes`.
+#
+# Both wrong forms shipped at some point (#6029 changed `contexts` to `nodes`;
+# before that the fragments were spread on the object itself), and neither was
+# caught: `gh api graphql` exits 1 when the response carries errors, the batch
+# call raised, and the REST fallback quietly answered instead -- so the gate
+# kept reporting verdicts from a query that had never run, and printed one
+# error line per alias of the rejected chunk (25 for a 25-alias chunk) that
+# nobody read. The old code wrapped the whole chunk loop in one try/except,
+# so the FIRST rejected chunk aborted it and the remaining chunks never
+# reached GraphQL at all. See `_gh_graphql` and `prefetch_pr_states`.
 
 
 def _pr_batch_query(numbers: list[int]) -> str:
@@ -276,6 +345,71 @@ def _sha_batch_query(shas: list[str]) -> str:
 
 def _author_login(node: dict | None) -> str:
     return ((node or {}).get("author") or (node or {}).get("user") or {}).get("login") or ""
+
+
+_BOT_TYPE_NAMES = frozenset({"bot"})
+
+
+def is_bot_login(author: dict | str | None) -> bool:
+    """One rule for "this login is a bot", applied at every review filter.
+
+    2026-10-19 (DIG-4298). The two filters used to disagree on what a bot is:
+    the queue's `_evidence_reviews` (scripts/merge_queue.py) stripped only
+    `[bot]`-suffix approvals, and this module's approvals sink excluded only the
+    three `[bot]` logins in `BOT_AUTHORS`. But ``gh --json`` returns the BARE
+    login (`coderabbitai`, not `coderabbitai[bot]` — see the note under
+    `REVIEW_BOTS`), so a bare-login bot's APPROVED review passed both filters
+    and cleared coverage as though a person had approved.
+
+    One login is a bot when
+
+      * its record says so -- `gh --json`'s ``is_bot``, REST's ``type``, or
+        GraphQL's ``__typename`` being ``Bot`` (when the query asks for it).
+        This is what catches an UNLISTED bot whose login is bare: gh builds at
+        least since 2.102 (the review environments this repo actually runs)
+        send ``is_bot`` on the author records both filters read, and the bare
+        login alone is indistinguishable from a person's; or
+      * its name says so -- the ``[bot]`` suffix GitHub appends in the REST
+        timeline, or a login in `REVIEW_BOTS`/`BOT_AUTHORS` (both spellings are
+        in the sets), which is what classifies hand-built fixtures and feeds
+        that predate the record typing.
+
+    A record with no typing field and an unlisted bare name is treated as a
+    person. That is deliberate: assuming the login is a bot would refuse real
+    approvals -- the failure mode that retired the non-author-approval demand on
+    2026-10-18 -- and both production fetches (``gh pr list/view --json``) carry
+    ``is_bot``, so a bare name with nothing else is a fixture artefact, not a
+    review a bot could actually submit.
+
+    Call it with whatever makes the login: the author record (`gh --json`,
+    GraphQL or REST shape), or the bare login string itself.
+    """
+    if isinstance(author, str):
+        record: dict = {}
+        login = author
+    else:
+        record = author if isinstance(author, dict) else {}
+        if record and not record.get("login"):
+            record = record.get("author") or record.get("user") or {}
+            if not isinstance(record, dict):
+                record = {}
+        login = str(record.get("login") or "")
+    if not login:
+        return False
+    # Name signals outrank a record that says human (2026-10-19, DIG-4298): the
+    # SAME login is graded as a reviewer bot elsewhere in this module (the
+    # REVIEW_BOTS hatch matches bare spellings), so trusting `is_bot: false`
+    # here would let one evaluation disagree with itself. A person whose real
+    # login collides with a reviewer-bot name loses nothing either way: their
+    # verdict degrades from the approval hatch to the agent-review hatch, both
+    # of which count.
+    if login.endswith("[bot]") or login in REVIEW_BOTS or login in BOT_AUTHORS:
+        return True
+    if record.get("is_bot") is True:
+        return True
+    if str(record.get("__typename") or "").lower() in _BOT_TYPE_NAMES:
+        return True
+    return str(record.get("type") or "").lower() in _BOT_TYPE_NAMES
 
 
 def _agent_review_from_comments(comments: list[dict], naming: str | None = None) -> dict | None:
@@ -315,12 +449,18 @@ def _apply_reviews_checks_comments(
     checks: list[dict],
     comments: list[dict],
 ) -> dict:
+    # The parsed check list is kept on the state, not only distilled into
+    # `bugbot`/`agent_tool`. It is the one thing the gate's own coverage test
+    # has to look at: "the parsed check list is not empty" is only observable
+    # if the list itself is observable, and the state dict is the public shape
+    # `verdict_for` judges. Both paths (GraphQL and the REST fallback) fill it.
+    state["checks"] = list(checks)
     state["approvals"] = [
         _author_login(review)
         for review in reviews
         if review.get("state") == "APPROVED"
-        and _author_login(review) not in BOT_AUTHORS
         and _author_login(review)
+        and not is_bot_login(review.get("author") or review.get("user"))
     ]
     agent_tool: list[dict] = []
     for check in checks:
@@ -332,6 +472,13 @@ def _apply_reviews_checks_comments(
             state["bugbot"] = conclusion
         elif name in REVIEW_BOT_CHECK_NAMES and conclusion == "SUCCESS":
             agent_tool.append({"bot": name, "via": "check"})
+    # The SAME reviews list feeds the REVIEW_BOTS hatch: a bot login is kept out
+    # of `approvals` (2026-10-19, DIG-4298) but its submitted review is still
+    # evidence -- CodeRabbit and friends clear coverage through this hatch, bare
+    # or suffixed, so filtering them out of one sink must not filter them out of
+    # the other (2026-10-18's old sink let them into `approvals` as if a person
+    # had approved; the eager fix would have stopped a legitimate CodeRabbit
+    # pass counting at all).
     for review in reviews:
         login = _author_login(review)
         if login in REVIEW_BOTS and review.get("state") in REVIEW_STATES:
@@ -347,6 +494,25 @@ def _apply_reviews_checks_comments(
     return state
 
 
+def _rollup_checks(node: dict) -> list[dict]:
+    """The check runs on a PR's HEAD commit, in GitHub's real GraphQL shape.
+
+    `statusCheckRollup` is an object with a `contexts` connection; it has no
+    `nodes` field of its own. The connection's `nodes` are the union
+    `StatusCheckRollupContext = CheckRun | StatusContext`, so the path is
+
+        commits.nodes[0].commit.statusCheckRollup.contexts.nodes
+
+    Reading `nodes` off the object (or a flat list off `contexts`) yields an
+    empty list for every real PR, which is what kept the bot-check arms dead.
+    See the note on `_PR_GRAPHQL_FIELDS`.
+    """
+    commits = (node.get("commits") or {}).get("nodes") or []
+    commit = (commits[0].get("commit") or {}) if commits else {}
+    rollup = commit.get("statusCheckRollup") or {}
+    return ((rollup.get("contexts") or {}).get("nodes") or [])
+
+
 def state_from_graphql_pr(node: dict) -> dict:
     """Map a GraphQL pullRequest node onto the dict `verdict_for` already judges."""
     labels = {
@@ -357,9 +523,7 @@ def state_from_graphql_pr(node: dict) -> dict:
     reviews = (node.get("reviews") or {}).get("nodes") or []
     comments = (node.get("comments") or {}).get("nodes") or []
     labeled = (node.get("timelineItems") or {}).get("nodes") or []
-    commits = (node.get("commits") or {}).get("nodes") or []
-    rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") if commits else None) or {}
-    checks = rollup.get("contexts") or []
+    checks = _rollup_checks(node)
     state = {
         "labels": labels,
         "approvals": [],
@@ -390,7 +554,18 @@ def prefetch_pr_states(numbers: list[int], cache: dict[int, dict], invalid: set[
                     invalid.add(number)
                 else:
                     cache[number] = state_from_graphql_pr(node)
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        # Fall back to REST, but SAY SO. A GraphQL query that GitHub rejects
+        # exits 1 and used to be swallowed here, so the gate answered from REST
+        # while its own query had never run -- and the error lines went to the
+        # terminal unread, one per alias of the rejected chunk. One line naming
+        # the cause is the difference between a visible failure and a silent
+        # one.
+        print(
+            "review coverage: the batched GraphQL query failed "
+            f"({_graphql_failure_reason(exc)}); falling back to one REST call per PR",
+            file=sys.stderr,
+        )
         _prefetch_pr_states_rest(pending, cache, invalid)
 
 
@@ -424,7 +599,12 @@ def prefetch_associated_prs(shas: list[str]) -> dict[str, int | None]:
             for index, sha in enumerate(chunk):
                 found[sha] = _merged_number_from_associated(repo.get(f"c{index}"))
         return found
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        print(
+            "review coverage: the batched GraphQL commit lookup failed "
+            f"({_graphql_failure_reason(exc)}); falling back to one REST call per commit",
+            file=sys.stderr,
+        )
         with ThreadPoolExecutor(max_workers=_REST_POOL) as pool:
             return dict(zip(pending, pool.map(associated_pr_number, pending), strict=True))
 
@@ -516,8 +696,151 @@ def commits_in_range(base: str, head: str) -> list[dict]:
         record = record.strip("\n")
         if not record:
             continue
-        sha, subject, author, parents = record.split("\x1f")
+        # The last two fields are author and parents; anchor on them so a
+        # subject containing \x1f (possible in principle) stays in the subject
+        # instead of shifting the fields. Empty `%P` leaves a trailing \x1f; a
+        # short record may leave the parents field out entirely.
+        fields = record.split("\x1f")
+        if len(fields) >= 4:
+            sha = fields[0]
+            subject = "\x1f".join(fields[1:-2])
+            author, parents = fields[-2], fields[-1]
+        elif len(fields) == 3:
+            sha, subject, author = fields
+            parents = ""
+        else:
+            # Dropping the record could hide an unreviewed commit: fail closed.
+            raise ValueError(
+                f"git log record has {len(fields)} field(s), expected at least 3: "
+                f"{record[:80]!r}"
+            )
         out.append({"sha": sha, "subject": subject, "author": author, "parents": parents})
+    return out
+
+
+def _shallow_repository() -> bool:
+    """True when local history is truncated by a shallow clone (fail closed)."""
+    try:
+        return _run(["git", "rev-parse", "--is-shallow-repository"]).strip() == "true"
+    except subprocess.CalledProcessError:
+        # Cannot prove the clone is complete, so do not claim coverage over it.
+        return True
+
+
+def _shares_history(base: str, head: str) -> bool:
+    """True when base and head have a common ancestor (fail closed on doubt).
+
+    This is not `--is-ancestor`: promotions into main are squashed, and develop
+    is rebased, so main is often not an ancestor of develop while still sharing
+    history. Disconnected history, however, means `base..head` is not the
+    promotion set we think it is.
+    """
+    result = subprocess.run(
+        ["git", "merge-base", base, head], cwd=REPO_ROOT, capture_output=True
+    )
+    return result.returncode == 0
+
+
+def history_gap_reason(base: str, head: str) -> str | None:
+    """Why local history cannot express `base..head`, or None when it can.
+
+    A shallow clone grafts history at a boundary. If the graft boundary sits on or
+    near the promotion head, `git log base..head` returns a handful of commits —
+    measured at one commit on 2026-10-19 — while GitHub's compare reports >250.
+    Judging that set would report SUCCESS over a fraction of the promotion, so
+    the gate refuses to answer instead (DIG-4389).
+    """
+    if _shallow_repository():
+        return (
+            "this clone is shallow (`git rev-parse --is-shallow-repository` says "
+            "true), so `git log` stops at the graft boundary and the range can be "
+            "a handful of commits instead of the whole promotion. Fetch full "
+            "history (`git fetch --unshallow`) or pass a complete GitHub compare "
+            "payload with --commits-json."
+        )
+    if not _shares_history(base, head):
+        return (
+            f"{base} and {head} share no common ancestor (or one ref is "
+            "unresolvable): the local range does not describe a promotion, so "
+            "its commit set is not the one to judge. Fetch the base branch and retry."
+        )
+    return None
+
+
+def graft_boundary_reason(commits: list[dict]) -> str | None:
+    """Why a parsed range contains a grafted root, or None.
+
+    Every commit in `base..head` except a true repository root has a parent. An
+    empty `%P` anywhere in the range means history was cut at a graft boundary,
+    even when `--is-shallow-repository` did not say so (replace refs, graft
+    files). Checking every commit, not just the oldest, catches a boundary that
+    `git log --reverse` did not put first.
+    """
+    for commit in commits:
+        if not commit["parents"].strip():
+            return (
+                f"commit {commit['sha'][:8]} in the range has no parent: local "
+                "history starts at a graft boundary, so the range is truncated. "
+                "Fetch full history (`git fetch --unshallow`) and retry."
+            )
+    return None
+
+
+def commits_from_compare(path: str, expected_head: str | None = None) -> list[dict]:
+    """Commit set from a GitHub compare payload (`repos/{o}/{r}/compare/{b}...{h}`).
+
+    `local_ci` uses this on a shallow clone, where local history cannot express
+    the range. GitHub caps the compare commit list (250 at time of writing), so a
+    payload whose `total_commits` exceeds `len(commits)` is truncated; refuse it
+    rather than judge a fraction of the promotion. When `expected_head` is given
+    (a full or abbreviated sha), the payload must end at that commit — a stale,
+    swapped or `behind` compare must not be judged as this promotion.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("compare payload was not an object")
+    commits = data.get("commits")
+    total = data.get("total_commits")
+    if not isinstance(commits, list):
+        raise ValueError("compare payload has no commit list")
+    if not isinstance(total, int):
+        raise ValueError("compare payload has no total_commits")
+    if total != len(commits):
+        raise ValueError(
+            f"GitHub compare is truncated ({len(commits)} of {total} commits), so "
+            "it cannot express this range. Fetch full history with "
+            "`git fetch --unshallow` and retry."
+        )
+    out: list[dict] = []
+    for entry in commits:
+        if not isinstance(entry, dict):
+            raise ValueError("compare commit was not an object")
+        sha = str(entry.get("sha") or "")
+        if not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise ValueError("compare commit had no 40-hex sha")
+        commit = entry.get("commit") or {}
+        message = str(commit.get("message") or "")
+        subject = message.splitlines()[0] if message else ""
+        author = str((commit.get("author") or {}).get("name") or "")
+        parents = " ".join(
+            str(parent.get("sha") or "")
+            for parent in (entry.get("parents") or [])
+            if isinstance(parent, dict)
+        )
+        out.append(
+            {"sha": sha, "subject": subject, "author": author, "parents": parents}
+        )
+    if expected_head:
+        if not out:
+            raise ValueError(
+                f"GitHub compare is empty, so it cannot contain head {expected_head}. "
+                "The base may already contain the head; fetch fresh refs and retry."
+            )
+        if not out[-1]["sha"].startswith(expected_head.lower()):
+            raise ValueError(
+                f"GitHub compare ends at {out[-1]['sha'][:12]}, not {expected_head}: "
+                "the payload is stale or belongs to another range."
+            )
     return out
 
 
@@ -737,13 +1060,54 @@ def verdict_for(state: dict) -> tuple[bool, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="origin/main")
-    parser.add_argument("--head", default="origin/develop")
+    parser.add_argument(
+        "--head",
+        default=None,
+        help="commit or ref to judge (default: origin/develop; with "
+        "--commits-json it also verifies the payload ends there)",
+    )
+    parser.add_argument(
+        "--commits-json",
+        metavar="PATH",
+        help=(
+            "judge this GitHub compare payload instead of a local git range; used "
+            "when a shallow clone cannot express base..head"
+        ),
+    )
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args()
+    head = args.head or "origin/develop"
 
-    commits = commits_in_range(args.base, args.head)
+    if args.commits_json:
+        try:
+            commits = commits_from_compare(args.commits_json, expected_head=args.head)
+        except (OSError, ValueError) as exc:
+            print(
+                f"review coverage: refusing the supplied commit set: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        reason = history_gap_reason(args.base, head)
+        if reason:
+            print(f"review coverage: refusing a degenerate range: {reason}", file=sys.stderr)
+            return 2
+        try:
+            commits = commits_in_range(args.base, head)
+        except (subprocess.CalledProcessError, ValueError) as exc:
+            print(
+                "review coverage: cannot read the local range "
+                f"{args.base}..{head}: {exc}. Fetch both refs and retry.",
+                file=sys.stderr,
+            )
+            return 2
+        reason = graft_boundary_reason(commits)
+        if reason:
+            print(f"review coverage: refusing a degenerate range: {reason}", file=sys.stderr)
+            return 2
+
     if not commits:
-        print(f"review coverage: {args.base}..{args.head} is empty — nothing to promote.")
+        print(f"review coverage: {args.base}..{head} is empty — nothing to promote.")
         return 0
 
     try:

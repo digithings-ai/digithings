@@ -11,8 +11,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "091_olympus_evidence_amendment_base_match.sql"
-PRIOR_PATH = MIGRATIONS_DIR / "090_olympus_evidence_bundles.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "091_olympus_evidence_amendment_base_match.sql"
+PRIOR_PATH = MIGRATIONS_DIR / "engine" / "090_olympus_evidence_bundles.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -33,7 +33,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_091() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("091_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("091_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_090() -> None:
@@ -72,7 +72,15 @@ def test_base_mismatch_function_and_trigger(sql: str) -> None:
 
 
 def test_architecture_conflict_markers_cleared() -> None:
-    arch = (REPO_ROOT / "digiquant" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    # DIG-3399 moved the research/portfolio monograph next to ARCHITECTURE.md.
+    # The pin follows the text; it does not require one file.
+    root = REPO_ROOT / "digiquant"
+    parts = [(root / "ARCHITECTURE.md").read_text(encoding="utf-8")]
+    parts.extend(
+        path.read_text(encoding="utf-8")
+        for path in sorted((root / "docs" / "architecture").glob("*.md"))
+    )
+    arch = "\n".join(parts)
     assert "<<<<<<<" not in arch
     assert ">>>>>>>" not in arch
     assert "Ticker evidence bundles (#2844 / WP11.1" in arch

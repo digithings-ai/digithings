@@ -25,6 +25,8 @@ from __future__ import annotations
 import ast
 import importlib.util
 import inspect
+import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -708,6 +710,433 @@ def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
     assert "pytest.fail" in src
 
 
+# ── one bot rule at the approvals sink (DIG-4298, 2026-10-19) ────────────────
+#
+# `_evidence_reviews` (the queue) and this sink used to filter bots differently:
+# the queue stripped `[bot]`-suffix approvals, the sink only three named logins,
+# and both missed a bare-login bot (the shape `gh --json` actually returns). One
+# predicate, `is_bot_login`, now classifies for both; these tests pin it at the
+# sink through `verdict_for`, the only way a verdict can pick a bot up.
+
+
+def _sink(reviews: list[dict[str, Any]]) -> tuple[dict[str, Any], bool, str]:
+    """Run `_apply_reviews_checks_comments` exactly the way both gates call it."""
+    state = _state()
+    crc._apply_reviews_checks_comments(state, reviews=reviews, checks=[], comments=[])
+    reviewed, why = crc.verdict_for(state)
+    return state, reviewed, why
+
+
+def test_an_unlisted_bots_bare_login_approval_never_reaches_the_approvals_sink() -> None:
+    """The DIG-4298 hole: an unlisted bot, bare login, APPROVED — refused.
+
+    `gh` sends the record, not the polite spelling: bare login plus `is_bot`.
+    The login alone (`flaky-lint`) is indistinguishable from a person's, so only
+    the record can say bot — and the sink must not count the review as an
+    approval. Refusal is what `_gate_review_coverage` then sees.
+    """
+    state, reviewed, why = _sink(
+        [{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}]
+    )
+    assert not reviewed
+    assert "no approval" in why
+
+    # The queue routes the SAME reviews list into this sink (`_gate_review_
+    # coverage` calls it directly on `_evidence_reviews`' pass-through), so the
+    # sink-side verdict is the one both gates grade; the merge-queue suite runs
+    # `_evidence_reviews` itself and refuses this shape there too.
+    state = _state()
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=[{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}],
+        checks=[],
+        comments=[],
+    )
+    assert state["approvals"] == []
+    assert state["agent_tool"] == []
+    reviewed, _ = crc.verdict_for(state)
+    assert not reviewed
+
+
+def test_an_unlisted_suffixed_bot_approval_is_not_an_approval_either() -> None:
+    """Any `[bot]` suffix is a bot designation whether or not the sink lists the
+    login: `netlify[bot]` is in neither REVIEW_BOTS nor BOT_AUTHORS, so the
+    2026-10-18 sink would have counted it as a person's approval. Nothing picks
+    its review up as agent evidence, so on its own the shape is refused."""
+    state, reviewed, why = _sink([{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
+    assert state["approvals"] == []
+    assert state["agent_tool"] == []
+    assert not reviewed
+    assert "no approval" in why
+
+
+def test_the_graphql_batch_catches_an_unlisted_bare_bot_the_same_way() -> None:
+    """`is_bot_login` must classify GraphQL records too — the batched fetch is
+    what the promotion range actually runs, and it carries `__typename`."""
+    state = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "flaky-lint", "__typename": "Bot"}, "state": "APPROVED"},
+            ]
+        )
+    )
+    assert state["approvals"] == []
+    reviewed, _ = crc.verdict_for(state)
+    assert not reviewed
+    counts = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "flaky-lint", "__typename": "User"}, "state": "APPROVED"},
+            ]
+        )
+    )
+    assert counts["approvals"] == ["flaky-lint"]
+    reviewed, why = crc.verdict_for(counts)
+    assert reviewed
+    assert "approved by flaky-lint" in why
+
+
+def test_the_batch_query_asks_for_the_review_authors_typename(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No test executes `_pr_batch_query`, and a malformed reviews field would
+    only fail at runtime — so pin the shape here instead: the review author has
+    to carry `__typename`, or the batched path loses its bot signal and an
+    unlisted bare bot's approval sneaks past the sink on promotion runs.
+    (The REST fallback keeps classifying via `is_bot`/`type`, so the degradation
+    is quiet rather than loud — which is exactly why the query is pinned.)"""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    query = crc._pr_batch_query([1894, 1893])
+    assert "reviews(last: 80) { nodes { state author { login __typename } } }" in query
+
+
+def test_the_batch_query_asks_for_the_contexts_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin the one query form GitHub accepts.
+
+    `StatusCheckRollup` is an OBJECT with the fields `commit`, `contexts`,
+    `id` and `state`; it has no `nodes` field (`undefinedField, fieldName
+    nodes, typeName StatusCheckRollup`). Its `contexts` field is a
+    `StatusCheckRollupContextConnection` whose `nodes` are the union
+    `StatusCheckRollupContext = CheckRun | StatusContext`, so the query must
+    ask for `contexts(first: N) { nodes { ... } }` and spread the fragments
+    inside `nodes`. Both wrong forms shipped at some point and neither was
+    caught, because a rejected query exits 1 and the REST fallback answered
+    in its place.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    query = " ".join(crc._pr_batch_query([1894]).split())
+    assert "statusCheckRollup {" in query
+    assert "contexts(first: 100) { nodes {" in query
+    assert "statusCheckRollup { nodes" not in query
+    # A bare `contexts {` has no pagination boundary, and the fragments cannot
+    # be spread on the connection itself -- both are `undefinedField` /
+    # `cannotSpreadFragment` at GitHub.
+    assert "contexts {" not in query
+
+
+def test_the_parsed_check_list_is_not_empty_for_a_pr_with_a_known_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reader must find the checks GitHub actually sends.
+
+    `statusCheckRollup` is an object whose `contexts` connection carries the
+    checks. Reading `nodes` off the object returns an empty list for every
+    real PR, so the bot-check arms could never fire -- and the old fixture
+    agreed with the broken reader, so no test noticed. This is the check that
+    was missing: a PR with a known check must yield a NON-EMPTY list.
+
+    It is asserted through the PUBLIC path (`prefetch_pr_states` -> the state
+    it caches), not through a private helper name: a test pinned to a helper
+    that the next refactor renames fails for a typo reason, not a behaviour
+    reason, and says nothing about the gate.
+    """
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        return {
+            "data": {
+                "repository": {
+                    "p6047": _graphql_pr(
+                        number=6047,
+                        checks=[
+                            {"name": "CodeRabbit", "conclusion": "SUCCESS"},
+                            {"context": "local-ci", "state": "PENDING"},
+                        ],
+                    )
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([6047], cache, invalid)
+    assert 6047 in cache, "the PR must not be reported as invalid"
+    checks = cache[6047]["checks"]
+    assert checks, "the parsed check list must not be empty for a PR with a known check"
+    assert {c.get("name") or c.get("context") for c in checks} == {"CodeRabbit", "local-ci"}
+
+
+def test_the_bot_check_arms_fire_off_a_graphql_pr() -> None:
+    """Arm 1 (Bugbot) and arm 3 (CodeRabbit / Claude) must clear the gate
+    through the GraphQL path — not only through the REST fallback."""
+    bugbot = crc.state_from_graphql_pr(
+        _graphql_pr(checks=[{"name": "Cursor Bugbot", "conclusion": "SUCCESS"}])
+    )
+    reviewed, why = crc.verdict_for(bugbot)
+    assert reviewed, why
+    assert "Cursor Bugbot completed" in why
+
+    coderabbit = crc.state_from_graphql_pr(
+        _graphql_pr(checks=[{"name": "CodeRabbit", "conclusion": "SUCCESS"}])
+    )
+    reviewed, why = crc.verdict_for(coderabbit)
+    assert reviewed, why
+    assert "agent review by CodeRabbit" in why
+
+
+def test_a_rejected_graphql_query_is_reported_and_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A query GitHub rejects must not vanish.
+
+    `gh api graphql` exits 1 when the response carries errors, so a broken
+    query used to raise, fall back to REST, and leave the caller none the
+    wiser -- while printing one error line per alias of the rejected chunk
+    (25 for a 25-alias chunk) that nobody read. The fallback stays; it now
+    says so, once, naming the cause.
+
+    This test drives the diagnostic from a synthetic exception. The capture
+    itself, and the real `_gh_graphql`, are covered by
+    `test_the_graphql_stderr_is_captured_not_inherited`.
+    """
+
+    def boom(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        raise subprocess.CalledProcessError(
+            1,
+            ["gh", "api", "graphql"],
+            "",
+            "gh: Field 'nodes' doesn't exist on type 'StatusCheckRollup'",
+        )
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", boom)
+    monkeypatch.setattr(
+        crc,
+        "_pr_review_state",
+        lambda number: {
+            "labels": set(),
+            "approvals": [],
+            "bugbot": None,
+            "title": "",
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        },
+    )
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894], cache, invalid)
+    assert 1894 in cache, "the REST fallback must still answer"
+    err = capsys.readouterr().err
+    assert "GraphQL" in err
+    assert "doesn't exist on type 'StatusCheckRollup'" in err
+
+
+_REJECTED_QUERY_STDERR = "gh: Field 'nodes' doesn't exist on type 'StatusCheckRollup'"
+
+
+def _gh_that_rejects_graphql(tmp_path: Path) -> Path:
+    """A `gh` stub that rejects a GraphQL query the way GitHub does.
+
+    It writes to stderr and exits non-zero, which is exactly how `gh api
+    graphql` reports a query the schema refuses. The stub is a real program
+    on the PATH, so the test exercises the real `subprocess.run` -- a
+    monkeypatched `subprocess.run` would only prove that the fake it was
+    handed behaves as the fake behaves.
+    """
+    stub = tmp_path / "gh"
+    stub.write_text(f"#!/bin/sh\necho \"{_REJECTED_QUERY_STDERR}\" >&2\nexit 1\n")
+    stub.chmod(0o755)
+    return stub
+
+
+def test_the_graphql_stderr_is_captured_not_inherited(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The capture is the point of this change, so it needs a test of its own.
+
+    Every other test in this file monkeypatched `_gh_graphql` wholesale, so
+    `subprocess.run(..., capture_output=True)` never ran: reverting
+    `_gh_graphql` to the form it had before this change left the suite
+    byte-identical. This one lets the REAL `_gh_graphql` run against a `gh`
+    stub that rejects the query, and pins three things:
+
+    - the stderr is CAPTURED, so it never reaches the terminal;
+    - it rides on the exception, where the fallback can name it;
+    - the exception names the command that failed, `gh` included.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(subprocess.CalledProcessError) as caught:
+        crc._gh_graphql("query { repository { pullRequest { number } } }")
+
+    error = caught.value
+    assert _REJECTED_QUERY_STDERR in (error.stderr or "")
+    assert error.cmd[0] == "gh", "the failing command must name gh"
+    assert error.returncode == 1
+    assert _REJECTED_QUERY_STDERR not in capfd.readouterr().err, (
+        "the stderr must be captured, not printed to the terminal"
+    )
+
+
+def test_a_rejected_query_names_the_cause_once_end_to_end(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The real `_gh_graphql`, the real fallback, one line naming the cause.
+
+    The point of the capture is that a human reading the log learns WHY the
+    gate fell back to REST. So the whole path runs: the real `_gh_graphql`
+    against a `gh` stub that rejects the query, the fallback, and the
+    diagnostic -- which must name the cause exactly once, not once per alias
+    and not once per chunk.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_pr_review_state",
+        lambda number: {
+            "labels": set(),
+            "approvals": [],
+            "bugbot": None,
+            "title": "",
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        },
+    )
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894], cache, invalid)
+    assert 1894 in cache, "the REST fallback must still answer"
+
+    err = capfd.readouterr().err
+    assert err.count("the batched GraphQL query failed") == 1, (
+        f"the fallback must say so once, not once per alias: {err!r}"
+    )
+    assert _REJECTED_QUERY_STDERR in err
+
+
+def test_the_commit_lookup_fallback_names_the_cause_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The commit-lookup fallback has to say so too, and only once.
+
+    `prefetch_associated_prs` is the second GraphQL path, and its fallback
+    was just as silent as the first one. It now names the cause, once, for
+    the whole call -- the chunk loop is inside one try, so one rejected chunk
+    is one line.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "associated_pr_number", lambda sha: None)
+
+    found = crc.prefetch_associated_prs(["a" * 40, "b" * 40])
+    assert found == {"a" * 40: None, "b" * 40: None}
+
+    err = capfd.readouterr().err
+    assert err.count("the batched GraphQL commit lookup failed") == 1, (
+        f"the fallback must say so once for the whole call: {err!r}"
+    )
+    assert _REJECTED_QUERY_STDERR in err
+
+
+def test_a_persons_approval_survives_the_bot_rule() -> None:
+    """The rule exists to refuse bots, never to doubt a person: `is_bot: false`
+    (what `gh` sends for every human account) keeps the approval countable."""
+    state, reviewed, why = _sink(
+        [{"author": {"login": "reviewer", "is_bot": False}, "state": "APPROVED"}]
+    )
+    assert state["approvals"] == ["reviewer"]
+    assert reviewed
+    assert "approved by reviewer" in why
+
+
+def test_a_listed_reviewer_bots_approval_is_agent_evidence_in_both_spellings() -> None:
+    """CodeRabbit's approvals keep counting — through the `REVIEW_BOTS` hatch.
+
+    Excluding bot logins from `approvals` was the DIG-4298 fix; had it been done
+    by stripping them out of the evidence list (`_evidence_reviews`' old suffix
+    strip), a legitimate CodeRabbit pass would have stopped counting at all, and
+    the suffixed spelling already disagreed with the bare one inside one gate:
+    `coderabbitai` counted as a person's approval, `coderabbitai[bot]` as no
+    evidence. One rule at the sink, identical verdicts both spellings.
+    """
+    for login in ("coderabbitai", "coderabbitai[bot]"):
+        state, reviewed, why = _sink([{"author": {"login": login}, "state": "APPROVED"}])
+        assert state["approvals"] == [], login
+        assert state["agent_tool"] == [{"bot": login, "via": "review"}], login
+        assert reviewed
+        assert "agent review by" in why, login
+        assert "approved by" not in why, login
+
+
+def test_rest_typing_is_caught_the_same_way() -> None:
+    """Raw REST feeds flag bots with `type: "Bot"` rather than `gh`'s `is_bot`;
+    the rule takes the record in whichever shape it arrives."""
+    review = {"user": {"login": "sam", "type": "Bot"}, "state": "APPROVED"}
+    state, reviewed, why = _sink([review])
+    assert state["approvals"] == []
+    assert not reviewed
+    assert "no approval" in why
+
+    # And the bare-login-first helper shape (`_author_login`'s `author`/`user`
+    # nesting) still resolves: an author record passed directly.
+    assert crc.is_bot_login({"login": "sam", "type": "Bot"})
+    assert not crc.is_bot_login({"login": "sam", "type": "User"})
+    assert crc.is_bot_login("coderabbitai[bot]")
+
+
+def test_is_bot_login_classifies_the_raw_shape_of_every_record() -> None:
+    """The one rule, pinned input by input.
+
+    Name signals classify without any record (`[bot]` suffix, `REVIEW_BOTS`
+    spellings); record signals classify when the login is bare and unlisted;
+    a record with neither is a person, because assuming a bot refuses real
+    approvals (see `is_bot_login`'s docstring).
+    """
+    assert crc.is_bot_login("coderabbitai[bot]"), "suffix"
+    assert crc.is_bot_login("netlify[bot]"), "any suffix, listed or not"
+    assert crc.is_bot_login("coderabbitai"), "listed name, bare spelling"
+    assert not crc.is_bot_login("coderabbitai-bad"), "prefix is not the suffix"
+    bare_bot = {"login": "flaky-lint", "is_bot": True}
+    assert crc.is_bot_login(bare_bot), "gh --json record"
+    assert crc.is_bot_login({"author": bare_bot}), "review node"
+    assert crc.is_bot_login({"user": bare_bot}), "REST-ish record"
+    assert crc.is_bot_login({"login": "flaky-lint", "__typename": "Bot"}), "GraphQL record"
+    assert not crc.is_bot_login({"login": "sam", "__typename": "User"}), "GraphQL person"
+    assert not crc.is_bot_login({"login": "sam", "is_bot": False}), "gh --json person"
+    assert not crc.is_bot_login({"login": "sam"}), "no signals at all: a person"
+    assert not crc.is_bot_login(""), "empty login is empty, not a bot"
+    assert not crc.is_bot_login(None)
+    assert not crc.is_bot_login({})
+
+
 # ── batched GitHub fetch (no live network) ───────────────────────────────────
 #
 # Sequential `gh pr view` + per-SHA `/commits/{sha}/pulls` is the promotion-range
@@ -726,6 +1155,14 @@ def _graphql_pr(
     checks: list[dict[str, Any]] | None = None,
     labeled: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """A pullRequest node in GitHub's REAL shape.
+
+    `statusCheckRollup` is an object whose `contexts` connection carries the
+    checks, so the payload nests them under `contexts.nodes`. A flat list
+    under `contexts` is a shape GitHub never sends -- and it is exactly the
+    shape the old fixture used, which is why the broken query went unnoticed:
+    the fixture agreed with the reader even when the query could not run.
+    """
     return {
         "number": number,
         "title": title,
@@ -738,7 +1175,7 @@ def _graphql_pr(
                 {
                     "commit": {
                         "statusCheckRollup": {
-                            "contexts": checks or [],
+                            "contexts": {"nodes": checks or []},
                         }
                     }
                 }
@@ -925,6 +1362,329 @@ def test_baseline_ancestor_set_is_one_rev_list(monkeypatch: pytest.MonkeyPatch) 
     ancestors = crc.baseline_ancestor_shas("e03c7095")
     assert ancestors == {"aaa", "bbb"}
     assert runs == [["git", "rev-list", "e03c7095"]]
+
+
+# ── the shallow-clone boundary (DIG-4389) ────────────────────────────────────
+#
+# `git log` emits `%H\x1f%s\x1f%an\x1f%P\x1e`, choosing \x1f and \x1e so a subject
+# can contain anything. Python's `str.strip()` treats BOTH as whitespace, so a
+# record whose `%P` is empty — the grafted root of a shallow clone — lost its
+# trailing separators and crashed the parser. That crash fails closed, which is
+# the safe state; merely deleting `.strip()` converts it into a gate that judges
+# the ONE commit a shallow clone can see and reports SUCCESS over a ~1000-commit
+# promotion. These tests pin both halves: the parser must survive an empty
+# `%P`, and the gate must refuse to answer over a degenerate range at all.
+
+
+_GRAFT_RAW = (
+    "6ad9aa1d73796da95cdf414b46409797a7f260a3"
+    "\x1fci(merge-queue): board review pass (#5895)\x1fChris\x1f\x1e\n"
+)
+
+
+def test_run_does_not_eat_the_record_and_unit_separators(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The root cause: \x1f and \x1e are whitespace to `str.strip()`."""
+    assert "\x1f".isspace() and "\x1e".isspace()
+    monkeypatch.setattr(crc.subprocess, "check_output", lambda *a, **k: _GRAFT_RAW)
+    out = crc._run(["git", "log"])
+    assert out == _GRAFT_RAW.rstrip("\n")
+    assert out.endswith("\x1e"), "the record terminator must survive the trim"
+
+
+def test_commits_in_range_parses_a_graft_boundary_record_with_empty_parents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grafted root has empty `%P`; it must parse as parents="" and not crash."""
+    monkeypatch.setattr(crc, "_run", lambda _args: _GRAFT_RAW.rstrip("\n"))
+    rows = crc.commits_in_range("origin/main", "6ad9aa1d7379")
+    assert rows == [
+        {
+            "sha": "6ad9aa1d73796da95cdf414b46409797a7f260a3",
+            "subject": "ci(merge-queue): board review pass (#5895)",
+            "author": "Chris",
+            "parents": "",
+        }
+    ]
+
+
+def test_commits_in_range_tolerates_a_record_without_a_parents_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Defensive parse: three fields means no parents, not a crash."""
+    monkeypatch.setattr(
+        crc, "_run", lambda _args: "sha1\x1fsubject\x1fauthor\x1e\n"
+    )
+    rows = crc.commits_in_range("origin/main", "head")
+    assert rows == [
+        {"sha": "sha1", "subject": "subject", "author": "author", "parents": ""}
+    ]
+
+
+def test_commits_in_range_refuses_a_record_that_cannot_be_parsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dropping an unparseable record could hide an unreviewed commit."""
+    monkeypatch.setattr(crc, "_run", lambda _args: "sha1\x1fauthor\x1e\n")
+    with pytest.raises(ValueError, match="expected at least 3"):
+        crc.commits_in_range("origin/main", "head")
+
+
+def test_commits_in_range_keeps_a_separator_inside_the_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the last two separators are structural; the subject may hold \\x1f."""
+    monkeypatch.setattr(
+        crc,
+        "_run",
+        lambda _args: "sha1\x1ffeat: a\x1fb\x1fauthor\x1fp1 p2\x1e\n",
+    )
+    rows = crc.commits_in_range("origin/main", "head")
+    assert rows == [
+        {
+            "sha": "sha1",
+            "subject": "feat: a\x1fb",
+            "author": "author",
+            "parents": "p1 p2",
+        }
+    ], "a separator in the subject must not shift author/parents"
+
+
+def test_a_shallow_clone_refuses_to_judge_the_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One commit is not the promotion; refuse instead of reporting coverage."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: True)
+    reason = crc.history_gap_reason("origin/main", "6ad9aa1d7379")
+    assert reason is not None
+    assert "shallow" in reason
+    assert "--commits-json" in reason, "the refusal must name the way through"
+
+
+def test_a_disconnected_base_refuses_to_judge_the_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`base..head` over disconnected history is not a promotion range."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: False)
+    reason = crc.history_gap_reason("origin/main", "6ad9aa1d7379")
+    assert reason is not None
+    assert "common ancestor" in reason
+
+
+def test_squashed_or_rebased_history_is_not_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promotions into main are squashed: main need not be an ancestor of develop."""
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: True)
+    assert crc.history_gap_reason("origin/main", "develop") is None
+
+
+def test_a_range_whose_oldest_commit_is_a_grafted_root_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The boundary signature that survives a misleading shallow check."""
+    reason = crc.graft_boundary_reason(
+        [{"sha": "s", "subject": "x", "author": "a", "parents": ""}]
+    )
+    assert reason is not None
+    assert "parent" in reason
+
+
+def test_a_parentless_commit_anywhere_in_the_range_refuses() -> None:
+    """A replace/graft boundary need not be the first row `git log` returns."""
+    reason = crc.graft_boundary_reason(
+        [
+            {"sha": "a" * 40, "subject": "x", "author": "a", "parents": "p"},
+            {"sha": "b" * 40, "subject": "y", "author": "a", "parents": ""},
+        ]
+    )
+    assert reason is not None
+    assert "bbbbbbbb" in reason
+
+
+def test_a_normal_range_has_no_graft_boundary() -> None:
+    assert (
+        crc.graft_boundary_reason(
+            [{"sha": "s", "subject": "x", "author": "a", "parents": "p1 p2"}]
+        )
+        is None
+    )
+
+
+def test_main_refuses_a_shallow_clone_before_running_the_range(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: True)
+
+    def must_not_run(_base: str, _head: str) -> list[dict[str, Any]]:
+        raise AssertionError("the range must not be judged on a shallow clone")
+
+    monkeypatch.setattr(crc, "commits_in_range", must_not_run)
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
+    assert crc.main() == 2
+    assert "shallow" in capsys.readouterr().err
+
+
+def test_main_fails_closed_when_the_range_cannot_be_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(crc, "_shallow_repository", lambda: False)
+    monkeypatch.setattr(crc, "_shares_history", lambda _base, _head: True)
+
+    def unreadable(_base: str, _head: str) -> list[dict[str, Any]]:
+        raise subprocess.CalledProcessError(128, "git log")
+
+    monkeypatch.setattr(crc, "commits_in_range", unreadable)
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--json"])
+    assert crc.main() == 2
+    assert "cannot read the local range" in capsys.readouterr().err
+
+
+def _compare_payload(commits: list[dict[str, Any]], total: int | None = None) -> dict[str, Any]:
+    return {
+        "total_commits": len(commits) if total is None else total,
+        "commits": commits,
+    }
+
+
+def _compare_commit(
+    sha: str = "a" * 40,
+    message: str = "fix(ci): a subject (#1)\n\nbody",
+    author: str = "Chris",
+    parents: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "sha": sha,
+        "commit": {"message": message, "author": {"name": author}},
+        "parents": [{"sha": p} for p in (parents if parents is not None else ["b" * 40])],
+    }
+
+
+def test_commits_from_compare_reads_a_complete_payload(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()])), encoding="utf-8"
+    )
+    assert crc.commits_from_compare(str(path)) == [
+        {
+            "sha": "a" * 40,
+            "subject": "fix(ci): a subject (#1)",
+            "author": "Chris",
+            "parents": "b" * 40,
+        }
+    ]
+
+
+def test_commits_from_compare_keeps_the_subject_not_the_body(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(
+            _compare_payload(
+                [_compare_commit(message="fix: one line (#2)\n\nlong body\nmore")]
+            )
+        ),
+        encoding="utf-8",
+    )
+    assert crc.commits_from_compare(str(path))[0]["subject"] == "fix: one line (#2)"
+
+
+def test_commits_from_compare_keeps_both_parents_of_a_merge_commit(tmp_path: Path) -> None:
+    """Dropping to the first parent would make `is_merge_commit` miss a merge."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(
+            _compare_payload([_compare_commit(parents=["c" * 40, "d" * 40])])
+        ),
+        encoding="utf-8",
+    )
+    row = crc.commits_from_compare(str(path))[0]
+    assert row["parents"] == f"{'c' * 40} {'d' * 40}"
+    assert crc.is_merge_commit(row["parents"])
+
+
+def test_commits_from_compare_refuses_a_payload_that_ends_elsewhere(
+    tmp_path: Path,
+) -> None:
+    """A stale or swapped compare must not be judged as this promotion."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit(sha="a" * 40)])),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"not b{12}"):
+        crc.commits_from_compare(str(path), expected_head="b" * 40)
+
+
+def test_commits_from_compare_refuses_an_empty_payload_for_a_named_head(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(json.dumps(_compare_payload([])), encoding="utf-8")
+    with pytest.raises(ValueError, match="empty"):
+        crc.commits_from_compare(str(path), expected_head="b" * 40)
+
+
+def test_commits_from_compare_accepts_the_named_head_prefix(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit(sha="a" * 40)])),
+        encoding="utf-8",
+    )
+    assert crc.commits_from_compare(str(path), expected_head="a" * 12)
+
+
+def test_commits_from_compare_refuses_a_malformed_payload(tmp_path: Path) -> None:
+    path = tmp_path / "compare.json"
+    path.write_text(json.dumps({"total_commits": 1, "commits": [{"nope": True}]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="40-hex"):
+        crc.commits_from_compare(str(path))
+
+
+def test_commits_from_compare_requires_a_file(tmp_path: Path) -> None:
+    with pytest.raises(OSError):
+        crc.commits_from_compare(str(tmp_path / "missing.json"))
+
+
+def test_main_refuses_a_missing_compare_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_review_coverage.py", "--commits-json", str(tmp_path / "missing.json")])
+    assert crc.main() == 2
+    assert "refusing the supplied commit set" in capsys.readouterr().err
+
+
+def test_commits_from_compare_refuses_a_truncated_payload(tmp_path: Path) -> None:
+    """GitHub caps compare at 250 commits; judging a capped set is a false green."""
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()], total=1086)),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="truncated"):
+        crc.commits_from_compare(str(path))
+
+
+def test_main_refuses_a_truncated_compare_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        crc,
+        "_shallow_repository",
+        lambda: (_ for _ in ()).throw(AssertionError("compare input needs no local history")),
+    )
+    path = tmp_path / "compare.json"
+    path.write_text(
+        json.dumps(_compare_payload([_compare_commit()], total=1086)),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["check_review_coverage.py", "--commits-json", str(path)]
+    )
+    assert crc.main() == 2
+    assert "truncated" in capsys.readouterr().err
 
 
 # ── the direct-push hatch (a commit with no source PR) ───────────────────────

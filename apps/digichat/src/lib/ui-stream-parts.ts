@@ -8,6 +8,7 @@
  */
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
+import { documentIdentityKeys } from "@/lib/document-identity";
 import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
 import { toolRowTitle } from "@digithings/ui/chat/stock";
 
@@ -17,12 +18,104 @@ export const CONVERSATION_PART_TYPE = "data-conversation" as const;
 /** Error text on a tool row whose call started but never returned a result. */
 export const ABANDONED_TOOL_ERROR = "Tool did not return a result before the stream ended.";
 
+/**
+ * MCP meta tools (284.3). Each one decides for itself what to call next, so a
+ * consent box naming one asks a human to approve a call nobody has named yet.
+ *
+ * digigraph already refuses these before they are offered (`MetaToolConfirmationRefused`),
+ * so the guard below is unreachable in production — it exists so the *render path*
+ * cannot be later reused for a meta tool without a test failing. The leaf brief
+ * makes this explicit; CTO bar item 10 calls it moot once 284.3 holds, which is a
+ * statement about the server, not about this file.
+ */
+export const MCP_META_TOOLS = [
+  "discover",
+  "executeRead",
+  "executeWrite",
+  "executeDestructive",
+] as const;
+
+const META_TOOL_SET: ReadonlySet<string> = new Set(
+  MCP_META_TOOLS.map((t) => t.toLowerCase())
+);
+
+/**
+ * May this tool name be presented as an approvable human decision?
+ *
+ * Case-insensitive on purpose: the names come from an operator allowlist that is
+ * matched case-sensitively upstream, so a differently-cased spelling must not
+ * quietly produce an *approvable* card here.
+ */
+export function isApprovableMcpTool(tool: string | undefined | null): boolean {
+  const name = (tool ?? "").trim().toLowerCase();
+  if (!name) return false;
+  return !META_TOOL_SET.has(name);
+}
+
+/** The lean public event digigraph records for a pending human decision (registry.PendingMcpCall.as_public_event). */
+export type PendingMcpDecision = {
+  pendingId: string;
+  serverId: string;
+  tool: string;
+  /** Argument *names* only. digigraph never sends values here: "Values may be client data." */
+  targetArguments: string[];
+  message?: string;
+};
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * Read a pending decision off the digigraph event, or null when the event is not
+ * one. digichat decides nothing here: every field is copied from what digigraph
+ * reported. There is no branch that classifies a tool as mutating.
+ */
+export function pendingMcpDecisionFromEvent(
+  payload: Record<string, unknown> | undefined
+): PendingMcpDecision | null {
+  const p = payload ?? {};
+  const pendingId = str(p.pending_id);
+  const tool = str(p.tool);
+  if (!pendingId || !tool) return null;
+  const targets = Array.isArray(p.target_arguments)
+    ? p.target_arguments.filter((t): t is string => typeof t === "string" && !!t.trim())
+    : [];
+  return {
+    pendingId,
+    serverId: str(p.server_id),
+    tool,
+    targetArguments: targets,
+    ...(str(p.message) ? { message: str(p.message) } : {}),
+  };
+}
+
+/**
+ * CTO bar item 10: the confirmation must name the concrete operation and its
+ * target, or it tells the human nothing they can consent to. `tool` is the
+ * *remote* tool digigraph resolved (`addOrEditJiraIssueComment`, not
+ * `executeWrite`), and the target is the argument names digigraph reported.
+ */
+export function describePendingMcpOperation(decision: PendingMcpDecision): string {
+  const where = decision.serverId ? ` on ${decision.serverId}` : "";
+  const target = decision.targetArguments.length
+    ? ` — target: ${decision.targetArguments.join(", ")}`
+    : "";
+  return `${decision.tool}${where}${target}`;
+}
+
 export type UiStreamWriter = {
   write: (chunk: UIMessageChunk) => void;
 };
 
 export type StandardActivityContext = {
   seq: number;
+  /**
+   * toolCallIds held open awaiting a human decision, mapped to their pending id.
+   * Optional so callers that build a context literal elsewhere keep compiling;
+   * created on first approval.
+   */
+  approvalsByToolCallId?: Map<string, string>;
   /** In-flight toolCallIds queued per tool name (FIFO — one row per call). */
   pendingByName: Map<string, string[]>;
   /** Last known MCP args keyed by toolCallId (used when retrieve omits them). */
@@ -40,6 +133,16 @@ export type StandardActivityContext = {
    * `_call` opened rather than minting an arg-less second row.
    */
   rowByCallId: Map<string, string>;
+  /**
+   * Identity keys of the sources already written this turn (see
+   * `src/lib/document-identity.ts`). Every retrieve span (digisearch,
+   * digivault_get_note, …) re-reports the same hits; writing each again stacked
+   * duplicate citation parts (OCC #185). A document is a duplicate when any of
+   * its keys was already seen — one key per location or handle, so the same
+   * document arriving under two paths is written once, while two documents
+   * that merely share a title are both written.
+   */
+  seenSources?: Set<string>;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
@@ -197,6 +300,26 @@ function ensureToolInput(
   ctx.inputAvailable.add(id);
 }
 
+function failedToolErrorText(span: ActivitySpan): string {
+  const result = span.toolResult;
+  if (typeof result === "string" && result.trim()) return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const record = result as Record<string, unknown>;
+    if (typeof record.content === "string" && record.content.trim()) return record.content;
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+    // An error object (MCP / tool payload): show it whole, not "Tool failed."
+    // (DIG-4459).
+    if (record.error && typeof record.error === "object") {
+      try {
+        return JSON.stringify(record.error, null, 2);
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+  return "Tool failed.";
+}
+
 function writeToolOutput(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
@@ -204,6 +327,16 @@ function writeToolOutput(
   span: ActivitySpan,
   extra: Record<string, unknown> = {},
 ): void {
+  // `tool-output-available` renders as success even when output.status is
+  // "failed". assistant-ui flips the row only on `tool-output-error`.
+  if (span.status === "failed") {
+    writer.write({
+      type: "tool-output-error",
+      toolCallId: id,
+      errorText: failedToolErrorText(span),
+    });
+    return;
+  }
   const output: Record<string, unknown> = {
     ...rememberInput(ctx, id, span),
     ...extra,
@@ -215,7 +348,6 @@ function writeToolOutput(
   if (started !== undefined) {
     output.durationMs = Math.max(0, Date.now() - started);
   }
-  if (span.status === "failed") output.status = "failed";
   writer.write({
     type: "tool-output-available",
     toolCallId: id,
@@ -224,15 +356,63 @@ function writeToolOutput(
 }
 
 /**
+ * Render a pending human decision as an approvable tool row.
+ *
+ * Emitting `tool-approval-request` is what switches assistant-ui's existing
+ * `requires-action` renderer on (useAISDKRuntime.js:87, useExternalHistory.js:27)
+ * — the Approve/Deny affordance already exists in
+ * `packages/ui/.../tool-fallback.aui.tsx` and has simply never been switched on.
+ *
+ * Returns the toolCallId, or null when the tool is a meta tool, in which case no
+ * approvable confirmation is emitted at all (CTO bar item 10).
+ */
+export function writePendingMcpApproval(
+  writer: UiStreamWriter,
+  ctx: StandardActivityContext,
+  decision: PendingMcpDecision
+): string | null {
+  if (!isApprovableMcpTool(decision.tool)) return null;
+  const title = describePendingMcpOperation(decision);
+  const id = beginToolCall(writer, ctx, decision.tool, title);
+  const toolInput: Record<string, unknown> = {
+    pending_id: decision.pendingId,
+    server_id: decision.serverId,
+    target_arguments: decision.targetArguments,
+  };
+  const span: ActivitySpan = {
+    operation: "execute_tool",
+    status: "started",
+    label: title,
+    toolName: decision.tool,
+    toolInput,
+  };
+  rememberInput(ctx, id, span);
+  ctx.inputById.set(id, toolInput);
+  writer.write({
+    type: "tool-approval-request",
+    approvalId: decision.pendingId,
+    toolCallId: id,
+    reason: "tool-calls",
+  });
+  if (!ctx.approvalsByToolCallId) ctx.approvalsByToolCallId = new Map();
+  ctx.approvalsByToolCallId.set(id, decision.pendingId);
+  return id;
+}
+
+/**
  * Settle a row whose result never arrived. `tool-output-error` is what flips
  * the AI SDK / assistant-ui tool part to an error state; a
  * `tool-output-available` with no result would render it as a success.
  */
-function writeAbandonedTool(writer: UiStreamWriter, id: string): void {
+function writeAbandonedTool(
+  writer: UiStreamWriter,
+  id: string,
+  errorText: string = ABANDONED_TOOL_ERROR,
+): void {
   writer.write({
     type: "tool-output-error",
     toolCallId: id,
-    errorText: ABANDONED_TOOL_ERROR,
+    errorText,
   });
 }
 
@@ -241,6 +421,12 @@ function writeSource(
   ctx: StandardActivityContext,
   doc: ActivityDocument,
 ): void {
+  const keys = documentIdentityKeys(doc);
+  if (keys.length > 0) {
+    const seen = (ctx.seenSources ??= new Set<string>());
+    if (keys.some((key) => seen.has(key))) return;
+    for (const key of keys) seen.add(key);
+  }
   const sourceId = nextId(ctx, "src");
   if (isHttpUrl(doc.path)) {
     writer.write({
@@ -348,15 +534,29 @@ export function writeStandardActivity(
  * this backstop (which exists so an Approve/Deny affordance cannot stick).
  * Auto-completing them as `completed` renders a lie: a success row whose tool
  * never returned.
+ *
+ * EXCEPTION — a row held open by `writePendingMcpApproval`. Its result cannot
+ * arrive in this stream: the turn was *suspended* (plan §2 D2 — LangGraph's
+ * `interrupt_after` drops the resume value, so the decision travels on
+ * `POST /api/chat/approve` instead). Settling it as `failed` here would flip the
+ * row to an error state and destroy the Approve/Deny affordance, which is the one
+ * case where "the result never arrived" means "waiting for a human", not "lost".
  */
 export function finishStandardActivity(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
+  /**
+   * The upstream reason, when there is one. The row that failed for that
+   * reason carries it; the others keep the generic "no result" text.
+   */
+  failure?: { toolName?: string; errorText?: string },
 ): void {
   closeOpenReasoning(writer, ctx);
+  const held = ctx.approvalsByToolCallId;
   for (const [name, queue] of ctx.pendingByName) {
     while (queue.length) {
       const id = queue.shift() as string;
+      if (held?.has(id)) continue;
       const stored = ctx.inputById.get(id) ?? {};
       const span: ActivitySpan = {
         operation: "execute_tool",
@@ -366,7 +566,11 @@ export function finishStandardActivity(
         ...(Object.keys(stored).length ? { toolInput: stored } : {}),
       };
       ensureToolInput(writer, ctx, id, name, span);
-      writeAbandonedTool(writer, id);
+      const specific =
+        failure?.errorText && failure.toolName === name
+          ? failure.errorText
+          : undefined;
+      writeAbandonedTool(writer, id, specific);
     }
   }
 }
@@ -376,13 +580,27 @@ export function finishStandardActivity(
  * digigraph speaks Chat Completions text, not UI tool parts.
  * Page-context document chips are folded into that text first so the model
  * still sees the host snapshot (#3590 preview stays gone).
+ *
+ * Approval parts are tool parts, so they are stripped here too — deliberately.
+ * Brief fact 1 says this function stops the browser returning anything about a
+ * tool to digigraph, and the fix is narrow by design: the *decision* does NOT
+ * travel through here. It travels on `POST /api/chat/approve`, a separate request
+ * for the same session, so no tool name and no argument can be smuggled upstream
+ * by forwarding message parts (brief fact 2 and 3).
  */
+const UPSTREAM_STRIPPED_PART_TYPES: ReadonlySet<string> = new Set([
+  "tool-approval-request",
+  "tool-approval-response",
+]);
+
 export function uiMessagesForUpstream(messages: UIMessage[]): UIMessage[] {
   return expandPageContextFileParts(messages)
     .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "system")
     .map((m) => ({
       ...m,
-      parts: m.parts.filter((p) => p.type === "text"),
+      parts: m.parts.filter(
+        (p) => p.type === "text" && !UPSTREAM_STRIPPED_PART_TYPES.has(p.type as string)
+      ),
     }));
 }
 

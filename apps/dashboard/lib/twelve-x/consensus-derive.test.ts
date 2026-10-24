@@ -30,6 +30,124 @@ describe('selectLatestCompleteConsensus', () => {
   });
 });
 
+/* ----------------------------------------------------------------------- */
+/* DIG-319 (DIG-57 leaf 2) — publish generations                            */
+/* ----------------------------------------------------------------------- */
+
+/**
+ * Fixture provenance: `fx_consensus_snapshot`, `run_date` 2026-06-02, read from
+ * production on 2026-10-04. That date holds three generations:
+ *   2026-06-17 14:47:45.587511+00  19 rows / 10 currencies
+ *   2026-06-30 23:00:54.339621+00   5 rows /  5 currencies  (partial rerun)
+ *   2026-07-23 22:43:39.052539+00  23 rows / 10 currencies
+ * The stamps keep their 6 fractional-second digits, which is what the database
+ * returns. Production holds more than one row per (run_date, currency) because
+ * the table key also holds `timeframe` and `weighted`; these callers pin those
+ * two first, so one row per currency per generation is what reaches this
+ * function. Which five currencies the middle generation republished is a
+ * fixture choice.
+ *
+ * Score is `(generation + 1) / 10 + currencyIndex / 100`, so the winning
+ * generation of a currency is readable straight off the value.
+ */
+const RUN_DATE = '2026-06-02';
+const G1 = '2026-06-17 14:47:45.587511+00';
+const G2 = '2026-06-30 23:00:54.339621+00';
+const G3 = '2026-07-23 22:43:39.052539+00';
+
+const MIDDLE_CURRENCIES = ['USD', 'EUR', 'JPY', 'GBP', 'CHF'];
+
+interface StampedRow {
+  run_date: string;
+  currency: string;
+  as_of: string;
+  score: number;
+}
+
+function generation(gen: number, asOf: string, currencies: readonly string[]): StampedRow[] {
+  return currencies.map((currency) => ({
+    run_date: RUN_DATE,
+    currency,
+    as_of: asOf,
+    score: (gen + 1) / 10 + G10.indexOf(currency) / 100,
+  }));
+}
+
+/** The three-generation production date: 25 rows, oldest generation first. */
+const THREE_GENERATIONS: StampedRow[] = [
+  ...generation(0, G1, G10),
+  ...generation(1, G2, MIDDLE_CURRENCIES),
+  ...generation(2, G3, G10),
+];
+
+/** Two fixed permutations: no Math.random, so a failure is reproducible. */
+function reordered<T>(rows: T[]): T[] {
+  const cut = Math.floor(rows.length / 2);
+  return [...rows.slice(cut).reverse(), ...rows.slice(0, cut).reverse()];
+}
+
+describe('selectLatestCompleteConsensus — publish generations', () => {
+  it('returns the newest-as_of row for each of the ten G10 currencies', () => {
+    const selected = selectLatestCompleteConsensus(THREE_GENERATIONS);
+
+    expect(selected).toHaveLength(10);
+    expect(selected.map((row) => row.currency)).toEqual(G10);
+    // Every currency was republished by G3, so G3 wins all ten.
+    expect(new Set(selected.map((row) => row.as_of))).toEqual(new Set([G3]));
+    // USD: 0.30 from G3, never 0.10 from G1 or 0.20 from G2.
+    expect(selected.find((row) => row.currency === 'USD')?.score).toBeCloseTo(0.3, 10);
+  });
+
+  it('still returns a currency only an older generation published', () => {
+    // Production G3 published all ten. Dropping its CHF row stands in for an
+    // incremental newest publish that has not reached CHF yet: CHF must still
+    // come back, carrying the newest stamp that did publish it (G2).
+    const incremental = THREE_GENERATIONS.filter(
+      (row) => !(row.as_of === G3 && row.currency === 'CHF'),
+    );
+
+    const selected = selectLatestCompleteConsensus(incremental);
+
+    expect(selected).toHaveLength(10);
+    const byCurrency = new Map(selected.map((row) => [row.currency, row]));
+    expect(byCurrency.get('CHF')?.as_of).toBe(G2);
+    expect(byCurrency.get('CHF')?.score).toBeCloseTo(0.2 + G10.indexOf('CHF') / 100, 10);
+    for (const currency of G10.filter((c) => c !== 'CHF')) {
+      expect(byCurrency.get(currency)?.as_of).toBe(G3);
+    }
+  });
+
+  it('never lets an unstamped row hide a stamped one', () => {
+    const selected = selectLatestCompleteConsensus([
+      ...THREE_GENERATIONS,
+      { run_date: RUN_DATE, currency: 'USD', as_of: null, score: 9.9 },
+      { run_date: RUN_DATE, currency: 'USD', as_of: 'not-a-date', score: 9.9 },
+    ]);
+
+    const usd = selected.find((row) => row.currency === 'USD');
+    expect(usd?.as_of).toBe(G3);
+    expect(usd?.score).toBeCloseTo(0.3, 10);
+  });
+
+  it('keeps the incumbent on an equal as_of tie', () => {
+    // Two rows, same (run_date, currency), same stamp: one generation, so the
+    // pick only decides which duplicate is seen, never which generation.
+    const first: StampedRow = { run_date: RUN_DATE, currency: 'USD', as_of: G3, score: 0.31 };
+    const second: StampedRow = { run_date: RUN_DATE, currency: 'USD', as_of: G3, score: 0.32 };
+    const selected = selectLatestCompleteConsensus([first, second, ...THREE_GENERATIONS]);
+
+    const usd = selected.find((row) => row.currency === 'USD');
+    expect(usd?.score).toBe(0.31);
+  });
+
+  it('returns the same rows whatever order the input arrives in', () => {
+    const expected = selectLatestCompleteConsensus(THREE_GENERATIONS);
+
+    expect(selectLatestCompleteConsensus(reordered(THREE_GENERATIONS))).toEqual(expected);
+    expect(selectLatestCompleteConsensus([...THREE_GENERATIONS].reverse())).toEqual(expected);
+  });
+});
+
 describe('consensusAverageAt', () => {
   it('returns null for i<0', () => {
     expect(consensusAverageAt([{ score: 1 }], -1)).toBeNull();

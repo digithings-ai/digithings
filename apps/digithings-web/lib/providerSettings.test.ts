@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PROVIDER_LABELS,
@@ -6,9 +8,38 @@ import {
   purgeLegacyApiKey,
   readFromStorage,
   validateProviderKey,
+  type ProviderId,
 } from "./providerSettings";
 
+type CatalogEntry = { id: string; fallbackModels: string[] };
+
+function loadCatalog(): CatalogEntry[] {
+  const path = fileURLToPath(new URL("../../../config/byok-providers.json", import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8")) as CatalogEntry[];
+}
+
 describe("providerSettings", () => {
+  it("uses each catalog fallbackModels list, in order", () => {
+    const catalog = loadCatalog();
+    expect(catalog.map((entry) => entry.id).sort()).toEqual(
+      (Object.keys(PROVIDER_MODELS) as ProviderId[]).sort(),
+    );
+    for (const entry of catalog) {
+      const ids = PROVIDER_MODELS[entry.id as ProviderId].map((model) => model.id);
+      expect(ids).toEqual(entry.fallbackModels);
+      expect(ids).not.toContain("meta-llama/llama-3.3-70b-instruct");
+      expect(ids).not.toContain("gpt-4.1-mini");
+      expect(ids).not.toContain("claude-3-5-haiku-20241022");
+      expect(ids).not.toContain("gemini-2.5-flash");
+    }
+  });
+
+  it("sends the selected model when the settings form tests a key", () => {
+    const path = fileURLToPath(new URL("../components/ProviderSettings.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    expect(src).toContain('"X-BYOK-Model": inputModel');
+  });
+
   let store: Map<string, string>;
   let setItemSpy: ReturnType<typeof vi.fn>;
 
@@ -39,7 +70,7 @@ describe("providerSettings", () => {
 
   describe("xai provider (added by #2348)", () => {
     it("is a recognized provider with model presets and a label", () => {
-      expect(PROVIDER_MODELS.xai.map((m) => m.id)).toEqual(["grok-4-3", "grok-4.5"]);
+      expect(PROVIDER_MODELS.xai.map((m) => m.id)).toEqual(["grok-4.3", "grok-4.5"]);
       expect(PROVIDER_LABELS.xai).toBe("xAI");
     });
 
@@ -62,7 +93,7 @@ describe("providerSettings", () => {
 
   describe("the BYOK key is never persisted to localStorage (#2348)", () => {
     it("never calls localStorage.setItem with the raw key, or under the legacy key name", () => {
-      persistProviderPreference("xai-super-secret-key", "xai", "grok-4-3");
+      persistProviderPreference("xai-super-secret-key", "xai", "grok-4.3");
 
       for (const call of setItemSpy.mock.calls) {
         const [storedKeyName, storedValue] = call as [string, string];
@@ -73,14 +104,14 @@ describe("providerSettings", () => {
     });
 
     it("still persists the non-secret provider/model preference", () => {
-      persistProviderPreference("xai-super-secret-key", "xai", "grok-4-3");
+      persistProviderPreference("xai-super-secret-key", "xai", "grok-4.3");
       expect(store.get("digichat:provider")).toBe("xai");
-      expect(store.get("digichat:model")).toBe("grok-4-3");
+      expect(store.get("digichat:model")).toBe("grok-4.3");
     });
 
     it("clears provider/model preference when the key is cleared (empty trimmed key)", () => {
       store.set("digichat:provider", "xai");
-      store.set("digichat:model", "grok-4-3");
+      store.set("digichat:model", "grok-4.3");
       persistProviderPreference("", "openrouter", "openai/gpt-4o-mini");
       expect(store.has("digichat:provider")).toBe(false);
       expect(store.has("digichat:model")).toBe(false);

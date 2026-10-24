@@ -35,8 +35,8 @@ DEFAULT_PATHS = [
     "digigraph/src",
     "digiquant/src",
     "digisearch/src",
-    "digismith/src",
-    "digiclaw",
+    "digitrace/src",
+    "digibot",
     "digibase/src",
     "digikey/src",
 ]

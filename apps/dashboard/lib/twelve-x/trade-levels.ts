@@ -9,12 +9,15 @@ import type {
   FxTradeLevels,
 } from './types';
 
-const PROVENANCES: readonly FxLevelProvenance[] = [
+export const PROVENANCES: readonly FxLevelProvenance[] = [
   'broker_quoted',
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
   'computed',
+  'technical',
+  'llm',
 ];
 
 const STATUSES: readonly FxTradeLevels['status'][] = ['complete', 'partial', 'incomplete'];
@@ -65,6 +68,9 @@ const PRESENTED_PRECISION: ReadonlySet<FxLevelProvenance> = new Set([
   'pmt_bank_trade',
   'pmt_seasonality_target',
   'pmt_position_cluster',
+  'pmt_retail_book',
+  'technical',
+  'llm',
 ]);
 
 function isProvenance(value: unknown): value is FxLevelProvenance {
@@ -219,6 +225,12 @@ export function provenanceChipLabel(level: FxTradeLevel): string {
       return 'seasonality';
     case 'pmt_position_cluster':
       return 'position book';
+    case 'pmt_retail_book':
+      return 'retail book';
+    case 'technical':
+      return 'technical';
+    case 'llm':
+      return 'model';
     default: {
       const _exhaustive: never = level.provenance;
       return _exhaustive;
@@ -328,9 +340,12 @@ export function evidenceDetail(statement: string): string | null {
 }
 
 export interface IdeaDetailModel {
+  /** Wire status, for diagnostics. Never render it — the union is internal. */
   status: FxTradeLevels['status'] | null;
   riskReward: number | null;
   riskRewardLabel: string | null;
+  /** A bracket arrived but is not publishable: show a pending state, no ladder. */
+  levelsPending: boolean;
   levelRows: IdeaDetailLevelRow[];
   evidenceRows: IdeaDetailEvidenceRow[];
 }
@@ -389,19 +404,19 @@ function buildLadderRows(
       }
     : null;
 
-  // Multi-target ladder: price-descending for display (labels follow display order).
-  const targetsByPriceDesc = [...tradeLevels.targets].sort((a, b) => {
-    const na = Number(a.value);
-    const nb = Number(b.value);
-    if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
-    return 0;
-  });
-  const targetRows: IdeaDetailLevelRow[] = targetsByPriceDesc.map((target, index) => ({
-    label: index === 0 ? 'Target' : `Target ${index + 1}`,
-    value: formatLevelValue(target.value, pair, target.provenance),
-    chip: provenanceChipLabel(target),
-    role: 'target',
-  }));
+  // Single primary target: the pipeline caps ideas to one target (LEVELS_MAX_TARGETS),
+  // so publish only the primary rung — never a "Target 2/3…" ladder.
+  const primaryTarget = tradeLevels.targets[0];
+  const targetRows: IdeaDetailLevelRow[] = primaryTarget
+    ? [
+        {
+          label: 'Target',
+          value: formatLevelValue(primaryTarget.value, pair, primaryTarget.provenance),
+          chip: provenanceChipLabel(primaryTarget),
+          role: 'target',
+        },
+      ]
+    : [];
 
   const long = isLongDirection(direction);
   const rows: IdeaDetailLevelRow[] = [];
@@ -417,11 +432,30 @@ function buildLadderRows(
   return rows;
 }
 
+/**
+ * A bracket publishes complete or not at all. `partial`, `incomplete`, and any
+ * status `parseTradeLevels` did not recognise (it coerces those to
+ * `incomplete`) all mean the ladder is not publishable, so no rows and no
+ * risk/reward are derived from them — a half bracket on screen reads as
+ * actionable (DIG-260 L5).
+ *
+ * Shape stays a separate question: `hasTradeLevels` answers "is there data",
+ * this answers "may it be shown".
+ *
+ * Exported so every ladder publisher gates on the same rule (DIG-260 L5
+ * follow-up): a publisher that derives fields from shape alone renders a
+ * target with no entry and no stop.
+ */
+export function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
+  return tradeLevels !== null && tradeLevels.status === 'complete';
+}
+
 /** Pure view-model for IdeaDetail levels + evidence blocks. */
 export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
   const tradeLevels = parseTradeLevels(idea.trade_levels);
+  const publishable = isPublishableBracket(tradeLevels);
   const levelRows =
-    hasTradeLevels(tradeLevels) && tradeLevels
+    publishable && hasTradeLevels(tradeLevels)
       ? buildLadderRows(tradeLevels, idea.pair, idea.direction)
       : [];
 
@@ -435,12 +469,15 @@ export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
     instrument: row.instrument,
   }));
 
-  const riskReward = tradeLevels?.risk_reward ?? null;
+  // A non-published bracket carries no publishable R:R either — otherwise the
+  // panel would render a bare ratio beside an absent target.
+  const riskReward = publishable ? (tradeLevels?.risk_reward ?? null) : null;
 
   return {
     status: tradeLevels?.status ?? null,
     riskReward,
     riskRewardLabel: riskReward != null ? formatRiskReward(riskReward) : null,
+    levelsPending: tradeLevels !== null && !publishable,
     levelRows,
     evidenceRows,
   };

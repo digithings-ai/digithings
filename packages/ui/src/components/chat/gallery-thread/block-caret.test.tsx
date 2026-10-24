@@ -11,7 +11,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { caretRowCol, ComposerBlockCaret } from "./block-caret";
+import { canvasFont, caretRowCol, ComposerBlockCaret, expandTabs } from "./block-caret";
 
 function mount(ui: React.ReactElement) {
   const host = document.createElement("div");
@@ -42,6 +42,39 @@ describe("caretRowCol", () => {
   it("clamps offsets outside the text", () => {
     expect(caretRowCol("hi", 99)).toEqual({ row: 0, col: 2 });
     expect(caretRowCol("hi", -4)).toEqual({ row: 0, col: 0 });
+  });
+});
+
+describe("canvasFont", () => {
+  const cs = {
+    fontStyle: "normal",
+    fontVariant: "normal",
+    fontWeight: "400",
+    fontFamily: '"Geist Mono", monospace',
+    // Computed `font` shorthand carries /line-height — canvas rejects that.
+    font: '400 14px / 22px "Geist Mono", monospace',
+  } as CSSStyleDeclaration;
+
+  it("never carries /line-height so ctx.font accepts it", () => {
+    const font = canvasFont(cs, 14);
+    expect(font).not.toContain("/");
+    expect(font).toContain("14px");
+    expect(font).toContain('"Geist Mono"');
+  });
+
+  it("falls back to monospace without a computed style", () => {
+    expect(canvasFont(null, 14)).toContain("monospace");
+  });
+});
+
+describe("expandTabs", () => {
+  it("leaves tab-free lines alone", () => {
+    expect(expandTabs("hello", 8)).toBe("hello");
+  });
+
+  it("advances to the next tab stop", () => {
+    expect(expandTabs("\t", 4)).toBe("    ");
+    expect(expandTabs("ab\t", 4)).toBe("ab  ");
   });
 });
 

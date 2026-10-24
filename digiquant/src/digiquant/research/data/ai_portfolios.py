@@ -86,12 +86,15 @@ def fetch_ai_portfolio_grounding(
     except (TypeError, ValueError):
         max_results = 8
     max_results = max(1, min(max_results, 10))
+    # Search engine, digisearch vocabulary end-to-end (#4723).
+    provider = cfg.get("provider", "auto")
     try:
         tool_out = call_web_search_tool(
             query=_build_query(accounts, recency),
             include_domains=list(_X_DOMAINS),
             max_results=max_results,
             recency_days=recency,
+            provider=provider,
         )
     except DashboardWebSearchError:
         raise

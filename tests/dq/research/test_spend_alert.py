@@ -142,6 +142,64 @@ class TestItReachesTheDiagnosticsRow:
         assert SPEND_ALERT_KEY not in breakdown
 
 
+class TestTheTokenDerivedEstimate:
+    """When the provider reports no cost, ``est_cost_usd`` falls back to a token-derived
+    estimate (#4596) — without it the spend alert can never fire and the column reads $0
+    on every run. The actual figure always wins when the provider did report one."""
+
+    # 10M prompt * $1.32/1M + 1M completion * $3.96/1M = $13.20 + $3.96 = $17.16
+    _BY_MODEL = {
+        "deepseek/deepseek-v4-pro": {
+            "calls": 1,
+            "prompt_tokens": 10_000_000,
+            "completion_tokens": 1_000_000,
+            "cached_tokens": 0,
+            "cost": 0.0,
+        }
+    }
+
+    def _row_for(self, *, cost_usd: float | None, by_model: dict[str, object]) -> dict[str, object]:
+        state = ResearchState(run_type="delta", run_date=date(2026, 8, 5))
+        return _row(
+            run_id="r",
+            run_type="delta",
+            run_date=date(2026, 8, 5),
+            model=None,
+            usage_snapshot={"cost_usd": cost_usd, "by_model": by_model},
+            summary=summarize_run(state),
+            attempt=1,
+        )
+
+    def test_an_unreported_cost_falls_back_to_the_estimate(self) -> None:
+        row = self._row_for(cost_usd=0.0, by_model=self._BY_MODEL)
+        assert row["est_cost_usd"] == pytest.approx(17.16)
+
+    def test_a_reported_cost_wins_over_the_estimate(self) -> None:
+        row = self._row_for(cost_usd=0.25, by_model=self._BY_MODEL)
+        assert row["est_cost_usd"] == 0.25
+
+    def test_no_estimate_leaves_the_unreported_cost_unchanged(self) -> None:
+        """Backward-compatible: an unpriced model set behaves exactly as before #4596."""
+        row = self._row_for(cost_usd=0.0, by_model={"made-up/model": {"prompt_tokens": 5}})
+        assert row["est_cost_usd"] == 0.0
+
+    def test_the_alert_fires_on_the_estimate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(SPEND_ALERT_ENV, "10")
+        row = self._row_for(cost_usd=0.0, by_model=self._BY_MODEL)
+        breakdown = row["breakdown"]
+        assert isinstance(breakdown, dict)
+        assert breakdown[SPEND_ALERT_KEY]["est_cost_usd"] == pytest.approx(17.16)
+
+    def test_the_same_value_reaches_both_the_row_and_the_alert(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(SPEND_ALERT_ENV, "10")
+        row = self._row_for(cost_usd=0.0, by_model=self._BY_MODEL)
+        breakdown = row["breakdown"]
+        assert isinstance(breakdown, dict)
+        assert breakdown[SPEND_ALERT_KEY]["est_cost_usd"] == row["est_cost_usd"]
+
+
 class TestItNeverBlocks:
     """The owner's decision, pinned. These are the tests that must never be relaxed."""
 

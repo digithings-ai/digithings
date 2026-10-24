@@ -1,5 +1,5 @@
 import type { ElementType } from 'react';
-import { LayoutDashboard, PieChart, GitBranch, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
 
 export interface NavItem {
   href: string;
@@ -10,29 +10,20 @@ export interface NavItem {
 }
 
 /**
- * The portfolio-owner spine: glance → why → full, plus FX Hub.
- * Single source of truth consumed by both the desktop sidebar and the mobile
- * app bar so they can never drift.
+ * This release the dashboard shell is FX Hub only.
+ * Brief, portfolio, and pipeline are the brief desk at `/app`
+ * (`apps/digiquant-web`). The sidebar and the mobile drawer both read this
+ * list, so they cannot drift.
  *
- * System was removed from top-level nav — run health lives on Pipeline (date
- * stats) and Brief (timeline). Legacy `/system` redirects to `/pipeline`.
- *
- * The FX Hub suite (/twelve-x) is a permanent destination since the
- * #1664 dashboard integration (previously env-gated behind
- * NEXT_PUBLIC_TWELVEX_ENABLED and rendered standalone).
+ * FX Hub stays at `/twelve-x` (base path `/dashboard`). Do not retarget it.
  */
-export const NAV: NavItem[] = [
-  { href: '/', label: 'Brief', icon: LayoutDashboard },
-  { href: '/portfolio', label: 'Portfolio', icon: PieChart },
-  { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
-  { href: '/twelve-x', label: 'FX Hub', icon: Globe },
-];
+export const NAV: NavItem[] = [{ href: '/twelve-x', label: 'FX Hub', icon: Globe }];
 
 /**
  * Pathname prefixes that stay LIVE when the live data backend is down (the
  * DB-unavailable gate). Two kinds of routes are exempt:
- *   - operator surfaces that must stay reachable to diagnose / reconfigure:
- *     '/pipeline' (run health panel) and '/settings';
+ *   - `/settings`, which must stay reachable to diagnose / reconfigure.
+ *     Pipeline stays behind the DB gate (`isDbExempt('/pipeline')` is false).
  *   - static legacy redirect routes that never touch Supabase, so gating them
  *     would only swallow a redirect.
  * Pathnames are app-relative (basePath '/dashboard' is stripped by usePathname).

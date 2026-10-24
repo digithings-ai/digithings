@@ -133,7 +133,7 @@ def generate_param_grid(
             and len(spec) == 3
             and all(isinstance(x, (int, float)) for x in spec)
         ):
-            # (min, max, step)
+            # Tuple holds minimum, maximum and step.
             lo, hi, step = spec[0], spec[1], spec[2]
             vals = []
             v = lo
@@ -235,7 +235,7 @@ def run_optimize(
     elif method == "random":
         trials = sample_random_params(strategy_name, n_trials, base_params=base_params)
     else:
-        # grid: auto-infer
+        # For grid search, infer the parameter grid automatically.
         trials = infer_param_grid(strategy_name, base_params=base_params, num_points_per_param=3)
 
     logger.info(
@@ -350,7 +350,29 @@ def _run_sdca_optimize(
     data_dir: str | Path | None,
     base_params: dict[str, float | int | str] | None,
 ) -> OptimizeResult:
-    """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
+    """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe.
+
+    Repo-split 1.2 (DIG-3691): a ``digiquant.strategies`` plugin providing
+    ``run_sdca_optimize`` takes precedence; the in-tree implementation below
+    is the fallback while R1 still lives in this repo.
+    """
+    try:
+        from digiquant import plugin as _plugin
+
+        _hook = _plugin.get_sdca_optimize_hook()
+    except Exception:
+        _hook = None
+    if _hook is not None:
+        return _hook(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            param_grid=param_grid,
+            method=method,
+            n_trials=n_trials,
+            data_path=data_path,
+            data_dir=data_dir,
+            base_params=base_params,
+        )
     # nautilus_trader is an optional extra; importing at module load would
     # pull Nautilus into every optimize caller.
     try:

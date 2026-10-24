@@ -10,6 +10,11 @@ function read(rel: string): string {
 }
 
 describe("gallery Thread is the product digichat skin", () => {
+  it("keeps a single tool-fallback source (DIG-3449)", () => {
+    expect(existsSync(join(here, "gallery-thread/tool-fallback.aui.tsx"))).toBe(
+      false,
+    );
+  });
   it("does not compose a parallel ChatMarkdown tree", () => {
     const adapter = read("DigichatThread.tsx");
     expect(adapter).toMatch(/gallery-thread\/thread\.aui/);
@@ -40,9 +45,11 @@ describe("gallery Thread is the product digichat skin", () => {
   });
 
   it("tools stay collapsed unless they require action", () => {
-    const fallback = read("gallery-thread/tool-fallback.aui.tsx");
+    // Single source: gallery Thread renders the stock ToolFallback, so the
+    // collapse, duration and naming pins live on that file (DIG-3449).
+    const fallback = read("stock/tool-fallback.aui.tsx");
     expect(fallback).toMatch(/useState\(isRequiresAction\)/);
-    expect(fallback).toMatch(/formatToolDuration\(ms\)/);
+    expect(fallback).toMatch(/formatToolDuration\(/);
     expect(fallback).not.toMatch(/isSettled/);
     expect(fallback).not.toMatch(/wantOpen/);
     expect(fallback).toMatch(/toolName/);
@@ -50,15 +57,15 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(fallback).not.toMatch(/`tool\(/);
   });
 
-  it("reasoning uses thought when done and expand caret", () => {
+  it("reasoning uses thought when done and the shared caret", () => {
     const reasoning = read("gallery-thread/reasoning.tsx");
     expect(reasoning).toMatch(/state=\{active \? "thinking" : "thought"\}/);
-    expect(reasoning).toMatch(/state="expand"/);
+    expect(reasoning).toMatch(/DisclosureChevron/);
   });
 
   it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {
     const root = join(here, "../../../../../");
-    const cf = readFileSync(join(root, "Dockerfile.digichat-cloudflare"), "utf8");
+    const cf = readFileSync(join(root, "infra/docker/Dockerfile.digichat-cloudflare"), "utf8");
     const app = readFileSync(join(root, "apps/digichat/Dockerfile"), "utf8");
     const copy = "apps/reference/app/(chatbot)/chatbot/chatbot.css";
     expect(cf).not.toContain(copy);
@@ -84,6 +91,16 @@ describe("gallery Thread is the product digichat skin", () => {
     // loads first and loses every tie, so it must not re-declare them (#3818).
     expect(aui).not.toMatch(/\.aui-action-bar-more-content \{/);
     expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
+  });
+
+  it("product app command lists paint the canvas when the footer clears --bg", () => {
+    const chatbot = read("../../styles/chat-digichat.css");
+    const rule =
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .aui-composer-trigger-popover,\n' +
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .dc-composer-menu {\n' +
+      "  background: var(--term-bg);\n" +
+      "}";
+    expect(chatbot).toContain(rule);
   });
 
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {

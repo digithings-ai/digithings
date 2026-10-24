@@ -27,8 +27,9 @@ from digiquant.dashboard.accounting.models import (
     PeriodStatus,
     TickerPeriodResult,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import eq_house_workspace, house_workspace_id
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import opt_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +87,12 @@ def _dec_str(value: Decimal | None) -> str | None:
     return format(value, "f")
 
 
-def _decimal(raw: Any) -> Decimal | None:
-    if raw is None:
-        return None
-    try:
-        return Decimal(str(raw))
-    except (ArithmeticError, ValueError):
-        return None
-
-
 def _period_rows(*, client: SupabaseClient, period_date: date) -> list[dict[str, Any]]:
-    resp = client.table(PERIODS).select("*").eq("period_date", period_date.isoformat()).execute()
+    resp = (
+        eq_house_workspace(client.table(PERIODS).select("*"))
+        .eq("period_date", period_date.isoformat())
+        .execute()
+    )
     return list(getattr(resp, "data", None) or [])
 
 
@@ -132,12 +128,12 @@ def _child_rows(*, client: SupabaseClient, table: str, period_id: UUID) -> list[
 
 def _row_implies_activity(period_row: dict[str, Any]) -> bool:
     """Whether a persisted period row should have at least one contribution child."""
-    e0 = _decimal(period_row.get("opening_equity")) or Decimal(0)
-    cash0 = _decimal(period_row.get("opening_cash")) or Decimal(0)
-    e1 = _decimal(period_row.get("closing_equity")) or Decimal(0)
-    cash1 = _decimal(period_row.get("closing_cash")) or Decimal(0)
-    net = _decimal(period_row.get("net_pnl_total")) or Decimal(0)
-    gross = _decimal(period_row.get("gross_pnl_total")) or Decimal(0)
+    e0 = opt_decimal(period_row.get("opening_equity")) or Decimal(0)
+    cash0 = opt_decimal(period_row.get("opening_cash")) or Decimal(0)
+    e1 = opt_decimal(period_row.get("closing_equity")) or Decimal(0)
+    cash1 = opt_decimal(period_row.get("closing_cash")) or Decimal(0)
+    net = opt_decimal(period_row.get("net_pnl_total")) or Decimal(0)
+    gross = opt_decimal(period_row.get("gross_pnl_total")) or Decimal(0)
     return (e0 - cash0) != 0 or (e1 - cash1) != 0 or net != 0 or gross != 0
 
 
@@ -179,7 +175,7 @@ def period_children_complete(
     # Every contribution with positive closing quantity must have a holding row —
     # a crash between contrib INSERT and holdings INSERT must not select as final.
     for row in contribs:
-        qty = _decimal(row.get("closing_quantity")) or Decimal(0)
+        qty = opt_decimal(row.get("closing_quantity")) or Decimal(0)
         if qty <= 0:
             continue
         sym = str(row.get("symbol") or "").strip().upper()
@@ -211,12 +207,12 @@ def _period_payload_matches(row: dict[str, Any], period: AccountingPeriod) -> bo
         (str(row.get("period_date") or "")[:10], period.period_date.isoformat()),
         (str(row.get("policy_version_id") or ""), period.policy_version_id),
         (str(row.get("status") or ""), period.status.value),
-        (_decimal(row.get("opening_equity")), period.opening_equity),
-        (_decimal(row.get("closing_equity")), period.closing_equity),
-        (_decimal(row.get("opening_cash")), period.opening_cash),
-        (_decimal(row.get("closing_cash")), period.closing_cash),
-        (_decimal(row.get("cash_pnl")), period.cash_pnl),
-        (_decimal(row.get("residual")), period.residual),
+        (opt_decimal(row.get("opening_equity")), period.opening_equity),
+        (opt_decimal(row.get("closing_equity")), period.closing_equity),
+        (opt_decimal(row.get("opening_cash")), period.opening_cash),
+        (opt_decimal(row.get("closing_cash")), period.closing_cash),
+        (opt_decimal(row.get("cash_pnl")), period.cash_pnl),
+        (opt_decimal(row.get("residual")), period.residual),
     ]
     for left, right in checks:
         if left != right:
@@ -405,8 +401,8 @@ def persist_period(
 
 def period_day_return_pct(period_row: dict[str, Any]) -> float | None:
     """Percent day return from a persisted period row: ``(E1 - E0) / E0 * 100``."""
-    e0 = _decimal(period_row.get("opening_equity"))
-    e1 = _decimal(period_row.get("closing_equity"))
+    e0 = opt_decimal(period_row.get("opening_equity"))
+    e1 = opt_decimal(period_row.get("closing_equity"))
     if e0 is None or e1 is None or e0 <= 0:
         return None
     return float(((e1 - e0) / e0) * Decimal(100))

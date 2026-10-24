@@ -35,13 +35,14 @@ const ThreadSourceImpl: SourceMessagePartComponent = (props) => {
   const href = isUrl && isHttpUrl(props.url) ? props.url : undefined;
 
   const rowClass = cn(
-    "aui-source-row text-muted-foreground hover:text-foreground inline-flex max-w-full items-center gap-2 py-0.5 text-sm transition-colors",
+    "aui-source-row text-ink-mute hover:text-ink inline-flex max-w-full items-center gap-2 py-0.5 text-sm transition-colors",
   );
 
   const inner = (
     <>
       <DotMatrix
-        state="searching"
+        // Static mark: a completed citation must not look like a running tool.
+        state="idle"
         label="Source"
         className="aui-source-mark size-3.5 shrink-0"
       />

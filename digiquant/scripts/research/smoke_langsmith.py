@@ -14,6 +14,7 @@ from __future__ import annotations
 import operator
 import os
 from typing import Annotated, Any, TypedDict
+from urllib.parse import urlsplit
 
 
 class S(TypedDict, total=False):
@@ -48,7 +49,7 @@ def _auth_ok() -> str | None:
 
 def _nesting_ok() -> bool:
     from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline
-    from digismith.trace import LANGSMITH_SDK_AVAILABLE, traceable
+    from digitrace.trace import LANGSMITH_SDK_AVAILABLE, traceable
 
     if not LANGSMITH_SDK_AVAILABLE:
         print("NESTING: FAIL — langsmith SDK not importable")
@@ -98,8 +99,8 @@ def _nesting_ok() -> bool:
         from langchain_core.tracers.langchain import wait_for_all_tracers
 
         wait_for_all_tracers()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001 — tracer flush is best-effort, but never silent
+        print(f"WARNING: tracer flush failed ({exc}) — spans may be missing")
 
     all_nested = all(r["has_parent"] for r in _RECORDS) and len(_RECORDS) > 0
     one_per_invoke = all(len(t) == 1 for t in spans) and spans[0] != spans[1]
@@ -108,6 +109,19 @@ def _nesting_ok() -> bool:
         f"NESTING: {'OK — 1 trace per invoke, no orphaning' if ok else 'FAIL — orphaning/no tracing'}"
     )
     return ok
+
+
+def _is_us_langsmith(endpoint: str) -> bool:
+    """True for the US LangSmith host, not a lookalike or the EU region.
+
+    ``endpoint.endswith("api.smith.langchain.com")`` is true for
+    ``https://evilapi.smith.langchain.com``.
+    """
+    try:
+        host = (urlsplit(endpoint).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return False
+    return host == "api.smith.langchain.com"
 
 
 def main() -> int:
@@ -120,7 +134,7 @@ def main() -> int:
     if endpoint and nesting:
         extra = (
             ""
-            if endpoint.endswith("api.smith.langchain.com") and "eu." not in endpoint
+            if _is_us_langsmith(endpoint)
             else f" — set LANGSMITH_ENDPOINT={endpoint} on the workflows"
         )
         print(f"\nVERDICT: READY — enable LANGSMITH_TRACING on the workflows{extra}")

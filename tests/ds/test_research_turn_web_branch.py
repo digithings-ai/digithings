@@ -193,7 +193,7 @@ def test_web_retrieve_normalizes_cited_hits_and_usage(monkeypatch):
     ]
     seen: dict[str, Any] = {}
     monkeypatch.setattr(
-        mod, "_live", lambda q, top_n: (seen.__setitem__("live_top_n", top_n), hits)[1]
+        mod, "_live", lambda q, top_n, effort=None: (seen.__setitem__("live_top_n", top_n), hits)[1]
     )
     monkeypatch.setattr(
         mod, "_fetch", lambda h, top_n: (seen.__setitem__("fetch_top_n", top_n), pages)[1]
@@ -245,7 +245,7 @@ def test_web_retrieve_invalid_effort_fails_hard():
 def test_web_retrieve_zero_cited_fails_hard(monkeypatch):
     from digisearch.agent import web_branch as mod
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [_hit("https://a.com/1", "A")])
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: [_hit("https://a.com/1", "A")])
     monkeypatch.setattr(mod, "_fetch", lambda h, top_n: [_page("https://a.com/1", "A")])
     monkeypatch.setattr(mod, "_rank", lambda q, pages, top_n: [])
     out = mod.run_web_research_turn({"user_message": "q", "source": "web"})
@@ -548,7 +548,7 @@ def test_run_web_research_turn_wires_retrieve_into_aggregate(monkeypatch):
 
     hits = [_hit("https://a.com/1", "A", score=0.8)]
     pages = [_page("https://a.com/1", "A", "body a")]
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: hits)
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: hits)
     monkeypatch.setattr(mod, "_fetch", lambda h, top_n: pages)
     monkeypatch.setattr(mod, "_rank", lambda q, p, top_n: pages)
     seen: dict[str, Any] = {}

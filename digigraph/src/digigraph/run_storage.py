@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_session_id(session_id: str | None) -> str:
@@ -30,8 +33,8 @@ def get_run_data_dir() -> str | None:
         path = cfg.get_run_data_dir()
         if path and str(path).strip():
             return str(path).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("run data dir config load failed (%s)", exc)
     return None
 
 
@@ -41,7 +44,8 @@ def _check_dataset_size_cap(serialized: str) -> None:
         from digigraph.project_config import DigiProjectConfig
 
         cap_mb = DigiProjectConfig.load().get_limits().dataset_size_cap_mb
-    except Exception:
+    except Exception as exc:
+        logger.warning("dataset size cap unreadable; falling back to the 50 MB default (%s)", exc)
         cap_mb = 50.0
     size_mb = len(serialized.encode("utf-8")) / (1024 * 1024)
     if size_mb > cap_mb:
@@ -84,8 +88,8 @@ def write_search_results(
         digistore_name = f"search_{next_idx}"
         digistore_put(session_id, digistore_name, results)
         ref = str(digistore_get(session_id, digistore_name))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("digistore write skipped for session %s (%s)", session_id, exc)
     return ref
 
 
@@ -100,7 +104,7 @@ def resolve_dataset_ref(session_id: str | None, dataset_ref: str) -> Path:
 
         return digistore_get(session_id, dataset_ref)
     except ImportError:
-        pass
+        logger.debug("digistore unavailable; resolving dataset_ref from filesystem")
     root = get_run_data_dir()
     if not root:
         raise ValueError("run_data_dir not set; cannot resolve dataset_ref")

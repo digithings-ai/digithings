@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { DisclosureChevron } from "./disclosure-chevron";
 import { DotMatrix } from "./DotMatrix";
 import {
   DIGI_CHAT_BOOT_STEP_EVENT,
@@ -89,10 +90,21 @@ export type BootFacts = {
   toolLabels?: readonly string[];
   mcpServers?: number;
   backend?: string;
+  /**
+   * Sleep-on-idle services the host wakes before revealing the chat. When
+   * set, a "wake up services" row waits on the real `services` boot step.
+   */
+  services?: readonly string[];
 };
 
 /** Real milestones the app reports while the container comes up. */
-type BootMilestone = "image" | "config" | "runtime" | "loop" | "backend";
+type BootMilestone =
+  | "image"
+  | "config"
+  | "runtime"
+  | "loop"
+  | "services"
+  | "backend";
 
 /**
  * Container/agent commands; one row each, in order. Rows adapt to the facts
@@ -148,6 +160,14 @@ export function toolChainRows(
       milestone: "loop",
       ms: 720,
       detail: `${facts.mcpServers} servers`,
+    });
+  }
+  if (facts?.services) {
+    rows.push({
+      label: "wake up services",
+      milestone: "services",
+      ms: 0,
+      detail: facts.services.length ? facts.services.join(", ") : undefined,
     });
   }
   rows.push({
@@ -330,7 +350,7 @@ function TypedLabel({ text, instant }: { text: string; instant: boolean }) {
 function SpinnerLine({ label }: { label?: string | null }) {
   return (
     <span className="dboot-lab-line dboot-lab-spin">
-      <DotMatrix state="loading" className="size-3.5" />
+      <DotMatrix state="loading" decorative className="!size-3" />
       {label ? <span>{label}</span> : null}
     </span>
   );
@@ -435,14 +455,14 @@ function ToolChainRow({
   const ms = done ? durationMs : liveMs;
   return (
     <div
-      className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
+      className="aui-tool-fallback-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-xs"
       data-slot="tool-fallback-trigger"
       data-visible={shown ? "true" : "false"}
     >
       <DotMatrix
         state={failed ? "error" : done ? "success" : "tool"}
-        label={failed ? "Error" : done ? "Ok" : "Running"}
-        className="aui-tool-fallback-trigger-icon size-3.5 shrink-0"
+        decorative
+        className="aui-tool-fallback-trigger-icon !size-3 shrink-0"
       />
       <span
         className="aui-tool-fallback-trigger-label-wrapper min-w-0 flex-1 truncate text-start leading-none"
@@ -468,17 +488,17 @@ function ReasoningRow({
 }) {
   return (
     <div
-      className="aui-reasoning-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-sm"
+      className="aui-reasoning-trigger group/trigger text-muted-foreground flex w-full items-center gap-2 py-1.5 text-xs"
       data-slot="reasoning-trigger"
     >
       <span
-        className="aui-reasoning-trigger-icon inline-flex size-3.5 shrink-0 items-center justify-center"
+        className="aui-reasoning-trigger-icon inline-flex size-3 shrink-0 items-center justify-center"
         data-slot="reasoning-trigger-icon"
       >
         <DotMatrix
           state={active ? "thinking" : "thought"}
-          label={active ? "Reasoning" : "Thought"}
-          className="size-3.5"
+          decorative
+          className="!size-3"
         />
       </span>
       <span
@@ -491,13 +511,7 @@ function ReasoningRow({
         {REASONING_LABEL}
         {active ? "" : ` (${(durationMs / 1000).toFixed(1)}s)`}
       </span>
-      <span data-slot="reasoning-trigger-chevron">
-        <DotMatrix
-          state="expand"
-          label="Toggle reasoning"
-          className="size-3.5"
-        />
-      </span>
+      <DisclosureChevron />
     </div>
   );
 }
@@ -561,9 +575,12 @@ function ToolChain({
       const reached =
         row.milestone === "backend"
           ? ready
-          : row.milestone === "config" || row.milestone === "runtime"
-            ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
-            : now - previousDone >= row.ms;
+          : row.milestone === "services"
+            ? // No timed fallback: only the host's real edge completes it.
+              steps.has("services") || ready
+            : row.milestone === "config" || row.milestone === "runtime"
+              ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
+              : now - previousDone >= row.ms;
       if (!reached) return current;
       const next = [...current];
       next[index] = now;

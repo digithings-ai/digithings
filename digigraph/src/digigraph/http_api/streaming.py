@@ -105,6 +105,7 @@ def _stream_completions_progressive(
     suppress_tool_stream: bool = False,
     force_tool: str | None = None,
     enable_web_search: bool = False,
+    search_engine: str | None = None,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -121,6 +122,7 @@ def _stream_completions_progressive(
         "require_tool_calls": require_tool_calls,
         "request_id": request_id,
         "enable_web_search": enable_web_search,
+        "search_engine": search_engine,
     }
     if workflow_extras:
         wf_kw.update(workflow_extras)
@@ -206,7 +208,18 @@ def _stream_completions_progressive(
             try:
                 ev = event_queue.get(timeout=0.5)
             except Empty:
-                continue
+                # A live worker may simply be between events. One that has
+                # already exited without ``done`` (an exception outside
+                # GRAPH_RUNTIME_ERRORS never enqueues it) will not produce
+                # another event, and continuing here never reaches stop/[DONE].
+                if worker.is_alive() or not event_queue.empty():
+                    continue
+                logger.error("workflow stream worker exited without a done event")
+                yield (
+                    "data: "
+                    f"{_sse_chunk(cid, created, model, 'Error: workflow stream ended before completion', None)}\n\n"
+                )
+                break
             event_type = ev[0]
             data = ev[1] if len(ev) > 1 else None
 

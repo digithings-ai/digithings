@@ -4,14 +4,29 @@
    `.app-input*`, `.slash-hint`, `.shell-cmd-ref`. Consumes tokens.
    ========================================================================== */
 
+/* Component sizing tokens. The shell, its bars and the palette share one
+   four-value rhythm (0.625rem bar padding, 0.375rem chip padding, 0.75rem
+   palette gap); none of those steps exist on the global --space-* scale, so
+   they live here rather than inventing a second global scale. Declared on the
+   host, which wraps the sidebar, top bar, input bar and palette. */
 .app-shell {
+  --app-sidebar-min: 13.75rem;
+  --app-sidebar-max: 16.25rem;
+  --app-bar-pad-block: 0.625rem;
+  --app-bar-pad-inline: var(--space-3);
+  --app-chip-pad-block: 0.375rem;
+  --app-input-max-h: 12.5rem;
+  --app-palette-w: 35rem;
+  --app-palette-pad-block: 0.875rem;
+  --app-palette-gap: 0.75rem;
+
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-  min-height: 100vh;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  grid-template-columns: minmax(var(--app-sidebar-min), var(--app-sidebar-max)) minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-family);
-  transition: grid-template-columns 0.25s var(--transition-ease);
+  transition: grid-template-columns var(--dur) var(--ease);
 }
 .app-shell.app-shell-sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
@@ -22,12 +37,12 @@
 
 /* --- Sidebar ----------------------------------------------------------- */
 .app-sidebar {
-  border-right: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border-right: 1px solid var(--hair);
+  background: var(--surface);
   overflow: hidden auto;
   font-family: var(--font-family-mono);
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
 }
 .app-shell-sidebar-collapsed .app-sidebar {
   border-right: none;
@@ -39,10 +54,10 @@
 }
 .app-sidebar-section h3 {
   margin: 0 0 var(--space-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
   font-weight: 600;
 }
 .app-sidebar-section ul {
@@ -51,15 +66,15 @@
   margin: 0;
 }
 .app-sidebar-section li {
-  padding: 4px 0;
-  color: var(--text-primary);
+  padding: var(--space-1) 0;
+  color: var(--ink);
 }
 
 /* --- Main column ------------------------------------------------------- */
 .app-shell-main-col {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
 }
 
@@ -68,15 +83,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: rgba(10, 10, 10, 0.7);
+  padding: var(--app-bar-pad-block) var(--app-bar-pad-inline);
+  border-bottom: 1px solid var(--hair);
+  /* The terminal ground, not a raw near-black: the literal was invisible-ink
+     in the light theme, where a fixed dark scrim under `--ink-soft` measured
+     1.28:1. */
+  background: var(--term-bg);
   font-family: var(--font-family-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
 }
-.app-topbar-title { color: var(--text-primary); letter-spacing: 0.02em; }
-.app-topbar-meta { color: var(--text-secondary); }
+.app-topbar-title { color: var(--ink); letter-spacing: 0.02em; }
+.app-topbar-meta { color: var(--ink-soft); }
 
 /* --- Main slot --------------------------------------------------------- */
 .app-main {
@@ -89,47 +107,53 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  gap: var(--app-bar-pad-block);
+  padding: var(--app-bar-pad-block) var(--app-bar-pad-inline);
+  border-top: 1px solid var(--hair);
+  background: var(--surface);
   font-family: var(--font-family-mono);
 }
 .app-input-marker {
-  color: var(--accent, var(--text-secondary));
+  color: var(--accent, var(--ink-soft));
   user-select: none;
 }
 .app-input-field {
   width: 100%;
   min-height: 1.8em;
-  max-height: 200px;
-  padding: 6px 8px;
+  max-height: var(--app-input-max-h);
+  padding: var(--app-chip-pad-block) var(--space-2);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   resize: none;
   outline: none;
 }
 .app-input-field:focus {
-  border-color: var(--accent, var(--border-color));
+  border-color: var(--accent, var(--hair));
+}
+/* `outline: none` above needs a keyboard equivalent: a 1px border tint is not
+   a focus indicator at a glance, and it is the same weight as the idle border. */
+.app-input-field:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: 2px;
 }
 .slash-hint {
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
 }
 .slash-hint kbd,
 .shell-cmd-ref {
   font-family: var(--font-family-mono);
-  font-size: 11px;
-  padding: 2px 6px;
+  font-size: var(--text-xs);
+  padding: 0.125rem 0.375rem;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+  background: var(--term-fill);
+  border: 1px solid var(--hair);
+  color: var(--ink);
 }
 
 /* --- Command palette --------------------------------------------------- */
@@ -146,50 +170,62 @@
 .app-shell-palette[hidden] { display: none; }
 
 .app-shell-palette-inner {
-  width: min(560px, 92vw);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  width: min(var(--app-palette-w), 92vw);
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-lg);
   box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
   overflow: hidden;
 }
 .app-shell-palette-input {
   width: 100%;
-  padding: 14px 16px;
+  padding: var(--app-palette-pad-block) var(--app-bar-pad-inline);
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--hair);
   background: transparent;
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
-  font-size: 14px;
+  font-size: 0.875rem;
   outline: none;
+}
+/* The palette input cleared its outline and declared no focus style at all, so
+   a keyboard user could not see where focus was inside the dialog. */
+.app-shell-palette-input:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: -2px;
 }
 .app-shell-palette-list {
   list-style: none;
   margin: 0;
-  padding: 6px;
+  padding: var(--app-chip-pad-block);
   max-height: 50vh;
   overflow: auto;
 }
 .app-shell-palette-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 8px 10px;
+  gap: var(--app-palette-gap);
+  padding: var(--space-2) var(--app-bar-pad-block);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-family: var(--font-family-mono);
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--text-sm);
+  color: var(--ink);
   outline: none;
 }
 .app-shell-palette-item.is-active,
 .app-shell-palette-item:hover,
 .app-shell-palette-item:focus-visible {
-  background: color-mix(in srgb, var(--accent, var(--fg)) 14%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent);
+}
+/* The tint above is a fill shift under the row; a focused row also carries a
+   ring, so keyboard focus is not signalled by a low-contrast fill alone. */
+.app-shell-palette-item:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: -2px;
 }
 .app-shell-palette-desc {
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
 
 /* --- Reduced motion ---------------------------------------------------- */

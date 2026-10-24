@@ -34,7 +34,6 @@ ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 #: DigiStackContainer.envVars (review finding 6).
 MCP_SCOPED_VARS = (
     "DIGIQUANT_MARKET_DATA_BACKEND",
-    "FRED_API_KEY",
     "GLOOMBERB_SESSION_COOKIE",
     "R2_ACCOUNT_ID",
     "R2_BUCKET",
@@ -56,7 +55,7 @@ def _code_lines(path: Path) -> str:
 
 
 def _env_vars_blocks(source: str) -> list[str]:
-    """Both ``envVars = { ... };`` blocks in index.ts: [stack, mcp]."""
+    """All ``envVars = { ... };`` blocks in index.ts: [stack, mcp, digichat]."""
     return [m.group(1) for m in re.finditer(r"envVars = \{([\s\S]*?)\n {2}\};", source)]
 
 
@@ -142,11 +141,12 @@ def test_worker_routes_mcp_service() -> None:
 def test_stack_container_env_has_no_mcp_duplication() -> None:
     """Finding 6: MCP secrets live on DigiQuantMcpContainer.envVars only."""
     blocks = _env_vars_blocks(WORKER_INDEX.read_text())
-    assert len(blocks) == 2
-    stack_block, mcp_block = blocks
+    assert len(blocks) == 3
+    stack_block, mcp_block, digichat_block = blocks
     for name in MCP_SCOPED_VARS:
         assert f"{name}:" not in stack_block, name
         assert f"{name}:" in mcp_block, name
+        assert f"{name}:" not in digichat_block, name
 
 
 def test_mcp_container_backend_passthrough_matches_library_default() -> None:
@@ -160,7 +160,6 @@ def test_mcp_container_backend_passthrough_matches_library_default() -> None:
 def test_wrangler_documents_mcp_secrets() -> None:
     text = WRANGLER.read_text()
     for name in (
-        "FRED_API_KEY",
         "GLOOMBERB_SESSION_COOKIE",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",
@@ -170,8 +169,23 @@ def test_wrangler_documents_mcp_secrets() -> None:
         assert name in text, name
 
 
+def test_wrangler_no_longer_offers_the_retired_fred_key() -> None:
+    """DIG-335: the checklist must not send an operator back to FRED for a key.
+
+    The comment block is an operator instruction list. Leaving
+    ``FRED_API_KEY`` in it is how the key got provisioned in the first place,
+    and it is the only place that names this Worker's secrets in prose.
+    """
+    assert "FRED_API_KEY" not in WRANGLER.read_text()
+
+
 def test_architecture_documents_mcp_hosting() -> None:
     text = ARCHITECTURE.read_text()
-    assert "mcp.digithings.ai" in text
+    surface = (ARCHITECTURE.parent / "docs" / "architecture" / "api-surface.md").read_text()
+    # One literal. The hostname lives in the topic file. Repeating it in the
+    # stub raises the endpoint census (DIG-3399).
+    host = "mcp.digithings.ai"
+    assert host in surface
+    assert host not in text
     assert "digiquant:backtest" in text
     assert "DigiQuantMcpContainer" in text

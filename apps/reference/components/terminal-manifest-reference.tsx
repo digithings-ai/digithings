@@ -48,8 +48,8 @@ const ROWS: TerminalManifestRow[] = [
       "the keymaster — short-lived JWTs, scoped API keys, and nothing\nshared that should not be.\n\nstack   PyJWT  ·  FastAPI",
   },
   {
-    id: "digismith",
-    name: "digismith",
+    id: "digitrace",
+    name: "digitrace",
     port: 8003,
     status: "online",
     blurb: "tracing · every hop on record",
@@ -57,8 +57,8 @@ const ROWS: TerminalManifestRow[] = [
       "the forge's ledger — traces, spans, and token spend for every\nagent hop.\n\nstack   OpenTelemetry  ·  FastAPI",
   },
   {
-    id: "digiclaw",
-    name: "digiclaw",
+    id: "digibot",
+    name: "digibot",
     status: "roadmap",
     blurb: "heartbeat + audit",
     detail: "heartbeat and audit trail for the whole stack — on the roadmap.",

@@ -81,6 +81,11 @@ class Result:
     score: float
     source_doc: Document | None = None
     rank: int | None = None
+    #: Which index(es) produced this hit (#5045 provenance). Single-index queries
+    #: carry ``[index_name]``; an RRF-merged hit present in several indexes carries
+    #: every contributing name in fan-out order, deduped. ``None`` when the producing
+    #: backend/path predates stamping. Index name == Chroma collection name (1:1).
+    index_names: list[str] | None = None
 
 
 @dataclass
@@ -92,8 +97,14 @@ class SearchResponse:
     total_count: int | None = (
         None  # full match count when include_total_count was True (Azure get_count())
     )
-    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``); None if unknown.
+    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``,
+    #: ``multi`` for comma-separated fan-out); None if unknown.
     backend: str | None = None
+    #: Which index names were queried (#5045 provenance): ``["occ_help"]`` for a
+    #: single-index call, ``["occ_help", "occ_tickets"]`` for a comma fan-out
+    #: (``backend="multi"``). ``None`` when the response was built outside
+    #: ``query_index`` (e.g. directly by a backend).
+    index_names: list[str] | None = None
 
 
 # Backward-compatibility aliases (prefer Document, Chunk, Query, Result in new code).

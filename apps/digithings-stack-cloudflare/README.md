@@ -3,15 +3,21 @@
 **Human gate — infra/network:** this Worker publishes `graph.digithings.ai`
 (digigraph), `key.digithings.ai` (digikey), and `search.digithings.ai`
 (digisearch, new external route #4063 — owner-approved for CI web grounding) on
-the public internet. APIs still require auth: digikey JWT / BFF token exchange;
+the public internet. Since #4687/#4689 this single worker also serves the folded
+`/dashboard-api/*` routes and digichat paths (`/embed*`, `/api/chat*`, …) — the
+standalone dashboard-api and digichat workers stay deployed until cutover.
+APIs still require auth: digikey JWT / BFF token exchange;
 on the search route, APIs need a digikey JWT (`digisearch:query`, or
 `digisearch:ingest` for `/ingest`), e.g. `POST /v1/orchestrator_invoke` for the
 CI pipeline. Auth-exempt on every host is only the shared service allowlist —
 `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`, plus
 OPTIONS preflights (CORS is enforced separately) — and the Worker-served paths
 `/_stack/meta`, `/v1/market/tickers|closes`, `/_stack/key/*` (proxied to
-digikey). `/_stack/mcp/zammad/*` (the read-only OCC Zammad MCP, proxied to
-the stack container's :8770) is **not** auth-exempt: it requires `x-digi-mcp-key`
+digikey). `/_stack/status` reports per-module health (`loaded` / `degraded` +
+last error, never secrets) for the fault-isolated route groups (#4685); like
+`/_stack/meta` it never touches a module loader, so it stays up when groups
+degrade. `/_stack/mcp/*` (the digisearch + digivault MCP servers, proxied to
+their in-container ports) is **not** auth-exempt: it requires `x-digi-mcp-key`
 matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
 Secrets only via `npx wrangler secret put` — never commit values. Operator
 secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
@@ -19,10 +25,14 @@ with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
 re-putting the secret and updating the `token` in the occ entry of
 `DIGICHAT_EMBED_TENANTS`; the Worker reads the secret per request, so the edge
 rotates instantly, while a running digichat Container keeps start-time env values
-until recycled — bump `SHARED_DIGICHAT_CONTAINER_ID`
-(`apps/digichat-cloudflare/src/paths.ts:22`) and redeploy when a rotation
-must reach a live instance. A Dockerfile rebuild-marker bump changes the image
-tag, not the instance id, and does not by itself replace a warm instance).
+until recycled — since DIG-3814 the Container id is derived from the deploying
+commit by `sharedDigichatContainerId` in
+`apps/digichat-cloudflare/src/paths.ts`, so every deploy that carries
+`DIGICHAT_CONTAINER_REV` (`apps/digichat-cloudflare/scripts/deploy.mjs`) recycles
+the instance on its own. The value is deliberately absent from `[vars]`; a deploy
+that does not carry the rev falls back to the legacy id, which is why the deploy
+wrapper refuses to run without one. A Dockerfile rebuild-marker bump changes the
+image tag, not the instance id, and does not by itself replace a warm instance).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.
@@ -38,7 +48,6 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
 | _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
-| _(container only)_ | zammad-mcp `:8770` | read-only OCC Zammad MCP; external paths are the key-gated `/_stack/mcp/*` edge routes |
 
 ```text
 Pages digithings.ai/chat[/occ]
@@ -98,22 +107,74 @@ npx wrangler secret put GROQ_API_KEY
 # optional base / force OR: CHEAPERINFERENCE_API_BASE DIGI_HOUSE_UPSTREAM=openrouter
 # When CHEAPERINFERENCE_API_KEY is set, container/entrypoint.sh merges the CI
 # LiteLLM overlay and exports ENV_LITELLM_CONFIG for the LiteLLM supervisor
-# (see docs/providers/cheaperinference.md). digithings.ai digichat and
+# (see docs/providers/cheaperinference.md). A failed merge, a missing overlay
+# asset, or a merged model_list without the curated house models keeps the
+# container up on the base config and names the verdict - including the
+# missing model ids - in /var/log/supervisor/stack-entrypoint.log, instead of
+# serving the base config in silence (DIG-4512). The curated tenant models
+# still answer model-not-found on that path, and /health still answers ok.
+# digithings.ai digichat and
 # digiquant.io dashboard are separate tenants — do not share one CI key expecting
 # isolated routing.
 
-npx wrangler deploy
+# Deploy. Use `npm run deploy`, NOT `npx wrangler deploy` (see the note below):
+npm run deploy
 ```
 
-Manual deploys also run through
-[`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)
-(`workflow_dispatch` only, behind the `production` environment gate — stays
-human-approved; PRs touching the stack run the `check` job only). The digiquant-mcp
-container reads its market-data secrets from the Worker environment — set each value via
-stdin (`$VALUE`-only, never commit values):
+`npm run deploy` runs [`scripts/deploy.mjs`](scripts/deploy.mjs), which resolves the
+deploying commit (`git rev-parse --verify HEAD`), injects it as
+`--var STACK_CONTAINER_REV:<sha12>`, and then verifies the live
+`https://graph.digithings.ai/_stack/meta` reports the matching `containerId`.
+It **refuses to deploy** if the commit cannot be resolved.
+
+> **Never hand-edit a Container id, and never deploy with a bare
+> `npx wrangler deploy`.** The shared Profile A Container's Durable Object id used to be
+> a hand-edited string (`shared-v18`) that every image-changing deploy had to remember to
+> bump, because `sleepAfter` alone does not evict a Container under steady traffic — a
+> code-only redeploy left the old instance serving its old image. Forgetting the bump
+> shipped no real fix while CI stayed green, and it had already caused two incidents:
+> `shared-v16` → `v17` (a container re-ingesting a committed PII snapshot on every cold
+> start, DIG-1506 / DIG-1500) and `v17` → `v18` (a digikey JWT scope-escalation build,
+> #5283 / #5010, still in service). The id is now derived from the deploying commit, so
+> every deploy guarantees a fresh instance and there is nothing to forget. The full
+> history is in `src/ports.ts`.
+>
+> A bare `npx wrangler deploy` still works and still serves traffic, but it ships the
+> **legacy** id (`shared-v18`) and cannot guarantee eviction — which is the defect.
+> `STACK_CONTAINER_REV` is deliberately absent from `wrangler.toml [vars]`: unset means
+> "this deploy carried no rev". Inject it; never hand-write it.
+
+> **There is a CI deploy lane again, re-derived (DIG-4612).**
+> `deploy-digithings-stack-cloudflare.yml` fires on `push: main` and on a manual
+> `workflow_dispatch`, and its deploy job sits behind the `production` environment - Chris is
+> the required reviewer - so a merge to main deploys the stack only after Chris approves it.
+> The lane is re-derived, not reverted, following DIG-2843's own precedent, and it deploys
+> through `npm run deploy` so the Container id is always derived from the deploying commit; a
+> bare `npx wrangler deploy` still ships the legacy id. The credential the lane needs is the
+> repo secret `CLOUDFLARE_API_TOKEN`, which carries Workers Scripts:Edit on the
+> digithings.ai account: run 39490394661 uploaded and deployed this Worker with it.
+>
+> **The trap that put two names in conflict is local, not CI.**
+> `apps/digithings-stack-cloudflare/wrangler.toml` warns that the LOCAL developer's
+> `CLOUDFLARE_API_TOKEN` in `.env` is a Vectorize/D1 token and makes `wrangler deploy`
+> fail with error 10000. That is a different credential from the repo secret of the same
+> name. A run of the lane from a developer machine must therefore not export the local
+> `.env` token into the deploy; CI only ever sees the repo secret.
+>
+> #6013 made the lane read `secrets.CLOUDFLARE_WORKERS_API_TOKEN`, a name that exists at
+> no level, and the lane exported an empty token: the failure landed on wrangler as an
+> auth error rather than on the missing credential. The lane reads the name that exists
+> again, and it refuses to deploy on an empty token, saying which credential is missing.
+> `npm run deploy` below is still the operator path for deploying a specific
+> tree by hand.
+> The build half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
+> and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
+
+The digiquant-mcp container reads its market-data secrets from the Worker environment — set
+each value via stdin (`$VALUE`-only, never commit values):
 
 ```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
@@ -180,8 +241,9 @@ Boot order (critical for Cloudflare Containers port probes):
 program stays `FATAL` (no ports ever bind — CF error 1101).
 
 **Full crawl** of help.online-compliance-center.com remains **HOLD** until
-explicit approval (`docs/projects/online-compliance-center/GAPLOG.md`). After
-approval, run docs_onboard apply against the production stack (ops job that can
+explicit approval. The GAPLOG entry that recorded it was removed with the client
+docs project directory (DIG-3394), so this paragraph is the hold of record.
+After approval, run docs_onboard apply against the production stack (ops job that can
 reach digisearch ingest with a JWT that has `digisearch:ingest`).
 
 ### Manual re-seed (local image / ops)
@@ -226,7 +288,7 @@ Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.
 
 **Recommendation:** for website digichat (Profile A), run **one** stack container
 instead of N monorepo services. Keep digichat (+ Postgres) separate — Node vs
-Python, different secrets and scale. Do **not** put digiquant / digismith HTTP /
+Python, different secrets and scale. Do **not** put digiquant / digitrace HTTP /
 Ollama in this path unless you need them.
 
 ### Chat-only service set
@@ -257,19 +319,25 @@ limiter URL is satisfied by aliasing the name `valkey` to the in-container
 `[program:redis]` (both `127.0.0.1:6379`). No new external dependency or
 secret — everything ships in this image.
 
-**Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
+**Omitted on purpose:** digiquant, digitrace HTTP, Ollama, heartbeat.
 
 digigraph chat-only env (entrypoint / bundle compose; `DIGIQUANT_URL` is a `wrangler.toml` var):
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
   tools `digisearch` + `digisearch_semantic` + `digisearch_web_search` +
-  `digivault_search_notes` + `digivault_get_note` + `web_search` (request opt-in; #3420)
+  `digivault_search_notes` + `digivault_get_note` + `digivault_search_tag` +
+  `digivault_backlinks` + `web_search` (request opt-in; #3420)
   (this stack has D1)
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note` — fallback
+- `DIGI_ALLOWED_TOOLS=digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,digivault_search_tag,digivault_backlinks` — fallback
   only, read solely when `digiproject.yaml` fails to load; kept in sync with it
+- `DIGI_SESSION_MODEL_ALLOWLIST` — house-upstream model slugs a chat session may pick
+  through `X-Digi-House-Model` (OCC settings). Only a listed slug binds, `llm_mode: free`
+  still refuses a paid one, and BYOK is unaffected. Empty turns the picker off.
 - Zammad ticket tools are not in the shared allowlist; the OCC tenant reaches them per
-  request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`)
+  request via its `mcp.servers` entry (`X-Digi-Mcp-Servers`), which now points at the
+  digichat-served MCP (`https://digithings.ai/api/mcp/zammad/mcp`) — the stack no longer
+  runs a zammad-mcp program
 - `DIGIQUANT_URL=` (empty) — never route to `backtest_node`
 
 digichat: `DIGICHAT_ENABLED_SERVICES=digigraph` (do not probe digiquant).
@@ -283,7 +351,7 @@ Published host ports clash (`8000` / `8005` / `3005` / `5433`):
 docker compose --profile digichat --profile digivault --profile litellm-cache down
 # or surgically:
 docker stop digi-digigraph digi-digikey digi-digisearch digi-digivault \
-  digi-litellm digi-digismith digi-digiquant digi-ollama \
+  digi-litellm digi-digitrace digi-digiquant digi-ollama \
   digi-litellm-redis digi-digikey-blocklist-redis digi-digichat digi-digichat-db
 ```
 
@@ -294,7 +362,7 @@ Leave Supabase / other projects alone if you still need them.
 From **repo root**:
 
 ```bash
-docker build -f Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
+docker build -f infra/docker/Dockerfile.digithings-stack-cloudflare -t digithings-stack:local .
 
 docker run --rm -d --name digithings-stack \
   -p 127.0.0.1:8000:8000 -p 127.0.0.1:8005:8005 \
@@ -341,4 +409,3 @@ npm test
 - Operator runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Vectorize cutover runbook (create indexes, sync, verify before flipping traffic): [`docs/ops/vectorize-cutover.md`](../../docs/ops/vectorize-cutover.md)
 - ADR-0018: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
-- OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)

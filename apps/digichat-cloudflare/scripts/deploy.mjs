@@ -1,0 +1,280 @@
+/**
+ * Deploy the digichat Worker with its Container id DERIVED FROM THE DEPLOYING
+ * COMMIT (DIG-3814).
+ *
+ * Why this wrapper exists. `DigiChatContainer`'s Durable Object id used to be a
+ * hand-edited string ("shared-v10") that every image- or env-changing deploy had
+ * to remember to bump, because `sleepAfter` alone does not evict a Container
+ * under steady traffic — so a code-only redeploy left the previous Firecracker
+ * instance serving its old image, boot env and all. That is not hypothetical:
+ * a warm instance was already the mitigation for a stale
+ * `DIGICHAT_EMBED_TENANTS` value in DIG-1381 Act B1, and the literal had been
+ * bumped by hand as recently as the day before this ticket was filed. A
+ * forgotten bump ships no real fix while everything stays green. So the id is
+ * now built from the deploying commit inside `src/paths.ts`, and this script is
+ * what feeds the commit in:
+ *
+ *     git rev-parse --verify HEAD
+ *       -> --var DIGICHAT_CONTAINER_REV:<sha12>
+ *         -> paths.ts: sharedDigichatContainerId(env.DIGICHAT_CONTAINER_REV)
+ *         -> "shared-<sha12>"
+ *
+ * THE FOLD IS NOT A SECOND DERIVATION. `apps/digithings-stack-cloudflare` folds
+ * the same digichat Container and re-exports this same function, so one deploy
+ * rev governs both surfaces. That is the whole point: deriving only one of them
+ * would look like the hole is closed while leaving it open.
+ *
+ * Three properties are deliberate, and all are pinned by
+ * `src/container-id-deploy.test.js`:
+ *
+ *  1. FAIL CLOSED ON THE REV. If the commit cannot be resolved, this script
+ *     refuses to deploy. Deploying without a rev would silently pin the legacy
+ *     id and reproduce exactly the defect it exists to remove, so the refusal is
+ *     the correct failure: loud, at the desk, before anything is uploaded.
+ *  2. VERIFY AFTERWARDS, AND SAY WHEN IT COULD NOT. After wrangler returns the
+ *     Worker is read back and must report the id this commit implies. That
+ *     catches a deploy that landed somewhere else and — the case that matters —
+ *     a bypassing deploy that produced the legacy fallback.
+ *  3. DISTINGUISH "DID NOT DEPLOY" FROM "DEPLOYED BUT UNPROVEN". This Worker is
+ *     routable: `wrangler.toml` re-asserts the live route set (the ROUTE HOLD
+ *     note of 2026-10-18 — the zone routes moved to digithings-stack in code,
+ *     but that cutover was never deployed), so `/_digichat/meta` answers and a
+ *     deploy CAN be verified over HTTP. When the read-back does not prove the
+ *     id this script exits **2** — distinct from wrangler's own non-zero exit,
+ *     which means the deploy itself failed. An operator (or a wrapper) can tell
+ *     the two apart, and neither is allowed to pass for a verified deploy.
+ *
+ * WHY A WORKER VAR AND NOT A BUILD-TIME DEFINE. The natural instrument is
+ * `wrangler deploy --define KEY=VALUE`, measured broken in the pinned wrangler
+ * 4.133.0: it rejects EVERY form, including the trivial `--define=FOO=bar`,
+ * because wrangler passes the raw `KEY=VALUE` string to esbuild as an object
+ * key and esbuild's `pushCommonFlags` throws `Invalid define: FOO=bar`. There
+ * is no working substitution hook here, so the rev travels as a Worker var.
+ * `--var` was measured to MERGE with the `[vars]` in wrangler.toml rather than
+ * replace them (a dry run with `--var DIGICHAT_CONTAINER_REV:<sha>` still listed
+ * DIGICHAT_REQUIRE_ROOT_AUTH, DIGICHAT_EMBED_HOSTS and DIGICHAT_ENABLED_SERVICES),
+ * which is why it is safe here; the var is deliberately absent from `[vars]` so
+ * it never becomes a hand-maintained key that the config-contract and
+ * self-host parity gates would pin.
+ *
+ * The CI deploy lane for this Worker is `deploy-digichat-cloudflare-container.yml`
+ * (re-derived on `develop` on 2026-10-22, DIG-5120). It deploys through this
+ * script — `npm run deploy --workspace digichat-cloudflare` — never through a
+ * bare `npx wrangler deploy`: the container id is a function of the commit only
+ * for as long as every deploy carries the rev.
+ *
+ * `scripts/occ_invite_key_rollout.sh` also deploys this Worker. It does NOT call
+ * this script, and that is deliberate: it pins wrangler with
+ * `npx --yes wrangler@4.133.0` for two documented reasons, while `npm run deploy`
+ * resolves the package's `^4.133.0` devDependency. It therefore passes
+ * `--var DIGICHAT_CONTAINER_REV:<sha12>` on its own pinned `wrangler deploy`
+ * instead. Two callers, one derivation, the same rev var — the invariant is the
+ * rev travelling with every deploy, not one script being the only door.
+ *
+ * Usage: `npm run deploy [-- <extra wrangler args>]`, e.g.
+ *   npm run deploy -- --containers-rollout=none
+ *
+ * The `CLOUDFLARE_API_TOKEN` trap in wrangler.toml still applies to whatever
+ * environment this is launched from: unset it for wrangler's own process (see
+ * the README) — it is a Vectorize/D1 token and makes every deploy fail with
+ * code 10000. CI never sees that token: the deploy lane exports the repo secret
+ * of the same name, which carries Workers Scripts:Edit.
+ */
+import { spawnSync } from "node:child_process";
+import { dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** Worker var carrying the rev. Must match paths.ts / the Env interface. */
+export const REV_VAR = "DIGICHAT_CONTAINER_REV";
+
+/** A git sha, short or full, lowercase hex. Anything else is refused. */
+export const SHA_RE = /^[0-9a-f]{7,40}$/;
+
+/** Hex chars that go into the Container id. 12 is what git --short=12 gives. */
+export const REV_LEN = 12;
+
+/**
+ * Where to read the deployed id back from.
+ *
+ * This Worker is routable today — `wrangler.toml` re-asserts the live route set
+ * (the ROUTE HOLD note of 2026-10-18) — so this URL answers and the check is
+ * real. Exit 2 then means the read-back did not prove this rev, not that the
+ * read-back was impossible.
+ */
+export const META_URL = "https://digithings.ai/_digichat/meta";
+
+/** Deployed but unprovable. Distinct from wrangler's non-zero, which is "failed". */
+export const EXIT_DEPLOYED_UNVERIFIED = 2;
+
+const APP_DIR = resolvePath(dirname(fileURLToPath(import.meta.url)), "..");
+
+function defaultRunGit(args) {
+  return spawnSync("git", args, { encoding: "utf8", cwd: APP_DIR });
+}
+
+/**
+ * The short commit sha this deploy ships, or a throw.
+ *
+ * `runGit` is injected so the tests can drive every failure arm without a
+ * repository. Nothing is defaulted silently: a non-zero status, an empty stdout,
+ * or a stdout that is not a sha all refuse the deploy.
+ */
+export function resolveDeployRev(runGit = defaultRunGit) {
+  const result = runGit(["rev-parse", "--verify", "HEAD"]) ?? {};
+  const status = typeof result.status === "number" ? result.status : 1;
+  const stdout = String(result.stdout ?? "").trim();
+  const stderr = String(result.stderr ?? "").trim();
+
+  if (status !== 0 || !SHA_RE.test(stdout)) {
+    throw new Error(
+      "digichat deploy REFUSED: cannot resolve the deploying commit " +
+        "with `git rev-parse --verify HEAD`.\n" +
+        "Deploying without it would ship the legacy pinned Container id and " +
+        "leave the previous instance serving its old image, which is the " +
+        "defect this script exists to remove (DIG-3814). Run the deploy from " +
+        "a checkout with a git history.\n" +
+        `git status: ${status}; git stdout: ${JSON.stringify(stdout)}; ` +
+        `git stderr: ${stderr || "<none>"}`,
+    );
+  }
+  return stdout.slice(0, REV_LEN);
+}
+
+/**
+ * The wrangler flag that makes paths.ts derive the id from `rev`.
+ *
+ * `--var` takes KEY:VALUE (a colon, not an equals) and the value is a plain
+ * string — no quoting. The sha shape is still checked here rather than trusted:
+ * this string reaches the deployed Worker as a Durable Object name component,
+ * and the one rev that must never get through is one that is not a sha.
+ */
+export function buildVarArg(rev) {
+  if (typeof rev !== "string" || !SHA_RE.test(rev)) {
+    throw new Error(
+      `digichat deploy REFUSED: refusing to build a --var from ${JSON.stringify(rev)}; ` +
+        "expected a lowercase git sha.",
+    );
+  }
+  return `--var=${REV_VAR}:${rev}`;
+}
+
+/** The Container id this rev must produce. Mirrors paths.ts; a test pins the two together. */
+export function expectedContainerId(rev) {
+  return `shared-${rev}`;
+}
+
+/**
+ * The argv for `npm exec -- wrangler deploy`, always carrying exactly one rev
+ * var. There is deliberately no argv here that omits it, which is the property
+ * the whole ticket rests on.
+ */
+export function buildWranglerArgs(rev, extra = []) {
+  return ["exec", "--", "wrangler", "deploy", buildVarArg(rev), ...extra];
+}
+
+/**
+ * Does the meta route prove the deploy this script just made is the one running?
+ *
+ * `field` is which key of the meta payload carries the Container id. It is a
+ * parameter because the standalone Worker reports `containerId` while the
+ * digithings-stack fold — which is the surface that actually serves digichat
+ * traffic — reports it as `digichatContainerId` beside its own `containerId`.
+ * Hard-coding either would let one wrapper verify the wrong field and call it a
+ * pass, which is the same defect as verifying nothing.
+ */
+export function metaMatchesDeploy(meta, expected, field = "containerId") {
+  return Boolean(meta) && meta[field] === expected;
+}
+
+/** `main`'s post-deploy decision, as a pure function so the arms are testable. */
+export function verdictFor({ meta, expected, metaUrl, readError, field = "containerId" }) {
+  if (metaMatchesDeploy(meta, expected, field)) {
+    return {
+      exitCode: 0,
+      message:
+        `digichat deploy: ${metaUrl} reports ${field} ${meta[field]} ` +
+        `(rev ${meta.rev ?? meta.digichatRev}) — a fresh instance is guaranteed`,
+    };
+  }
+  const reachable = readError === null || readError === undefined;
+  const headline = reachable
+    ? "DEPLOYED BUT UNVERIFIED"
+    : "DEPLOYED BUT NOT VERIFIABLE";
+  return {
+    exitCode: EXIT_DEPLOYED_UNVERIFIED,
+    message:
+      `\ndigichat deploy: ${headline}\n` +
+      `  the deploy carried rev and expected ${metaUrl} to report ${field} ${expected}\n` +
+      `  it reported ${JSON.stringify(meta && meta[field])} (rev ` +
+      `${JSON.stringify(meta && (meta.rev ?? meta.digichatRev))}; read: ${readError ?? "ok"})\n` +
+      (reachable
+        ? "  A legacy id here means the bundle reached production without the rev, " +
+          "so the running Container may still be the previous instance. Redeploy with " +
+          "`npm run deploy` from a checkout (not a bare `npx wrangler deploy`).\n"
+        : "  The read-back could not be performed, so this rev is unproven: the " +
+          `Worker declares the route (${metaUrl} is in its wrangler.toml), so a failed ` +
+          "read is one of three things: the Worker answered with an error, the route " +
+          "is missing, or the request never reached the edge. The deploy DID run; " +
+          "what it did not prove is that this rev is the id serving traffic. Confirm " +
+          "on the fold, which shares the same derivation: curl -s " +
+          "https://graph.digithings.ai/_stack/meta\n"),
+  };
+}
+
+async function readMeta(metaUrl) {
+  let meta = null;
+  let readError = null;
+  try {
+    const response = await fetch(metaUrl, { headers: { accept: "application/json" } });
+    if (response.ok) {
+      meta = await response.json();
+    } else {
+      readError = `HTTP ${response.status}`;
+    }
+  } catch (err) {
+    readError = String(err && err.message ? err.message : err);
+  }
+  return { meta, readError };
+}
+
+async function main(extra, metaUrl = META_URL) {
+  const rev = resolveDeployRev();
+  const expected = expectedContainerId(rev);
+  process.stdout.write(
+    `digichat deploy: commit ${rev} -> Container id ${expected}\n`,
+  );
+
+  const deployed = spawnSync("npm", buildWranglerArgs(rev, extra), {
+    stdio: "inherit",
+    cwd: APP_DIR,
+  });
+  if (typeof deployed.status === "number" && deployed.status !== 0) {
+    process.exit(deployed.status);
+  }
+
+  const { meta, readError } = await readMeta(metaUrl);
+  const verdict = verdictFor({ meta, expected, metaUrl, readError });
+  if (verdict.exitCode === 0) {
+    process.stdout.write(`${verdict.message}\n`);
+    return;
+  }
+  process.stderr.write(`${verdict.message}`);
+  process.exit(verdict.exitCode);
+}
+
+const invokedDirectly =
+  process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.argv[1]);
+if (invokedDirectly) {
+  const extra = process.argv.slice(2);
+  const urlIndex = extra.indexOf("--meta-url");
+  let metaUrl = META_URL;
+  let passthrough = extra;
+  if (urlIndex !== -1) {
+    metaUrl = extra[urlIndex + 1] ?? META_URL;
+    passthrough = [...extra.slice(0, urlIndex), ...extra.slice(urlIndex + 2)];
+  }
+  main(passthrough, metaUrl).catch((err) => {
+    process.stderr.write(`${err && err.message ? err.message : err}\n`);
+    process.exit(1);
+  });
+}

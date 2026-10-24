@@ -1,4 +1,5 @@
 import type { ActivitySpan } from "@/lib/chat-activity";
+import { documentIdentityKeys } from "@/lib/document-identity";
 import {
   DIGIVAULT_GET_NOTE_TOOL,
   DIGIVAULT_SEARCH_TOOL,
@@ -61,8 +62,12 @@ export function mapDigisearchRagSources(
   for (const raw of sources) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const doc = mapRawSourceToDocument(raw as Record<string, unknown>);
-    if (!doc || seen.has(doc.path)) continue;
-    seen.add(doc.path);
+    if (!doc) continue;
+    const keys = documentIdentityKeys(doc);
+    if (keys.length > 0) {
+      if (keys.some((key) => seen.has(key))) continue;
+      for (const key of keys) seen.add(key);
+    }
     documents.push(doc);
   }
   const toolName = ragToolDisplayName(payload.tool);

@@ -216,6 +216,11 @@ def backtest_node(state: WorkflowState) -> dict:
                                 "error": "Backtest job timed out waiting for completion.",
                             }
                     else:
+                        # httpx timeout=90 is a per-read idle limit. digiquant
+                        # heartbeats inside that window, so they never trip it.
+                        # Match the v1 status poll's wall clock (checked between
+                        # events, not instead of the idle timeout).
+                        deadline = time.monotonic() + 120.0
                         with client.stream(
                             "GET",
                             f"{base_url}/backtest/{job_id}/progress",
@@ -223,6 +228,11 @@ def backtest_node(state: WorkflowState) -> dict:
                             headers=req_headers,
                         ) as stream:
                             for line in stream.iter_lines():
+                                if time.monotonic() >= deadline:
+                                    return {
+                                        "backtest_result": None,
+                                        "error": "Backtest job timed out waiting for completion.",
+                                    }
                                 if line.startswith("data: "):
                                     try:
                                         event = json.loads(line[6:])

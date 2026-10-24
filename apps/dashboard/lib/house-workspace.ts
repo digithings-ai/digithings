@@ -6,9 +6,10 @@
  * not a secret.
  *
  * Migration 109 lets an authenticated Custom member SELECT their own overlay
- * rows *or* house. Date-only `.from('positions')` therefore mixes books on
- * Brief / Holdings / Performance. Every house-dashboard Group A read must go
- * through `houseBook()` so overlay weights never seed the public book.
+ * rows or house. Date-only `.from('positions')` therefore mixes books on
+ * Brief / Holdings / Performance. Production Group A reads go through
+ * `apiHouseBook` in `api-query.ts`; the Worker pins the house workspace.
+ * `houseBook()` is the supabase-js pin, covered by house-workspace.test.ts.
  *
  * Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
  * `instruments`) stay date-only. Accounting NAV uses `public_accounting_nav_history`

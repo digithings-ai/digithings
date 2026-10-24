@@ -2,7 +2,7 @@
 title: "digichat install — guide"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - guide
@@ -16,13 +16,16 @@ digithings ships **self-hosted** AI infra. Clients install digichat **releases f
 ### Install unit
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+docker build -f apps/digichat/Dockerfile \
+  --build-arg DIGICHAT_VERSION=2.7.0 \
+  --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
+  -t digichat:2.7.0 .
 ```
 
 - Git tag: `digichat-vX.Y.Z`
-- GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v2.3.2`)
+- Published image: `ghcr.io/digithings-ai/digichat:vX.Y.Z`, from `v2.6.4` on (first published 2026-10-21; private, pull with a `ghcr.io` credential). The publish workflow builds one from each `digichat-vX.Y.Z` tag; the `v2.4.x`–`v2.6.3` tags have no image. Without registry access, build from source.
 - Changelog: `apps/digichat/CHANGELOG.md`
-- Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.
+- Pin by digest once you publish the image yourself — do not rely on `:latest`.
 
 ### Profiles
 
@@ -39,6 +42,6 @@ cp infra/digichat-release/.env.profile-a.example \
 make digichat-profile-a-up
 ```
 
-Does not start digiquant / digisearch / digismith / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.
+Does not start digiquant / digisearch / digitrace / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.
 
 See also [[digichat]].

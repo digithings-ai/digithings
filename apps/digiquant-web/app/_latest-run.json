@@ -1,0 +1,6 @@
+{
+  "capturedAt": "2026-09-30T15:54:02+00:00",
+  "source": "supabase:documents (metadata only, anon key)",
+  "snapshot": null,
+  "reason": "No run source reachable: SUPABASE_URL and SUPABASE_ANON_KEY were not set when this was generated."
+}

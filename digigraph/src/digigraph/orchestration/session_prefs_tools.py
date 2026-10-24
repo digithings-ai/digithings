@@ -65,7 +65,7 @@ SESSION_SET_LANGUAGE_TOOL = _fn(
 SESSION_SET_MODEL_TOOL = _fn(
     SESSION_SET_MODEL,
     "Set the chat model id for this session (must be on the deployment allowlist).",
-    {"model": {"type": "string", "description": "Model id, e.g. openai/gpt-oss-20b:free."}},
+    {"model": {"type": "string", "description": "Model id, e.g. deepseek/deepseek-v4.1-flash-1017."}},
     ["model"],
 )
 SESSION_SET_EFFORT_TOOL = _fn(
@@ -180,6 +180,9 @@ def session_tool_handler(name: str) -> SessionToolHandler:
                 "ok": False,
                 "error": "pass mode (auto|collapsed|open) or enabled (true|false)",
             }
+        if name == SESSION_TOGGLE_TOOL:
+            # Tool on/off is /tools. Stay registered so lock filters still see the name.
+            return {"ok": False, "error": "Tools are changed in /tools."}
         return _handle_session_tool(raw, context)
 
     return handler

@@ -1,9 +1,20 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
+import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
+  HOSTED_WEB_SEARCH_SCOPE,
+  INSUFFICIENT_LICENSE_SCOPE_CODE,
+  RATE_LIMIT_RETRY_CODE,
+  UPSTREAM_BOOT_MAX_ATTEMPTS,
+  UPSTREAM_BOOT_MAX_ELAPSED_MS,
+  UPSTREAM_BOOT_RETRY_CODE,
   createDigigraphTraceStreamResponse,
   digigraphErrorToEmbedPayload,
+  isUpstreamBootRetry,
+  parseRetryAfterMs,
+  rateLimitRetryPayload,
+  retryAfterSeconds,
 } from "./stream";
 import {
   BYOK_MODEL_REMEDIABLE_MESSAGE,
@@ -45,6 +56,26 @@ it("does not stream the upstream error body to the browser", async () => {
   expect(body).not.toContain('"type":"text-delta"');
   expect(body).not.toContain('"type":"text-start"');
   expect(errorLog).toHaveBeenCalled();
+});
+
+it("sends the curated tenant model in the request body", async () => {
+  let sent: { model?: string } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { model?: string };
+    return new Response("", { status: 200 });
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    model: "deepseek/deepseek-v4.1-flash",
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.model).toBe("deepseek/deepseek-v4.1-flash");
 });
 
 // #3910: a real 200 always carries a non-null body even when the upstream sends
@@ -1180,6 +1211,108 @@ it("surfaces a non-JSON upstream body as a stream error without leaking the body
   expect(body).not.toContain('"type":"text-delta"');
 });
 
+const streamFor429 = async (upstreamBody: string, retryAfter: string | null) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(upstreamBody, {
+      status: 429,
+      statusText: "Too Many Requests",
+      headers: retryAfter === null ? {} : { "retry-after": retryAfter },
+    }),
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  return { body: await new Response(res.body).text(), errorLog };
+};
+
+// #4777: a digigraph 429 is rate-limited, not down — the turn must say when to
+// retry instead of falling through to the generic unavailable-message.
+it("surfaces a digigraph 429 as retry-in-N-seconds from Retry-After", async () => {
+  const { body, errorLog } = await streamFor429(
+    JSON.stringify({
+      error: {
+        code: "rate_limit_exceeded",
+        message: "Rate limit exceeded for 203.0.113.7 on db.internal:5432",
+        request_id: "req-429",
+        service: "digigraph",
+      },
+    }),
+    "60",
+  );
+
+  expect(errorTextFrom(body)).toContain(RATE_LIMIT_RETRY_CODE);
+  const errorText = errorTextFrom(body)!;
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe(RATE_LIMIT_RETRY_CODE);
+  expect(formatEmbedChatError(new Error(errorText))).toBe(
+    "Rate limit reached, retry in 60 seconds.",
+  );
+  // The relayed code keeps the rate-limit BYOK policy: free_then_byok tenants
+  // open the sequence instead of dead-ending on the 429.
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      showByok: true,
+      gateMode: "ungated",
+      errorCode: parsed?.code,
+    }),
+  ).toBe(true);
+  // Server-composed copy only: no upstream text crosses to the visitor.
+  expect(body).not.toContain("203.0.113.7");
+  expect(body).not.toContain("db.internal");
+  expect(body).not.toContain("req-429");
+  expect(body).not.toContain("Rate limit exceeded for");
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// Status-gated, never body-parsed: a bare proxy 429 with no usable body or
+// header still renders retry copy, not UNAVAILABLE.
+it("falls back to copy without a number when Retry-After is absent", async () => {
+  const { body } = await streamFor429("", null);
+
+  const errorText = errorTextFrom(body)!;
+  expect(formatEmbedChatError(new Error(errorText))).toBe(
+    "Rate limit reached, please try again shortly.",
+  );
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe(RATE_LIMIT_RETRY_CODE);
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(body).not.toContain('"type":"text-delta"');
+});
+
+it("parses Retry-After for display unclamped, rejects garbage", () => {
+  expect(retryAfterSeconds("60")).toBe(60);
+  expect(retryAfterSeconds("3600")).toBe(3600);
+  expect(retryAfterSeconds(null)).toBeNull();
+  expect(retryAfterSeconds("")).toBeNull();
+  expect(retryAfterSeconds("soon")).toBeNull();
+  expect(retryAfterSeconds("0")).toBeNull();
+  expect(retryAfterSeconds("-5")).toBeNull();
+  // HTTP-date has 1s resolution, so assert a window, not an exact delta.
+  const httpDate = retryAfterSeconds(new Date(Date.now() + 90000).toUTCString());
+  expect(httpDate).toBeGreaterThan(80000 / 1000);
+  expect(httpDate).toBeLessThanOrEqual(90);
+  expect(retryAfterSeconds(new Date(Date.now() - 7000).toUTCString())).toBeNull();
+});
+
+it("builds the relayed 429 payload with singular and fallback copy", () => {
+  expect(JSON.parse(rateLimitRetryPayload("1"))).toEqual({
+    error: RATE_LIMIT_RETRY_CODE,
+    message: "Rate limit reached, retry in 1 second.",
+  });
+  expect(JSON.parse(rateLimitRetryPayload(null))).toEqual({
+    error: RATE_LIMIT_RETRY_CODE,
+    message: "Rate limit reached, please try again shortly.",
+  });
+});
+
 // #4323: a sleeping stack container answers 503 while it boots. The turn must
 // survive the cold start: report "connecting", retry upstream, then continue.
 it("retries a 503 cold start and reports the connection status", async () => {
@@ -1285,4 +1418,677 @@ it("stops the retry when the request is aborted during a cold-start wait", async
   } finally {
     vi.useRealTimers();
   }
+});
+
+// #4753: boot-coded 503s (stack container_booting + Retry-After) get the
+// extended budget; everything below pins that contract.
+
+const boot503 = (retryAfter = "5", body?: string) =>
+  new Response(
+    body ?? JSON.stringify({ code: "container_booting", message: "stack container not ready" }),
+    { status: 503, headers: { "retry-after": retryAfter } },
+  );
+
+const sseHello = () =>
+  new Response('data: {"choices":[{"delta":{"content":"Hello."}}]}\n\ndata: [DONE]\n\n', {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+
+const streamBody = async (init?: RequestInit & { signal?: AbortSignal }) => {
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    signal: init?.signal,
+  });
+  return new Response(res.body).text();
+};
+
+it("detects the boot code in flat, nested, and string envelopes only", () => {
+  expect(isUpstreamBootRetry(JSON.stringify({ code: UPSTREAM_BOOT_RETRY_CODE }))).toBe(true);
+  expect(
+    isUpstreamBootRetry(JSON.stringify({ error: { code: UPSTREAM_BOOT_RETRY_CODE } })),
+  ).toBe(true);
+  expect(isUpstreamBootRetry(JSON.stringify({ error: UPSTREAM_BOOT_RETRY_CODE }))).toBe(true);
+  expect(isUpstreamBootRetry("stack container not ready: timeout")).toBe(false);
+  expect(isUpstreamBootRetry(JSON.stringify({ code: "overloaded" }))).toBe(false);
+  expect(isUpstreamBootRetry(JSON.stringify({ error: { code: "overloaded" } }))).toBe(false);
+  expect(isUpstreamBootRetry("")).toBe(false);
+  expect(isUpstreamBootRetry("not json {")).toBe(false);
+});
+
+it("parses Retry-After seconds, clamps floods and hangs, rejects garbage", () => {
+  expect(parseRetryAfterMs("5")).toBe(5000);
+  expect(parseRetryAfterMs("0")).toBe(1000);
+  expect(parseRetryAfterMs("3600")).toBe(30000);
+  expect(parseRetryAfterMs(null)).toBeNull();
+  expect(parseRetryAfterMs("")).toBeNull();
+  expect(parseRetryAfterMs("soon")).toBeNull();
+  // HTTP-date has 1s resolution, so assert a window, not an exact delta.
+  const httpDate = parseRetryAfterMs(new Date(Date.now() + 7000).toUTCString());
+  expect(httpDate).toBeGreaterThan(5000);
+  expect(httpDate).toBeLessThanOrEqual(7000);
+  expect(parseRetryAfterMs(new Date(Date.now() - 7000).toUTCString())).toBe(1000);
+});
+
+it("retries a boot-coded 503 and reports warming_up between connecting and connected", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503())
+      .mockResolvedValueOnce(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(eventsFrom(body).filter((event) => event.type === "data-connection")).toEqual([
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connecting" } },
+      {
+        type: "data-connection",
+        id: "digigraph-connection",
+        data: { state: "warming_up", message: "Waking up services…" },
+      },
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connected" } },
+    ]);
+    expect(errorTextFrom(body)).toBeUndefined();
+    expect(body).toContain("Hello.");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("accepts the boot code in the nested digibase envelope", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        boot503("5", JSON.stringify({ error: { code: UPSTREAM_BOOT_RETRY_CODE } })),
+      )
+      .mockResolvedValueOnce(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(body).toContain("warming_up");
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Acceptance: a full ~240s boot (48 x Retry-After 5s) ends in a streamed
+// answer with the warming state throughout — never the unavailable-message.
+it("survives a simulated ~240s boot and streams the first send", async () => {
+  vi.useFakeTimers();
+  try {
+    const boots = Array.from({ length: 48 }, () => boot503("5"));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boots.shift() ?? sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(49);
+    expect(body).toContain("warming_up");
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+    expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("honors the server Retry-After exactly on the boot code", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("10"))
+      .mockResolvedValueOnce(boot503("10"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("clamps an excessive Retry-After to the boot delay ceiling", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("3600"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    expect(errorTextFrom(await pendingBody)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("floors a zero Retry-After so a boot 503 cannot hot-loop", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("0"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    expect(errorTextFrom(await pendingBody)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Retry-After is honored on the boot code ONLY: a non-boot 503 keeps the
+// fixed 2s/5s/8s delays and the 4-attempt budget even when it carries one.
+it("ignores Retry-After on a non-boot 503 and keeps the short budget", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "overloaded" } }), {
+          status: 503,
+          headers: { "retry-after": "30" },
+        }),
+      )
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(body).not.toContain("warming_up");
+    expect(body).toContain("Hello.");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps the short budget when a non-boot 503 never recovers", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("30", JSON.stringify({ code: "overloaded" })));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(body).not.toContain("warming_up");
+    expect(body).not.toContain('"type":"text-delta"');
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+    expect(errorLog).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Time bound: Retry-After 5s polls floor(250s / 5s) + 1 = 51 times, then the
+// turn fails with the unavailable-message instead of retrying forever.
+it("exhausts the boot budget on a boot that never ends", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("5"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(
+      Math.floor(UPSTREAM_BOOT_MAX_ELAPSED_MS / 5000) + 1,
+    );
+    expect(body).not.toContain('"type":"text-delta"');
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+    expect(errorLog).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Attempt bound: the backstop when the clock cannot be trusted.
+it("caps boot attempts even when the budget has not elapsed", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("1"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(UPSTREAM_BOOT_MAX_ATTEMPTS);
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops a boot wait when the request is aborted", async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(boot503("30"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody({ signal: controller.signal });
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(errorTextFrom(body)).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+const HOSTED_WEB_SEARCH_DENIAL = JSON.stringify({
+  error: INSUFFICIENT_LICENSE_SCOPE_CODE,
+  message:
+    `Hosted capability requires license scope '${HOSTED_WEB_SEARCH_SCOPE}'. ` +
+    "Serve plain inference without the hosted headers, or provision a license that entitles this capability.",
+});
+
+function headerBag(init: RequestInit | undefined): Record<string, string> {
+  const headers = new Headers(init?.headers);
+  return {
+    web: headers.get("x-digi-enable-web-search") ?? "",
+    engine: headers.get("x-digi-search-engine") ?? "",
+    corpus: headers.get("x-digi-corpus-index") ?? "",
+  };
+}
+
+it("retries a hosted-web-search 403 once without the hosted web-search headers", async () => {
+  const seen: Array<Record<string, string>> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    seen.push(headerBag(init));
+    if (seen.length === 1) {
+      return new Response(HOSTED_WEB_SEARCH_DENIAL, {
+        status: 403,
+        statusText: "Forbidden",
+      });
+    }
+    return new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("What is digigraph?")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {
+      Authorization: "Bearer from-upstream-headers",
+      "X-Digi-Enable-Web-Search": "1",
+      "X-Digi-Search-Engine": "exa",
+      "X-Digi-Corpus-Index": "docs",
+    },
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(seen).toHaveLength(2);
+  expect(seen[0]).toEqual({ web: "1", engine: "exa", corpus: "docs" });
+  expect(seen[1]).toEqual({ web: "", engine: "", corpus: "docs" });
+  expect(body).toContain("Hello.");
+  expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  expect(errorLog.mock.calls.some((call) => String(call[0]).includes(HOSTED_WEB_SEARCH_SCOPE))).toBe(
+    true,
+  );
+});
+
+it("does not retry a corpus license denial by dropping corpus headers", async () => {
+  const seen: Array<Record<string, string>> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    seen.push(headerBag(init));
+    return new Response(
+      JSON.stringify({
+        error: INSUFFICIENT_LICENSE_SCOPE_CODE,
+        message: "Hosted capability requires license scope 'digisearch-corpus'.",
+      }),
+      { status: 403, statusText: "Forbidden" },
+    );
+  });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {
+      "X-Digi-Enable-Web-Search": "1",
+      "X-Digi-Corpus-Index": "docs",
+    },
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.corpus).toBe("docs");
+  expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+});
+
+it("appends a guardrail wrap-up instruction to the digigraph request and releases", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  let released = false;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+  });
+  const guard: TurnGuard = {
+    active: true,
+    async beforeRound() {
+      return { action: "answer", instruction: "Answer with what you have." };
+    },
+    recordUsage() {},
+    release() {
+      released = true;
+    },
+    capToolPayload(value) {
+      return value;
+    },
+    noteToolCap() {},
+  };
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  await new Response(res.body).text();
+
+  expect(sent?.messages?.some((message) => message.content === "Answer with what you have.")).toBe(
+    true,
+  );
+  expect(released).toBe(true);
+});
+
+it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "tool_call",
+                  payload: { tool: "fixture_search", query: "hello", status: "started" },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Done." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const guard = createTurnGuard({
+    slug: "public",
+    guardrails: { maxToolCallsPerTurn: 1 },
+  });
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    guard,
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("tool-call-limit");
+  expect(body).toContain("Tool-call limit reached (1 this turn)");
+  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).toContain("Done.");
+});
+
+const answerThenHang = (opts?: { withUsage?: boolean }) => {
+  const encoder = new TextEncoder();
+  let failBody: ((err: Error) => void) | undefined;
+  const payload: Record<string, unknown> = {
+    choices: [{ delta: { content: "Premium answer." } }],
+  };
+  if (opts?.withUsage) {
+    payload.usage = { prompt_tokens: 11, completion_tokens: 5, total_tokens: 16 };
+  }
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      failBody = (err) => controller.error(err);
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+    },
+  });
+  return {
+    body,
+    fail: () => failBody?.(new DOMException("The operation was aborted.", "AbortError")),
+  };
+};
+
+async function readUntil(res: Response, needle: string): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let seen = "";
+  while (!seen.includes(needle)) {
+    const next = await reader.read();
+    if (next.done) break;
+    seen += decoder.decode(next.value);
+  }
+  return reader;
+}
+
+it("charges a premium turn when the visitor disconnects after the answer", async () => {
+  const hung = answerThenHang({ withUsage: true });
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 11,
+    outputTokens: 5,
+    totalTokens: 16,
+  });
+  await reader.cancel().catch(() => {});
+});
+
+it("charges a typical turn when the disconnect lands before the usage chunk", async () => {
+  const hung = answerThenHang();
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(hung.body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+  );
+  const onUsage = vi.fn();
+  const controller = new AbortController();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    signal: controller.signal,
+    onUsage,
+  });
+
+  const reader = await readUntil(res, "Premium answer.");
+  controller.abort();
+  hung.fail();
+
+  await vi.waitFor(() => expect(onUsage).toHaveBeenCalledTimes(1));
+  expect(onUsage).toHaveBeenCalledWith(undefined);
+  await reader.cancel().catch(() => {});
+});
+
+it("does not charge when upstream fails before an answer", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("nope", { status: 500, statusText: "Internal Server Error" }),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).not.toHaveBeenCalled();
+});
+
+it("charges once when the stream errors after text has started", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Partial answer." } }],
+          usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { digigraph_error: { code: "upstream_error", message: "boom" } } }],
+        })}\n\n`,
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 8,
+    outputTokens: 2,
+    totalTokens: 10,
+  });
+});
+
+it("charges reported usage once when the trace stream finishes", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "Hello." } }],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+  const onUsage = vi.fn();
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+    onUsage,
+  });
+  await new Response(res.body).text();
+  expect(onUsage).toHaveBeenCalledTimes(1);
+  expect(onUsage).toHaveBeenCalledWith({
+    inputTokens: 3,
+    outputTokens: 1,
+    totalTokens: 4,
+  });
 });

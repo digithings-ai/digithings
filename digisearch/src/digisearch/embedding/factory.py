@@ -17,6 +17,7 @@ import logging
 import os
 from typing import Literal
 
+from digisearch.backend_require import _env_truthy, _first_env, _warn_legacy_env
 from digisearch.core.config import DigiSearchConfig
 from digisearch.embedding.base import EmbeddingProvider
 from digisearch.embedding.batch import BatchEmbedder
@@ -63,32 +64,6 @@ def effective_query_mode(requested: str, backend: str | None) -> QueryMode:
     return mode
 
 
-def _env_truthy(name: str, default: str = "0") -> bool:
-    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes")
-
-
-def _first_env(*names: str) -> str:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""
-
-
-_LEGACY_WARNED: set[str] = set()
-
-
-def _warn_legacy_env(canonical: str, *legacy: str) -> None:
-    if os.environ.get(canonical, "").strip():
-        return
-    for name in legacy:
-        if os.environ.get(name, "").strip():
-            if name not in _LEGACY_WARNED:
-                _LEGACY_WARNED.add(name)
-                logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
-            return
-
-
 def vector_backend_configured() -> bool:
     """True when Chroma or Vectorize credentials/paths are present."""
     if os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"):
@@ -121,6 +96,22 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
         from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
         return get_default_minilm_embedder()
+    # The env var carries the model id itself (no alias table to drift):
+    # DIGISEARCH_EMBEDDING_PROVIDER=Xenova/paraphrase-multilingual-MiniLM-L12-v2.
+    # Canonical id lives in providers.multilingual.MULTILINGUAL_MODEL_ID;
+    # tests pin the literal below to it.
+    if name.strip().lower() == "xenova/paraphrase-multilingual-minilm-l12-v2":
+        from digisearch.embedding.providers.multilingual import (
+            MULTILINGUAL_MODEL_ID,
+            get_default_multilingual_embedder,
+        )
+
+        if model is not None and model.strip().lower() != MULTILINGUAL_MODEL_ID.lower():
+            raise EmbeddingConfigError(
+                f"embedding provider {name!r} ships a single model "
+                f"({MULTILINGUAL_MODEL_ID!r}); got model {model!r}"
+            )
+        return get_default_multilingual_embedder()
     if name in ("openai", "oai"):
         api_key = os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
@@ -131,9 +122,16 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
         from digisearch.embedding.providers.openai import OpenAIEmbedder
 
         return OpenAIEmbedder(model=model or "text-embedding-3-small", api_key=api_key)
+    # Query-side twin of the corpus-index worker. Same model id, 1024-dim.
+    # Called before the unknown-provider error so bge-m3 is not a silent miss.
+    from digisearch.embedding.providers.workers_ai import provider_for
+
+    workers = provider_for(name, model)
+    if workers is not None:
+        return workers
     raise EmbeddingConfigError(
-        f"unknown embedding provider {name!r}; expected minilm or openai "
-        "(new providers are out of scope for the wire-embed task)"
+        f"unknown embedding provider {name!r}; expected minilm, openai, bge-m3, "
+        "or a model id (e.g. 'Xenova/paraphrase-multilingual-MiniLM-L12-v2')"
     )
 
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+
 import pytest
 from digigraph.corpus_routing import (
     TenantCorpusMapError,
@@ -310,7 +313,8 @@ def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> Non
         '"also-ok":"not-an-object"}'
     )
     table = load_tenant_corpus_map(raw)
-    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "OCC" not in table  # lowercased to occ; occ_help is kept
+    assert table["occ"].digisearch_index == "occ_help"
     assert "also-ok" not in table
     assert table["ok-tenant"].digisearch_index == "ok_docs"
     assert table["ok-tenant"].vault_path_prefix == "clients/ok"
@@ -365,6 +369,39 @@ def test_merge_server_prompt_wins_when_mapped_with_prompt(
     assert out.research_system_prompt_override == "OCC prompt"
 
 
+# DIG-509 leaf 1a. The grounding rule reaches the research node as the occ
+# tenant's corpus-map `research_system_prompt`. The short "OCC prompt" case above
+# proves the map beats a client body value; this one proves the real instruction
+# - which an operator pastes as multi-line text with apostrophes and quotes -
+# survives JSON parsing and the HTTP merge layer byte-for-byte, rather than
+# being mangled or truncated on the way to research_system_prompt_override.
+GROUNDING_PROMPT = """You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it."""
+
+DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING = (
+    '{"occ": {"digisearch_index": "occ_help", "research_system_prompt": '
+    + json.dumps(GROUNDING_PROMPT)
+    + "}}"
+)
+
+
+def test_merge_preserves_grounding_prompt_from_corpus_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mapped tenant's grounding instruction reaches the node verbatim."""
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", DIGI_TENANT_CORPUS_MAP_WITH_GROUNDING)
+    req = WorkflowRequest(prompt="hi", research_system_prompt_override="client value")
+    out = _with_digi_request_context(_merge_http("occ"), req)
+    assert out.research_system_prompt_override == GROUNDING_PROMPT
+
+
 def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """Single-tenant path must not trust a client-supplied system prompt either.
 
@@ -377,3 +414,201 @@ def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyP
     req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
     out = _with_digi_request_context(_merge_http("baseline"), req)
     assert out.research_system_prompt_override is None
+
+
+def test_resolve_map_accepts_comma_separated_fan_out() -> None:
+    """A comma-separated index pair (#4756 fan-out) passes validation intact,
+    while empty elements and bad chars still fail closed."""
+    mapped = {
+        "occ": TenantCorpusOverride(
+            digisearch_index="occ_help,occ_tickets",
+            vault_path_prefix="clients/online-compliance-center",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="occ",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "occ_help,occ_tickets"
+    assert out.vault_path_prefix == "clients/online-compliance-center"
+
+    for bad in ("occ_help,", ",occ_help", "occ_help,,occ_tickets", "occ help,occ_tickets"):
+        out = resolve_corpus_override(
+            headers={},
+            tenant_slug="occ",
+            corpus_map={
+                "occ": TenantCorpusOverride(
+                    digisearch_index=bad,
+                    vault_path_prefix="clients/online-compliance-center",
+                ),
+            },
+        )
+        assert out.digisearch_index is None
+
+
+def test_digithings_tenant_parses_scoped_prompt() -> None:
+    """DIG-3556: the digithings tenant carries a scoped research prompt."""
+    m = load_tenant_corpus_map(
+        '{"digithings": {"digisearchIndex": "digithings_docs", '
+        '"vaultPathPrefix": "clients/digithings", '
+        '"researchSystemPrompt": "Answer only about digithings."}}'
+    )
+    assert m["digithings"].digisearch_index == "digithings_docs"
+    assert m["digithings"].vault_path_prefix == "clients/digithings"
+    assert m["digithings"].research_system_prompt == "Answer only about digithings."
+
+
+def test_tenant_map_parses_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": True}}))
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_defaults_lock_session_controls_off() -> None:
+    from digigraph.corpus_routing import _parse_map
+
+    mapped = _parse_map(json.dumps({"occ": {"digisearchIndex": "occ_help"}}))
+    assert mapped["occ"].lock_session_controls is False
+
+
+def test_resolve_override_carries_lock_session_controls() -> None:
+    mapped = load_tenant_corpus_map(
+        json.dumps({"occ": {"lockSessionControls": True, "digisearchIndex": "occ_help"}})
+    )
+    override = resolve_corpus_override(tenant_slug="occ", corpus_map=mapped)
+    assert override.lock_session_controls is True
+
+
+def test_unknown_map_key_warns_naming_slug_and_key_but_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unrecognised entry key must be reported, not silently dropped.
+
+    DIG-4459 decision note D2: the map is read key by key and the override is
+    built from explicit keyword arguments, so an unknown key used to vanish with
+    no log line and no error — a renamed or misspelled field looked exactly like
+    a working map. The warning carries the tenant slug and the key name, never
+    the value.
+    """
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "tenant_a_index",
+                "digisearchIndexTypo": "sensitive-value-do-not-log",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    warnings = [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "occ" in message
+    assert "digisearchIndexTypo" in message
+    assert "sensitive-value-do-not-log" not in caplog.text
+    # The known key still applies — an unknown key must not disturb the entry.
+    assert table["occ"].digisearch_index == "tenant_a_index"
+
+
+def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    """Every recognised spelling must stay silent — the warning is not noise."""
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "tenant_a_index",
+                "vaultPathPrefix": "clients/occ",
+                "researchSystemPrompt": "Answer only about occ.",
+                "lockSessionControls": True,
+            },
+            "ok-tenant": {
+                "digisearch_index": "ok_docs",
+                "vault_path_prefix": "clients/ok",
+                "research_system_prompt": "Answer only about ok.",
+                "lock_session_controls": False,
+            },
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+    assert not [r for r in caplog.records if "unknown key" in r.getMessage()]
+    assert table["occ"].lock_session_controls is True
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+
+
+def test_unknown_key_does_not_relax_fail_closed_on_known_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D3: an unknown key is a forward-compatibility problem, a bad known value
+    stays a safety problem and is still refused."""
+    raw = json.dumps(
+        {
+            "occ": {
+                "digisearchIndex": "not a valid index!",
+                "someFutureKey": "x",
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        table = load_tenant_corpus_map(raw)
+        override = resolve_corpus_override(tenant_slug="occ", corpus_map=table)
+    assert override.digisearch_index is None
+
+
+def test_tenant_map_real_boolean_lock_passes_through() -> None:
+    """A real boolean is taken as written: true locks, false does not."""
+    locked = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": True}}))
+    unlocked = load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": False}}))
+    assert locked["occ"].lock_session_controls is True
+    assert unlocked["occ"].lock_session_controls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["true", "false", 1, 0, 1.0, None, [], {}],
+    ids=["str-true", "str-false", "int-1", "int-0", "float", "null", "list", "object"],
+)
+def test_tenant_map_non_boolean_lock_fails_closed_to_locked(value: object) -> None:
+    """DIG-4590: a non-boolean lock flag must never unlock the tenant.
+
+    The digichat registry validator rejects the same field ("lockSessionControls
+    must be a boolean"). The corpus map fails closed to LOCKED for that entry.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps({"occ": {"lockSessionControls": value, "digisearchIndex": "tenant_a_index"}})
+    )
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_keeps_the_entry() -> None:
+    """A bad lock value degrades the flag only: the entry and its corpus survive.
+
+    Dropping the entry would unlock the tenant *and* re-point its corpus.
+    """
+    mapped = load_tenant_corpus_map(
+        json.dumps(
+            {
+                "occ": {
+                    "lockSessionControls": "true",
+                    "digisearchIndex": "tenant_a_index",
+                    "vaultPathPrefix": "clients/tenant-a",
+                }
+            }
+        )
+    )
+    assert mapped["occ"].digisearch_index == "tenant_a_index"
+    assert mapped["occ"].vault_path_prefix == "clients/tenant-a"
+    assert mapped["occ"].lock_session_controls is True
+
+
+def test_tenant_map_bad_lock_warns_without_the_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The warning names the tenant and the JSON type, never the offending value."""
+    with caplog.at_level(logging.WARNING, logger="digigraph.corpus_routing"):
+        load_tenant_corpus_map(json.dumps({"occ": {"lockSessionControls": "yes-please"}}))
+    warnings = [r for r in caplog.records if "lockSessionControls" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "occ" in message
+    assert "str" in message
+    assert "yes-please" not in message

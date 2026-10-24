@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Git pre-push hook. Rejects:
-#   • pushes to any remote URL not matching the pinned digithings origin
+#   • pushes to any remote URL other than GitHub, the Origin mirror, or Origin /local
+#   • origin/<slug> drafts pushed anywhere except the Origin /local endpoint
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
+#   • pushes to `develop` without ALLOW_DEVELOP_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
+#
+# Warns, and never blocks (DIG-1579):
+#   • the branch being pushed is older than 10 days — see the policy pointer it prints
 #
 # Installed by `make hooks-install` (and by `make agents-init`), which installs
 # this file **as committed on origin/develop**, not your working copy — one hook
@@ -19,15 +24,32 @@ set -euo pipefail
 remote="${1:-}"
 url="${2:-}"
 
-allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
+# GitHub stays the public/release remote. Origin is the agent iteration host.
+# The mirror clone URL pass-throughs normal branches to GitHub. /local accepts
+# only refs/heads/origin/* and those refs never sync to GitHub.
+github_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
+origin_mirror_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?$'
+origin_local_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?/local/?$'
+origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 
-# Allowed branch name taxonomy. Keep in sync with BRANCHING.md and the
-# GitHub branch-naming ruleset on origin.
+# Allowed branch name taxonomy. Keep in sync with BRANCHING.md and
+# scripts/github-rulesets/01-branch-naming.json. That file is the desired
+# GitHub ruleset; it is not applied on the repo (see that directory's README).
+# Do not say "on origin" — origin is the Cursor mirror, not GitHub.
+#
+# `DIG-<n>-<title-slug>` is the branch Paperclip checks out an execution
+# workspace on. It matched no arm here, so a bare `git push` from such a
+# workspace was refused outright — the hook validates the destination
+# `remote_ref`, and there is no exemption for a branch the remote already holds.
+# Admitting the shape is the whole fix; the digit is required so this cannot
+# widen into a prefix match on `DIG`, and the slug is required so `DIG-47-` is
+# not a branch name. Such a branch accumulates commits from unrelated issues and
+# must not be blanket pushed — see the execution-workspace rule in BRANCHING.md.
 #
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -40,9 +62,12 @@ is_zero_sha() {
   [[ "$1" =~ ^0+$ ]]
 }
 
-if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
+is_origin_local=0
+if [[ "$url" =~ $origin_local_url_regex ]]; then
+  is_origin_local=1
+elif [ -n "$url" ] && ! [[ "$url" =~ $github_url_regex || "$url" =~ $origin_mirror_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
-  echo "         Only the pinned origin (github.com/digithings-ai/digithings) is allowed." >&2
+  echo "         Allowed: github.com/digithings-ai/digithings, or origin.cursor.com/chrizefan/digithings (and its /local endpoint)." >&2
   exit 1
 fi
 
@@ -59,10 +84,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
 
   # Deletions are exempt from the taxonomy: a branch created outside it — a
-  # `bot/*` ref from project-stub-fields.yml, or anything predating a tightening
-  # of the rules — must still be deletable. Enforcing a name on the way out only
-  # strands the refs the rule was meant to discourage. The `main` guard below
-  # still applies: deleting main is at least as serious as pushing to it.
+  # leftover `bot/*` ref from a workflow that no longer exists (project-stub-fields.yml
+  # was removed in #4919), or anything predating a tightening of the rules — must
+  # still be deletable. Enforcing a name on the way out only strands the refs the
+  # rule was meant to discourage. The `main` guard below still applies: deleting
+  # main is at least as serious as pushing to it.
   is_deletion=0
   if is_zero_sha "$local_sha"; then
     is_deletion=1
@@ -71,19 +97,34 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Branch name validation — only for refs/heads/; tags, notes and deletions are exempt.
   if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
     branch_name="${remote_ref#refs/heads/}"
-    if ! [[ "$branch_name" =~ $branch_regex ]]; then
+    if [ "$is_origin_local" -eq 1 ]; then
+      if ! [[ "$branch_name" =~ $origin_draft_regex ]]; then
+        echo "pre-push: '$branch_name' cannot go to the Origin-only endpoint." >&2
+        echo "         origin-local accepts only origin/<slug>. Push promotion branches to origin or github." >&2
+        failed=1
+        continue
+      fi
+    elif [[ "$branch_name" == origin/* ]]; then
+      echo "pre-push: refusing to push '$branch_name' onto GitHub or the mirror remote." >&2
+      echo "         Publish Origin drafts with 'origin push local'. Promote with a task/, module/, or release/ branch." >&2
+      failed=1
+      continue
+    elif ! [[ "$branch_name" =~ $branch_regex ]]; then
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
       echo "         Allowed patterns (see BRANCHING.md):" >&2
       echo "           main | develop | release/vX.Y.Z" >&2
       echo "           module/<component>  (e.g. module/digiquant, module/digigraph)" >&2
       echo "           release-please--branches--<target>--components--<component>" >&2
-      echo "                        (pushed by the release-please-*.yml workflows)" >&2
+      echo "                        (no release-please workflow remains; the pattern" >&2
+      echo "                        stays so a leftover ref can still be pushed)" >&2
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2
-      echo "           {feat,fix,docs,chore}/<slug>" >&2
-      echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
-      echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
+      echo "           {feat,fix,docs,chore,revert}/<slug>" >&2
+      echo "           bot/<slug>  (pushed by agent-backlog-snapshot.yml" >&2
+      echo "                        and pipeline-provider-review.yml)" >&2
+      echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
+      echo "                        per-issue, never blanket — BRANCHING.md)" >&2
       failed=1
       continue
     fi
@@ -92,6 +133,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Block push to main without explicit opt-in.
   if [ "$remote_ref" = "refs/heads/main" ] && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
     echo "pre-push: refusing to push to 'main'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
+    failed=1
+    continue
+  fi
+
+  # Block push to develop without explicit opt-in. develop carries
+  # required_pull_request_reviews: null (BRANCHING.md), so unlike main there
+  # is no server-side PR gate on it and this hook is the only guard.
+  if [ "$remote_ref" = "refs/heads/develop" ] && [ "${ALLOW_DEVELOP_PUSH:-0}" != "1" ]; then
+    echo "pre-push: refusing to push to 'develop'. Set ALLOW_DEVELOP_PUSH=1 if this is intentional." >&2
+    echo "         Usual cause: this branch tracks develop upstream, so a bare 'git push' lands there. Fix: git branch --set-upstream-to=github/<branch> <branch>." >&2
     failed=1
     continue
   fi
@@ -167,6 +218,75 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the live-trading changes." >&2
       failed=1
       continue
+    fi
+  fi
+
+  # ── DIG-1589: duplicate-work guard (resume before create) ──────────────────
+  # Appended last so a content refusal above is never masked by this one: the
+  # live-trading arm is the safety gate, and the operator should read that
+  # message first. Deliberately additive — no existing arm is modified.
+  #
+  # Runs on refs/heads/ only, because the guard is about branching: a tag or a
+  # note pushed from an unmerged commit is not a second attempt at the work.
+  if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
+    # The guard refuses a *rebuild*, a second attempt at work already in flight.
+    # It cannot tell a rebuild from an update on its own, so the kind of push has
+    # to be stated here: git reports a ref the remote does not have as an
+    # all-zero sha, which is the signal the diff base above already reads.
+    # Without it the arm refuses every follow-up commit to an unmerged branch,
+    # because such a branch keeps overlapping its siblings at every later commit.
+    if [ -n "$remote_sha" ] && ! is_zero_sha "$remote_sha"; then
+      push_kind="--is-update"
+    else
+      push_kind="--is-create"
+    fi
+    # An installed hook is a *copy* under .git/hooks, shared by every worktree,
+    # so $0 cannot find the checker. Resolve it from the repository the push is
+    # running in — the checker is committed, so a real checkout always has it.
+    top="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+    checker="${BRANCH_RESTART_CHECK_PATH:-${top:+$top/scripts/branch_restart_check.py}}"
+    if [ -z "$checker" ] || [ ! -f "$checker" ]; then
+      echo "pre-push: duplicate-work guard skipped — scripts/branch_restart_check.py not found." >&2
+      echo "         Run 'git fetch origin' and retry; without it a rebuilt branch cannot be detected." >&2
+    elif ! command -v "${BRANCH_RESTART_CHECK_PYTHON:-python3}" >/dev/null 2>&1; then
+      echo "pre-push: duplicate-work guard skipped — '${BRANCH_RESTART_CHECK_PYTHON:-python3}' not found." >&2
+    elif ! restart_out="$("${BRANCH_RESTART_CHECK_PYTHON:-python3}" "$checker" "$local_sha" \
+                            --branch-name "${branch_name:-$local_ref}" "$push_kind" 2>&1)"; then
+      # Non-zero is a refusal; the checker has already written the reason and the
+      # sibling list, and it carries the escapes that permit the push.
+      printf '%s\n' "$restart_out" >&2
+      failed=1
+      continue
+    elif [ -n "$restart_out" ]; then
+      # Allowed, but something worth recording — an applied escape, or a
+      # fail-open path. An escape that is invisible is an escape nobody trusts.
+      printf '%s\n' "$restart_out" >&2
+    fi
+  fi
+
+  # ── DIG-1579: branch-age warning (never blocks) ────────────────────────────
+  # Appended last for the same reason as the arm above: a content refusal must
+  # never be masked by a warning. Also purely additive — no existing arm moves.
+  #
+  # Deletions are exempt here too, and for a second reason to the taxonomy one:
+  # § 4 of the policy clears stale refs with `git push origin --delete`, so
+  # warning on the way out would print at the operator during exactly the
+  # cleanup this hook exists to make cheap — and it must never become the reason
+  # such a push fails.
+  if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
+    age_top="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+    age_checker="${BRANCH_AGE_WARNING_PATH:-${age_top:+$age_top/scripts/branch_age_warning.py}}"
+    if [ -z "$age_checker" ] || [ ! -f "$age_checker" ]; then
+      echo "pre-push: branch-age warning skipped — scripts/branch_age_warning.py not found." >&2
+      echo "         Run 'git fetch origin' and retry." >&2
+    elif ! command -v "${BRANCH_AGE_WARNING_PYTHON:-python3}" >/dev/null 2>&1; then
+      echo "pre-push: branch-age warning skipped — '${BRANCH_AGE_WARNING_PYTHON:-python3}' not found." >&2
+    else
+      # `|| true` is load-bearing, not defensive noise: the module already exits 0
+      # on every path, but a traceback or a signal must not become a non-zero
+      # exit the way a refusal is. This arm has no opinion on the push.
+      "${BRANCH_AGE_WARNING_PYTHON:-python3}" "$age_checker" "$local_sha" \
+        --branch-name "${branch_name:-$local_ref}" 2>&1 || true
     fi
   fi
 done

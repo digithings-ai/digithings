@@ -28,9 +28,16 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "061_checkpointer_retention.sql"
+    REPO_ROOT
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "engine"
+    / "061_checkpointer_retention.sql"
 )
 
 # The three tables the prune must cover. `checkpoint_migrations` is LangGraph's own

@@ -32,7 +32,10 @@ from digiquant.dashboard.research_retrieval.models import (
     content_digest,
     legacy_document_ref_id,
 )
-from digiquant.dashboard.research_retrieval.queries import RetrievalManifestMode
+from digiquant.dashboard.research_retrieval.queries import (
+    RetrievalManifestMode,
+    _theses_for_as_of,
+)
 from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     LoadedResearchState,
@@ -41,7 +44,7 @@ from digiquant.dashboard.research_retrieval.store import (
 from digiquant.dashboard.research_retrieval.tools import resolve_retrieval_manifest_mode
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.dashboard.test_context_compiler import _evidence, _loaded_state
+from tests.dq.dashboard.context_compiler_support import _evidence, _loaded_state
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 _TS = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
@@ -297,6 +300,40 @@ class TestQueryPortfolio:
         assert out["nav"]["nav"] == 1.02
         assert out["theses"][0]["thesis_id"] == "t1"
         assert out["decision_lessons"][0]["reflection"] == "waited for confirmation"
+
+    def test_theses_for_as_of_keeps_the_newest_date_when_history_is_long(self) -> None:
+        newest = [
+            {"date": "2026-06-18", "thesis_id": f"live-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(3)
+        ]
+        older = [
+            {"date": "2026-06-17", "thesis_id": f"old-{i}", "name": f"O{i}", "status": "ACTIVE"}
+            for i in range(40)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        active = _theses_for_as_of(client, as_of_date=date(2026, 6, 19))
+        assert sorted(row["thesis_id"] for row in active) == ["live-0", "live-1", "live-2"]
+
+    def test_theses_for_as_of_warns_when_the_latest_date_fills_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from digiquant.dashboard.research_retrieval.queries import _THESIS_ROW_CAP
+
+        newest = [
+            {
+                "date": "2026-06-18",
+                "thesis_id": f"live-{i}",
+                "name": f"T{i}",
+                "status": "ACTIVE",
+            }
+            for i in range(_THESIS_ROW_CAP)
+        ]
+        older = [{"date": "2026-06-17", "thesis_id": "old", "name": "Old", "status": "ACTIVE"}]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        with caplog.at_level("WARNING", logger="digiquant.dashboard.research_retrieval.queries"):
+            active = _theses_for_as_of(client, as_of_date=date(2026, 6, 19))
+        assert len(active) == _THESIS_ROW_CAP
+        assert any("row_cap" in record.message for record in caplog.records)
 
     def test_ticker_filter(self) -> None:
         client = FakeSupabaseClient(
@@ -1173,7 +1210,16 @@ class TestSearchResearch:
                         "content": "body",
                         "payload": None,
                         "workspace_id": str(house_workspace_id()),
-                    }
+                    },
+                    {
+                        "date": "2026-06-12",
+                        "document_key": "macro",
+                        "doc_type": "macro",
+                        "run_type": "baseline",
+                        "content": "body",
+                        "payload": None,
+                        "workspace_id": str(house_workspace_id()),
+                    },
                 ]
             },
             store={},
@@ -1181,22 +1227,28 @@ class TestSearchResearch:
         # Patch the archive store resolver into the fake client's store path.
         import digiquant.dashboard.research_retrieval.queries as q
 
-        orig = q.read_archived_document
+        orig = q.read_archived_documents
+        calls: list[list[tuple[str, str]]] = []
 
-        def _fake_read(_client, _store, *, workspace_id, document_key, date_str):
-            return payload
+        def _fake_read(_client, _store, *, workspace_id, keys):
+            calls.append(list(keys))
+            return {pair: payload for pair in keys}
 
-        q.read_archived_document = _fake_read  # type: ignore[assignment]
+        q.read_archived_documents = _fake_read  # type: ignore[assignment]
         try:
             out = search_research(
                 client,
                 run_date=date(2026, 6, 19),
                 document_key="macro",
+                include_prior=True,
                 store=store,
             )
         finally:
-            q.read_archived_document = orig  # type: ignore[assignment]
-        assert out["rows"][0]["payload"] == payload
+            q.read_archived_documents = orig  # type: ignore[assignment]
+        # #4562: the whole page hydrates in one batched read, not one per row,
+        # and every NULL-payload row on the page gets its payload merged back.
+        assert [row["payload"] for row in out["rows"]] == [payload, payload]
+        assert calls == [[("macro", "2026-06-19"), ("macro", "2026-06-12")]]
 
     def test_blinded_phase_drops_blocked_document(self) -> None:
         client = FakeSupabaseClient(

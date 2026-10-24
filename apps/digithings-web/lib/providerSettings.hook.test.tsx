@@ -63,7 +63,7 @@ describe("useProviderSettings().save() (#2348 AC3 — targets the hook, not pers
     });
 
     act(() => {
-      api!.save("xai-super-secret-key", "xai", "grok-4-3");
+      api!.save("xai-super-secret-key", "xai", "grok-4.3");
     });
 
     expect(setItemSpy).toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("useProviderSettings().save() (#2348 AC3 — targets the hook, not pers
 
     // The non-secret provider/model preference IS expected to persist.
     expect(store.get("digichat:provider")).toBe("xai");
-    expect(store.get("digichat:model")).toBe("grok-4-3");
+    expect(store.get("digichat:model")).toBe("grok-4.3");
 
     // And the hook's own returned state reflects the session-only key.
     expect(api!.isSet).toBe(true);
@@ -94,7 +94,7 @@ describe("useProviderSettings().save() (#2348 AC3 — targets the hook, not pers
       root.render(<Harness />);
     });
     act(() => {
-      api!.save("xai-super-secret-key", "xai", "grok-4-3");
+      api!.save("xai-super-secret-key", "xai", "grok-4.3");
     });
     act(() => {
       api!.clear();

@@ -1,15 +1,25 @@
 {
   "name": "digithings-cron",
+  "description": "Cloudflare worker that dispatches scheduled digithings jobs.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digithings-cron"
+  },
   "private": true,
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --test-scheduled",
     "test": "vitest run",
+    "check:deployed-triggers": "vitest run src/deployed-triggers.test.ts",
+    "pretypecheck": "node scripts/check-app-install.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250801.0",
+    "@cloudflare/workers-types": "^5.20261021.1",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0",
     "wrangler": "^4.28.0"

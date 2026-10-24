@@ -64,6 +64,11 @@ ALLOWLIST = {
     # mirroring tokens.css module accents.
     "apps/reference/components/livery-store.ts",
     "apps/reference/components/livery-switcher.tsx",
+    # Generated colour table. The source of the hex is tokens.css.
+    "packages/design/tokens.ts",
+    # Generated from digivoice/hammerspoon/theme_registry.json.
+    "packages/ui/src/theme/palette-registry.ts",
+    "packages/ui/src/components/themeInit.ts",
 }
 
 TEST_FILE = re.compile(r"(\.test\.|\.spec\.|/__tests__/|/test/)")

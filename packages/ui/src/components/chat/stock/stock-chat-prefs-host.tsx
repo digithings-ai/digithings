@@ -16,6 +16,12 @@ import {
   EmbedChatPrefsProvider,
   catalogToolsFromClient,
   createDefaultEmbedChatPrefs,
+  chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
+  persistDensity,
+  persistScroll,
+  useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   disabledCatalogIds,
   extraOffFromCatalog,
   type CatalogToolRow,
@@ -24,7 +30,10 @@ import {
 } from "./embed-chat-prefs";
 // Package twins of the app types (identical literals/shapes; see skin-types.ts).
 // Aliased to the app names so the hook body below reads unchanged (WS4).
-import type { StockComposerMenuKind as ComposerMenuKind } from "./skin-types";
+import {
+  isStockComposerMenuKind,
+  type StockComposerMenuKind as ComposerMenuKind,
+} from "./skin-types";
 import type { SkinMcpServerConfig as SessionMcpConfig } from "./skin-types";
 import type { ThinkingMode, ViewMode } from "./skin-types";
 
@@ -35,14 +44,35 @@ export type StockChatPrefsConfig = {
   defaultLanguage?: string;
   defaultModel?: string;
   availableModels: readonly string[];
+  /** Catalog presets and groups. The menu falls back to raw ids when absent. */
+  modelPicker?: {
+    presets: readonly { id: string; label: string; model: string }[];
+    groups: readonly { provider: string; models: readonly { id: string; label: string }[] }[];
+    showFullList: boolean;
+  };
   /** Host pre-computes models.allowPicker || features.modelPicker. */
   allowModelPicker?: boolean;
   view: ViewMode;
   thinking: ThinkingMode;
+  /** Deployment default. A stored `dt-density` still wins for this user. */
+  density?: "compact" | "default" | "airy";
+  effort?: "low" | "medium" | "high";
+  searchEngine?: string;
+  toolbar?: boolean;
+  scrollbars?: "always" | "auto";
+  /** Deployment default for follow/free. A stored `dt-scroll` still wins. */
+  scroll?: { mode: "follow" | "free" };
   tenantAllowsWeb: boolean;
   showByok: boolean;
+  /**
+   * The backend that serves this chat, as a display label. The host owns
+   * the provider vocabulary; absent means unknown.
+   */
+  providerLabel?: string;
   allowUserServers?: boolean;
   allowAddForm?: boolean;
+  /** Foundry is `agent`, a host lock is `locked`, otherwise tools toggle. */
+  toolControl?: "toggle" | "locked" | "agent";
 };
 
 /** Injectable product deps: pure app functions the package must not import. */
@@ -70,11 +100,14 @@ export type StockChatPrefsDeps = {
   renderMenuPanes?: (args: {
     kind: ComposerMenuKind;
     models: readonly string[];
+    defaultModel?: string;
+    modelPicker?: StockChatPrefsConfig["modelPicker"];
     providerSeed?: string;
     mcpSeed?: string;
     onClose: () => void;
   }) => ReactNode;
   onOpenSessions?: () => void;
+  onOpenArtifacts?: () => void;
 };
 
 const defaultResolveWebSearch = (tenantAllows: boolean, userPref: boolean) =>
@@ -91,6 +124,7 @@ export function useStockChatPrefs({
   deps,
   sessionKey,
   hasSessions,
+  hasArtifacts = false,
   newThread,
   redo,
 }: {
@@ -98,6 +132,8 @@ export function useStockChatPrefs({
   deps: StockChatPrefsDeps;
   sessionKey: string;
   hasSessions: boolean;
+  /** Gating flag for /artifacts. Off until an artifact surface is wired. */
+  hasArtifacts?: boolean;
   newThread: () => void;
   redo: () => void;
 }) {
@@ -116,8 +152,47 @@ export function useStockChatPrefs({
     extra: extraOffFromCatalog(catalogTools),
     view: config.view,
     thinking: config.thinking,
+    // No storage on the first render: the server cannot read dt-density, so
+    // the stored choice is applied after mount (useStoredDensityAfterMount).
+    ...chromePrefsFromDeploy(
+      {
+        density: config.density,
+        effort: config.effort,
+        searchEngine: config.searchEngine,
+        toolbar: config.toolbar,
+        scrollbars: config.scrollbars,
+        scroll: config.scroll?.mode,
+      },
+      null,
+    ),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   const chatPrefsRef = useRef(chatPrefs);
@@ -139,6 +214,7 @@ export function useStockChatPrefs({
     [],
   );
   const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getSearchEngine = useCallback(() => chatPrefsRef.current.searchEngine, []);
   const getMcpSession = useCallback(
     () =>
       deps.mcpOps.headerValue(
@@ -181,19 +257,40 @@ export function useStockChatPrefs({
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
+      setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
+          }),
         }),
       tenantAllowsWeb,
       showByok,
+      providerLabel: config.providerLabel,
       showModels,
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions,
+      hasArtifacts,
       allowUserMcp: config.allowUserServers === true,
       allowAddMcp: config.allowAddForm === true,
       catalogTools,
@@ -201,6 +298,9 @@ export function useStockChatPrefs({
       sessionKey,
       openSettings: () => {
         setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
       },
       openTools: () => {
         setComposerMenu("tools");
@@ -219,8 +319,17 @@ export function useStockChatPrefs({
       openEffort: () => {
         setComposerMenu("effort");
       },
+      openSearchEngine: () => {
+        setComposerMenu("search-engine");
+      },
       openView: () => {
         setComposerMenu("view");
+      },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
+      openTheme: () => {
+        setComposerMenu("theme");
       },
       openThinking: () => {
         setComposerMenu("thinking");
@@ -229,12 +338,21 @@ export function useStockChatPrefs({
         setComposerMenu("language");
       },
       openSessions: deps.onOpenSessions ?? defaultOpenSessions,
+      openArtifacts: deps.onOpenArtifacts ?? (() => {}),
       newThread: () => {
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
+          }),
         });
         newThread();
       },
@@ -244,11 +362,25 @@ export function useStockChatPrefs({
           extra: extraOffFromCatalog(catalogTools),
           view: config.view,
           thinking: config.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: config.density,
+            effort: config.effort,
+            searchEngine: config.searchEngine,
+            toolbar: config.toolbar,
+            scrollbars: config.scrollbars,
+            scroll: config.scroll?.mode,
+          }),
         });
         newThread();
       },
       undo: () => {},
       redo,
+      toolControl: config.toolControl,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     }),
     [
       chatPrefs,
@@ -259,17 +391,30 @@ export function useStockChatPrefs({
       catalogTools,
       sessionKey,
       hasSessions,
+      hasArtifacts,
       newThread,
       redo,
       config.allowUserServers,
       config.allowAddForm,
+      config.providerLabel,
       config.servers,
       config.view,
       config.thinking,
+      config.density,
+      config.effort,
+      config.searchEngine,
+      config.toolbar,
+      config.scrollbars,
       deps.mcpOps,
       deps.resolveLanguage,
       deps.defaultLanguageCode,
       deps.onOpenSessions,
+      config.toolControl,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     ],
   );
 
@@ -277,6 +422,8 @@ export function useStockChatPrefs({
     deps.renderMenuPanes?.({
       kind: composerMenu,
       models: config.availableModels,
+      defaultModel: config.defaultModel,
+      modelPicker: config.modelPicker,
       providerSeed,
       mcpSeed,
       onClose: () => {
@@ -296,6 +443,7 @@ export function useStockChatPrefs({
     getEnableWebSearch,
     getMcpSession,
     getEffort,
+    getSearchEngine,
     setWebSearch: (on: boolean) => setChatPrefs((p) => ({ ...p, webSearch: on })),
   };
 }

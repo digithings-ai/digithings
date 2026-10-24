@@ -4,7 +4,7 @@
 # MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
 # No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
 # which calls issubclass() on raw annotations — PEP 563 string annotations crash
-# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
+# every @mcp.tool() at import (infra/docker/Dockerfile.digithings-stack-cloudflare marker v8).
 import json
 import logging
 import os
@@ -15,7 +15,10 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
+from digisearch.client import SURFACE_MCP, require_art9_clear
 from digisearch.core.models import Query
+from digisearch.grokipedia.tools import grokipedia_get_page as _grokipedia_get_page
+from digisearch.grokipedia.tools import grokipedia_search as _grokipedia_search
 from digisearch.logging import configure_logging
 from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
@@ -81,7 +84,7 @@ def semantic(
 
             response = SearchResponse(results=results)
         except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
-            logger.error("digisearch client query failed: %s", e)
+            logger.exception("digisearch client query failed: %s", e)
             return f"[digisearch query error: {e}]"
     else:
         allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
@@ -120,33 +123,79 @@ def semantic(
 @mcp.tool()
 def web_search(
     query: str,
+    provider: str = "auto",
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     max_results: int = 4,
+    recency_days: int | None = 7,
+    purpose: str | None = None,
+    effort: str | None = None,
+    offset: int = 0,
 ) -> str:
-    """Search the public web (first-party tool). Returns JSON WebSearchResponse."""
-    try:
-        from digisearch.web_search.models import (
-            WebSearchConfigError,
-            WebSearchRequest,
-            summarize_validation_error,
-        )
-        from digisearch.web_search.service import run_web_search
-    except ImportError as e:
-        return f"[web_search unavailable: install digisearch[web-search] for web_search: {e}]"
+    """Search the public web through a swappable provider (#4711).
+
+    Returns JSON ``WebSearchResponse``. ``provider='auto'`` (default) is always
+    the in-house searxng→ddgs engine, even when external API keys are
+    configured; naming a provider uses that provider fail-closed (a missing key
+    returns a disabled message instead of falling back to another provider).
+
+    ``provider``: internal | exa | tavily | parallel | firecrawl | tinyfish
+    (externals appear only once their API key is configured).
+    ``effort``: fast | thorough — a latency/quality tier mapped per provider;
+    the in-house engine has no tiers. ``purpose``: natural-language intent,
+    honoured by tinyfish and parallel. ``offset``: page start (default 0);
+    only providers that can page (exa) accept offset > 0.
+    """
+    from digisearch.web_providers import (
+        UnknownProviderError,
+        WebProviderBadRequestError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+        get_provider,
+    )
+    from digisearch.web_search.models import (
+        WebSearchConfigError,
+        WebSearchRequest,
+        summarize_validation_error,
+    )
+
     try:
         req = WebSearchRequest(
             query=query,
             include_domains=include_domains or [],
             exclude_domains=exclude_domains or [],
             max_results=max_results,
+            recency_days=recency_days,
+            provider=provider,
+            purpose=purpose,
+            effort=effort,  # type: ignore[arg-type]
+            offset=offset,
         )
     except ValidationError as e:
         return f"[web_search invalid input: {summarize_validation_error(e)}]"
     try:
-        return run_web_search(req).model_dump_json()
-    except WebSearchConfigError as e:
+        engine = get_provider(req.provider)
+    except UnknownProviderError as e:
+        return f"[web_search error: {e}]"
+    try:
+        return engine.search(req).model_dump_json()
+    except WebProviderNotConfiguredError as e:
+        # Fail-closed disabled message, not a raised error (MCP convention).
+        return f"[web_search disabled: {e}]"
+    except (WebProviderUnavailableError, WebSearchConfigError) as e:
         return f"[web_search unavailable: {e}]"
+    except WebProviderCapabilityError as e:
+        return f"[web_search error: {e}]"
+    except WebProviderBadRequestError as e:
+        # Caller error, not an outage: info-level so it does not read as a
+        # provider outage in operator logs (#4711 review).
+        logger.info("web_search rejected input: %s", e)
+        return f"[web_search error: {e}]"
+    except WebProviderError as e:
+        logger.exception("web_search provider failure: %s", e)
+        return f"[web_search error: {e}]"
 
 
 @mcp.tool()
@@ -221,68 +270,10 @@ except ImportError:
     logger.info("research_turn MCP tool omitted (install digisearch[agent])")
 
 
-@mcp.tool()
-def exa_web_search(
-    query: str,
-    search_type: str = "auto",
-    num_results: int = 8,
-    category: str | None = None,
-    include_domains: list[str] | None = None,
-    exclude_domains: list[str] | None = None,
-    offset: int = 0,
-) -> str:
-    """Live web search via EXA (alternative to the owned corpus).
-
-    Dormant without EXA_API_KEY — returns a disabled message instead of failing.
-    search_type: instant|fast|auto|deep-lite|deep|deep-reasoning.
-    include_domains/exclude_domains restrict or drop hits by domain.
-
-    Paging: EXA ``POST /search`` has no offset parameter and caps ``numResults``
-    at :attr:`digisearch.web_exa.EXA_MAX_RESULTS` (100). ``offset`` returns the
-    client-side page ``results[offset : offset + num_results]`` of one enlarged
-    search window (``numResults = offset + num_results``); call it repeatedly to
-    walk the result set, e.g. ``offset=0, 8, 16, ...`` with the default page size.
-    A page reaching past the cap (``offset + num_results > 100``) returns an
-    explicit error — never a silently truncated page. A page past the query's
-    result count (still within the cap) returns an explicit empty page.
-    ``offset=0`` (the default) is byte-identical to the unpaged call.
-    """
-    from digisearch import web_exa
-
-    if not web_exa.is_exa_configured():
-        return "EXA web search is disabled (EXA_API_KEY is not set)."
-    if search_type not in web_exa.VALID_SEARCH_TYPES:
-        return f"[digisearch web search error: invalid search_type: {search_type!r}]"
-    requested = 0
-    try:
-        requested = max(1, min(int(num_results), web_exa.EXA_MAX_RESULTS))
-        start = int(offset)
-        data = web_exa.exa_search(
-            query,
-            search_type=search_type,  # type: ignore[arg-type]
-            num_results=requested,
-            offset=start,
-            category=category,
-            include_domains=include_domains,
-            exclude_domains=exclude_domains,
-        )
-    except (web_exa.ExaError, ValueError) as e:
-        logger.error("digisearch web search failed: %s", e)
-        return f"[digisearch web search error: {e}]"
-    if start > 0 and not data.results and not data.output:
-        return (
-            f"No EXA results at offset {start} (window [{start}, {start + requested}) is past "
-            f"the query's result count, within the {web_exa.EXA_MAX_RESULTS}-result EXA cap)."
-        )
-    # The landed 10-result render cap stays the default; an explicit page larger
-    # than it must render whole or paging would silently truncate.
-    return web_exa.format_web_results(data, max_items=max(10, requested))
-
-
 # --- Phase C monitors (§4.7, #4065) -------------------------------------------------
 #
 # Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
-# shape of `exa_web_search`: without a reachable store the tools return a
+# shape of `web_search`: without a reachable store the tools return a
 # disabled message instead of raising. Create/update-time validation goes
 # through `watch_config_error` — the same gate the HTTP API applies — because a
 # watch with an unparseable cron would raise inside `is_due` at tick time, where
@@ -297,7 +288,7 @@ def _monitor_store_or_none() -> MonitorStore | None:
     try:
         return get_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch monitor store unavailable: %s", e)
+        logger.exception("digisearch monitor store unavailable: %s", e)
         return None
 
 
@@ -316,7 +307,7 @@ def monitors_create_watch(
 
     The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
     this response only — never on list/read. Provide ``schedule_cron`` (5-field
-    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    digibot grammar) or ``interval_seconds`` (>= 60); cron wins when both are
     given. The watch is named after the query. ``delivery_mode`` other than
     ``poll`` needs targets, which this surface cannot set, so those are rejected.
     This surface creates oss watches only: an EXA-backed watch (``backend``,
@@ -420,7 +411,7 @@ def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
 # ``websets_add_search`` return ids while the run is scheduled — the chat surface
 # polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
 # secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
-# Fail-closed shape of ``exa_web_search``: without a reachable store the
+# Fail-closed shape of ``web_search``: without a reachable store the
 # tools return a disabled string instead of raising.
 
 _WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."
@@ -431,7 +422,7 @@ def _webset_store_or_none() -> WebsetStore | None:
     try:
         return get_webset_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch webset store unavailable: %s", e)
+        logger.exception("digisearch webset store unavailable: %s", e)
         return None
 
 
@@ -617,6 +608,115 @@ def websets_export(webset_id: str, format: str = "json") -> str:
     return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
 
 
+# --- grokipedia unofficial JSON spike -----------------------------------------
+#
+# Read-only tools over grokipedia.com JSON APIs the public site JS already
+# calls. ``/api/page`` 404s; ``get_page`` uses ``/api/page-preview``. robots.txt
+# currently Disallow: /api/ — HOLD hatch (legal/product). No HTML scrape.
+
+
+@mcp.tool()
+def grokipedia_search(query: str, limit: int = 10) -> str:
+    """Search grokipedia.com (unofficial JSON spike; HOLD hatch).
+
+    Calls ``GET /api/full-text-search?query=&limit=``. Returns JSON
+    ``{ok, query, results:[{slug,title,snippet,...}], total_count}`` or
+    ``{ok:false, error, status_code, retryable}``. Polite rate limits apply.
+    Not an official xAI API. robots.txt currently Disallow: /api/.
+    """
+    return _grokipedia_search(query=query, limit=limit)
+
+
+@mcp.tool()
+def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
+    """Fetch one grokipedia page via page-preview (unofficial JSON spike).
+
+    Calls ``GET /api/page-preview?slug=`` (``/api/page`` is dead / 404).
+    ``include_content=True`` sends ``includeContent=true``; ``False`` sends
+    the site's short-preview flag ``content=0``. Long content is truncated.
+    Returns JSON ``{ok, found, page:{slug,title,content,truncated}}`` or
+    ``{ok:false, error, status_code, retryable}``. No HTML scrape.
+    """
+    return _grokipedia_get_page(slug=slug, include_content=include_content)
+
+
+# --- Art. 9 screen on the MCP surface (DIG-1083 leaf 10; spec DIG-912 §5.4) --
+# This server is loopback-bound by default - the local stack overrides the bind to
+# 0.0.0.0 inside the container so its published port answers (docker-compose.yml),
+# which leaves the compose network as the reachable surface - and unauthenticated:
+# ``DIGI_MCP_REQUIRE_AUTH`` is read in exactly one place repo-wide and it is not
+# here. Screening is therefore the only control standing in front of the surface,
+# which is why the surface is declared explicitly (``digisearch.client.SURFACE_MCP``)
+# rather than left to the path-keyed floor in ``digibase.art9`` - a registry keyed
+# by path cannot see a surface that has no path.
+#
+# FastMCP 1.9.3 has no middleware hook (``mcp.server.fastmcp.middleware`` does not exist),
+# so the seam is the registered ``Tool.fn``: dispatch runs
+# ``ToolManager.call_tool`` -> ``Tool.run`` -> ``fn_metadata`` -> ``fn(**arguments)``.
+# Reassigning ``Tool.fn`` therefore intercepts genuine server-side tool calls. Wrapping
+# ``FastMCP.call_tool`` instead would intercept nothing — that is the client-facing path —
+# and would read like a guard while screening no tool call at all.
+def _tool_payload(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
+    """The argument map a tool call arrives with, as a screenable payload."""
+    if kwargs:
+        return dict(kwargs)
+    return {"args": list(args)}
+
+
+def _screened_tool_fn(tool_name: str, fn: Any, is_async: bool) -> Any:
+    if is_async:
+
+        async def screened(*args: Any, **kwargs: Any) -> Any:
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return await fn(*args, **kwargs)
+
+    else:
+
+        def screened(*args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return fn(*args, **kwargs)
+
+    screened.__name__ = getattr(fn, "__name__", tool_name)
+    screened.__doc__ = fn.__doc__
+    screened.__art9_screened__ = True
+    # Record what was wrapped so a test can undo the screen in place and
+    # prove the guard can go red (DIG-1083).
+    screened.__wrapped__ = fn
+    return screened
+
+
+def install_art9_surface_screen(server: Any | None = None) -> int:
+    """Screen every registered MCP tool call through the Art. 9 surface registry.
+
+    Returns the number of tools wrapped. Raises when the server serves **no tools
+    at all**: a screen covering nothing is indistinguishable from a screen that is
+    not installed, and FastMCP's private manager going away must fail loudly rather
+    than pass silently. Re-installing over already-screened tools returns 0 and
+    raises nothing — that is idempotence, not absence.
+    """
+    srv = mcp if server is None else server
+    manager = getattr(srv, "_tool_manager", None)
+    if manager is None:
+        raise RuntimeError("FastMCP exposes no _tool_manager; Art. 9 screen cannot be installed")
+    tools = list(manager.list_tools())
+    if not tools:
+        raise RuntimeError("no digisearch MCP tools registered; Art. 9 screen would cover nothing")
+    wrapped = 0
+    for tool in tools:
+        original = tool.fn
+        if getattr(original, "__art9_screened__", False):
+            continue
+        tool.fn = _screened_tool_fn(tool.name, original, bool(tool.is_async))
+        wrapped += 1
+    if wrapped:
+        logger.info("art9 screen installed on %d digisearch MCP tools", wrapped)
+    return wrapped
+
+
+#: Number of MCP tools the import-time screen covers. Asserted non-zero by the tests.
+ART9_SCREENED_TOOLS = install_art9_surface_screen()
+
+
 def run_mcp(
     transport: str = "streamable-http",
     host: str | None = None,
@@ -628,5 +728,17 @@ def run_mcp(
     require_real_search_backend()
     bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
+    # FastMCP fixes its DNS-rebinding allowlist to loopback at construction; a
+    # container bind to all interfaces must also accept the compose service name or every
+    # in-network call is refused 421. Extra hosts via DIGISEARCH_MCP_ALLOWED_HOSTS.
+    if bind not in ("127.0.0.1", "localhost", "::1"):
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        extra = os.environ.get("DIGISEARCH_MCP_ALLOWED_HOSTS", "digisearch-mcp:*")
+        hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+        hosts += [h.strip() for h in extra.split(",") if h.strip()]
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=hosts
+        )
     mcp.settings.port = port
     mcp.run(transport=transport)

@@ -393,6 +393,57 @@ export async function redeemInvite(
   return request<RedeemInviteResult>(opts, 'POST', '/settings/access/redeem-invite', payload);
 }
 
+export type InviteBrandResult = {
+  marker: string | null;
+  line: string | null;
+};
+
+export type InviteBrandApiOptions = {
+  /** Absolute or relative functions base, e.g. https://xxx.supabase.co/functions/v1 */
+  functionsBaseUrl?: string;
+  /** Supabase anon key for the platform gateway (public by design). The
+   *  route itself is session-free — this only gets past the gateway. */
+  anonKey?: string;
+  fetchImpl?: typeof fetch;
+};
+
+/**
+ * Public invite-card branding for pre-signup visitors (no session yet —
+ * sends only the gateway anon key, never a session token). Display-only:
+ * nulls render the default card. Never rejects — a failed lookup is
+ * indistinguishable from an unbranded code.
+ */
+export async function getInviteBrand(
+  opts: InviteBrandApiOptions,
+  params: { code: string; product_key?: string },
+): Promise<InviteBrandResult> {
+  const fallback: InviteBrandResult = { marker: null, line: null };
+  try {
+    const explicit = (opts.functionsBaseUrl ?? functionsBase()).replace(/\/$/, '');
+    if (!explicit) return fallback;
+    const anonKey = (opts.anonKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+    if (!anonKey) return fallback;
+    const qs = new URLSearchParams({ code: params.code, product_key: params.product_key ?? 'fx_hub' });
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const res = await fetchImpl(`${explicit}/settings/access/invite-brand?${qs.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+    });
+    if (!res.ok) return fallback;
+    const json = (await res.json()) as Record<string, unknown>;
+    const marker = typeof json.marker === 'string' && json.marker.trim() ? json.marker.trim() : null;
+    if (!marker) return fallback;
+    const line = typeof json.line === 'string' && json.line.trim() ? json.line.trim() : null;
+    return { marker, line };
+  } catch {
+    return fallback;
+  }
+}
+
 export type TwelveXSessionResult = {
   ok: true;
   access_token: string;

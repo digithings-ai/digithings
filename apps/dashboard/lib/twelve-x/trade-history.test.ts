@@ -24,11 +24,16 @@ function idea(partial: Partial<FxTradeIdeaRow> & Pick<FxTradeIdeaRow, 'run_date'
     catalyst: 'FOMC minutes',
     levels: [],
     citations: [],
+    // `status` is not optional in the producer: twelve-x `TradeLevels` declares
+    // it and every build site sets `status=_status(...)`, and the persisted
+    // column is a full `model_dump`. A fixture that omits it encodes a shape
+    // nothing emits, and `parseTradeLevels` coerces it to 'incomplete'.
     trade_levels: {
       entry_low: { value: '148.20', provenance: 'broker_quoted', source_ref: 'desk.md' },
       entry_high: { value: '148.60', provenance: 'broker_quoted', source_ref: 'desk.md' },
       stop: { value: '147.40', provenance: 'broker_quoted', source_ref: 'desk.md' },
       targets: [{ value: '150.50', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+      status: 'complete',
     },
     evidence: [],
     as_of: '2026-07-31T00:00:00Z',
@@ -113,7 +118,91 @@ describe('assembleTradeHistory', () => {
     expect(rows[1].hasLevels).toBe(true);
   });
 
-  it('marks missing_rates, unscored, and level-less ideas honestly', () => {
+  // DIG-260 L5. The rows above prove the positive arm: a complete bracket
+  // publishes. These prove the gate is reached at all — without them the gate
+  // could be deleted and the suite above would still be green.
+  it.each(['partial', 'incomplete'])(
+    'withholds every level of a %s bracket while keeping the row',
+    (status) => {
+      const [row] = assembleTradeHistory(
+        [
+          idea({
+            run_date: '2026-07-31',
+            rank: 1,
+            trade_levels: {
+              entry_low: { value: '148.20', provenance: 'broker_quoted', source_ref: 'desk.md' },
+              entry_high: { value: '148.60', provenance: 'broker_quoted', source_ref: 'desk.md' },
+              stop: { value: '147.40', provenance: 'broker_quoted', source_ref: 'desk.md' },
+              targets: [{ value: '150.50', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+              status,
+            },
+          }),
+        ],
+        [],
+      );
+      expect(row.entryBand).toBeNull();
+      expect(row.stop).toBeNull();
+      expect(row.target).toBeNull();
+      expect(row.hasLevels).toBe(false);
+      // The rest of the row is not gated: the gate is about levels, not rows.
+      expect(row.pair).toBe('USD/JPY');
+      expect(row.title).toBe('JPY SHORT — via USD/JPY');
+    },
+  );
+
+  it('withholds a bracket whose status is absent', () => {
+    // parseTradeLevels coerces an unrecognised/absent status to 'incomplete'.
+    const [row] = assembleTradeHistory(
+      [
+        idea({
+          run_date: '2026-07-31',
+          rank: 1,
+          trade_levels: {
+            entry_low: { value: '148.20', provenance: 'broker_quoted', source_ref: 'desk.md' },
+            entry_high: { value: '148.60', provenance: 'broker_quoted', source_ref: 'desk.md' },
+            stop: { value: '147.40', provenance: 'broker_quoted', source_ref: 'desk.md' },
+            targets: [{ value: '150.50', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+          },
+        }),
+      ],
+      [],
+    );
+    expect(row.stop).toBeNull();
+    expect(row.hasLevels).toBe(false);
+  });
+
+  it('withholds every ladder field when the bracket is not complete', () => {
+    // Broker target-only: targets exist but entry + stop are missing. A history
+    // row must publish nothing — a target with no entry or stop is a half ladder.
+    const partial = idea({
+      run_date: '2026-07-28',
+      rank: 1,
+      trade_levels: {
+        targets: [{ value: '1.1800', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+        status: 'partial',
+      },
+    });
+    const rows = assembleTradeHistory([partial], []);
+    const row = rows[0];
+    expect(row.entryBand).toBeNull();
+    expect(row.stop).toBeNull();
+    expect(row.target).toBeNull();
+    // Merged semantics (L5 as landed): a withheld bracket reports no levels.
+    // The shape-only hasLevels distinction stays open on #5238 for its owner.
+    expect(row.hasLevels).toBe(false);
+    // The internal status enum never reaches the published row.
+    expect(JSON.stringify(row)).not.toContain('partial');
+  });
+
+  it('publishes the ladder only for a complete bracket', () => {
+    const complete = idea({ run_date: '2026-07-29', rank: 1 });
+    const rows = assembleTradeHistory([complete], []);
+    expect(rows[0].entryBand).toBe('148.2–148.6');
+    expect(rows[0].stop).toBe('147.4');
+    expect(rows[0].target).toBe('150.5');
+  });
+
+  it('marks missing_rates as no_data, unscored and level-less ideas honestly', () => {
     const rows: TradeHistoryRow[] = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-20', rank: 1, trade_levels: {} }),
@@ -123,7 +212,9 @@ describe('assembleTradeHistory', () => {
     );
     const missing = rows.find((r) => r.runDate === '2026-07-20');
     const unscored = rows.find((r) => r.runDate === '2026-07-21');
+    // An ungradeable idea (missing_rates) is NOT live: kept out of the live book.
     expect(missing?.lifecycle).toBe('no_data');
+    expect(missing?.evalStatus).toBe('missing_rates');
     expect(missing?.directionalWin).toBeNull();
     expect(unscored?.lifecycle).toBe('unscored');
     expect(unscored?.entryBand).toBeNull();
@@ -132,7 +223,7 @@ describe('assembleTradeHistory', () => {
 });
 
 describe('displayableTradeHistory / tradeResult', () => {
-  it('keeps right/wrong/live and drops no_data and unscored', () => {
+  it('keeps right/wrong/live and drops unscored', () => {
     const rows = assembleTradeHistory(
       [
         idea({ run_date: '2026-07-24', rank: 1 }),
@@ -157,6 +248,7 @@ describe('displayableTradeHistory / tradeResult', () => {
       ],
     );
     const shown = displayableTradeHistory(rows);
+    // missing_rates is no_data, so the un-gradeable board is filtered out.
     expect(shown.map((r) => `${r.runDate}:${tradeResult(r)}`).sort()).toEqual([
       '2026-07-24:right',
       '2026-07-25:live',

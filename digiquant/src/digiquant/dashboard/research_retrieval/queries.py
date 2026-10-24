@@ -32,7 +32,7 @@ from digiquant.dashboard.research_retrieval.cache import ResearchCache, _parse_r
 from digiquant.dashboard.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 from digiquant.dashboard.tenancy import house_workspace_id
-from digiquant.ops.checkpoint_archive import read_archived_document
+from digiquant.ops.checkpoint_archive import read_archived_document, read_archived_documents
 from digiquant.research.decision_log import fetch_recent_lessons
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.supabase_retry import run_with_supabase_retry
@@ -194,6 +194,43 @@ def _hydrate_archived_row(
     return {**row, "payload": payload}
 
 
+def _hydrate_archived_rows(
+    client: SupabaseClient,
+    rows: list[dict[str, Any]],
+    *,
+    store: Any | None,
+) -> list[dict[str, Any]]:
+    """Read a whole page of NULL-payload rows in ONE archive query (#4562).
+
+    ``search_research`` returns up to 500 rows, and every NULL-payload row on
+    the page used to cost its own ``archive_objects`` select -- ~1 s each in
+    production, so a 7-version history walked sequentially. Collect the page's
+    ``(document_key, date)`` pairs, resolve them in one round-trip, and merge
+    the payloads back in. A row that does not resolve keeps its NULL payload,
+    which is the same degradation as the single-row helper.
+    """
+    pending: list[tuple[str, str]] = []
+    for row in rows:
+        if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+            continue
+        pending.append((str(row["document_key"]), str(row["date"])))
+    if not pending:
+        return rows
+    payloads = read_archived_documents(
+        client, store, workspace_id=str(house_workspace_id()), keys=pending
+    )
+    if not payloads:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("payload") is not None or not row.get("document_key") or not row.get("date"):
+            out.append(row)
+            continue
+        payload = payloads.get((str(row["document_key"]), str(row["date"])))
+        out.append({**row, "payload": payload} if payload is not None else row)
+    return out
+
+
 def _query_documents_row(
     client: SupabaseClient,
     *,
@@ -345,26 +382,52 @@ def _nav_for_as_of(client: SupabaseClient, *, as_of_date: date) -> dict[str, Any
     return snapshot
 
 
+_THESIS_ROW_CAP = 100
+_TERMINAL_THESIS_STATUSES = frozenset({"CLOSED", "INVALIDATED"})
+
+
 def _theses_for_as_of(client: SupabaseClient, *, as_of_date: date) -> list[dict[str, Any]]:
+    """Active theses on the latest date at or before ``as_of_date``.
+
+    The date is resolved first, then that date's rows are fetched. One ordered
+    ``limit`` across dates lets older rows consume the cap and drop the date
+    the caller asked for (#1835). ``row_cap`` bounds a single date and warns
+    when that date itself is clipped.
+    """
+    date_resp = (
+        client.table("theses")
+        .select("date")
+        .lte("date", as_of_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    date_rows = list(getattr(date_resp, "data", None) or [])
+    if not date_rows:
+        return []
+    top_date = str(date_rows[0].get("date") or "")
+    if not top_date:
+        return []
     resp = (
         client.table("theses")
         .select("date, thesis_id, name, vehicle, invalidation, status, notes")
-        .lte("date", as_of_date.isoformat())
-        .order("date", desc=True)
-        .limit(100)
+        .eq("date", top_date)
+        .limit(_THESIS_ROW_CAP)
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return []
-    rows.sort(key=lambda row: str(row.get("date") or ""), reverse=True)
-    top_date = str(rows[0].get("date") or "")
-    terminal = {"CLOSED", "INVALIDATED"}
+    if len(rows) >= _THESIS_ROW_CAP:
+        logger.warning(
+            "_theses_for_as_of: %d rows for %s hit row_cap=%d — the thesis "
+            "register may be truncated (#1835)",
+            len(rows),
+            top_date,
+            _THESIS_ROW_CAP,
+        )
     return [
         row
         for row in rows
-        if str(row.get("date") or "") == top_date
-        and str(row.get("status") or "ACTIVE").upper() not in terminal
+        if str(row.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
     ]
 
 
@@ -611,15 +674,17 @@ def _postprocess_search_rows(
             key = str(row.get("document_key") or "")
             if not research_document_allowed(retrieval_phase, key):
                 continue
-            row = _hydrate_archived_row(client, row, store=store)
         elif dataset == "daily_snapshots":
             # The snapshot IS the digest payload, so the same phase gate that
             # blinds ``documents/digest`` must apply here too.
             if not research_document_allowed(retrieval_phase, DIGEST_DOCUMENT_KEY):
                 continue
-        if dataset in {"documents", "daily_snapshots"} and not full_content:
-            row = _preview_row(row)
         out.append(row)
+    if dataset == "documents":
+        # Blinded keys are dropped above, so only visible rows are ever fetched.
+        out = _hydrate_archived_rows(client, out, store=store)
+    if dataset in {"documents", "daily_snapshots"} and not full_content:
+        out = [_preview_row(row) for row in out]
     return out
 
 
@@ -651,7 +716,7 @@ def search_research(
 
     Storage routing is transparent: live rows come from Supabase, and archived
     older ``documents.payload`` cells are hydrated through the R2 pointer
-    (``_hydrate_archived_row``). Market history is served by the dedicated
+    (``_hydrate_archived_rows``, one batched pointer read per page). Market history is served by the dedicated
     price/macro tools, never here. No raw table or column name is accepted, so
     the generic PostgREST surface that ``query_data`` exposed is gone.
     """

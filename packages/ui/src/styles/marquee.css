@@ -41,10 +41,13 @@
 /* one full copy of the content; padding-right doubles as the wrap gap so the
    -50% translate lands exactly one period on (see header comment) */
 .mq-group {
+  /* component tokens — loop period gap (gap + matching padding) */
+  --mq-gap: 2.2rem;
+
   display: inline-flex;
   align-items: center;
-  gap: 2.2rem;
-  padding-inline-end: 2.2rem;
+  gap: var(--mq-gap);
+  padding-inline-end: var(--mq-gap);
   white-space: nowrap;
 }
 
@@ -56,8 +59,20 @@
   animation: mq-right var(--mq-speed, 34s) linear infinite;
 }
 
-.mq-row:hover .mq-track {
+/* Pause from a control (`data-paused`). Hover does not use play-state: toggling
+   it restarts the loop at translateX(0), which jumps the strip to the right.
+   Marquee pins the computed transform instead. */
+.mq-row[data-paused="true"] .mq-track {
   animation-play-state: paused;
+}
+
+/* A short row would show the seamless copy beside the first. One group is at
+   least the viewport wide, so the copy starts off-screen and each logo is
+   visible once. */
+.mq-fill.mq-row .mq-group {
+  min-width: 100vw;
+  justify-content: space-evenly;
+  box-sizing: border-box;
 }
 
 @keyframes mq-left {
@@ -78,6 +93,76 @@
 @media (prefers-reduced-motion: reduce) {
   .mq-track--left,
   .mq-track--right {
+    animation: none;
+  }
+}
+
+/* MarketBar (components/finance-composites/MarketBar).
+   The live mark is a square in the money green. Each cell owns its padding
+   and the group gap is zero, so the duplicated copy meets the first with the
+   same gap as every other pair — the seam is not a hole. A percent pulse is
+   opacity on the number only; the slot widths stay put. */
+.mb-tape.mq-row .mq-group {
+  flex: 0 0 auto;
+  gap: 0;
+  padding-inline-end: 0;
+}
+
+.mb-cell {
+  flex: 0 0 auto;
+}
+
+.mb-price {
+  display: inline-block;
+  min-width: 10ch;
+  text-align: end;
+}
+
+.mb-pct {
+  min-width: 8.5ch;
+}
+
+.mb-live-mark {
+  --mb-mark: 0.45rem;
+
+  display: inline-block;
+  width: var(--mb-mark);
+  height: var(--mb-mark);
+  flex-shrink: 0;
+  border-radius: 0;
+  background: var(--up);
+  animation: mb-live-pulse 2.4s ease-out infinite;
+}
+
+/* Missing prices. Same square as the feed mark, in --down, with no pulse. */
+.mb-status-miss {
+  display: inline-block;
+  width: var(--mb-mark, 0.45rem);
+  height: var(--mb-mark, 0.45rem);
+  flex-shrink: 0;
+  border-radius: 0;
+  background: var(--down);
+}
+
+@keyframes mb-live-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+.mb-pct-pulse {
+  animation: mb-pct-pulse 0.7s ease-out;
+}
+
+@keyframes mb-pct-pulse {
+  0% { opacity: 1; }
+  35% { opacity: 0.2; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-live-mark,
+  .mb-pct-pulse {
     animation: none;
   }
 }

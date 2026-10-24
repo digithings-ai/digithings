@@ -1,11 +1,13 @@
 """Migration 118 — knowledge_notes vault namespace (#1142 / #3603).
 
-Structural parse checks always run. Executable Postgres checks apply the
-file with ``psql -v ON_ERROR_STOP=1 --single-transaction`` against an
-ephemeral Docker Postgres (the same wrapping ``db-migrate.yml`` uses).
-They skip when Docker is missing locally; they fail in CI rather than skip.
-``psql``/``pg_isready`` use TCP ``127.0.0.1`` inside the container so a unix
-socket that lags ``pg_isready`` cannot flake the promote job (#3594).
+Structural parse checks always run and are marked ``unit``. Executable
+Postgres checks apply the file with ``psql -v ON_ERROR_STOP=1
+--single-transaction`` against an ephemeral Docker Postgres (the same
+wrapping ``db-migrate.yml`` uses) and are marked ``integration`` so the
+``unit`` lane stays Docker-free. They skip when Docker is missing locally;
+they fail in CI rather than skip. ``psql``/``pg_isready`` use TCP
+``127.0.0.1`` inside the container so a unix socket that lags ``pg_isready``
+cannot flake the promote job (#3594).
 """
 
 from __future__ import annotations
@@ -21,11 +23,15 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.unit
+# No module-level marker: the structural checks below are ``unit`` and the
+# Docker-backed ones are ``integration`` (marked per test), so the ``unit``
+# lane never starts a container.
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION = MIGRATIONS_DIR / "118_knowledge_notes_vault_namespace.sql"
+# The migrations tree is split into engine/cutover/prod (#5854); 118 is an
+# engine migration.
+MIGRATION = MIGRATIONS_DIR / "engine" / "118_knowledge_notes_vault_namespace.sql"
 PG_IMAGE = os.environ.get("DIGITHINGS_TEST_PG_IMAGE", "postgres:16-alpine")
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -101,10 +107,12 @@ def sql(raw: str) -> str:
     return "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("--"))
 
 
+@pytest.mark.unit
 def test_migration_is_the_only_118() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("118_*.sql")) == [MIGRATION]
+    assert sorted(MIGRATIONS_DIR.rglob("118_*.sql")) == [MIGRATION]
 
 
+@pytest.mark.unit
 def test_migration_is_not_self_wrapping(raw: str) -> None:
     assert not SELF_WRAP_REGEX.search(raw), (
         "db-migrate.yml would drop --single-transaction wrapping if this file "
@@ -112,12 +120,14 @@ def test_migration_is_not_self_wrapping(raw: str) -> None:
     )
 
 
+@pytest.mark.unit
 def test_comment_on_vault_column_follows_add_column(sql: str) -> None:
     add_at = sql.lower().index("add column if not exists vault")
     comment_at = sql.lower().index("comment on column public.knowledge_notes.vault")
     assert comment_at > add_at
 
 
+@pytest.mark.unit
 def test_uniqueness_is_vault_path_not_slug(sql: str) -> None:
     assert "unique (vault, vault_path)" in sql
     assert "knowledge_notes_vault_vault_path_key" in sql
@@ -126,6 +136,7 @@ def test_uniqueness_is_vault_path_not_slug(sql: str) -> None:
     assert "add constraint knowledge_notes_vault_slug_key" not in sql
 
 
+@pytest.mark.unit
 def test_revokes_client_grants_and_grants_service_role(sql: str) -> None:
     assert "revoke all on table public.knowledge_notes from public, anon, authenticated" in sql
     assert (
@@ -134,6 +145,7 @@ def test_revokes_client_grants_and_grants_service_role(sql: str) -> None:
     )
 
 
+@pytest.mark.unit
 def test_psql_and_pg_isready_use_tcp_loopback() -> None:
     argv = _psql_argv("docker", "dt-m118-x", "postgres", single_transaction=True)
     assert argv[argv.index("psql") + 1 : argv.index("psql") + 3] == ["-h", "127.0.0.1"]
@@ -144,6 +156,7 @@ def test_psql_and_pg_isready_use_tcp_loopback() -> None:
     ]
 
 
+@pytest.mark.unit
 def test_fresh_and_upgrade_share_updated_at_trigger(sql: str) -> None:
     assert "create or replace function public.knowledge_notes_set_updated_at()" in sql
     assert "set search_path = ''" in sql
@@ -185,6 +198,9 @@ def _require_docker() -> str:
     if os.environ.get("CI") == "true":
         pytest.fail(message)
     pytest.skip(message)
+    # pytest.fail/pytest.skip always raise (NoReturn); the explicit raise
+    # documents that no path may fall through and return None implicitly.
+    raise AssertionError("unreachable: pytest.skip always raises")
 
 
 def _psql_argv(
@@ -335,6 +351,7 @@ def _scalar(pg: tuple[str, str], database: str, sql_text: str) -> str:
     return _psql(docker, container, database, sql_text, single_transaction=False)
 
 
+@pytest.mark.integration
 def test_fresh_database_applies_118(pg_container: tuple[str, str]) -> None:
     db = _new_db(pg_container, "fresh")
     _apply_118(pg_container, db)
@@ -364,6 +381,7 @@ def test_fresh_database_applies_118(pg_container: tuple[str, str]) -> None:
     assert trigger == "1"
 
 
+@pytest.mark.integration
 def test_pre118_duplicate_stems_apply_without_data_loss(
     pg_container: tuple[str, str],
 ) -> None:
@@ -386,6 +404,7 @@ def test_pre118_duplicate_stems_apply_without_data_loss(
     assert vaults == "1"
 
 
+@pytest.mark.integration
 def test_118_is_idempotent_on_fresh_and_legacy(pg_container: tuple[str, str]) -> None:
     for suffix, prelude in (("idemp_fresh", ""), ("idemp_legacy", PRE_118_TABLE + DUPLICATE_STEMS)):
         db = _new_db(pg_container, suffix)
@@ -400,6 +419,7 @@ def test_118_is_idempotent_on_fresh_and_legacy(pg_container: tuple[str, str]) ->
         }
 
 
+@pytest.mark.integration
 def test_anon_cannot_read_or_mutate_even_if_rls_disabled(
     pg_container: tuple[str, str],
 ) -> None:
@@ -439,6 +459,7 @@ def test_anon_cannot_read_or_mutate_even_if_rls_disabled(
         )
 
 
+@pytest.mark.integration
 def test_updated_at_trigger_fires_after_upgrade(pg_container: tuple[str, str]) -> None:
     db = _new_db(pg_container, "trig")
     docker, container = pg_container
@@ -463,6 +484,7 @@ def test_updated_at_trigger_fires_after_upgrade(pg_container: tuple[str, str]) -
     assert after == "t"
 
 
+@pytest.mark.unit
 def test_docker_probe_timeout_is_unavailable_not_an_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -478,6 +500,7 @@ def test_docker_probe_timeout_is_unavailable_not_an_error(
     assert _docker_available() is None
 
 
+@pytest.mark.unit
 def test_docker_probe_returns_path_when_daemon_responds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

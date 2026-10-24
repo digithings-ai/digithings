@@ -128,7 +128,7 @@ COPILOT_TEMPLATE = """\
 
 {rules}
 
-- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
+- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Kept as a convention per `docs/adr/0024-drop-pr-linkage-enforcement.md` (automated enforcement removed 2026-08). `.github/workflows/pr-linkage.yml` is not in the tree.
 
 ---
 
@@ -140,7 +140,7 @@ COPILOT_TEMPLATE = """\
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin.
 
 ---
 
@@ -221,7 +221,7 @@ alwaysApply: true
 
 {rules}
 
-- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
+- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Kept as a convention per `docs/adr/0024-drop-pr-linkage-enforcement.md` (automated enforcement removed 2026-08). `.github/workflows/pr-linkage.yml` is not in the tree.
 
 ---
 
@@ -233,7 +233,7 @@ alwaysApply: true
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin.
 
 ---
 

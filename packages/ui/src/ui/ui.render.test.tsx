@@ -138,6 +138,18 @@ describe("vendored ui kit renders server-side", () => {
     );
   });
 
+  it("Badge status variants use distinct semantic status tokens", () => {
+    const cases = ["open", "add", "trim", "exit", "closed"] as const;
+    for (const variant of cases) {
+      const html = renderToStaticMarkup(<Badge variant={variant}>{variant}</Badge>);
+      expect(html, variant).toContain(
+        `border-(--status-${variant}) text-(--status-${variant})`,
+      );
+      // The old collapse: every action badge read as --accent.
+      expect(html, variant).not.toContain("text-accent");
+    }
+  });
+
   it("Checkbox renders its root and (when checked) the indicator", () => {
     const checked = renderToStaticMarkup(<Checkbox defaultChecked aria-label="Enable" />);
     expect(checked).toContain('data-slot="checkbox"');
@@ -347,6 +359,21 @@ describe("vendored ui kit renders server-side", () => {
     );
     expect(html).toContain('data-density="compact"');
     expect(html).toContain("[data-slot=table-cell]]:py-1");
+  });
+
+  it("Table density=dense frees the header height and tightens rows", () => {
+    const html = renderToStaticMarkup(
+      <Table density="dense">
+        <TableBody>
+          <TableRow>
+            <TableCell>1.20</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(html).toContain('data-density="dense"');
+    expect(html).toContain("[data-slot=table-head]]:h-auto");
+    expect(html).toContain("[data-slot=table-cell]]:py-0.5");
   });
 
   it("TableRowHeader renders a scoped row header inside a body row", () => {

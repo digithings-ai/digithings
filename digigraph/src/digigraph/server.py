@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -94,6 +95,12 @@ app = FastAPI(
 install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
+# Art. 9 admission runs OUTSIDE DigiAuthMiddleware: FastAPI inserts each
+# add_middleware at index 0, so the last call is the outermost. Screening the
+# body before authentication is what makes a refusal observable at all -- behind
+# DigiAuth an unauthenticated Art. 9 request answers 401 and the checkpointer
+# assertion below becomes vacuous.
+install_art9_admission(app, app_name="digigraph")
 
 
 @app.middleware("http")
@@ -158,6 +165,7 @@ async def byok_header_context(request: Request, call_next):
         BYOK_ROUTABLE_PROVIDERS,
         byok_default_model_refusal,
         byok_model_required,
+        byok_model_required_refusal,
         byok_model_routes_elsewhere,
         byok_provider_supported,
         pop_byok,
@@ -182,10 +190,7 @@ async def byok_header_context(request: Request, call_next):
             return json_error_response(
                 status_code=400,
                 code="byok_model_required",
-                message=(
-                    f"BYOK provider {provider!r} requires X-BYOK-Model "
-                    "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
-                ),
+                message=byok_model_required_refusal(provider),
                 request=request,
                 service="digigraph",
             )
@@ -221,20 +226,35 @@ async def byok_header_context(request: Request, call_next):
                 service="digigraph",
             )
 
+    from digigraph.model_config import (
+        pop_house_model,
+        pop_premium_models,
+        pop_router_models,
+        push_house_model,
+        push_premium_models,
+        push_router_models,
+    )
+
     tok = push_byok_header(request)
+    house_tok = push_house_model(request.headers.get("x-digi-house-model"))
+    premium_tok = push_premium_models(request.headers.get("x-digi-premium-models"))
+    router_tok = push_router_models(request.headers.get("x-digi-router-models"))
     try:
         return await call_next(request)
     finally:
+        pop_router_models(router_tok)
+        pop_premium_models(premium_tok)
+        pop_house_model(house_tok)
         pop_byok(tok)
 
 
 from digigraph.rate_limit import RateLimiter as _RateLimiter
 
 _rate_limiter = _RateLimiter()
-# Expensive endpoints: 10 req/min. Ingest/query: 30 req/min. Health: unlimited.
+# Expensive endpoints (/workflow, /v1/product_graphs): 10 req/min. Chat: 60 req/min (#4776). Ingest/query: 30 req/min. Health: unlimited.
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/workflow": (10, 60),
-    "/v1/chat/completions": (10, 60),
+    "/v1/chat/completions": (60, 60),
     "/v1/product_graphs": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
@@ -316,7 +336,7 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and digiclaw (kept for back-compat)."""
+    """Legacy health check for Docker and digibot (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
 
 
@@ -325,7 +345,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Contract: returns HTTP 200 with ``{"ok": true}``. Intended for load
-    balancers and k8s probes. For richer diagnostics, see digismith's
+    balancers and k8s probes. For richer diagnostics, see digitrace's
     ``/v1/status``.
     """
     return {"ok": True}
@@ -335,6 +355,11 @@ from digigraph.http_api.context import (
     _digi_fields_from_request,
     _thread_config,
     _with_digi_request_context,
+)
+from digigraph.http_api.license_gate import (
+    LicenseScopeDenied,
+    denial_response,
+    enforce_web_search_license,
 )
 
 
@@ -394,7 +419,7 @@ def test_llm() -> dict[str, str | bool]:
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
     except _LLM_PROBE_ERRORS as e:
-        return {"ok": False, "model": "", "reply": "", "error": str(e)}
+        return {"ok": False, "model": "", "reply": "", "error": type(e).__name__}
 
 
 def _resolve_request_id(request: Request) -> str | None:
@@ -414,7 +439,7 @@ def _resolve_request_id(request: Request) -> str | None:
 )
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
-    digiclaw custom skill: run_digigraph_workflow.
+    digibot custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
     # WorkflowRequest.require_tool_calls is body-only (no X-Require-Tool-Calls header,
@@ -427,6 +452,10 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):
         req = req.model_copy(update={"request_id": rid})
+    # Hosted license gate (spec §7): body ``enable_web_search`` on /workflow
+    # requires the ``hosted-web-search`` scope (corpus headers are gated inside
+    # ``_with_digi_request_context``). Plain requests never touch license code.
+    enforce_web_search_license(http_request.headers, enabled=bool(req.enable_web_search))
     req = _with_digi_request_context(http_request, req)
     return run_digigraph_workflow(req)
 
@@ -551,8 +580,8 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except PROJECT_CONFIG_ERRORS:
-        pass
+    except PROJECT_CONFIG_ERRORS as exc:
+        logger.debug("project config load failed (%s); keeping env LLM mode %r", exc, mode)
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
 
@@ -609,8 +638,10 @@ from digigraph.http_api.chat_resolve import (
     _resolve_force_tool_chat,
     _resolve_openwebui_format,
     _resolve_require_tool_calls_chat,
+    _resolve_search_engine_chat,
     _resolve_session_id,
     _resolve_suppress_tool_stream,
+    enforce_web_search_license_scope,
 )
 from digigraph.http_api.streaming import (
     _build_completion,
@@ -646,6 +677,11 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     require_tool_calls = _resolve_require_tool_calls_chat(req, request)
     enable_web_search = _resolve_enable_web_search_chat(req, request)
+    # Hosted license gate (spec §7): body-or-header web-search opt-in requires
+    # the ``hosted-web-search`` scope (corpus headers are gated inside
+    # ``_digi_fields_from_request`` below). Plain turns never touch license code.
+    enforce_web_search_license_scope(req, request)
+    search_engine = _resolve_search_engine_chat(req, request)
     limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
     if limited is not None:
         return limited
@@ -685,6 +721,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 suppress_tool_stream=suppress_tool_stream,
                 force_tool=_resolve_force_tool_chat(req, request),
                 enable_web_search=enable_web_search,
+                search_engine=search_engine,
             ),
             media_type="text/event-stream",
             headers={
@@ -708,6 +745,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             request_id=request_id,
             force_tool=_resolve_force_tool_chat(req, request),
             enable_web_search=enable_web_search,
+            search_engine=search_engine,
             disabled_tools=disabled_tokens or None,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
@@ -777,5 +815,18 @@ def v1_run_product_graph(
 
 app.include_router(v1)
 
+# DIG-284 leaf 284.6: the route that consumes a recorded MCP decision.
+from digigraph.http_api.mcp_decisions import router as mcp_decisions_router
+
+app.include_router(mcp_decisions_router)
+
 register_fastapi_error_handlers(app, service="digigraph")
+
+
+@app.exception_handler(LicenseScopeDenied)
+async def _license_scope_denied_handler(_request: Request, exc: LicenseScopeDenied) -> JSONResponse:
+    """Spec §7.3 refusal: 403 ``insufficient_license_scope`` naming the scope."""
+    return denial_response(exc.missing_scope)
+
+
 setup_otel_fastapi(app, service_name="digigraph", service_version=__version__)

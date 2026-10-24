@@ -117,7 +117,7 @@ describe("ProviderSettings — xai has UI parity with the other providers (#2348
   it("still selects each pre-existing provider's default model preset (no regression)", () => {
     expect(renderForm("openai")).toContain("GPT-4o mini");
     expect(renderForm("anthropic")).toContain("Claude Sonnet 4");
-    expect(renderForm("gemini")).toContain("Gemini 2.5 Flash");
+    expect(renderForm("gemini")).toContain("Gemini 3.5 Flash Lite");
     expect(renderForm("openrouter")).toContain("GPT-4o mini");
   });
 });

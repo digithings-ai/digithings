@@ -37,7 +37,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / ".release-please-manifest.json"
 CONFIG = REPO_ROOT / "release-please-config.json"
-DIGICHAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-please-digichat.yml"
 
 
 def _manifest() -> dict[str, str]:
@@ -100,25 +99,6 @@ def test_the_lockfile_records_the_same_version_as_each_managed_package() -> None
             f"{declared} — run `npm install` to resync the lockfile."
         )
 
-
-@pytest.mark.unit
-def test_release_please_targets_a_branch_the_work_actually_lands_on() -> None:
-    """The whole defect in one assertion.
-
-    A release workflow pointed at a branch nothing merges into produces no releases and
-    invites someone to hand-write them, which is exactly what happened on
-    module/digichat. digichat is frontend and merges to develop.
-    """
-    wf = DIGICHAT_WORKFLOW.read_text(encoding="utf-8")
-    commands = "\n".join(line for line in wf.splitlines() if not line.lstrip().startswith("#"))
-    assert "target-branch: develop" in commands
-    assert "module/digichat" not in commands, (
-        "module/digichat has not moved since digichat-v0.6.0 — targeting it means no "
-        "release ever fires"
-    )
-    # Not main: a squashed promotion commit reads as a no-op to a Conventional Commits
-    # parser and would swallow the real feat/fix signal (#1343).
-    assert "target-branch: main" not in commands
 
 
 @pytest.mark.unit

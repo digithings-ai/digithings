@@ -8,8 +8,12 @@ import logging
 import os
 from pathlib import Path
 
-from digiquant.models import BacktestResult
-from digiquant.nautilus_runner import run_nautilus_backtest
+from digiquant.models import (
+    BacktestResult,
+    apply_engine_provenance,
+    build_engine_provenance,
+)
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING, run_nautilus_backtest
 from digiquant.strategy_aliases import STRATEGY_ALIASES
 from digiquant.strategy_specs import STRATEGY_PARAM_SPECS
 
@@ -59,6 +63,11 @@ _CACHE_ENABLED = os.environ.get("DIGIQUANT_BACKTEST_CACHE", "true").strip().lowe
     "no",
 )
 
+# Part of the cache key. v2 = sharpe_ratio and max_drawdown_pct are derived from the
+# account-report balance path (DIG-462); v1 reported a per-trade series annualised by
+# sqrt(252), which no consumer of a cached result should ever see again.
+_METRICS_VERSION = 2
+
 
 def _backtest_cache_max() -> int:
     raw = (os.environ.get("DIGIQUANT_BACKTEST_CACHE_MAX") or "128").strip()
@@ -80,6 +89,10 @@ def _cache_key(
     data_dir: str | Path | None,
 ) -> str:
     payload = {
+        # Bumped whenever a reported metric changes meaning, so results cached by an
+        # older runner (e.g. the pre-fix Sharpe annualised off the per-trade analyzer
+        # series) cannot be served against a key that no longer describes them.
+        "metrics_version": _METRICS_VERSION,
         "strategy_name": strategy_name,
         "symbols": sorted(symbols),
         "params": dict(sorted((params or {}).items())),
@@ -149,6 +162,17 @@ def run_backtest(
         full_tearsheet=full_tearsheet,
     )
     if result is not None:
+        # DIG-945: stamp the build that produced this result, once, from the
+        # live process. Verified means the chart series survived withholding:
+        # RETURNS_SERIES_MISSING (single-symbol) or its "(k/n symbols)"
+        # aggregate form is absent from missing.
+        verified = not any(
+            m == RETURNS_SERIES_MISSING or m.startswith(f"{RETURNS_SERIES_MISSING} (")
+            for m in result.missing
+        )
+        result = apply_engine_provenance(
+            result, build_engine_provenance(returns_series_verified=verified)
+        )
         if _CACHE_ENABLED and tearsheet_path is None:
             if key in _backtest_cache_order:
                 _backtest_cache_order.remove(key)

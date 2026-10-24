@@ -1,4 +1,9 @@
-export { RepoActivity, type RepoActivityProps } from "./RepoActivity";
+export {
+  RepoActivity,
+  type RepoActivityProps,
+  type RepoContributor,
+  type RepoModuleRelease,
+} from "./RepoActivity";
 export { RepoHeatmap, type RepoHeatmapProps } from "./RepoHeatmap";
 export { bucketContributions, bucketDaily, levelFor, type HeatDay } from "./heatmap";
 export { fetchRepoActivityLive, type FetchRepoActivityLiveOptions } from "./fetch";

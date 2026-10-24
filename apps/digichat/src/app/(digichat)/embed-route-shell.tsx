@@ -14,13 +14,13 @@
  */
 
 import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
-import {
-  embedOriginHostOf,
-  resolveEmbedClientConfigForPaint,
-} from "@/lib/embed-chat-tenant";
+import { embedOriginHostOf, resolveEmbedClientConfigForPaint } from "@/lib/embed-chat-tenant";
+import { resolveEmbedRenderToken } from "@/lib/embed-token-transport";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
+import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts so it deliberately wins over them; mirrors [data-theme] onto
@@ -30,8 +30,8 @@ import EmbedClient from "./embed/embed-client";
    document. */
 const THEME_PIN_SCRIPTS = {
   light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.classList.add('light');e.classList.remove('dark')}catch(t){}",
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.classList.add('dark');e.classList.remove('light')}catch(t){}",
+    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#f1f0eb')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
+  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#121417')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
 } as const;
 
 function themePinScript(theme: "dark" | "light"): string {
@@ -48,15 +48,26 @@ export default async function EmbedRouteShell({
 }) {
   const hdrs = await headers();
   const referer = hdrs.get("referer") ?? hdrs.get("referrer");
+  // DIG-3523: the token arrives via the proxy-forwarded x-embed-token header
+  // (the proxy strips ?token= from the render URL so the flight payload
+  // cannot echo it into the HTML). The query param stays as fallback for
+  // direct hits that bypassed the proxy.
+  const token = resolveEmbedRenderToken({
+    headerToken: hdrs.get("x-embed-token"),
+    queryToken: params.token,
+  });
+  const requestedHost = resolveEmbedHostParamOrReferer(first(params.host), referer);
   const initialTenantCfg = resolveEmbedClientConfigForPaint(
-    first(params.token),
-    resolveEmbedHostParamOrReferer(first(params.host), referer),
+    token,
+    requestedHost,
     embedOriginHostOf(hdrs),
   );
-  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(
-    initialTenantCfg,
-    params,
-  );
+  // Invite-only hosts (OCC, DIG-1210): no valid invite token -> the standard
+  // 404, no hint, no branding, no chat.
+  if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
+    notFound();
+  }
+  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
   // The host's URL overrides (welcome / placeholder / suggestions / accent)
   // seed the first paint too: the client hook applies them post-mount, which
@@ -109,7 +120,7 @@ export default async function EmbedRouteShell({
               ? ':root[data-theme="dark"]{--embed-canvas:#121417}:root[data-theme="light"]{--embed-canvas:#f1f0eb}' // canon-allow: keeps the canvas token correct when the theme flips before hydration
               : ""
           }${
-            first(params.host) || first(params.token)
+            first(params.host) || token
               ? "body.bg-background{background:var(--embed-canvas)}.dc-embed-shell{background:var(--embed-canvas)}"
               : "body.bg-background{background:transparent!important}body *{background:transparent!important}"
           }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,

@@ -58,7 +58,7 @@ Connecting to execution venues (Interactive Brokers, Alpaca, QuantConnect) or ex
 - Migrate the existing research Yahoo Finance pipeline into digiquant
 - digiquant becomes the **source of truth** for price data across the platform
 - research taps into digiquant instead of maintaining its own pipeline
-- Phase 1: Yahoo Finance (already exists), expand to free sources (Alpha Vantage, Twelve Data, CoinGecko for crypto)
+- Phase 1: Yahoo Finance (already exists), expand to free sources (Twelve Data; crypto via web search - no key)
 - Price data stored in Supabase (digiquant schema — OHLCV tables per asset/timeframe)
 - Background job that keeps price tables updated on a schedule
 - Exposed as MCP tools: `get_price_history`, `get_latest_price`, `list_available_assets`
@@ -135,7 +135,7 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 - Tear sheet improvements (custom design layer)
 - PineScript export (basic conversion for indicator-based strategies)
 - TradingView PineScript import → Python conversion (experimental)
-- Expand price data sources (Alpha Vantage, crypto)
+- Expand price data sources (Twelve Data; crypto via web search - no key)
 - digisearch semantic search over strategy library (assess pgvector)
 
 ### Phase 3 — Agentic Strategy Research (Longer term)

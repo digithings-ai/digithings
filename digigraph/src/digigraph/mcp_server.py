@@ -16,7 +16,7 @@ Run standalone::
 
 # No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
 # which calls issubclass() on raw annotations — PEP 563 string annotations crash
-# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
+# every @mcp.tool() at import (infra/docker/Dockerfile.digithings-stack-cloudflare marker v8).
 import json
 import logging
 import os
@@ -276,7 +276,11 @@ def create_mcp_server() -> Any:
         from digigraph.workflow import run_digigraph_workflow
 
         try:
-            _authorize_mcp_ctx(ctx, SCOPE_WORKFLOW)
+            # Same token chat/thread_state forward into TestClient. workflow
+            # calls the graph in-process, so the JWT has to ride on the request
+            # or WorkflowState.digi_bearer stays empty and digisearch/digiquant
+            # see no Authorization header.
+            token = _authorize_mcp_ctx(ctx, SCOPE_WORKFLOW)
         except McpAuthDenied as exc:
             return _mcp_denied_json(exc)
         try:
@@ -287,6 +291,7 @@ def create_mcp_server() -> Any:
             prompt=prompt,
             session_id=session_id,
             request_id=str(uuid.uuid4()),
+            digi_bearer=token,
         )
         try:
             result = run_digigraph_workflow(req)

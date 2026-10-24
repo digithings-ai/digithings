@@ -19,6 +19,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from digiquant.scalars import opt_float_strict
+from digiquant.stats.honesty import wilson
+
 # 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
 # carried in ``entry_label`` (MR/Trend/MR&T) on the nautilus path. Back-compatible:
 # 1.0 consumers ignore ``ohlc_bars``; 1.1 fixtures may carry an empty list.
@@ -32,7 +35,10 @@ from pydantic import BaseModel, Field
 # are omitted from slapper dumps via ``to_json()`` so those payloads stay unchanged.
 # Public-honesty extras (``beats_flat_dca_oos``) are optional on the same path —
 # absent means "do not claim an OOS win", never a silent true.
-SCHEMA_VERSION = "1.3"
+# 1.4 — added ``win_rate_n`` + ``win_rate_ci95`` on ``StatBlock`` (#4828):
+# Wilson 95% CI fractions backing every rendered win rate. Back-compatible:
+# both default to null, so 1.0–1.3 fixtures still validate.
+SCHEMA_VERSION = "1.4"
 
 # Extra keys set only on DCA publish. ``to_json`` drops them when unset so a
 # Slapper dump does not grow ``null`` fields (#3170 slapper identity).
@@ -154,6 +160,14 @@ class StatBlock(BaseModel):
     avg_trade: float = 0.0
     wins: int = 0
     losses: int = 0
+    # Honesty envelope (#4828): sample size + Wilson 95% CI fractions backing
+    # ``percent_profitable``. Null when the adapter has no (k, n) pair.
+    win_rate_n: int | None = Field(
+        default=None, description="Sample size behind percent_profitable"
+    )
+    win_rate_ci95: tuple[float, float] | None = Field(
+        default=None, description="Wilson 95% CI fractions (lo, hi)"
+    )
 
 
 class TradeRecord(BaseModel):
@@ -354,22 +368,27 @@ def _stat_block(block: Mapping[str, object] | None) -> StatBlock:
     """Build a StatBlock from a pine ``_dir_metrics`` dict (tolerant of gaps)."""
     if not block:
         return StatBlock()
+    n = int(block.get("trades", 0) or 0)
+    k = min(n, max(0, int(block.get("wins", 0) or 0)))
+    ci95: tuple[float, float] | None = None
+    if n > 0:
+        w = wilson(k, n)
+        if w is not None:
+            ci95 = (w.lo, w.hi)
     return StatBlock(
-        trades=int(block.get("trades", 0) or 0),
+        trades=n,
         net_profit=float(block.get("net_profit", 0.0) or 0.0),
         net_profit_pct=float(block.get("net_profit_pct", 0.0) or 0.0),
-        gross_profit=_opt_float(block.get("gross_profit")),
-        gross_loss=_opt_float(block.get("gross_loss")),
+        gross_profit=opt_float_strict(block.get("gross_profit")),
+        gross_loss=opt_float_strict(block.get("gross_loss")),
         percent_profitable=float(block.get("percent_profitable", 0.0) or 0.0),
-        profit_factor=_opt_float(block.get("profit_factor")),
+        profit_factor=opt_float_strict(block.get("profit_factor")),
         avg_trade=float(block.get("avg_trade", 0.0) or 0.0),
         wins=int(block.get("wins", 0) or 0),
         losses=int(block.get("losses", 0) or 0),
+        win_rate_n=n if n > 0 else None,
+        win_rate_ci95=ci95,
     )
-
-
-def _opt_float(v: object) -> float | None:
-    return None if v is None else float(v)  # type: ignore[arg-type]
 
 
 def _points(
@@ -506,8 +525,8 @@ def _build_tearsheet(
             pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
             equity_after=float(t.get("equity_after", 0.0) or 0.0),
             exit_reason=str(t.get("exit_reason", "")),
-            max_runup_pct=_opt_float(t.get("max_runup_pct")),
-            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+            max_runup_pct=opt_float_strict(t.get("max_runup_pct")),
+            max_drawdown_pct=opt_float_strict(t.get("max_drawdown_pct")),
         )
         for i, t in enumerate(trades, 1)
     ]
@@ -731,13 +750,18 @@ def from_nautilus(
             pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
             equity_after=float(t.get("equity_after", 0.0) or 0.0),
             exit_reason=str(t.get("exit_reason", "")),
-            max_runup_pct=_opt_float(t.get("max_runup_pct")),
-            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+            max_runup_pct=opt_float_strict(t.get("max_runup_pct")),
+            max_drawdown_pct=opt_float_strict(t.get("max_drawdown_pct")),
         )
         for i, t in enumerate(trades or [], 1)
     ]
 
+    dd_curve = _drawdown_from_equity(eq, initial_capital) if eq else []
     max_dd = getattr(result, "max_drawdown_pct", None)
+    if max_dd is None and dd_curve:
+        # A missing Nautilus drawdown is not a flat curve. The equity path
+        # already has the peak-to-trough; reporting 0% would hide it.
+        max_dd = min(point.v for point in dd_curve)
 
     return TearsheetData(
         strategy=str(getattr(result, "strategy_name", "")),
@@ -753,10 +777,10 @@ def from_nautilus(
         net_profit=total_pnl,
         net_profit_pct=float(getattr(result, "total_return_pct", 0.0) or 0.0),
         max_drawdown_pct=float(max_dd) if max_dd is not None else 0.0,
-        sharpe_ratio=_opt_float(getattr(result, "sharpe_ratio", None)),
+        sharpe_ratio=opt_float_strict(getattr(result, "sharpe_ratio", None)),
         total_trades=int(getattr(result, "num_trades", 0) or 0),
         equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in eq],
-        drawdown_curve=_drawdown_from_equity(eq, initial_capital) if eq else [],
+        drawdown_curve=dd_curve,
         trades=trade_records,
         notes=list(notes or []),
     )

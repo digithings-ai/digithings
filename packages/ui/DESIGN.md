@@ -29,19 +29,19 @@ colors:
   diff-del: "#E2929E"
 typography:
   display:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "clamp(2rem, 5vw, 3.4rem)"
     fontWeight: 500
     lineHeight: 1.1
     letterSpacing: "-0.04em"
   body:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "-0.015em"
   mono:
-    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
+    fontFamily: '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace'
     fontSize: "0.8rem"
     fontWeight: 400
     lineHeight: normal
@@ -96,6 +96,8 @@ components:
 
 # Design System: digiweb
 
+> **Historical, 2026-10-23.** This file records the Instrument Panel / utilitarian-terminal language as it was written. Several claims no longer match the shipping code: the ink-mute values, the display clamp, the focus mechanism, the spacing scale, the diff tokens, "one sans island", and the glyph count. [`docs/design/CURRENT_UI_LANGUAGE.md`](../../docs/design/CURRENT_UI_LANGUAGE.md) is the current description, and its §6 lists each outdated claim with the file that proves it. Where the two disagree, `packages/design/tokens.css` wins.
+
 ## Overview
 
 **Creative North Star: "The Instrument Panel"**
@@ -104,7 +106,7 @@ digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — 
 
 ### Active blend — utilitarian terminal (v0.1 promoted)
 
-As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside Cursor / Graphite / xAI. Ledger: [`design/BLEND.md`](design/BLEND.md). Product rollout plan: [`design/ROLLOUT.md`](design/ROLLOUT.md).
+As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by herdr.dev, agentmail.to, and omarchy.org, alongside Cursor / Graphite / xAI. Those site scans were removed with the old design reference. Ledger: [`BLEND.md`](../design/BLEND.md). Product rollout plan: [`ROLLOUT.md`](../design/ROLLOUT.md).
 
 **Shipping in `tokens.css` + design-reference (Phase 0):**
 
@@ -174,9 +176,9 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 
 ## Typography
 
-**Display Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
+**Display Font:** Geist Mono (with ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace fallback)
 **Body Font:** Geist Mono (same stack — utilitarian v0.1 mono everything)
-**Label/Mono Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
+**Label/Mono Font:** Geist Mono (same fallback chain — see Display Font)
 
 **Character:** One mono voice carries claim, body, and chrome. Hierarchy is size and tracking, not a second face. Serif (`serif-legacy` / Instrument Serif or Fraunces) is an escape hatch for rare editorial moments — quotes, legal names — never the default marketing H1.
 
@@ -205,6 +207,44 @@ Two structural patterns recur across every family and are load-bearing rather th
 Responsive behavior collapses through one shared breakpoint (`760px`) for most multi-column grids (feature cells, bento grid) and a device-appropriate breakpoint elsewhere (`900px` card-deck pinning, `640px`–`720px` for dense metric/ratio grids). Device mockups (the dashboard phone frame) deliberately opt out of breakpoints entirely and resize fluidly via `clamp()`, because hardware should look like hardware at any width, not requeue its layout.
 
 **The Crop-Never-Break Rule.** Product screenshots inside a `ProductFrame` scale down to fit their container (`Math.min(1, containerWidth / artboardWidth)`) but never scale up past their authored size — an undersized container crops via `overflow: hidden` rather than letting the artwork reflow or blow out its box.
+
+## Document grammar (public pages)
+
+The public sites are documents, not posters: every page is one framed column, a page title, then a stack of hairline-separated sections. This is the opencode-informed language — no eyebrow kickers, no display hero, no alternating bands — and it is assembled from six utility-only parts (they emit no CSS class of their own; every value comes from the tokens).
+
+- **`DocumentFrame`** — the one bordered column. `max-w-[var(--frame-w)]` centred with a hairline `border-x`, and the side borders dropped below `1040px` so narrow viewports fill.
+- **`Section`** — separated by a hairline `border-top` (never a band or a background change), padded `py-[var(--page-step)] px-[var(--page-pad)]`, `first:border-t-0` so the frame's top edge stays clean. Optional `title` (the `--type-section` h2) and `lede`, then children.
+- **`PageTitle`** — the page's single `h1` at `--type-page-title` with an optional lede. No kicker, no `em` accent, no `PageHead` hero.
+- **`Prose`** — body measure capped at `--measure-prose` (72ch) with `--leading-prose` (1.8) and the inline rules (links, `<strong>` → medium ink, `[*]` list markers) applied as arbitrary variants, so a page never styles prose itself.
+- **`GlyphList` / `GlyphRow`** — the row grammar: a muted mono `[*]`, an optional `<strong>Label</strong>` in medium ink, then one unpunctuated clause. Borderless, 1rem rhythm. The ruled family (`RuledList`/`RuledRow`) stays for tabular term/definition content.
+- **`Figure`** — the `Fig N.` caption that numbers a stats block: the `<figure>` content plus a mono caption reading `Fig N — caption`, with `Fig N` in accent.
+
+**The Type Ladder.** `--type-hero` (`clamp(2rem, 4.5vw, 2.75rem)`) is reserved for a landing hero; every other surface uses `--type-page-title` (`clamp(1.5rem, 3vw, 2rem)`), `--type-section` (1.375rem), `--type-sub-label`/`--type-body` (1rem) and `--type-meta` (0.75rem with `--tracking-meta` 0.08em, uppercase for Fig captions and table headers only). The instrument-panel display clamp stays for the reference and dashboard surfaces, not for a public page.
+
+### Changelog rows (ReleaseRail)
+
+A release is one hairline row in a `180px 1fr` grid: the version, date and product pinned in a
+sticky aside (`sm:sticky sm:top-[5rem]`), the shipped title in the wide column, and its
+highlights as `[*]` rows in caller order. No cards, no scroll strip, and no tag chrome beyond
+the release tag itself; static, so a changelog reads without JavaScript.
+
+### Footer cells (FooterCells)
+
+The footer is a hairline table, not a link cloud: one cell per top-level destination at equal
+weight (`sm:grid-cols-2 lg:grid-cols-5`), each separated by the same 1px hairline the sections
+use, and a mono legal strip underneath carrying the copyright, the privacy notice and the
+sibling site. No column headings, no nested groups, no background change.
+
+### Docs frame (DocsLayout + DocsSearch)
+
+The docs shell is the framed column with a spine: the scroll-spied sidebar (a native `<details>`
+disclosure below 860px, so the nav never just vanishes), the content column, and — once the
+viewport clears 1200px — a narrower *on this page* rail, sticky at `--docs-nav-h` and built from
+the same `itemLink` renderer as the sidebar (2px inline-start border, `bg-accent-weak` when
+active). `DocsLayout` takes `nav`, `rail`, `railLabel` (default "on this page") and a `search`
+slot; the search is `DocsSearch` — the stock `SearchBar` wearing a `<Kbd>⌘K</Kbd>` hint — which
+filters the page's own headings on the client (no index, no dependency) and binds `⌘K`/`Ctrl-K`
+to focus. Print hides the sidebar and the rail and collapses back to a single column.
 
 ## Elevation & Depth
 

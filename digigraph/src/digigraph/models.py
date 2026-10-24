@@ -94,6 +94,14 @@ class ChatCompletionRequest(BaseModel):
             "vault/search hits and never replace them (#3420)."
         ),
     )
+    search_engine: str | None = Field(
+        None,
+        description=(
+            "Per-request web_search engine (X-Digi-Search-Engine). One of auto, "
+            "internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto "
+            "for the in-house engine; unknown values fail at the digisearch hub (#4722)."
+        ),
+    )
     research_system_prompt: str | None = Field(
         None,
         max_length=4000,
@@ -193,6 +201,20 @@ class WorkflowRequest(BaseModel):
             "set it. digivault also enforces tenant→prefix server-side."
         ),
     )
+    digisearch_tools: dict[str, dict[str, str]] | None = Field(
+        None,
+        description=(
+            "Tenant map digisearchTools (DIG-3269): dedicated per-index search tools. "
+            "Overwritten server-side from the tenant map, never trusted from the client."
+        ),
+    )
+    lock_session_controls: bool = Field(
+        False,
+        description=(
+            "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by "
+            "_with_digi_request_context, never trusted from the client."
+        ),
+    )
     research_system_prompt_override: str | None = Field(
         None,
         description=(
@@ -230,6 +252,14 @@ class WorkflowRequest(BaseModel):
             "Also via X-Digi-Enable-Web-Search (#3420)."
         ),
     )
+    search_engine: str | None = Field(
+        None,
+        description=(
+            "Per-request web_search engine (X-Digi-Search-Engine). One of auto, "
+            "internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto "
+            "for the in-house engine; unknown values fail at the digisearch hub (#4722)."
+        ),
+    )
     disabled_tools: list[str] | None = Field(
         None,
         description=(
@@ -256,6 +286,23 @@ class WorkflowRequest(BaseModel):
             "Unrecognized values are ignored. Always overwritten from the header on HTTP."
         ),
     )
+
+
+# Bounds for the operator tool allowlist (DIG-284), mirroring
+# apps/digichat/src/lib/deploy-config/mcp-servers.ts so there is one set of
+# numbers on both sides of the boundary. A longer name cannot survive
+# `prefixed_tool_name` unambiguously; 256 entries is what one header row may
+# carry. The BFF refuses an overshoot rather than trimming it, and so does this
+# model — see `allowed_tools` for why a partial allowlist is the worse answer.
+MAX_MCP_TOOL_ENTRIES = 256
+MAX_MCP_TOOL_NAME_LENGTH = 64
+
+# A remote tool name as the operator wrote it: full, unprefixed, untruncated.
+# Whitespace is refused the way the BFF refuses it (MCP_TOOL_NAME_SCHEMA): a name
+# containing it could never match an advertised tool and would only hide a typo.
+McpToolName = Annotated[
+    str, Field(min_length=1, max_length=MAX_MCP_TOOL_NAME_LENGTH, pattern=r"^\S+$")
+]
 
 
 class McpServerRef(BaseModel):
@@ -285,6 +332,39 @@ class McpServerRef(BaseModel):
             "(e.g. digivault path_prefix, digisearch index_name). Header-supplied "
             "session overlay; never trusted from a request body."
         ),
+    )
+    # Operator allowlist of full remote tool names for this server (DIG-284).
+    # Exact match only, deny-by-default: absent and `[]` both offer zero tools,
+    # which is why a field dropped in transit is a denial and not a safe default.
+    # Bounds mirror the BFF (MAX_MCP_TOOL_ENTRIES / MAX_MCP_TOOL_NAME_LENGTH
+    # above) and an overshoot is rejected, never trimmed — a partial allowlist
+    # denies tools the operator asked for while still looking configured.
+    # Operator-only like `auth_header`: the session overlay can never set it.
+    allowed_tools: list[McpToolName] | None = Field(
+        None,
+        max_length=MAX_MCP_TOOL_ENTRIES,
+        description=(
+            "Operator allowlist of full remote MCP tool names for this server "
+            "(exact match, no globs). Absent or empty offers zero tools. "
+            "Operator-only — never settable via the session overlay."
+        ),
+        alias="allowedTools",
+    )
+    # Advisory subset of `allowed_tools` whose tools change remote state, so the
+    # chat can flag them before a call. Absent means every allowed tool mutates;
+    # an explicit `[]` means none do — the two spellings mean different things
+    # and must stay distinct across the wire. Deliberately not validated as a
+    # subset of `allowed_tools` (review #5061 S2): this list grants nothing, so a
+    # stale name in it is inert rather than an accidental grant.
+    mutating_tools: list[McpToolName] | None = Field(
+        None,
+        max_length=MAX_MCP_TOOL_ENTRIES,
+        description=(
+            "Operator-marked subset of allowedTools that mutates remote state. "
+            "Absent means every allowed tool mutates; [] means none do. "
+            "Advisory only — it never grants a tool. Operator-only."
+        ),
+        alias="mutatingTools",
     )
 
 

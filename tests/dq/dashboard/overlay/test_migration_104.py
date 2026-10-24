@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "104_workspace_provider_credentials.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "104_workspace_provider_credentials.sql"
 
 TABLE = "workspace_provider_credentials"
 TRIGGER_FUNCTION = "reject_workspace_provider_credential_mutation"
@@ -84,7 +84,7 @@ def table_body(sql: str) -> str:
 
 
 def test_migration_is_the_only_104() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("104_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("104_*.sql")) == [MIGRATION_PATH]
 
 
 def test_header_reuses_k3_envelope_and_aad(raw: str) -> None:

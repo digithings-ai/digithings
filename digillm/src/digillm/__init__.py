@@ -2,7 +2,7 @@
 
 Speaks to any OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter,
 OpenAI direct, or a registered external provider). No FastAPI, no service
-coupling; optional LangSmith tracing via digismith degrades to a no-op when
+coupling; optional LangSmith tracing via digitrace degrades to a no-op when
 absent.
 
 Public API:
@@ -53,6 +53,12 @@ from digillm.client import (
     set_telemetry_observer,
     set_usage_observer,
 )
+from digillm.egress_record import (
+    EgressCategoryId,
+    EgressDecision,
+    EgressRecord,
+    set_egress_observer,
+)
 from digillm.structured import resolve_model, structured_completion
 from digillm.telemetry import (
     ArtifactRef,
@@ -79,6 +85,9 @@ __all__ = [
     "CacheStatus",
     "CallPurpose",
     "ChatCompletionMessage",
+    "EgressCategoryId",
+    "EgressDecision",
+    "EgressRecord",
     "JsonSchemaResponseFormat",
     "NodeRunOutcome",
     "NodeRunRecord",
@@ -120,6 +129,7 @@ __all__ = [
     "resolve_model",
     "run_tools",
     "set_byok",
+    "set_egress_observer",
     "set_fan_out_detach_hook",
     "set_proxy_key",
     "set_telemetry_observer",

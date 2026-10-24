@@ -84,6 +84,18 @@
             "description": "Deprecated and IGNORED. Accepted only so clients that still send it do not get a 422; its value never reaches graph state. The research system prompt is operator-configured only \u2014 project config (agents.research_system_prompt) or the tenant corpus map (DIGI_TENANT_CORPUS_MAP) \u2014 so a caller cannot inject its own system prompt (CWE-639 / prompt injection).",
             "title": "Research System Prompt"
           },
+          "search_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request web_search engine (X-Digi-Search-Engine). One of auto, internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto for the in-house engine; unknown values fail at the digisearch hub (#4722).",
+            "title": "Search Engine"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -147,6 +159,25 @@
         "additionalProperties": false,
         "description": "Trusted Streamable HTTP MCP server forwarded by the BFF (#3736).",
         "properties": {
+          "allowedTools": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^\\S+$",
+                  "type": "string"
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator allowlist of full remote MCP tool names for this server (exact match, no globs). Absent or empty offers zero tools. Operator-only \u2014 never settable via the session overlay.",
+            "title": "Allowedtools"
+          },
           "auth": {
             "anyOf": [
               {
@@ -178,6 +209,25 @@
             "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
             "title": "Id",
             "type": "string"
+          },
+          "mutatingTools": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^\\S+$",
+                  "type": "string"
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator-marked subset of allowedTools that mutates remote state. Absent means every allowed tool mutates; [] means none do. Advisory only \u2014 it never grants a tool. Operator-only.",
+            "title": "Mutatingtools"
           },
           "setup": {
             "anyOf": [
@@ -423,6 +473,24 @@
             "description": "Per-request digisearch index. Client-writable on this model but, when DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the authenticated tenant's map entry (headers/body cannot select another tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it.",
             "title": "digisearch index"
           },
+          "digisearch_tools": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tenant map digisearchTools (DIG-3269): dedicated per-index search tools. Overwritten server-side from the tenant map, never trusted from the client.",
+            "title": "Digisearch Tools"
+          },
           "disabled_tools": {
             "anyOf": [
               {
@@ -482,6 +550,12 @@
             ],
             "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those hint the model with tool_choice=required rather than injecting a locate call.",
             "title": "Force Tool"
+          },
+          "lock_session_controls": {
+            "default": false,
+            "description": "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by _with_digi_request_context, never trusted from the client.",
+            "title": "Lock Session Controls",
+            "type": "boolean"
           },
           "mcp_servers": {
             "anyOf": [
@@ -566,6 +640,18 @@
             ],
             "description": "Per-request response language code (X-Digi-Language). One of the curated codes in digigraph.languages.LANGUAGE_NAMES; unrecognized values are ignored.",
             "title": "Response Language"
+          },
+          "search_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request web_search engine (X-Digi-Search-Engine). One of auto, internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto for the in-house engine; unknown values fail at the digisearch hub (#4722).",
+            "title": "Search Engine"
           },
           "session_id": {
             "anyOf": [
@@ -800,7 +886,7 @@
     },
     "/health": {
       "get": {
-        "description": "Legacy health check for Docker and digiclaw (kept for back-compat).",
+        "description": "Legacy health check for Docker and digibot (kept for back-compat).",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -823,7 +909,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digismith's\n``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nContract: returns HTTP 200 with ``{\"ok\": true}``. Intended for load\nbalancers and k8s probes. For richer diagnostics, see digitrace's\n``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {
@@ -1085,6 +1171,27 @@
         ]
       }
     },
+    "/v1/mcp/decisions": {
+      "post": {
+        "description": "Apply one human decision to one recorded call, at most once.",
+        "operationId": "post_mcp_decision_v1_mcp_decisions_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Mcp Decision V1 Mcp Decisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Post Mcp Decision"
+      }
+    },
     "/v1/model-info": {
       "get": {
         "description": "Return the LLM model used for Project RAG completions. Use to validate config.",
@@ -1238,7 +1345,7 @@
     },
     "/workflow": {
       "post": {
-        "description": "digiclaw custom skill: run_digigraph_workflow.\nPhase 0: user idea \u2192 backtest via digiquant \u2192 result in < 10s.",
+        "description": "digibot custom skill: run_digigraph_workflow.\nPhase 0: user idea \u2192 backtest via digiquant \u2192 result in < 10s.",
         "operationId": "run_digigraph_workflow",
         "requestBody": {
           "content": {

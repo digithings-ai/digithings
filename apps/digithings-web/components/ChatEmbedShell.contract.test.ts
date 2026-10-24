@@ -7,7 +7,8 @@ import {
   THEME,
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
-  formatShellLoadErrorLine,
+  formatShellLoadDiagnostic,
+  readParentDocumentPalette,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -22,7 +23,7 @@ describe("ChatEmbedShell contracts", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 
-  it("posts digichat:theme with light|dark only", () => {
+  it("posts digichat:theme with light|dark and an optional palette", () => {
     expect(THEME).toBe("digichat:theme");
     expect(buildEmbedThemeMessage("light")).toEqual({
       type: "digichat:theme",
@@ -36,6 +37,23 @@ describe("ChatEmbedShell contracts", () => {
     });
   });
 
+  it("forwards only a known parent palette on the theme message", () => {
+    const attr = (v: string | null) => ({ getAttribute: () => v });
+    expect(readParentDocumentPalette(attr("dracula"))).toBe("dracula");
+    expect(readParentDocumentPalette(attr(" Nord "))).toBe("nord");
+    expect(readParentDocumentPalette(attr("default"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr("nope"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr(null))).toBeUndefined();
+    expect(buildEmbedThemeMessage("light", 1, "dracula")).toEqual({
+      type: THEME,
+      theme: "light",
+      ts: 1,
+      palette: "dracula",
+    });
+    expect(buildEmbedThemeMessage("dark", 1)).toEqual({ type: THEME, theme: "dark", ts: 1 });
+    expect("palette" in buildEmbedThemeMessage("dark", 1)).toBe(false);
+  });
+
   it("posts digichat:parent-error for in-chat handshake failures", () => {
     expect(PARENT_ERROR).toBe("digichat:parent-error");
     expect(buildEmbedParentErrorMessage("ready_timeout", 99)).toEqual({
@@ -43,24 +61,45 @@ describe("ChatEmbedShell contracts", () => {
       code: "ready_timeout",
       ts: 99,
     });
-    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe(
-      "embed_unloadable",
-    );
+    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe("embed_unloadable");
   });
 
-  it("formats shell load fallback without tunnel/DIGICHAT_EMBED_HOSTS copy", () => {
-    const line = formatShellLoadErrorLine();
-    expect(line.startsWith("error: ")).toBe(true);
+  it("keeps the operator diagnostic for the dev console only", async () => {
+    const line = formatShellLoadDiagnostic("test");
     expect(line).toContain("DIGICHAT_EMBED_ORIGIN");
-    expect(line).toContain("Container");
     expect(line).not.toContain("tunnel");
-    expect(line).not.toContain("DIGICHAT_EMBED_HOSTS");
+    // Logged, never rendered: the only caller is the console helper, and it
+    // is silent in production builds.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const src = readFileSync(
+      fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(src.split("formatShellLoadDiagnostic(").length - 1).toBe(2); // definition + console.error
+    expect(src).toContain('if (process.env.NODE_ENV === "production") return;');
+    expect(src).toContain("console.error(formatShellLoadDiagnostic(reason))");
   });
 
   it("reads parent html data-theme as light or dark", () => {
     expect(readParentDocumentTheme({ getAttribute: () => "light" })).toBe("light");
     expect(readParentDocumentTheme({ getAttribute: () => "dark" })).toBe("dark");
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
+  });
+
+  it("posts digichat:theme on a live toggle instead of rebuilding iframe src", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    const start = src.indexOf("const onThemeAttr");
+    const end = src.indexOf("const observer", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const handler = src.slice(start, end);
+    expect(handler).not.toContain("setSrc");
+    expect(handler).toContain("postMessage");
+    expect(handler).toContain("buildEmbedThemeMessage");
   });
 
   it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
@@ -76,16 +115,93 @@ describe("ChatEmbedShell contracts", () => {
     const src = readFileSync(path, "utf8");
     expect(src).toContain("BootLabOverlay");
     expect(src).toContain('variant="tooltask"');
-    expect(src).toContain("readyEdge={embedReady}");
+    // Reveal waits on the iframe handshake AND the shared service warm-up.
+    // Same gate for the landing pop-up, /chat, and /chat/occ.
+    expect(src).toContain("readyEdge={revealed}");
+    expect(src).toContain("waitForServices");
+    expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
+    expect(src).toContain(`signalDigichatBootStep("services")`);
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).toContain("opacity: embedReady ? 1 : 0");
-    // Curated per-host copy rides into the iframe URL.
-    expect(src).toContain("Ask about digithings");
-    expect(src).toContain("Ask about Online Compliance Center");
+    expect(src).toContain("opacity: revealed ? 1 : 0");
+
+    // The full-page routes paint the digichat hero banner in that same cover
+    // instead of the tool chain: /chat and /chat/occ are only the chat, so a
+    // simulated tool list would invent work the visitor never started. The
+    // landing pop-up leaves warmupLoader at its default ("toolchain") and
+    // keeps the BootLabOverlay branch above.
+    expect(src).toContain('from "@digithings/hero-banner/web"');
+    expect(src).toContain('from "@digithings/hero-banner/definitions"');
+    expect(src).toContain('warmupLoader?: "toolchain" | "banner"');
+    expect(src).toContain('warmupLoader = "toolchain"');
+    expect(src).toContain('warmupLoader === "banner"');
+    expect(src).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
+
+    const pageShellSrc = readFileSync(
+      fileURLToPath(new URL("./ChatPageShell.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(pageShellSrc).toContain('warmupLoader="banner"');
+    // Curated per-host copy rides into the iframe URL. The strings themselves
+    // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
+    // same conversation with the same welcome — assert both halves: the URL
+    // wiring here, and that the shell still reads its copy from the shared
+    // record rather than keeping a private copy that could drift.
     expect(src).toContain('url.searchParams.set("welcome"');
     expect(src).toContain('url.searchParams.set("suggestions"');
+    expect(src).toContain('from "@/lib/embedCopy"');
+
+    const copyPath = fileURLToPath(new URL("../lib/embedCopy.ts", import.meta.url));
+    const copy = readFileSync(copyPath, "utf8");
+    expect(copy).toContain("Ask about digithings");
+    expect(copy).toContain("Ask about Online Compliance Center");
+  });
+
+  it("forwards the OCC invite key from the parent URL to the embed", async () => {
+    // DIG-1210. The barrier is a bearer capability in the parent URL, handed
+    // straight to digichat under the one name it already enforces (`token=`).
+    // Source contract: the key must be read from window.location inside the
+    // mount effect, never during render — this app is output: "export", so the
+    // shipped HTML is one static artifact every visitor shares.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain('from "@/lib/inviteToken"');
+    expect(src).toContain("readInviteToken(window.location.search)");
+    expect(src).toContain('url.searchParams.set("token", inviteToken)');
+
+    // Read behind the route's opt-in, never unconditionally: /chat must not
+    // pick up a stray ?token= and hand it to a tenant that never asked for one.
+    expect(src).toContain("acceptsInviteToken");
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    // Formatting-agnostic: Prettier may keep the guard ternary on one line.
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(guardIndex).toBeLessThan(readIndex);
+
+    // Rebuilt only when something is actually missing. An invite link needs one
+    // extra src swap on hydration (the exported first paint had no key); every
+    // other visitor's src must be left alone.
+    expect(src).toContain("missingToken");
+    expect(src).toContain('!current.includes("token=")');
+  });
+
+  it("opts /chat/occ into the invite key and leaves /chat out", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const occ = readFileSync(
+      fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const chat = readFileSync(
+      fileURLToPath(new URL("../app/chat/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(occ).toContain("acceptsInviteToken");
+    expect(chat).not.toContain("acceptsInviteToken");
   });
 
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {
@@ -106,5 +222,42 @@ describe("ChatEmbedShell contracts", () => {
     expect(css).toContain(".dc-chat-frame");
     expect(css).toContain("--chat-frame-canvas");
     expect(css).toContain("@digithings/ui/styles/digichat-boot-loader.css");
+  });
+
+  it("strips the invite key from the address bar right after reading it (DIG-1437)", async () => {
+    // The key must not survive in browser history or in the visible address
+    // bar. It is read client-side inside the mount effect, so that is the only
+    // place the rewrite can happen; doing it during render would put the key
+    // back into the exported HTML this app ships as one shared artifact.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain("stripInviteTokenFromUrl");
+
+    // One call site, and it is the rewrite. A second would mean the key is
+    // being scrubbed twice, which is churn, not defence.
+    expect(src.split("window.history.replaceState").length - 1).toBe(1);
+
+    // Gated on the route opt-in and on a non-empty key, so an ordinary /chat
+    // visit never touches history.
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(stripIndex).toBeGreaterThan(readIndex);
+    expect(stripIndex).toBeGreaterThan(-1);
+    expect(src).toContain("token ? stripInviteTokenFromUrl");
+
+    // The token stays in the effect's local state for the session and nowhere
+    // else — no store, no cookie, no sessionStorage. These match a USE
+    // (sessionStorage.setItem, document.cookie =), not the bare word: a
+    // guard on the bare name fires on this comment and on any prose that
+    // documents the rule, which is a test that cannot fail for its reason.
+    expect(src).not.toMatch(/sessionStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toMatch(/localStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toContain("setItem(");
+    expect(src).not.toMatch(/document\s*\.\s*cookie\s*=[^=]/);
   });
 });

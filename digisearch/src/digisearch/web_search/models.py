@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal  # score:allow untyped any — output extras are open-ended
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
@@ -14,12 +14,18 @@ class WebSearchResult(BaseModel):
     snippet: str = ""
     score: float = 0.0
     engine: str = ""
+    published_date: str = ""
+    author: str = ""
 
 
 class WebSearchResponse(BaseModel):
     query: str
     results: list[WebSearchResult] = Field(default_factory=list)
     provider: str = ""
+    # Per-provider extras (cost, vendor answer, paging cursor) kept out of
+    # `results` so the result corpus stays shape-stable across providers.
+    cost_dollars: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
 
 
 class WebSearchErrorResponse(BaseModel):
@@ -66,6 +72,18 @@ class WebSearchRequest(BaseModel):
     exclude_domains: list[str] = Field(default_factory=list, max_length=20)
     max_results: int = Field(default=4, ge=1, le=10)
     recency_days: int | None = Field(default=7, ge=1, le=365)
+    # Cross-vendor provider selection (#4711). Validated by
+    # digisearch.web_providers.registry, not by a Literal, so an unknown name
+    # reaches the route as a clean 400 instead of a FastAPI 422.
+    provider: str = Field(default="auto", max_length=64)
+    # Natural-language search intent, honoured by Tinyfish (`purpose`) and
+    # Parallel (`objective`); a hint elsewhere — a provider may ignore it.
+    purpose: str | None = Field(default=None, max_length=2000)
+    # Effort tier, mapped per provider (a hint; internal has no tiers).
+    effort: Literal["fast", "thorough"] | None = None
+    # Deep-paging start offset. Only meaningful for providers that can page
+    # (exa); offset > 0 against a provider that cannot is a 400, not a no-op.
+    offset: int = Field(default=0, ge=0)
 
 
 class WebSearchConfigError(ValueError):

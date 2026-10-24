@@ -3,7 +3,7 @@
 > Thesis-aware portfolio loop. Consumes research `DigestPayload`; produces analyst payloads,
 > deliberation summaries, PM direction memo, sized book, and terminal booking via commit.
 >
-> Boundary: [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) · Canonical topology:
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Canonical topology:
 > [ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md) · Spec §13.2:
 > [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 
@@ -354,6 +354,12 @@ the immutable analyst base — never broad re-grounding.
 | `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
 | `low_value_carry` | WP11.3 enforce selection (#2902) | `true` | deterministic skip; zero provider calls |
 | `attention_carry` | WP13.4 enforce attention (#2930) | `true` | post-analyst re-route skipped deliberation; zero provider calls |
+
+These four are exactly the members of the `CarryReason` `Literal`
+(`models/deliberation.py`) — a constant that is not in the Literal is a value the
+constructing node raises `ValidationError` on. `CARRY_ATTENTION` was defined and used
+by the H6 node but missing from the Literal, so every attention-enforced carry raised
+until #4592; `tests/dq/portfolio/test_deliberation_carry_reason.py` now pins the set.
 
 Consequences of `llm_failure`, all downstream of the flag:
 

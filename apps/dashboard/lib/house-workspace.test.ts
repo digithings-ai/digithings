@@ -51,13 +51,17 @@ describe('house workspace identity', () => {
   });
 });
 
-describe('dashboard Group A readers stay house-scoped', () => {
+describe('dashboard Group A readers go through the Workers API house pin', () => {
   const files = ['queries.ts', 'observability-queries.ts'] as const;
 
-  it.each(files)('%s has no date-only Group A .from() and uses houseBook()', (file) => {
+  it.each(files)('%s has no raw Group A .from() and uses apiHouseBook()', (file) => {
     const src = readFileSync(join(here, file), 'utf8');
-    expect(src).toContain("from './house-workspace'");
-    expect(src).toContain('houseBook(');
+    // All reads go through the Workers API query root; the house workspace
+    // pin is enforced server-side (CONTRACT §7), not by a client helper.
+    expect(src).toContain("from './api-query'");
+    expect(src).toContain('apiHouseBook(');
+    expect(src).not.toContain("from './house-workspace'");
+    expect(src).not.toContain('houseBook(');
     for (const table of GROUP_A_TABLES) {
       const rawFrom = new RegExp(`\\.from\\(['"]${table}['"]\\)`, 'g');
       expect(src.match(rawFrom) ?? [], `${file} still has raw .from('${table}')`).toEqual([]);
@@ -66,8 +70,8 @@ describe('dashboard Group A readers stay house-scoped', () => {
         table !== 'nav_history' &&
         (src.includes(`'${table}'`) || src.includes(`"${table}"`));
       if (queriesTable) {
-        const houseCall = new RegExp(`houseBook\\([^,]+,\\s*['"]${table}['"]\\)`);
-        expect(src, `${file} must call houseBook(..., '${table}')`).toMatch(houseCall);
+        const houseCall = new RegExp(`apiHouseBook\\(\\s*['"]${table}['"]`);
+        expect(src, `${file} must call apiHouseBook('${table}')`).toMatch(houseCall);
       }
     }
   });

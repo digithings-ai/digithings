@@ -1436,6 +1436,185 @@ def test_stream_deltas_emits_reasoning_then_content() -> None:
     assert [p for k, p in seen if k == "content"] == ["answer"]
 
 
+# The chat reasoning policy as config/model-policy.json declares it. digillm ships
+# with an empty policy; the application registers the configured one at import.
+_CHAT_REASONING_POLICY = client_mod.ReasoningEffortPolicy(
+    default_sent={"deepseek-v4.1-flash-1017": "medium"},
+    configurable_prefixes=("gpt-5", "gpt-6", "gpt-oss", "gemini-3"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _chat_reasoning_policy() -> Any:
+    """Register the configured chat reasoning policy for each test, then restore."""
+    previous = client_mod.get_reasoning_effort_policy()
+    client_mod.set_reasoning_effort_policy(_CHAT_REASONING_POLICY)
+    yield
+    client_mod.set_reasoning_effort_policy(previous)
+
+
+def test_no_registered_policy_sends_no_reasoning_effort() -> None:
+    """digillm's own default policy is empty: nothing gets the field, even with /effort."""
+    client_mod.set_reasoning_effort_policy(client_mod.ReasoningEffortPolicy())
+    assert "reasoning_effort" not in _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", "high")
+    assert "reasoning_effort" not in _streamed_kwargs("openai/gpt-5.6-luna", "low")
+
+
+def _streamed_kwargs(model: str, effort: str | None = None) -> dict[str, Any]:
+    """Wire kwargs of one mocked streamed chat turn for ``model`` at ``effort``."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [_stream_chunk(content="ok")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            model,
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+            reasoning_effort=effort,
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    return kwargs
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4.1-flash-release",
+        "deepseek/deepseek-v4-flash",
+        "openrouter/deepseek/deepseek-v4.1-flash-1017",
+        "openrouter/deepseek/deepseek-v4.1-flash",
+    ],
+)
+def test_1017_chat_without_effort_sends_its_default_to_turn_reasoning_on(model: str) -> None:
+    """1017 streams no reasoning unless asked; with no /effort it gets its default level."""
+    assert _streamed_kwargs(model)["reasoning_effort"] == "medium"
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "HIGH "])
+def test_chat_effort_maps_to_reasoning_effort_on_1017(effort: str) -> None:
+    """The chat's /effort becomes the request's reasoning_effort."""
+    kwargs = _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", effort)
+    assert kwargs["reasoning_effort"] == effort.strip().lower()
+
+
+@pytest.mark.parametrize(
+    "model", ["openai/gpt-5.6-luna", "openai/gpt-oss-120b", "google/gemini-3.7-flash"]
+)
+def test_configurable_models_take_chat_effort_and_keep_their_default_otherwise(
+    model: str,
+) -> None:
+    """Models with levels get /effort; with none set the field is omitted (model default)."""
+    assert _streamed_kwargs(model, "low")["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in _streamed_kwargs(model)
+
+
+@pytest.mark.parametrize("model", ["gpt-4o-mini", "deepseek/deepseek-v4-pro", "qwen/qwen3.8-flash"])
+def test_models_without_levels_never_get_reasoning_effort(model: str) -> None:
+    """No configurable level: the request is unchanged even when /effort is set."""
+    assert "reasoning_effort" not in _streamed_kwargs(model, "high")
+
+
+def test_unknown_effort_counts_as_unset() -> None:
+    """Only low/medium/high pass; anything else falls back to the model default."""
+    assert _streamed_kwargs("deepseek/deepseek-v4.1-flash-1017", "max")["reasoning_effort"] == (
+        "medium"
+    )
+    assert "reasoning_effort" not in _streamed_kwargs("openai/gpt-5.6-luna", "max")
+
+
+def test_stream_retries_without_reasoning_effort_on_a_400_that_names_it() -> None:
+    """A provider that refuses levels still answers, at the model's default reasoning."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "deepseek/deepseek-v4.1-flash-1017",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+            reasoning_effort="high",
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [call.kwargs.get("reasoning_effort") for call in calls] == ["high", None]
+    assert calls[1].kwargs.get("stream_options") == {"include_usage": True}
+
+
+def test_stream_drops_each_refused_field_once_across_successive_400s() -> None:
+    """A gateway that names one unknown field per 400 still gets an answer."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _bad_request("Unrecognized request argument supplied: reasoning_effort"),
+        _bad_request("Unrecognized request argument supplied: stream_options"),
+        [_stream_chunk("hi")],
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "deepseek/deepseek-v4.1-flash-1017",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    assert out == "hi"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert [("reasoning_effort" in c.kwargs, "stream_options" in c.kwargs) for c in calls] == [
+        (True, True),
+        (False, True),
+        (False, False),
+    ]
+
+
+def test_stream_400_naming_a_dropped_field_again_propagates() -> None:
+    """Each field is dropped once; a repeat refusal is a real error, not a loop."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, reject]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError):
+            digillm.run_tools(
+                "deepseek/deepseek-v4.1-flash-1017",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 2
+
+
+def test_stream_unrelated_400_propagates_when_no_effort_is_sent() -> None:
+    """With no reasoning_effort on the request, a 400 naming it is not retried."""
+    reject = _bad_request("Unrecognized request argument supplied: reasoning_effort")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [reject, [_stream_chunk("hi")]]
+    client_mod.set_reasoning_effort_policy(client_mod.ReasoningEffortPolicy())
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(BadRequestError):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+                [],
+                execute_tool=lambda *_: "",
+                stream_deltas=True,
+            )
+    assert fake_client.chat.completions.create.call_count == 1
+
+
+def test_non_streaming_1017_call_sends_no_reasoning_effort() -> None:
+    """Batch (non-streaming) 1017 callers keep their request unchanged."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("deepseek/deepseek-v4.1-flash-1017", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert "reasoning_effort" not in kwargs
+
+
 def test_stream_deltas_tool_call_then_final_answer() -> None:
     """A tool call streamed across fragments runs, then the final answer streams."""
     round1 = [
@@ -2039,3 +2218,85 @@ def test_client_compatibility_facade_reexports_split_helpers() -> None:
     assert client_mod.ToolDefinition is types.ToolDefinition
     assert client_mod.byok is overrides.byok
     assert client_mod._llm_cache_key is cache.llm_cache_key
+
+
+# ── Forced wrap-up schema enforcement (#4556) ────────────────────────────────
+
+
+def _two_tool_rounds_then_wrap_up(tc: Any) -> list[MagicMock]:
+    """Two tool-requesting rounds (max_tool_rounds=2), then the forced wrap-up."""
+    return [
+        _mock_response("", tool_calls=[tc]),
+        _mock_response("", tool_calls=[tc]),
+        _mock_response('{"ok": true}'),
+    ]
+
+
+def test_final_response_format_enforces_the_forced_wrap_up() -> None:
+    """#4556: ``final_response_format`` must reach the forced tool-free wrap-up
+    completion, not just the caller's retry. Without it the cheap model can answer in
+    prose or return an empty body, which is what forced the tool-free retry that could
+    not re-ground (the tool results live only in ``run_tools``' local copy)."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = _two_tool_rounds_then_wrap_up(tc)
+
+    schema = {
+        "type": "json_schema",
+        "json_schema": {"name": "Answer", "schema": {"type": "object"}},
+    }
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+            final_response_format=schema,
+        )
+
+    assert out == '{"ok": true}'
+    calls = fake_client.chat.completions.create.call_args_list
+    assert len(calls) == 3, "two tool rounds plus the forced wrap-up"
+    # The tool-enabled rounds cannot carry response_format (mutually exclusive with
+    # tools at the provider), and must not have been given one.
+    assert calls[0].kwargs.get("response_format") is None
+    assert calls[1].kwargs.get("response_format") is None
+    # The wrap-up runs with tools=None, so it is the one legal schema-enforced turn.
+    assert calls[2].kwargs["response_format"] is schema
+    assert not calls[2].kwargs.get("tools")
+
+
+def test_forced_wrap_up_stays_unconstrained_without_final_response_format() -> None:
+    """Backwards compatibility: omitting ``final_response_format`` keeps the historical
+    unconstrained wrap-up, so existing callers are unaffected by #4556."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = _two_tool_rounds_then_wrap_up(tc)
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+        )
+
+    assert out == '{"ok": true}'
+    wrap_up = fake_client.chat.completions.create.call_args_list[2].kwargs
+    assert "response_format" not in wrap_up

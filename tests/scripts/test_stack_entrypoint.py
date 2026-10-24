@@ -8,6 +8,7 @@ must therefore be either deliberately fail-fast or best-effort.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -99,6 +100,19 @@ def _boot_path_block(start_index: int) -> list[str]:
     return block
 
 
+def _block_after(lines: list[str], needle: str) -> list[str]:
+    """The `if` block whose opening line contains `needle`, up to its `fi`."""
+    for index, line in enumerate(lines):
+        if needle in line:
+            block: list[str] = []
+            for candidate in lines[index:]:
+                block.append(candidate)
+                if candidate == "fi":
+                    return block
+            return block
+    raise AssertionError(f"no line contains {needle!r}")
+
+
 def test_required_data_dirs_fail_fast_deliberately():
     """Creating the required dirs may abort the boot — but on purpose, legibly.
 
@@ -163,3 +177,208 @@ def test_a_failing_cp_aborts_set_e_unless_guarded(tmp_path):
     aborted = subprocess.run(["sh", "-c", unguarded], capture_output=True, text=True)
     assert ok.returncode == 0 and "REACHED" in ok.stdout
     assert aborted.returncode != 0 and "REACHED" not in aborted.stdout
+
+
+def test_cheaperinference_merge_must_not_fall_back_silently():
+    """A failed overlay merge must not be a SILENT fallback.
+
+    The base file the image ships carries no curated model, so serving it
+    quietly leaves LiteLLM answering every curated tenant model with
+    model-not-found while the health probe stays green (DIG-4512). The
+    fallback is allowed to exist, but it must name its verdict.
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "merge failed; using default litellm.yaml" not in text, (
+        "the silent merge fallback is still in the entrypoint"
+    )
+    assert "--require-curated-ids" in text, (
+        "the merge must be told to check the curated ids"
+    )
+
+
+def test_cheaperinference_merge_failure_degrades_to_the_base_config():
+    """A failed merge must NOT take the container down.
+
+    The base config is a build-time COPY, so it is always present, and the
+    container cold-starts on every request (ports.ts sleepAfter 1m): a boot
+    abort would take digisearch, digivault and digikey down with it for every
+    request after an idle minute. The failure therefore degrades to the base
+    config and is named loudly in the log file (DIG-4512).
+    """
+    lines = _pre_exec_lines()
+    block = _nested_if_block(lines, 'if [ -n "$_missing" ]')
+    assert "exit 1" not in block, f"the merge failure branch must not abort: {block}"
+    text = "\n".join(lines)
+    assert "curated-models CHECK-FAILED - serving the base config" in text, (
+        "the degraded path must name its verdict and the config it serves"
+    )
+
+
+
+
+def test_cheaperinference_missing_overlay_asset_degrades_to_the_base_config():
+    """A missing overlay asset used to skip the whole merge block silently."""
+    lines = _pre_exec_lines()
+    block = _nested_if_block(lines, 'if [ -n "$_missing" ]')
+    assert "exit 1" not in block, f"the missing-asset branch must not abort: {block}"
+    assert "overlay asset missing" in "\n".join(block), block
+
+
+
+
+def test_litellm_config_is_always_exported_for_supervisord():
+    """supervisord expands %(ENV_LITELLM_CONFIG)s in the litellm command.
+
+    An unset value expands to an empty --config, so litellm serves no model at
+    all — the same silent outage the merge fallback caused (DIG-4512). Every
+    LITELLM_CONFIG export must therefore be paired with an ENV_LITELLM_CONFIG
+    export.
+    """
+    lines = _pre_exec_lines()
+    exports = [
+        (index, line)
+        for index, line in enumerate(lines)
+        if line.startswith("export LITELLM_CONFIG=")
+    ]
+    assert exports, "expected the LiteLLM config to be exported"
+    for index, line in exports:
+        following = lines[index + 1] if index + 1 < len(lines) else ""
+        assert following.startswith("export ENV_LITELLM_CONFIG="), (
+            f"LITELLM_CONFIG export is not paired with ENV_LITELLM_CONFIG: {line}"
+        )
+
+
+def _nested_if_span(lines: list[str], needle: str) -> tuple[int, int]:
+    """The start and end index of the `if` block whose opening line has `needle`.
+
+    The merge block nests `if`s, so the first `fi` after the opening line is
+    not the end of the block.
+    """
+    start = next(index for index, line in enumerate(lines) if needle in line)
+    depth = 0
+    for index in range(start, len(lines)):
+        line = lines[index]
+        if line.startswith("if ") or line.startswith("if!"):
+            depth += 1
+        if line == "fi":
+            depth -= 1
+            if depth == 0:
+                return start, index
+    raise AssertionError(f"no matching `fi` for {needle!r}")
+
+
+def _nested_if_block(lines: list[str], needle: str) -> list[str]:
+    """The `if` block whose opening line contains `needle`, up to its MATCHING `fi`."""
+    start, end = _nested_if_span(lines, needle)
+    return lines[start:end + 1]
+
+
+def test_a_failed_merge_degrades_to_the_base_config_and_keeps_booting(tmp_path):
+    """The behaviour R1 asks for, run for real.
+
+    A merge that fails must leave supervisord pointing at the base config,
+    must not abort the boot, and must write the verdict - with the merge's
+    own missing-model list - into the log file the operator reads.
+    """
+    lines = _pre_exec_lines()
+    start = next(i for i, line in enumerate(lines) if "export LITELLM_CONFIG=" in line)
+    _outer_start, outer_end = _nested_if_span(lines, 'if [ -n "$_ci_key" ]')
+    block = lines[start:outer_end + 1]
+    assert block[-1] == "fi", block[-1]
+
+    app = tmp_path / "app"
+    (app / "config").mkdir(parents=True)
+    (app / "scripts").mkdir()
+    for name in ("litellm.yaml", "litellm.cheaperinference.yaml"):
+        (app / "config" / name).write_text("model_list: []\n")
+    (app / "scripts" / "merge_litellm_cheaperinference.py").write_text("# stub\n")
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "python3").write_text(
+        "#!/bin/sh\necho 'ERROR: the merged litellm model_list is missing 1 curated"
+        " model id(s): deepseek/deepseek-v4.1-flash' >&2\nexit 1\n"
+    )
+    (stub / "python3").chmod(0o755)
+
+    body = "\n".join(block).replace("/app", str(app)).replace("/var/log/supervisor", str(logs))
+    script = tmp_path / "boot.sh"
+    script.write_text("set -eu\n" + body + '\necho "CFG=$ENV_LITELLM_CONFIG"\necho REACHED\n')
+    env = dict(os.environ)
+    env["PATH"] = str(stub) + ":" + env["PATH"]
+    env["CHEAPERINFERENCE_API_KEY"] = "k"
+    result = subprocess.run(["sh", str(script)], capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "REACHED" in result.stdout, "the boot must continue past a failed merge"
+    assert f"CFG={app}/config/litellm.yaml" in result.stdout, result.stdout
+    verdict = (logs / "stack-entrypoint.log").read_text()
+    assert "curated-models CHECK-FAILED" in verdict, verdict
+    assert "deepseek/deepseek-v4.1-flash" in verdict, verdict
+
+
+def _no_overlay_branch(lines: list[str]) -> list[str]:
+    """The else branch of the OUTER cheaperinference merge block.
+
+    The merge block nests `if`s and now has an inner `else` of its own, so
+    the outer else has to be found by depth, not by being the first one.
+    """
+    outer_start, outer_end = _nested_if_span(lines, 'if [ -n "$_ci_key" ]')
+    outer = lines[outer_start:outer_end + 1]
+    depth = 0
+    for index, line in enumerate(outer):
+        if line.startswith("if ") or line.startswith("if!"):
+            depth += 1
+        elif line == "else" and depth == 1:
+            branch: list[str] = []
+            for candidate in outer[index:]:
+                branch.append(candidate)
+                if candidate == "fi":
+                    return branch
+            return branch
+        if line == "fi":
+            depth -= 1
+    raise AssertionError("no else branch in the merge block")
+
+
+def test_the_no_overlay_path_names_the_missing_curated_models():
+    """The base config carries no curated model, so the gap must be named.
+
+    Without the overlay the boot serves a model_list that answers every
+    curated tenant model with model-not-found while /health stays green. The
+    boot must say which ids are missing instead of logging one INFO line and
+    continuing (DIG-4512).
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "--check-config" in text, (
+        "the boot must check the effective config for the curated ids"
+    )
+    assert "curated-models MISSING" in text, "the missing curated ids must be named"
+
+
+def test_the_no_overlay_path_does_not_abort_the_boot():
+    """A litellm-only fault must not take the whole stack down.
+
+    The container cold-starts on every request (ports.ts sleepAfter 1m), so an
+    abort on the no-overlay path would take digisearch, digivault and digikey
+    down for every request after an idle minute. The merge branch does not
+    abort either: it degrades to the same base config.
+    """
+    block = _no_overlay_branch(_pre_exec_lines())
+    assert not any("exit 1" in line for line in block), block
+    assert any("curated-models" in line for line in block), block
+
+
+def test_loud_boot_lines_reach_the_operator_log_file():
+    """The entrypoint's stderr is not captured by supervisord.
+
+    supervisord only manages its own program logs, so a boot line that only
+    reached stderr was invisible to every diagnostic except the container
+    console. The loud lines must also reach a file in the supervisor log
+    directory, where the operator looks for them (DIG-4512).
+    """
+    text = "\n".join(_pre_exec_lines())
+    assert "stack-entrypoint.log" in text, (
+        "the loud boot lines must also be written to a log file"
+    )
+

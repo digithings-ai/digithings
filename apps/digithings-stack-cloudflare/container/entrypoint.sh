@@ -25,30 +25,88 @@ export DIGIVAULT_URL="${DIGIVAULT_URL:-http://127.0.0.1:8004}"
 export DIGISEARCH_URL="${DIGISEARCH_URL:-http://127.0.0.1:8002}"
 # Chat-only: never default digiquant URL (would trigger backtest_node / DATA_DIR errors).
 export DIGIQUANT_URL="${DIGIQUANT_URL:-}"
-export DIGISMITH_URL="${DIGISMITH_URL:-}"
+export DIGITRACE_URL="${DIGITRACE_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 # House default: merge Cheaper Inference overlay when key present (unless forced OR).
+# ENV_LITELLM_CONFIG is what supervisord expands in the [program:litellm] command,
+# so it must be set on EVERY path: an unset value expands to an empty --config and
+# litellm then serves no model at all while the health probe stays green
+# (DIG-4512). The merge below replaces both values with the merged file.
 export LITELLM_CONFIG="${LITELLM_CONFIG:-/app/config/litellm.yaml}"
+export ENV_LITELLM_CONFIG="${ENV_LITELLM_CONFIG:-$LITELLM_CONFIG}"
 _ci_key="${CHEAPERINFERENCE_API_KEY:-}"
 _upstream="$(printf '%s' "${DIGI_HOUSE_UPSTREAM:-}" | tr '[:upper:]' '[:lower:]')"
 _ci_house="$(printf '%s' "${CHEAPERINFERENCE_HOUSE:-}" | tr '[:upper:]' '[:lower:]')"
 _force_or=0
 case "$_upstream" in openrouter|or) _force_or=1 ;; esac
 case "$_ci_house" in 0|false|no|off) _force_or=1 ;; esac
+# Loud boot lines go to the container stderr AND to a file the operator can
+# read afterwards. supervisord only manages its own program logs, so a line
+# that only reached stderr was invisible to every diagnostic except the
+# container console (DIG-4512).
+_log() {
+  printf '%s\n' "$*" >> /var/log/supervisor/stack-entrypoint.log 2>/dev/null || true
+  printf '%s\n' "$*" >&2
+}
 if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
   export CHEAPERINFERENCE_API_BASE="${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}"
-  if [ -f /app/scripts/merge_litellm_cheaperinference.py ] \
-    && [ -f /app/config/litellm.cheaperinference.yaml ] \
-    && [ -f /app/config/litellm.yaml ]; then
-    python3 /app/scripts/merge_litellm_cheaperinference.py \
+  # Every asset the merge needs must be present. A missing asset used to skip the
+  # whole merge block in silence, which left the base config in place.
+  _missing=""
+  for _asset in /app/scripts/merge_litellm_cheaperinference.py \
+    /app/config/litellm.cheaperinference.yaml \
+    /app/config/litellm.yaml; do
+    [ -f "$_asset" ] || _missing="$_missing $_asset"
+  done
+  # A missing asset or a failed merge must NOT abort the boot. The container
+  # cold-starts on every request (ports.ts sleepAfter 1m), so a dead container
+  # takes digisearch, digivault and digikey down with it for every request
+  # after an idle minute - a wider outage than the curated-model 404 it
+  # prevents, on a live invite-gated tenant. The base config is a build-time
+  # COPY, so it is always present: degrade to it and keep the verdict loud
+  # in the log file instead of serving it silently (DIG-4512).
+  _merge_rc=0
+  _merge_detail=""
+  if [ -n "$_missing" ]; then
+    _merge_rc=1
+    _merge_detail="overlay asset missing:$_missing"
+  else
+    # The merge must produce a model_list that carries every curated house
+    # model. Its own message names the ones that are missing.
+    _merge_detail="$(python3 /app/scripts/merge_litellm_cheaperinference.py \
       --base /app/config/litellm.yaml \
       --overlay /app/config/litellm.cheaperinference.yaml \
-      -o /app/config/litellm.runtime.yaml \
-      && export LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      && export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      || echo "cheaperinference: merge failed; using default litellm.yaml" >&2
+      --require-curated-ids \
+      -o /app/config/litellm.runtime.yaml 2>&1)" || _merge_rc=$?
   fi
+  if [ "$_merge_rc" -eq 0 ]; then
+    export LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    _log "digithings-stack: INFO cheaperinference: curated-models OK (overlay merged into $LITELLM_CONFIG)"
+  else
+    _log "digithings-stack: ERROR cheaperinference: merge failed (${_merge_detail:-no detail}); curated-models CHECK-FAILED - serving the base config $LITELLM_CONFIG"
+  fi
+else
+  # No overlay: the effective config is the base file the image ships, and it
+  # carries none of the curated house models, so every curated tenant model
+  # answers model-not-found while /health stays green. The gap is named here
+  # and in the log file instead of being served silently (DIG-4512).
+  # This path does NOT abort the boot: the container cold-starts on every
+  # request (ports.ts sleepAfter 1m), so an abort here would take digisearch,
+  # digivault and digikey down with it for every request after an idle
+  # minute. The merge branch above does not abort either: it degrades to the
+  # same base config, so both paths keep the container up and name the
+  # verdict in the log file.
+  _curated_check_rc=0
+  _curated_missing=""
+  _curated_missing="$(python3 /app/scripts/merge_litellm_cheaperinference.py --check-config "$LITELLM_CONFIG" 2>/dev/null)" || _curated_check_rc=$?
+  case "$_curated_check_rc" in
+    0) _curated_sev="INFO"; _curated_note="curated-models OK" ;;
+    1) _curated_sev="ERROR"; _curated_note="curated-models MISSING (${_curated_missing:-none reported})" ;;
+    *) _curated_sev="ERROR"; _curated_note="curated-models CHECK-FAILED (rc=$_curated_check_rc)" ;;
+  esac
+  _log "digithings-stack: $_curated_sev cheaperinference: overlay not applied; $_curated_note - serving $LITELLM_CONFIG"
 fi
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
@@ -60,7 +118,7 @@ export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 # env, so those edits were real). Keep this list in sync with agents.allowed_tools in
 # infra/digichat-release/config/digiproject.yaml, which outranks it whenever the project
 # config loads; this value only decides what happens when that load fails (#2306).
-export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note}"
+export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digisearch_semantic,digisearch_web_search,digivault_search_notes,digivault_get_note,digivault_search_tag,digivault_backlinks}"
 # "Is Vectorize configured?" must agree with digisearch's own Python check
 # (the CLOUDFLARE_*/VECTORIZE_*/D1_* canonical-with-fallback lookup, see
 # digisearch/src/digisearch/search/_stub.py's _first_env) byte-for-byte, or one
@@ -130,7 +188,7 @@ export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
-export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digitrace/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="/usr/local/bin:$PATH"
 
 # Container envVars may mangle multiline PEMs — accept base64-wrapped secret,
@@ -194,44 +252,12 @@ for client_dir in /seed/vault/clients/*; do
   done
 done
 
-# Alias the dotless name `zammad-mcp` to this container's own non-loopback
-# IPv4 so digigraph's remote-MCP client can dial `http://zammad-mcp:8770/mcp`
-# (its SSRF guard always blocks loopback, #3879, and there is no Docker DNS
-# under Firecracker). Warn and continue if no usable address is found.
-if ! getent hosts zammad-mcp >/dev/null 2>&1; then
-  # Bounded and non-fatal by design: a resolver probe must never stall
-  # startup, and a failed write must never trip `set -eu` (an entrypoint
-  # that exits takes the whole stack container with it).
-  zammad_mcp_ip=$(timeout 5 python3 -c '
-import socket
-
-probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-try:
-    probe.connect(("192.0.2.1", 80))
-    print(probe.getsockname()[0])
-finally:
-    probe.close()
-' 2>/dev/null || true)
-  case "${zammad_mcp_ip:-}" in
-    127.* | 169.254.*) zammad_mcp_ip="" ;;
-  esac
-  if [ -n "${zammad_mcp_ip:-}" ]; then
-    if printf '%s zammad-mcp\n' "$zammad_mcp_ip" >> /etc/hosts 2>/dev/null; then
-      echo "digithings-stack: aliased zammad-mcp -> $zammad_mcp_ip"
-    else
-      echo "digithings-stack: WARN could not write the zammad-mcp host alias" >&2
-    fi
-  else
-    echo "digithings-stack: WARN no zammad-mcp host alias; Zammad MCP will be unreachable" >&2
-  fi
-fi
-
 # The copied config/searxng/settings.yml names its limiter DB as
 # `redis://valkey:6379/0` — the dedicated sidecar host in dev compose. This
 # container runs the single [program:redis] on 127.0.0.1:6379 instead, so alias
 # the dotless name `valkey` to loopback and the file works unchanged (#4297).
-# Best-effort and non-fatal, same shape as the zammad-mcp alias above: searxng
-# starts either way, and a missing alias only degrades its limiter DB.
+# Best-effort and non-fatal: searxng starts either way, and a missing alias
+# only degrades its limiter DB.
 if ! getent hosts valkey >/dev/null 2>&1; then
   if printf '127.0.0.1 valkey\n' >> /etc/hosts 2>/dev/null; then
     echo "digithings-stack: aliased valkey -> 127.0.0.1 (searxng limiter redis)"

@@ -19,11 +19,17 @@ from digiquant.research.phases._node_factory import (
     _scoped_data_layer,
     _shared_context,
 )
+from digiquant.research.phases.phase7_synthesis import (
+    _digest_phase_inputs,
+    _digest_shared_context,
+    _subsection_phase_inputs,
+)
 from digiquant.research.state import (
     DataLayerSnapshot,
     DeltaTriageDecision,
     DeltaTriageResult,
     PriorContext,
+    ResearchConfigBundle,
     ResearchState,
     SegmentPayload,
     SegmentSlot,
@@ -452,3 +458,101 @@ def test_shared_context_run_date_always_equals_state_run_date() -> None:
     state = _delta_state_with_sources()
     shared = _shared_context(state)
     assert shared["run_date"] == state.run_date.isoformat()
+
+
+# --- #4609: the digest phase_inputs diet — prior_digests lives once ----------
+
+
+def _digest_body(tag: str) -> str:
+    return f"# Daily Digest — {tag}\n\n## Market regime\n\n" + ("Continuity sentence. " * 400)
+
+
+def _digest_state() -> ResearchState:
+    """A digest run: two fat prior briefings + five subsection memos."""
+    yesterday = _digest_body("2026-06-18")
+    day_before = _digest_body("2026-06-17")
+    subsections = {
+        slug: {"slug": slug, "date": RUN_DATE.isoformat(), "body": f"## {slug}\n" + "x" * 200}
+        for slug in ("macro", "alt-data", "institutional", "asset-classes", "us-equities")
+    }
+    return ResearchState(
+        run_type="delta",
+        run_date=RUN_DATE,
+        baseline_date=BASELINE_DATE,
+        config=ResearchConfigBundle(watchlist=["SPY"]),
+        prior_context=PriorContext(
+            last_snapshots=[
+                {
+                    "date": "2026-06-18",
+                    "run_type": "delta",
+                    "snapshot": {
+                        "date": "2026-06-18",
+                        "body": yesterday,
+                        "regime_label": "Cooling",
+                    },
+                },
+                {
+                    "date": "2026-06-17",
+                    "run_type": "delta",
+                    "snapshot": {
+                        "date": "2026-06-17",
+                        "body": day_before,
+                        "regime_label": "Risk-off",
+                    },
+                },
+            ],
+            latest_segments={
+                "digest": {
+                    "date": "2026-06-18",
+                    "payload": {
+                        "date": "2026-06-18",
+                        "body": yesterday,
+                        "regime_label": "Cooling",
+                    },
+                },
+                "digest-delta": {
+                    "date": "2026-06-17",
+                    "payload": {
+                        "date": "2026-06-17",
+                        "body": day_before,
+                        "regime_label": "Risk-off",
+                    },
+                },
+            },
+        ),
+        phase7_subsection_outputs=subsections,
+        phase6_bias_row={"macro_regime": "goldilocks", "equity_bias": "constructive"},
+    )
+
+
+def test_prior_digests_not_duplicated_across_blocks() -> None:
+    """#4609: the digest prompt serialized ``prior_digests`` 2-3x — once in the
+    cached shared_context and again in the uncached stitcher/subsection
+    ``phase_inputs``. Exactly one copy must remain, in shared_context."""
+    state = _digest_state()
+    shared = _digest_shared_context(state)
+    stitch_inputs = _digest_phase_inputs(state)
+    subsection_inputs = _subsection_phase_inputs("macro", state)
+
+    assert len(shared["prior_context"]["prior_digests"]) == 2
+    assert "prior_digests" not in stitch_inputs
+    assert "prior_digests" not in subsection_inputs
+
+
+def test_digest_phase_inputs_drops_prior_digest_bytes() -> None:
+    """#4609 byte yardstick: the stitcher's uncached ``phase_inputs`` must no
+    longer carry the ~48k of prior digest bodies that already ride in the cached
+    shared_context block."""
+    state = _digest_state()
+    shared = _digest_shared_context(state)
+    stitch_inputs = _digest_phase_inputs(state)
+
+    removed = _size({"prior_digests": shared["prior_context"]["prior_digests"]})
+    assert removed > 1_000, "fixture prior_digests too small to prove the diet"
+    # Exact sizes are pinned so the numbers quoted in
+    # docs/research/token-budget.md (#4609) stay reproducible from this fixture.
+    assert removed == 17_056
+    assert _size(stitch_inputs) == 1_587
+    # The pre-#4609 phase_inputs was this dict plus the duplicate copy.
+    with_duplicate = {**stitch_inputs, "prior_digests": shared["prior_context"]["prior_digests"]}
+    assert _size(with_duplicate) - _size(stitch_inputs) == removed

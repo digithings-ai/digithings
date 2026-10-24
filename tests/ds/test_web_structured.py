@@ -216,7 +216,7 @@ def test_retrieve_cited_reuses_rank_with_config_budgets(monkeypatch):
     ]
     seen: dict[str, int] = {}
 
-    def fake_live(query: str, top_n: int) -> list[WebSearchResult]:
+    def fake_live(query: str, top_n: int, effort: str | None = None) -> list[WebSearchResult]:
         seen["live_top_n"] = top_n
         return hits
 
@@ -245,7 +245,7 @@ def test_retrieve_cited_raises_when_rank_drops_all_sources(monkeypatch):
     from digisearch.web import structured as mod
     from digisearch.web.grounding_models import WebResearchConfig, WebResearchError
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [])
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: [])
     monkeypatch.setattr(mod, "_fetch", lambda hits, top_n: [])
     monkeypatch.setattr(mod, "_rank", lambda q, pages, top_n: [])
 
@@ -260,7 +260,9 @@ def test_structured_synthesis_raises_when_retrieval_yields_no_sources(monkeypatc
     monkeypatch.setattr(
         mod,
         "_live",
-        lambda q, top_n: [WebSearchResult(url="https://a.com/1", title="A", snippet="s")],
+        lambda q, top_n, effort=None: [
+            WebSearchResult(url="https://a.com/1", title="A", snippet="s")
+        ],
     )
     monkeypatch.setattr(mod, "_fetch", lambda hits, top_n: [_page("https://a.com/1", "A")])
     monkeypatch.setattr(mod, "_rank", lambda q, pages, top_n: [])

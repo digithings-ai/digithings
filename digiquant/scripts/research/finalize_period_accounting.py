@@ -39,6 +39,7 @@ import argparse
 import logging
 import os
 import sys
+import warnings
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -70,7 +71,6 @@ from digiquant.portfolio.models.portfolio_ledger import (
 )
 from digiquant.portfolio.writers.execution_io import (
     HOLDING_LOTS,
-    _decimal,
     _symbol,
 )
 from digiquant.portfolio.writers.ledger_io import (
@@ -83,6 +83,7 @@ from digiquant.portfolio.writers.ledger_io import (
 )
 from digiquant.portfolio.writers.opening_snapshot import cold_start_requires_seed
 from digiquant.research.data.queries import r2_close_rows
+from digiquant.scalars import opt_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +120,15 @@ try:
 
     load_dotenv(Path(__file__).resolve().parents[2] / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def _sb():
@@ -165,7 +173,7 @@ def _mark_from_close(
     except LookupError:
         return None
     closes = [float(r["close"]) for r in rows if r.get("close") is not None]
-    close = _decimal(closes[0]) if closes else None
+    close = opt_decimal(closes[0]) if closes else None
     if close is None or close <= 0:
         return None
     return MarkObservation(
@@ -191,15 +199,16 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
         day = prior - timedelta(days=offset)
         head = period_head(client=client, period_date=day)
         if head is not None:
-            cash = _decimal(head.get("closing_cash"))
-            if cash is not None and cash >= 0:
-                return cash
-            if cash is not None and cash < 0:
+            cash = opt_decimal(head.get("closing_cash"))
+            if cash is None:
+                continue
+            if cash < 0:
                 raise FinalizerDeclined(
                     f"prior accounting tip {day.isoformat()} has negative "
                     f"closing_cash={cash} — decline finalization for "
                     f"{period_date.isoformat()} (no fabricated cash stub, #4105)"
                 )
+            return cash
     resp = (
         _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())
@@ -209,8 +218,8 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
     )
     rows = list(getattr(resp, "data", None) or [])
     if rows:
-        nav = _decimal(rows[0].get("nav"))
-        cash_pct = _decimal(rows[0].get("cash_pct"))
+        nav = opt_decimal(rows[0].get("nav"))
+        cash_pct = opt_decimal(rows[0].get("cash_pct"))
         if nav is not None and cash_pct is not None and nav > 0:
             return (nav * cash_pct / Decimal(100)).quantize(Decimal("0.01"))
         # Absolute dollar NAV is not always available; weight-only books use indexed NAV.
@@ -223,7 +232,7 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
             )
             for prow in getattr(pos, "data", None) or []:
                 if _symbol(prow.get("ticker")) == "CASH":
-                    w = _decimal(prow.get("weight_pct")) or Decimal(0)
+                    w = opt_decimal(prow.get("weight_pct")) or Decimal(0)
                     return (nav * w / Decimal(100)).quantize(Decimal("0.01"))
     return Decimal(0)
 
@@ -266,7 +275,7 @@ def _opening_quantities(*, client: Any, period_date: date) -> dict[str, Decimal]
             continue
         if not opened_at and run_date >= period_date.isoformat():
             continue
-        qty = _decimal(row.get("quantity")) or Decimal(0)
+        qty = opt_decimal(row.get("quantity")) or Decimal(0)
         if str(row.get("status") or "") == HoldingLotStatus.CLOSED:
             closed_at = str(row.get("closed_at") or "")
             # Only count closes that happened before the period opens.
@@ -282,7 +291,7 @@ def _opening_quantities(*, client: Any, period_date: date) -> dict[str, Decimal]
 
     qty_by_symbol: dict[str, Decimal] = {}
     for key, open_row in opens.items():
-        opened = _decimal(open_row.get("quantity")) or Decimal(0)
+        opened = opt_decimal(open_row.get("quantity")) or Decimal(0)
         live = opened - closed.get(key, Decimal(0))
         if live <= 0:
             continue
@@ -359,12 +368,12 @@ def _fills_for_period(*, client: Any, period_date: date) -> list[PeriodFill]:
             logger.warning("skip fill %s — no decision action for order %s", row.get("id"), oid)
             continue
         side = FillSide.SELL if action in sell_actions else FillSide.BUY
-        qty = _decimal(row.get("quantity"))
-        price = _decimal(row.get("price"))
+        qty = opt_decimal(row.get("quantity"))
+        price = opt_decimal(row.get("price"))
         if qty is None or price is None or qty <= 0 or price <= 0:
             continue
-        fee = _decimal(row.get("fee")) or Decimal(0)
-        slip = _decimal(row.get("slippage")) or Decimal(0)
+        fee = opt_decimal(row.get("fee")) or Decimal(0)
+        slip = opt_decimal(row.get("slippage")) or Decimal(0)
         executed_at_raw = row.get("executed_at")
         if isinstance(executed_at_raw, datetime):
             executed_at = executed_at_raw
@@ -471,8 +480,8 @@ def _legacy_nav_day_return_pct(*, client: Any, period_date: date) -> Decimal | N
     prev_rows = list(getattr(prev, "data", None) or [])
     if not cur_rows or not prev_rows:
         return None
-    n1 = _decimal(cur_rows[0].get("nav"))
-    n0 = _decimal(prev_rows[0].get("nav"))
+    n1 = opt_decimal(cur_rows[0].get("nav"))
+    n0 = opt_decimal(prev_rows[0].get("nav"))
     if n0 is None or n1 is None or n0 <= 0:
         return None
     return ((n1 - n0) / n0) * Decimal(100)

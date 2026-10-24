@@ -8,15 +8,20 @@
 }
 
 .aui-md {
-  color: var(--text-primary);
+  /* Markdown density for the assistant-ui CLI skin. */
+  --aui-md-size: 0.875rem;
+  --aui-md-leading: 1.5;
+  --aui-md-pre-pad-block: var(--space-2);
+
+  color: var(--ink);
   font-family: var(--font-family-mono);
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: var(--aui-md-size);
+  line-height: var(--aui-md-leading);
 }
 
 .aui-md pre {
   overflow: auto;
-  padding: 0.5rem 0;
+  padding: var(--aui-md-pre-pad-block) 0;
 }
 
 .aui-md code {

@@ -35,6 +35,8 @@ Before making any change to `digigraph/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC, digichat and Zammad ticket text stays as written in prompts and tool results. Do not add a masker for that text. digitrace secret and attribute redaction stays.
+
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
 - **Tool modules**: Register new tools from `orchestration/builtin.py`; put handlers in the matching `orchestration/*_tools.py` module (or add one). digisearch tool calls must use `vertical_orchestrator.digisearch_hub`, not ad-hoc HTTP shims.
 - **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
@@ -46,7 +48,7 @@ Beyond root `AGENTS.md`:
 - **Checkpointer env**: Set `DIGI_CHECKPOINTER=memory|sqlite|postgres` explicitly in prod; `memory` does not survive restarts.
 - **MCP auth**: Bind MCP to loopback; set `DIGI_MCP_REQUIRE_AUTH=1` when exposing beyond localhost. When required, **every** MCP tool verifies a digikey RS256 bearer token (signature via `DIGIKEY_JWKS_URL` / `DIGIKEY_PUBLIC_KEY_PEM`, plus issuer/audience/exp) and requires the tool's scope (`digigraph:workflow`, `digigraph:chat`, or `digigraph:mcp`); it fails closed when no verifier is configured. Without the flag the server is unauthenticated.
 - **Remote MCP SSRF (#3879)**: `X-Digi-Mcp-Servers` / `DIGI_MCP_SERVERS` URLs are DNS-validated at connect time via `_mcp_http_client_factory` (`orchestration/mcp_client.py`): the host resolves immediately before the socket, every A/AAAA must be globally routable, and the validated IPs are dialed in order without a second lookup. Do not add a remote-MCP connect path that bypasses that httpcore backend. Dotless Docker names (`datatap-mcp`) are *assumed* to be internal and may resolve to RFC1918/ULA — an assumption, not a proof (a redirect to a dotless internal name, or a hostile search domain, can still reach private space). Set `DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST` (comma-separated) to allow only named hosts to resolve private. Loopback/link-local/metadata/CGNAT never may.
-- **No PII in spans**: digismith spans must not carry raw prompts, full document bodies, or bearer tokens. See `digismith/ARCHITECTURE.md` Section 4.
+- **No PII in spans**: digitrace spans must not carry raw prompts, full document bodies, or bearer tokens. See `digitrace/ARCHITECTURE.md` Section 4.
 
 ---
 

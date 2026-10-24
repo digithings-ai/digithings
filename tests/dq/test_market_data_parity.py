@@ -519,6 +519,181 @@ def test_get_price_technicals_helper_reads_r2_only(monkeypatch):
     assert got["latest"] == pytest.approx(want_window[0], nan_ok=True)
 
 
+def _count_manifest_reads(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Wrap the fixture's manifest read to count calls (the batch cost seam)."""
+    real = mcp._read_manifest
+    calls = {"n": 0}
+
+    def _counted() -> dict:
+        calls["n"] += 1
+        return real()
+
+    monkeypatch.setattr(mcp, "_read_manifest", _counted)
+    return calls
+
+
+def test_get_price_technicals_batch_matches_single_ticker_calls(monkeypatch):
+    """#4600: the batch entry point returns the single-ticker envelope per ticker."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=_T7B_RUN_DATE,
+    )
+    assert set(batch) == set(_T7B_TICKERS)
+    for ticker in _T7B_TICKERS:
+        single = q.get_price_technicals(
+            client=_ExplodingMarketClient(), ticker=ticker, lookback=20, as_of=_T7B_RUN_DATE
+        )
+        assert [r["date"] for r in batch[ticker]["window"]] == [r["date"] for r in single["window"]]
+        assert batch[ticker]["window"] == pytest.approx(single["window"], nan_ok=True)
+        assert batch[ticker]["latest"] == pytest.approx(single["latest"], nan_ok=True)
+
+
+def _t7b_live_frames(
+    tickers: list[str], live_dates: list[str], base_by_ticker: dict[str, float]
+) -> dict[str, pl.DataFrame]:
+    """Synthetic post-seal live OHLCV, one frame per ticker (live-overlap branch)."""
+    frames: dict[str, pl.DataFrame] = {}
+    for ticker in tickers:
+        closes = [round(base_by_ticker[ticker] + i * 0.5, 2) for i in range(len(live_dates))]
+        frames[ticker] = pl.DataFrame(
+            {
+                "timestamp": live_dates,
+                "ticker": [ticker] * len(live_dates),
+                "open": closes,
+                "high": [c + 0.2 for c in closes],
+                "low": [c - 0.2 for c in closes],
+                "close": closes,
+                "volume": [1_000_000 + i for i in range(len(live_dates))],
+            }
+        )
+    return frames
+
+
+def test_get_price_technicals_batch_matches_single_calls_past_seal(monkeypatch):
+    """#4600: batch == N single calls on the live-overlap branch (``as_of > seal``).
+
+    The seal-only parity test above covers ``as_of == seal`` (no live fetch).
+    Production reads run at a run_date past the seal, so this drives the
+    ``as_of > seal`` branch — ``_read_r2_window`` fetches the post-seal live
+    overlap, drops the unsettled ``as_of`` bar, and merges it onto the sealed
+    history. Batch and per-ticker values must still match exactly.
+    """
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    seal = _dt_date.fromisoformat(_T7B_AS_OF)
+    live_dates = [(seal + _tdelta_mod(days=i)).isoformat() for i in (1, 2, 3)]
+    frames = _t7b_live_frames(list(_T7B_TICKERS), live_dates, {"SPY": 130.0, "QQQ": 230.0})
+    monkeypatch.setattr(
+        "digiquant.data.prices.fetchers.fetch_batch",
+        lambda tickers, **kwargs: FetchResult(
+            frames={t: frames[t] for t in tickers if t in frames}, errors={}
+        ),
+    )
+    as_of = seal + _tdelta_mod(days=3)  # the unsettled as_of bar (seal+3) is excluded
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=as_of,
+    )
+    assert set(batch) == set(_T7B_TICKERS)
+    for ticker in _T7B_TICKERS:
+        single = q.get_price_technicals(
+            client=_ExplodingMarketClient(), ticker=ticker, lookback=20, as_of=as_of
+        )
+        assert [r["date"] for r in batch[ticker]["window"]] == [r["date"] for r in single["window"]]
+        assert batch[ticker]["window"] == pytest.approx(single["window"], nan_ok=True)
+        assert batch[ticker]["latest"] == pytest.approx(single["latest"], nan_ok=True)
+        # Proof the live overlap contributed: the newest served bar is post-seal,
+        # and it is seal+2 — not the excluded as_of bar (seal+3).
+        assert batch[ticker]["latest"]["date"] == live_dates[-2]
+
+
+def _arm_manifest_lookup_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Arm the shared manifest read to fail LookupError-shaped (``KeyError``)."""
+
+    def _boom() -> dict:
+        raise KeyError("as_of")
+
+    monkeypatch.setattr(mcp, "_read_manifest", _boom)
+
+
+def test_get_price_technicals_manifest_read_failure_is_fail_soft(monkeypatch):
+    """#4600 follow-up: a LookupError-shaped manifest read stays fail-soft.
+
+    Pre-#4600 the single-ticker helper resolved the seal inside its
+    ``except LookupError``, so a manifest read raising ``LookupError``
+    (``KeyError`` included) produced the empty envelope rather than
+    propagating. Resolving the shared manifest outside that guard flipped the
+    helper fail-loud; this pins the restored contract on BOTH paths — the
+    single-ticker helper returns the empty envelope, and the batch returns it
+    for every requested ticker.
+    """
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    _arm_manifest_lookup_error(monkeypatch)
+    single = q.get_price_technicals(
+        client=_ExplodingMarketClient(), ticker="SPY", lookback=20, as_of=_T7B_RUN_DATE
+    )
+    assert single == {"ticker": "SPY", "latest": {}, "window": []}
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=_T7B_RUN_DATE,
+    )
+    assert batch == {t: {"ticker": t, "latest": {}, "window": []} for t in _T7B_TICKERS}
+
+
+def test_get_price_technicals_batch_reads_manifest_once(monkeypatch):
+    """#4600: N tickers share ONE manifest read (was one per ticker)."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    batch = q.get_price_technicals_batch(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        lookback=20,
+        as_of=_T7B_RUN_DATE,
+    )
+    assert set(batch) == set(_T7B_TICKERS)
+    assert calls["n"] == 1
+
+
+def test_get_market_context_r2_reads_manifest_once(monkeypatch):
+    """#4600: the preflight market-context basket batches its technicals read."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    ctx = q.get_market_context(
+        client=_ExplodingMarketClient(),
+        tickers=list(_T7B_TICKERS),
+        series_ids=[],
+        run_date=_T7B_RUN_DATE,
+    )
+    assert sorted(ctx["price_technicals"]) == sorted(_T7B_TICKERS)
+    assert calls["n"] == 1
+
+
+def test_select_focus_tickers_reads_manifest_once(monkeypatch):
+    """#4600: H4 candidate scoring batches its technicals read."""
+    _t7b_both(monkeypatch)
+    _use_r2(monkeypatch)
+    calls = _count_manifest_reads(monkeypatch)
+    focus = select_focus_tickers(
+        client=_ExplodingMarketClient(),
+        watchlist=["SPY", "QQQ", "AAPL", "MSFT"],
+        run_date=_T7B_RUN_DATE,
+        holdings=["SPY"],
+        top_n=2,
+    )
+    assert "QQQ" in focus  # only SPY/QQQ have sealed generations
+    assert calls["n"] == 1
+
+
 def test_get_macro_series_helper_r2_matches_supabase(monkeypatch):
     _, _, sup = _t7b_both(monkeypatch)
     _use_supabase(monkeypatch)

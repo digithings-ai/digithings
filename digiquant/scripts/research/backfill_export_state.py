@@ -2,8 +2,8 @@
 """
 backfill_export_state.py — Pre-backfill Supabase state export (rollback aid).
 
-Exports daily_snapshots + documents rows for a date range to JSON files so
-the operator can restore if the backfill produces bad results.
+Exports daily_snapshots + documents + positions rows for a date range to JSON
+files so the operator can restore if the backfill produces bad results.
 
 Usage:
     python3 scripts/backfill_export_state.py --start 2026-04-05 --end 2026-04-14
@@ -16,7 +16,8 @@ import argparse
 import json
 import os
 import sys
-from datetime import date, timedelta
+import warnings
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any  # score:allow untyped any — duck-typed Supabase client + rows
 
@@ -25,8 +26,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 try:
     from supabase import create_client  # type: ignore
@@ -35,8 +43,9 @@ try:
 except ImportError:
     _HAS_SB = False
 
-ROOT = Path(__file__).parent.parent
-DEFAULT_OUT = ROOT / "data" / "backfill-backup"
+from lib.roots import SCRATCH_DATA  # noqa: E402
+
+DEFAULT_OUT = SCRATCH_DATA / "backfill-backup"
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -124,7 +133,10 @@ def export_state(start: str, end: str, out_dir: Path) -> None:
     print(f"✅ Exported {len(pos_rows)} positions rows → {pos_path}")
 
     summary = {
-        "exported_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        # Explicit UTC clock, kept in the exact "…Z" shape the export has always
+        # used (naive-UTC + "Z" suffix) so the output stays byte-identical.
+        "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        + "Z",
         "start": start,
         "end": end,
         "daily_snapshots_count": len(snap_rows),

@@ -60,7 +60,7 @@ Per repo policy ([`AGENTS.md`](../../AGENTS.md)), open a tracking epic before co
 | 3 | `fix(ci): provider-review claude CLI` | REM-008, REM-089 |
 | 4 | `fix(digiquant): compute-technicals Polars types` | REM-009 |
 | 5 | `fix(infra): compose Redis blocklist wiring` | REM-005 |
-| 6 | `fix(digiclaw): heartbeat JWT + exit codes` | REM-004, REM-073 |
+| 6 | `fix(digibot): heartbeat JWT + exit codes` | REM-004, REM-073 |
 | 7 | `fix(workflows): dead refs + agent renames` | REM-044, REM-097, REM-096 |
 | 8 | `fix(digisearch): ingest backend + path containment` | REM-001, REM-011 |
 | 9 | `fix(digisearch): MCP loopback + fail-closed + docker` | REM-003, REM-021, REM-022, REM-023 |
@@ -116,8 +116,8 @@ Waves define **parallel agent batches**. Complete earlier waves before starting 
 
 | Wave | Name | Parallel batch size | Primary paths |
 |------|------|:-------------------:|---------------|
-| **0** | Cron, shell, compose wiring | 6–8 | `.github/workflows/`, `docker-compose.yml`, `digiclaw/` |
-| **1** | Security P0 + auth plane | 6–8 | `digisearch/`, `digigraph/`, `digikey/`, `digiclaw/` |
+| **0** | Cron, shell, compose wiring | 6–8 | `.github/workflows/`, `docker-compose.yml`, `digibot/` |
+| **1** | Security P0 + auth plane | 6–8 | `digisearch/`, `digigraph/`, `digikey/`, `digibot/` |
 | **2** | CI & test infrastructure | 6–8 | `.github/workflows/`, `tests/`, `scripts/score.py` |
 | **3** | Per-module P1 fixes | 8–10 (by component) | `digiquant/`, `digichat/`, `olympus/`, `digibase/` |
 | **4** | Docs-only & drift | 8–10 | `**/AGENTS.md`, `**/ARCHITECTURE.md`, `docs/` |
@@ -187,8 +187,8 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 
 #### REM-004 → AUDIT-004
 - **Title:** Send machine API key Bearer on digiquant drift/optimize from heartbeat
-- **Component:** digiclaw
-- **Files:** `digiclaw/src/digiclaw/heartbeat_runner.py`, `docker-compose.yml` (env for key), `tests/dc/test_heartbeat*.py`
+- **Component:** digibot
+- **Files:** `digibot/src/digibot/heartbeat_runner.py`, `docker-compose.yml` (env for key), `tests/dc/test_heartbeat*.py`
 - **Depends:** REM-005
 - **Parallel:** no
 - **Acceptance:** With stack up + key env, heartbeat logs show 200 on drift; fails loudly without auth
@@ -807,8 +807,8 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 
 #### REM-072 → AUDIT-072
 - **Title:** Fix HEARTBEAT.md path for Docker `DIGI_WORKSPACE`
-- **Component:** digiclaw
-- **Files:** `digiclaw/ARCHITECTURE.md`, `digiclaw/src/digiclaw/heartbeat_runner.py` or compose volume
+- **Component:** digibot
+- **Files:** `digibot/ARCHITECTURE.md`, `digibot/src/digibot/heartbeat_runner.py` or compose volume
 - **Depends:** —
 - **Parallel:** yes (wave 0)
 - **Acceptance:** heartbeat profile finds checklist file in container
@@ -816,17 +816,17 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 
 #### REM-073 → AUDIT-073
 - **Title:** Return non-zero exit when heartbeat unhealthy
-- **Component:** digiclaw
-- **Files:** `digiclaw/src/digiclaw/heartbeat_runner.py`, `tests/dc/`
+- **Component:** digibot
+- **Files:** `digibot/src/digibot/heartbeat_runner.py`, `tests/dc/`
 - **Depends:** REM-004
 - **Parallel:** yes
 - **Acceptance:** pytest: failed drift → exit code != 0
 - **Effort:** S
 
 #### REM-074 → AUDIT-074
-- **Title:** Update digiclaw AGENTS.md ADDM wording to match addm.py
-- **Component:** digiclaw
-- **Files:** `digiclaw/AGENTS.md`
+- **Title:** Update digibot AGENTS.md ADDM wording to match addm.py
+- **Component:** digibot
+- **Files:** `digibot/AGENTS.md`
 - **Depends:** REM-028
 - **Parallel:** yes
 - **Acceptance:** doc-check
@@ -1129,7 +1129,7 @@ Meta, validation, and **DOC-*** gaps not fully covered by audit rows.
 | REM-109 | — | meta | Run `make score` on branch; fix until thresholds met | staged diff | all waves | no | Security≥8 Quality≥8 Opt≥7 Acc≥9 | M |
 | REM-110 | — | meta | Pre-PR sign-off checklist completed | PR body | REM-108 | no | All checkboxes in §5.6 ticked | S |
 | REM-111 | DOC-03 | digikey | Mark ADR-0007 implemented (not proposed) | `docs/adr/0007-digikey-revocation.md` | REM-013 | yes | ADR status accepted | S |
-| REM-112 | DOC-04/05 | digiquant/digiclaw | Fix ADDM stub docs in digiquant AGENTS | `digiquant/AGENTS.md` | REM-028,074 | yes | doc-check | S |
+| REM-112 | DOC-04/05 | digiquant/digibot | Fix ADDM stub docs in digiquant AGENTS | `digiquant/AGENTS.md` | REM-028,074 | yes | doc-check | S |
 | REM-113 | DOC-07 | digigraph | Fix require_scope per-route doc drift | `digigraph/AGENTS.md` | — | yes | Matches middleware model | S |
 | REM-114 | DOC-08 | digigraph | Document data_engineer gate at registration | `digigraph/ARCHITECTURE.md` | REM-049 | yes | Matches code | S |
 | REM-115 | DOC-09 | digisearch | Fix `/azure_status` auth in ARCHITECTURE | `digisearch/ARCHITECTURE.md` | — | yes | Matches middleware | S |
@@ -1169,7 +1169,7 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | **REM-140** | G-04 | Locate and mark edgar (or named) tests with `@pytest.mark.unit` | 2 | `tests/**` (grep edgar) | — | `pytest --collect-only -m unit` includes edgar suite | S |
 | **REM-141** | DOC-02 | Update `ROADMAP.md` revocation / Redis opt-in (with REM-016) | 4 | `ROADMAP.md` | REM-016 | doc-check; matches SECURITY.md | S |
 | **REM-142** | DOC-04 | Fix `digiquant/ARCHITECTURE.md` ADDM / drift sections | 4 | `digiquant/ARCHITECTURE.md` | REM-028 | doc-check; ADDM wording matches `addm.py` | S |
-| **REM-143** | DOC-05 | Fix `digiclaw/ARCHITECTURE.md` ADDM + auth-blocked vs logic-blocked | 4 | `digiclaw/ARCHITECTURE.md` | REM-074 | doc-check | S |
+| **REM-143** | DOC-05 | Fix `digibot/ARCHITECTURE.md` ADDM + auth-blocked vs logic-blocked | 4 | `digibot/ARCHITECTURE.md` | REM-074 | doc-check | S |
 | **REM-144** | G-05 | Wire `apps/digichat` into `make test-unit` or documented aggregate target | 2 | `Makefile`, `docs/agents/COMPONENT_ROUTING.md` | — | `make test-unit` runs digichat vitest OR README documents npm-only gate | S |
 | **REM-145** | G-06 | Document or dedupe double workflow triggers (`ci.yml` vs path filters) | 2 | `.github/workflows/ci.yml`, `docs/agents/CI_CONVENTIONS.md` | — | doc-check; one trigger path per PR event documented | S |
 
@@ -1276,7 +1276,7 @@ Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST
 | A3-digigraph | `digigraph/**`, `tests/dg/**` | 002, 012, 025–027, 047, 049–054 |
 | A4-digikey | `digikey/**`, `tests/dk/**` | 013–019, 104 |
 | A5-digiquant | `digiquant/**`, `tests/dq/**` | 009, 028–031, 055–060, 101–102 |
-| A6-digiclaw | `digiclaw/**`, `tests/dc/**` | 004, 072–074 |
+| A6-digibot | `digibot/**`, `tests/dc/**` | 004, 072–074 |
 | A7-digibase+smith | `digibase/**`, `digismith/**`, `tests/db/**`, `tests/dsm/**` | 039–040, 066–071 |
 | A8-digichat | `apps/digichat/**` | 010, 032–034, 075–079, 105 |
 | A9-olympus+design | `cloudflare/olympus/**`, `packages/design/**`, `cloudflare/digithings/**`, `cloudflare/digiquant/**` | 035–038, 080–083 |

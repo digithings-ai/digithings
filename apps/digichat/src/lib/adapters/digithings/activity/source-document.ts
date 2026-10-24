@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { MAX_DOC_FIELD_CHARS, MAX_NOTE_BODY_CHARS, type ActivityDocument } from "@/lib/chat-activity";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,6 +51,41 @@ export function resolveSourcePath(
   return fallback ? stripRepoPrefix(fallback).slice(0, MAX_DOC_FIELD_CHARS) : "";
 }
 
+/**
+ * An opaque, stable handle for a document.
+ *
+ * The handle is what makes the identity of a document stable when the document
+ * surfaces more than once — a web URL and a vault path of the same document
+ * carry the same handle, a title does not. It is derived from the source's own
+ * per-document id and is NOT reversible, because the document id itself must
+ * never reach the browser (the activity payload is client facing).
+ */
+export function documentHandleToken(handle: string): string {
+  return `doc-${createHash("sha256").update(handle).digest("hex").slice(0, 16)}`;
+}
+
+/**
+ * The handle of the document a raw source row describes: the digivault doc id,
+ * or the digigraph source id with its chunk rank removed.
+ *
+ * Both ids are per DOCUMENT: digigraph builds `source_id` as
+ * `<doc_id>#<rank>` for a chunk and as `<doc_id>` for a whole document, so the
+ * base of the source id is the document id. A DOI is deliberately NOT used
+ * here: a DOI names a work, and one work can carry several documents.
+ *
+ * The handle is carried even when the path was rewritten to the title — that
+ * rewrite is exactly the case where the path stops being an identity.
+ */
+export function resolveDocumentHandle(raw: Record<string, unknown>): string | undefined {
+  const docId = (typeof raw.doc_id === "string" ? raw.doc_id : "").split("#")[0]?.trim();
+  if (docId) return documentHandleToken(docId);
+  const sourceId = (typeof raw.source_id === "string" ? raw.source_id : "")
+    .split("#")[0]
+    ?.trim();
+  if (sourceId) return documentHandleToken(sourceId);
+  return undefined;
+}
+
 export function resolveSourceTitle(
   path: string,
   meta: Record<string, unknown>,
@@ -75,7 +112,10 @@ export function ragToolDisplayName(tool: unknown): string {
   if (t === "digivault_search_notes") return "digivault_search_notes";
   if (t === "digivault_get_note") return "digivault_get_note";
   if (t === "digivault") return "digivault";
-  if (t === "digithings_docs" || t.startsWith("digisearch")) return "digisearch";
+  // Keep dedicated per-index tools (digisearch_occ_help, digisearch_zammad_tickets,
+  // DIG-3269) under their real name: the started row is keyed by that name, so
+  // collapsing the completion to "digisearch" spawned a second, generic row.
+  if (t === "digithings_docs") return "digisearch";
   return t.slice(0, MAX_DOC_FIELD_CHARS);
 }
 
@@ -98,6 +138,8 @@ export function mapRawSourceToDocument(raw: Record<string, unknown>): ActivityDo
   }
   if (!path || !title) return null;
   const doc: ActivityDocument = { title, path };
+  const handle = resolveDocumentHandle(raw);
+  if (handle) doc.docId = handle;
   const tier =
     (typeof meta.evidence_tier === "string" && meta.evidence_tier.trim()) ||
     (meta.source_kind === "external" ? "External" : undefined) ||

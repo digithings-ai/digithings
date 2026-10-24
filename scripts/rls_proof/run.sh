@@ -4,8 +4,8 @@
 # ============================================================================
 # Applies:
 #   1) 00_supabase_shim.sql
-#   2) digiquant/supabase/migrations/*.sql (lexicographic sort, top-level)
-#   (099/102–105 now live in digiquant/supabase/migrations/ — applied by the main glob)
+#   2) digiquant/supabase/migrations/{engine,prod}/*.sql (engine first, then prod)
+#   (099/102–105 live in digiquant/supabase/migrations/prod/ — applied by the layered glob)
 #   4) seed (01_seed.sql) — once, before both proofs
 #   5) 02_pre_cutover_110.sql  (anon house-only; BEFORE 900)
 #   6) cutover/900_drop_anon_read_cutover.sql  (post-cutover state)
@@ -74,8 +74,8 @@ EOF
 run_sql_file "supabase-compat shim" "$PROOF_DIR/00_supabase_shim.sql"
 
 log ""
-log "=== Migration source: origin/develop top-level digiquant/supabase/migrations/*.sql ==="
-mapfile -t DEVELOP_MIGS < <(find "$MIG_DIR" -maxdepth 1 -name '*.sql' | sort)
+log "=== Migration source: origin/develop layered digiquant/supabase/migrations/{engine,prod}/*.sql (engine first, then prod) ==="
+mapfile -t DEVELOP_MIGS < <({ find "$MIG_DIR/engine" -maxdepth 1 -name '*.sql' | LC_ALL=C sort; find "$MIG_DIR/prod" -maxdepth 1 -name '*.sql' | LC_ALL=C sort; }))
 log "count: ${#DEVELOP_MIGS[@]}"
 for f in "${DEVELOP_MIGS[@]}"; do
   base="$(basename "$f")"

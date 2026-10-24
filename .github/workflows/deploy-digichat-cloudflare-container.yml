@@ -1,174 +1,334 @@
-# Deploys the digithings.ai digichat Cloudflare Container -- the live
-# `/embed` widget behind digithings.ai/chat and digithings.ai/chat/occ
-# (see apps/digichat-cloudflare/README.md). Before this workflow (#2199),
-# that deploy was manual-only (`npx wrangler deploy` from a developer machine
-# with Docker + `wrangler login`) -- verified no workflow anywhere ran it.
+# Deploy: digithings-digichat (Cloudflare Containers)
 #
-# This is a SEPARATE deploy target from publish-digichat-image.yml's GHCR
-# image: that image is for self-hosted/DataTap client compose deployments and
-# is never consumed here -- this Container builds fresh from
-# Dockerfile.digichat-cloudflare via Cloudflare's own build pipeline on
-# `wrangler deploy`, independent of anything pushed to GHCR.
+# The deploy lane for the digithings-digichat Worker (DigiChatContainer) and
+# its Container, which serves the digithings.ai digichat routes.
 #
-# Gated on either signal actually being real, not on every incidental commit
-# under these paths:
-#   - digichat's own version (apps/digichat/package.json) changed in this
-#     push -- the release-please signal a real digichat release just landed,
-#     mirroring publish-digichat-image.yml's existing idempotency check.
-#   - the Container wrapper itself changed (apps/digichat-cloudflare/** or
-#     Dockerfile.digichat-cloudflare) -- that code has no version field and is
-#     not release-please-tracked at all, so a version-only gate would never
-#     redeploy a fix made purely to the wrapper.
-# `workflow_dispatch` always deploys: there is no `before` SHA to diff
-# against, and a human explicitly asking for a deploy should get one.
+# HISTORY - read this before changing anything here.
 #
-# Requires repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID -- NOT
-# yet present as of #2199. Until they're added (Settings -> Secrets and
-# variables -> Actions, or `gh secret set`), this workflow fails closed with a
-# wrangler auth error rather than deploying nothing silently. The token needs
-# at least Workers Scripts:Edit on the digithings.ai Cloudflare account.
-name: "Deploy: digichat Cloudflare Container"
+# 1. Before a lane existed the digichat Worker was deployed by hand, from a
+#    developer machine, with Docker and `npx wrangler login`. The lane was
+#    deleted on 2026-10-01 by f54af7052 (#4919, Human Gate), together with the
+#    stack lane, and DIG-2843 then decided to "document as it is, no CI lane".
+#    Both were recoverable at `git show 'f54af7052^:<path>'`.
+# 2. That hazard is gone. The Container id is DERIVED from the deploying
+#    commit (DIG-3814), so every deploy creates a fresh instance and there is
+#    nothing left to hand-edit and nothing to forget. `npm run deploy`
+#    (apps/digichat-cloudflare/scripts/deploy.mjs) injects the rev, refuses to
+#    deploy when the commit cannot be resolved, and reads /_digichat/meta back
+#    afterwards to prove the live id is the one this commit implies.
+# 3. So this lane is RE-DERIVED, not `git revert`ed back - DIG-2843's own
+#    precedent is to re-derive a deleted lane, never to revert it. It deploys
+#    through the wrapper, so the rev is never absent. A BARE `npx wrangler
+#    deploy` ships the legacy pinned Container id (DIG-3814, DIG-4487), which
+#    is the defect class this whole arrangement exists to remove.
+#
+# THE GATE IS THE POINT. The deploy job sits behind the `production`
+# environment, whose manifest (.github/environments.json) names Chris as the
+# required reviewer and allows main-branch deployments only. That is what
+# lets Chris stop a deploy; the trigger is only what makes the gate
+# observable. Keep production-deploy-gate-watchdog.yml able to see anything
+# that sits on the gate.
+#
+# THE DEPLOY IS MANUAL, ON PURPOSE. DIG-4612 (the stack lane's own
+# re-derivation) ruled on this file by name: "Do NOT restore it with a
+# `push: main` trigger. On main it had NO `production` environment gate, so a
+# push-triggered successor would deploy production on every merge with
+# nobody's approval - worse than the manual path. If it comes back it must be
+# manual dispatch plus a gate."
+#
+# So the `push: main` trigger below runs VALIDATION ONLY: the deploy job's
+# `if` is `github.event_name == 'workflow_dispatch'`, so a merge to main
+# proves the tree still builds and the packaging generator still works and
+# deploys NOTHING. The trigger exists because this repo's own invariant
+# (tests/scripts/test_deploy_digithings_stack_cloudflare.py,
+# test_every_deploy_workflow_fires_on_push_to_main) requires every
+# deploy-capable workflow to fire on a push to main. The push and the
+# pull_request path filters are the same list, so the proof on a develop PR is
+# the proof that runs on main.
+#
+# THE REF IS A CHOICE, NOT A DEFAULT TO TRUST, AND TWO REFS ARE IN PLAY.
+#   * The DISPATCH ref is the branch or tag the RUN is started from, and the
+#     `production` environment's branch policy is evaluated against IT -
+#     GitHub matches the deployment branch rule against the run's GITHUB_REF,
+#     not against anything this workflow computes. That policy allows `main`
+#     only, and this repo's default branch is `develop`, so a run started
+#     from `develop` is refused by the environment before the deploy job
+#     runs. The lane cannot deploy while it lives on `develop` alone; it
+#     becomes deployable once a promotion carries it to `main`.
+#   * `inputs.ref` is the TREE that gets checked out and deployed, and the
+#     environment never sees it. A dispatch from `main` with a ref of
+#     `some-feature-branch` would pass the branch policy and ship that
+#     branch, so the policy alone does not bind what production gets. The
+#     deploy gate therefore refuses any tree that is not on main - it
+#     compares the checked-out commit with main through the GitHub API - and
+#     it does that BEFORE Chris is asked to approve anything, because the
+#     deploy job needs the gate. The commit the gate resolved is handed to
+#     the deploy job, so what ships is exactly what was proven, not a branch
+#     that moved in between.
+# As of 2026-10-22 the live digichat Worker's rev (eef1ee72c20f) IS main's
+# tip - it was promoted to main by #6226 - so a dispatch at main ships the
+# live tree, including the OCC gate. That is a measurement, not a guarantee,
+# and it moves as soon as main moves: the ref decides what production gets,
+# so the ref is printed and resolved before the deploy and the approval is
+# Chris's to give knowingly. DIG-3390 owns keeping the ref honest.
+#
+# TWO APPROVED DISPATCHES CAN RACE. The concurrency group is per-run (see
+# below), so two approved dispatches may both reach `wrangler deploy` and the
+# older tree can end up live. A static group would serialise them, but this
+# repo's own invariant refuses a static group on a production-gated job
+# (tests/scripts/test_workflow_environment_concurrency.py): a shared group
+# with cancel-in-progress: true would cancel a deployment Chris already
+# approved. The residual race is the price of that rule, and it needs two
+# dispatches, not an unattended loop.
+#
+# CREDENTIALS. wrangler authenticates from the CLOUDFLARE_API_TOKEN
+# environment variable, and the repo secret of that name is the token this
+# lane deploys with: it carries Workers Scripts:Edit on the digithings.ai
+# account. CLOUDFLARE_ACCOUNT_ID is the account it deploys into. Both exist
+# as repo secrets (see .github/secret-names.json for the names-only list);
+# neither is read from a local file and neither is printed. The trap that
+# broke the stack lane is local, not CI: the LOCAL .env token called
+# CLOUDFLARE_API_TOKEN in apps/digithings-stack-cloudflare/wrangler.toml
+# carries only Vectorize/D1 scopes and makes every deploy fail with code
+# 10000. The repo secret is a different credential.
+#
+# THE IMAGE INPUTS ARE GENERATED. The image this lane builds COPYs
+# image-packages/digichat/manifests/*/package.json and image-packages/digichat/npm,
+# and image-packages/ is gitignored (.gitignore "/image-packages/") and
+# produced by scripts/package_r5_image_inputs.py. A checkout never carries it,
+# so every job that leads to the image build packages it first - the deploy
+# job (the build context needs it), the deploy gate (so a broken generator is
+# red BEFORE Chris's production approval) and the pull-request check (so a
+# broken generator is visible in CI before a change can reach main - a
+# signal, not a merge gate: the gate on a develop PR is the `local-ci`
+# status). Run 39485748555 is what that missing step cost on the stack lane.
+#
+# Do not add `working-directory`: the Container pins
+# `image_build_context = "../.."`, so the image build needs the repository
+# root as its context (#4046).
+name: "Deploy: digithings-digichat (Cloudflare Containers)"
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - "apps/digichat/package.json"
+      - "infra/docker/Dockerfile.digichat-cloudflare"
       - "apps/digichat-cloudflare/**"
-      - "Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - "apps/dashboard/**"
+      - "packages/design/**"
+      - "packages/ui/**"
+      - "packages/digichat-ui/**"
+      - "packages/hero-banner/**"
+      - "packages/catalog/**"
+      - "config/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.base.json"
+      - ".dockerignore"
+      - ".github/workflows/deploy-digichat-cloudflare-container.yml"
+      # The action that packages the image inputs is a build input of the image
+      # too: it decides what the image carries. A change to it that matches no
+      # filter would never be proven in CI, and the merge would deploy nothing.
+      - ".github/actions/package-digichat-image-inputs/action.yml"
+  pull_request:
+    paths:
+      - "infra/docker/Dockerfile.digichat-cloudflare"
+      - "apps/digichat-cloudflare/**"
+      - "apps/digichat/**"
+      - "apps/dashboard/**"
+      - "packages/design/**"
+      - "packages/ui/**"
+      - "packages/digichat-ui/**"
+      - "packages/hero-banner/**"
+      - "packages/catalog/**"
+      - "config/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.base.json"
+      - ".dockerignore"
+      - ".github/workflows/deploy-digichat-cloudflare-container.yml"
+      - ".github/actions/package-digichat-image-inputs/action.yml"
   workflow_dispatch:
-
-concurrency:
-  group: deploy-digichat-cloudflare-container
-  cancel-in-progress: false
+    inputs:
+      ref:
+        description: "Git ref to deploy. Only a tree that is ON main is accepted (the deploy gate refuses the rest, before the approval); the default is main's tip."
+        required: false
+        default: "main"
 
 permissions:
   contents: read
 
+# Per-run group, and never superseding: the `production` environment can
+# hold a run at the approval gate, so a shared group with
+# cancel-in-progress: true would cancel a deployment Chris already
+# approved. This is the same shape, and the same reason, as the other
+# production-gated lane in this repo.
+concurrency:
+  group: deploy-digichat-cloudflare-container-${{ github.run_id }}
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  check:
+    name: "check (pull request - validation only)"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Full history: the gating step below diffs against `before`, which
-          # a shallow (default depth-1) clone would not have fetched.
-          fetch-depth: 0
-
-      - name: Decide whether a deploy is warranted
-        id: check
-        env:
-          BEFORE: ${{ github.event.before }}
-          EVENT_NAME: ${{ github.event_name }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          # workflow_dispatch has no `before` SHA — a human explicitly asked to deploy.
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "workflow_dispatch — deploying."
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          current_version=$(jq -r .version apps/digichat/package.json)
-          if [ -z "$current_version" ] || [ "$current_version" = "null" ]; then
-            echo "apps/digichat/package.json has no .version field -- refusing to guess." >&2
-            exit 1
-          fi
-          target_message="digichat-v${current_version}"
-
-          # When `before` is missing or not in the fetched history (first push, force-push
-          # to main), git-diff gating is unreliable. Fall back to live target state:
-          # compare against the latest Worker deployment message (mirrors
-          # publish-digichat-image.yml's manifest inspect gate).
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
-            echo "Unresolvable prior commit — using live deployment message instead of git diff."
-            live_message=""
-            if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-              live_message=$(npx --yes wrangler@4.28.0 deployments list --name digithings-digichat --json 2>/dev/null | jq -r '.[0].annotations."workers/message" // empty' || true)
-            fi
-            echo "Live deployment message: ${live_message:-<none>}; target: $target_message"
-            if [ -n "$live_message" ] && [ "$live_message" = "$target_message" ]; then
-              echo "deploy=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
-
-          # grep is deliberately not -q, and stdout is redirected instead: under
-          # `set -o pipefail`, -q exits at the first match, the writer takes SIGPIPE
-          # and the pipeline reports 141, so a large changed-file list reads as NO
-          # match. The exact threshold is grep-version-dependent -- measured ~56KB
-          # on GNU grep 3.11 and ~131KB on 3.8 -- so it can sit below the 64KB pipe
-          # buffer. This step runs under the implicit `bash -e {0}` (no pipefail),
-          # so -q would be correct today, and pipefail is not the house style here
-          # either (34 of 232 run: steps set it). But $BEFORE spans a whole
-          # develop->main promotion, and the largest on main is 76,083 bytes /
-          # 1,724 paths (#832, 2026-06-18, predating this gate; 26,657 is the max
-          # since it existed) -- past every threshold above. Draining
-          # stdin means the gate cannot silently invert if pipefail is added later.
-          if echo "$changed_files" | grep -E '^(apps/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)' >/dev/null; then
-            echo "Container wrapper itself changed -- deploying."
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if git cat-file -e "$BEFORE:apps/digichat/package.json" 2>/dev/null; then
-            prev_version=$(git show "$BEFORE:apps/digichat/package.json" | jq -r .version)
-          else
-            prev_version=""
-          fi
-          echo "digichat version: ${prev_version:-<none>} -> $current_version"
-
-          if [ "$prev_version" != "$current_version" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "digichat version unchanged, and the wrapper itself didn't change -- nothing to deploy."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-node@v4
-        if: steps.check.outputs.deploy == 'true'
         with:
           node-version: "22"
           cache: npm
+      - run: npm ci
+      # The image this lane deploys is built from the repository root, and the
+      # Dockerfile COPYs image-packages/digichat/..., a GENERATED and gitignored
+      # tree. Packaging it here proves the generator works in CI before a
+      # change can reach main, instead of at a production deploy.
+      - name: "Package the digichat image inputs"
+        uses: ./.github/actions/package-digichat-image-inputs
+      # `typecheck` and `test` are this app's own scripts: `tsc --noEmit` and
+      # `vitest run`, run with the app as the working directory (npm runs a
+      # workspace script in that workspace).
+      - run: npm run typecheck --workspace digichat-cloudflare
+      - run: npm run test --workspace digichat-cloudflare
 
-      - name: Install workspace dependencies
-        if: steps.check.outputs.deploy == 'true'
-        # apps/digichat-cloudflare has no lockfile of its own -- it's an npm
-        # workspace under the root package-lock.json (see "workspaces" in the root
-        # package.json). `npm ci` must run at repo root so wrangler can resolve
-        # apps/digichat-cloudflare/src/index.ts's `@cloudflare/containers`
-        # import when it bundles the Worker. Without this, wrangler 3.x (the
-        # version wrangler-action installed by default before this fix pinned
-        # wranglerVersion below) silently ignored `[[containers]]` and never tried
-        # to bundle that import at all; wrangler 4.x tries to build it for real and
-        # fails loudly with "Could not resolve '@cloudflare/containers'" if
-        # node_modules isn't there -- verified locally both ways.
-        run: npm ci
-
-      - name: Read digichat version
-        if: steps.check.outputs.deploy == 'true'
-        id: version
-        run: echo "version=$(jq -r .version apps/digichat/package.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy
-        if: steps.check.outputs.deploy == 'true'
-        uses: cloudflare/wrangler-action@v3
+  check-deploy-gate:
+    name: "check (deploy gate)"
+    # No `needs`: with `needs: [check]` the push-to-main path skipped
+    # `check`, so it skipped the gate and then skipped `deploy` - DIG-1569
+    # reproduced inside its own fix.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      rev: ${{ steps.resolve.outputs.rev }}
+    steps:
+      - uses: actions/checkout@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/digichat-cloudflare
-          command: deploy --message digichat-v${{ steps.version.outputs.version }}
-          # No upstream provider secrets here: the digichat Worker's envVars whitelist
-          # does not forward OPENROUTER_API_KEY / CHEAPERINFERENCE_API_KEY (digithings-stack owns them).
-          # Do not set wrangler-action `with.wranglerVersion` to 4.28.0 — that
-          # CLI rejects `deploy --message` (run 34213316753). Omit the pin so
-          # `npx --no-install wrangler` uses the workspace install from
-          # `npm ci` (lockfile 4.120.x), which accepts --message and builds
-          # Containers. wrangler-action@v3's own default is still 3.90.0.
-          # wranglerVersion floor: 4.28.0 (package.json ^4.28.0)
+          ref: ${{ inputs.ref || github.sha }}
+      # THE TREE IS BOUND TO MAIN BEFORE CHRIS IS ASKED. The production
+      # environment's branch policy is matched against the DISPATCH ref, so it
+      # says nothing about `inputs.ref`: a dispatch from main with a ref of
+      # some-feature-branch would pass the policy and ship that branch. This
+      # step refuses any tree that is not on main, and it runs BEFORE the
+      # approval because the deploy job needs this one. The commit it resolves
+      # is handed to the deploy job, so the tree that ships is the tree that
+      # was proven here, not a branch that moved in between.
+      - name: "Preflight: the tree this deploy ships is on main"
+        id: resolve
+        env:
+          REQUESTED_REF: ${{ inputs.ref || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rev="$(git rev-parse --verify 'HEAD^{commit}')"
+          echo "requested ref: $REQUESTED_REF"
+          echo "checked out commit: $rev"
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${rev}" --jq .status 2>/dev/null || echo unknown)"
+          case "$status" in
+            behind|identical)
+              echo "the tree is on main (compare status: $status)" ;;
+            *)
+              echo "::error::the tree this deploy ships ($rev, requested ref $REQUESTED_REF) is not on main (compare status: $status)."
+              echo "::error::The production environment's branch policy is matched against the DISPATCH ref, not against inputs.ref, so nothing else constrains this tree. A dispatch at main ships main."
+              exit 1 ;;
+          esac
+          echo "container id this deploy ships: shared-$(echo "$rev" | cut -c1-12)"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The gate is the last job before Chris's production approval, so the
+      # packaging runs HERE as well as in the deploy job: a generator that
+      # broke must make the gate red, not a deploy that is already approved.
+      - name: "Package the digichat image inputs"
+        uses: ./.github/actions/package-digichat-image-inputs
+      - run: npm run typecheck --workspace digichat-cloudflare
+      - run: npm run test --workspace digichat-cloudflare
+
+  deploy:
+    name: "deploy (production)"
+    # Manual dispatch only. A merge to main runs the gate above and deploys
+    # NOTHING - see the header, and DIG-4612's ruling on this file by name.
+    if: github.event_name == 'workflow_dispatch'
+    needs: [check-deploy-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      # The COMMIT the gate validated, not the ref: `main` can move between the
+      # gate and this job, and what ships must be what was proven.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-deploy-gate.outputs.rev }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The build context is the repository root, so the tree the Dockerfile
+      # COPYs from has to exist in THIS job. image-packages/ is generated and
+      # gitignored: without this step the build dies computing its cache key.
+      #
+      # The local deploy path has always packaged these inputs first
+      # (scripts/local-deploy/deploy_worker.sh) and the digichat publish lane
+      # has had the same step since #5968 (DIG-4506).
+      - name: "Package the digichat image inputs"
+        uses: ./.github/actions/package-digichat-image-inputs
+      # Preflight: say what is about to be deployed. Every step of a job that
+      # names an environment runs AFTER that environment's protection rules are
+      # satisfied, so this step cannot be the thing that stops a bad ref - the
+      # gate above is, and it runs before the approval. What this step does is
+      # prove that the tree in this job is the tree the gate validated, and
+      # print the facts the approval was about: the deploy's rev is the commit
+      # the ref resolves to, and the Container id is derived from it.
+      - name: "Preflight: the ref and the rev this deploy ships"
+        env:
+          REQUESTED_REF: ${{ inputs.ref || github.sha }}
+          GATED_REV: ${{ needs.check-deploy-gate.outputs.rev }}
+        run: |
+          set -euo pipefail
+          rev="$(git rev-parse --verify HEAD)"
+          echo "requested ref: $REQUESTED_REF"
+          echo "checked out commit: $rev"
+          echo "commit the deploy gate validated: $GATED_REV"
+          if [ "$rev" != "$GATED_REV" ]; then
+            echo "::error::this job holds $rev but the deploy gate validated $GATED_REV, so the tree that would ship is not the tree that was proven."
+            exit 1
+          fi
+          echo "container id this deploy ships: shared-$(echo "$rev" | cut -c1-12)"
+      # Preflight (DIG-4717). Actions substitutes an EMPTY STRING for a secret
+      # name it cannot resolve, so a missing credential reaches the deploy as an
+      # empty environment variable and the failure lands on wrangler as an auth
+      # error instead of on the missing secret. This step makes the gap loud at
+      # the point of use. It prints whether the variable is empty, never its
+      # value.
+      - name: "Preflight: the Cloudflare credentials are present"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty. This lane needs a Cloudflare API token that can deploy a Worker with a container."
+            echo "::error::The name is the one the repo already holds. A dedicated Workers Scripts:Edit token under a name of its own would also work and is the better long-term shape, but it has to be CREATED first: a name with no secret behind it deploys nothing."
+            exit 1
+          fi
+          echo "CLOUDFLARE_API_TOKEN is present (value not shown)."
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is empty. wrangler would fail on the account instead of on the missing secret."
+            exit 1
+          fi
+          echo "CLOUDFLARE_ACCOUNT_ID is present (value not shown)."
+      # NOT a bare `npx wrangler deploy`: that ships the legacy pinned
+      # Container id (DIG-3814, DIG-4487). The wrapper injects the rev, refuses
+      # to deploy without it and reads the id back afterwards.
+      - name: "Deploy digichat container"
+        run: npm run deploy --workspace digichat-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

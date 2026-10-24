@@ -158,7 +158,7 @@ def test_v1_web_search_ddgs_ratelimit_is_soft_envelope(
 def test_v1_web_search_success_shape_unchanged(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The success body stays exactly ``{query, results, provider}``."""
+    """The success body stays ``{query, results, provider, cost_dollars, output}``."""
     import digisearch.web_search.service as svc
     from digisearch.web_search.models import WebSearchResponse, WebSearchResult
 
@@ -173,9 +173,12 @@ def test_v1_web_search_success_shape_unchanged(
     r = client.post("/v1/web_search", json={"query": "etf flows"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"query", "results", "provider"}
+    assert set(body) == {"query", "results", "provider", "cost_dollars", "output"}
     assert body["query"] == "etf flows"
-    assert body["provider"] == "searxng"
+    # `provider` names the vendor; the in-house backend that served it moves
+    # to `output.backend` (#4711).
+    assert body["provider"] == "internal"
+    assert body["output"] == {"backend": "searxng"}
     assert [row["url"] for row in body["results"]] == ["https://a.com/1"]
 
 
@@ -281,15 +284,16 @@ def test_v1_web_search_empty_unresponsive_engines_reaches_client(
 
     The hosted container's only observability channel is this HTTP response, so
     a successful empty body must name the blocked engines without changing the
-    ``{query, results, provider}`` shape.
+    ``{query, results, provider, cost_dollars, output}`` shape.
     """
     _searxng_empty_with_unresponsive_engines(monkeypatch)
     r = client.post("/v1/web_search", json={"query": "etf flows"})
     assert r.status_code == 200
     body = r.json()
     assert body["results"] == []
-    assert body["provider"] == _UNRESPONSIVE_DIAGNOSTIC
-    assert set(body) == {"query", "results", "provider"}
+    assert body["provider"] == "internal"
+    assert body["output"]["backend"] == _UNRESPONSIVE_DIAGNOSTIC
+    assert set(body) == {"query", "results", "provider", "cost_dollars", "output"}
 
 
 @pytest.mark.unit
@@ -306,4 +310,5 @@ def test_orchestrator_invoke_web_search_empty_unresponsive_engines_reaches_clien
     body = r.json()
     assert body.get("ok") is True
     assert body["data"]["results"] == []
-    assert body["data"]["provider"] == _UNRESPONSIVE_DIAGNOSTIC
+    assert body["data"]["provider"] == "internal"
+    assert body["data"]["output"]["backend"] == _UNRESPONSIVE_DIAGNOSTIC

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
+import { apiDb } from '@/lib/api-query';
+import { isApiConfigured } from '@/lib/api-client';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
@@ -110,7 +112,7 @@ export default function PipelineNodeDetail({
           size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
         ].join(' ')}
       >
-        {documentKey && loading && (
+        {loading && (
           <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="w-full" />
@@ -120,7 +122,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Error */}
-        {documentKey && !loading && error && (
+        {!loading && error && (
           <div className="space-y-2">
             <p className="text-warn text-sm">{error}</p>
             <p className="text-xs text-ink-mute">
@@ -130,7 +132,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Document content — reused LibraryDocumentBody dispatch */}
-        {documentKey && !loading && !error && doc && (
+        {!loading && !error && doc && (
           <div className="space-y-4">
             {explanation && (
               <p className="border-b border-hair pb-3 text-xs leading-relaxed text-ink-mute">
@@ -148,7 +150,7 @@ export default function PipelineNodeDetail({
         )}
 
         {/* Not found */}
-        {documentKey && !loading && !error && !doc && (
+        {!loading && !error && !doc && (
           <div className="space-y-2 py-4">
             <p className="text-ink-mute text-sm">
               No output found for <span className="font-mono text-ink">{documentKey}</span> on {date}.
@@ -163,29 +165,18 @@ export default function PipelineNodeDetail({
   );
 }
 
-/** Fetch a document by document_key + date via Supabase. Falls back gracefully. */
+/** Fetch a document by document_key + date via the dashboard API. Falls back gracefully. */
 async function fetchByDocumentKey(
   documentKey: string,
   date: string,
 ): Promise<LibraryDocumentResult | null> {
-  const { createClient } = await import('@supabase/supabase-js');
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
+  if (!isApiConfigured()) return null;
 
-  // Secondary client — do not share GoTrue storage with the auth singleton.
-  const supabase = createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
   // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
   // row, which rendered as "No output found" — the same failure class as the
   // #1538 digest headline (a retried/backfilled publish can duplicate a
   // (document_key, date) pair even though none exist today).
-  const { data, error } = await supabase
+  const { data, error } = await apiDb
     .from('documents')
     .select('id')
     .eq('document_key', documentKey)

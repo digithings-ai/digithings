@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, type ComponentPropsWithoutRef, type FC } from "react";
+import { memo, useEffect, useRef, type ComponentPropsWithoutRef, type FC } from "react";
 import {
   ComposerPrimitive,
   unstable_defaultDirectiveFormatter,
@@ -9,6 +9,8 @@ import {
   type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import { cn } from "./cn";
+import { DotMatrix } from "../DotMatrix";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -65,13 +67,16 @@ type ItemsProps = {
 
 const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
   const { isLoading } = unstable_useTriggerPopoverScopeContext();
+  const listRef = useRef<HTMLDivElement | null>(null);
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverItems>
       {(items) => (
+        <div className="relative min-h-0">
         <div
           data-slot="composer-trigger-popover-items"
           className="flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto py-1"
           ref={(node) => {
+            listRef.current = node;
             node
               ?.querySelector<HTMLElement>("[data-highlighted]")
               ?.scrollIntoView({ block: "nearest" });
@@ -82,25 +87,70 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               key={item.id}
               item={item}
               index={index}
-              className="flex w-full cursor-pointer items-baseline justify-between gap-4 px-3 py-1.5 text-start outline-none outline-offset-[-1px] data-[highlighted]:outline data-[highlighted]:outline-1"
+              className="flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"
             >
-              <span className="shrink-0 text-sm font-medium">{item.label}</span>
+              {/* Same mark language as the composer menu: the highlighted
+                  row gets the user-message chevron and shifts right. */}
+              <span className="aui-menu-cursor" aria-hidden>
+                <DotMatrix state="user" decorative className="size-3.5" />
+              </span>
+              <span className="shrink-0 font-medium">{item.label}</span>
               {item.description ? (
-                <span className="text-muted-foreground min-w-0 truncate text-end text-xs leading-tight">
+                <span className="text-ink-mute ml-auto min-w-0 truncate text-end text-xs leading-tight">
                   {item.description}
                 </span>
               ) : null}
             </ComposerPrimitive.Unstable_TriggerPopoverItem>
           ))}
           {items.length === 0 && (
-            <div className="text-muted-foreground px-3 py-2 text-sm">
+            <div className="text-ink-mute px-3 py-2 text-sm">
               {isLoading ? loadingLabel : emptyLabel}
             </div>
           )}
         </div>
+        <OverlayScrollbar targetRef={listRef} width={6} />
+        </div>
       )}
     </ComposerPrimitive.Unstable_TriggerPopoverItems>
   );
+};
+
+/**
+ * Arrow-key handling for the picker.
+ *
+ * The composer textarea keeps focus while the picker is open, so the keys are
+ * caught at document level (capture) rather than on the popover.
+ *
+ * It lives inside `Unstable_TriggerPopover` because the popover scope is the
+ * only place that exposes the picker's own `close()`. A synthetic Escape
+ * dispatched on `document` has `document` as its target, so it never reaches
+ * the composer's own keydown handler and the picker stayed open (DIG-4599).
+ */
+const TriggerPopoverArrowKeys: FC = () => {
+  const { open, close } = unstable_useTriggerPopoverScopeContext();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      const popover = document.querySelector<HTMLElement>(
+        '[data-slot="composer-trigger-popover"]',
+      );
+      if (!popover) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "ArrowRight") {
+        // Same as Enter: submit the highlighted row.
+        popover.querySelector<HTMLElement>("[data-highlighted]")?.click();
+        return;
+      }
+      // Same as Escape: go back / close the picker, through the picker's own
+      // scope. Upstream's Escape handler closes the popover the same way.
+      close();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open, close]);
+  return null;
 };
 
 /**
@@ -135,7 +185,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
     <ComposerPrimitive.Unstable_TriggerPopover
       data-slot="composer-trigger-popover"
       className={cn(
-        "aui-composer-trigger-popover bg-popover text-popover-foreground absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border",
+        "aui-composer-trigger-popover bg-surface-2 text-ink absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border",
         className,
       )}
       {...props}
@@ -152,6 +202,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
           removeOnExecute={action.removeOnExecute}
         />
       ) : null}
+      <TriggerPopoverArrowKeys />
       <Items emptyLabel={emptyItemsLabel} loadingLabel={loadingLabel} />
     </ComposerPrimitive.Unstable_TriggerPopover>
   );

@@ -1,0 +1,66 @@
+name: "Security: customer PII scan"
+
+# DIG-1498 R5 / DIG-2607. The gitignore rules added for the occ_tickets
+# artifacts govern untracked files only: `git add -f`, a missing root
+# .gitignore and the next artifact under the next name all walk past them.
+# This job scans what is actually committed.
+#
+# Deliberate divergence from security-gitleaks.yml: no paths-ignore. That
+# workflow skips **.md and docs/** because a credential pasted into prose is
+# noise. Customer PII in a markdown file is the whole incident this job
+# exists for, so scoping it away would leave the exact leak undetected.
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: pr-${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  customer-pii-scan:
+    name: Scan tracked files for customer PII
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # No job-level env here on purpose: the `runner` context is not available in
+    # a job's env block (actionlint enforces this). RUNNER_TEMP is already
+    # exported into every step, which is how security-gitleaks.yml reaches it.
+
+    steps:
+      - name: Check out the full history
+        uses: actions/checkout@v4
+        with:
+          # The scanner enumerates tracked files from the index, so it needs the
+          # checkout, not a shallow one, but not the history either way.
+          fetch-depth: 0
+
+      - name: Scan tracked files for customer PII
+        run: python3 scripts/scan_customer_pii.py --json "${RUNNER_TEMP}/customer-pii-report.json"
+
+      # `if: always()` on purpose. A report step gated on success() publishes
+      # nothing exactly when a human needs it: the job is red BECAUSE the scan
+      # found something, and success() is false on the run that matters.
+      - name: Name the findings
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/customer-pii-report.json" ]; then
+            echo "Customer PII findings (path and line only, never the value):"
+            cat "${RUNNER_TEMP}/customer-pii-report.json"
+          else
+            echo "The scan exited before it could write a report; see the step above."
+          fi
+
+      - name: Upload the findings report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-pii-report
+          path: ${{ runner.temp }}/customer-pii-report.json
+          if-no-files-found: warn
+          retention-days: 30

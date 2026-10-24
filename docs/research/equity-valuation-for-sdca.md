@@ -40,9 +40,9 @@ that workbook is **not** committed.
 |---|---|---|---|---|---|---|
 | CAPE (Shiller P/E10) | Yale `ie_data.xls` (academic). **Not on FRED.** Do not scrape MULTPL. | Monthly | 1871– | Shiller posts it for research; not a registered adviser; no redistribution-as-product claim. Human review before we *depend* on a monthly pull. | Earnings lag 1–2 quarters; CPI is revised. There is **no ALFRED vintage**. Impose a publication lag (e.g. use month *t−2* CAPE on day *t*) and never “fill forward” a restated E. | Slow valuation. Map to implied price rails (CAPE band × real EPS), **not** to a time-power-law. |
 | Trailing / forward PE | Trailing: from prices + GAAP/operating EPS (paid vendor or delayed free). Forward: FactSet / Bloomberg consensus. | Daily / quarterly | Trailing: decades if vendor; forward: ~30y, vendor. | Paid. **Human gate** before a new vendor. | Consensus forward PE is revised continuously — classic lookahead if you use the final number on a past date. | Inferior to CAPE for a multi-decade SDCA book. Skip until a PIT vendor exists. |
-| Buffett (mkt cap / GDP) | **FRED first.** Construct `NCBEILQ027S` (nonfinancial corporate equities, $ millions, quarterly) / `GDP` ($ billions, SAAR). World Bank `DDDM01USA156NWDB` is the same idea annually, last obs **2020** — too lagged to drive a daily strategy. | Quarterly (GDP: advance / second / third + annual revisions) | 1947– | [FRED ToS](https://fred.stlouisfed.org/legal/): free with attribution; API key required for the JSON API. Graph CSV is public. | **This is the lookahead trap.** Using today’s GDP vintage on 2009-03-31 is not what a 2009 actor saw. Use ALFRED (`realtime_start` = `realtime_end` = as-of). `macro_ingest.fred_observations_to_rows` already *stores* `realtime_start` but `fetch_fred_series()` does **not** request vintages — current ingest is latest-vintage. | Slow valuation / regime. Bad as a *daily* rail by itself: COVID Q2 2020 **GDP collapse in the denominator made the ratio look *more expensive*** right as equities bottomed. |
+| Buffett (mkt cap / GDP) | **FRED first.** Construct `NCBEILQ027S` (nonfinancial corporate equities, $ millions, quarterly) / `GDP` ($ billions, SAAR). World Bank `DDDM01USA156NWDB` is the same idea annually, last obs **2020** — too lagged to drive a daily strategy. | Quarterly (GDP: advance / second / third + annual revisions) | 1947– | [FRED ToS](https://fred.stlouisfed.org/legal/): free with attribution; API key required for the JSON API. Graph CSV is public. | **This is the lookahead trap.** Using today’s GDP vintage on 2009-03-31 is not what a 2009 actor saw. Use ALFRED (`realtime_start` = `realtime_end` = as-of). The FRED mapper was removed with the move to gloomberb `econ_series`, which seals a print as fetched — no vintages. | Slow valuation / regime. Bad as a *daily* rail by itself: COVID Q2 2020 **GDP collapse in the denominator made the ratio look *more expensive*** right as equities bottomed. |
 | Equity risk premium (CAPE earnings yield − 10y) | CAPE (above) + FRED `DGS10` (already in `macro_series.yaml`) | Daily rate × monthly CAPE | 1962– (10y); CAPE 1881– | Same as legs. | `DGS10` is a daily close, low revision risk. CAPE lag still applies. ERP **must not** mix a revised CAPE with a contemporaneous yield without the lag. | Rate-aware valuation. **This is the metric that makes 2020 look cheap** when raw CAPE does not (see table). Prefer ERP (or CAPE-implied price *and* a rates overlay) over raw CAPE percentile. |
-| HY OAS (ICE BofA) | FRED `BAMLH0A0HYM2` — **already in** `digiquant/src/digiquant/research/config/macro_series.yaml` and the daily FRED ingest. MCP `digiquant_get_macro_series` reads the *ingested* Supabase table, not live FRED. | Daily | 1996– | ICE via FRED. Graph CSV without an API key returned only ~3 years in this session; full history needs `FRED_API_KEY` (already used by `fetch_fred`). | Spreads are not revised like GDP, but the series can be restated. Still prefer ALFRED for backtests. | **Regime filter / composite indicator**, not a valuation rail. Closest existing pattern: M2 liquidity’s indicator vote (`indicators/m2_signals.py`) feeding a precomputed parquet. |
+| HY OAS (ICE BofA) | FRED `BAMLH0A0HYM2` — **already in** `digiquant/src/digiquant/research/config/macro_series.yaml` and the daily FRED ingest. MCP `digiquant_get_macro_series` reads the *ingested* Supabase table, not live FRED. | Daily | 1996– | ICE via FRED. Graph CSV without an API key returned only ~3 years in this session. FRED was dropped as a provider on 2026-10-04 (DIG-335) and `FRED_API_KEY` is retired, so do not provision it; full history for this series is an open gap covered only by the sealed Gloomberb `econ_series` panel. | Spreads are not revised like GDP, but the series can be restated. Still prefer ALFRED for backtests. | **Regime filter / composite indicator**, not a valuation rail. Closest existing pattern: M2 liquidity’s indicator vote (`indicators/m2_signals.py`) feeding a precomputed parquet. |
 | Put/call (CBOE) | CBOE daily market statistics; historical usually **paid**. Not on FRED. | Daily | 1990s– (vendor) | Proprietary. Scraping the public delayed page is fragile and likely ToS-hostile. **Human review required** before any dependency. | Same-day sentiment; little revision, but definition changes (equity-only vs total, inverted ETF effects). | Sentiment overlay in the composite, **never** a `RiskModel` rail. |
 
 **FRED-first rule, applied:** anything we can already ingest (`DGS10`, `BAMLH0A0HYM2`, `GDP`,
@@ -54,7 +54,7 @@ pursued.
 ## Level vs rails — does `RiskModel` fit?
 
 `RiskModel` is a structural protocol: `rails(dates) -> DataFrame[low, median, high]`. The engine
-then calls `valuation_z_score(price, low, median, high)` and maps that z into `[0, 100]` risk.
+then calls `power_law_z_score(price, low, median, high)` and maps that z into `[0, 100]` risk.
 Crypto fills those rails with quantile regressions of *price on log calendar time*.
 
 Equities can reuse the **protocol** in one of two ways:
@@ -77,11 +77,11 @@ honest; interpolating GDP across days is not.
 
 | Hazard | What goes wrong | How to avoid |
 |---|---|---|
-| GDP / market-cap revisions | BEA restates GDP for years. A 2026 vintage of 2009-Q1 GDP is not what was on the tape in 2009. | ALFRED: for each as-of date `d`, fetch observations with `realtime_start=d&realtime_end=d`. The existing ingest stores `meta.realtime_start` but does not *request* vintages — extend `fetch_fred_series` if this ever becomes production. |
+| GDP / market-cap revisions | BEA restates GDP for years. A 2026 vintage of 2009-Q1 GDP is not what was on the tape in 2009. | ALFRED: for each as-of date `d`, fetch observations with `realtime_start=d&realtime_end=d`. The gloomberb `econ_series` ingest seals one print per series and does not expose vintages; a vintage path would be new work if this ever becomes production. |
 | Earnings lag | CAPE’s E10 includes reports that were not out on day 1 of the month. | Use CAPE as of month-end *minus a lag* (two months is conservative). Never peek at a restated E. |
 | COVID denominator | Nominal GDP fell in 2020-Q2; Buffett = cap / GDP **rose** in the official quarterly print (`NCBEILQ027S/GDP` ≈ 129% in 2020-Q1 → **173% in 2020-Q2** on current vintage). A Buffett-driven SDCA would have read “more expensive” through the crash. | Do not use Buffett as a daily or even intra-quarter signal. If used at all, pair with a high-frequency spread and treat GDP as a *regime prior* updated on release dates only. |
 | `digiquant_get_macro_series` | Returns the last `lookback` ingested rows from Supabase — operator diagnostic, not a PIT backtest feed. | Backtests must read a vintage-aware store, not this MCP tool. |
-| FRED graph CSV | Convenient, no API key, **current vintage only**, and some ICE series truncate to ~3 years without a key. | Fine for a spike; not a production path. Production stays `fetch_fred` + `FRED_API_KEY`. |
+| FRED graph CSV | Convenient, no API key, **current vintage only**, and some ICE series truncate to ~3 years. | Fine for a spike; not a production path. Production reads the sealed macro panel written by Gloomberb `econ_series` (#4794). FRED was dropped as a provider on 2026-10-04 (DIG-335). |
 
 ## Historical plausibility (2000 / 2009 / 2020 / 2021)
 
@@ -123,8 +123,10 @@ the design (ERP and/or HY OAS in the composite, ALFRED for GDP).
 
 ## Existing wiring to reuse (no new production code here)
 
-- FRED ingest: `digiquant/src/digiquant/data/prices/macro_ingest.py` (`fetch_fred`,
-  `FRED_OBS_URL`). Manifest: `digiquant/src/digiquant/research/config/macro_series.yaml`
+- Macro ingest: `digiquant/src/digiquant/data/prices/macro_ingest.py`. The writer is now
+  Gloomberb `econ_series` (#4794); `fetch_fred` and `FRED_OBS_URL` were removed with the provider
+  on 2026-10-04 (DIG-335). Manifest:
+  `digiquant/src/digiquant/research/config/macro_series.yaml`
   already lists `DGS10` and `BAMLH0A0HYM2`.
 - Operator read: MCP `digiquant_get_macro_series` → Supabase `macro_series_observations`
   (latest window, not vintages).
@@ -181,8 +183,8 @@ including a miss if it still misses.
 - FRED graph CSV (no API key): `GDP` 1947-01-01–2026-04-01; `NCBEILQ027S` 1945-10-01–2026-01-01;
   `DGS10` 1962-01-02–2026-08-27; `DDDM01USA156NWDB` 1975–2020 only; `BAMLH0A0HYM2` truncated to
   2023-08-29–2026-08-27 without a key; `SP500` on FRED is a ~10-year licensed window.
-- `FRED_API_KEY` was unset in this environment; production ingest remains the right full-history
-  path.
+- Full-history coverage for the truncating series is a known gap: the sealed macro
+  panel (Gloomberb `econ_series`) has no key and no backfill beyond its page window.
 - Shiller `ie_data.xls` fetched from `http://www.econ.yale.edu/~shiller/data/ie_data.xls` (HTTP 200,
   last saved 2023-09-17). Event CAPE values in the table are from the `Data` sheet column “P/E10 or
   CAPE.”

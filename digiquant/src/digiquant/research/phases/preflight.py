@@ -35,7 +35,10 @@ from digiquant.research.decision_log import (
     fetch_recent_lessons,
     resolve_pending,
 )
-from digiquant.research.forecast_outcomes import resolve_matured_forecast_outcomes
+from digiquant.research.forecast_outcomes import (
+    ResolvedOutcomesMemo,
+    resolve_matured_forecast_outcomes,
+)
 from digiquant.research.sectors_config import load_sectors
 from digiquant.research.state import (
     DataLayerSnapshot,
@@ -58,15 +61,12 @@ from digiquant.research.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.scalars import is_cash
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 logger = logging.getLogger(__name__)
-
-
-def _is_cash_ticker(ticker: str) -> bool:
-    return str(ticker).strip().upper() == "CASH"
 
 
 @dataclass(frozen=True)
@@ -89,6 +89,9 @@ class PreflightDeps:
     outcome_maturation_deps: Any | None = None
     # Outer-retry attempt id (string form of DIGIQUANT_ATTEMPT / DiagnosticsDeps.attempt).
     research_state_attempt_id: str | None = None
+    # Run-scoped resolved-outcome cohort memo shared with the portfolio direction
+    # phase (#4617). One dict per (run, client); None reads directly.
+    resolved_outcomes_memo: ResolvedOutcomesMemo | None = None
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -427,7 +430,7 @@ def _hydrate_config(
     if current_weights:
         # Mark-to-market (#955): drift prior weights by price moves since the last run so
         # the sizing no-trade band compares against the actual current book, not stale targets.
-        held = tuple(t for t in current_weights if not _is_cash_ticker(t))
+        held = tuple(t for t in current_weights if not is_cash(t))
         try:
             deltas = (
                 query_price_deltas(client=client, tickers=held, run_date=run_date) if held else {}
@@ -706,6 +709,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[ResearchState], dict]
             research_state_pin=pin_raw if isinstance(pin_raw, dict) else None,
             prior_effective_forecast_ids=prior_effective_ids,
             outcome_lesson_pin=lesson_pin_raw if isinstance(lesson_pin_raw, dict) else None,
+            resolved_outcomes_memo=deps.resolved_outcomes_memo,
         )
         if snapshot is not None:
             update["direction_prerequisite_snapshot"] = snapshot.model_dump(mode="json")

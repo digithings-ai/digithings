@@ -13,7 +13,15 @@
  * Uses stock assistant-ui Thread (ProductStockShell) against POST /api/chat.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
@@ -26,15 +34,30 @@ import {
   EmbedChatPrefsProvider,
   SkinCredit,
   catalogToolsFromClient,
+  chromePrefsFromDeploy,
   disabledCatalogIds,
   extraOffFromCatalog,
+  persistDensity,
+  persistScroll,
+  resetChromePrefsFromDeploy,
+  useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
+  isStockComposerMenuKind,
 } from "@digithings/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
+import {
+  contextMeterEnabled,
+  contextMeterModel,
+  modelSentOnTurn,
+  sessionModelSeed,
+  showModelPicker,
+} from "@/lib/session-model-seed";
+import { toolControlFor } from "@/lib/tool-control";
 import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
 import {
   useBYOKKey,
@@ -59,7 +82,6 @@ import {
 import { p } from "@/lib/base-path";
 import {
   decideEmbedSendGate,
-  shouldArmGateCharge,
 } from "@/lib/embed-send-gate";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 
@@ -70,12 +92,10 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import {
-  EMBED_TRIAL_TURN_LIMIT,
-  formatEmbedTurnCounter,
-} from "@/lib/embed-turn-limits";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
+import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
 import {
@@ -93,16 +113,28 @@ import {
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { startWarmup } from "@/lib/warmup-gate";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
 } from "@/lib/embed-parent-error-messages";
 import {
   applyEmbedDocumentTheme,
+  applyEmbedPalette,
+  embedThemePrefs,
+  embedUserThemeKey,
   parseEmbedThemeParam,
+  parseEmbedUserTheme,
   parseThemeMessage,
+  readEmbedUserThemeRaw,
+  resolveEmbedPalette,
+  resolveEmbedTheme,
+  subscribeEmbedUserTheme,
+  writeEmbedUserTheme,
   type EmbedTheme,
+  type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
+import type { PaletteName } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -164,6 +196,22 @@ function EmbedPageInner({
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
 
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
+  useEffect(() => {
+    void startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
+  }, []);
+
   // Real boot milestone for the loader: the tenant/deploy config resolved.
   useEffect(() => {
     signalDigichatBootStep("config");
@@ -171,9 +219,36 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
-  // Parent postMessage > ?theme= URL pin > tenant registry (default dark).
-  const effectiveTheme: EmbedTheme =
-    parentTheme ?? urlTheme ?? (tenantCfg.theme === "light" ? "light" : "dark");
+  // The parent's palette rides the same message; it never writes data-palette
+  // itself (that would fight the theme effect below).
+  const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
+  // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
+  const userThemeKey = embedUserThemeKey(tenantCfg.slug);
+  const userThemeRaw = useSyncExternalStore(
+    subscribeEmbedUserTheme,
+    () => readEmbedUserThemeRaw(userThemeKey),
+    () => null,
+  );
+  const userTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  const setUserTheme = useCallback(
+    (next: EmbedUserTheme | null) => {
+      writeEmbedUserTheme(userThemeKey, next);
+    },
+    [userThemeKey],
+  );
+  // /theme pick > parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  const effectiveTheme: EmbedTheme = resolveEmbedTheme({
+    pick: userTheme,
+    parent: parentTheme,
+    url: urlTheme,
+    tenant: tenantCfg.theme,
+  });
+  // /theme pick > parent postMessage > default look. One channel, one writer
+  // (the theme effect below), so a parent palette cannot be reverted mid-tick.
+  const effectivePalette = resolveEmbedPalette({
+    pick: userTheme,
+    parent: parentPalette,
+  });
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -254,6 +329,9 @@ function EmbedPageInner({
       const parsed = parseThemeMessage(event, themeParentOrigins);
       if (!parsed) return;
       setParentTheme(parsed.theme);
+      // A message without a palette clears the parent channel, so the pick or
+      // the default look takes over again.
+      setParentPalette(parsed.palette ?? null);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -266,24 +344,28 @@ function EmbedPageInner({
   // ThemeClassSync mirrors [data-theme] onto .dark/.light; the wrapper below
   // keeps its class for Tailwind `dark:` inside the subtree.
   //
-  // The app-wide ThemeProvider installs a prefers-color-scheme listener that
-  // rewrites <html data-theme> whenever there is no `dt-theme` key — always
-  // true for an anonymous embed visitor. Re-assert the effective theme via a
-  // MutationObserver so OS flips (and ThemeProvider) cannot silently override
-  // a parent- or tenant-forced theme (#1434).
+  // ThemeProvider bails on a pinned document, so it does not repaint the
+  // embed today. The MutationObserver stays as a guard: anything else that
+  // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
+  // silently override the effective theme (#1434).
   useEffect(() => {
     const el = document.documentElement;
     const desired = effectiveTheme;
+    const palette = effectivePalette === "default" ? null : effectivePalette;
     const apply = () => {
-      if (el.getAttribute("data-theme") !== desired) {
+      const modeChanged = el.getAttribute("data-theme") !== desired;
+      if (modeChanged) {
         applyEmbedDocumentTheme(desired);
+      }
+      if (modeChanged || el.getAttribute("data-palette") !== palette) {
+        applyEmbedPalette(effectivePalette, desired);
       }
     };
     apply();
     const observer = new MutationObserver(apply);
-    observer.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
     return () => observer.disconnect();
-  }, [effectiveTheme]);
+  }, [effectiveTheme, effectivePalette]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -331,6 +413,8 @@ function EmbedPageInner({
           uiParams={urlColors}
           planProof={planProof}
           bootLab={initialBoot}
+          theme={{ mode: effectiveTheme, palette: effectivePalette }}
+          onThemePick={setUserTheme}
         />
       </div>
     </>
@@ -345,6 +429,8 @@ function EmbedChat({
   uiParams,
   planProof,
   bootLab,
+  theme,
+  onThemePick,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -353,6 +439,9 @@ function EmbedChat({
   uiParams: EmbedUiParams;
   planProof?: string | null;
   bootLab?: string | null;
+  /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
+  theme: EmbedUserTheme;
+  onThemePick: (next: EmbedUserTheme | null) => void;
 }) {
   const {
     key: byokKey,
@@ -377,12 +466,62 @@ function EmbedChat({
   const tenantLanguage = stockClient.chrome.defaultLanguage || DEFAULT_LANGUAGE_CODE;
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
+    // Start on the tenant's curated default so the first turn uses the model
+    // the picker shows as selected (v4.1-flash on OCC) instead of falling
+    // through to the digigraph operator default. An empty list leaves the
+    // session model unset, even when a default is set, so the turn sends
+    // no X-Digi-Model until the user picks one. The live house publishes
+    // no models, so this release shows no house bar.
+    model: sessionModelSeed({
+      available: stockClient.models.available,
+      defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
+    }),
     language: tenantLanguage,
     view: stockClient.features.view,
     thinking: stockClient.features.thinking,
+    // No storage on the first render (hydration); see useStoredDensityAfterMount.
+    ...chromePrefsFromDeploy(
+      {
+        density: stockClient.features.density,
+        effort: stockClient.features.effort,
+        searchEngine: stockClient.gate.searchEngine,
+        toolbar: stockClient.chrome.toolbar,
+        scrollbars: stockClient.chrome.scrollbars,
+        scroll: stockClient.chrome.scroll?.mode,
+      },
+      null,
+    ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
+  useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const draftSink = useRef<(text: string) => void>(() => {});
+  const [composerDraftBound, setComposerDraftBound] = useState(false);
+  const syncPalette = useCallback(
+    (next: {
+      kind: "closed" | "commands" | "pane";
+      menu: "close" | "keep" | string;
+      filter: string;
+    }) => {
+      setPaletteQuery(next.filter);
+      if (next.menu === "close") setComposerMenu(null);
+      else if (next.menu !== "keep" && isStockComposerMenuKind(next.menu)) {
+        setComposerMenu(next.menu);
+      }
+    },
+    [],
+  );
+  const bindComposerDraft = useCallback((setText: (text: string) => void) => {
+    draftSink.current = setText;
+    setComposerDraftBound(true);
+  }, []);
+  const setComposerDraft = useCallback((text: string) => {
+    draftSink.current(text);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
@@ -394,14 +533,10 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   chatPrefsRef.current = chatPrefs;
   const getResponseLanguage = useCallback(() => chatPrefsRef.current.language, []);
-  const getSelectedModel = useCallback(() => {
-    if (byokIsSet) {
-      const bound = byokModel.trim();
-      if (bound) return bound;
-    }
-    const id = chatPrefsRef.current.model.trim();
-    return id || undefined;
-  }, [byokIsSet, byokModel]);
+  const getSelectedModel = useCallback(
+    () => modelSentOnTurn(chatPrefsRef.current.model, { isSet: byokIsSet, model: byokModel }),
+    [byokIsSet, byokModel],
+  );
   const planProofRef = useRef(planProof);
   // eslint-disable-next-line react-hooks/refs -- send-time HMAC proof (#1339)
   planProofRef.current = planProof ?? null;
@@ -422,6 +557,7 @@ function EmbedChat({
     [],
   );
   const getEffort = useCallback(() => chatPrefsRef.current.effort, []);
+  const getSearchEngine = useCallback(() => chatPrefsRef.current.searchEngine, []);
   const getMcpSession = useCallback(
     () =>
       mcpSessionOverlayHeaderValue(
@@ -568,12 +704,18 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    // The counter moves on every submitted turn, not only on the composer's
+    // own submit path — the hook is the one funnel every send passes through.
+    onTurnCharge: () => {
+      if (!ungated) armGateCharge();
+    },
     getResponseLanguage,
     getEnableWebSearch,
     getDisabledTools,
     getSelectedModel,
     getMcpSession,
     getEffort,
+    getSearchEngine,
     getPlanProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
@@ -645,7 +787,6 @@ function EmbedChat({
           ...(forceTool ? { forceTool } : {}),
           pageContext: consumePageContext(),
         });
-        if (!ungated) armGateCharge();
         return;
       }
       chat.onRetry?.();
@@ -659,7 +800,6 @@ function EmbedChat({
         ...(forceTool ? { forceTool } : {}),
         pageContext: consumePageContext(),
       });
-      if (!ungated) armGateCharge();
     }
   }, [
     byokIsSet,
@@ -673,11 +813,6 @@ function EmbedChat({
     gate,
     consumePageContext,
   ]);
-
-  const openByok = useCallback((seed?: string) => {
-    setProviderSeed(seed);
-    setComposerMenu("provider");
-  }, []);
 
   const onByokSaved = useCallback(
     (key: string, provider: BYOKProvider, model: string) => {
@@ -839,9 +974,8 @@ function EmbedChat({
   // render of its own. `sentHeld` is what makes the release idempotent, since
   // the effect re-runs on every chat identity change while the answer streams.
   //
-  // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
-  // would re-capture this effect. Arm the deferred gate charge ourselves so
-  // the held fourth question counts the same as any other send (charged only
+  // Call chat.send directly. Arm the deferred gate charge ourselves so the
+  // held fourth question counts the same as any other send (charged only
   // once it settles without error — see the settle effect near `chat`).
   useEffect(() => {
     const question = heldQuestionRef.current;
@@ -856,7 +990,6 @@ function EmbedChat({
       ...(forceTool ? { forceTool } : {}),
       pageContext: ctx,
     });
-    if (!ungated) armGateCharge();
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -930,42 +1063,7 @@ function EmbedChat({
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
   const headerTitle = tenantCfg.title;
 
-  const wrappedSend = useCallback(
-    (question: string, opts?: { forceTool?: string }) => {
-      // byok_only: require a key before any send
-      if (llmAccess === "byok_only" && !byokIsSet) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        pendingByokRetryRef.current = true;
-        setComposerMenu("provider");
-        return;
-      }
-      // Out of free turns: HOLD the question and raise the form. Dropping it
-      // on the floor (what this did) meant the visitor's fourth question just
-      // vanished — they had typed it, pressed send, and got nothing back.
-      if ((gate.locked || trialLocked) && !ungated) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        lastGatedPost.current = null;
-        setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
-        return;
-      }
-      const hadCtx = pageContextRef.current != null;
-      const ctx = consumePageContext();
-      void chat.send(question, { ...opts, pageContext: ctx });
-      emit("embed_turn_submitted", {
-        accent,
-        turn: gate.turns + 1,
-        byok: byokIsSet,
-        page_context: hadCtx,
-      });
-      if (!ungated) armGateCharge();
-    },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContext],
-  );
-
-
-  // Stock Composer no longer calls wrappedSend — reattach hold/charge via sendGate.
+  // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
   const sendGate = useMemo(
     () => ({
       shouldHold: (raw: string) => {
@@ -996,9 +1094,6 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
       },
       onAllowSend: () => {
-        if (shouldArmGateCharge(ungated)) {
-          armGateCharge();
-        }
         emit("embed_turn_submitted", {
           accent,
           turn: gate.turns + 1,
@@ -1026,9 +1121,11 @@ function EmbedChat({
 
   const catalog = stockClient.tools.catalog;
   const catalogTools = useMemo(() => catalogToolsFromClient(stockClient), [stockClient]);
-  const showModels =
-    (stockClient.models.allowPicker === true || stockClient.features.modelPicker === true) &&
-    stockClient.models.available.length > 0;
+  const showModels = showModelPicker({
+    allowPicker: stockClient.models.allowPicker,
+    featureModelPicker: stockClient.features.modelPicker,
+    available: stockClient.models.available,
+  });
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1056,20 +1153,60 @@ function EmbedChat({
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
+      setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
+      setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
+      setScrollbars: (mode) => setChatPrefs((p) => ({ ...p, scrollbars: mode })),
+      setDensity: (density) => {
+        persistDensity(density);
+        setChatPrefs((p) => ({ ...p, density }));
+      },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         }),
       tenantAllowsWeb,
       showByok,
+      // The backend that serves this chat: the own-key provider the
+      // session carries, else the house backend. This is the label the
+      // composer chip shows, so it follows the active provider.
+      providerLabel: backendLabel(
+        byokIsSet ? byokProvider : null,
+        stockClient.backendType,
+      ),
       showModels,
+      showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The gate's own budget takes the meter slot: a trial tenant gates on
+      // turns, so the turns are the number worth showing, and a Foundry
+      // agent reports no token usage for the context bar to size.
+      usage: isTrialForm ? { used: gate.turns, limit: gate.limit } : undefined,
+      // The model the turn sends, including a bring-your-own-key binding.
+      // Not the session model alone, and not written back into the session.
+      meterModel: contextMeterModel({
+        sessionModel:
+          modelSentOnTurn(chatPrefs.model, { isSet: byokIsSet, model: byokModel }) ?? "",
+      }),
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
+      // The embed surface has no artifact panel. Gating the row off is why
+      // openArtifacts is never reached here.
+      hasArtifacts: false,
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
       catalogTools,
@@ -1077,6 +1214,9 @@ function EmbedChat({
       sessionKey: gate.host,
       openSettings: () => {
         setComposerMenu("settings");
+      },
+      openHelp: () => {
+        setComposerMenu("help");
       },
       openTools: () => {
         setComposerMenu("tools");
@@ -1095,9 +1235,24 @@ function EmbedChat({
       openEffort: () => {
         setComposerMenu("effort");
       },
+      openSearchEngine: () => {
+        setComposerMenu("search-engine");
+      },
       openView: () => {
         setComposerMenu("view");
       },
+      openDensity: () => {
+        setComposerMenu("density");
+      },
+      // /theme is open on every embed (2.6.6). The tenant's theme is the
+      // start; a pick lasts for this tab and is not written to localStorage.
+      ...embedThemePrefs({
+        theme,
+        onThemePick,
+        openTheme: () => {
+          setComposerMenu("theme");
+        },
+      }),
       openThinking: () => {
         setComposerMenu("thinking");
       },
@@ -1105,12 +1260,21 @@ function EmbedChat({
         setComposerMenu("language");
       },
       openSessions: () => {},
+      openArtifacts: () => {},
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1121,6 +1285,14 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
+          ...resetChromePrefsFromDeploy({
+            density: stockClient.features.density,
+            effort: stockClient.features.effort,
+            searchEngine: stockClient.gate.searchEngine,
+            toolbar: stockClient.chrome.toolbar,
+            scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
+          }),
           extra: extraOffFromCatalog(catalogTools),
         });
         chat.reset?.();
@@ -1129,12 +1301,30 @@ function EmbedChat({
       redo: () => {
         chat.regenerate?.();
       },
+      toolControl: toolControlFor({
+        backendType: stockClient.backendType,
+        lockSessionControls: stockClient.gate.lockSessionControls === true,
+        allowUserToggle: stockClient.tools.allowUserToggle,
+      }),
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
     }),
     [
       chatPrefs,
       tenantAllowsWeb,
       showByok,
+      byokIsSet,
+      byokModel,
+      byokProvider,
       showModels,
+      tenantCfg.showContextMeter,
+      tenantCfg.slug,
+      isTrialForm,
+      gate.turns,
+      gate.limit,
       catalog,
       catalogTools,
       gate.host,
@@ -1145,6 +1335,22 @@ function EmbedChat({
       stockClient.mcp.servers,
       stockClient.features.view,
       stockClient.features.thinking,
+      theme.mode,
+      theme.palette,
+      onThemePick,
+      stockClient.features.density,
+      stockClient.backendType,
+      stockClient.gate.lockSessionControls,
+      stockClient.tools.allowUserToggle,
+      paletteQuery,
+      setComposerDraft,
+      bindComposerDraft,
+      composerDraftBound,
+      syncPalette,
+      stockClient.features.effort,
+      stockClient.gate.searchEngine,
+      stockClient.chrome.toolbar,
+      stockClient.chrome.scrollbars,
     ],
   );
 
@@ -1190,14 +1396,6 @@ function EmbedChat({
   const footerSlot = footerAttribution ? (
     <SkinCredit attribution={footerAttribution} />
   ) : null;
-  const turnCounterSlot = isTrialForm ? (
-    <p
-      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
-      data-testid="embed-turn-counter"
-    >
-      {formatEmbedTurnCounter(gate.turns, gate.limit)}
-    </p>
-  ) : null;
 
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
@@ -1229,7 +1427,6 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
-        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1277,7 +1474,6 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
-            {turnCounterSlot}
           </>
         }
       />
@@ -1285,6 +1481,8 @@ function EmbedChat({
         <EmbedComposerMenu
           kind={composerMenu}
           models={stockClient.models.available}
+          defaultModel={stockClient.models.default}
+          picker={stockClient.models.picker}
           onClose={() => {
             setComposerMenu(null);
             setProviderSeed(undefined);

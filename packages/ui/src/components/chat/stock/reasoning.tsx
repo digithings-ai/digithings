@@ -10,13 +10,16 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { DisclosureChevron } from "../disclosure-chevron";
+import { DotMatrix } from "../DotMatrix";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
+import { OverlayScrollbar } from "../overlay-scrollbar";
 
 export const ANIMATION_DURATION = 200;
 
@@ -25,9 +28,9 @@ const ReasoningPreviewContext = createContext(false);
 const reasoningVariants = cva("aui-reasoning-root mb-4 w-full", {
   variants: {
     variant: {
-      outline: "rounded-lg border px-3 py-2",
+      outline: "rounded-none border px-3 py-2",
       ghost: "",
-      muted: "bg-muted/50 rounded-lg px-3 py-2",
+      muted: "bg-surface-2/50 rounded-none px-3 py-2",
     },
   },
   defaultVariants: {
@@ -176,34 +179,25 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-reasoning-trigger group/trigger text-ink-mute hover:text-ink flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-xs transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
+      <DotMatrix
+        state={active ? "thinking" : "thought"}
+        decorative
         className="aui-reasoning-trigger-icon size-4 shrink-0"
       />
       <span
         data-slot="reasoning-trigger-label"
         className={cn(
           "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",
-          active && "shimmer motion-reduce:animate-none",
         )}
       >
         Reasoning{durationText}
       </span>
-      <ChevronDownIcon
-        data-slot="reasoning-trigger-chevron"
-        className={cn(
-          "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -214,12 +208,14 @@ function ReasoningContent({
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
   const isPreview = useContext(ReasoningPreviewContext);
+  const keepMounted = useExportKeepMounted();
 
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="reasoning-content"
       className={cn(
-        "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",
+        "aui-reasoning-content text-ink-mute relative overflow-hidden text-sm outline-none",
         "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",
@@ -291,6 +287,7 @@ function ReasoningText({
   }, [isPreview]);
 
   return (
+    <div className="relative">
     <div
       ref={scrollRef}
       data-slot="reasoning-text"
@@ -315,6 +312,8 @@ function ReasoningText({
       <div ref={contentRef} className="aui-reasoning-text-content space-y-4">
         {children}
       </div>
+    </div>
+    <OverlayScrollbar targetRef={scrollRef} width={4} className="aui-reasoning-scroll" />
     </div>
   );
 }

@@ -11,7 +11,8 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 3. [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram and interfaces.
 4. [ROADMAP.md](ROADMAP.md) — phases and current priorities.
 5. [SECURITY.md](SECURITY.md) — non-negotiable security defaults.
-6. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
+6. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+7. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
 
 ## Hard rules (non-negotiable)
 
@@ -35,13 +36,30 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 ## Workflow
 
 1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
-2. Branch: `feature/<short-description>` or `fix/<short-description>`.
+2. Branch: `feat/<short-description>`, `fix/<short-description>`, or `revert/<short-description>` to roll back an earlier change (full taxonomy in [BRANCHING.md](BRANCHING.md)).
 3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
-4. Run `make score` and pass the PR gate (Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9). Rubrics: [docs/scoring/](docs/scoring/).
-5. Open a PR with the template. Include: what changed, why, how it was tested.
-6. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
+4. Open a PR with the template. Include: what changed, why, how it was tested. Quality bar is review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
+5. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
 
 For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+
+## PR titles (into develop)
+
+Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope** from the module allow-list. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working.
+
+Examples:
+
+- `feat(digillm): add streaming tool calls`
+- `ci(root): conventional-commit PR title lint`
+- `fix(digiquant): correct fill timestamp timezone`
+
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digibot, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+
+Exempt patterns (not blocked):
+
+- `chore(*): release …` / `chore(release): …` (release-please)
+- `chore: promote develop to main`
+- PRs labeled `autorelease: pending`
 
 ## Testing
 
@@ -63,4 +81,25 @@ For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WOR
 - Default to the most conservative, secure, and token-efficient option.
 - If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
 
-By contributing, you agree to the technical constraints above and the license terms in [LICENSE](LICENSE).
+## Develop merge rule (Chris, 15 Oct 2026)
+
+DCO sign-off is dropped entirely (DIG-3845): do not add `Signed-off-by`
+lines, do not ask for them, and never gate on them. A PR is ready to merge
+into protected `develop` when all three hold:
+
+(a) The PR description follows the standard template
+    (`.github/PULL_REQUEST_TEMPLATE.md`): modules, files and folders touched;
+    what the PR delivers; which feature or epic it belongs to; how it fits
+    the project vision.
+(b) CI passes, locally (`local-ci`) or on GitHub.
+(c) An agentic review pass left comments (default: in-session multi-subagent
+    review hunting bugs; Copilot, CodeRabbit or Bugbot also count) and every
+    comment is addressed (fix commit or reply).
+
+Pull requests are squash-merged. A GitHub squash keeps the full message body of
+each squashed commit, separated by `---------`, on the squash commit itself,
+on `develop`. Only history states that older commits carry `Signed-off-by`
+trailers; nothing requires them anymore.
+
+MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
+not reuse.

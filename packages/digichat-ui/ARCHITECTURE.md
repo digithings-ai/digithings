@@ -16,22 +16,24 @@ Do not reintroduce a second transcript renderer here.
 
 | File | What it is |
 |---|---|
-| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/websearch`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. |
-| `src/activity-view.ts` | Pure helpers (`citationHits`, …) for markdown export / legacy hydrate. No JSX. |
-| `src/transcript-markdown.ts` | Shared serializer for last-answer + full-thread markdown export. |
-| `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
-| `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers — **not** mounted by digichat 2.0 `CliThread`. |
-| `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). |
+| `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. |
+| `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
+| `src/components/DigiChatMark.tsx` | Brand mark (digithings-web nav). The wordmark is not re-implemented here: `Wordmark` / `TerminalWordmark` in `@digithings/ui` own that grammar. |
+| `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
+| `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). Legacy blocks stay as a CSS contract. |
 | `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`. |
-| `src/types.ts` | `DigiChatActivity`, `DigiChatMessage`, `DigiChatController` (embed adapter shape — not a React session). |
 
 ## Public API contract
 
-- **Exports** (`src/index.ts`): `DigiChatMark`/`DigiChatWordmark`,
+- **Exports** (`src/index.ts`): `DigiChatMark`,
   activity-view helpers, transcript markdown helpers, slash-commands helpers,
   optional `DocumentPane`/`MiniMarkdown`, and the types above.
+- **The view-level wording lives here.** `VIEW_LABELS` in `src/slash-commands.ts`
+  is the one home of the wording for the view levels, and `VIEW_CHOICES` and the
+  palette's `/view` choice options are built from it. A consumer that needs the
+  wording imports it; a second copy is a drift (DIG-4665).
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
-  directly. digichat layers `.dc-term-*` chrome around `CliThread`.
+  directly. digichat layers `.dc-term-*` chrome around the stock Thread.
 - Styles read canon tokens (`--ink`, `--accent`, `--hair`, …) under the
   consumer's `[data-theme]`; this package defines no tokens of its own.
 

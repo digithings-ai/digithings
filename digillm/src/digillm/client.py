@@ -1,7 +1,7 @@
 """Provider-agnostic, OpenAI-compatible LLM client.
 
 Extracted from the mature ``digigraph.llm`` implementation and made standalone:
-no FastAPI, no digigraph, no digismith hard dependencies. Speaks to any
+no FastAPI, no digigraph, no digitrace hard dependencies. Speaks to any
 OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
 or a registered external provider) and provides:
 
@@ -45,7 +45,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar, Token, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -53,6 +53,7 @@ from typing import (  # score:allow untyped any — OpenAI message dict payloads
     Any,
     NoReturn,
 )
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from openai import BadRequestError, OpenAI, Timeout
@@ -61,6 +62,12 @@ from openai.types.chat import ChatCompletion
 from digillm import cache as _cache
 from digillm import overrides as _overrides
 from digillm import types as _types
+from digillm.egress_record import (
+    NO_EGRESS_DESTINATION,
+    UNKNOWN_DESTINATION,
+    EgressDecision,
+    record_egress,
+)
 from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
@@ -102,13 +109,13 @@ _llm_cache_set = _cache.llm_cache_set
 
 logger = logging.getLogger(__name__)
 
-# Optional tracing: degrade to a no-op decorator when digismith is not installed.
+# Optional tracing: degrade to a no-op decorator when digitrace is not installed.
 try:
-    from digismith.trace import traceable as _traceable  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised only when digismith is absent
+    from digitrace.trace import traceable as _traceable  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised only when digitrace is absent
 
     def _traceable(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """No-op stand-in for ``digismith.trace.traceable`` when digismith is absent."""
+        """No-op stand-in for ``digitrace.trace.traceable`` when digitrace is absent."""
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             return fn
@@ -405,6 +412,295 @@ _CONNECT_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_CONNECT_TIMEOUT_SECONDS
 _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SECONDS)
 
 
+# ── Art. 9 egress screen (leaf L11, DIG-1085) ─────────────────────────────────
+# Defence in depth. The in-process screens (leaves 1, 2, 6) sit on digibase's own
+# ingest seams and therefore never see a prompt that reaches a model another way --
+# an MCP-originated prompt, or anything a caller sends straight at a client it got
+# from get_client_for_model(). This screen is installed on the *client object*, so
+# it covers every call that leaves through it, whoever made the call.
+#
+# ARCHITECTURAL NOTE -- digillm does not depend on digibase, and must not acquire
+# it: digibase requires fastapi, and digillm/AGENTS.md forbids "import fastapi ...
+# anywhere in the package". digillm/egress_record.py already sets the precedent for
+# this exact tension (DIG-1139 duplicated its digest rather than importing). So the
+# screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
+# once, and digisearch -- which does hard-depend on digibase -- is where the
+# digibase-backed screen is normally supplied. Every consumer of digillm in the
+# stack (digigraph, digisearch, digibot) already has digibase installed.
+#
+# When no screen can be resolved the call proceeds UNSCREENED and the record says
+# so. That is deliberate and is the one honest option: this is a second line of
+# defence behind the in-process screens, so failing closed would take every
+# digillm consumer down for a control they may not have installed, while claiming
+# a verdict nobody computed would put a fabrication in the audit ledger. The
+# unscreened case is visible precisely because DIG-2708's validator makes
+# PASS (screened, found nothing) and UNSCREENED (never screened) distinct rows.
+
+_EGRESS_SCREEN_UNSET: Any = object()
+_egress_screen: Any = _EGRESS_SCREEN_UNSET
+
+
+class Art9EgressRefused(RuntimeError):
+    """Raised at the egress boundary when Art. 9 screening refuses a payload.
+
+    Carries the stable ``art9:<category>:<signal>`` machine code and the category
+    ids, never the matched value: this exception is raised inside retry and
+    telemetry machinery that can end up in a log aggregator or an error envelope,
+    and digibase's own contract for ``reason`` is that it stays safe to log.
+    """
+
+    def __init__(self, reason: str, categories: tuple[str, ...]) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.categories = categories
+
+
+def _refusal_outcome(refusal: Art9EgressRefused) -> EgressScreenOutcome:
+    """The record-shaped view of a refusal.
+
+    The screen raises rather than returning, so the verdict would otherwise exist
+    only as an exception the caller has to already know about. Writing it onto the
+    client lets any caller read the verdict back off the object it holds --
+    including digisearch, which screens through this seam but must not import this
+    module's exception type.
+    """
+    return EgressScreenOutcome(EgressDecision.REFUSED, tuple(refusal.categories), refusal.reason)
+
+
+@dataclass(frozen=True)
+class EgressScreenOutcome:
+    """What the egress screen decided, in this module's own vocabulary.
+
+    ``masked_payload`` holds the redaction to substitute when ``decision`` is
+    MASKED. It is ``None`` whenever the screen did not produce one, which is the
+    case for every current digibase screen -- see :func:`screen_egress_payload`.
+    """
+
+    decision: EgressDecision
+    category_ids: tuple[str, ...]
+    reason: str
+    masked_payload: Any = None
+
+
+def set_egress_screen(screen: Any) -> None:
+    """Install the process-wide egress screen; pass ``None`` to restore the default.
+
+    Mirrors :func:`set_telemetry_observer` and the ``overrides`` seam: one
+    process-wide hook, resolvable once, no per-call plumbing for callers to forget.
+    """
+    global _egress_screen
+    _egress_screen = screen
+
+
+def get_egress_screen() -> Any:
+    """Return the installed egress screen, or ``None`` when none is available.
+
+    Resolution order: an explicitly installed screen, then digibase's
+    ``art9.screen_request`` reached through a function-local import. The import is
+    deliberately not at module scope -- that would make ``import digillm`` fail in
+    every environment without digibase, which is the coupling the seam exists to
+    avoid. The resolved value is cached, including a negative one: the answer
+    cannot change within a process, and re-attempting the import on every model
+    call would put a failed import on the hot path.
+    """
+    global _egress_screen
+    if _egress_screen is _EGRESS_SCREEN_UNSET:
+        try:
+            from digibase.art9 import screen_request
+        except ImportError:
+            _egress_screen = None
+        else:
+            _egress_screen = screen_request
+    return _egress_screen
+
+
+def screen_egress_payload(payload: Any) -> EgressScreenOutcome:
+    """Screen one outbound payload. Returns UNSCREENED when no screen is available.
+
+    The verdict vocabulary maps onto the egress record's own decision enum, and the
+    mapping is forced by ``EgressRecord._validate_shape``: MASKED and REFUSED must
+    carry their categories, and nothing else may carry any. So "screened and clean"
+    is PASS, "screened and tripped" is REFUSED, and "never screened" is UNSCREENED --
+    three different facts a data-subject request needs to tell apart.
+    """
+    screen = get_egress_screen()
+    if screen is None:
+        return EgressScreenOutcome(EgressDecision.UNSCREENED, (), "egress_screen_unavailable")
+
+    result = screen(payload)
+    categories = tuple(result.categories)
+    if result.decision == "allow":
+        return EgressScreenOutcome(EgressDecision.PASS, (), str(result.reason))
+
+    if result.decision == "mask":
+        # ``mask`` is reachable only alongside an Art. 9(2) exception_ref, and
+        # digibase's screen_text/screen_request return ``redacted=None`` on every
+        # path in leaf L1 -- there is no redaction implementation to honour the
+        # narrower outcome with. Substituting None would send *less* than was
+        # screened; sending the original unmasked payload would be the exact
+        # failure this epic exists to prevent. Refuse instead, and say so.
+        if result.redacted is None:
+            raise Art9EgressRefused(f"{result.reason}:mask_without_redaction", categories)
+        return EgressScreenOutcome(
+            EgressDecision.MASKED, categories, str(result.reason), result.redacted
+        )
+
+    raise Art9EgressRefused(str(result.reason), categories)
+
+
+class _ScreenedCompletions:
+    """``client.chat.completions`` with the outbound messages screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "messages" in kwargs:
+            messages = kwargs["messages"]
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(messages)
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["messages"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedEmbeddings:
+    """``client.embeddings`` with the outbound inputs screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "input" in kwargs:
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(kwargs["input"])
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["input"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedChat:
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    @property
+    def completions(self) -> _ScreenedCompletions:
+        return _ScreenedCompletions(self._inner.completions, self._owner)
+
+
+class _ScreenedOpenAI:
+    """Transparent proxy that screens every payload leaving a constructed client.
+
+    Screening at the client, rather than at the call sites inside digillm, is the
+    point of this leaf: ``get_client_for_model`` hands the object to callers, and a
+    caller that uses the client directly -- an MCP tool handler, for instance -- is
+    exactly the path no in-process screen covers.
+
+    Everything that is not ``chat.completions.create`` / ``embeddings.create``
+    delegates untouched, so the proxy cannot change a client's behaviour beyond
+    screening. ``base_url`` in particular must stay reachable: ``_egress_destination``
+    reads it to place the call in the ledger.
+    """
+
+    __slots__ = ("_inner", "chat", "embeddings", "last_screen")
+
+    def __init__(self, inner: OpenAI) -> None:
+        self._inner = inner
+        # Mirror whatever surfaces the wrapped object actually has. A real
+        # ``openai.OpenAI`` has both, but an embeddings-only client double does
+        # not, and a transparent proxy must not be the thing that decides a
+        # client is malformed: synthesising ``chat`` unconditionally raised
+        # AttributeError on construction and broke a landed leaf's suite. An
+        # unset slot falls through ``__getattr__`` to the inner object, so the
+        # proxy raises the same error the inner object would have.
+        chat = getattr(inner, "chat", None)
+        if chat is not None:
+            self.chat = _ScreenedChat(chat, self)
+        embeddings = getattr(inner, "embeddings", None)
+        if embeddings is not None:
+            self.embeddings = _ScreenedEmbeddings(embeddings, self)
+        self.last_screen: EgressScreenOutcome | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __enter__(self) -> "_ScreenedOpenAI":
+        self._inner.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._inner.__exit__(*exc)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"_ScreenedOpenAI({self._inner!r})"
+
+
+def screened_client(inner: OpenAI) -> _ScreenedOpenAI:
+    """Wrap a freshly constructed client in the Art. 9 egress screen."""
+    return _ScreenedOpenAI(inner)
+
+
+def client_screen_outcome(client: Any) -> EgressScreenOutcome | None:
+    """The full verdict the screen recorded for the call this client just made.
+
+    Returns ``None`` when no call has been screened through this client yet. A
+    caller that records the outbound payload needs ``masked_payload`` as well as
+    the decision: once a screen substitutes a redaction, the honest thing to
+    digest is what went on the wire, not the payload that was screened.
+    """
+    screened = getattr(client, "last_screen", None)
+    # ``last_screen`` is set only by the screen, and only to an
+    # EgressScreenOutcome -- but "the attribute is not None" is not the same
+    # statement as "a verdict was recorded". An object that fabricates
+    # attributes on access (a test double, a duck-typed client) answers the
+    # getattr with a mock, and forwarding that to the ledger would write a
+    # decision no screen ever made and a category set that fails to build the
+    # record at all. The isinstance is the whole guard: it asks who wrote the
+    # value, not merely whether there is one.
+    return screened if isinstance(screened, EgressScreenOutcome) else None
+
+
+def client_screen_fields(
+    client: Any,
+) -> tuple[EgressDecision, tuple[str, ...]]:
+    """Read the verdict the screen recorded for the call this client just made."""
+    screened = client_screen_outcome(client)
+    if screened is None:
+        return EgressDecision.UNSCREENED, ()
+    return screened.decision, screened.category_ids
+
+
+def wire_payload(client: Any, payload: Any) -> Any:
+    """The payload as it actually left, which is what a ledger row must digest.
+
+    Identical to ``payload`` unless the screen masked it, in which case the
+    substituted redaction is what the provider received.
+    """
+    screened = client_screen_outcome(client)
+    if screened is not None and screened.decision is EgressDecision.MASKED:
+        return screened.masked_payload
+    return payload
+
+
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
@@ -421,7 +717,9 @@ def get_client() -> OpenAI:
     byok_override = _byok_override.get()
     if byok_override and not _litellm_proxy_configured():
         api_key, base_url = byok_override
-        return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+        return screened_client(
+            OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+        )
 
     api_key = _default_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
@@ -433,7 +731,7 @@ def get_client() -> OpenAI:
         kwargs: dict[str, Any] = {"api_key": api_key, "timeout": _REQUEST_TIMEOUT}
         if normalized_base:
             kwargs["base_url"] = normalized_base
-        client = OpenAI(**kwargs)
+        client = screened_client(OpenAI(**kwargs))
         _client_cache[cache_key] = client
     return client
 
@@ -443,9 +741,31 @@ def _default_base_configured() -> bool:
     return bool((os.environ.get("OPENAI_API_BASE") or "").strip())
 
 
+def _api_hostname(base: str) -> str:
+    """Hostname of an API base, or empty when the value is not a URL.
+
+    A substring test is true for ``https://evilopenrouter.ai``. CodeQL
+    ``py/incomplete-url-substring-sanitization`` does not accept that.
+    """
+    raw = (base or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"//{raw}"
+    try:
+        return (urlsplit(raw).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+
+
+def _hostname_is(base: str, host: str) -> bool:
+    name = _api_hostname(base)
+    return name == host or name.endswith("." + host)
+
+
 def _api_base_is_openrouter() -> bool:
     """True when the default client talks to OpenRouter's OpenAI-compat API (CLI/GHA)."""
-    return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "openrouter.ai")
 
 
 _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
@@ -454,22 +774,130 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
+# DeepSeek flash: the house flash slugs and the ``*-release`` names route to
+# the V4.1 Flash 1017 checkpoint (2026-10-21). Chris decided 1017 replaces
+# the older flash checkpoints. The 0731 fast row is its own markets id, with
+# its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
-    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
-    "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
+    # House chats run the 1017 checkpoint (Chris, 23 Oct 2026); this slug stays
+    # its own id so a picker selection is never silently rewritten. 1017 reasons
+    # only when asked — the digichat chain sends reasoning_effort for it — while
+    # the bare id reasons unprompted (live check 2026-10-22).
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
+    "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
+    "deepseek/deepseek-v3.1": "deepseek-v3.1",
+    "deepseek/deepseek-v3.2": "deepseek-v3.2",
+    "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
+    "deepseek/deepseek-r1": "deepseek-r1",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
-    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
     "openai/gpt-oss-120b": "gpt-oss-120b",
+    "openai/gpt-6-luna": "gpt-6-luna",
+    "openai/gpt-5-mini": "gpt-5-mini",
+    "openai/gpt-6.1-sol": "gpt-6.1-sol",
+    "google/gemini-3.5-flash-lite": "gemini-3.5-flash-lite",
+    "google/gemini-3.8-flash": "gemini-3.8-flash",
+    "z-ai/glm-5.3": "glm-5.3",
     "z-ai/glm-5.3-flash": "glm-5.3-flash",
+    "z-ai/glm-4.7-flash": "glm-4.7-flash",
+    "qwen/qwen3.8-flash": "qwen3.8-flash",
+    "qwen/qwen3.8-27b": "qwen3.8-27b",
+    "qwen/qwen3.8-max": "qwen3.8-max",
+    "qwen/qwen3.8-2.4t-a95b": "qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-max-0902": "qwen3.8-max-0902",
+    "xiaomi/mimo-v2.6-flash": "mimo-v2.6-flash",
+    "xiaomi/mimo-v2.6-pro": "mimo-v2.6-pro",
+    "minimax/minimax-m3": "minimax-m3",
 }
+
+
+# Models the OpenRouter auto router may spend on for this request. Empty means
+# ``openrouter/auto`` is not a routed call: CI house still fails closed rather
+# than sending an unconstrained router at OpenRouter.
+_router_models: ContextVar[tuple[str, ...] | None] = ContextVar(
+    "digillm_router_models", default=None
+)
+
+
+def push_router_models(value: str | None) -> Token[tuple[str, ...] | None]:
+    """Bind the router allowlist (comma-separated). At most 64 ids."""
+    raw = (value or "").strip()
+    if not raw:
+        return _router_models.set(None)
+    ids: list[str] = []
+    for part in raw.split(","):
+        slug = part.strip()
+        if slug and slug not in ids:
+            ids.append(slug)
+        if len(ids) >= 64:
+            break
+    return _router_models.set(tuple(ids) if ids else None)
+
+
+def pop_router_models(token: Token[tuple[str, ...] | None]) -> None:
+    _router_models.reset(token)
+
+
+def get_router_models() -> tuple[str, ...] | None:
+    models = _router_models.get()
+    if not models:
+        return None
+    premium = _premium_models.get()
+    if not premium:
+        return models
+    kept = tuple(model for model in models if model not in premium)
+    return kept or None
+
+
+# Manual Premium picks. The OpenRouter router must not spend them. The BFF
+# sends the ids on X-Digi-Premium-Models; an empty value clears the set.
+_premium_models: ContextVar[frozenset[str]] = ContextVar(
+    "digillm_premium_models", default=frozenset()
+)
+
+
+def push_premium_models(value: str | None) -> Token[frozenset[str]]:
+    """Bind the premium ids the router has to drop. Comma-separated."""
+    raw = (value or "").strip()
+    if not raw:
+        return _premium_models.set(frozenset())
+    ids = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    return _premium_models.set(ids)
+
+
+def pop_premium_models(token: Token[frozenset[str]]) -> None:
+    _premium_models.reset(token)
+
+
+def _is_openrouter_auto(model: str) -> bool:
+    if model in {"openrouter/auto", "openrouter/openrouter/auto"}:
+        return True
+    provider, model_id = _parse_provider_prefix(model)
+    return provider == "openrouter" and model_id in {"auto", "openrouter/auto"}
+
+
+def _openrouter_auto_routed(model: str) -> bool:
+    """True when this call may hit OpenRouter's auto router with an allowlist.
+
+    Requires a non-empty router context and ``OPENROUTER_API_KEY``. Without
+    either, the call is not given an unconstrained OpenRouter route.
+    """
+    models = get_router_models()
+    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    return bool(models) and bool(key) and _is_openrouter_auto(model)
 
 
 def _api_base_is_cheaperinference() -> bool:
     """True when the default client talks to hosted Cheaper Inference (CLI/GHA)."""
-    return "cheaperinference.com" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "cheaperinference.com")
 
 
 def cheaperinference_house_preferred() -> bool:
@@ -505,6 +933,87 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
+# Chat reasoning (Chris, 2026-10-22): reasoning is on for every chat. A chat's
+# /effort (low/medium/high, ``X-Digi-Effort``) maps to ``reasoning_effort`` on
+# models whose level is configurable; with no /effort set the model keeps its
+# own default level. Models without levels reason (or not) as they always do.
+REASONING_EFFORTS: frozenset[str] = frozenset({"low", "medium", "high"})
+
+
+@dataclass(frozen=True)
+class ReasoningEffortPolicy:
+    """Which models take ``reasoning_effort``, and which need their default sent.
+
+    The ids live in ``config/model-policy.json`` (``reasoning_effort``), not here:
+    model names belong in config (#5029), and digillm reads no files at runtime,
+    so the application loads the policy and registers it with
+    :func:`set_reasoning_effort_policy` (digigraph does this in ``llm_client``).
+
+    ``default_sent`` maps a bare catalog id to the level sent when the chat set
+    no /effort, for models that only reason when a level is sent.
+    ``configurable_prefixes`` are bare-id prefixes of models that take a level
+    and already reason at their default when the field is omitted. The empty
+    default policy sends the field to no model, so a process that registers
+    nothing keeps every request unchanged.
+    """
+
+    default_sent: dict[str, str] = field(default_factory=dict)
+    configurable_prefixes: tuple[str, ...] = ()
+
+
+_reasoning_effort_policy = ReasoningEffortPolicy()
+
+
+def set_reasoning_effort_policy(policy: ReasoningEffortPolicy) -> None:
+    """Register the process-wide chat reasoning policy (see :class:`ReasoningEffortPolicy`)."""
+    global _reasoning_effort_policy
+    _reasoning_effort_policy = policy
+
+
+def get_reasoning_effort_policy() -> ReasoningEffortPolicy:
+    """Return the registered chat reasoning policy (empty until one is registered)."""
+    return _reasoning_effort_policy
+
+
+def _reasoning_wire_id(model: str) -> str:
+    """Catalog id the reasoning policy keys on.
+
+    An ``openrouter/`` prefix is stripped first. A house slug then maps to its
+    Cheaper Inference bare id; anything else keeps its last slug segment, without
+    a ``:variant`` suffix.
+    """
+    slug = model.removeprefix("openrouter/")
+    bare = cheaperinference_bare_id_for_house_slug(slug)
+    if bare is not None:
+        return bare
+    return slug.split(":", 1)[0].rsplit("/", 1)[-1]
+
+
+def reasoning_effort_configurable(model: str) -> bool:
+    """True when ``model`` takes a ``reasoning_effort`` level (house slug or bare id)."""
+    policy = _reasoning_effort_policy
+    wire = _reasoning_wire_id(model)
+    return wire in policy.default_sent or (
+        bool(policy.configurable_prefixes) and wire.startswith(policy.configurable_prefixes)
+    )
+
+
+def chat_reasoning_effort(model: str, requested: str | None = None) -> str | None:
+    """``reasoning_effort`` a chat turn sends for ``model``, or ``None`` to omit it.
+
+    ``requested`` is the chat's /effort. It is sent only to models with
+    configurable levels; anything other than low/medium/high counts as unset.
+    Unset keeps the model's default: omitted, except where the default has to be
+    sent to turn reasoning on at all (the policy's ``default_sent``).
+    """
+    if not reasoning_effort_configurable(model):
+        return None
+    effort = (requested or "").strip().lower()
+    if effort in REASONING_EFFORTS:
+        return effort
+    return _reasoning_effort_policy.default_sent.get(_reasoning_wire_id(model))
+
+
 def _cheaperinference_api_base() -> str:
     return (
         os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
@@ -530,7 +1039,7 @@ def _cheaperinference_direct_client() -> OpenAI:
     cache_key: tuple[str, str | None] = (key, base)
     client = _client_cache.get(cache_key)
     if client is None:
-        client = OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT)
+        client = screened_client(OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT))
         _client_cache[cache_key] = client
     return client
 
@@ -699,6 +1208,8 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    if _openrouter_auto_routed(model):
+        return "openrouter/auto"
     bare = cheaperinference_bare_id_for_house_slug(model)
     if bare is not None and _cheaperinference_direct_house():
         return bare
@@ -737,17 +1248,24 @@ def get_client_for_model(model: str) -> OpenAI:
         api_key, base_url = byok_override
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
-            return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+            return screened_client(
+                OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+            )
         expected = cfg["base_url"] if cfg else "a registered provider base_url"
         raise RuntimeError(
             f"BYOK api_base {base_url!r} does not match registered base for "
             f"provider {provider!r} (expected {expected!r}); refusing silent "
             "house/vendor fallthrough."
         )
+    # OpenRouter auto, only with an allowlist already bound for this request.
+    # Direct to OpenRouter (not the LiteLLM proxy, and not Cheaper Inference):
+    # there is no unconstrained ``openrouter/auto`` route on the CI overlay.
+    if _openrouter_auto_routed(model):
+        provider = "openrouter"
     # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
     # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
     # there is no OpenRouter fallback.
-    if _is_ci_catalog_miss(model):
+    elif _is_ci_catalog_miss(model):
         _raise_for_ci_catalog_miss(model)
     elif cheaperinference_bare_id_for_house_slug(model) is not None and (
         _cheaperinference_direct_house()
@@ -755,7 +1273,7 @@ def get_client_for_model(model: str) -> OpenAI:
         if _api_base_is_cheaperinference():
             return get_client()
         return _cheaperinference_direct_client()
-    if provider is None or _use_default_base_client(model):
+    if not _openrouter_auto_routed(model) and (provider is None or _use_default_base_client(model)):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
@@ -767,7 +1285,9 @@ def get_client_for_model(model: str) -> OpenAI:
     cached = _client_cache.get(cache_key)
     if cached is not None:
         return cached
-    client = OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT)
+    client = screened_client(
+        OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT),
+    )
     _client_cache[cache_key] = client
     return client
 
@@ -1073,9 +1593,14 @@ def _optional_nonnegative_int(value: Any) -> int | None:
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
+    # ``getattr``'s default covers a missing attribute only, so the except arm is a
+    # provider property that raised. Returning None keeps the call alive; the type
+    # is logged so a raising usage/cost field leaves a trace instead of vanishing.
+    # Only the exception type: a provider object may carry prompt text.
     try:
         return getattr(value, name, None)
-    except Exception:
+    except Exception as error:
+        logger.debug("optional attribute %r raised %s", name, type(error).__name__)
         return None
 
 
@@ -1211,6 +1736,64 @@ def _record_usage(**fields: Any) -> None:
         logger.debug("usage observer raised: %s", exc)
 
 
+# ── Egress record ─────────────────────────────────────────────────────────────
+# One record per physical attempt that reached the wire, plus one for the cache-hit
+# path where nothing left the process. The record carries a keyed digest of the
+# outbound messages, never the messages: see digillm.egress_record for why an
+# unkeyed fallback is worse than no digest at all.
+
+
+def _egress_destination(client: OpenAI) -> str:
+    """Resolve where a call is going, without ever reading the API key.
+
+    A base URL may legitimately carry credentials in its userinfo
+    (``https://user:token@proxy/v1``), so the userinfo is stripped before the
+    value reaches a plain-text ledger. When the client has no usable base URL the
+    destination is recorded as ``unknown`` rather than ``none``: ``none`` is the
+    no-egress sentinel, and an egress we cannot place must not be filed as one.
+    """
+    base_url = getattr(client, "base_url", None)
+    if not base_url:
+        return UNKNOWN_DESTINATION
+    text = str(base_url)
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # pragma: no cover - urlsplit is very permissive
+        return text.split("@")[-1]
+    if "@" not in parts.netloc:
+        return text
+    host = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+
+
+def _record_egress(
+    *,
+    scope: _AttemptScope,
+    destination: str,
+    provider: str,
+    model: str,
+    outcome: str,
+    decision: EgressDecision = EgressDecision.UNSCREENED,
+    category_ids: tuple[str, ...] = (),
+    payload: Any = None,
+) -> None:
+    """Emit one egress record for a call that left (or did not leave) the process."""
+    metadata = scope.metadata
+    record_egress(
+        call_id=scope.call_id,
+        attempt_id=uuid4(),
+        destination=destination,
+        provider=provider,
+        model=model,
+        purpose=str(metadata.purpose) if metadata is not None else "unknown",
+        cache_status=str(scope.cache_status),
+        outcome=outcome,
+        decision=decision,
+        category_ids=category_ids,
+        payload=payload,
+    )
+
+
 # ── Tool-argument normalization ───────────────────────────────────────────────
 
 
@@ -1302,14 +1885,79 @@ def _create_with_retry(
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)
+        # The digest covers the messages as they go on the wire, which is after any
+        # DIGI_TOOL_MESSAGE_MAX_CHARS compaction -- and only the messages, never the
+        # whole kwargs dict, which can carry a BYOK key in extra_body.
+        #
+        # "As they go on the wire" is not this binding on its own. The screen
+        # substitutes the redacted copy *inside* create, on a fresh dict built by
+        # the **kwargs expansion, so on a masked attempt this binding still holds
+        # the text the screen withheld. Every record therefore digests through
+        # wire_payload(), which substitutes the copy the provider actually
+        # received; digests against the binding and the ledger describes an egress
+        # that did not happen.
+        outbound_payload = kwargs.get("messages")
+        destination = _egress_destination(client)
+        # The screen verdict is read fresh at each record site below via
+        # client_screen_fields(client) (CodeQL #2947/#2948: no pre-loop
+        # binding is needed — every read is dominated by one of those calls).
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
                 if on_attempt is not None:
                     on_attempt()
                 response = client.chat.completions.create(**kwargs)
+                screen_decision, screen_categories = client_screen_fields(client)
+            except Art9EgressRefused as refusal:
+                # The screen refused the payload, so nothing left the process. This
+                # gets its own branch ahead of the generic one below precisely so it
+                # is NOT recorded as a failed attempt: the comment there says an
+                # attempt "reached the wire (or failed to)", and this one never left
+                # the building. It is still recorded -- an Art. 9 refusal is exactly
+                # what the ledger exists to show -- under its own outcome, with the
+                # real destination (only a cache hit may claim "none") and the
+                # categories that triggered it. Never retried: the payload did not
+                # change between attempts, so a retry would be refused identically.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    # Not "failed": nothing was attempted, so a reader filtering on
+                    # outcome would otherwise count this as a provider outage. The
+                    # record's outcome is a free-form string precisely so a blocked
+                    # call can say so; the telemetry enum below has no such member
+                    # and keeps FAILED, which is the closest thing it can express.
+                    outcome="refused",
+                    decision=EgressDecision.REFUSED,
+                    category_ids=refusal.categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=refusal,
+                )
+                scope.terminal_outcome = ProviderCallOutcome.FAILED
+                raise
             except asyncio.CancelledError:
+                screen_decision, screen_categories = client_screen_fields(client)
                 scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.CANCELLED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1321,6 +1969,19 @@ def _create_with_retry(
                 )
                 raise
             except Exception as error:
+                screen_decision, screen_categories = client_screen_fields(client)
+                # The attempt reached the wire (or failed to), so it gets a record
+                # even when the retry loop will try again.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.FAILED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1343,6 +2004,25 @@ def _create_with_retry(
                 )
                 delay = _sleep_transient_retry(delay)
                 continue
+            _record_egress(
+                scope=scope,
+                destination=destination,
+                provider=provider,
+                model=str(kwargs.get("model") or "unknown"),
+                # A streaming call has already sent the payload at this point, but
+                # its body has not been read yet, so the attempt's fate is still
+                # open. Recording "started" is the honest value; recording
+                # "succeeded" here would leave a permanent false success for every
+                # stream that dies mid-flight, which is the case counsel asks about.
+                outcome=(
+                    ProviderAttemptOutcome.STARTED.value
+                    if _defer_success
+                    else ProviderAttemptOutcome.SUCCEEDED.value
+                ),
+                decision=screen_decision,
+                category_ids=screen_categories,
+                payload=wire_payload(client, outbound_payload),
+            )
             if _defer_success:
                 return response, scope, attempt_number, retry_reason, started_at
             _emit_attempt(
@@ -1460,8 +2140,11 @@ def completion(
         )
 
     attempt_scope = _attempt_scope.get()
+    routed_auto = _openrouter_auto_routed(model)
     cache_status = (
-        CacheStatus.BYPASSED if tools or _byok_override.get() is not None else CacheStatus.MISS
+        CacheStatus.BYPASSED
+        if tools or _byok_override.get() is not None or routed_auto
+        else CacheStatus.MISS
     )
     if attempt_scope is not None:
         attempt_scope.cache_status = cache_status
@@ -1469,7 +2152,7 @@ def completion(
     # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or
     # read the shared in-process cache; tool calls may have side effects).
     cache_key: str | None = None
-    if not tools and _byok_override.get() is None:
+    if not tools and _byok_override.get() is None and not routed_auto:
         cache_key = _llm_cache_key(
             effective_model, messages, temperature, response_format, max_tokens
         )
@@ -1478,6 +2161,17 @@ def completion(
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
             if attempt_scope is not None:
                 attempt_scope.cache_status = CacheStatus.HIT
+                # Nothing left the process, and the record has to say so: a log that
+                # omits the no-egress path is a spotty sample, not a ledger.
+                _record_egress(
+                    scope=attempt_scope,
+                    destination=NO_EGRESS_DESTINATION,
+                    provider=_provider_name(provider),
+                    model=effective_model,
+                    outcome=ProviderAttemptOutcome.SUCCEEDED.value,
+                    decision=EgressDecision.CACHE_HIT,
+                    payload=None,
+                )
             return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {
@@ -1492,6 +2186,12 @@ def completion(
         kwargs["tool_choice"] = tool_choice
     elif response_format is not None:
         kwargs["response_format"] = response_format
+    if routed_auto:
+        # OpenAI SDK extra_body is merged onto the JSON body. OpenRouter reads
+        # a top-level ``models`` array as the router's allowlist.
+        extra = dict(kwargs.get("extra_body") or {})
+        extra["models"] = list(get_router_models() or ())
+        kwargs["extra_body"] = extra
 
     try:
         r = create_with_retry(kwargs)
@@ -1616,6 +2316,7 @@ def _stream_completion_one_turn(
     tool_choice: str | ToolArguments = "auto",
     on_content_delta: Callable[[str], None] | None = None,
     on_reasoning_delta: Callable[[str], None] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, list[ToolCallDict] | None]:
     """Run one ``stream=True`` completion, accumulating content and tool calls.
 
@@ -1627,6 +2328,10 @@ def _stream_completion_one_turn(
     models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
     model called no tool (caller returns the content), else the accumulated calls
     for the caller to run before looping.
+
+    ``reasoning_effort`` is the chat's /effort; :func:`chat_reasoning_effort`
+    decides what goes on the wire. A 400 that names the field drops it once and
+    retries, so a provider that refuses levels still answers.
     """
     provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
@@ -1642,32 +2347,35 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    wire_effort = chat_reasoning_effort(model, reasoning_effort)
+    if wire_effort is not None:
+        kwargs["reasoning_effort"] = wire_effort
 
     usage_started = time.perf_counter()
-    try:
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
-    except BadRequestError as error:
-        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
-        # field rather than ignoring it. Retry once without the field so streaming
-        # still works there; usage then simply arrives only if that provider reports
-        # it some other way. Only a 400 that names the field is treated as this
-        # dialect mismatch — every other bad request propagates untouched.
-        if "stream_options" not in str(error).lower():
-            raise
-        kwargs.pop("stream_options", None)
-        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
-            client,
-            _provider=provider,
-            _requested_model=model,
-            _defer_success=True,
-            **kwargs,
-        )
+    # Strict OpenAI-compatible endpoints 400 on an unknown optional field rather
+    # than ignoring it, and name one field per refusal. ``stream_options`` (usage
+    # then arrives only if the provider reports it some other way) and
+    # ``reasoning_effort`` (the model then reasons at its default) are each
+    # dropped once when a 400 names them, so at most one retry per field. Every
+    # other bad request, or a field already dropped, propagates untouched.
+    droppable = ("stream_options", "reasoning_effort")
+    while True:
+        try:
+            stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+                client,
+                _provider=provider,
+                _requested_model=model,
+                _defer_success=True,
+                **kwargs,
+            )
+            break
+        except BadRequestError as error:
+            message = str(error).lower()
+            named = [field for field in droppable if field in kwargs and field in message]
+            if not named:
+                raise
+            for field in named:
+                kwargs.pop(field, None)
     content_parts: list[str] = []
     tool_calls_accum: dict[int, ToolCallDict] = {}
     evidence = _StreamEvidence()
@@ -1882,6 +2590,78 @@ def _execute_tool_in_fan_out(
     return execute_tool(name, args)
 
 
+# DeepSeek V3.2+/V4 sometimes emits its native "DSML" tool-call markup as plain
+# content instead of structured tool_calls (OCC demo: raw "<｜DSML｜tool_calls>"
+# in the chat and the turn ending). The bar is U+FF5C; ASCII "|" is accepted too.
+_DSML_BAR = r"\s*[｜|]+\s*"
+_DSML_TAG = rf"<{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_END = rf"</{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_WRAP = r"\s*(?:tool_calls|function_calls|calls)\s*"
+_DSML_BLOCK_RE = re.compile(
+    rf"{_DSML_TAG}{_DSML_WRAP}>(.*?)(?:{_DSML_END}{_DSML_WRAP}>|\Z)",
+    re.S,
+)
+_DSML_INVOKE_RE = re.compile(
+    rf"{_DSML_TAG}\s*invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:{_DSML_END}\s*invoke\s*>|(?={_DSML_TAG}\s*invoke)|\Z)",
+    re.S,
+)
+_DSML_PARAM_RE = re.compile(
+    rf"{_DSML_TAG}\s*parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?){_DSML_END}\s*parameter\s*>",
+    re.S,
+)
+_DSML_MARK_RE = re.compile(_DSML_TAG)
+
+
+def _parse_dsml_tool_calls(content: str | None) -> tuple[str, list[dict[str, Any]]]:
+    """Lift DSML tool-call markup out of ``content`` into OpenAI-shaped tool_calls.
+
+    Returns (content with the markup removed, tool_calls). Leaves content untouched
+    and returns [] when there is no parseable markup.
+    """
+    if not content or not _DSML_MARK_RE.search(content):
+        return content or "", []
+    calls: list[dict[str, Any]] = []
+    for block in _DSML_BLOCK_RE.finditer(content):
+        for inv in _DSML_INVOKE_RE.finditer(block.group(1)):
+            args: dict[str, Any] = {}
+            for pname, is_str, raw in _DSML_PARAM_RE.findall(inv.group(2)):
+                value: Any = raw.strip() if is_str != "false" else raw.strip()
+                if is_str == "false":
+                    try:
+                        value = json.loads(raw.strip())
+                    except ValueError:
+                        value = raw.strip()
+                args[pname] = value
+            calls.append(
+                {
+                    "id": f"dsml_{len(calls)}",
+                    "type": "function",
+                    "function": {"name": inv.group(1).strip(), "arguments": json.dumps(args)},
+                }
+            )
+    if not calls:
+        return content, []
+    stripped = _DSML_BLOCK_RE.sub("", content).strip()
+    return stripped, calls
+
+
+def _emit_tool_result(
+    on_tool_step: Callable[[str, Any], None], name: str, result: str | dict[str, Any]
+) -> None:
+    """Emit one tool_result step, keyed by the *tool* name.
+
+    The tool name must win over any "name" key in the result: get_skill returns
+    {"name": <skill id>, ...}, and spreading the result last relabelled the
+    completion as a phantom tool named after the skill while the real row
+    never completed (OCC demo, DIG-3089).
+    """
+    body = result if isinstance(result, dict) else {"content": result}
+    payload = {**body, "name": name}
+    if isinstance(body.get("name"), str) and body["name"] != name:
+        payload["result_name"] = body["name"]
+    on_tool_step("tool_result", payload)
+
+
 @_traceable("run_tools")
 def run_tools(
     model: str,
@@ -1895,6 +2675,8 @@ def run_tools(
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
+    final_response_format: JsonSchemaResponseFormat | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -1935,7 +2717,20 @@ def run_tools(
             round's deltas are buffered and released as one end-of-round batch
             instead of live per-token, since a delta already streamed can't be
             un-streamed if that round then turns out to have no tool_calls and
-            gets rejected (see ``_produce_turn``'s docstring below).
+            (see ``_produce_turn``'s docstring below).
+        final_response_format: Optional JSON-schema descriptor applied to the
+            forced tool-free wrap-up completion ONLY (#4556). Tool-enabled turns
+            cannot carry ``response_format`` at all -- ``completion`` rejects
+            ``tools`` + ``response_format`` together (fail-fast), because the
+            provider json_schema and function-calling modes are mutually
+            exclusive. Without enforcement here the cheap model may answer the
+            wrap-up in prose or return an empty body, which forces the caller's
+            retry path and discards the grounding this loop just gathered. The
+            wrap-up runs with ``turn_tools=None``, so it is the one legal place
+            to enforce a schema; providers without json_schema support ignore it.
+        reasoning_effort: The chat's /effort (low/medium/high) for streamed turns.
+            ``None`` keeps the model's default level; see
+            :func:`chat_reasoning_effort`.
 
     Returns:
         The model's final response content.
@@ -1973,6 +2768,8 @@ def run_tools(
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
         turn_tools: list[ToolDefinition] | None,
+        *,
+        response_format: JsonSchemaResponseFormat | None = None,
     ) -> tuple[str, list[ToolCallDict] | None]:
         """Produce one assistant turn as ``(content, tool_calls|None)``.
 
@@ -1987,12 +2784,16 @@ def run_tools(
         buffering is what keeps that turn's narration from ever reaching a consumer
         that would otherwise have shown it as an accepted answer. Trading live
         per-token delivery for that is only worth it under the explicit
-        ``require_tool_calls`` opt-in floor -- the tool-free wrap-up completion
-        (``turn_tools=None``) and the default ``tool_choice="auto"`` path are
-        unaffected and keep streaming deltas live, per the round_boundary comment
-        below.
+        ``require_tool_calls`` opt-in floor -- the default ``tool_choice="auto"``
+        path is unaffected and keeps streaming deltas live, per the round_boundary
+        comment below.
+
+        ``response_format`` (the forced wrap-up's schema, #4556) makes the turn
+        non-streaming: a schema-enforced completion cannot also emit live deltas,
+        and the schema guarantee is the more valuable one. Every other caller
+        leaves it ``None`` and keeps the streaming behaviour above.
         """
-        if stream_deltas:
+        if stream_deltas and response_format is None:
             gate_required = bool(turn_tools) and tool_choice == "required"
             buffered: list[tuple[str, str]] = []
 
@@ -2020,6 +2821,7 @@ def run_tools(
                 tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
+                reasoning_effort=reasoning_effort,
             )
             if gate_required and on_tool_step is not None and tool_calls:
                 # Requirement satisfied this round -- release the buffered narration in
@@ -2037,11 +2839,68 @@ def run_tools(
                 temperature=temperature,
                 tools=turn_tools,
                 tool_choice=tool_choice,
+                response_format=response_format,
             )
         )
 
+    def _wrapup_turn(turn_messages: list[ChatCompletionMessage]) -> str:
+        """Tool-free wrap-up turn with DSML markup filtered from stream and result."""
+        nonlocal on_tool_step
+        outer = on_tool_step
+        held: list[str] = []
+        state = {"suppress": False}
+
+        def _filter(kind: str, payload: Any) -> None:
+            if outer is None:
+                return
+            if kind != "content" or not isinstance(payload, str):
+                outer(kind, payload)
+                return
+            if state["suppress"]:
+                return
+            held.append(payload)
+            text = "".join(held)
+            hit = _DSML_MARK_RE.search(text)
+            if hit:
+                state["suppress"] = True
+                held.clear()
+                if text[: hit.start()]:
+                    outer("content", text[: hit.start()])
+                return
+            cut = text.rfind("<")
+            if cut >= 0 and ">" not in text[cut:] and len(text) - cut < 24:
+                # Could be the start of a DSML tag split across deltas: hold it.
+                if text[:cut]:
+                    outer("content", text[:cut])
+                held[:] = [text[cut:]]
+                return
+            held.clear()
+            outer("content", text)
+
+        on_tool_step = _filter if outer is not None else None
+        try:
+            raw, _ = _produce_turn(turn_messages, None, response_format=final_response_format)
+        finally:
+            on_tool_step = outer
+        if held and not state["suppress"] and outer is not None:
+            outer("content", "".join(held))
+        cleaned, _ = _parse_dsml_tool_calls(raw)
+        if _DSML_MARK_RE.search(cleaned):
+            cleaned = cleaned[: _DSML_MARK_RE.search(cleaned).start()].rstrip()
+        return cleaned
+
     for round_idx in range(max_tool_rounds):
         content, tool_calls = _produce_turn(current, tools)
+        streamed_content = content
+        if not tool_calls and tools:
+            content, dsml_calls = _parse_dsml_tool_calls(content)
+            if dsml_calls:
+                logger.warning(
+                    "run_tools: lifted %d DSML tool call(s) out of round %d content",
+                    len(dsml_calls),
+                    round_idx,
+                )
+                tool_calls = dsml_calls
         if not tool_calls:
             if tool_choice == "required":
                 # tool_choice="required" is a floor a deployment opted into (see
@@ -2059,7 +2918,7 @@ def run_tools(
                 )
             return content or ""
 
-        if on_tool_step is not None and content:
+        if on_tool_step is not None and streamed_content:
             # This round's content already streamed live via on_tool_step("content", ...)
             # inside _produce_turn, before tool_calls was known — that is unavoidable for
             # a live per-token stream (buffering the whole round to decide "is this
@@ -2077,7 +2936,9 @@ def run_tools(
             # Empty-narration tool rounds deliberately skip this callback: there is no
             # streamed content to demote, and emitting a vacuous boundary would reorder
             # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
-            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
+            # streamed_content, not content: DSML markup lifted into tool_calls
+            # above already streamed live and must be demoted with the narration.
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": streamed_content})
 
         asst_entries: list[ToolCallDict] = []
         for tc in tool_calls:
@@ -2154,6 +3015,8 @@ def run_tools(
                     result = {"content": str(e)}
                 else:
                     _note_tool_success()
+                if on_tool_step is not None:
+                    _emit_tool_result(on_tool_step, name, result)
                 ordered.append(((tc_id, name, args), result))
 
         for idx, ((tc_id, name, args), result) in enumerate(ordered):
@@ -2162,14 +3025,12 @@ def run_tools(
                     _note_tool_error(name, tool_errors[idx])
                 else:
                     _note_tool_success()
-            if on_tool_step is not None:
-                if run_parallel:
-                    on_tool_step("tool_call", {"name": name, "arguments": args})
-                payload = {
-                    "name": name,
-                    **(result if isinstance(result, dict) else {"content": result}),
-                }
-                on_tool_step("tool_result", payload)
+            # Sequential calls already emitted their result the moment each
+            # tool returned (below), so a slow round no longer leaves earlier
+            # rows "running" until the last tool of the round finishes.
+            if on_tool_step is not None and run_parallel:
+                on_tool_step("tool_call", {"name": name, "arguments": args})
+                _emit_tool_result(on_tool_step, name, result)
             msg_content = (
                 result.get("content", str(result)) if isinstance(result, dict) else str(result)
             )
@@ -2220,6 +3081,27 @@ def run_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        final, _ = _produce_turn(current, None)
+        # #4556: the wrap-up is the one legal schema-enforced turn (tools=None).
+        # Enforcing the caller's output schema here stops the cheap model from
+        # answering in prose or returning an empty body, which is what forced the
+        # tool-free retry that could not re-ground.
+        # With tool history in context, DeepSeek V4.x often answers this tool-free
+        # wrap-up with DSML tool-call markup instead of prose (OCC demo). The live
+        # stream is filtered so the markup never reaches the client, the returned
+        # text is stripped, and an all-markup answer gets one explicit retry.
+        final = _wrapup_turn(current)
+        if not final.strip():
+            logger.warning("run_tools: wrap-up returned only DSML tool calls; retrying for prose")
+            current.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "No more tools are available. Do not call or write any tool calls. "
+                        "Write the final answer now in plain prose/markdown from the tool "
+                        "results above, and say what could not be retrieved."
+                    ),
+                }
+            )
+            final = _wrapup_turn(current)
         return final or ""
     return content or ""

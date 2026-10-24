@@ -21,6 +21,7 @@ import {
 } from "@/lib/ui-stream-parts";
 import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
+import type { TurnGuard } from "@/lib/guardrails/turn";
 
 export type DigigraphTracePayload = {
   v?: number;
@@ -61,6 +62,53 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
     payload.detail = err.detail;
   }
   return JSON.stringify(payload);
+}
+
+/**
+ * Machine-readable code relayed on a digigraph 429 (#4777). digigraph
+ * rate-limits `/v1/chat/completions` per IP with `Retry-After` +
+ * `error.code rate_limit_exceeded` (#4776). The code is accurate for any 429
+ * by status alone, so the branch never parses the body — a proxy-generated
+ * 429 with an empty body still renders retry copy instead of UNAVAILABLE.
+ */
+export const RATE_LIMIT_RETRY_CODE = "rate_limit_exceeded";
+
+/**
+ * Parse a Retry-After header into display seconds. Unlike parseRetryAfterMs
+ * (a sleep duration, clamped to the boot window) this is display-only: the
+ * real number is shown, unclamped. Returns null when the header is missing or
+ * unusable — the caller falls back to copy without a number.
+ */
+export function retryAfterSeconds(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = raw.trim();
+  if (!value.length) return null;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isSafeInteger(seconds) || seconds <= 0) return null;
+    return seconds;
+  }
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  const seconds = Math.ceil((at - Date.now()) / 1000);
+  return seconds > 0 ? seconds : null;
+}
+
+/**
+ * Build the relayed 429 payload: the rate-limit code plus server-composed
+ * copy carrying the Retry-After seconds. Composed here — never relayed from
+ * the upstream body — so anonymous embed visitors see no upstream text; only
+ * the parsed integer crosses the trust boundary. The client renders
+ * `message` verbatim (formatEmbedChatError) and the code keeps the
+ * rate-limit BYOK policy (shouldSuggestByokOnEmbedError).
+ */
+export function rateLimitRetryPayload(retryAfter: string | null): string {
+  const seconds = retryAfterSeconds(retryAfter);
+  const message =
+    seconds === null
+      ? "Rate limit reached, please try again shortly."
+      : `Rate limit reached, retry in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+  return digigraphErrorToEmbedPayload({ code: RATE_LIMIT_RETRY_CODE, message });
 }
 
 /**
@@ -112,6 +160,65 @@ function relayableUpstreamCode(body: string): string | null {
 export const DIGIGRAPH_UNAVAILABLE_MESSAGE =
   "The assistant is unavailable right now. Please try again shortly.";
 
+/**
+ * digigraph refuses an optional hosted capability the license does not
+ * entitle (`insufficient_license_scope`). Web search is optional: the turn
+ * retries once as plain inference. Corpus grounding is not optional and is
+ * not stripped here.
+ */
+export const INSUFFICIENT_LICENSE_SCOPE_CODE = "insufficient_license_scope";
+export const HOSTED_WEB_SEARCH_SCOPE = "hosted-web-search";
+
+const HOSTED_WEB_SEARCH_HEADER_NAMES = new Set([
+  "x-digi-enable-web-search",
+  "x-digi-search-engine",
+]);
+
+/** Missing scope named by a 403 body, or null when this is not that refusal. */
+export function insufficientLicenseScopeName(bodyText: string): string | null {
+  if (!bodyText.length) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const outer = parsed as { error?: unknown; code?: unknown; message?: unknown };
+  const nested =
+    typeof outer.error === "object" && outer.error !== null
+      ? (outer.error as { code?: unknown; message?: unknown })
+      : undefined;
+  const code =
+    typeof outer.error === "string"
+      ? outer.error
+      : typeof nested?.code === "string"
+        ? nested.code
+        : typeof outer.code === "string"
+          ? outer.code
+          : null;
+  if (code !== INSUFFICIENT_LICENSE_SCOPE_CODE) return null;
+  const message =
+    typeof outer.message === "string"
+      ? outer.message
+      : typeof nested?.message === "string"
+        ? nested.message
+        : "";
+  const named = message.match(/license scope '([^']+)'/);
+  return named?.[1] ?? "";
+}
+
+/** Drop hosted web-search headers. Returns false when none were present. */
+export function stripHostedWebSearchHeaders(headers: Record<string, string>): boolean {
+  let stripped = false;
+  for (const key of Object.keys(headers)) {
+    if (!HOSTED_WEB_SEARCH_HEADER_NAMES.has(key.toLowerCase())) continue;
+    delete headers[key];
+    stripped = true;
+  }
+  return stripped;
+}
+
 class DigigraphStreamContractError extends Error {
   constructor(payload: string) {
     super(payload);
@@ -127,6 +234,82 @@ const UPSTREAM_RETRY_DELAYS_MS = [2000, 5000, 8000];
 function retryDelayMs(attempt: number): number {
   const index = Math.min(attempt - 1, UPSTREAM_RETRY_DELAYS_MS.length - 1);
   return UPSTREAM_RETRY_DELAYS_MS[index] ?? 0;
+}
+
+/**
+ * Machine-readable boot code the stack worker puts on container-not-ready
+ * 503s (#4753). ONLY a 503 carrying this code gets the extended boot budget
+ * below — every other 503 (real outage, digigraph overload, old plain-text
+ * worker body) keeps the ~15s budget above.
+ */
+export const UPSTREAM_BOOT_RETRY_CODE = "container_booting";
+
+/**
+ * Extended retry budget for a booting upstream (#4753). The stack allows
+ * portReady 180s + instanceGet 60s, so the budget covers the full ~240s boot
+ * window plus margin. Bounded two ways: total elapsed time AND attempt count
+ * (Retry-After: 5 polls ~50 times over the window; the attempt cap is the
+ * backstop for clock weirdness).
+ */
+export const UPSTREAM_BOOT_MAX_ELAPSED_MS = 250_000;
+export const UPSTREAM_BOOT_MAX_ATTEMPTS = 64;
+
+/** Server-sent Retry-After is honored inside this window (flood/hang guard). */
+const BOOT_RETRY_AFTER_MIN_MS = 1_000;
+const BOOT_RETRY_AFTER_MAX_MS = 30_000;
+
+/** Fallback boot backoff when the 503 carries no usable Retry-After. */
+const BOOT_RETRY_BASE_DELAY_MS = 2_000;
+
+/** True when the 503 body carries the boot code (flat or nested envelope). */
+export function isUpstreamBootRetry(bodyText: string): boolean {
+  if (!bodyText.length) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch {
+    return false;
+  }
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const outer = parsed as { error?: unknown; code?: unknown };
+  const code =
+    typeof outer.error === "string"
+      ? outer.error
+      : typeof outer.error === "object" && outer.error !== null
+        ? (outer.error as { code?: unknown }).code
+        : outer.code;
+  return code === UPSTREAM_BOOT_RETRY_CODE;
+}
+
+/**
+ * Parse a Retry-After header (delta-seconds or HTTP-date) into a clamped
+ * delay. Returns null when the header is missing or unusable — the caller
+ * falls back to exponential backoff. The server hint is honored exactly
+ * (clamped): no jitter, so a booting container is re-polled on its schedule.
+ */
+export function parseRetryAfterMs(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = raw.trim();
+  if (!value.length) return null;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isSafeInteger(seconds)) return null;
+    return Math.min(Math.max(seconds * 1000, BOOT_RETRY_AFTER_MIN_MS), BOOT_RETRY_AFTER_MAX_MS);
+  }
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return null;
+  const delta = at - Date.now();
+  if (delta <= 0) return BOOT_RETRY_AFTER_MIN_MS;
+  return Math.min(delta, BOOT_RETRY_AFTER_MAX_MS);
+}
+
+/** Exponential fallback with jitter for a boot 503 without Retry-After. */
+function bootRetryFallbackDelayMs(bootAttempt: number): number {
+  const backoff = Math.min(
+    BOOT_RETRY_BASE_DELAY_MS * 2 ** Math.max(bootAttempt - 1, 0),
+    BOOT_RETRY_AFTER_MAX_MS,
+  );
+  return backoff * (0.8 + Math.random() * 0.4);
 }
 
 /** Abort-aware sleep so Stop stays responsive between cold-start retries. */
@@ -192,8 +375,25 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
+  /**
+   * House model for the request body. Defaults to ``digigraphModelName()``;
+   * the route passes the tenant's curated ``models.default`` so the first
+   * turn runs the same model the picker shows (OCC: v4.1-flash).
+   */
+  model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
   signal?: AbortSignal;
+  /** Shown before the answer when a premium pick falls back to Auto. */
+  preface?: string;
+  /**
+   * Reported token usage for the premium spend window. Called from the
+   * stream `finally`, including when the visitor aborts after an answer.
+   * Omitted usage charges a typical turn. Absent when the deployment does
+   * not meter (OCC).
+   */
+  onUsage?: (usage?: { inputTokens: number; outputTokens: number }) => void;
+  /** Shared TPM / tool-cap guard. Inactive when the deployment sets neither. */
+  guard?: TurnGuard;
 }) {
   const stripped = uiMessagesForUpstream(opts.messages).map((m) => {
     const { id: _omit, ...rest } = m;
@@ -204,7 +404,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
     ignoreIncompleteToolCalls: true,
   });
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
-  const model = digigraphModelName();
+  const model = opts.model?.trim() || digigraphModelName();
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
@@ -214,6 +414,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
       let textOpen = false;
       /** Any answer text was written — the normal success signal. */
       let textEmitted = false;
+      let usageMetadata:
+        | { inputTokens: number; outputTokens: number; totalTokens: number }
+        | undefined;
+      let toolCallsSoFar = 0;
       const activityCtx = createActivityWriteContext();
       const openText = () => {
         if (textOpen) return;
@@ -228,6 +432,11 @@ export async function createDigigraphTraceStreamResponse(opts: {
         textOpen = false;
         textSeq += 1;
       };
+      if (opts.preface) {
+        openText();
+        writer.write({ type: "text-delta", id: textId, delta: `${opts.preface}\n\n` });
+        textEmitted = true;
+      }
       writer.write({
         type: "data-connection",
         id: "digigraph-connection",
@@ -238,15 +447,36 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // success tail: a part left streaming keeps the thinking animation
       // parked above the final state (foundry wraps the same way).
       try {
+      let outbound = coreMessagesToDigigraphOpenAi(coreMessages);
+      if (opts.guard?.active) {
+        const clearance = await opts.guard.beforeRound({
+          writer,
+          pendingText: outbound.map((message) => message.content).join("\n"),
+          toolCallsSoFar: 0,
+          signal: opts.signal,
+        });
+        if (clearance.action !== "proceed") {
+          outbound = [...outbound, { role: "user", content: clearance.instruction }];
+        }
+      }
       const bodyPayload: Record<string, unknown> = {
         model,
-        messages: coreMessagesToDigigraphOpenAi(coreMessages),
+        messages: outbound,
         stream: true,
       };
       // #2572: never follow cross-origin redirects while carrying BYOK /
       // LiteLLM / digikey credentials (Node forwards X-* across origins).
       let res: Response;
-      for (let attempt = 1; ; attempt += 1) {
+      // Normal-path attempts (fetch errors + non-boot 503s) keep the ~15s
+      // budget (UPSTREAM_MAX_ATTEMPTS + UPSTREAM_RETRY_DELAYS_MS). Boot-coded
+      // 503s count separately against UPSTREAM_BOOT_MAX_* (#4753).
+      let attempt = 0;
+      let bootAttempts = 0;
+      let warmingReported = false;
+      let droppedHostedWebSearch = false;
+      const requestHeaders: Record<string, string> = { ...opts.upstreamHeaders };
+      const loopStartedAtMs = Date.now();
+      for (;;) {
         if (opts.signal?.aborted) {
           throw new DOMException("The operation was aborted.", "AbortError");
         }
@@ -263,7 +493,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
               // is why route.ts's unconditional set is pinned by a test rather than
               // left to inspection: if it ever becomes conditional, this adapter must
               // regain a fallback or digigraph gets an unauthenticated request (#2537).
-              ...opts.upstreamHeaders,
+              ...requestHeaders,
               // After upstreamHeaders so dogfood never inherits Open WebUI format.
               // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
               // (X-Response-Format: openwebui or openwebui_format=true), never implied
@@ -281,18 +511,71 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
             throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
           }
+          attempt += 1;
           if (attempt >= UPSTREAM_MAX_ATTEMPTS || opts.signal?.aborted) {
             throw err;
           }
           await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
         }
-        if (res.status === 503 && attempt < UPSTREAM_MAX_ATTEMPTS) {
-          if (res.body) {
-            await res.body.cancel().catch(() => {});
+        if (res.status === 503) {
+          // Read (don't just cancel) the body: the boot code lives in it, and
+          // a consumed body is equivalent to a cancelled one for the error
+          // path below (`res.text()` on it resolves "" via the catch).
+          const bodyText = (await res.text().catch(() => "")).slice(0, 4000);
+          if (isUpstreamBootRetry(bodyText) && !opts.signal?.aborted) {
+            bootAttempts += 1;
+            const remainingMs = UPSTREAM_BOOT_MAX_ELAPSED_MS - (Date.now() - loopStartedAtMs);
+            if (bootAttempts < UPSTREAM_BOOT_MAX_ATTEMPTS && remainingMs > 0) {
+              if (!warmingReported) {
+                warmingReported = true;
+                // One line per turn (not per retry): a full boot polls ~50
+                // times, and the warming_up stream part is the client signal.
+                console.error(
+                  `[digigraph] upstream booting (${UPSTREAM_BOOT_RETRY_CODE}); ` +
+                    `extended retry budget ${UPSTREAM_BOOT_MAX_ELAPSED_MS}ms`,
+                );
+                writer.write({
+                  type: "data-connection",
+                  id: "digigraph-connection",
+                  // The status line the chat shows (DIG-4459): the client
+                  // has no default copy, so the server names the wait.
+                  data: { state: "warming_up", message: "Waking up services…" },
+                });
+              }
+              const serverDelayMs = parseRetryAfterMs(res.headers.get("retry-after"));
+              const delayMs = Math.min(
+                serverDelayMs ?? bootRetryFallbackDelayMs(bootAttempts),
+                remainingMs,
+              );
+              await abortableSleep(delayMs, opts.signal);
+              continue;
+            }
+            break;
+          }
+          attempt += 1;
+          if (attempt >= UPSTREAM_MAX_ATTEMPTS) {
+            break;
           }
           await abortableSleep(retryDelayMs(attempt), opts.signal);
           continue;
+        }
+        // Optional hosted web search: a license that lacks the scope must not
+        // fail the turn. Retry once as plain inference (the 403 says so).
+        // Corpus headers stay — an ungrounded answer is not a silent fallback.
+        if (res.status === 403 && !droppedHostedWebSearch) {
+          const probe = (await res.clone().text().catch(() => "")).slice(0, 4000);
+          if (
+            insufficientLicenseScopeName(probe) === HOSTED_WEB_SEARCH_SCOPE &&
+            stripHostedWebSearchHeaders(requestHeaders)
+          ) {
+            droppedHostedWebSearch = true;
+            console.error(
+              `[digigraph] upstream 403 ${INSUFFICIENT_LICENSE_SCOPE_CODE} ` +
+                `(${HOSTED_WEB_SEARCH_SCOPE}); retrying once without hosted web-search headers`,
+            );
+            continue;
+          }
         }
         break;
       }
@@ -305,6 +588,18 @@ export async function createDigigraphTraceStreamResponse(opts: {
           `[digigraph] upstream ${res.status} ${res.statusText}`,
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
         );
+        if (res.status === 429) {
+          // #4777: rate-limited, not down — say when to retry instead of the
+          // generic unavailable-message. Status-gated (never body-parsed):
+          // digigraph sends Retry-After + error.code rate_limit_exceeded
+          // (#4776), but a bare proxy 429 takes the same path. Ahead of the
+          // relayable check so the Retry-After seconds survive — that path
+          // relays the code alone and would drop the number.
+          closeText();
+          throw new DigigraphStreamContractError(
+            rateLimitRetryPayload(res.headers.get("retry-after")),
+          );
+        }
         const relayable = relayableUpstreamCode(detail);
         if (relayable) {
           // Actionable refusal: hand the code (never the body) to the client so
@@ -333,9 +628,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
         closeText();
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
-      let usageMetadata:
-        | { inputTokens: number; outputTokens: number; totalTokens: number }
-        | undefined;
       for await (const delta of iterateOpenAiSse(res.body, (usage) => {
         const inputTokens = usage.prompt_tokens;
         const outputTokens = usage.completion_tokens;
@@ -407,6 +699,17 @@ export async function createDigigraphTraceStreamResponse(opts: {
           // resets which text part subsequent "content" deltas land in.
           if (payload.type === "round_boundary") {
             closeText();
+            // Notice only. beforeRound may ask for an answer-band follow-up;
+            // this loop has no second request to attach it to, so the result
+            // is discarded. The tool-cap notice still fires from noteToolCap.
+            if (opts.guard?.active) {
+              await opts.guard.beforeRound({
+                writer,
+                pendingText: outbound.map((message) => message.content).join("\n"),
+                toolCallsSoFar,
+                signal: opts.signal,
+              });
+            }
             continue;
           }
 
@@ -415,7 +718,20 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
           }
           for (const span of spans) {
-            writeStandardActivity(writer, span, activityCtx);
+            if (span.operation === "execute_tool") {
+              toolCallsSoFar += 1;
+              // noteToolCap no-ops under the cap and after the notice is sent,
+              // including when one event carries two execute_tool spans.
+              if (opts.guard?.active) opts.guard.noteToolCap(writer, toolCallsSoFar);
+            }
+            const next =
+              opts.guard?.active && span.toolResult !== undefined
+                ? {
+                    ...span,
+                    toolResult: opts.guard.capToolPayload(span.toolResult) as typeof span.toolResult,
+                  }
+                : span;
+            writeStandardActivity(writer, next, activityCtx);
           }
         }
       }
@@ -428,6 +744,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           type: "message-metadata",
           messageMetadata: { usage: usageMetadata },
         });
+        opts.guard?.recordUsage(usageMetadata);
       }
       // #3910: a real 200 always has a non-null body even when the upstream
       // sends no bytes, so `!res.body` only catches 204/205/HEAD. Without this,
@@ -445,6 +762,13 @@ export async function createDigigraphTraceStreamResponse(opts: {
         throw new DigigraphStreamContractError(DIGIGRAPH_UNAVAILABLE_MESSAGE);
       }
       } finally {
+        // An abort used to skip the charge that sat after the SSE loop, so a
+        // visitor who disconnected at the end of each answer was not billed.
+        // House passes onUsage; OCC does not, and stays unmetered.
+        if (opts.onUsage && (textEmitted || usageMetadata)) {
+          opts.onUsage(usageMetadata);
+        }
+        opts.guard?.release();
         // Idempotent when the turn already settled on the success path.
         finishStandardActivity(writer, activityCtx);
         closeText();

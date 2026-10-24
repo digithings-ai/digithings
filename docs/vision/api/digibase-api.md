@@ -2,7 +2,7 @@
 title: "digibase — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - support
@@ -46,7 +46,7 @@ Shared Python library imported by every service — not a network surface.
 Pydantic, FastAPI, Prometheus, OpenTelemetry
 
 ## Related
-digismith, digisearch
+digitrace, digisearch
 
 ## Links
 - [Source](https://github.com/digithings-ai)

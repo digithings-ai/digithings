@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthCard, type AuthOAuthProvider } from '@digithings/ui';
+import { AuthCard, type AuthCardBrand, type AuthOAuthProvider } from '@digithings/ui';
 import { Card } from '@digithings/ui/ui';
 import { useAuth } from '@/lib/auth-context';
 import { formatAuthError, SIGNUP_SESSION_MISSING_COPY } from '@/lib/auth-errors';
+import { getInviteBrand } from '@/lib/settings-api';
+import { parseInviteQuery, peekStashedInvite } from '@/lib/invite-stash';
 import { dashboardBasePath } from '@/lib/supabase';
 
 export const MIN_PASSWORD_LENGTH = 8;
@@ -27,6 +29,28 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
   const [password, setPassword] = useState('');
   const signUp = initialMode === 'signup';
   const base = dashboardBasePath();
+  const [brand, setBrand] = useState<AuthCardBrand | null>(null);
+
+  // Invite banner (signup only): the team marker is the only per-invite
+  // variable — the line is a fixed generic template, no custom copy needed.
+  const inviteBannerLine =
+    "Create your account to get started. Your invite unlocks your team's workspace.";
+
+  // Invite branding (signup only): an invite link is how someone WITHOUT an
+  // account arrives, so resolve the client's marker for the card. Unbranded
+  // or failed lookups keep the default card — getInviteBrand never rejects.
+  useEffect(() => {
+    if (!signUp || typeof window === 'undefined') return;
+    const code = peekStashedInvite() ?? parseInviteQuery(window.location.search);
+    if (!code) return;
+    let cancelled = false;
+    void getInviteBrand({}, { code }).then((result) => {
+      if (!cancelled && result.marker) setBrand({ marker: result.marker, line: result.line });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [signUp]);
 
   async function start(provider: AuthOAuthProvider) {
     setError(null);
@@ -71,6 +95,12 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
 
   return (
     <div className="qn-blueprint-bg flex min-h-screen flex-col items-center justify-center p-6 text-ink">
+      {signUp && brand ? (
+        <div className="acct-invite-banner" role="status">
+          <span className="acct-invite-banner-marker">Join {brand.marker} on digiquant</span>
+          <span className="acct-invite-banner-line">{inviteBannerLine}</span>
+        </div>
+      ) : null}
       {!authEnabled ? (
         <Card className="w-full max-w-[380px] gap-0 border border-hair p-5 ring-0">
           <p className="font-mono text-[0.68rem] text-ink-mute">

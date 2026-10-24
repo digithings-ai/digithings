@@ -73,7 +73,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 
 ### How `db-migrate.yml` actually triggers
 
-Workflow: [`.github/workflows/db-migrate.yml`](../../../.github/workflows/db-migrate.yml).
+The former `db-migrate.yml` workflow was removed in the strict-essentials cut; use the manual alternative below when migrations must be applied.
 
 1. **Trigger:** `push` to `main` with path `digiquant/supabase/migrations/**`, or
    `workflow_dispatch`.

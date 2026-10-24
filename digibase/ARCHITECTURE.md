@@ -62,7 +62,7 @@ Attaches an ASGI middleware that records three metrics per request and exposes t
 - `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
 - The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
 - Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
-- digiclaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
+- digibot does not expose `/metrics` — it is a CLI runner (`python -m digibot`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 
@@ -206,7 +206,7 @@ Registers two exception handlers on the FastAPI application instance: one for `S
 ### `digibase.audit`
 
 Sole fleet-wide JSONL audit emitter (CHR-151 / #1193). Component packages
-(`digigraph.audit`, `digiquant.audit`, `digiclaw.audit`) keep a thin `audit_log()`
+(`digigraph.audit`, `digiquant.audit`, `digibot.audit`) keep a thin `audit_log()`
 compat wrapper that delegates here — they must not open or append the audit file
 themselves.
 
@@ -291,6 +291,7 @@ Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-obs
 
 ```python
 resolve_otel_endpoint() -> str
+resolve_otel_headers() -> dict[str, str]
 inject_trace_context(headers: MutableMapping[str, str]) -> None
 setup_otel_fastapi(app: Any, *, service_name: str, service_version: str | None = None) -> None
 ```
@@ -298,6 +299,11 @@ setup_otel_fastapi(app: Any, *, service_name: str, service_version: str | None =
 Endpoint resolution (#222): prefers `DIGI_OTEL_ENDPOINT`, then the OpenTelemetry
 standard `OTEL_EXPORTER_OTLP_ENDPOINT`. Empty / unset → tracing disabled
 (zero overhead).
+
+Headers resolution (#4927): prefers `DIGI_OTEL_HEADERS`, then the OpenTelemetry
+standard `OTEL_EXPORTER_OTLP_HEADERS`. Comma-separated `key=value` pairs with
+URL-decoded values; empty / unset → `{}` and malformed pairs are skipped.
+`setup_otel_fastapi` passes `headers=` to `OTLPSpanExporter` only when non-empty.
 
 When an endpoint is set, attempts to import OpenTelemetry SDK packages; if they
 are missing (base install without `[otel]`), logs a warning and returns. When
@@ -498,13 +504,13 @@ The library has no internal circular dependencies. `errors.py` and `audit.py` de
 | digigraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digigraph.audit.audit_log`) | `setup_otel_fastapi` |
 | digiquant | — | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digiquant.audit.audit_log`) | `setup_otel_fastapi` |
 | digisearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
-| digismith | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digitrace | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digikey | — | `register_fastapi_error_handlers` | — | — |
-| digiclaw | — | — | `emit_event` (via thin `digiclaw.audit.audit_log`) | — |
+| digibot | — | — | `emit_event` (via thin `digibot.audit.audit_log`) | — |
 
 digigraph is the heaviest consumer: it uses `outbound_service_headers` in five locations (both connector modules, both vertical orchestrator hub modules, and the graph nodes module) to propagate correlation ids and bearer tokens on every outbound service-to-service call.
 
-digiclaw imports digibase for audit emission (`emit_event` / `redact_mapping`) via its thin `audit_log` wrapper.
+digibot imports digibase for audit emission (`emit_event` / `redact_mapping`) via its thin `audit_log` wrapper.
 
 ---
 
@@ -591,7 +597,7 @@ The digibase service will need to expose Postgres connection pools sized for the
 
 **digisearch** (`digisearch/src/digisearch/server.py`) mirrors digiquant: error handlers and OTel wiring, no outbound header usage from digibase.
 
-**digismith** (`digismith/src/digismith/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
+**digitrace** (`digitrace/src/digitrace/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
 
 **digikey** (`digikey/src/digikey/server.py`) uses only `register_fastapi_error_handlers`. It does not emit OTel traces via digibase (it may have its own tracing concerns given its role as the identity service).
 

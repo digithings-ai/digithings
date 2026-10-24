@@ -40,6 +40,12 @@ export type InviteCodeRow = {
    *  product grant — e.g. an fx_hub code that also raises the redeemer to
    *  'desk'. Null means "product grant only, no tier bump". */
   plan_floor: string | null;
+  /** Optional client branding for the invite signup banner — a short team
+   *  marker ("12X"), the only per-invite variable. brand_line is reserved
+   *  for a future per-invite override; the client currently renders a fixed
+   *  generic line. Display-only; null/blank marker renders the default card. */
+  brand_marker?: string | null;
+  brand_line?: string | null;
 };
 
 export type InviteStore = {
@@ -68,7 +74,12 @@ export type InviteStore = {
     source: "env" | "table";
     redeemed_at: string;
   }): Promise<void>;
-  incrementRedemptionCount(id: string): Promise<void>;
+  /**
+   * Consume one redemption slot. Must be atomic: a code with
+   * max_redemptions = 1 can be claimed only once, including under concurrent
+   * redeems. Returns false when the code is missing, revoked, or exhausted.
+   */
+  claimRedemption(id: string): Promise<boolean>;
   recordAdminAudit?(row: {
     workspace_id: string | null;
     event_key: string;
@@ -128,6 +139,50 @@ function invalid(): RedeemErr {
     code: "INVITE_INVALID",
     message: "Invite code is not valid.",
   };
+}
+
+export type InviteBrand = {
+  marker: string;
+  line: string | null;
+};
+
+/**
+ * Display-only brand lookup for the invite signup card. Returns the
+ * marker/line of the matching active code, or null when the code is
+ * unknown, revoked, exhausted, or simply unbranded (all render the
+ * default card). Records no attempt and grants nothing — safe to call
+ * before signup, when the visitor has no session yet.
+ */
+export async function resolveInviteBrand(args: {
+  productKey: unknown;
+  code: unknown;
+  envHash?: string | null;
+  store: InviteStore;
+}): Promise<InviteBrand | null> {
+  const productKey = normalizeProductKey(args.productKey);
+  if (productKey !== FX_HUB_PRODUCT) return null;
+  const code = normalizeInviteCode(args.code);
+  if (code.length < INVITE_MIN_CODE_LENGTH) return null;
+
+  const presented = await sha256Hex(code);
+  const envHash = (args.envHash ?? "").trim().toLowerCase();
+  if (envHash && timingSafeEqualHex(presented, envHash)) return null;
+
+  const rows = await args.store.listActiveCodes(productKey);
+  for (const row of rows) {
+    if (row.revoked_at) continue;
+    if (
+      row.max_redemptions != null &&
+      row.redemption_count >= row.max_redemptions
+    ) {
+      continue;
+    }
+    if (!timingSafeEqualHex(presented, row.code_hash)) continue;
+    const marker = (row.brand_marker ?? "").trim();
+    if (!marker) return null;
+    return { marker, line: (row.brand_line ?? "").trim() || null };
+  }
+  return null;
 }
 
 export async function redeemProductInvite(args: {
@@ -205,14 +260,39 @@ export async function redeemProductInvite(args: {
     }
   }
 
+  if (!matched) {
+    await args.store.recordAttempt({
+      user_id: args.userId,
+      product_key: productKey,
+      ok: false,
+      attempted_at: now.toISOString(),
+    });
+    return invalid();
+  }
+
+  // Cap check above is a snapshot. Two callers can both see count 0. Claim
+  // the slot before inserting a grant, and skip the claim when this email
+  // already holds the product so a retry does not burn another seat.
+  const already = await args.store.hasGrant(email, productKey);
+  if (!already && matched.id) {
+    const claimed = await args.store.claimRedemption(matched.id);
+    if (!claimed) {
+      await args.store.recordAttempt({
+        user_id: args.userId,
+        product_key: productKey,
+        ok: false,
+        attempted_at: now.toISOString(),
+      });
+      return invalid();
+    }
+  }
+
   await args.store.recordAttempt({
     user_id: args.userId,
     product_key: productKey,
-    ok: matched != null,
+    ok: true,
     attempted_at: now.toISOString(),
   });
-
-  if (!matched) return invalid();
 
   // A plan_floor bump applies whether or not the product grant is new — a
   // repeat redemption of a higher-tier code should still raise the tier.
@@ -228,7 +308,6 @@ export async function redeemProductInvite(args: {
     }
   }
 
-  const already = await args.store.hasGrant(email, productKey);
   if (already) {
     return { ok: true, alreadyGranted: true, productKey, planFloor: matched.planFloor };
   }
@@ -246,9 +325,6 @@ export async function redeemProductInvite(args: {
     source: matched.source,
     redeemed_at: now.toISOString(),
   });
-  if (matched.id) {
-    await args.store.incrementRedemptionCount(matched.id);
-  }
 
   if (productKey === FX_HUB_PRODUCT) {
     try {

@@ -4,12 +4,18 @@
  */
 
 .dc-brand {
+  /* Brand strip measures — the same values as the CLI session strip in
+     session.css, kept local so each sheet can be retuned on its own. */
+  --dc-brand-pad: 0.55rem 0.75rem;
+  --dc-brand-gap: 0.35rem;
+  --dc-brand-size: 0.82rem;
+
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
+  gap: var(--dc-brand-gap);
   border-bottom: 1px solid var(--border);
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
+  padding: var(--dc-brand-pad);
+  font-size: var(--dc-brand-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -170,15 +176,17 @@
 
 .dc-embed-shell [data-thread-skin] .aui-block-caret {
   --caret-pad-left: 0.375rem;
+  --caret-row-h: 1.375rem;
+  --caret-size: 0.88rem;
   display: none;
   position: absolute;
   width: 1ch;
-  height: 1.375rem;
+  height: var(--caret-row-h);
   left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
-  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0px));
+  top: calc(var(--caret-row, 0) * var(--caret-row-h) + var(--caret-pad-top, 0px));
   background: var(--tenant-accent, var(--accent, var(--primary)));
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: var(--caret-size);
   pointer-events: none;
   animation: aui-caret-blink 1.06s steps(1) infinite;
 }
@@ -213,16 +221,37 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 }
 
 /* BYOK / paywall — stock-token remapping of former session.css classes */
+/* Gate chrome: one measure across the BYOK list, key input, action row and the
+   paywall card. Declared on the gate roots so the tokens travel with each
+   element instead of relying on a single wrapper. */
+.dc-byok-flow,
+.dc-byok-option-list,
+.dc-byok-input,
+.dc-paywall,
+.dc-gate-card,
+.dc-term-row {
+  --dc-gate-max-w: 28rem;
+  --dc-gate-gap: 0.75rem;
+  --dc-gate-size: 0.875rem;
+  --dc-gate-hint-size: 0.75rem;
+  --dc-gate-hint-gap: 0.4rem;
+  --dc-gate-input-pad: 0.5rem 0.65rem;
+  --dc-gate-input-gap: 0.25rem;
+  --dc-gate-option-gap: 0.4rem;
+  --dc-gate-option-pad: 0.35rem 0.5rem;
+  --dc-gate-marker-gap: 0.35rem;
+}
+
 .dc-byok-flow,
 .dc-term-row {
-  margin-top: 0.75rem;
-  font-size: 0.875rem;
+  margin-top: var(--dc-gate-gap);
+  font-size: var(--dc-gate-size);
   color: var(--foreground);
 }
 
 .dc-term-marker {
   color: var(--muted-foreground);
-  margin-right: 0.35rem;
+  margin-right: var(--dc-gate-marker-gap);
 }
 
 .dc-term-body {
@@ -230,8 +259,8 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 }
 
 .dc-byok-prompt {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
+  margin: 0 0 var(--dc-gate-hint-gap);
+  font-size: var(--dc-gate-hint-size);
   color: var(--muted-foreground);
 }
 
@@ -239,16 +268,16 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 28rem;
+  max-width: var(--dc-gate-max-w);
 }
 
 .dc-byok-option {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--dc-gate-option-gap);
   width: 100%;
   margin: 0;
-  padding: 0.35rem 0.5rem;
+  padding: var(--dc-gate-option-pad);
   border: 0;
   border-radius: calc(var(--radius) - 2px);
   background: transparent;
@@ -276,15 +305,15 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 .dc-byok-input {
   display: block;
   width: 100%;
-  max-width: 28rem;
-  margin-top: 0.25rem;
-  padding: 0.5rem 0.65rem;
+  max-width: var(--dc-gate-max-w);
+  margin-top: var(--dc-gate-input-gap);
+  padding: var(--dc-gate-input-pad);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
   background: var(--background);
   color: var(--foreground);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--dc-gate-size);
   outline: none;
 }
 
@@ -296,8 +325,8 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 .dc-byok-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: var(--dc-gate-gap);
+  margin-top: var(--dc-gate-gap);
 }
 
 .dc-byok-action {
@@ -307,7 +336,7 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   background: none;
   color: var(--muted-foreground);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--dc-gate-hint-size);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -321,22 +350,141 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--destructive);
 }
 
+/* Faded red (Chris, 21 Oct, DIG-4459): a 4% wash and a 20% hairline; the
+   text keeps the full destructive colour so it stays WCAG AA. */
 .aui-message-error-root {
   color: var(--destructive);
-  border-color: color-mix(in oklch, var(--destructive) 40%, transparent);
-  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 20%, transparent);
+  background: color-mix(in oklch, var(--destructive) 4%, transparent);
 }
 
 .dc-paywall,
 .dc-gate-card {
-  margin: 1rem auto;
-  max-width: 28rem;
-  padding: 1rem 1.1rem;
+  --dc-card-margin: 1rem auto;
+  --dc-card-pad: 1rem 1.1rem;
+
+  margin: var(--dc-card-margin);
+  max-width: var(--dc-gate-max-w);
+  padding: var(--dc-card-pad);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
   color: var(--card-foreground);
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent);
+}
+
+/* Terminal look for the first-party product (DIG-2983): the same dress as
+   digichat-tui and the digiquant embed. One canvas painted at the product
+   root, every surface above it transparent, one hairline colour for every box
+   rule, Geist Mono throughout, and the open chat marked with an arrow instead
+   of a filled row. Scoped to the stock product root; catalog skins are
+   untouched. Only chrome.mode app paints the canvas: /embed (incl. wide,
+   transparent embeds) keeps the shell canvas rules above, and the framed
+   modal/sidebar modes keep the host page behind them. */
+[data-stock-product][data-thread-skin="digichat"] {
+  --term-bg: #08090b;
+  --term-ink: #e7eaec;
+  --term-mute: #7e858b;
+  --term-hair: #2a2e33;
+
+  /* Terminal chrome measures: the shared row height, tool chip, gutter and
+     meta type size for this skin. */
+  --term-row-h: 2.25rem;
+  --term-tool-h: 1.375rem;
+  --term-chip-pad-inline: 0.45rem;
+  --term-gutter: 0.75rem;
+  --term-gap: 0.5rem;
+  --term-meta-size: 0.6875rem;
+}
+
+:root[data-theme="light"] [data-stock-product][data-thread-skin="digichat"] {
+  --term-bg: #f1f0eb;
+  --term-ink: #1a1c1e;
+  --term-mute: #6b7177;
+  --term-hair: #d4d1c8;
+}
+
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] {
+  background: var(--term-bg);
+  color: var(--term-ink);
+}
+
+body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: #08090b;
+}
+
+:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: #f1f0eb;
+}
+
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread__footer,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread-list {
+  --bg: transparent;
+  --surface: transparent;
+  --hair: var(--term-hair);
+  background: transparent;
+}
+
+/* Box rules: the sidebar header and the tool row share one height, so their
+   bottom rules run as a single line across the page. */
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list {
+  border-right-color: var(--term-hair);
+}
+
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list > :first-child,
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
+  box-sizing: border-box;
+  height: var(--term-row-h);
+  border-bottom: 1px solid var(--term-hair);
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
+  flex-wrap: nowrap;
+  gap: var(--term-gap);
+  padding: 0 var(--term-gutter);
+  overflow-x: auto;
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button {
+  height: var(--term-tool-h);
+  border: 1px solid var(--term-hair);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 var(--term-chip-pad-inline);
+  color: var(--term-mute);
+  font-family: inherit;
+  font-size: var(--term-meta-size);
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button[aria-pressed="true"] {
+  border-color: var(--term-ink);
+  color: var(--term-ink);
+}
+
+[data-stock-product][data-thread-skin="digichat"] .aui-composer-root > :first-child {
+  border-color: var(--term-hair);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* assistant-ui marks the open chat on the item root (data-active +
+   aria-current), not on the trigger, so the row is keyed off its parent. */
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item {
+  color: var(--term-mute);
+  font-size: var(--term-meta-size);
+}
+
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item:hover,
+[data-stock-product][data-thread-skin="digichat"] [aria-current="true"] > .digichat-thread-list__item {
+  background: transparent;
+  color: var(--term-ink);
+}
+
+[data-stock-product][data-thread-skin="digichat"] [aria-current="true"] > .digichat-thread-list__item::before {
+  content: "→ ";
+  color: var(--accent-digichat, var(--accent));
 }
 
 /* chrome.mode: sidebar (#4515). A docked panel beside the host content rather
@@ -358,14 +506,50 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 }
 
 .dc-presentation__panel {
+  /* Docked panel width — the one knob for chrome.mode: sidebar. */
+  --dc-panel-w: min(380px, 100vw);
+
   display: flex;
   flex-direction: column;
   flex: none;
-  width: min(380px, 100vw);
+  width: var(--dc-panel-w);
   height: 100%;
   min-height: 0;
   overflow: hidden;
   border-inline-start: 1px solid var(--border);
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Small screens: iOS Safari zooms on focus when an input's font-size is under
+   16px. Keep pinch zoom; just meet the 16px threshold. Popups fit the visible
+   viewport (--dc-vvh tracks visualViewport, so the keyboard is accounted for).
+   Shared by every chat, not one tenant. */
+@media (max-width: 640px), (pointer: coarse) {
+  .aui-composer-input,
+  textarea,
+  input[type="text"],
+  input[type="search"],
+  input:not([type]) {
+    font-size: 16px !important;
+  }
+  .aui-composer-trigger-popover,
+  [data-slot="composer-trigger-popover"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [role="dialog"] {
+    max-width: calc(100vw - 16px) !important;
+    max-height: min(70dvh, calc(var(--dc-vvh, 100dvh) - 140px)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    overflow-wrap: anywhere;
+  }
+  .aui-composer-trigger-popover * {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
 }

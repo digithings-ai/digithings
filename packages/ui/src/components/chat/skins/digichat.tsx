@@ -6,11 +6,12 @@ import "../../../styles/chat-aui.css";
 import "../../../styles/chat-digichat.css";
 import "../../../styles/digichat-boot-loader.css";
 
-import { useCallback, useMemo, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, type FormEvent } from "react";
 import {
   unstable_useMentionAdapter,
   unstable_useSlashCommandAdapter,
   useAui,
+  useAuiState,
 } from "@assistant-ui/react";
 import {
   copyMarkdownWithFallback,
@@ -29,7 +30,11 @@ import {
   useComposerCopy,
   useSkinChrome,
 } from "../stock/skin-chrome";
-import { useDisclosureUi } from "../stock/deploy-ui-context";
+import {
+  useDeployUi,
+  useDisclosureUi,
+} from "../stock/deploy-ui-context";
+import { workVisibilityForView } from "../stock/skin-types";
 import {
   useStockComposerGateSubmit,
   useStockSendGate,
@@ -38,6 +43,12 @@ import {
   useEmbedChatPrefsOptional,
   type EmbedChatPrefsApi,
 } from "../stock/embed-chat-prefs";
+import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
+import {
+  downloadThreadSnapshot,
+  showSnapshotError,
+} from "../../../replay/browser";
+import { applyExportSlash } from "../../../replay/export-format";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -74,7 +85,22 @@ export type SkinSlashAction =
   | { kind: "block" }
   | { kind: "force"; forceTool: string; text: string }
   | { kind: "force-web"; text: string }
+  | { kind: "pane"; command: SkinSlashExtraDef; arg: string }
   | { kind: "run"; command: SkinSlashExtraDef; arg: string };
+
+export type SkinPaletteKind = "closed" | "commands" | "pane";
+
+export type SkinPaletteFrame = {
+  kind: SkinPaletteKind;
+  filter?: string;
+  menu?: string;
+};
+
+export type SkinPaletteApply = {
+  kind: SkinPaletteKind;
+  menu: "close" | "keep" | string;
+  filter: string;
+};
 
 /**
  * Structural mirror of the app's `SlashAdapterLike`
@@ -108,6 +134,12 @@ export type DigichatSkinSlash = {
     prefs: EmbedChatPrefsApi,
     extra?: readonly SkinSlashExtraDef[],
   ) => void;
+  /** Composer text → the one open surface. */
+  frame: (text: string) => SkinPaletteFrame;
+  /** Previous surface plus the next frame. A button-opened menu can stay. */
+  applyFrame: (prev: SkinPaletteKind, frame: SkinPaletteFrame) => SkinPaletteApply;
+  /** Draft written when a pane command is chosen (`/language `), or null. */
+  paneDraft: (id: string) => string | null;
   armForceTool: (
     sessionKey: string,
     forceTool: string,
@@ -159,13 +191,19 @@ export function DigichatSkin({
     copy?.welcome ?? "",
     copy?.placeholder ?? "",
   );
-  const { pageContext } = useSkinChrome();
+  const skinChrome = useSkinChrome();
+  const { pageContext } = skinChrome;
   const reasoningUi = useDisclosureUi("reasoning");
   const toolCallsUi = useDisclosureUi("toolCalls");
+  // The raw view level is what decides how much of the work is shown.
+  const deployUi = useDeployUi();
+  const workVisibility = workVisibilityForView(deployUi.view);
   const gateSubmit = useStockComposerGateSubmit();
   const gate = useStockSendGate();
   const prefs = useEmbedChatPrefsOptional();
   const aui = useAui();
+  const composerText = useAuiState((s) => s.composer.text);
+  const palettePrev = useRef<SkinPaletteKind>("closed");
   const slashPrefs = useMemo(() => {
     if (!prefs) return null;
     return {
@@ -177,6 +215,18 @@ export function DigichatSkin({
     };
   }, [prefs, aui]);
   const enableSlash = Boolean(slashPrefs) && Boolean(slashWiring);
+  useEffect(() => {
+    if (!enableSlash || !slashPrefs?.syncPalette || !slashWiring) return;
+    const next = slashWiring.applyFrame(palettePrev.current, slashWiring.frame(composerText));
+    palettePrev.current = next.kind;
+    slashPrefs.syncPalette(next);
+  }, [composerText, enableSlash, slashPrefs, slashWiring]);
+  useEffect(() => {
+    if (!slashPrefs?.bindComposerDraft) return;
+    slashPrefs.bindComposerDraft((text) => {
+      aui.composer.setText(text);
+    });
+  }, [slashPrefs, aui]);
   const extra = useMemo(
     () =>
       slashPrefs && slashWiring ? slashWiring.extraDefs(slashPrefs) : [],
@@ -195,6 +245,13 @@ export function DigichatSkin({
         const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
         if (md) downloadMarkdown("digichat.md", md);
       },
+      exportHtml: () => {
+        void downloadThreadSnapshot().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "HTML export failed.";
+          if (typeof document !== "undefined") showSnapshotError(document, message);
+          console.error("html export failed", error);
+        });
+      },
     }),
     [aui],
   );
@@ -204,6 +261,7 @@ export function DigichatSkin({
     return slashWiring.buildCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
       if (c.id === "export") return { ...c, execute: copyExport.exportThread };
+      if (c.id === "export-html") return { ...c, execute: copyExport.exportHtml };
       if (c.id === "compact") {
         return {
           ...c,
@@ -221,72 +279,21 @@ export function DigichatSkin({
           },
         };
       }
-      if (c.id === "language") {
-        return {
-          ...c,
-          execute: () =>
-            slashWiring.executeFromComposer(
-              "lang",
-              aui.composer.getState().text,
-              slashPrefs,
-              extra,
-            ),
-        };
-      }
-      if (c.id === "effort") {
-        return {
-          ...c,
-          execute: () =>
-            slashWiring.executeFromComposer(
-              "effort",
-              aui.composer.getState().text,
-              slashPrefs,
-              extra,
-            ),
-        };
-      }
-      if (c.id === "byok") {
-        return {
-          ...c,
-          execute: () =>
-            slashWiring.executeFromComposer(
-              "byok",
-              aui.composer.getState().text,
-              slashPrefs,
-              extra,
-            ),
-        };
-      }
-      if (c.id === "mcp") {
-        return {
-          ...c,
-          execute: () =>
-            slashWiring.executeFromComposer(
-              "mcp",
-              aui.composer.getState().text,
-              slashPrefs,
-              extra,
-            ),
-        };
-      }
-      if (c.id === "tools") {
-        return {
-          ...c,
-          execute: () =>
-            slashWiring.executeFromComposer(
-              "tools",
-              aui.composer.getState().text,
-              slashPrefs,
-              extra,
-            ),
-        };
-      }
-      if (slashWiring.shouldDraft(c.id, extra)) {
-        const draft = `${c.label?.startsWith("/") ? c.label : `/${c.id}`} `;
+      const draft = slashWiring.paneDraft(c.id);
+      if (draft) {
         return {
           ...c,
           execute: () => {
             queueMicrotask(() => aui.composer.setText(draft));
+          },
+        };
+      }
+      if (slashWiring.shouldDraft(c.id, extra)) {
+        const inserted = `${c.label?.startsWith("/") ? c.label : `/${c.id}`} `;
+        return {
+          ...c,
+          execute: () => {
+            queueMicrotask(() => aui.composer.setText(inserted));
           },
         };
       }
@@ -302,6 +309,12 @@ export function DigichatSkin({
     return {
       adapter: slashWiring?.prefixAdapter(slash.adapter) ?? slash.adapter,
       action: slash.action,
+      matcher: (text, _triggerChar, cursorPosition) => {
+        if (!slashWiring || cursorPosition <= 0) return null;
+        const frame = slashWiring.frame(text);
+        if (frame.kind !== "commands") return null;
+        return { query: frame.filter ?? "", offset: 0, endOffset: cursorPosition };
+      },
     };
   }, [slash, slashWiring]);
 
@@ -336,7 +349,7 @@ export function DigichatSkin({
       if (slashPrefs && slashWiring) {
         const text = aui.composer.getState().text;
         const action = slashWiring.submitAction(text, extra);
-        if (action.kind === "block") {
+        if (action.kind === "block" || action.kind === "pane") {
           event.preventDefault();
           return;
         }
@@ -378,15 +391,26 @@ export function DigichatSkin({
         if (action.kind === "run") {
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
-          else if (action.command.id === "export") copyExport.exportThread();
-          else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          else if (action.command.id === "export") {
+            applyExportSlash(action.arg, document, {
+              html: () => copyExport.exportHtml(),
+              markdown: () => copyExport.exportThread(),
+            });
+          }
+          else if (action.command.id === "compact") {
+            // Palette compact serializes the thread and queues a summary.
+            // executeDef only resets prefs and opens an empty thread.
+            const compact = commands.find((command) => command.id === "compact");
+            if (compact) compact.execute();
+            else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          } else slashWiring.executeDef(action.command, action.arg, slashPrefs);
           aui.composer.setText("");
           return;
         }
       }
       gateSubmit?.(event);
     },
-    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra],
+    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra, commands],
   );
 
   return (
@@ -406,7 +430,15 @@ export function DigichatSkin({
       }
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
-
+      workVisibility={workVisibility}
+      composerToolbar={
+        prefs && prefs.prefs.toolbar !== false ? (
+          <DigichatComposerToolbar prefs={prefs} />
+        ) : undefined
+      }
+      scrollbars={prefs?.prefs.scrollbars ?? "always"}
+      scrollMode={prefs?.prefs.scroll}
+      density={prefs?.prefs.density ?? "default"}
     />
   );
 }

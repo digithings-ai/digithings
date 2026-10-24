@@ -1,6 +1,6 @@
 # Releases
 
-Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`). Use **git tags** or Docker image digests in production.
+Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`). Use **git tags** or Docker image digests in production.
 
 ## Release process
 
@@ -16,13 +16,8 @@ Monorepo components ship as **independent Python packages** (`digibase`, `digigr
 
    This is a required step, not bookkeeping: the branch is how that version is patched once `main` has moved on. See [Patching a released version](#patching-a-released-version) and BRANCHING.md § [Cutting a release](BRANCHING.md#cutting-a-release).
 4. **Docker images:**
-   - digichat → [`.github/workflows/publish-digichat-image.yml`](.github/workflows/publish-digichat-image.yml)  
-     Published when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`.  
-     Tags: `:v<package.json version>` and `:latest` (skips if that version tag already exists).
-   - Python HTTP services → [`.github/workflows/publish-service-images.yml`](.github/workflows/publish-service-images.yml) — a push to `main` only, **not** a tag.  
-     Images: `ghcr.io/digithings-ai/{digikey,digigraph,digiquant,digisearch,digismith,digivault,digiclaw}`  
-     Tags: `:sha-<12-char-sha>`, `:latest`, and `:v<pyproject-version>`.  
-     Manual: Actions → “Publish: service images” → `workflow_dispatch` (all or one service).
+   - digichat → `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` when the `digichat-vX.Y.Z` tag lands. Nothing is published until the next tag is cut; see [the self-hosted release notes](docs/architecture/digichat-self-hosted-release.md) and [the digichat promotion runbook](docs/ops/digichat-datatap-aca.md).
+   - Python HTTP services → the former `publish-service-images.yml` workflow was removed in the strict-essentials cut. Until a replacement is added, use local builds (`docker compose build` / `make up`).
 5. **Tagging:** the `digichat-vX.Y.Z` tag is cut in step 1 by release-please (if you bump by hand, cut it yourself on `develop` in the same change). Per-component `digichat-vX.Y.Z` or repo-wide `vX.Y.Z` — pick one and stay consistent. The tag is the release identity pinned clients cite, and it is what publishes the digichat image.
 6. Append a changelog entry under "Unreleased" below, then move it under a new dated heading.
 
@@ -84,8 +79,7 @@ was closed and the version was forced to **1.0.0** (`package.json` +
 `.release-please-manifest.json` + `CHANGELOG.md`) so the next develop→main
 promote publishes `ghcr.io/digithings-ai/digichat:v1.0.0`.
 
-**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** DataTap and other
-existing clients remain pinned there until they upgrade.
+**Do not delete `ghcr.io/digithings-ai/digichat:v0.9.3`.** Existing clients remain pinned there until they upgrade.
 
 Historically, while digichat was pre-1.0, release-please used
 `bump-patch-for-minor-pre-major` + `bump-minor-pre-major` so every release was
@@ -106,7 +100,7 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 ## Install order (local / CI)
 
-`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digismith`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
+`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digitrace`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
 
 ## Changelog (high level)
 
@@ -114,7 +108,7 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 - **Branch cleanup:** Confirmed removal of stale merged branch `task/149-w1e-price-pipeline` (already deleted from origin; merged into `develop` via PR #286 / #288 for issue #149 — research price pipeline migration).
 
-- **Baseline cleanup (Phase 1–7):** AI-hallucinated docs removed; root docs rewritten; digiclaw repackaged (Phase 4); code dedup into `digibase`; test baseline for digiclaw; full details in [#31](https://github.com/digithings-ai/digithings/issues/31).
+- **Baseline cleanup (Phase 1–7):** AI-hallucinated docs removed; root docs rewritten; digibot repackaged (Phase 4); code dedup into `digibase`; test baseline for digibot; full details in [#31](https://github.com/digithings-ai/digithings/issues/31).
 - **Strategic docs:** [docs/VISION.md](docs/VISION.md) captures two-domain plan (digithings.ai + digiquant.io) and strategic decisions. First ADRs landed: [0001 Project Spec](docs/adr/0001-project-spec.md), [0002 Domain Unification](docs/adr/0002-domain-unification.md).
 - **Federated hub:** digisearch/digiquant expose `POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke` (manifest + dispatch). digigraph caches vertical tool schemas and invokes them (same JWT chain). `DIGI_HUB_MODE=federated` additionally registers `digisearch_research_delegate` / `digiquant_pipeline_delegate`. digiquant: `POST /v1/workflow`, MCP `digiquant_run_pipeline`. digisearch: optional `digisearch[agent]`, `POST /v1/research_turn`, MCP `digisearch_research_turn`. digichat: `DIGICHAT_ENABLED_SERVICES`, optional `DIGISEARCH_INTERNAL_URL`, trace `service` field in UI.
 - **Infra / LiteLLM:** Compose uses `docker.litellm.ai/berriai/litellm:main-stable`, explicit `--config`, `/health/liveliness` healthcheck, digigraph `depends_on: litellm` healthy; optional `litellm-cache` profile (Redis). `LITELLM_PROXY_API_KEY` for digigraph Bearer vs upstream `OPENAI_API_KEY` in LiteLLM; proxy `litellm_settings` cache, retries, timeouts, and Ollama Cloud → local fallbacks in `config/litellm.yaml`.
@@ -122,5 +116,5 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 - **digigraph:** depends on `digibase`; standardized errors; policy module; optional tool entry points `digigraph.tools`; `quant_artifact_uri` in workflow state.
 - **digiquant:** `POST /v1/jobs/backtest`, `GET /v1/jobs/{id}/status`; `digibase` errors and OTel.
 - **digisearch:** `workspace_id` on query; `digisearch-worker` CLI stub; `embeddings.config`; `digibase` integration.
-- **digismith:** `digibase` errors and OTel; correlation middleware.
-- **digiclaw:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.
+- **digitrace:** `digibase` errors and OTel; correlation middleware.
+- **digibot:** optional `AUDIT_SINK_URL` for NDJSON POST mirror. Renamed from `digiclaw` (PR #5441); the module is parked, so it gets no release tag of its own. The self-host `heartbeat` profile in `infra/self-host/compose.ghcr.yml` now pulls `ghcr.io/digithings-ai/digibot`, and **no workflow publishes that image yet** — build it locally (`make up-heartbeat`) until a publish workflow lands.

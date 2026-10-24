@@ -4,8 +4,12 @@ import * as React from "react"
 import { cn } from "../lib/utils"
 
 type TableProps = React.ComponentProps<"table"> & {
-  /** `compact` halves the header/cell padding for dense ledgers. */
-  density?: "default" | "compact"
+  /**
+   * `compact` halves the header/cell padding for dense ledgers; `dense` drops
+   * the fixed header height and runs rows at a hairline's breath, for a small
+   * aside table that shares its column with other content.
+   */
+  density?: "default" | "compact" | "dense"
 }
 
 function Table({ className, density = "default", ...props }: TableProps) {
@@ -21,6 +25,8 @@ function Table({ className, density = "default", ...props }: TableProps) {
           "w-full caption-bottom text-xs",
           density === "compact" &&
             "[&_[data-slot=table-head]]:h-8 [&_[data-slot=table-cell]]:py-1 [&_[data-slot=table-row-header]]:py-1",
+          density === "dense" &&
+            "[&_[data-slot=table-head]]:h-auto [&_[data-slot=table-head]]:py-1 [&_[data-slot=table-cell]]:py-0.5 [&_[data-slot=table-row-header]]:py-0.5",
           className
         )}
         {...props}

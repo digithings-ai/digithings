@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  documentHandleToken,
   mapRawSourceToDocument,
   ragToolDisplayName,
   resolveSourcePath,
@@ -89,5 +90,64 @@ describe("ragToolDisplayName", () => {
     expect(ragToolDisplayName("digivault_search_notes")).toBe("digivault_search_notes");
     expect(ragToolDisplayName("digivault_get_note")).toBe("digivault_get_note");
     expect(ragToolDisplayName(undefined)).toBe("digisearch");
+  });
+
+  it("keeps tenant per-index digisearch tool names so the result joins its call row", () => {
+    expect(ragToolDisplayName("digisearch_zammad_tickets")).toBe("digisearch_zammad_tickets");
+    expect(ragToolDisplayName("digisearch_occ_help")).toBe("digisearch_occ_help");
+  });
+});
+
+describe("source document handle (DIG-4591)", () => {
+  it("carries an opaque handle token for the document", () => {
+    const doc = mapRawSourceToDocument({
+      doc_id: "609e63ae-2671-47ad-bf5a-779ff7d8b757",
+      source_id: "609e63ae#1",
+      metadata: { title: "A note" },
+    });
+    expect(doc?.docId).toBe(
+      documentHandleToken("609e63ae-2671-47ad-bf5a-779ff7d8b757")
+    );
+    // The document id itself must never travel in the client facing payload.
+    expect(doc?.docId).not.toContain("609e63ae");
+    expect(doc?.docId).toMatch(/^doc-[0-9a-f]{16}$/);
+  });
+
+  it("uses the source id without its chunk rank when there is no doc id", () => {
+    const doc = mapRawSourceToDocument({
+      source_id: "doc-1#3",
+      metadata: { title: "A note" },
+    });
+    expect(doc?.docId).toBe(documentHandleToken("doc-1"));
+  });
+
+  it("gives the same document the same handle every time", () => {
+    const raw = {
+      doc_id: "609e63ae-2671-47ad-bf5a-779ff7d8b757",
+      metadata: { title: "A note" },
+    };
+    expect(mapRawSourceToDocument(raw)?.docId).toBe(
+      mapRawSourceToDocument(raw)?.docId
+    );
+  });
+
+  it("keeps the handle when the path was rewritten to the title", () => {
+    // The opaque id has no readable path, so the path becomes the title — the
+    // handle is what still identifies the document.
+    const doc = mapRawSourceToDocument({
+      doc_id: "609e63ae-2671-47ad-bf5a-779ff7d8b757",
+      metadata: { title: "A note" },
+    });
+    expect(doc?.path).toBe("A note");
+    expect(doc?.docId).toBe(
+      documentHandleToken("609e63ae-2671-47ad-bf5a-779ff7d8b757")
+    );
+  });
+
+  it("carries no handle when the source has no id", () => {
+    const doc = mapRawSourceToDocument({
+      metadata: { source_url: "https://example.com/a", title: "A note" },
+    });
+    expect(doc?.docId).toBeUndefined();
   });
 });

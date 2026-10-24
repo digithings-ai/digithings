@@ -1,7 +1,9 @@
 import "./layout.css";
 import { BentoGridReference } from "@/components/bento-grid-reference";
 import { DocsLayoutReference } from "@/components/docs-layout-reference";
+import { DocumentReference } from "@/components/document-reference";
 import { FeatureCellReference } from "@/components/feature-cell-reference";
+import { ModuleGridReference } from "@/components/module-grid-reference";
 import { NumberedStagesReference } from "@/components/numbered-stages-reference";
 import { PhoneDashboard } from "@/components/phone-dashboard";
 import { MockTearsheet, ProductFrame } from "@/components/product-frame-reference";
@@ -25,8 +27,10 @@ export default function LayoutPage() {
       <FeatureCellReference />
       <NumberedStagesReference />
       <BentoGridReference />
+      <ModuleGridReference />
       <TestimonialWallReference />
       <DocsLayoutReference />
+      <DocumentReference />
 
       <section className="section-block" id="product-frame">
         <p className="kicker">{"// product frame"}</p>

@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { Button, Card } from '@digithings/ui/ui';
 import { CalendarClock } from 'lucide-react';
 import type {
-  FxConfluenceSnapshotRow,
   FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
@@ -26,7 +25,6 @@ export default function TodayTab({
   digest,
   tradeIdeas,
   tradeIdeaHistory = [],
-  confluence,
   briefs,
   events,
   series,
@@ -36,7 +34,6 @@ export default function TodayTab({
   digest: DigestData;
   tradeIdeas: FxTradeIdeaRow[];
   tradeIdeaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
-  confluence: FxConfluenceSnapshotRow[];
   briefs: FxBriefRow[];
   events: FxEconomicCalendarRow[];
   series: FxConsensusSnapshotRow[];
@@ -106,12 +103,11 @@ export default function TodayTab({
       <div className="today-main grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <DigestBrief digest={digest} />
-          <TradeIdeasPanel
-            ideas={tradeIdeas}
-            ideaHistory={tradeIdeaHistory}
-            confluence={confluence}
-            highlightRanks={highlightRanks}
-          />
+        <TradeIdeasPanel
+          ideas={tradeIdeas}
+          ideaHistory={tradeIdeaHistory}
+          highlightRanks={highlightRanks}
+        />
           <TodayConsensusChart series={series} />
         </div>
 

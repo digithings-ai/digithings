@@ -1,16 +1,73 @@
+/* Zero radius is the rule for the chrome, not a per-rule decision. Every
+   control inherits it from this one declaration; a rounded corner is a
+   geometry decision and would have to name its own value. */
+.dc-code-inline,
+.dc-code-block pre,
+.dc-code-copy,
+.dc-msg-copy,
+.dc-textarea,
+.dc-edit-textarea,
+.dc-send,
+.dc-stop,
+.dc-quota-banner,
+.dc-byok-option,
+.dc-byok-input {
+  border-radius: 0;
+}
+
 .dc-page {
+  /* Page gutter: one ramp each for the inline pad and the bottom air. */
+  --dc-page-pad-inline: clamp(0.7rem, 3vw, 1.4rem);
+  --dc-page-pad-block-end: clamp(0.7rem, 3vw, 1.2rem);
+
   min-height: 100vh;
-  padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem);
+  padding: calc(var(--dq-nav-h, 62px) + 0.6rem) var(--dc-page-pad-inline)
+    var(--dc-page-pad-block-end);
   display: flex;
 }
 
 .dc-session {
+  /* Sizing layer for the session chrome. Declared once at the session root so
+     the brand strip, transcript, composer, agent chain and doc pane retune from
+     one place; the global space and text tokens are used where they match
+     exactly. Values are the pre-token measures, so rendering is unchanged. */
+  --dc-type-brand: 0.82rem;
+  --dc-type-body: 0.8rem;
+  --dc-type-sm: 0.78rem;
+  --dc-type-xs: 0.74rem;
+  --dc-type-chain: 0.72rem;
+  --dc-type-micro: 0.7rem;
+  --dc-type-2xs: 0.68rem;
+  --dc-type-edit: 0.9rem;
+  --dc-type-input: 1rem;
+  --dc-leading-body: 1.5;
+  --dc-leading-chain: 1.45;
+  --dc-space-3xs: 0.2rem;
+  --dc-space-2xs: 0.35rem;
+  --dc-space-xs: 0.4rem;
+  --dc-space-sm: 0.55rem;
+  --dc-space-md: 0.75rem;
+  --dc-brand-pad: var(--dc-space-sm) var(--dc-space-md);
+  --dc-thread-pad: 0.85rem var(--dc-space-md);
+  --dc-msg-marker-w: 0.85rem;
+  --dc-code-pad: 0.7rem 0.8rem;
+  --dc-form-pad: var(--space-2) var(--dc-space-md) var(--dc-space-md);
+  --dc-pane-pad-block: 0.6rem;
+  --dc-pane-pad-inline: 0.7rem;
+  --dc-body-indent: 1.6rem;
+  --dc-act-max-h: 14rem;
+  --dc-gate-max-w: 28rem;
+  --dc-source-card-max-w: 16rem;
+  --dc-doc-pane-w: minmax(220px, 38%);
+  --dc-session-max-w: min(1080px, 96vw);
+  --dc-session-h: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem);
+
   width: 100%;
-  max-width: min(1080px, 96vw);
+  max-width: var(--dc-session-max-w);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--dq-nav-h, 62px) - 1.4rem);
+  height: var(--dc-session-h);
   min-height: 440px;
   font-family: var(--font-mono);
   background: transparent;
@@ -34,10 +91,10 @@
 .dc-brand {
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
+  gap: var(--dc-space-2xs);
   border-bottom: 1px solid var(--hair);
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
+  padding: var(--dc-brand-pad);
+  font-size: var(--dc-type-brand);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -57,8 +114,8 @@
 .dc-wordmark-header {
   flex-shrink: 0;
   border-bottom: 1px solid var(--hair);
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
+  padding: var(--dc-brand-pad);
+  font-size: var(--dc-type-brand);
 }
 
 .dc-thread {
@@ -67,20 +124,20 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  padding: 0.85rem 0.75rem;
+  padding: var(--dc-thread-pad);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--dc-space-md);
 }
 
 .dc-msg {
   position: relative;
   display: grid;
-  grid-template-columns: 0.85rem minmax(0, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: var(--dc-msg-marker-w) minmax(0, 1fr);
+  gap: var(--space-2);
   align-items: start;
-  font-size: 0.8rem;
-  line-height: 1.55;
+  font-size: var(--dc-type-body);
+  line-height: var(--leading, 1.55);
 }
 .dc-who {
   color: var(--accent);
@@ -102,8 +159,8 @@
   white-space: pre-wrap;
 }
 .dc-intro-body {
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-size: var(--dc-type-sm);
+  line-height: var(--dc-leading-body);
 }
 .dc-intro .dc-body {
   color: var(--ink-soft);
@@ -126,7 +183,6 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 0;
   padding: 0.05rem 0.3rem;
 }
 .dc-code-block {
@@ -137,13 +193,12 @@
   margin: 0;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.7rem 0.8rem;
+  padding: var(--dc-code-pad);
   overflow-x: auto;
 }
 .dc-code-block code {
   font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-size: var(--dc-type-xs);
   color: var(--ink);
   white-space: pre;
 }
@@ -151,26 +206,25 @@
 .dc-code-copy,
 .dc-msg-copy {
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--dc-type-micro);
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.12rem 0.4rem;
+  padding: 0.12rem var(--dc-space-xs);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s var(--ease, ease);
+  transition: opacity var(--dur-fast) var(--ease);
 }
 .dc-code-copy {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  top: var(--dc-space-xs);
+  right: var(--dc-space-xs);
 }
 .dc-msg-actions {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.4rem;
+  gap: var(--dc-space-2xs);
+  margin-top: var(--dc-space-xs);
 }
 .dc-msg-actions-visible .dc-msg-copy {
   opacity: 1;
@@ -183,7 +237,7 @@
 .dc-edit-last {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--dc-space-2xs);
   width: 100%;
 }
 .dc-edit-textarea {
@@ -191,12 +245,11 @@
   min-height: 4.5rem;
   resize: vertical;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--dc-type-edit);
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 0;
-  padding: 0.45rem 0.55rem;
+  padding: 0.45rem var(--dc-space-sm);
   box-sizing: border-box;
 }
 .dc-code-block:hover .dc-code-copy,
@@ -210,15 +263,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  padding-left: 1.6rem;
+  padding-left: var(--dc-body-indent);
 }
 
 .dc-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem 0.75rem;
+  gap: var(--space-2);
+  padding: var(--dc-form-pad);
   border-top: 1px solid var(--hair);
   background: transparent;
   position: relative;
@@ -227,18 +280,18 @@
   grid-column: 1 / -1;
   list-style: none;
   margin: 0;
-  padding: 0.15rem 0 0.35rem;
+  padding: 0.15rem 0 var(--dc-space-2xs);
   border-bottom: 1px solid var(--hair);
 }
 .dc-slash-item {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--dc-space-md);
   width: 100%;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--dc-type-sm);
   text-align: left;
   padding: 0.28rem 0;
   cursor: pointer;
@@ -258,21 +311,21 @@
 .dc-slash-note pre {
   margin: 0;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--dc-type-sm);
   white-space: pre-wrap;
   color: var(--ink-mute);
 }
 .dc-textarea {
   font: inherit;
-  font-size: 0.8rem;
-  line-height: 1.45;
+  font-size: var(--dc-type-body);
+  line-height: var(--dc-leading-chain);
   background: transparent;
   border: 0;
   color: var(--ink);
   width: 100%;
   resize: none;
   max-height: 140px;
-  padding: 0.35rem 0;
+  padding: var(--dc-space-2xs) 0;
 }
 /* iOS Safari auto-zooms the page on focusing any input/textarea under 16px —
  * there is no CSS opt-out for that behavior, only staying above the
@@ -282,34 +335,38 @@
  * from a narrow frame, and a phone is the only place the zoom happens. */
 @media (max-width: 640px) and (pointer: coarse) {
   .dc-textarea {
-    font-size: 1rem;
+    font-size: var(--dc-type-input);
   }
 }
 .dc-textarea::placeholder {
   color: var(--ink-soft);
 }
-.dc-textarea:focus {
-  outline: none;
+/* The canon focus state for the controls this sheet owns: 2px accent outline.
+   These rules used to switch the indicator off — or paint a 1px 50% one —
+   which left the composer with no visible focus at all. */
+.dc-textarea:focus-visible,
+.dc-byok-input:focus-visible,
+.dc-byok-option-list:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .dc-send,
 .dc-stop {
   font: inherit;
   align-self: stretch;
   border: 1px solid var(--hair);
-  border-radius: 0;
   cursor: pointer;
   padding: 0.3rem 0.65rem;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dc-send {
-  font-size: 1rem;
-  border-radius: 0;
+  font-size: var(--dc-type-input);
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
 }
 .dc-stop {
-  font-size: 0.8rem;
+  font-size: var(--dc-type-body);
   color: var(--ink-soft);
   background: transparent;
 }
@@ -352,24 +409,24 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  margin-bottom: 0.55rem;
-  font-size: 0.72rem;
-  line-height: 1.45;
+  margin-bottom: var(--dc-space-sm);
+  font-size: var(--dc-type-chain);
+  line-height: var(--dc-leading-chain);
 }
 /* System aside (`·` ChatMessage) — sits at the chain's text size rather than
    the transcript's, so it reads as chain chrome and not as an answer. */
 .dc-act-status {
-  font-size: 0.72rem;
+  font-size: var(--dc-type-chain);
 }
 .dc-act-hits {
   margin: 0.1rem 0 0;
   padding-left: 0.9rem;
   list-style: disc;
-  font-size: 0.74rem;
-  line-height: 1.5;
+  font-size: var(--dc-type-xs);
+  line-height: var(--dc-leading-body);
   /* Cap so a 5-note search with 4-line snippets can't own the transcript —
      same scroll grammar as `.dc-act-reasoning-text`. */
-  max-height: 14rem;
+  max-height: var(--dc-act-max-h);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -384,13 +441,13 @@
   color: var(--ink-soft);
 }
 .dc-act-hit-path {
-  margin-left: 0.35rem;
+  margin-left: var(--dc-space-2xs);
   color: var(--ink-mute);
   font-size: 0.92em;
 }
 .dc-act-hit-tier,
 .dc-act-hit-year {
-  margin-left: 0.35rem;
+  margin-left: var(--dc-space-2xs);
   color: var(--ink-mute);
   font-size: 0.88em;
 }
@@ -407,7 +464,7 @@
   display: none;
 }
 .dc-act-hit-snippet {
-  margin: 0.2rem 0 0;
+  margin: var(--dc-space-3xs) 0 0;
   color: var(--ink-mute);
   display: -webkit-box;
   -webkit-line-clamp: 4;
@@ -418,43 +475,41 @@
    scrolls sideways — the embed runs down to 375px. */
 .dc-act-reasoning-text {
   margin: 0;
-  max-height: 14rem;
+  max-height: var(--dc-act-max-h);
   overflow-y: auto;
   overscroll-behavior: contain;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.55;
+  font-size: var(--dc-type-chain);
+  line-height: var(--leading, 1.55);
 }
 /* Research brief — a ChatWidgetFrame card; the frame is unpadded by contract,
    so the body owns its padding. */
 .dc-act-brief {
-  margin: 0.25rem 0;
+  margin: var(--space-1) 0;
 }
 .dc-act-brief-body {
   padding: 0.6rem 0.8rem;
-  font-size: 0.74rem;
-  line-height: 1.5;
+  font-size: var(--dc-type-xs);
+  line-height: var(--dc-leading-body);
   color: var(--ink-mute);
 }
 .dc-act-brief-themes {
   margin: 0;
-  padding-left: 1rem;
+  padding-left: var(--space-3);
 }
 .dc-act-brief-label {
   color: var(--ink-soft);
   font-weight: 600;
 }
 .dc-act-brief-questions {
-  margin-top: 0.4rem;
+  margin-top: var(--dc-space-xs);
 }
 .dc-act-brief-q-heading {
-  margin: 0 0 0.2rem;
+  margin: 0 0 var(--dc-space-3xs);
   font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--ink-mute);
 }
 .dc-act-brief-questions ol {
@@ -483,12 +538,11 @@
   color: var(--ink-soft);
 }
 .dc-quota-banner {
-  margin: 0.2rem 0 0 1.6rem;
+  margin: var(--dc-space-3xs) 0 0 var(--dc-body-indent);
   padding: 0.45rem 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
-  border-radius: 0;
-  background: color-mix(in srgb, var(--down) 8%, transparent);
-  font-size: 0.74rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--hair));
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: var(--dc-type-xs);
   color: var(--ink-soft);
 }
 .dc-quota-banner p {
@@ -501,36 +555,30 @@
   margin-top: var(--space-3);
 }
 .dc-byok-prompt {
-  margin: 0 0 0.4rem;
+  margin: 0 0 var(--dc-space-xs);
   font-family: var(--font-family-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: var(--type-meta);
+  color: var(--ink-soft);
 }
 .dc-byok-option-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 28rem;
-  outline: none;
-}
-.dc-byok-option-list:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: 2px;
+  max-width: var(--dc-gate-max-w);
 }
 .dc-byok-option {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--dc-space-xs);
   width: 100%;
   margin: 0;
-  padding: 0.2rem 0.35rem;
+  padding: var(--dc-space-3xs) var(--dc-space-2xs);
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -540,21 +588,19 @@
   display: inline-block;
   width: 1ch;
   color: var(--accent);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-mono);
 }
 .dc-byok-input {
   display: block;
   width: 100%;
-  max-width: 28rem;
-  margin-top: 0.25rem;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0;
-  background: var(--bg-term, transparent);
-  color: var(--text-primary);
+  max-width: var(--dc-gate-max-w);
+  margin-top: var(--space-1);
+  padding: var(--dc-space-xs) var(--dc-space-sm);
+  border: 1px solid var(--hair);
+  background: var(--term-bg);
+  color: var(--ink);
   font-family: var(--font-family-mono);
-  font-size: 13px;
-  outline: none;
+  font-size: var(--text-sm);
 }
 .dc-byok-input:focus {
   border-color: var(--accent);
@@ -562,25 +608,26 @@
 .dc-byok-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--dc-space-md);
 }
 .dc-byok-action {
   margin: 0;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
   font-family: var(--font-family-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .dc-byok-action:hover {
-  color: var(--text-primary);
+  color: var(--ink);
 }
 .dc-byok-action-danger {
-  color: var(--down, #e0654b);
+  /* State red; `--down` is the market direction. */
+  color: var(--danger);
 }
 
 .dc-session-main {
@@ -590,7 +637,7 @@
 }
 .dc-session-with-pane .dc-session-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+  grid-template-columns: minmax(0, 1fr) var(--dc-doc-pane-w);
 }
 .dc-session-main .dc-thread {
   flex: 1;
@@ -599,25 +646,25 @@
 
 .dc-source-cards {
   list-style: none;
-  margin: 0.55rem 0 0;
+  margin: var(--dc-space-sm) 0 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: var(--dc-space-xs);
 }
 .dc-source-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.1rem;
-  max-width: 16rem;
+  max-width: var(--dc-source-card-max-w);
   border: 1px solid var(--hair);
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 0.74rem;
+  font-size: var(--dc-type-xs);
   text-align: left;
-  padding: 0.35rem 0.5rem;
+  padding: var(--dc-space-2xs) var(--space-2);
   cursor: pointer;
 }
 .dc-source-card:hover,
@@ -629,7 +676,7 @@
 }
 .dc-source-card-path {
   color: var(--ink-mute);
-  font-size: 0.68rem;
+  font-size: var(--dc-type-2xs);
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
@@ -659,13 +706,13 @@
 .dc-doc-pane-head {
   display: flex;
   align-items: start;
-  gap: 0.5rem;
-  padding: 0.55rem 0.7rem;
+  gap: var(--space-2);
+  padding: var(--dc-space-sm) var(--dc-pane-pad-inline);
   border-bottom: 1px solid var(--hair);
 }
 .dc-doc-pane-title {
   flex: 1;
-  font-size: 0.82rem;
+  font-size: var(--dc-type-brand);
 }
 .dc-doc-pane-close {
   /* kit IconButton (nb-icon) sizes the glyph at 2rem; the doc-pane header is a
@@ -678,14 +725,14 @@
   cursor: pointer;
   font: inherit;
   line-height: 1;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem var(--dc-space-xs);
 }
 .dc-doc-pane-path,
 .dc-doc-pane-snippet,
 .dc-doc-pane-empty {
   margin: 0;
-  padding: 0.5rem 0.7rem;
-  font-size: 0.74rem;
+  padding: var(--space-2) var(--dc-pane-pad-inline);
+  font-size: var(--dc-type-xs);
   color: var(--ink-mute);
 }
 .dc-doc-pane-body,
@@ -693,7 +740,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0.6rem 0.7rem;
+  padding: var(--dc-pane-pad-block) var(--dc-pane-pad-inline);
 }
 .dc-doc-pane-frame {
   width: 100%;

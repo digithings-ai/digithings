@@ -110,7 +110,16 @@ describe("stock ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    expect(screen.getByText(/Failed tool/)).toBeTruthy();
+    // The status glyph is decorative (DIG-4669): the visible label below names
+    // the row, so the glyph carries no name of its own.
+    const icon = document.querySelector('[data-slot="dot-matrix"]');
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon?.getAttribute("role")).toBeNull();
+    expect(icon?.getAttribute("aria-label")).toBeNull();
+    const label = document.querySelector(
+      '[data-slot="tool-fallback-trigger-label"]',
+    );
+    expect(label?.textContent).toMatch(/Failed tool/);
     expect(screen.queryByText(/Used tool/)).toBeNull();
   });
 });

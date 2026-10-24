@@ -27,13 +27,13 @@ vi.mock("@/lib/ecosystem", () => ({
   getEcosystemDefaults: vi.fn(() => ({
     digigraphUrl: "http://127.0.0.1:8000",
     digiquantUrl: "http://127.0.0.1:8001",
-    digismithUrl: "http://127.0.0.1:8003",
+    digitraceUrl: "http://127.0.0.1:8003",
     digisearchUrl: "",
   })),
   getEcosystemEndpoints: vi.fn(async () => ({
     digigraphUrl: "http://127.0.0.1:8000",
     digiquantUrl: "http://127.0.0.1:8001",
-    digismithUrl: "http://127.0.0.1:8003",
+    digitraceUrl: "http://127.0.0.1:8003",
     digisearchUrl: "",
   })),
   parseEndpointsPayload: vi.fn(),

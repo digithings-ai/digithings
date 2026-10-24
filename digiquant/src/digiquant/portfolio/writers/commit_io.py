@@ -21,6 +21,7 @@ from digiquant.dashboard.overlay.persist import (
 from digiquant.dashboard.tenancy import resolved_workspace_id
 from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
 from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
@@ -43,6 +44,7 @@ from digiquant.research.supabase_io import (
     load_prior_book,
     publish_document,
 )
+from digiquant.scalars import is_cash, opt_float
 
 logger = logging.getLogger(__name__)
 
@@ -79,26 +81,15 @@ def _coerce_float(val: Any) -> float:
         return 0.0
 
 
-def _is_cash(ticker: Any) -> bool:
-    return isinstance(ticker, str) and ticker.strip().upper() == "CASH"
-
-
-def _opt_float(value: Any) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _clamp_conviction(value: float) -> float:
     return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
 
 
 def _effective_conviction(analyst: Any, debate: Any) -> float | None:
-    base = _opt_float((analyst or {}).get("conviction_score"))
+    base = opt_float((analyst or {}).get("conviction_score"))
     if base is None:
         return None
-    delta = _opt_float((debate or {}).get("conviction_delta")) or 0.0
+    delta = opt_float((debate or {}).get("conviction_delta")) or 0.0
     return round(_clamp_conviction(base + delta), 2)
 
 
@@ -224,7 +215,7 @@ def _interval_price_returns(
     for row in raw_rows:
         ticker = row.get("ticker")
         row_date = row.get("date")
-        close = _opt_float(row.get("close"))
+        close = opt_float(row.get("close"))
         if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
             continue
         if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
@@ -262,7 +253,7 @@ def _compute_nav(
     held = {
         str(r.get("ticker")): _coerce_float(r.get("weight_pct"))
         for r in prior_book
-        if r.get("ticker") and not _is_cash(r.get("ticker"))
+        if r.get("ticker") and not is_cash(r.get("ticker"))
     }
     book_date = _prior_book_date(prior_book)
     if not held or book_date is None:
@@ -302,7 +293,7 @@ def _latest_values_r2(
             day = str(row.get("date") or "")
             if not isinstance(ticker, str) or not day:
                 continue
-            value = _opt_float(row.get("close"))
+            value = opt_float(row.get("close"))
             if ticker not in latest or day > latest[ticker][0]:
                 latest[ticker] = (day, value)
         return {t: v for t, (_, v) in latest.items() if v is not None}
@@ -311,7 +302,7 @@ def _latest_values_r2(
             latest_row = get_price_technicals(
                 client=None, ticker=str(ticker), lookback=lookback_days, as_of=run_date
             )["latest"]
-            value = _opt_float(latest_row.get(value_col))
+            value = opt_float(latest_row.get(value_col))
             if value is not None:
                 out[str(ticker)] = value
         return out
@@ -374,7 +365,7 @@ def _latest_values(
     for row in getattr(resp, "data", None) or []:
         ticker = row.get("ticker")
         if isinstance(ticker, str) and ticker not in out:
-            value = _opt_float(row.get(value_col))
+            value = opt_float(row.get(value_col))
             if value is not None:
                 out[ticker] = value
     return out
@@ -391,7 +382,7 @@ def _enrich_positions(
     debates: dict[str, Any],
     preferences: dict[str, Any],
 ) -> None:
-    tickers = [str(r["ticker"]) for r in pos_rows if not _is_cash(r.get("ticker"))]
+    tickers = [str(r["ticker"]) for r in pos_rows if not is_cash(r.get("ticker"))]
     if not tickers:
         return
     prior = {str(r.get("ticker")): r for r in prior_book if r.get("ticker")}
@@ -401,10 +392,10 @@ def _enrich_positions(
 
     for row in pos_rows:
         ticker = row.get("ticker")
-        if not isinstance(ticker, str) or _is_cash(ticker):
+        if not isinstance(ticker, str) or is_cash(ticker):
             continue
         prev = prior.get(ticker) or {}
-        prev_entry = _opt_float(prev.get("entry_price"))
+        prev_entry = opt_float(prev.get("entry_price"))
         if prev_entry is not None and prev_entry > 0:
             row["entry_price"] = round(prev_entry, 6)
             row["entry_date"] = prev.get("entry_date") or date_str
@@ -449,7 +440,7 @@ def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str
         if not isinstance(row, dict):
             continue
         ticker = row.get("ticker")
-        if not isinstance(ticker, str) or not ticker or _is_cash(ticker):
+        if not isinstance(ticker, str) or not ticker or is_cash(ticker):
             continue
         weight = _coerce_float(row.get("target_pct"))
         if weight <= 0:
@@ -683,6 +674,19 @@ def book_portfolio(
                 "category": "fixed_income_cash",
             }
         )
+
+    # DIG-2816: reconcile the committed book against ``position_events`` BEFORE it is
+    # persisted. ``positions.weight_pct`` is a drift-carrying actual; the ledger holds
+    # the operator's intended target, so anchoring here is what makes the committed book
+    # and the ledger describe the same thing. A book holding a ticker the ledger EXITed
+    # is refused here rather than persisted and left for ``_prune_orphan_positions``.
+    ledger_report = reconcile_book(
+        pos_rows,
+        fetch_ledger_state(client, workspace_id, date_str),
+        writer="commit_io",
+        mode="anchor",
+    )
+    logger.info("commit_io: %s", ledger_report.summary())
 
     for row in pos_rows:
         row["workspace_id"] = workspace_id

@@ -8,8 +8,9 @@
  *
  * Reasoning rides `additional_kwargs.reasoning_content` (how LangChain
  * surfaces provider thinking) and tool calls ride `tool_call_chunks`
- * (streaming) / `tool_calls` (complete); tool results arrive as ToolMessage
- * frames carrying `tool_call_id`.
+ * (streaming) / `tool_calls` (settled args). The row stays open until a
+ * ToolMessage (`type: "tool"`, `tool_call_id`) arrives. ToolMessage content
+ * is the tool result, not answer text.
  */
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import type { ActivityDetail } from "@/lib/chat-activity";
@@ -21,6 +22,7 @@ import {
   type UiStreamWriter,
 } from "@/lib/ui-stream-parts";
 import { toChatMessages } from "@/lib/adapters/shared/messages";
+import { guardRound, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   createTextWriter,
   isRecord,
@@ -43,6 +45,8 @@ type Consumer = {
   toolNames: Map<string, string>;
   /** Partial JSON args accumulated from `tool_call_chunks`. */
   toolArgs: Map<string, string>;
+  /** False when this new tool call is past the cap and must not be rendered. */
+  admitToolStart?: () => boolean;
 };
 
 /** Answer text from a LangChain chunk: a plain string or content blocks. */
@@ -71,12 +75,14 @@ function contentReasoning(chunk: Record<string, unknown>): string {
   return out;
 }
 
-function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
+function consumeChunk(chunk: Record<string, unknown>, c: Consumer): boolean {
   const reasoning = contentReasoning(chunk);
   if (reasoning) writeReasoningDelta(c.writer, c.ctx, reasoning, c.activityDetail);
 
   const text = contentText(chunk.content);
-  if (text) c.text.delta(text);
+  // ToolMessage content is the tool result. Emitting it as a text delta
+  // puts the payload in the answer.
+  if (text && chunk.type !== "tool") c.text.delta(text);
 
   // Streaming tool calls: `tool_call_chunks: [{ id, name, args }]`. The args
   // arrive as JSON fragments, so they are accumulated and used as the input
@@ -91,6 +97,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     if (argsDelta) c.toolArgs.set(callId, (c.toolArgs.get(callId) ?? "") + argsDelta);
     if (name) c.toolNames.set(callId, name);
     if (!name || c.ctx.rowByCallId.has(callId)) continue;
+    if (c.admitToolStart && !c.admitToolStart()) return true;
     c.text.close();
     writeGatedSpan(
       c.writer,
@@ -100,20 +107,26 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     );
   }
 
-  // Settled tool calls: `tool_calls: [{ id, name, args }]`.
+  // Settled args: `tool_calls: [{ id, name, args }]`. Completing the row here
+  // writes a success with no result, so a missing ToolMessage never becomes
+  // an error. Keep the row started until the ToolMessage (or stream end).
   const calls = Array.isArray(chunk.tool_calls) ? chunk.tool_calls : [];
   for (const raw of calls) {
     if (!isRecord(raw)) continue;
     const callId = stringField(raw, "id") ?? "tool";
     const name = stringField(raw, "name") ?? c.toolNames.get(callId) ?? "tool";
     const input = parseToolInput(raw.args) ?? parseToolInput(c.toolArgs.get(callId));
+    if (input) c.toolArgs.set(callId, JSON.stringify(input));
+    c.toolNames.set(callId, name);
+    if (c.ctx.rowByCallId.has(callId)) continue;
+    if (c.admitToolStart && !c.admitToolStart()) return true;
     c.text.close();
     writeGatedSpan(
       c.writer,
       c.ctx,
       {
         operation: "execute_tool",
-        status: "completed",
+        status: "started",
         label: name,
         toolName: name,
         callId,
@@ -145,6 +158,7 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
       c.activityDetail,
     );
   }
+  return false;
 }
 
 export async function createLangGraphStreamResponse(opts: {
@@ -155,6 +169,7 @@ export async function createLangGraphStreamResponse(opts: {
   /** Resolved by the caller from `backend.apiKeyEnv`; null when unset. */
   apiKey: string | null;
   signal?: AbortSignal;
+  guard?: TurnGuard;
 }): Promise<Response> {
   const url = `${opts.backend.apiUrl.replace(/\/+$/, "")}/runs/stream`;
   const headers: Record<string, string> = {
@@ -175,30 +190,86 @@ export async function createLangGraphStreamResponse(opts: {
       const text = createTextWriter(writer, ctx);
       const toolNames = new Map<string, string>();
       const toolArgs = new Map<string, string>();
+      const upstream = new AbortController();
+      const stopVisitor = () => upstream.abort();
+      opts.signal?.addEventListener("abort", stopVisitor);
+      let toolCallsSoFar = 0;
+      let capped = false;
+      const admitToolStart = () => {
+        const guard = opts.guard;
+        if (!guard?.active || guard.toolCap == null) return true;
+        if (toolCallsSoFar >= guard.toolCap) {
+          guard.noteToolCap(writer, toolCallsSoFar);
+          capped = true;
+          upstream.abort();
+          return false;
+        }
+        toolCallsSoFar += 1;
+        return true;
+      };
       try {
+        const instruction = await guardRound(opts.guard, {
+          writer,
+          pendingText: body,
+          signal: opts.signal,
+        });
+        let requestBody = body;
+        if (instruction) {
+          const parsed = JSON.parse(body) as {
+            input: { messages: { role: string; content: string }[] };
+          };
+          parsed.input.messages.push({ role: "user", content: instruction });
+          requestBody = JSON.stringify(parsed);
+        }
         const res = await fetch(url, {
           method: "POST",
           headers,
-          body,
-          signal: opts.signal,
+          body: requestBody,
+          signal: upstream.signal,
         });
         if (!res.ok || !res.body) {
           // Never leave an abandoned body holding a socket (the digigraph
           // adapter cancels explicitly for the same reason).
           await res.body?.cancel().catch(() => {});
-          writeFailureStatus(writer, ctx, `LangGraph ${res.status}`, opts.activityDetail);
-          return;
+          const label = `LangGraph ${res.status}`;
+          writeFailureStatus(writer, ctx, label, opts.activityDetail);
+          // activityDetail "off" drops the status row. Throw so the UI stream
+          // still ends on an error part instead of a successful empty turn.
+          throw new Error(label);
         }
-        for await (const evt of iterateSse(res.body, opts.signal)) {
-          // LangGraph `messages/*` frames carry an ARRAY of message chunks.
-          const value = parseSseValue(evt.data);
-          if (value === null) continue;
-          const frames = Array.isArray(value) ? value : [value];
-          for (const frame of frames) {
-            if (isRecord(frame)) consumeChunk(frame, { writer, ctx, text, activityDetail: opts.activityDetail, toolNames, toolArgs });
+        try {
+          for await (const evt of iterateSse(res.body, upstream.signal)) {
+            // LangGraph `messages/*` frames carry an ARRAY of message chunks.
+            const value = parseSseValue(evt.data);
+            if (value === null) continue;
+            const frames = Array.isArray(value) ? value : [value];
+            let stop = false;
+            for (const frame of frames) {
+              if (!isRecord(frame)) continue;
+              if (
+                consumeChunk(frame, {
+                  writer,
+                  ctx,
+                  text,
+                  activityDetail: opts.activityDetail,
+                  toolNames,
+                  toolArgs,
+                  admitToolStart,
+                })
+              ) {
+                stop = true;
+                break;
+              }
+            }
+            if (stop) break;
           }
+        } catch (err) {
+          // The cap abort is ours. A visitor abort still fails the turn.
+          if (!capped || opts.signal?.aborted) throw err;
         }
       } finally {
+        opts.signal?.removeEventListener("abort", stopVisitor);
+        opts.guard?.release();
         text.close();
         finishStandardActivity(writer, ctx);
       }

@@ -40,7 +40,7 @@ def _load(name: str, filename: str) -> Any:
 
 bep = _load("backfill_execution_prices_r2", "backfill_execution_prices.py")
 eao = _load("execute_at_open_r2", "execute_at_open.py")
-fep = _load("fill_entry_prices_r2", "fill-entry-prices.py")
+fep = _load("fill_entry_prices_r2", "fill_entry_prices.py")
 pfe = _load("position_entry_from_events_r2", "position_entry_from_events.py")
 
 

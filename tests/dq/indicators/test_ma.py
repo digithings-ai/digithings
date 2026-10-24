@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from digiquant.indicators.ma import DEMA, EMA, HMA, SMA, VWMA, WMA, WilderMA, make_ma
 
+pytestmark = pytest.mark.unit
+
 
 class TestWilderMA:
     def test_not_initialized_before_enough_bars(self) -> None:

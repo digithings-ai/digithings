@@ -50,7 +50,12 @@ const isExternalHref = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href) || hr
 export function hrefIsCurrent(href: string, currentPath?: string): boolean {
   if (!currentPath || isExternalHref(href) || href.includes("#")) return false;
   const path = href.split("?")[0] ?? href;
-  const norm = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
+  const norm = (p: string): string => {
+    if (p.length <= 1) return p;
+    let end = p.length;
+    while (end > 0 && p.charCodeAt(end - 1) === 47) end -= 1;
+    return p.slice(0, end);
+  };
   return norm(path) === norm(currentPath);
 }
 
@@ -187,7 +192,14 @@ export function Footer({
  *  reference/components/footer-reference.tsx). A duplicate overlay span
  *  carries the gradient clipped to its glyphs; reduced motion (and no-JS)
  *  park the band off-screen so no glow travels. Requires a MotionProvider
- *  in the consuming app. */
+ *  in the consuming app.
+ *
+ *  The rise/fill only works because `.colophon` clips with `overflow-x: clip`
+ *  rather than `overflow: hidden` (site.css): `hidden` made the colophon its
+ *  own child's nearest scrollport, so `.colo-word`'s `view()` timeline
+ *  resolved against a box that never scrolls, saturated, and the whole
+ *  scroll-scrub silently no-opped (the mark sat fully risen at every scroll
+ *  position). Do not "simplify" that back to `overflow: hidden`. */
 export function Colophon({
   name,
   suffix,

@@ -16,6 +16,7 @@
  * Spec: docs/superpowers/specs/2026-08-01-digichat-activity-protocol-design.md
  */
 
+import { isRecord } from "@digithings/ui/lib/record";
 import type { DigiChatActivity } from "@digithings/digichat-ui";
 import type { UIMessage } from "ai";
 
@@ -46,6 +47,14 @@ export type ActivityDetail = "off" | "labels" | "full";
 export type ActivityDocument = {
   title: string;
   path: string;
+  /**
+   * An opaque handle token for this document (`doc-<16 hex>`), derived from
+   * the source's own per-document id. Identity only — it is never rendered.
+   * A path names a location, not a document, so one document that surfaces
+   * through two locations (a web URL and a vault path) can only be recognised
+   * as one document by its handle. See `src/lib/document-identity.ts`.
+   */
+  docId?: string;
   tier?: string;
   year?: number;
   snippet?: string;
@@ -236,6 +245,15 @@ function toolResult(
   return out;
 }
 
+/**
+ * The shape of an opaque document handle token (`doc-<16 hex>`).
+ *
+ * The activity payload is client facing, so only a token of this shape may
+ * travel in it: a raw source id would expose a vault identifier to the
+ * browser. Anything that does not look like a token is dropped.
+ */
+const DOC_HANDLE_RE = /^doc-[0-9a-f]{16}$/;
+
 function documents(value: unknown): ActivityDocument[] | undefined {  if (!Array.isArray(value)) return undefined;
   const out: ActivityDocument[] = [];
   for (const entry of value) {
@@ -245,6 +263,8 @@ function documents(value: unknown): ActivityDocument[] | undefined {  if (!Array
     const path = str(record.path, MAX_DOC_FIELD_CHARS);
     if (!title || !path) continue;
     const doc: ActivityDocument = { title, path };
+    const docId = str(record.docId, MAX_DOC_FIELD_CHARS);
+    if (docId && DOC_HANDLE_RE.test(docId)) doc.docId = docId;
     const tier = str(record.tier, MAX_DOC_FIELD_CHARS);
     if (tier) doc.tier = tier;
     if (typeof record.year === "number" && Number.isFinite(record.year)) {
@@ -393,10 +413,6 @@ export function chatActivitySpan(
 const KEY_SEP = "\x1f";
 const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
  * Rebuild ActivitySpan[] from 2.0 standard UI parts (tool / source / reasoning /
  * data-status). Used so markdown export / legacy hydrate keep working without
@@ -491,6 +507,17 @@ export function standardPartsToSpans(
             : "started";
       const span: ActivitySpan = { operation: "execute_tool", status, label, toolName: name };
       if (query) span.query = query;
+      // A generic tool payload, under the same envelope key `writeToolOutput`
+      // puts it on (`output.result`). Carrying it means a completed tool that
+      // came back with something is visible as such, so the trailing pass can
+      // tell "returned nothing" from "returned something we cannot read" even
+      // when the output was projected straight off a settled message. Without
+      // it a tenant tool whose name collides with one of ours fabricates "no
+      // hits" over a payload that is sitting right there.
+      if (output && "result" in output) {
+        const payload = toolResult(output.result);
+        if (payload !== undefined) span.toolResult = payload;
+      }
       spans.push(span);
       continue;
     }
@@ -530,6 +557,46 @@ export function standardPartsToSpans(
   return spans;
 }
 
+/**
+ * The digichat tools whose result is a retrieval, i.e. the ones for which an
+ * empty answer is a real answer. Membership here is what licenses the trailing
+ * pass to claim zero hits: we asked a search, it came back, and it brought
+ * nothing. Everything else — an MCP tool, a connector, anything whose output
+ * this projector was never taught to read — is not evidence of a retrieval, and
+ * its silence is an unknown, not an empty result.
+ *
+ * This is a list of our own tools, deliberately, not a list of output shapes. A
+ * shape list cannot be finished: the first MCP tool to answer in an unlisted
+ * shape would be misreported as "no hits" again. A tool list is closed by
+ * construction — anything not ours is unrecognised until someone adds it here
+ * on purpose (DIG-509 leaf 2a, same class as DIG-189).
+ */
+const SEARCH_TOOL_NAMES = new Set([
+  "azure_ai_search",
+  "digisearch",
+  "digivault",
+  "digivault_search_notes",
+  "file_search",
+  "rag_sources",
+  "web_search",
+]);
+
+/**
+ * The discriminator the transcript renders a status row from, so no renderer has
+ * to read the message prose back to learn what happened — `no results`,
+ * `failed` and `could not read` are three meanings, and matching English to tell
+ * them apart is guesswork (see the note above `activityMeta` in activity-view).
+ * `query` is left off when the turn never carried one; it is a known-unknown,
+ * never `""`.
+ */
+function statusOutcome(
+  name: string,
+  query: string,
+  state: NonNullable<Extract<DigiChatActivity, { kind: "status" }>["outcome"]>["state"],
+) {
+  return query ? { name, query, state } : { name, state };
+}
+
 export type ToDigiChatActivityOptions = {
   /**
    * When true (default), a completed search with no retrieve yet becomes a
@@ -565,6 +632,13 @@ export function toDigiChatActivity(
   // retrieve arriving afterwards overwrites the row before the trailing pass
   // ever runs, and the pass only looks at rows still shaped like a tool_call.
   const failedTools = new Set<string>();
+  // Tool keys whose completion carried a payload we can read but not count. It is
+  // not that the payload proves a retrieval ran — it is that the tool demonstrably
+  // came back with something, which is the opposite of "found nothing" whatever
+  // shape it is in, so such a tool must never be rewritten as a zero-hit row.
+  // Keyed by (name, query) with the rows themselves, so one call's payload can
+  // never decide another call's row.
+  const payloadTools = new Set<string>();
   // Row index of the still-open ("started", not yet resolved by a matching
   // completed/failed/retrieve span) call for each tool name — regardless of
   // whether the started span itself carried a query. Cleared the instant a
@@ -622,6 +696,7 @@ export function toDigiChatActivity(
       const key = toolKey(name, span.query ?? "");
       completedTools.add(key);
       if (span.status === "failed") failedTools.add(key);
+      if (span.toolResult !== undefined) payloadTools.add(key);
       const idx = pendingRow.get(name);
       pendingRow.delete(name);
 
@@ -655,6 +730,7 @@ export function toDigiChatActivity(
         const failResult: DigiChatActivity = {
           kind: "status",
           message: query ? `Search for "${query}" failed.` : "Search failed.",
+          outcome: statusOutcome(name, query, "failed"),
         };
         const failIdx = toolRows.get(key);
         const pending = pendingRow.get(name);
@@ -768,7 +844,8 @@ export function toDigiChatActivity(
   }
 
   // A search that completed and never produced citations is a "no hits" answer,
-  // not a perpetually-pending tool call — but only once the turn has settled.
+  // not a perpetually-pending tool call — but only once the turn has settled,
+  // and only for a tool we know searches (see SEARCH_TOOL_NAMES).
   // Mid-stream the call `.done` often arrives a few events before the output
   // `.done`; converting early flashes "no hits" then rewrites to real hits.
   // A search that errored is terminal either way — never leave it spinning,
@@ -780,12 +857,34 @@ export function toDigiChatActivity(
       rows[idx] = {
         kind: "status",
         message: row.query ? `Search for "${row.query}" failed.` : "Search failed.",
+        outcome: statusOutcome(row.name, row.query, "failed"),
       };
       continue;
     }
-    if (settle) {
-      rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
+    // `count: 0` is the only lever for "searched and found nothing", and the UI
+    // renders it as the literal string `no hits` — an authoritative negative. It
+    // requires positive evidence that a retrieval ran, and here that evidence is
+    // the tool being one of ours that searches: an empty answer from a tool we
+    // know retrieves is a real answer, so the honest zero stands.
+    //
+    // Two things veto it. A payload came back we could read but not count,
+    // whatever shape it is in — something existing is the opposite of "found
+    // nothing", and reading it as empty would contradict it. Or the tool is not
+    // ours, which means this projector was never taught to read its result, so
+    // its silence is an unknown rather than an empty. Both say what is true and
+    // claim nothing about the result.
+    if (!settle) continue;
+    if (payloadTools.has(key) || !SEARCH_TOOL_NAMES.has(row.name)) {
+      rows[idx] = {
+        kind: "status",
+        message: row.query
+          ? `Could not read the result of "${row.name}" for "${row.query}".`
+          : `Could not read the result of "${row.name}".`,
+        outcome: statusOutcome(row.name, row.query, "unreadable"),
+      };
+      continue;
     }
+    rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
   }
 
   flushReasoning();

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:7e9dc98ca139ffca839242b5f3831763176b157ae28cf04f7b0507ec3f36ffc3",
+  "pageVersion": "sha256:b33db9b3b6f358c8e4c0eb51ad3df46ad16be55d670029ee1cac8ef0f4a2c41d",
   "claims": [
     {
       "id": "claim_bb78f6fb791340829971aef0844e8ae7",
@@ -13,16 +13,6 @@
       ]
     },
     {
-      "id": "claim_861e8197db3e4787907e71ba2cf1af25",
-      "statement": "Connector writes use the abstract ConnectorPayload (operation + data) in / ConnectorResult (success, external_id, error) out protocol.",
-      "evidence": [
-        {
-          "resource": "repo://digibase/src/digibase/connectors/base.py#L1-L23",
-          "version": "repo-lines-v1:sha256:99716b46c5c35a357b5e720be82a7c9775a57a2c30afbb1f60a5242a3632033b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ODA2YTEzNjViOTZhNzAzNTJlYzMzNWYyMzUwMTY2OTk3NjM4MzkzZTMzMWRkZjI2OTM4ODlhYjJhMDVkMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwYTFiZDFiNjkyY2FhYWM3MGU0NDAxNzNlNmE5YzM2YzM2MWYyMTlkZDdhZGFkZGJiNzg4MzM2OTJiMDEwOWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
-        }
-      ]
-    },
-    {
       "id": "claim_b96faecf8b1244a79aa0a5dac5546c61",
       "statement": "SupabaseConnector (digibase[supabase] extra) wraps an injected client with upsert, filtered select, and guarded delete plus write audit, raising SupabaseNotConfiguredError instead of carrying an implicit None client.",
       "evidence": [
@@ -31,10 +21,42 @@
           "version": "repo-lines-v1:sha256:d1e976d0fec3a27263dcc9dd22da16b27b4ea73e9b4d6a586fa7cac648049969:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkODcwN2RiNWMxNGRjNjFmNzVmNTc3YjFiNzFmOGUxZDc1NGY0Y2Y3NTcwYjVjM2IwYzg0NGM3ODAwOTUyZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5OTFmMGI0N2Q4NzVkNGMwY2FhZTM3NTljZDhlMjJlNDMwYTZjYTEzYmU0MGI5NDkzZTZjMmNjYWVjMDA0MGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU0MzJlMTJlMmY5YjBhYmE5YWFlNjM2Yzc1ZjE2ODBkMjY0ZjM2ZTljZDc0NGRmZjk4MWYwZmYyMzBhOTI5MTYifQ"
         }
       ]
+    },
+    {
+      "id": "claim_f4ecb4b71c7e47b6bc574ff6eebc98fa",
+      "statement": "The digibase.connectors package has no base module; its __all__ is empty and Supabase names (SupabaseConnector, SupabaseReadResult, SupabaseWriteResult) are exposed through a lazy __getattr__ so that import digibase.connectors does not require the optional supabase dependency.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/__init__.py#L1-L31",
+          "version": "repo-lines-v1:sha256:bd636171c0d29a4647fcc9b139a99510dc9fb0416ad5696809ca6a49c839a9c5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBmMWFlOWI4MzIyNzU0ZjdjNGYxNmJhMTNkODlkYTVmNzJlNTU2YWNhZWMxZGUxY2I4MDQwNzIyZWU1ZGU3ZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzOWMzOTU1NmJiN2VjZjE2MmM5ZTExNzY0YWZlN2U4NTM0ODdkOTYwOWQ4ZTZlYmI2NjAxMWE3NTBkMzFmM2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://tests/db/connectors/test_connector_base_removed.py#L12-L21",
+          "version": "repo-lines-v1:sha256:1c4d7a1e2ddec127df9929160d0ff3976942f724a76e69c5ce74f289fb765adb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlZjM0YTM5ZjkyMmM5MDkwMDhmMTE2NzY1NTlmYmJjODQ2MTY5OTIxZjJlZDlkNDdhOWJkMDA4ZTE2N2MwMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ2MGU3Y2E2YzQ1YmVmOWVmNmEzZjczN2Q0Zjg5M2ZhNDZiNTkyNmE4MmY5ODU0Zjk3MjBjMWNhNGQ2YjY3MjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmOGY5ZGE0MjYxNTRjODVhNDJkOGNiYjgyNWYyNjc3YmY1MzkyMmY3YzgyMmE4MGNhYjJjOGYwOTE0OTBiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJiZjczNzg0NGQ2YjNhNmM5ZWM5MGMwM2I0ZjQ0MGM0YzU1N2YxNDk5MjExMmJlNjNkNWIzNTIwOTVmMTBmYjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4eddb029387b46b79d3b0991bb0d3dd6",
+      "statement": "SupabaseConnector.upsert splits large payloads into batches of DEFAULT_CHUNK (500) rows, and delete refuses unfiltered calls (no eq or non-empty in_) by returning SupabaseWriteResult(success=False, error='refusing unfiltered delete…') instead of executing.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L127-L172",
+          "version": "repo-lines-v1:sha256:8d190c3f55886349e0ef7b8785d51b67d4d02c62d4c919282b9e00e8c777319b:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjYzk0YTUwZWNlYzg1YjI3Yjk2ZTc5MjdlMTEyY2M1MzhiOGU1ZjRmZmQ2YjlhNGZiMjMyMjUzODRlODFhZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MjZhMDg5YWQ4MzkwNjAxNmYwYjBmMDQ1MzcyZjBlYTVlNWFkNzUxN2E5OWVhYTlhOGFkNjM1ZGQ5N2Q3MTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzYmU3NjI4ZWQxZWJiMTVjMTIxZWNjMmVhMDFkODY0ZmQ3YTFmMWE1ZDNmZDNkYjllMTM2MzVhNjY5OGI0NTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNlN2IxODM0ZThjM2QyNDJlYzhhOTZlMTJiZTMxZjAzZjg4YzY2M2U0YjQxOWE3ZDViM2NmYjlmYjA0ZmI4MWMifQ"
+        },
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L237-L270",
+          "version": "repo-lines-v1:sha256:443ff075ebdd15e72c6917dafa80a3070fad892609e51daeb48802508f7f88ca:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4NGIxODFiN2Q4Mzk1YTBjYjhjYzc1ZTMxM2ZkMmRjYzBiZTcyNmZjMTIzZTk0MDQzYmY0NzM2NTkzNDBkOTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5MjZhMDg5YWQ4MzkwNjAxNmYwYjBmMDQ1MzcyZjBlYTVlNWFkNzUxN2E5OWVhYTlhOGFkNjM1ZGQ5N2Q3MTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhYzhlOTM5ZTY5ZDkxMjJmMTc2NGJiZTJmMWFjNzJhNTEwN2NmODk1MmI1MTVlYjI5ZDQ5ZjIyYTMyM2U3M2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBlNWY0NWE2ZDZiMzQ5NTg3MDJiYzkwNjM4NjEyMTIwYzg5NjIxODliNTM4NDdlNGFjNWM4OWRhODNlZTFiZjcifQ"
+        },
+        {
+          "resource": "repo://digibase/src/digibase/connectors/supabase.py#L87-L90",
+          "version": "repo-lines-v1:sha256:5848ebdaec4fb1a74e4786aa2bd4a3f1c76e4307aad1f0fc7d3882c04d9d652e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTI5ZWY2MjgyNDliOWMxMjljZjg3MTQ5MmEwMjRhYWRiMDE3MDI0YjcyYmEwZDkzNmYyYjU0YTQ4MDZmZDk3YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDgzNzU3MGVmNTBlZGU4ZTkyMzhhNWI2NGFlNmUyY2RhYjljNWMxMTllZmVlNDVmNDZiMjI4ZjM5Nzc2ZTJlNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmExODc2OWU2MjkxNDcxMTJhMTU5M2JjMzgxMzhlNzEyOTkyODM1YWZkM2FhMjMyZmViNGJmMjZhMjNkM2Y3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjc1YWFhODQ3ZjdmODhiNmE4NWFkNDZmOWZiNTViYTYyOTE0MjcwYWVmNDg5MzA0MTM1NjFkM2ZmNjg2YTI2NSJ9"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-09T14:37:17.158Z"
+    "at": "2026-09-23T13:25:31.068Z"
   }
 }

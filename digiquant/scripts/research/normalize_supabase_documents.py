@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple  # score:allow untyped any — duck-typed PostgREST rows
+
+logger = logging.getLogger(__name__)
 
 try:
     import jsonschema
@@ -44,9 +47,13 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-SCHEMAS_DIR = ROOT / "templates" / "schemas"
-DIGEST_SCHEMA = ROOT / "templates" / "digest-snapshot-schema.json"
-DELTA_REQ_SCHEMA = ROOT / "templates" / "delta-request-schema.json"
+from lib.roots import (  # noqa: E402
+    DELTA_REQUEST_SCHEMA as DELTA_REQ_SCHEMA,
+)
+from lib.roots import (  # noqa: E402
+    DIGEST_SNAPSHOT_SCHEMA as DIGEST_SCHEMA,
+)
+from lib.roots import research_script, schema_file  # noqa: E402
 
 
 def _ensure_importable() -> None:
@@ -255,7 +262,7 @@ def schema_for_kind(kind: str) -> Optional[Dict[str, Any]]:
     fname = DOC_TYPE_TO_SCHEMA.get(kind)
     if not fname:
         return None
-    return _load_json(SCHEMAS_DIR / fname)
+    return _load_json(schema_file(fname))
 
 
 def validate_payload(kind: str, payload: Dict[str, Any]) -> List[str]:
@@ -978,7 +985,7 @@ def _render_digest_markdown_optional(snapshot: Dict[str, Any]) -> Optional[str]:
     try:
         import importlib.util
 
-        path = ROOT / "scripts" / "materialize_snapshot.py"
+        path = research_script("materialize_snapshot.py")
         spec = importlib.util.spec_from_file_location("_mat_snap", path)
         mod = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -987,7 +994,7 @@ def _render_digest_markdown_optional(snapshot: Dict[str, Any]) -> Optional[str]:
         if callable(fn):
             return str(fn(snapshot))
     except Exception:
-        pass
+        logger.debug("digest markdown render unavailable", exc_info=True)
     return None
 
 
@@ -1103,7 +1110,7 @@ def migrate_row(row: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str
     return new_payload, []
 
 
-# Must match chk_documents_doc_type (see supabase/migrations/014_documents_research_delta_doc_type.sql, 019).
+# Must match chk_documents_doc_type (see supabase/migrations/engine/014_documents_research_delta_doc_type.sql, engine/019).
 DOC_TYPE_DB_COLUMN: Dict[str, str] = {
     "digest_snapshot": "Daily Digest",
     "delta_digest": "Daily Delta",

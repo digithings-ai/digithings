@@ -1,10 +1,6 @@
 /**
- * #1418 gap 3: the embed ran its own markdown renderer at a 0.8rem mono scale
- * while digithings.ai used the shared one, so the same answer read differently
- * on each surface. Both now render through the shared `.chat-md` grammar.
- *
- * Asserted against SERVER-rendered markup, matching this package's convention:
- * the embed must read without client JS.
+ * MiniMarkdown delegates to the shared ChatMarkdown (`.chat-md`).
+ * Asserted against server-rendered markup: the embed must read without client JS.
  */
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";

@@ -1,0 +1,87 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+
+import type { ChapterWithSections } from "@/lib/book/toc";
+
+/**
+ * The book's table of contents (DIG-2821).
+ *
+ * Carries no page number. A page number is only knowable once Paged.js has
+ * paginated the document, so this renders an empty `.book-toc__ref` cell that
+ * the print step fills in (`components/book/PagedBoot.tsx`). On screen it stays
+ * empty, which is honest — a web reader scrolls, and the heading rail already
+ * tells them where they are.
+ */
+export default function BookToc({
+  chapters,
+  activeSlug,
+  withRefs = false,
+}: {
+  chapters: readonly ChapterWithSections[];
+  activeSlug?: string;
+  /** Print route only: reserve the column the page references land in. */
+  withRefs?: boolean;
+}) {
+  if (chapters.length === 0) {
+    return <p className="font-mono text-ink-soft">no chapters yet</p>;
+  }
+
+  const row = (label: ReactNode, refKey: string) => (
+    <span className="book-toc__row">
+      <span className="book-toc__label">{label}</span>
+      {withRefs ? (
+        <>
+          <span className="book-toc__leader" aria-hidden="true" />
+          <span className="book-toc__ref" data-book-toc-ref={refKey}>
+            {""}
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+
+  return (
+    <ol className="book-toc list-none p-0">
+      {chapters.map((chapter) => {
+        const active = chapter.slug === activeSlug;
+        return (
+          <li
+            key={chapter.slug}
+            className="book-toc__chapter border-hair border-b py-3 last:border-b-0"
+          >
+            {row(
+              <>
+                <span className="book-toc__num font-mono text-[0.75rem] text-accent">
+                  {String(chapter.order).padStart(2, "0")}
+                </span>{" "}
+                <Link
+                  href={chapter.href}
+                  aria-current={active ? "page" : undefined}
+                  className={active ? "text-ink" : "text-ink-soft"}
+                >
+                  {chapter.title}
+                </Link>
+              </>,
+              chapter.href,
+            )}
+            <p className="book-toc__summary m-0 text-ink-soft">{chapter.summary}</p>
+            {!withRefs && chapter.sections.length > 0 ? (
+              <ol className="book-toc__sections mt-2 list-none p-0 pl-6 font-mono text-[0.82rem]">
+                {chapter.sections.map((s) => (
+                  <li key={s.slug} className="py-0.5">
+                    {row(
+                      <Link href={s.href} className="text-ink-soft">
+                        {String(chapter.order).padStart(2, "0")}.{s.order} {s.title}
+                      </Link>,
+                      s.href,
+                    )}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

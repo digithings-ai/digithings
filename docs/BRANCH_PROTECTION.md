@@ -23,20 +23,24 @@ doc blindly; it has drifted from reality before (that's the story this section t
 | `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
 | `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
 | `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
-| `gitleaks-scan` | `security-gitleaks.yml` | Secrets scan over the PR diff (full history on `develop`/`main` push). Added to the required set in #3922. **Not yet applied live** — see the pre-apply note below. |
+| `gitleaks-scan` | `security-gitleaks.yml` | Secrets scan over the PR diff (full history on `develop`/`main` push). **Not required** — the inventory declares it `advisory`. Added to the writer's payload in #3922 and never applied live; DIG-2223 removed it from the writer. |
 
-> **Pre-apply note (#3922):** `security-gitleaks.yml` currently skips markdown/doc-only
-> PRs with a workflow-level `paths-ignore`. A workflow skipped by path filtering leaves
-> its required check in a **Pending** state, so GitHub would block docs-only PRs from
-> merging ("Waiting for status to be reported"). Before applying the updated script,
-> relocate that skip to a **job-level** conditional — a skipped *job* reports Success —
-> or drop the PR trigger filter. Do not apply `gitleaks-scan` as a required context
-> while the workflow can be skipped by path filtering.
+> **Why `gitleaks-scan` is still not required (blocker resolved 2026-10-10, #5318).** It was
+> blocked on a workflow-level `paths-ignore: ["**.md", "docs/**"]` in `security-gitleaks.yml`.
+> A workflow skipped by path filtering reports **no check run at all** — not a skipped job —
+> so requiring the name would hang every docs-only PR on "Waiting for status to be reported".
+> #5318 deleted that filter, so the workflow now reports on every PR and the stall hazard is
+> gone.
+>
+> What is *not* gone is the promotion decision itself. The check stays `advisory` until
+> DIG-1983's branch-protection write is sequenced, which is a human-only repo-settings change.
+> Until then the snapshot lists three contexts and the writer applies three.
 
 `strict: true` — the PR branch must be up-to-date with `develop` before merging.
-`scripts/set-branch-protection.sh` applies exactly this payload (once the
-[pre-apply note](#on-develop) above is resolved) and refuses `--branch main`
-(its contexts are develop-specific — see [On `main`](#on-main)).
+`scripts/set-branch-protection.sh` applies exactly this payload and refuses `--branch main`
+(its contexts are develop-specific — see [On `main`](#on-main)). It reads the context list
+from `.github/required-contexts.txt` rather than carrying one of its own — see
+[Ownership](#ownership-of-develops-required-contexts).
 
 Verified before applying: a throwaway PR touching no component path (the worst case for
 `ci.yml`'s per-job path gating) confirmed all three checks post a real conclusion rather
@@ -97,15 +101,218 @@ unreliable as a *required* check (it reports `neutral` on a usage-limit skip, wh
 have blocked all ten promotions on 2026-08-05 had it been required). #1612 was closed as
 not planned; see its closing comment for the full comparison.
 
+## The policy-gate drift guard
+
+`ci.yml`'s own "Verify needs list covers every job in this file" step only sees
+`ci.yml`, so it cannot fail on a policy check that lives in another workflow file — it
+would stay green no matter which one that was. `scripts/check_required_policy_checks.py`
+is the corrected inventory ([DIG-1982](https://github.com/digithings-ai/digithings/issues/1982)).
+It reconciles:
+
+| set | against | catches |
+|---|---|---|
+| `.github/policy-checks.yml` | the jobs the workflows actually define | a renamed or dropped check; a policy surface nobody declared |
+| `.github/policy-checks.yml` | develop's required contexts | a check the gate does not hold, and a gate the inventory does not own |
+| every context the gate holds **or** the inventory declares | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
+
+That third row covers both sets on purpose, and the second half of it is
+[DIG-2237](https://github.com/digithings-ai/digithings/issues/2237), because the original
+guard only asked about the live gate. A workflow whose checks are all `advisory` reports
+nothing that anyone is waiting for, so a workflow-level `paths-ignore` added to one was a
+**false green**: no failing check, and a PR shape the check would never cover. The moment
+DIG-1952 child B promotes such an entry, every PR it skips hangs. The guard now reports that
+as a finding before the promotion, not after.
+
+"Whether it can report" is decided from the `pull_request:` trigger alone, and all four
+filters matter, not two of them:
+
+| trigger filter | why it can stop the check arriving |
+|---|---|
+| `paths:` / `paths-ignore:` | a skipped **workflow** reports nothing — only a skipped *job* reports Success |
+| `branches:` | the workflow never starts for a PR into another branch |
+| `branches-ignore:` | the same filter spelled as an exclusion; matching globs |
+| `types:` | for `pull_request`, `GITHUB_SHA` is the **last merge commit on the PR merge branch**, and a required context has to report against that commit for the PR to ever leave "Waiting for status to be reported": `opened` covers the first report, `synchronize` every later push, `reopened` a re-open, so all three or the context is not safe to require. A workflow on `types: [opened]` reports for the opening push and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
+
+An **absent** `types:` key is GitHub's default (`opened`, `synchronize`, `reopened`), which
+includes `synchronize` and is therefore reachable. A `types:` key that is present but
+unreadable is treated as empty, so the rule fails closed rather than passing on a value
+nobody could read.
+
+`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The reconciliations do
+not overlap; dropping the old one would leave a real hole.
+
+### Completeness: `tracked_workflows` is an allowlist, not the scope
+
+`.github/policy-checks.yml` tracks 8 of the 66 workflow files — the ones with policy
+surfaces. That is the right size, but an allowlist nobody checks for completeness is not an
+inventory: a brand-new workflow carrying a real gate would be out of scope by construction,
+and `policy.untracked-producer` would never be raised.
+
+So the guard also scans every `*.yml` under `.github/workflows/` for a named job matching a
+live or declared context, and fails when the producer is untracked — including when the
+producer is untracked *and* cannot report, which previously drew `policy.undeclared-gate`
+and then stopped, giving the wrong diagnosis on exactly the case `gitleaks-scan` exists to
+exercise. Adding a workflow is therefore not free: either name it in `tracked_workflows`, or
+do not give any of its jobs a `name:`. Migrating all 66 is not the answer and is not
+required.
+
+An untracked file that will not parse is reported (`policy.unreadable-workflow`), not
+raised — otherwise any of the 58 untracked workflows could take the guard down with an
+unreadable error instead of a diagnosis. A **tracked** file that will not parse still
+raises, because a tracked file is a declared surface.
+
+**Check the gate, at any time:**
+
+```bash
+python3 scripts/check_required_policy_checks.py                    # committed snapshot (what CI runs)
+python3 scripts/check_required_policy_checks.py --live \
+    --repo digithings-ai/digithings --branch develop               # the live gate
+```
+
+CI reads `.github/required-contexts.txt`, not the API: reading branch protection needs
+`administration: read`, which **cannot be granted to `GITHUB_TOKEN`** at all, so no
+workflow can read it. The snapshot is only trustworthy if it is updated in the same
+change as the protection itself — run `--live` after any manual branch-protection edit
+and commit the difference, or the guard is checking a fiction.
+
+### Keeping the snapshot true
+
+Doing that by hand leaves one gap: nothing catches a branch-protection edit that nobody ran
+`--live` after. The PR path cannot close it, because `GITHUB_TOKEN` cannot read branch
+protection at all, so putting the read on the PR path would mean putting a human-only
+credential in front of every merge.
+
+**Nothing closes that gap today, and this section says so instead of pretending otherwise.**
+An earlier draft of this work carried a `policy-gate-live` job in
+[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) that was meant to run the
+`--live` read on a clock. It was removed, for three reasons that are all still true:
+
+- **It could never run.** The workflow it lived in is `disabled_manually` on GitHub since
+  the 2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
+  (`apps/digithings-cron/src/jobs.ts`). A job on a lane that is deliberately silent is a job
+  that reports nothing.
+- **Its credential design was rejected.** It read `POLICY_CHECK_APP_PRIVATE_KEY` /
+  `POLICY_CHECK_APP_ID` / `POLICY_CHECK_INSTALLATION_ID` and called
+  `scripts/mint_policy_check_token.py` — the GitHub App design that was **rejected on
+  2026-10-07**, whose manifest, minting script and tests were deleted by that same change.
+  The credential the registry actually names is a fine-grained PAT stored as
+  `POLICY_CHECK_READER_TOKEN` (see
+  [`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md)), and it
+  needs no app id and no installation id.
+- **It would have been a red run, not a check.** The secret it read is not provisioned (the
+  `cron` environment holds no secrets at all) and creating it needs `Administration: write`,
+  which is Chris-only on this one-member org. A canary that starts red because it cannot
+  read its own secret is how a check becomes a silent stop.
+
+**What the guard does check, mechanically.** `scripts/check_required_policy_checks.py` always
+compares the committed snapshot against `scripts/set-branch-protection.sh` — the writer that
+applies it — and fails when the two disagree, so the snapshot and the writer cannot drift
+apart. What it does *not* do is compare the snapshot with the live gate: under `--live` the
+guard reconciles the **live** context set against the **inventory** in
+`.github/policy-checks.yml` (in both directions — a required context that is missing from
+the gate, and a live context that the inventory never declares), and separately checks the
+snapshot against the writer. So a hand edit of branch protection shows up as a drift between
+the live set and the inventory, while a hand edit of the snapshot alone shows up as a drift
+between the snapshot and the writer. Only the combination of both checks is a proof that the
+three agree, and running them is a human step today.
+
+**When the credential is provisioned**, the automated live read belongs in its own workflow
+with its own clock row, against the PAT the registry names — not in a job riding a disabled
+lane. That is a separate piece of work with a human gate, not a follow-up hidden in this
+change.
+
+### Declaring a new policy check
+
+Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
+
+- `required` — must be in develop's contexts *and* must report on every develop PR.
+  The guard fails both if it is absent and if it could be skipped.
+- `advisory` — runs and reports but deliberately does not gate. **Requires a `reason`.**
+- `other-branch` — gates another branch (`main`), not develop.
+
+### Every non-`required` entry needs an owner
+
+A `reason` records what was true when it was written. On its own it is indistinguishable
+from what is true now, forever — which is what makes `advisory` an escape hatch nobody owns
+([DIG-2237](https://github.com/digithings-ai/digithings/issues/2237)). So:
+
+| field | required on | meaning |
+|---|---|---|
+| `owner:` | every non-`required` entry | who answers for it. Missing → `GuardError` |
+| `review_by:` | *or* one of the two below, on `advisory` | a date to revisit the decision |
+| `issue:` | | the issue tracking the gap (`DIG-NNNN`) |
+| `gated_by:` | | a context that is `required` in this inventory **and** present in the live gate |
+
+`gated_by:` is validated, not trusted: naming a context the inventory does not declare is a
+`GuardError`, and naming one that is declared but not actually in the live gate is a
+`policy.bad-gated-by` finding. Otherwise "it is gated by the aggregator" would be a citation
+rather than a fact. `advisory` with none of the three raises.
+
+There is a separate, narrower field for a gap that is **accepted on purpose**: `known_gap:`.
+It suppresses the reachability finding for that entry while the entry is ungated, and stops
+applying the moment the entry reaches the live gate — at that point the check really does
+have to report, so the accepted gap has expired. **`Workflow secret references (PR reporter)`
+is the only entry with one today**: it lives in its own path-filtered workflow, so it does
+not report on every PR shape while it stays advisory, and the day it is promoted the gap
+closes. (`gitleaks-scan` used to be the carrier; its own `paths-ignore` was removed upstream
+in #5318, so that gap is gone.)
+
+A job counts as a policy surface when it has an explicit `name:`. A job without one
+reports under its job id and is folded into an aggregator instead. Naming a job makes it
+a policy surface; leaving it unnamed keeps it internal.
+
+**`gitleaks-scan` is the worked example of why `required` is not free.** Its entry is
+`advisory`, and for six days it was also the fourth context hardcoded into the writer — a
+gate you could apply with one command, declared nowhere in the inventory, recorded in no
+snapshot. Two things had to be true before promoting it, and only the first now holds:
+
+* **The check reports on every PR shape.** It did not, until #5318 removed the
+  workflow-level `paths-ignore` — a skipped *workflow* reports nothing, while a skipped *job*
+  reports Success, which is why the filter could not simply be moved to a job-level `if:`
+  (GitHub expressions cannot test "changed files match this path glob"). `policy.stall` in
+  `scripts/check_required_policy_checks.py` now enforces this in CI instead of only in prose.
+* **Someone promotes it on purpose.** That is DIG-1983's branch-protection write, which is
+  human-only. Until it happens the snapshot lists three contexts and the writer applies three.
+
+## Ownership of `develop`'s required contexts
+
+Two files decide what `develop` requires, and exactly one of each kind, so there is nothing
+left to compare by hand (DIG-2223):
+
+| Role | File | Owns |
+|---|---|---|
+| The context **set** | `.github/required-contexts.txt` | Which check names `develop` requires. Comment lines are prose, not gates. |
+| The **write** | `scripts/enable_branch_protection.py` | The only script that PUTs protection. Owns the preflight, the plan-blocked diagnosis, and the union that stops a narrower apply from dropping a live gate. |
+| The **develop entrypoint** | `scripts/set-branch-protection.sh` | Nothing but the branch name. Reads the set from the snapshot, then delegates. Holds no list of its own. |
+| The **check** | `scripts/check_required_policy_checks.py` | Executes the writer (`--print-contexts`) and fails on any difference from the snapshot, then reconciles the snapshot against the inventory and the workflows. |
+
+`scripts/check_required_policy_checks.py` executes the writer rather than scanning its
+source, because a source scan goes blind the moment the payload is built any other way — a
+generated list, a heredoc, a variable — and a scan that finds no literals then reads exactly
+like "the writer is in sync".
+
+**Adding a gate is therefore:** edit the snapshot, declare it in `.github/policy-checks.yml`,
+prove its workflow reports on a docs-only PR, then run the writer. Editing the writer is not
+a step, because it holds no list to edit.
+
 ## How to apply protection
 
-Re-apply `develop`'s checks (idempotent — safe to re-run any time the contexts in the
-script match what's actually live). Read the [pre-apply note](#on-develop) first:
-`gitleaks-scan` must not be applied while `security-gitleaks.yml` can be skipped by path
-filtering.
+Re-apply `develop`'s checks (idempotent — safe to re-run any time the snapshot matches what's
+actually live). The snapshot is the **input**, not a record of what was applied: edit
+`.github/required-contexts.txt` first, then run the writer, which applies exactly that list.
 
 ```bash
 bash scripts/set-branch-protection.sh
+```
+
+By default the writer *unions* the live contexts, so a stale snapshot cannot quietly weaken
+the branch. To make the snapshot authoritative — which is what you want immediately after
+editing it — pass `--replace-checks`, and then prove the result against the live gate:
+
+```bash
+bash scripts/set-branch-protection.sh --replace-checks
+python3 scripts/check_required_policy_checks.py --live \
+    --repo digithings-ai/digithings --branch develop
 ```
 
 `--branch main` is refused on purpose — see [On `main`](#on-main) for how `main`'s
@@ -135,6 +342,14 @@ Look at `required_status_checks.contexts`: on `develop` it should list the check
 [On `develop`](#on-develop) with `strict: true`; on `main` it should list only
 `Every commit reaching main was reviewed` per [On `main`](#on-main).
 
+`scripts/enable_branch_protection.py status` reports the same state in a form meant for
+reading, and is what [the policy-gate guard](#the-policy-gate-drift-guard) uses:
+
+```bash
+python3 scripts/enable_branch_protection.py status \
+    --repo digithings-ai/digithings --branch develop
+```
+
 ## Emergency bypass procedure
 
 `enforce_admins` is intentionally set to `false`. Repository admins can merge a PR even
@@ -151,3 +366,29 @@ Do **not** disable branch protection entirely — adjust it or fix the failing c
 If a check is renamed or replaced, re-run the script after updating the `contexts` array in
 `scripts/set-branch-protection.sh`. The `gh api PUT` call is idempotent — it replaces the
 full protection config each time.
+
+## Scope: this applies to `digithings`, not to `twelve-x`
+
+Everything above is about `digithings-ai/digithings`, and only that repo has the protection
+described here. `digithings-ai` is on the GitHub Free plan, and **protected branches on a
+private repository require GitHub Pro**. `twelve-x` and `digithings-ops` are private, so
+branch protection, rulesets and the native merge queue are all refused on them with:
+
+```
+Upgrade to GitHub Pro or make this repository public to enable this feature.
+```
+
+This is a plan limit, not a misconfiguration — the identical API call succeeds on the
+public `digithings` and is refused on private `twelve-x` in the same org, with the same
+token and the same admin permission.
+
+`scripts/enable_branch_protection.py status` reports the gate for any repo:
+
+```bash
+python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
+```
+
+Until the plan changes, the merge path for `twelve-x` is
+[the merge queue](MERGE_QUEUE.md), which governs merges but — say this plainly — **cannot
+stop a direct push to the branch.** Only branch protection can do that. The full repo
+survey is in [MERGE_QUEUE.md § Repo survey](MERGE_QUEUE.md#repo-survey).
