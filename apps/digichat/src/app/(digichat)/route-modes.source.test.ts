@@ -2,13 +2,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveRouteMode } from "./route-mode";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(here, rel), "utf8");
 
 /**
- * Single route `/` with `?mode=` (single-route plan, Step 3 + menu root).
- * Bare `/` renders the menu (no chat); product/embed/catalog via `?mode=`.
+ * Single route `/` with `?mode=` (single-route plan, Step 3).
+ * Bare `/` renders the product chat; the dev menu is opt-in via `?mode=menu`
+ * (DIG-5395: the DIG-5121 cutover put this root on the public digithings.ai/chat).
  * Old routes stay alive until Step 6 (compat shims = Step 5).
  */
 describe("single route / with ?mode=", () => {
@@ -19,16 +21,43 @@ describe("single route / with ?mode=", () => {
   });
 
   it("branches on ?mode=", () => {
-    expect(page).toMatch(/params\.mode === "embed"/);
-    expect(page).toMatch(/params\.mode === "catalog"/);
+    const resolver = read("route-mode.ts");
+    expect(resolver).toMatch(/mode === "embed"/);
+    expect(resolver).toMatch(/mode === "catalog"/);
+    expect(resolver).toMatch(/mode === "menu"/);
     expect(page).toMatch(/<EmbedRouteShell params=\{params\} \/>/);
     expect(page).toMatch(/<BaselineClient \/>/);
   });
 
-  it("renders the menu at bare / and product only on ?mode=product", () => {
-    expect(page).toMatch(/params\.mode === "product"/);
+  it("defaults bare / to the product chat", () => {
+    expect(resolveRouteMode(undefined)).toBe("product");
+    expect(resolveRouteMode("product")).toBe("product");
+    expect(resolveRouteMode("")).toBe("product");
+  });
+
+  it("never falls through to the menu on an unknown ?mode=", () => {
+    expect(resolveRouteMode("nope")).toBe("product");
+    expect(resolveRouteMode(["menu", "product"])).toBe("product");
+  });
+
+  it("keeps the dev menu behind ?mode=menu", () => {
+    expect(resolveRouteMode("menu")).toBe("menu");
     expect(page).toMatch(/<RouteMenu \/>/);
     expect(page).toMatch(/from "\.\/route-menu"/);
+    expect(page).toMatch(/resolveRouteMode\(params\.mode\)/);
+  });
+
+  it("still resolves the explicit embed and catalog surfaces", () => {
+    expect(resolveRouteMode("embed")).toBe("embed");
+    expect(resolveRouteMode("catalog")).toBe("catalog");
+  });
+
+  it("falls back to product for repeated, empty and oddly-cased values", () => {
+    expect(resolveRouteMode(["embed", "x"])).toBe("product");
+    expect(resolveRouteMode(["menu", "menu"])).toBe("product");
+    expect(resolveRouteMode([])).toBe("product");
+    expect(resolveRouteMode("PRODUCT")).toBe("product");
+    expect(resolveRouteMode(" menu ")).toBe("product");
   });
 
   it("guards catalog in production and de-indexes non-product modes", () => {
