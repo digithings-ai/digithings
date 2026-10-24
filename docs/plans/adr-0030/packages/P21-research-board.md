@@ -175,5 +175,5 @@ git commit -m "feat(digiquant): validate twelve-x research board rows"
 ## Out of scope / do not touch
 
 - Relevance formula, consensus math, confluence `build_confluence`.
-- Scrapers, `digifetch`, vendor site credentials.
+- Scrapers, `digifetch`, Prime Market credentials.
 - Execution, brokers, SQL, twelve-x repo.

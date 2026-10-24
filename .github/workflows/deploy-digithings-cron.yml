@@ -34,7 +34,25 @@ jobs:
       - name: Install package dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Test + typecheck
+      # DIG-732. The required-trigger contract must be asserted against the
+      # DEPLOYED trigger list, not only wrangler.toml: a contract the repo
+      # satisfies while the deployment does not is exactly DIG-553 Finding 1
+      # wearing a passing test. Read permission only, no writes, no deploy.
+      # This script observes and asserts nothing — the contract check that
+      # consumes its output is the same vitest test that runs locally, so there
+      # is one implementation of the contract, not a copy in CI.
+      - name: Fetch deployed cron triggers
+        run: |
+          crons="$(node apps/digithings-cron/scripts/fetch-deployed-triggers.mjs)"
+          echo "Deployed cron triggers: ${crons}"
+          echo "DIGITHINGS_CRON_DEPLOYED_TRIGGERS=${crons}" >> "$GITHUB_ENV"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # An unmet contract fails here, so the deploy below never runs with a
+      # required FX trigger missing. See apps/digithings-cron/src/triggers.ts.
+      - name: Test + typecheck (asserts the required-trigger contract)
         run: |
           npm run test --workspace digithings-cron
           npm run typecheck --workspace digithings-cron

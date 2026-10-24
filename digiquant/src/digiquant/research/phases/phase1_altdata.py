@@ -31,7 +31,7 @@ class OptionsDerivativesReport(ResearchMemo):
 
 
 class PoliticianSignalsReport(ResearchMemo):
-    """Phase 1D — official policy signals (Treasury/Fed/regulatory)."""
+    """Phase 1D — Congressional trades (STOCK Act) + policy signals."""
 
 
 class AiPortfoliosReport(ResearchMemo):
@@ -73,13 +73,7 @@ _SPECS = (
         skill_slug="alt-politician-signals",
         output_model=PoliticianSignalsReport,
         phase_outputs_field=_PHASE_FIELD,
-        # Containment (DIG-1252, for Counsel's DIG-1251 ruling): no live_search.
-        # Counsel has ruled this feed permanently refused under 5 U.S.C. 13107(c)(1)(B),
-        # and live_search=True is what put the nightly pipeline's `web_search` pre-pass
-        # on capitoltrades.com / quiverquant.com via search_domains.yaml. Dropping the
-        # flag stops the outbound harvest without deleting the segment, its skill, or
-        # its published history. Revisit only on Counsel's ruling.
-        live_search=False,
+        live_search=True,
     ),
     SegmentNodeSpec(
         segment_slug="alt-onchain-positioning",

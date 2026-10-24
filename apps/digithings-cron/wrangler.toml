@@ -20,6 +20,15 @@ DRY_RUN = "0"
 # restore workflow_dispatch for those ids only and log github_override.
 GITHUB_OVERRIDE_JOBS = ""
 
+# Where the cron alarms post (DIG-732). Not secrets: the transport reuses
+# GH_DISPATCH_TOKEN, which already carries Issues: write. #4761 is the open
+# epic that moves these clocks onto Cloudflare, so a missing trigger lands
+# next to the migration that is supposed to guarantee it.
+# These are set deliberately. An unset pair degrades every alarm to a log line,
+# which is the defect DIG-732 exists to remove.
+ALERT_ISSUE_REPO = "digithings-ai/digithings"
+ALERT_ISSUE_NUMBER = "4761"
+
 # Secrets (wrangler secret put; never commit values):
 #   GH_DISPATCH_TOKEN   — Actions write + Issues read/write on digithings-ai/digithings
 #                         + digithings-ai/twelve-x. No Contents grant, so this token

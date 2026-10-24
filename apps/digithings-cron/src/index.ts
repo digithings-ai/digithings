@@ -10,6 +10,8 @@ import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
+import { raiseTriggerAlarms } from "./trigger-alarm";
+import { UNMAPPED_CRON } from "./triggers";
 
 export type StartedRun = {
   job_id: string;
@@ -26,6 +28,12 @@ type RunOptions = {
   awaitDispatch?: boolean;
   /** Manual /kick may start paused jobs; scheduled() never sets this. */
   includeDisabled?: boolean;
+  /**
+   * True when a human deliberately asked for this cron, i.e. POST /kick.
+   * An unmapped cron from a kick is a probe result, not a deployed trigger, so
+   * it must not raise the `unmapped_cron` alarm. scheduled() never sets this.
+   */
+  probe?: boolean;
 };
 
 export function houseArgs(
@@ -78,7 +86,19 @@ async function runJobsForCron(
   const pending: Promise<StartedRun>[] = [];
 
   if (jobs.length === 0) {
-    console.error(JSON.stringify({ cron, error: "unmapped_cron" }));
+    // A cron reached the Worker and dispatched nothing. Whether that is a FAULT
+    // depends on whether the cron is recognised at all: a cron whose only jobs
+    // are disabled is a deliberately paused trigger, and doing nothing is the
+    // correct behaviour, so it must not page anyone. A cron no row claims is
+    // unrecognised — work is firing that nobody designed — and that is an alarm
+    // on the twelve-x path (DIG-732) rather than the log line it used to be.
+    console.error(JSON.stringify({ cron, error: UNMAPPED_CRON }));
+    const recognised = jobsForCron(cron, { includeDisabled: true }).length > 0;
+    if (!opts.probe && !recognised) {
+      // One extra subrequest on a path that dispatched nothing, so it cannot
+      // cost a dispatch. waitUntil: a slow alarm must not delay the Worker.
+      ctx.waitUntil(raiseTriggerAlarms(env, [{ alarm_class: UNMAPPED_CRON, cron }]));
+    }
   }
   for (const job of jobs) {
     if (job.etOpenGate && !opts.force && !shouldDispatchAtOpen(cron, scheduledTime)) {
@@ -227,6 +247,7 @@ export default {
         args,
         awaitDispatch: true,
         includeDisabled: true,
+        probe: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
