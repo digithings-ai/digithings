@@ -82,9 +82,11 @@ describe("mcp.servers client projection never leaks operator secrets (#3841)", (
       ["digivault", "jwt"],
     ]);
     const client = toDigichatClientConfig(dep);
+    // Raw backend ids, never a humanised name: the client shows what the
+    // backend calls the server, so a label that disagrees is a bug.
     expect(client.mcp.servers).toEqual([
-      { id: "digisearch", label: "Search", default: true },
-      { id: "digivault", label: "Vault", default: true },
+      { id: "digisearch", label: "digisearch", default: true },
+      { id: "digivault", label: "digivault", default: true },
     ]);
     const serialized = JSON.stringify(client);
     expect(serialized).not.toContain("authScheme");
