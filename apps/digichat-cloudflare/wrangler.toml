@@ -199,6 +199,16 @@ new_sqlite_classes = ["DigiChatContainer"]
 # Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
 # (created 2026-10-13). Without the binding the Worker uses
 # the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
+#
+# The same namespace holds the digichat deployment document under key
+# `config-yaml` (non-secret YAML or JSON, same shape as config/digichat.yaml:
+# deployment + hosts). The Worker forwards it to the Container as
+# DIGICHAT_CONFIG_YAML at boot; the container prefers it over the file on disk
+# and merges DIGICHAT_EMBED_TENANTS over it. A KV edit applies on the next
+# boot (the Container sleeps after 1m idle) — no redeploy:
+#   npx wrangler kv key put --namespace-id 361b710bee56466097053275404535ba \
+#     config-yaml --path <digichat-config.yaml>
+# Keep it non-secret: credentials are named env refs (tokenEnv), never inline.
 [[kv_namespaces]]
 binding = "DIGICHAT_TENANTS_KV"
 id = "361b710bee56466097053275404535ba"
