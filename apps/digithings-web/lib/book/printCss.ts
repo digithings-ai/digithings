@@ -484,29 +484,55 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
 
 
-/* Cover: edition/version, the hero banner, the title. Nothing else. */
-.book-cover {
-  text-align: center !important;
-  padding-top: 28mm !important;
-}
-.book-cover__kicker {
-  margin: 0 0 10mm !important;
-  font-size: 8pt !important;
-  letter-spacing: 0.12em !important;
-  text-transform: none !important;
+/* The edition and version, set opposite the folio on every page. */
+.pagedjs_page .book-page-imprint {
+  position: absolute !important;
+  bottom: 8mm !important;
+  left: 18mm !important;
+  font-family: var(--font-mono) !important;
+  font-size: 7.5pt !important;
+  letter-spacing: 0.04em !important;
   color: var(--ink-soft) !important;
 }
-/* '.pagedjs_page p' sets body text left-aligned in ink; the cover line is not body text. */
-.pagedjs_page .book-cover p.book-cover__kicker { text-align: center !important; font-size: 8pt !important; color: var(--ink-soft) !important; }
-.book-cover__mark { width: 150mm !important; max-width: 100% !important; margin: 0 auto 12mm !important; }
+
+/* Cover: the hero banner, a hairline, and the title set at footer scale —
+   the same composition as the colophon, at the front instead of the back. */.book-cover {
+  text-align: left !important;
+  padding-top: 28mm !important;
+  min-height: 232mm !important;
+  position: relative !important;
+}
+.book-cover__mark {
+  width: 142mm !important;
+  max-width: 100% !important;
+  margin: 0 0 10mm !important;
+}
+.book-cover__foot {
+  padding-top: 4mm !important;
+  border-top: 0.4pt solid var(--hair) !important;
+}
 .book-cover__title {
-  margin: 0 auto !important;
-  font-size: 24pt !important;
-  line-height: 1.1 !important;
+  margin: 0 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 8pt !important;
+  letter-spacing: 0.12em !important;
+  line-height: 1.4 !important;
+  color: var(--ink-soft) !important;
   white-space: normal !important;
 }
+.book-cover__kicker { display: none !important; }
 .book-cover__subtitle { display: none !important; }
 .book-cover__meta { display: none !important; }
+.book-cover__imprint {
+  position: absolute !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 7.5pt !important;
+  letter-spacing: 0.04em !important;
+  color: var(--ink-soft) !important;
+}
 
 .book-colophon { min-height: 220mm !important; }
 .book-colophon__title { font-size: 18pt !important; line-height: 1.2 !important; }
@@ -524,11 +550,10 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-colophon__mark {
   position: absolute !important;
   left: 0 !important;
-  right: 0 !important;
   bottom: 26mm !important;
   width: 142mm !important;
   max-width: 100% !important;
-  margin: 0 auto !important;
+  margin: 0 !important;
 }
 .pagedjs_page .book-colophon__mark svg { display: block; width: 100%; height: auto; }
 .pagedjs_page .book-colophon__foot {

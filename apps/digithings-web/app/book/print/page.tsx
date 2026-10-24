@@ -72,13 +72,15 @@ export default async function BookPrintPage() {
         </div>
 
         <section className="book-cover">
-          <p className="book-cover__kicker">digithings · edition 2026 · version 1.0</p>
           <div
             className="book-cover__mark"
             aria-hidden
             dangerouslySetInnerHTML={{ __html: WORDMARK }}
           />
-          <h1 className="book-cover__title">the digithings book</h1>
+          <div className="book-cover__foot">
+            <h1 className="book-cover__title">the digithings book</h1>
+          </div>
+          <p className="book-cover__imprint">edition 26 · version 1</p>
         </section>
 
         {/* Front matter. The reference beside each chapter is filled in by

@@ -140,6 +140,15 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
 function stampPages(): void {
   document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page, index) => {
     page.dataset.bookPage = String(index + 1);
+    // The folio is drawn by the pagination engine on the outer edge; this
+    // imprints the edition and version on the other side, so a reader holding
+    // one page can tell which printing it came from.
+    if (!page.querySelector(".book-page-imprint")) {
+      const imprint = document.createElement("span");
+      imprint.className = "book-page-imprint";
+      imprint.textContent = "E26 · V1";
+      page.appendChild(imprint);
+    }
   });
 }
 
