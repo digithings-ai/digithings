@@ -503,9 +503,13 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   min-height: 232mm !important;
 }
 .pagedjs_page .book-colophon__mark {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 18mm !important;
   width: 142mm !important;
   max-width: 100% !important;
-  margin: 44mm auto 0 !important;
+  margin: 0 auto !important;
 }
 .pagedjs_page .book-colophon__mark svg { display: block; width: 100%; height: auto; }
 .pagedjs_page .book-colophon__foot {
@@ -513,13 +517,11 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  padding-top: 5mm !important;
+  padding-top: 4mm !important;
   border-top: 0.4pt solid var(--hair) !important;
 }
 .pagedjs_page .book-chapter__head > p:nth-of-type(2) { margin-bottom: 6mm !important; }
 
-/* A closing sheet with no text. The browser builder paints the field here. */
-.book-end { break-before: page; min-height: 240mm; }
 
 /* Added by the browser builder to continuation pages. */
 .book-running-head {

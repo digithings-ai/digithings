@@ -151,9 +151,6 @@ export default async function BookPrintPage() {
         </div>
       </section>
 
-      {/* Endpaper: the only closing surface with no text. The browser builder
-          paints the same random field here that it puts behind the cover. */}
-      <section className="book-end" aria-hidden="true" />
     </div>
   );
 }

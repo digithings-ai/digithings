@@ -69,19 +69,19 @@ export async function buildBookPdf(
       (page) =>
         page.querySelector(".book-cover") ||
         page.querySelector(".book-contents") ||
-        page.querySelector(".book-end"),
+        page.querySelector(".book-colophon"),
     );
     for (const page of fields) {
       const isCover = Boolean(page.querySelector(".book-cover"));
       const isContents = Boolean(page.querySelector(".book-contents"));
-      const isEnd = Boolean(page.querySelector(".book-end"));
+      const isClosing = Boolean(page.querySelector(".book-colophon"));
       page.querySelectorAll(".book-cover__field").forEach((node) => node.remove());
       const layer = frame.createElement("div");
       layer.className = "book-field";
       layer.setAttribute("aria-hidden", "true");
       const light = theme === "light";
       layer.style.cssText = `position:absolute;inset:0;z-index:0;pointer-events:none;opacity:${
-        isCover ? (light ? 0.5 : 0.82) : isContents ? (light ? 0.18 : 0.4) : isEnd ? (light ? 0.42 : 0.62) : light ? 0.14 : 0.3
+        isCover ? (light ? 0.5 : 0.82) : isContents ? (light ? 0.18 : 0.4) : isClosing ? (light ? 0.3 : 0.55) : light ? 0.14 : 0.3
       }`;
       layer.innerHTML = fieldSvg({
         seed: randomSeed(),
