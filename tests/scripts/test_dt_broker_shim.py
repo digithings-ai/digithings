@@ -499,6 +499,117 @@ def test_a_repository_flag_that_names_nothing_is_refused() -> None:
             ghshim.check_pull_request_target(call, {})
 
 
+# ---------------------------------------------------------------------------
+# the rules the review of DIG-5413 found (DIG-5415)
+# ---------------------------------------------------------------------------
+
+
+def test_a_flag_value_that_parses_as_a_repository_is_not_the_repository() -> None:
+    """The title is a title; the call is about the repository gh will use.
+
+    Before DIG-5415 the shim read the title as the repository flag, cleared
+    the wall, and gh opened the pull request against `GH_REPO`.
+    """
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "--title", "-Rdigithings-ai/digithings"],
+            {"GH_REPO": "someone-else/their-project"},
+        )
+
+
+def test_a_flag_value_that_parses_as_a_repository_does_not_answer_for_the_call() -> None:
+    """The value is skipped, so the fallback answers -- and it is the org one."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "--title", "-Rdigithings-ai/digithings"],
+        {"GH_REPO": REPO},
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_every_value_flag_skips_its_value() -> None:
+    """A value is not a flag position, for every flag that takes one."""
+    value = "-Rdigithings-ai/digithings"
+    for flag in (
+        "--assignee",
+        "-a",
+        "--attach",
+        "--base",
+        "-B",
+        "--body",
+        "-b",
+        "--body-file",
+        "-F",
+        "--head",
+        "-H",
+        "--label",
+        "-l",
+        "--milestone",
+        "-m",
+        "--project",
+        "-p",
+        "--recover",
+        "--reviewer",
+        "-r",
+        "--template",
+        "-T",
+        "--title",
+        "-t",
+    ):
+        with pytest.raises(ghshim.Refusal):
+            ghshim.check_pull_request_target(
+                ["pr", "create", flag, value],
+                {"GH_REPO": "someone-else/their-project"},
+            )
+
+
+def test_the_empty_separate_repository_value_is_refused() -> None:
+    """`--repo ""` names nothing, so the fallback must not answer for it."""
+    for call in (
+        ["pr", "create", "--repo", ""],
+        ["pr", "create", "-R", ""],
+    ):
+        with pytest.raises(ghshim.Refusal):
+            ghshim.check_pull_request_target(call, {"GH_REPO": REPO})
+
+
+def test_a_repository_flag_inside_a_short_flag_cluster_is_read() -> None:
+    """`-f` is `--fill` on `pr create`, so `-fR owner/name` names the repo."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "-fRdigithings-ai/digithings"],
+        {"GH_REPO": "digithings-ai/other"},
+    )
+    assert notes == ["pull request against digithings-ai/digithings"]
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "-fRsomeone-else/their-project"], {"GH_REPO": REPO}
+        )
+
+
+def test_an_api_field_value_that_parses_as_a_repository_is_not_the_repository() -> None:
+    """`-f` takes a value on `gh api`; it is not the repository flag there."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["api", "repos/{owner}/{repo}/pulls", "-f", "-Rdigithings-ai/digithings"],
+            {"GH_REPO": "someone-else/their-project"},
+        )
+
+
+def test_a_flag_the_shim_does_not_know_is_refused() -> None:
+    """A flag the shim cannot place could be the repository."""
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "create", "--a-flag-we-do-not-know", "x"], {"GH_REPO": REPO}
+        )
+
+
+def test_a_repository_flag_after_the_terminator_is_not_read() -> None:
+    """After `--` gh takes positionals; the wall does not read a repo there."""
+    notes = ghshim.check_pull_request_target(
+        ["pr", "create", "--", "-Rsomeone-else/their-project"], {"GH_REPO": REPO}
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
 def test_a_relative_body_path_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The path is relative, but the mistake is the same one."""
     monkeypatch.chdir(tmp_path)

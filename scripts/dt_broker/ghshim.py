@@ -541,6 +541,184 @@ def _no_repository_named() -> Refusal:
     )
 
 
+#: The flags of `gh pr create` that take a value, in the long and the short
+#: spelling. The value of one of these is a value and not a flag: a title
+#: that begins `-R` is a title, and reading it as the repository is how the
+#: wall was made to answer for a call it was not about. The set is the
+#: flag list of gh 2.102.0; a flag this shim does not know is refused.
+_PR_CREATE_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--assignee",
+        "-a",
+        "--attach",
+        "--base",
+        "-B",
+        "--body",
+        "-b",
+        "--body-file",
+        "-F",
+        "--head",
+        "-H",
+        "--label",
+        "-l",
+        "--milestone",
+        "-m",
+        "--project",
+        "-p",
+        "--recover",
+        "--reviewer",
+        "-r",
+        "--template",
+        "-T",
+        "--title",
+        "-t",
+    }
+)
+
+#: The boolean flags of `gh pr create`. They take no value, so the argument
+#: after one is a flag position, and a repository flag there is the call's
+#: own target.
+_PR_CREATE_BOOLEAN_FLAGS: frozenset[str] = frozenset(
+    {
+        "--draft",
+        "-d",
+        "--dry-run",
+        "--editor",
+        "-e",
+        "--fill",
+        "-f",
+        "--fill-first",
+        "--fill-verbose",
+        "--help",
+        "-h",
+        "--no-maintainer-edit",
+        "--web",
+        "-w",
+    }
+)
+
+#: The flags of `gh api` that take a value. `gh api` takes the repository
+#: only when the endpoint uses the `{owner}`/`{repo}` placeholders, but the
+#: same scan answers for it.
+_API_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--cache",
+        "--field",
+        "-F",
+        "--header",
+        "-H",
+        "--hostname",
+        "--input",
+        "--jq",
+        "-q",
+        "--method",
+        "-X",
+        "--preview",
+        "-p",
+        "--raw-field",
+        "-f",
+        "--template",
+        "-t",
+    }
+)
+
+#: The boolean flags of `gh api`.
+_API_BOOLEAN_FLAGS: frozenset[str] = frozenset(
+    {
+        "--allow-escape-sequences",
+        "--help",
+        "-h",
+        "--include",
+        "-i",
+        "--paginate",
+        "--silent",
+        "--slurp",
+        "--verbose",
+    }
+)
+
+
+def _flag_tables(command: str) -> tuple[frozenset[str], frozenset[str]]:
+    """The value flags and the boolean flags of the command being scanned.
+
+    `gh pr create` and `gh api` do not share a flag list. A caller that is
+    neither -- the tests call the scanner directly -- gets both lists, so
+    a known flag of either command is still placed correctly.
+    """
+    if command == "api":
+        return _API_VALUE_FLAGS, _API_BOOLEAN_FLAGS
+    if command == "pr":
+        return _PR_CREATE_VALUE_FLAGS, _PR_CREATE_BOOLEAN_FLAGS
+    return (
+        _PR_CREATE_VALUE_FLAGS | _API_VALUE_FLAGS,
+        _PR_CREATE_BOOLEAN_FLAGS | _API_BOOLEAN_FLAGS,
+    )
+
+
+def _short_flag_repo(
+    argument: str,
+    value_flags: frozenset[str],
+    boolean_flags: frozenset[str],
+    argv: list[str],
+    index: int,
+) -> tuple[str | None, int]:
+    """The repository a short-flag cluster names, and the arguments it eats.
+
+    pflag reads a short flag in a cluster one letter at a time: the letters
+    before a flag that takes a value are booleans, and the rest of the
+    cluster is that flag's value. `-fR owner/name` names the repository on
+    `gh pr create` (`-f` is `--fill`), so a scan that only looked at the
+    start of the argument would not see the flag gh acts on.
+
+    The answer is the repository name (or None) and how many arguments the
+    cluster consumes: 1 for the cluster alone, 2 when its last flag takes
+    the next argument as its value.
+    """
+    chars = argument[1:]
+    while chars:
+        char = chars[0]
+        if char == "R":
+            rest = chars[1:]
+            if not rest:
+                if index + 1 >= len(argv):
+                    raise _no_repository_named()
+                value = argv[index + 1]
+                if not value:
+                    raise _no_repository_named()
+                return value, 2
+            if rest.startswith("="):
+                # pflag strips one `=`: `-R=owner/name` is `-R owner/name`.
+                value = rest[1:]
+                if not value:
+                    raise _no_repository_named()
+                return value, 1
+            return rest, 1
+
+        flag = f"-{char}"
+        if flag in boolean_flags:
+            chars = chars[1:]
+            continue
+        if flag in value_flags:
+            rest = chars[1:]
+            if rest.startswith("="):
+                rest = rest[1:]
+            if rest:
+                # The value is attached; the rest of the cluster is the
+                # value, so no later letter is a flag of its own.
+                return None, 1
+            if index + 1 < len(argv):
+                return None, 2
+            return None, 1
+
+        # A shorthand this shim does not know. gh will refuse the call, but
+        # the shim cannot know where its value ends, so it refuses too.
+        raise Refusal(
+            f"this call uses {_safe(argument)}, a flag the shim does not know; it cannot "
+            "tell which repository the call is about, so it refuses it"
+        )
+    return None, 1
+
+
 def _repo_from_flag(argv: list[str]) -> str | None:
     """The `--repo owner/name` a call names, if it names one.
 
@@ -554,24 +732,64 @@ def _repo_from_flag(argv: list[str]) -> str | None:
     repository flag that names nothing is refused rather than ignored: an
     ignored flag is a flag the call did not make, and the fallback to
     `GH_REPO` or to the checkout's own remote would then answer for it.
+
+    A repository flag is read only where a flag can start. The value of a
+    value-taking flag is not a flag position: `--title "-Rdigithings-ai/
+    digithings"` is a title, and reading it as the repository made the wall
+    check the title's repository while gh used `GH_REPO`. A flag this shim
+    does not know is refused, because the shim cannot place its value and a
+    flag it cannot place could be the repository. The same is true after
+    `--`: gh treats everything after it as a positional, so no repository
+    flag starts there.
     """
+    command = argv[0] if argv else ""
+    value_flags, boolean_flags = _flag_tables(command)
     named: str | None = None
-    for index, argument in enumerate(argv):
+    index = 0
+    while index < len(argv):
+        argument = argv[index]
+        if argument == "--":
+            break
         if argument in ("--repo", "-R"):
-            if index + 1 >= len(argv):
+            if index + 1 >= len(argv) or not argv[index + 1]:
                 raise _no_repository_named()
             named = argv[index + 1]
-        elif argument.startswith("--repo="):
+            index += 2
+            continue
+        if argument.startswith("--repo="):
             named = argument.split("=", 1)[1]
             if not named:
                 raise _no_repository_named()
-        elif argument.startswith("-R") and len(argument) > 2:
-            # pflag reads `-Rvalue` and `-R=value` as the same flag.
-            named = argument[2:]
-            if named.startswith("="):
-                named = named[1:]
-            if not named:
-                raise _no_repository_named()
+            index += 1
+            continue
+        if argument.startswith("--"):
+            head, separator, _ = argument.partition("=")
+            if separator:
+                # The value is inside this argument, so gh cannot read it as
+                # a separate repository flag.
+                index += 1
+                continue
+            if head in boolean_flags:
+                index += 1
+                continue
+            if head in value_flags:
+                # The next argument is this flag's value, whatever it looks
+                # like. gh consumes it even when it begins with `-`.
+                index += 2 if index + 1 < len(argv) else 1
+                continue
+            raise Refusal(
+                f"this call uses {_safe(argument)}, a flag the shim does not know; it "
+                "cannot tell which repository the call is about, so it refuses it"
+            )
+        if argument.startswith("-") and len(argument) > 1:
+            found, consumed = _short_flag_repo(
+                argument, value_flags, boolean_flags, argv, index
+            )
+            if found is not None:
+                named = found
+            index += consumed
+            continue
+        index += 1
     return named
 
 
