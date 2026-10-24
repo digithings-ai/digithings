@@ -20,22 +20,20 @@ export function MemoryThreadListSidebar() {
   }
   return (
     <aside
-      className="border-border/50 bg-muted/20 flex w-56 shrink-0 flex-col border-r"
+      className="app-thread-rail"
       data-memory-thread-list
       aria-label="Conversations"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2 py-2">
-        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Chats
-        </span>
-        <ThreadListPrimitive.New className="text-foreground hover:bg-muted rounded px-2 py-1 text-xs">
-          New
+      <div className="app-thread-rail-head">
+        <span className="app-thread-rail-label">chats</span>
+        <ThreadListPrimitive.New className="app-thread-rail-new">
+          + new
         </ThreadListPrimitive.New>
       </div>
-      <ThreadListPrimitive.Root className="dc-thread-list flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1">
+      <ThreadListPrimitive.Root className="dc-thread-list app-thread-rail-list">
         <ThreadListPrimitive.Items>
           {() => (
-            <ThreadListItemPrimitive.Root className="data-[active]:bg-muted hover:bg-muted/60 rounded px-2 py-1.5 text-sm">
+            <ThreadListItemPrimitive.Root className="app-thread-rail-item data-[active]:bg-surface-2 hover:bg-surface-2">
               <ThreadListItemPrimitive.Trigger className="w-full truncate text-left">
                 <ThreadListItemPrimitive.Title fallback="New chat" />
               </ThreadListItemPrimitive.Trigger>

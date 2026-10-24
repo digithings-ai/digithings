@@ -1,0 +1,411 @@
+/**
+ * app-shell-states.css — the digichat app surface's own chrome, on the house
+ * grid: hairline rules, zero radius, one mono voice, ink that clears AA.
+ *
+ * Three jobs, all audit findings from epic #6327:
+ *  1. States (T4): the wait, the empty sidebar, and the failed thread used to
+ *     be a dropped "Loading…" line and unstyled muted text. They render here
+ *     as terminal lines with a named action.
+ *  2. Residue (T1/T3): the root menu was a rounded card with a shadow and
+ *     `bg-muted` rows; it is now a hairline list with a `▸` marker.
+ *  3. Narrow (P1): the app shell is a 220–260px rail + main column. Below
+ *     48rem the rail becomes an off-canvas drawer so the composer keeps the
+ *     width, and the top bar wraps instead of overflowing.
+ *
+ * Loaded from `src/app/(digichat)/globals.css` only. Keep every selector under
+ * the `app-` family (`app` is digichat's registered family baseline).
+ */
+
+/* ── skip link (T7: main has no skip path) ─────────────────────────────── */
+
+.app-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 60;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg);
+  border: 1px solid var(--hair-strong);
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  font-size: var(--text-xs, 0.6875rem);
+  text-decoration: none;
+}
+
+.app-skip:focus,
+.app-skip:focus-visible {
+  left: var(--space-3);
+  top: var(--space-3);
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* ── the wait: house type-out, never a spinner ─────────────────────────── */
+
+.app-shell-wait {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ── designed states ───────────────────────────────────────────────────── */
+
+.app-state {
+  display: grid;
+  place-content: center;
+  gap: var(--space-2);
+  min-height: 40vh;
+  font-family: var(--font-family-mono);
+}
+
+.app-state-inline {
+  place-content: start;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--hair);
+}
+
+.app-state-line {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.app-state-mark {
+  margin-inline-end: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.app-state-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.app-state-action {
+  justify-self: start;
+  padding: 0 0 1px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--hair-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.app-state-action:hover {
+  border-bottom-color: var(--ink);
+}
+
+.app-state-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.app-sidebar-state {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: var(--space-2) 0 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.app-sidebar-state-mark {
+  color: var(--ink-soft);
+}
+
+/* ── text actions in the shell chrome ──────────────────────────────────── */
+
+.app-text-button {
+  appearance: none;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--hair-2);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.app-text-button:hover {
+  text-decoration-color: currentColor;
+}
+
+.app-text-button:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.app-text-button-block {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+  text-decoration: none;
+}
+
+.app-text-button-block:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.app-thread-row-action {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.app-thread-row-action:hover {
+  color: var(--ink);
+}
+
+.app-thread-row-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ── memory thread rail (catalog skins) ────────────────────────────────── */
+
+.app-thread-rail {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 14rem;
+  border-inline-end: 1px solid var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+}
+
+.app-thread-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.app-thread-rail-new {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.app-thread-rail-new:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.app-thread-rail-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.app-thread-rail-item {
+  padding: var(--space-1) var(--space-2);
+  border-inline-start: 1px solid transparent;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+.app-thread-rail-item[data-active] {
+  border-inline-start-color: var(--ink);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* ── root menu ─────────────────────────────────────────────────────────── */
+
+.app-menu {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--space-5) var(--space-4);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+}
+
+.app-menu-inner {
+  width: min(32rem, 100%);
+}
+
+.app-menu-head {
+  margin-bottom: var(--space-5);
+}
+
+.app-menu-title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.app-menu-copy {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.app-menu-list {
+  border-top: 1px solid var(--hair);
+}
+
+.app-menu-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--duration-hover) var(--ease);
+}
+
+.app-menu-row:hover {
+  background: var(--surface-2);
+}
+
+.app-menu-row:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.app-menu-key {
+  padding: 0 0.35rem;
+  border: 1px solid var(--hair);
+  color: var(--ink-soft);
+  font-size: var(--text-xs, 0.6875rem);
+  line-height: 1.6;
+}
+
+.app-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-menu-row-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.app-menu-desc {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.app-menu-go {
+  color: var(--ink-soft);
+  transition: transform var(--duration-hover) var(--ease);
+}
+
+.app-menu-row:hover .app-menu-go,
+.app-menu-row:focus-visible .app-menu-go {
+  transform: translateX(2px);
+}
+
+.app-menu-note {
+  margin: var(--space-4) 0 0;
+  color: var(--ink-soft);
+  font-size: var(--text-xs, 0.6875rem);
+  text-align: center;
+}
+
+/* ── narrow viewports (P1: composer and header usable) ─────────────────── */
+
+@media (max-width: 48rem) {
+  .app-shell,
+  .app-shell.app-shell-sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 100dvh;
+  }
+
+  /* The rail leaves the grid and becomes a drawer; hidden entirely when
+     collapsed so no 0-width column keeps the focus order. */
+  .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(19rem, 88vw);
+    border-right: 1px solid var(--hair);
+    background: var(--surface);
+  }
+
+  .app-shell-sidebar-collapsed .app-sidebar {
+    display: none;
+  }
+
+  .app-shell-main-col {
+    min-height: 100dvh;
+  }
+
+  .app-topbar {
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .app-topbar-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-topbar-meta {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-2);
+    overflow-wrap: anywhere;
+  }
+
+  .app-main {
+    padding: var(--space-3);
+  }
+
+  .app-menu {
+    padding: var(--space-4) var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-menu-row,
+  .app-menu-go {
+    transition: none;
+  }
+
+  .app-menu-row:hover .app-menu-go,
+  .app-menu-row:focus-visible .app-menu-go {
+    transform: none;
+  }
+}

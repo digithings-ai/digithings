@@ -60,7 +60,8 @@ describe("baseline preview isolation", () => {
     expect(client).toMatch(/ThreadSkinView/);
     expect(client).toMatch(/@digithings\/ui\/chat\/skins/);
     expect(client).toMatch(/THREAD_SKINS/);
-    expect(thread).toContain("How can I help you today?");
+    expect(thread).toContain("Ask the stack.");
+    expect(thread).toContain("It reads the configured docs, then answers.");
     expect(thread).toContain("aui-thread-root");
     expect(thread).not.toContain("ask digichat");
     expect(client).not.toMatch(/StockChromeBar|ToolCatalogBar|ProductStockShell/);

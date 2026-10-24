@@ -27,6 +27,11 @@ import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
 import {
+  ChatShellEmpty,
+  ChatShellLoading,
+  ChatShellUnavailable,
+} from "@/components/chat-shell-states";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -105,6 +110,15 @@ export function ChatShell({
   // so the input's onBlur — which also fires on unmount — doesn't commit
   // after a cancel or double-commit after Enter.
   const renameHandledRef = useRef(false);
+
+  // Narrow viewports get the sidebar as an off-canvas rail (`app-shell-states.css`
+  // at 48rem); without this the 220px rail leaves the composer ~150px wide.
+  // Deferred out of the effect body — react-hooks/set-state-in-effect.
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    if (!window.matchMedia("(max-width: 48rem)").matches) return;
+    queueMicrotask(() => setCollapsed(true));
+  }, []);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -436,11 +450,7 @@ export function ChatShell({
   const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
 
   if (!ready || !activeThread) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
+    return <ChatShellLoading />;
   }
 
   return (
@@ -449,7 +459,15 @@ export function ChatShell({
       data-thread-skin={clientConfig?.chrome.skin}
       data-chrome-mode={clientConfig?.chrome.mode ?? "app"}
     >
-      <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
+      <a className="app-skip" href="#app-main">
+        Skip to the thread
+      </a>
+      <aside
+        className="app-sidebar"
+        aria-label="App sidebar"
+        data-expanded={!collapsed}
+        inert={collapsed ? true : undefined}
+      >
         <div className="app-sidebar-body">
           <div>
             <div>DT</div>
@@ -481,9 +499,7 @@ export function ChatShell({
           </Label>
 
           {grouped.length === 0 ? (
-            <p role="status">
-              {threadQuery.trim() ? "No chats match that search." : "No chats yet."}
-            </p>
+            <ChatShellEmpty query={threadQuery} />
           ) : (
             grouped.map((g) => (
               <section key={g.label} className="app-sidebar-section">
@@ -544,7 +560,7 @@ export function ChatShell({
                             aria-label={`Actions for ${t.title}`}
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => e.stopPropagation()}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="app-thread-row-action"
                           >
                             <MoreHorizontal className="size-3.5" />
                           </DropdownMenuTrigger>
@@ -597,17 +613,14 @@ export function ChatShell({
               <span>digithings.ai</span>
               <span aria-hidden>↗</span>
             </Link>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-auto w-full justify-between"
-              style={{ background: "transparent", border: "none", cursor: "pointer" }}
+              className="app-text-button app-text-button-block"
               onClick={() => signOut({ callbackUrl: p("/embed") })}
             >
               <span>sign out</span>
-              <span aria-hidden>⏻</span>
-            </Button>
+              <span aria-hidden="true">⏻</span>
+            </button>
           </section>
         </div>
       </aside>
@@ -616,54 +629,31 @@ export function ChatShell({
         <header className="app-topbar">
           <span className="app-topbar-title">{activeThread.title || "New chat"}</span>
           <span className="app-topbar-meta">
-            <Button
+            <button
               type="button"
-              variant="link"
-              size="sm"
+              className="app-text-button"
               onClick={() => setByokMode(true)}
-              className="h-auto px-0 font-normal text-inherit underline-offset-2"
-              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
               aria-label="Configure bring your own key"
             >
               bring your own key
-            </Button>
+            </button>
             {" · "}
-            {subtitle} · <Button
+            {subtitle} ·{" "}
+            <button
               type="button"
-              variant="link"
-              size="sm"
+              className="app-text-button"
               onClick={() => setCollapsed((v) => !v)}
-              className="h-auto px-0 font-normal text-inherit underline-offset-2"
-              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
               aria-label="Toggle sidebar"
+              aria-expanded={!collapsed}
             >
               ⌘/
-            </Button>
+            </button>
           </span>
         </header>
 
-        <main className="app-main">
+        <main id="app-main" tabIndex={-1} className="app-main">
           {activeThread.remote && !activeThread.hydrated ? (
-            <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <p>Could not load this conversation yet.</p>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto px-0 font-normal text-inherit underline-offset-2"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "inherit",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: "inherit",
-                }}
-                onClick={() => void openThread(activeThread.id)}
-              >
-                Retry
-              </Button>
-            </div>
+            <ChatShellUnavailable onRetry={() => void openThread(activeThread.id)} />
           ) : (
             <ChatPanel
               key={`${activeThread.id}-${activeThread.hydrateVersion}`}

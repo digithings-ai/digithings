@@ -171,8 +171,13 @@ export function ChatPanel({
         footerSlot={
           <>
             {error?.message ? (
-              <div role="alert" className="px-3 py-2 text-sm text-destructive">
-                {error.message}
+              <div role="alert" className="app-state app-state-inline">
+                <p className="app-state-line">
+                  <span className="app-state-mark" aria-hidden="true">
+                    !
+                  </span>
+                  {error.message}
+                </p>
               </div>
             ) : null}
             <QuantComparisonStrip messages={messages} conversationId={threadId} />
@@ -181,7 +186,7 @@ export function ChatPanel({
       />
       {byokMode ? (
         <div
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 shadow-lg"
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-hair bg-background p-3"
           role="dialog"
           aria-label="BYOK"
         >

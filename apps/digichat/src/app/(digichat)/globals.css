@@ -10,6 +10,7 @@
  * ChatShell loads those via @/styles/chat-shell-cli.css.
  */
 @import "../../styles/product-chrome.css";
+@import "../../styles/app-shell-states.css";
 @import "@digithings/ui/styles/chat-core.css";
 @import "@digithings/ui/styles/chat-widgets.css";
 @import "@digithings/ui/styles/chat-aui.css";

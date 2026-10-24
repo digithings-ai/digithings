@@ -30,6 +30,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "digichat · digithings",
   description: "Production chat UI for the digigraph orchestrator.",
+  // Authenticated app surface (and tenant iframes): nothing here belongs in an
+  // index. Audit T7 — the route group was indexable by default.
+  robots: { index: false, follow: false },
 };
 
 // Pre-paint companion to the shared themeInitScript: mirror [data-theme] onto

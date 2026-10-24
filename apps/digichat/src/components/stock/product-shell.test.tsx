@@ -14,7 +14,11 @@ vi.mock("@/lib/warmup-gate", () => ({
 }));
 import { render, screen } from "@testing-library/react";
 import type { AssistantRuntime } from "@assistant-ui/react";
-import { ProductStockShell } from "./product-shell";
+import {
+  ProductStockShell,
+  resolveProductHeadline,
+  resolveProductPlaceholder,
+} from "./product-shell";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 
 vi.mock("@digithings/ui/chat/stock/thread", () => ({
@@ -274,5 +278,62 @@ describe("ProductStockShell", () => {
     expect(
       screen.getByTestId("stock-thread").getAttribute("data-composer-layout"),
     ).toBe("compact");
+  });
+});
+
+/**
+ * Finding T2 / P0 (product-shell.tsx:385): the product surface used to end its
+ * headline chain on the stock template line "How can I help you today?". The
+ * fallback is now the deployment's own house copy, so the product never ships
+ * the template's empty state.
+ */
+describe("product copy", () => {
+  const emptyCopy = {
+    ...DEFAULT_CLIENT_CONFIG,
+    chrome: {
+      ...DEFAULT_CLIENT_CONFIG.chrome,
+      welcome: "",
+      title: "",
+      placeholder: "",
+    },
+  };
+
+  it("falls back to the deployment's house copy, never the stock template", () => {
+    expect(resolveProductHeadline(emptyCopy)).toBe("Ask about digithings");
+    expect(resolveProductPlaceholder(emptyCopy)).toBe("Ask a question");
+    expect(resolveProductHeadline(emptyCopy)).not.toMatch(/how can i help you/i);
+  });
+
+  it("keeps the deployment copy when the config sets it", () => {
+    const cfg = {
+      ...DEFAULT_CLIENT_CONFIG,
+      chrome: {
+        ...DEFAULT_CLIENT_CONFIG.chrome,
+        welcome: "Ask the vault.",
+        title: "ask digichat",
+        placeholder: "Ask the vault a question",
+      },
+    };
+    expect(resolveProductHeadline(cfg)).toBe("Ask the vault.");
+    expect(resolveProductPlaceholder(cfg)).toBe("Ask the vault a question");
+  });
+
+  it("lets a host override win over the deployment copy", () => {
+    expect(
+      resolveProductHeadline(
+        { ...DEFAULT_CLIENT_CONFIG, chrome: { ...DEFAULT_CLIENT_CONFIG.chrome, welcome: "Ask the vault." } },
+        "  Ask this thread.  ",
+      ),
+    ).toBe("Ask this thread.");
+  });
+
+  it("keeps the stock template line out of the shell source", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const source = await readFile(
+      path.join(process.cwd(), "src/components/stock/product-shell.tsx"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/How can I help you today\?/);
   });
 });

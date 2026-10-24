@@ -139,6 +139,40 @@ export function buildProductRuntimeAdapters(
 
 
 /**
+ * Headline for the empty thread and the boot overlay.
+ *
+ * Chain: host override (`?welcome=` / panel prop) → deployment welcome →
+ * deployment title → the product's own house copy. Never the stock template's
+ * empty-state line: a shipped default empty state is product copy (audit T2),
+ * and the package's own line belongs to the package, not here.
+ */
+export function resolveProductHeadline(
+  cfg: DigichatClientConfig,
+  welcome?: string,
+): string {
+  return (
+    welcome?.trim() ||
+    cfg.chrome.welcome?.trim() ||
+    cfg.chrome.title?.trim() ||
+    DEFAULT_CLIENT_CONFIG.chrome.welcome?.trim() ||
+    "digichat"
+  );
+}
+
+/** Composer placeholder: same rule as the headline, one source of copy. */
+export function resolveProductPlaceholder(
+  cfg: DigichatClientConfig,
+  placeholder?: string,
+): string {
+  return (
+    placeholder?.trim() ||
+    cfg.chrome.placeholder?.trim() ||
+    DEFAULT_CLIENT_CONFIG.chrome.placeholder?.trim() ||
+    "Ask a question"
+  );
+}
+
+/**
  * Mount the selected assistant-ui Thread with deploy-config adapters and chrome.
  * Caller owns AssistantChatTransport → POST /api/chat (never baseline-chat).
  *
@@ -349,7 +383,7 @@ export function ProductStockShell({
       theme: cfg.chrome.theme,
       mode: cfg.chrome.mode,
       title: cfg.chrome.title,
-      welcome: welcome?.trim() || cfg.chrome.welcome,
+      welcome: resolveProductHeadline(cfg, welcome),
       welcomeBody: cfg.chrome.welcomeBody ?? [],
       placeholder: placeholder?.trim() || cfg.chrome.placeholder,
       suggestions: (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [],
@@ -378,14 +412,9 @@ export function ProductStockShell({
     ],
   );
 
-  const headline =
-    welcome?.trim() ||
-    cfg.chrome.welcome?.trim() ||
-    cfg.chrome.title?.trim() ||
-    "How can I help you today?";
+  const headline = resolveProductHeadline(cfg, welcome);
   const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
-  const inputPlaceholder =
-    placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";
+  const inputPlaceholder = resolveProductPlaceholder(cfg, placeholder);
 
   // Real deployment facts for the boot chain - the same values the chat runs
   // on, so the loader never claims counts the deployment does not have.
