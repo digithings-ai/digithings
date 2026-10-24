@@ -56,3 +56,5 @@ Requires stack images on GHCR (`DIGI_IMAGE_TAG` after `publish-service-images.ym
 
 - Client install: [INSTALL.md](INSTALL.md)
 - Product model: [digichat-self-hosted-release.md](../architecture/digichat-self-hosted-release.md)
+
+Release candidate reviewed by the owner for the 2.7.0 cut.
