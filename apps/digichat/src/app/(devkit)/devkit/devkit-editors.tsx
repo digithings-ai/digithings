@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 import {
   Button,
   Card,
@@ -25,8 +24,10 @@ import {
   Textarea,
 } from "@digithings/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
+import { VIEW_MODES } from "@/lib/view-modes";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { CONTRAST_MINIMUM, contrast } from "./devkit-contrast";
+import { SkinGallery } from "./skin-gallery";
 import {
   appendListItem,
   applyAll,
@@ -425,7 +426,7 @@ export const ACCENT_SWATCH_PRESETS = [
   { name: "digichat", hex: "#e2708a" }, // canon-allow: pins canon --accent-digichat hex (packages/design/tokens.css)
   { name: "digikey", hex: "#d97a5a" }, // canon-allow: pins canon --accent-digikey hex (packages/design/tokens.css)
   { name: "digismith", hex: "#6fa3a3" }, // canon-allow: pins canon --accent-digismith hex (packages/design/tokens.css)
-  { name: "digiclaw", hex: "#b87840" }, // canon-allow: pins canon --accent-digiclaw hex (packages/design/tokens.css)
+  { name: "digibot", hex: "#b87840" }, // canon-allow: pins canon --accent-digibot hex (packages/design/tokens.css)
   { name: "digibase", hex: "#9ea0a5" }, // canon-allow: pins canon --accent-digibase hex (packages/design/tokens.css)
   { name: "digistore", hex: "#7b7fc7" }, // canon-allow: pins canon --accent-digistore hex (packages/design/tokens.css)
   { name: "digivault", hex: "#9d8fc9" }, // canon-allow: pins canon --accent-digivault hex (packages/design/tokens.css)
@@ -816,10 +817,9 @@ export function DevkitEditors({
       case "Appearance":
         return (
           <>
-        <SelectRow
-          label="skin"
+        <SkinGallery
           value={chrome?.skin ?? "digichat"}
-          groups={[{ label: "skins", options: THREAD_SKINS }]}
+          palette={chrome?.palette}
           onCommit={(v) => scalar(["chrome", "skin"], v)}
         />
         <SegRow
@@ -943,7 +943,7 @@ export function DevkitEditors({
         <SelectRow
           label="chain-of-thought view"
           value={features?.view ?? "balanced"}
-          options={["hidden", "compact", "balanced", "detailed"]}
+          options={VIEW_MODES}
           onCommit={(v) => scalar(["features", "view"], v)}
         />
         <SegRow

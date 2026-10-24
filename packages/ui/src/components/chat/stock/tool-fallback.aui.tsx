@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useCallback, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
+import { useTurnOutcome } from "../turn-outcome";
 import {
   toolApprovalAcceptsText,
   useScrollLock,
@@ -19,32 +20,17 @@ import {
   CollapsibleTrigger,
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useExportKeepMounted } from "../../../replay/export-mount";
 import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { readGloomberbAttribution } from "@digithings/ui";
+import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
+import { JsonView } from "./json-view";
 
 const ANIMATION_DURATION = 200;
 
 const pressable = "active:scale-[0.98]";
-
-function formatJsonDump(value: unknown): string {
-  if (value === undefined) return "";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return value;
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
 
 export const formatToolDuration = (ms: number) => {
   if (!Number.isFinite(ms) || ms < 0) return "0ms";
@@ -153,7 +139,7 @@ function ToolFallbackDuration({
     <span
       data-slot="tool-fallback-duration"
       className={cn(
-        "aui-tool-fallback-duration text-muted-foreground text-xs tabular-nums",
+        "aui-tool-fallback-duration text-ink-mute text-xs tabular-nums",
         className,
       )}
       {...props}
@@ -181,11 +167,16 @@ function ToolFallbackTrigger({
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
 
+  // Upstream assistant-ui wording, one word per state.
   const label = isCancelled
     ? "Cancelled tool"
     : isErrorStatus
       ? "Failed tool"
-      : "Used tool";
+      : statusType === "running"
+        ? "Running tool"
+        : statusType === "requires-action"
+          ? "Waiting on tool"
+          : "Used tool";
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
@@ -194,37 +185,28 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-ink-mute hover:text-ink flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
         className,
       )}
       {...props}
     >
       <DotMatrix
         state={matrixState}
-        label={label}
+        decorative
         className="aui-tool-fallback-trigger-icon size-4 shrink-0"
       />
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-foreground",
-          isCancelled && "text-muted-foreground line-through",
+          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-ink",
+          isCancelled && "text-ink-mute line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
         {label}: <b>{title ?? toolName}</b>
       </span>
       <ToolFallbackDuration />
-      <ChevronDownIcon
-        data-slot="tool-fallback-trigger-chevron"
-        className={cn(
-          "aui-tool-fallback-trigger-chevron size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          "-rotate-90",
-          "group-data-open/trigger:rotate-0",
-          "group-data-panel-open/trigger:rotate-0",
-        )}
-      />
+      <DisclosureChevron />
     </CollapsibleTrigger>
   );
 }
@@ -234,8 +216,10 @@ function ToolFallbackContent({
   children,
   ...props
 }: React.ComponentProps<typeof CollapsibleContent>) {
+  const keepMounted = useExportKeepMounted();
   return (
     <CollapsibleContent
+      keepMounted={keepMounted}
       data-slot="tool-fallback-content"
       className={cn(
         "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
@@ -272,15 +256,23 @@ function ToolFallbackArgs({
 }) {
   if (!argsText) return null;
 
+  // DIG-4459: the full arguments, pretty-printed and highlighted. While the
+  // call streams the text may be partial JSON; formatJsonDump repairs it for
+  // display and falls back to the raw text, never a cut-off copy.
   return (
     <div
       data-slot="tool-fallback-args"
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {formatJsonDump(argsText)}
-      </pre>
+      <p className="aui-tool-fallback-args-header text-ink-mute text-xs font-medium">
+        Arguments:
+      </p>
+      <JsonView
+        value={argsText}
+        slot="tool-fallback-args-json"
+        className="aui-tool-fallback-args-value mt-1"
+      />
     </div>
   );
 }
@@ -300,12 +292,14 @@ function ToolFallbackResult({
       className={cn("aui-tool-fallback-result", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
+      <p className="aui-tool-fallback-result-header text-ink-mute text-xs font-medium">
         Result:
       </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {formatJsonDump(result)}
-      </pre>
+      <JsonView
+        value={result}
+        slot="tool-fallback-result-json"
+        className="aui-tool-fallback-result-content mt-1"
+      />
     </div>
   );
 }
@@ -324,7 +318,7 @@ function ToolFallbackAttribution({
     <div
       data-slot="tool-fallback-attribution"
       className={cn(
-        "aui-tool-fallback-attribution text-muted-foreground flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs",
+        "aui-tool-fallback-attribution text-ink-mute flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs",
         className,
       )}
       {...props}
@@ -336,13 +330,35 @@ function ToolFallbackAttribution({
           href={attribution.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="aui-tool-fallback-attribution-link text-foreground/90 underline-offset-2 hover:underline"
+          className="aui-tool-fallback-attribution-link text-ink/90 underline-offset-2 hover:underline"
         >
           Open in Gloomberb
         </a>
       ) : null}
     </div>
   );
+}
+
+/** The tool's own error, whole: a string as-is, anything else as JSON. */
+export function toolErrorText(error: unknown): string | null {
+  if (error === undefined || error === null || error === "") return null;
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object") return JSON.stringify(parsed, null, 2);
+    } catch {
+      /* plain text */
+    }
+    return error;
+  }
+  if (error instanceof Error) return error.stack ?? error.message;
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
 }
 
 function ToolFallbackError({
@@ -354,30 +370,34 @@ function ToolFallbackError({
 }) {
   if (status?.type !== "incomplete") return null;
 
-  const error = status.error;
-  const errorText = error
-    ? typeof error === "string"
-      ? error
-      : JSON.stringify(error)
-    : null;
-
+  const errorText = toolErrorText(status.error);
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+  // First line is the headline; the full text (traceback, payload) follows,
+  // folded when it is long. The arguments stay visible above this box.
+  const [firstLine = errorText, ...rest] = errorText.split("\n");
+  const hasMore = rest.some((line) => line.trim());
+  const tone = isCancelled ? "status" : "error";
 
   return (
     <div
+      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className))}
       data-slot="tool-fallback-error"
-      className={cn("aui-tool-fallback-error", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
-        {headerText}
-      </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
+      <ChatNoticeContent
+        tone={tone}
+        title={
+          <>
+            <span className="aui-tool-fallback-error-header">
+              {isCancelled ? "Cancelled: " : "Error: "}
+            </span>
+            <span className="aui-tool-fallback-error-reason">{firstLine}</span>
+          </>
+        }
+        detail={hasMore ? rest.join("\n") : undefined}
+      />
     </div>
   );
 }
@@ -539,7 +559,7 @@ function ToolFallbackApproval({
   const question = isQuestion(approval);
 
   const promptText = approval?.prompt ? (
-    <p className="aui-tool-fallback-approval-prompt text-foreground">
+    <p className="aui-tool-fallback-approval-prompt text-ink">
       {approval.prompt}
     </p>
   ) : null;
@@ -547,7 +567,7 @@ function ToolFallbackApproval({
   const errorText = error ? (
     <p
       role="alert"
-      className="aui-tool-fallback-approval-error text-destructive text-xs"
+      className="aui-tool-fallback-approval-error text-danger text-xs"
     >
       {error}
     </p>
@@ -595,7 +615,7 @@ function ToolFallbackApproval({
           {confirmMeta?.title ?? `${approvalOptionLabel(confirming)}?`}
         </p>
         {confirmDescription && (
-          <p className="aui-tool-fallback-approval-confirm-description text-muted-foreground">
+          <p className="aui-tool-fallback-approval-confirm-description text-ink-mute">
             {confirmDescription}
           </p>
         )}
@@ -603,7 +623,7 @@ function ToolFallbackApproval({
           <ul className="aui-tool-fallback-approval-confirm-grants flex flex-col gap-1">
             {confirming.grants.map((grant) => (
               <li key={grant}>
-                <code className="aui-tool-fallback-approval-confirm-grant bg-muted rounded px-1.5 py-0.5 text-xs">
+                <code className="aui-tool-fallback-approval-confirm-grant bg-surface-2 rounded-none px-1.5 py-0.5 text-xs">
                   {grant}
                 </code>
               </li>
@@ -748,7 +768,17 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   approval,
   respondToApproval,
 }) => {
-  const effectiveStatus = resolveToolStatus(status, isError, result);
+  const outcome = useTurnOutcome();
+  const resolved = resolveToolStatus(status, isError, result);
+  // A call still waiting on a result when the turn was stopped will never
+  // get one: show it cancelled, not "Waiting on tool". A call that waits on
+  // the visitor (approval, interrupt) keeps its controls.
+  const effectiveStatus: ToolCallMessagePartStatus | undefined =
+    outcome === "stopped" &&
+    resolved?.type === "requires-action" &&
+    !offersInterruptAction(resolved, approval, interrupt)
+      ? { type: "incomplete", reason: "cancelled" }
+      : resolved;
   const isCancelled =
     effectiveStatus?.type === "incomplete" &&
     effectiveStatus.reason === "cancelled";
@@ -776,11 +806,12 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
         status={effectiveStatus}
       />
       <ToolFallbackContent>
-        <ToolFallbackError status={effectiveStatus} />
         <ToolFallbackArgs
           argsText={argsText}
           className={cn(isCancelled && "opacity-60")}
         />
+        {/* DIG-4459: the error goes under the arguments, never instead of them. */}
+        <ToolFallbackError status={effectiveStatus} />
         {shouldRenderApproval && (
           <ToolFallbackApproval
             addResult={addResult}

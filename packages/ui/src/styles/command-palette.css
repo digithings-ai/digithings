@@ -30,31 +30,42 @@
 
 @layer components {
   .cp-trigger {
-    margin-top: 1.2rem;
-    width: min(100%, 26rem);
+    /* component tokens — palette trigger geometry */
+    --cp-trigger-top: 1.2rem;
+    --cp-trigger-w: 26rem;
+    --cp-trigger-gap: 1rem;
+    --cp-trigger-pad-block: 0.7rem;
+    --cp-trigger-pad-inline: 0.8rem;
+    --cp-trigger-pad-lead: 1rem;
+    --cp-trigger-font: 0.78rem;
+
+    margin-top: var(--cp-trigger-top);
+    width: min(100%, var(--cp-trigger-w));
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 0.7rem 0.8rem 0.7rem 1rem;
+    gap: var(--cp-trigger-gap);
+    padding: var(--cp-trigger-pad-block) var(--cp-trigger-pad-inline) var(--cp-trigger-pad-block) var(--cp-trigger-pad-lead);
     border: 1px solid var(--hair);
     border-radius: 0;
     background: var(--surface);
     color: var(--ink-mute);
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--cp-trigger-font);
     cursor: pointer;
     transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
   }
 
   .cp-overlay {
+    --cp-overlay-top: 14vh;
+
     position: fixed;
     inset: 0;
     z-index: var(--cp-z, 40);
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding-top: 14vh;
+    padding-top: var(--cp-overlay-top);
   }
 
   .cp-scrim {
@@ -65,9 +76,26 @@
   }
 
   .cp-panel {
+    /* component tokens — panel + row rhythm */
+    --cp-panel-w: 34rem;
+    --cp-panel-max-h: 62vh;
+    --cp-gap: 0.6rem;
+    --cp-row-pad-block: 0.5rem;
+    --cp-row-pad-inline: 0.6rem;
+    --cp-row-font: 0.8rem;
+    --cp-input-font: 0.9rem;
+    --cp-input-row-pad-block: 0.8rem;
+    --cp-input-row-pad-inline: 0.9rem;
+    --cp-results-pad: 0.4rem;
+    --cp-desc-font: 0.62rem;
+    --cp-foot-font: 0.6rem;
+    --cp-kbd-size: 1.15rem;
+    --cp-kbd-font: 0.62rem;
+    --cp-dot: 7px;
+
     position: relative;
-    width: min(92vw, 34rem);
-    max-height: 62vh;
+    width: min(92vw, var(--cp-panel-w));
+    max-height: var(--cp-panel-max-h);
     display: flex;
     flex-direction: column;
     border: 1px solid var(--hair);
@@ -80,8 +108,8 @@
   .cp-input-row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.8rem 0.9rem;
+    gap: var(--cp-gap);
+    padding: var(--cp-input-row-pad-block) var(--cp-input-row-pad-inline);
     border-bottom: 1px solid var(--hair);
   }
 
@@ -96,19 +124,21 @@
     background: transparent;
     color: var(--ink);
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    font-size: var(--cp-input-font);
     outline: none;
   }
 
   .cp-results {
     overflow-y: auto;
-    padding: 0.4rem;
+    padding: var(--cp-results-pad);
   }
 
   .cp-group-label {
-    padding: 0.5rem 0.6rem 0.25rem;
+    --cp-group-font: 0.56rem;
+
+    padding: var(--cp-row-pad-block) var(--cp-row-pad-inline) var(--space-1);
     font-family: var(--font-mono);
-    font-size: 0.56rem;
+    font-size: var(--cp-group-font);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--ink-mute);
@@ -118,14 +148,14 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.5rem 0.6rem;
+    gap: var(--cp-gap);
+    padding: var(--cp-row-pad-block) var(--cp-row-pad-inline);
     border: none;
     border-radius: 0;
     background: transparent;
     color: var(--ink-soft);
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: var(--cp-row-font);
     cursor: pointer;
     text-align: start;
   }
@@ -137,8 +167,8 @@
   }
 
   .cp-dot {
-    width: 7px;
-    height: 7px;
+    width: var(--cp-dot, 7px);
+    height: var(--cp-dot, 7px);
     border-radius: 0;
     flex-shrink: 0;
     background: var(--accent);
@@ -151,7 +181,7 @@
 
   .cp-desc {
     display: block;
-    font-size: 0.62rem;
+    font-size: var(--cp-desc-font);
     color: var(--ink-mute);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -163,36 +193,40 @@
   }
 
   .cp-empty {
-    padding: 1.4rem 0.6rem;
+    padding: var(--cp-empty-pad-block, 1.4rem) var(--cp-row-pad-inline);
     text-align: center;
     color: var(--ink-mute);
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--cp-trigger-font, 0.78rem);
   }
 
   .cp-foot {
+    --cp-foot-gap: 1.2rem;
+
     display: flex;
-    gap: 1.2rem;
-    padding: 0.6rem 0.9rem;
+    gap: var(--cp-foot-gap);
+    padding: var(--cp-row-pad-inline) var(--cp-input-row-pad-inline);
     border-top: 1px solid var(--hair);
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--cp-foot-font);
     color: var(--ink-mute);
   }
 
   .cp-kbd {
+    --cp-kbd-pad: 0.3rem;
+
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.15rem;
-    height: 1.15rem;
-    padding: 0 0.3rem;
+    min-width: var(--cp-kbd-size);
+    height: var(--cp-kbd-size);
+    padding: 0 var(--cp-kbd-pad, 0.3rem);
     border: 1px solid var(--hair);
     border-bottom-width: 2px;
     border-radius: 0;
     background: color-mix(in srgb, var(--ink) 5%, transparent);
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--cp-kbd-font);
     line-height: 1;
     color: var(--ink-soft);
     vertical-align: middle;
@@ -208,9 +242,12 @@
 @layer components {
   .cp-overlay--glass {
     /* shipped: pt-[12vh] px-3 sm:px-4 */
-    padding-top: 12vh;
-    padding-inline-start: 0.75rem;
-    padding-inline-end: 0.75rem;
+    --cp-glass-top: 12vh;
+    --cp-glass-gutter: 0.75rem;
+
+    padding-top: var(--cp-glass-top);
+    padding-inline-start: var(--cp-glass-gutter);
+    padding-inline-end: var(--cp-glass-gutter);
   }
 
   .cp-overlay--glass .cp-scrim {
@@ -221,8 +258,10 @@
 
   .cp-overlay--glass .cp-panel {
     /* shipped: w-full max-w-lg rounded-xl bg-term-bg shadow-2xl shadow-black/50 */
+    --cp-glass-max: 32rem;
+
     width: 100%;
-    max-width: 32rem;
+    max-width: var(--cp-glass-max, 32rem);
     max-height: none;
     border-radius: 0;
     background: var(--term-bg);
@@ -245,14 +284,18 @@
   .cp-overlay--glass .cp-results {
     /* shipped: max-h-[min(52vh,420px)] py-1 (list scrolls, not the panel) */
     max-height: min(52vh, 420px);
-    padding: 0.25rem 0;
+    padding: var(--space-1) 0;
   }
 
   .cp-overlay--glass .cp-row {
     /* shipped: items-start gap-3 px-3 py-2.5 sans text-sm, squared rows */
+    --cp-glass-row-gap: 0.75rem;
+    --cp-glass-row-pad-block: 0.625rem;
+    --cp-glass-row-pad-inline: 0.75rem;
+
     align-items: flex-start;
-    gap: 0.75rem;
-    padding: 0.625rem 0.75rem;
+    gap: var(--cp-glass-row-gap, 0.75rem);
+    padding: var(--cp-glass-row-pad-block, 0.625rem) var(--cp-glass-row-pad-inline, 0.75rem);
     border-radius: 0;
     color: var(--ink);
     font-family: var(--font-sans);
@@ -279,15 +322,17 @@
 
   .cp-overlay--glass .cp-empty {
     /* shipped: px-4 py-8 text-sm */
-    padding: 2rem 1rem;
+    --cp-empty-pad-block: 2rem;
+
+    padding: var(--space-5) var(--space-3);
     font-family: var(--font-sans);
     font-size: 0.875rem;
   }
 
   @media (min-width: 640px) {
     .cp-overlay--glass {
-      padding-inline-start: 1rem;
-      padding-inline-end: 1rem;
+      padding-inline-start: var(--space-3);
+      padding-inline-end: var(--space-3);
     }
   }
 }
@@ -323,5 +368,5 @@
 .cp-foot span {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--cp-kbd-pad, 0.3rem);
 }

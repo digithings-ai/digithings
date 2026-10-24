@@ -30,6 +30,8 @@ vi.mock("@assistant-ui/react", async () => {
   return {
     ...actual,
     useAui: () => aui,
+    useAuiState: (selector: (state: { composer: { text: string } }) => unknown) =>
+      selector({ composer: { text: "" } }),
     unstable_useSlashCommandAdapter: () => ({ adapter: {}, action: {} }),
     unstable_useMentionAdapter: () => ({ adapter: {}, directive: {} }),
   };

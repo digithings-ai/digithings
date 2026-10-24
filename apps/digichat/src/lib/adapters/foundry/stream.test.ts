@@ -5,10 +5,19 @@ import {
   createFoundryStreamResponse,
   applyGroundingDirective,
   FoundryToolLeakFilter,
+  consumeLeakDrop,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
+  capacityRetryDelayMs,
+  isRateLimitFailure,
+  rateLimitHintMs,
+  rateLimitResumeDelayMs,
+  RATE_LIMIT_EXHAUSTED_TEXT,
+  FoundryToolCallCounter,
+  toolCallLimitNotice,
   type FoundryStreamEvent,
   type FoundryConversationItem,
+  type FoundryResponsesCreateBody,
 } from "./stream";
 import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
 
@@ -62,17 +71,158 @@ describe("FoundryToolLeakFilter", () => {
       expect(filter.flush()).toBeNull();
     });
 
+    it("does not emit remote_functions.azure_ai_search({...}) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+      expect(filter.push(call)).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      for (const part of ["remote_functions.azure_ai_search(", '{"query":"Acme"})']) {
+        expect(fragmented.push(part)).toBeNull();
+      }
+      expect(fragmented.flush()).toBeNull();
+      const withAnswer = new FoundryToolLeakFilter();
+      expect(withAnswer.push(`${call}\n\nAcme is the customer.`)).toBe("\n\nAcme is the customer.");
+    });
+
+    it("does not emit (remote search in progress) as answer text", () => {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push("(remote search in progress)")).toBeNull();
+      expect(filter.flush()).toBeNull();
+      const fragmented = new FoundryToolLeakFilter();
+      expect(fragmented.push("(remote")).toBeNull();
+      expect(fragmented.push(" search in progress)")).toBeNull();
+      expect(fragmented.flush()).toBeNull();
+      const cutOff = new FoundryToolLeakFilter();
+      expect(cutOff.push("(remote search")).toBeNull();
+      expect(cutOff.flush()).toBeNull();
+    });
+
     it("a legitimate reply that starts like the leak token but diverges is not truncated", () => {
-      // "(remote work example)" never matches the leak grammar past "(remote" —
-      // isRemoteFunctionsLeakPrefix requires the token to continue with
-      // "_functions" (or close immediately), so " work example)" flushes the
-      // held "(remote" ahead of itself. flush() at the end is a null-op here;
-      // the real assertion is that push() already returned everything.
+      // "(remote work example)" never matches the leak grammar past "(remote":
+      // the call scanner requires "_functions" (or the end of the chunk), so
+      // " work example)" flushes the held "(remote" ahead of itself.
       const filter = new FoundryToolLeakFilter();
       expect(filter.push("(remote")).toBeNull();
       expect(filter.push(" work example)")).toBe("(remote work example)");
       expect(filter.flush()).toBeNull();
     });
+  });
+
+  it("drops back-to-back remote_functions calls in one chunk", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = (query: string) => `remote_functions.azure_ai_search({"query":"${query}"})`;
+    expect(filter.push(`${call("Acme")} ${call("Bob")}`)).toBe(" ");
+    expect(filter.flush()).toBeNull();
+    const glued = new FoundryToolLeakFilter();
+    expect(glued.push(call("Acme") + call("Bob"))).toBeNull();
+    expect(glued.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call that shares a chunk with answer text", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    expect(filter.push(`Let me look that up. ${call}`)).toBe("Let me look that up. ");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("drops a remote_functions call inside a code fence", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    const out = filter.push("```\n" + call + "\n```");
+    expect(out).toBe("```\n\n```");
+    expect(out).not.toContain("remote_functions");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a remote_functions call split across chunks, then drops it", () => {
+    const filter = new FoundryToolLeakFilter();
+    expect(filter.push("Result: remote_functions.azu")).toBe("Result: ");
+    expect(filter.push('re_ai_search({"query":"Acme"}) done')).toBe(" done");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("holds a chunk that ends inside the word remote", () => {
+    for (const partial of ["r", "re", "rem", "remo", "remot", "(r", "(re", "(rem", "(remo", "(remot"]) {
+      const filter = new FoundryToolLeakFilter();
+      expect(filter.push(`Look ${partial}`)).toBe("Look ");
+      expect(filter.flush()).toBe(partial);
+    }
+    expect(new FoundryToolLeakFilter().push("for")).toBe("for");
+    expect(new FoundryToolLeakFilter().push("Look(")).toBe("Look(");
+    const paren = new FoundryToolLeakFilter();
+    expect(paren.push("Look (")).toBe("Look ");
+    expect(paren.flush()).toBe("(");
+    const prose = "Here is the answer (remote work is fine).";
+    for (let i = 1; i < prose.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const out = `${filter.push(prose.slice(0, i)) ?? ""}${filter.push(prose.slice(i)) ?? ""}${filter.flush() ?? ""}`;
+      expect(out, `prose split ${i}`).toBe(prose);
+    }
+  });
+
+  it("drops a wrapped call split at every index, including the opening paren", () => {
+    const text = 'Let me check. (remote_functions.azure_ai_search({"q":1}))';
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("Let me check. ");
+    }
+  });
+
+  it("drops a wrapped call whose closing paren never arrives", () => {
+    const text =
+      'Let me check. (remote_functions.azure_ai_search({"query":"weather"})\n\nThe answer is 5 degrees.';
+    const expected = "Let me check. \n\nThe answer is 5 degrees.";
+    const whole = new FoundryToolLeakFilter();
+    expect(`${whole.push(text) ?? ""}${whole.flush() ?? ""}`).toBe(expected);
+    for (let i = 1; i < text.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(text.slice(0, i));
+      const second = filter.push(text.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe(expected);
+    }
+  });
+
+  it("drops a remote_functions call streamed one character at a time", () => {
+    const filter = new FoundryToolLeakFilter();
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    let out = "";
+    for (const ch of `See ${call} now`) out += filter.push(ch) ?? "";
+    out += filter.flush() ?? "";
+    expect(out).toBe("See  now");
+    expect(out).not.toContain("remote_functions");
+  });
+
+  it("drops every two-way split of a remote_functions call", () => {
+    const call = 'remote_functions.azure_ai_search({"query":"Acme"})';
+    for (let i = 1; i < call.length; i++) {
+      const filter = new FoundryToolLeakFilter();
+      const first = filter.push(call.slice(0, i));
+      const second = filter.push(call.slice(i));
+      const tail = filter.flush();
+      expect(`${first ?? ""}${second ?? ""}${tail ?? ""}`, `split at ${i}`).toBe("");
+    }
+  });
+
+  it("releases an unclosed call as prose once the hold passes 8KB", () => {
+    const filter = new FoundryToolLeakFilter();
+    const open = 'remote_functions.azure_ai_search({"query":"';
+    expect(filter.push(open)).toBeNull();
+    const answer = `${"n".repeat(8 * 1024)} Acme is the customer.`;
+    const released = filter.push(answer);
+    expect(released).toContain("Acme is the customer.");
+    expect(filter.push(" Still here.")).toBe(" Still here.");
+    expect(filter.flush()).toBeNull();
+  });
+
+  it("emits the remainder when a leak drop does not advance", () => {
+    expect(consumeLeakDrop("Seen", " kept", 2, 2)).toEqual({ emit: "Seen kept", rest: null });
+    expect(consumeLeakDrop("", "Answer", 1, 0)).toEqual({ emit: "Answer", rest: null });
+    expect(consumeLeakDrop("Pre ", "Hi there", 0, 3)).toEqual({ emit: "Pre ", rest: "there" });
   });
 });
 
@@ -399,6 +549,83 @@ describe("createFoundryStreamResponse", () => {
     });
   });
 
+  it("surfaces the Responses API token usage and the serving model", async () => {
+    // The context meter reads `metadata.custom.usage`; a Foundry turn has to
+    // carry the real counts or the bar can never be drawn.
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "Hi" },
+      {
+        type: "response.completed",
+        response: {
+          model: "gpt-4o",
+          usage: { input_tokens: 1200, output_tokens: 340, total_tokens: 1540 },
+        },
+      },
+    ]);
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("hello?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain('"type":"message-metadata"');
+    expect(out).toContain('"inputTokens":1200');
+    expect(out).toContain('"outputTokens":340');
+    expect(out).toContain('"totalTokens":1540');
+    expect(out).toContain('"model":"gpt-4o"');
+  });
+
+  it("surfaces a tool-invocation failure instead of the generic outage line", async () => {
+    // What the trial actually produced: the agent called the MCP tool
+    // with a number where the tool wants a string, the MCP refused, and the
+    // response died. The reader must see the tool's complaint, not "the
+    // assistant is unavailable".
+    const client = {
+      conversations: {
+        async create() {
+          return { id: "conv_fail" };
+        },
+      },
+      responses: {
+        async create() {
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: "response.output_item.added",
+                item: { type: "mcp_call", name: "list_collector_reports" },
+              } as unknown as FoundryStreamEvent;
+              throw new Error(
+                "An error occurred invoking 'list_collector_reports': 'pageSize' must be a string, but a number was provided.",
+              );
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("show me the collector reports")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+
+    expect(out).toContain("pageSize");
+    expect(out).toContain("list_collector_reports");
+    // The generic line hid the real reason.
+    expect(out).not.toContain("The assistant is unavailable");
+  });
+
   it("flushes a held leak-prefix instead of silently dropping the tail of a reply", async () => {
     // The final delta ends the stream exactly on an incomplete leak-token
     // prefix ("(remote") — nothing downstream ever disambiguates it, so
@@ -422,6 +649,30 @@ describe("createFoundryStreamResponse", () => {
 
     expect(out).toContain('"delta":"See the "');
     expect(out).toContain('"delta":"(remote"');
+  });
+
+  it("does not stream a raw azure_ai_search tool call or the remote-search placeholder as the answer", async () => {
+    const { client } = fakeClient([
+      { type: "response.output_text.delta", delta: "remote_functions.azure" },
+      { type: "response.output_text.delta", delta: '_ai_search({"query":"Acme"})' },
+      { type: "response.output_text.delta", delta: "(remote search in progress)" },
+      { type: "response.output_text.delta", delta: "Acme is the customer." },
+      { type: "response.completed" },
+    ]);
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("who is Acme?")],
+      conversationId: null,
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+    });
+    const out = await drain(res);
+    expect(out).not.toContain("remote_functions");
+    expect(out).not.toContain("azure_ai_search");
+    expect(out).not.toContain("remote search in progress");
+    expect(out).toContain("Acme is the customer.");
   });
 
   it("flushes a held leak-prefix when the stream exhausts naturally, not just on a done break", async () => {
@@ -1303,5 +1554,749 @@ describe("mapFoundryEvent call_id correlation (#3861)", () => {
     expect(mapFoundryEvent(message, state)).toBeNull();
     // Stateless callers (and native file_search agents) keep the old behavior.
     expect(mapFoundryEvent(message)?.type).toBe("activity");
+  });
+});
+
+describe("capacity retry (#5979)", () => {
+  function flakyClient(failures: number, events: FoundryStreamEvent[], status = 429) {
+    let calls = 0;
+    let conversations = 0;
+    const options: unknown[] = [];
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_429" };
+        },
+      },
+      responses: {
+        async create(_params: unknown, opts?: unknown) {
+          calls += 1;
+          options.push(opts);
+          if (calls <= failures) {
+            const err = new Error(`${status} error`) as Error & { status?: number };
+            err.status = status;
+            throw err;
+          }
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, calls: () => calls, conversations: () => conversations, options };
+  }
+
+  it("waits and resumes when the deployment is throttled, without duplicating text", async () => {
+    const { client, calls, conversations, options } = flakyClient(2, [
+      { type: "response.output_text.delta", delta: "Hello" },
+      { type: "response.output_text.delta", delta: " world" },
+      { type: "response.completed" },
+    ]);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(3);
+    // The waiting state reaches the client twice (one per 429) and is cleared.
+    expect(out.match(/"state":"warming_up"/g)?.length).toBe(2);
+    expect(out).toContain("Waiting for model capacity");
+    expect(out).toContain('"state":"ready"');
+    // The answer is streamed once, not once per retry.
+    expect(out.match(/Hello/g)?.length).toBe(1);
+    // A retry must not mint a second conversation or re-emit its part.
+    expect(conversations()).toBe(1);
+    expect(out.match(/"conversationId"/g)?.length).toBe(1);
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The SDK's own retries must not multiply our schedule.
+    expect(options.map((o) => (o as { maxRetries?: number }).maxRetries)).toEqual([0, 0, 0]);
+  });
+
+  it("gives up after the retry schedule and explains the rate limit", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, []);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    // Initial attempt plus one retry per configured delay.
+    expect(calls()).toBe(3);
+    // DC-18: a rate limit that outlives the retries says so plainly.
+    expect(out).toContain("per-minute token limit");
+    expect(out).not.toContain("The assistant is unavailable right now");
+    // The waiting state must not be left behind: the last connection part is
+    // `ready`, even though the error part follows it.
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not retry a non-capacity error", async () => {
+    const { client, calls } = flakyClient(Number.POSITIVE_INFINITY, [], 400);
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1, 1],
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(out).not.toContain("Waiting for model capacity");
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("delay classification", () => {
+    function throttle(headers: Record<string, string>) {
+      const err = new Error("429") as Error & { status: number; headers: { get(name: string): string | null } };
+      err.status = 429;
+      err.headers = { get: (name) => headers[name] ?? null };
+      return err;
+    }
+
+    it("reads retry-after seconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "7" }), 0, [1])).toBe(7000);
+    });
+
+    it("reads Azure's millisecond headers as milliseconds", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after-ms": "250" }), 0, [1])).toBe(250);
+      expect(capacityRetryDelayMs(throttle({ "x-ms-retry-after-ms": "900" }), 0, [1])).toBe(900);
+    });
+
+    it("falls back to the schedule when no header is present", () => {
+      // Regression: Number(null) === 0 used to win and zero every backoff.
+      expect(capacityRetryDelayMs(throttle({}), 1, [1, 4, 8])).toBe(4);
+    });
+
+    it("caps a hostile retry-after", () => {
+      expect(capacityRetryDelayMs(throttle({ "retry-after": "3600" }), 0, [1])).toBe(30_000);
+    });
+
+    it("does not retry a non-capacity status or a hard quota stop", () => {
+      const notFound = throttle({});
+      notFound.status = 404;
+      expect(capacityRetryDelayMs(notFound, 0, [1])).toBeNull();
+
+      const quota = throttle({}) as Error & { code?: string };
+      quota.code = "insufficient_quota";
+      expect(capacityRetryDelayMs(quota, 0, [1])).toBeNull();
+    });
+  });
+});
+
+describe("mid-stream rate limit resume (DC-18)", () => {
+  const RATE_LIMIT_MESSAGE =
+    "Your requests to gpt-5.6-terra for gpt-5-6-terra in westeurope have exceeded token rate limit.";
+
+  /** Foundry fails the response in-stream, after tool calls already ran. */
+  function failedEvent(message = RATE_LIMIT_MESSAGE, code = "rate_limit_exceeded"): FoundryStreamEvent {
+    return {
+      type: "response.failed",
+      response: { status: "failed", error: { code, message } },
+    } as unknown as FoundryStreamEvent;
+  }
+
+  /** What the openai SDK throws when an SSE payload carries `error`. */
+  function sdkStreamError(message = RATE_LIMIT_MESSAGE) {
+    const err = new Error(message) as Error & { status?: number; code?: string; error?: unknown };
+    err.status = undefined;
+    err.code = "rate_limit_exceeded";
+    err.error = { code: "rate_limit_exceeded", message };
+    return err;
+  }
+
+  type Attempt = FoundryStreamEvent[] | { events: FoundryStreamEvent[]; throwAfter: Error };
+
+  function scriptedClient(attempts: Attempt[]) {
+    const params: Array<{ conversation: string; input?: string; stream: true }> = [];
+    let conversations = 0;
+    const client = {
+      conversations: {
+        async create() {
+          conversations += 1;
+          return { id: "conv_rl" };
+        },
+      },
+      responses: {
+        async create(p: { conversation: string; input?: string; stream: true }) {
+          const attempt = attempts[Math.min(params.length, attempts.length - 1)];
+          params.push({ ...p });
+          const events = Array.isArray(attempt) ? attempt : attempt.events;
+          const throwAfter = Array.isArray(attempt) ? undefined : attempt.throwAfter;
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+              if (throwAfter) throw throwAfter;
+            },
+          };
+        },
+      },
+    } as unknown as OpenAIResponsesClientLike;
+    return { client, params, conversations: () => conversations };
+  }
+
+  const toolCall = (id: string): FoundryStreamEvent[] =>
+    [
+      {
+        type: "response.output_item.added",
+        item: { type: "mcp_call", id, name: "list_collector_reports", arguments: "" },
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "mcp_call",
+          id,
+          name: "list_collector_reports",
+          arguments: '{"jobTypes":"BACKUP","pageSize":"20"}',
+          output: "{}",
+        },
+      },
+    ] as unknown as FoundryStreamEvent[];
+
+  async function run(client: OpenAIResponsesClientLike, delays: readonly number[] = [1, 1, 1]) {
+    return drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "trial-agent",
+        messages: [userMessage("which mailboxes were backed up in the last 3 days")],
+        conversationId: null,
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        capacityRetryDelaysMs: [1],
+        rateLimitResumeDelaysMs: delays,
+      }),
+    );
+  }
+
+  it("waits, shows the notice, and continues the same turn without re-sending the question", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params, conversations } = scriptedClient([
+      [...toolCall("mcp_1"), failedEvent()],
+      [
+        { type: "response.output_text.delta", delta: "30 mailboxes" },
+        { type: "response.completed" },
+      ] as FoundryStreamEvent[],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(2);
+    expect(params[0].input).toContain("which mailboxes were backed up");
+    // The resume continues from the saved tool results: same conversation, no new input.
+    expect(params[1]).toEqual({ conversation: "conv_rl", stream: true });
+    expect(conversations()).toBe(1);
+    expect(out).toContain("Hit the model's per-minute token limit");
+    expect(out).toContain("30 mailboxes");
+    expect(out).not.toContain("The assistant is unavailable right now");
+    expect(out).not.toContain('"type":"error"');
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("resumes when the SDK throws the rate limit while iterating", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params } = scriptedClient([
+      { events: [{ type: "response.output_text.delta", delta: "Checking" }] as FoundryStreamEvent[], throwAfter: sdkStreamError() },
+      [
+        { type: "response.output_text.delta", delta: "done" },
+        { type: "response.completed" },
+      ] as FoundryStreamEvent[],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(2);
+    expect(params[1].input).toBeUndefined();
+    // Text before the limit stays; the continuation starts on a new paragraph.
+    expect(out).toContain("Checking");
+    expect(out).toContain('"delta":"\\n\\ndone"');
+    expect(out).not.toContain("The assistant is unavailable right now");
+  });
+
+  it("gives up after the cap with a clear explanation instead of the generic error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { client, params } = scriptedClient([[failedEvent()]]);
+
+    const out = await run(client, [1, 1, 1]);
+
+    // First attempt plus three resumes.
+    expect(params).toHaveLength(4);
+    expect(out).toContain(JSON.stringify(RATE_LIMIT_EXHAUSTED_TEXT).slice(1, 40));
+    expect(out).not.toContain("The assistant is unavailable right now");
+    const states = [...out.matchAll(/"state":"(warming_up|ready)"/g)].map((m) => m[1]);
+    expect(states.at(-1)).toBe("ready");
+  });
+
+  it("does not resume a non-rate-limit failure", async () => {
+    const { client, params } = scriptedClient([
+      [failedEvent("The server had an error.", "server_error")],
+    ]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(1);
+    expect(out).not.toContain("per-minute token limit");
+  });
+
+  it("does not resume a hard quota stop", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const quota = sdkStreamError("You exceeded your current quota.");
+    (quota as unknown as { code: string }).code = "insufficient_quota";
+    (quota as unknown as { error: unknown }).error = { code: "insufficient_quota", message: quota.message };
+    const { client, params } = scriptedClient([{ events: [], throwAfter: quota }]);
+
+    const out = await run(client);
+
+    expect(params).toHaveLength(1);
+    expect(out).toContain("The assistant is unavailable right now");
+  });
+
+  describe("classification", () => {
+    it("recognises every shape the limit arrives in", () => {
+      expect(isRateLimitFailure(failedEvent())).toBe(true);
+      expect(isRateLimitFailure({ type: "error", code: "rate_limit_exceeded", message: "x" })).toBe(true);
+      expect(isRateLimitFailure(sdkStreamError())).toBe(true);
+      expect(isRateLimitFailure({ status: 429 })).toBe(true);
+      expect(isRateLimitFailure(new Error(RATE_LIMIT_MESSAGE))).toBe(true);
+      expect(isRateLimitFailure(failedEvent("boom", "server_error"))).toBe(false);
+      expect(isRateLimitFailure({ status: 429, code: "insufficient_quota" })).toBe(false);
+    });
+
+    it("maps an in-stream rate-limit failure and leaves other failures alone", () => {
+      expect(mapFoundryEvent(failedEvent())).toEqual({ type: "rate-limit", message: RATE_LIMIT_MESSAGE });
+      expect(mapFoundryEvent(failedEvent("boom", "server_error"))).toBeNull();
+      expect(mapFoundryEvent({ type: "response.error", message: "Bad request" } as unknown as FoundryStreamEvent)).toEqual({
+        type: "error",
+        message: "Bad request",
+      });
+    });
+
+    it("reads the wait from the message text or headers", () => {
+      expect(rateLimitHintMs(new Error("Rate limit exceeded. Please try again in 12 seconds."))).toBe(12_000);
+      expect(rateLimitHintMs(new Error("rate limit reached; retry after 500ms"))).toBe(500);
+      expect(rateLimitHintMs(new Error(RATE_LIMIT_MESSAGE))).toBeNull();
+      const withHeader = Object.assign(new Error("429"), {
+        status: 429,
+        headers: { get: (n: string) => (n === "retry-after" ? "7" : null) },
+      });
+      expect(rateLimitHintMs(withHeader)).toBe(7_000);
+    });
+
+    it("uses the hint (plus margin, capped) or the schedule", () => {
+      const hinted = new Error("Rate limit exceeded. Please try again in 12 seconds.");
+      expect(rateLimitResumeDelayMs(hinted, 0, [30_000])).toBe(13_000);
+      expect(rateLimitResumeDelayMs(new Error("Rate limit exceeded. Try again in 600 seconds."), 0, [1])).toBe(90_000);
+      expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 1, [30_000, 60_000])).toBe(60_000);
+      expect(rateLimitResumeDelayMs(new Error(RATE_LIMIT_MESSAGE), 2, [30_000, 60_000])).toBeNull();
+      expect(rateLimitResumeDelayMs(new Error("nope"), 0, [1])).toBeNull();
+    });
+  });
+});
+
+function mcpEvent(
+  phase: "added" | "done",
+  id: string,
+  name: string,
+): FoundryStreamEvent {
+  return {
+    type: phase === "added" ? "response.output_item.added" : "response.output_item.done",
+    item: {
+      type: "mcp_call",
+      name,
+      call_id: id,
+      status: "completed",
+      output: phase === "done" ? '{"ok":true}' : undefined,
+    },
+  } as FoundryStreamEvent;
+}
+
+describe("FoundryToolCallCounter", () => {
+  it("counts a start and its done once, and ignores search output", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(counter.observe(mcpEvent("added", "c1", "fixture__list"))).toBe("new");
+    expect(counter.observe(mcpEvent("done", "c1", "fixture__list"))).toBe("known");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "azure_ai_search_call_output", call_id: "s1" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "reasoning" },
+      } as FoundryStreamEvent),
+    ).toBe("ignore");
+    expect(counter.observe({ type: "response.file_search_call.in_progress" })).toBe("new");
+    expect(
+      counter.observe({
+        type: "response.output_item.done",
+        item: { type: "file_search_call", call_id: "fs1" },
+      } as FoundryStreamEvent),
+    ).toBe("known");
+    expect(counter.observe({ type: "response.file_search_call.searching" })).toBe("ignore");
+    expect(counter.count).toBe(2);
+  });
+
+  it("counts a done-only call and pairs an id-less start with a later id", () => {
+    const counter = new FoundryToolCallCounter();
+    expect(
+      counter.observe({
+        type: "response.output_item.added",
+        item: { type: "mcp_call", name: "fixture__get" },
+      } as FoundryStreamEvent),
+    ).toBe("new");
+    expect(counter.observe(mcpEvent("done", "late", "fixture__get"))).toBe("known");
+    expect(counter.observe(mcpEvent("done", "only", "fixture__other"))).toBe("new");
+    expect(counter.count).toBe(2);
+  });
+});
+
+describe("createFoundryStreamResponse tool-call cap", () => {
+  function scriptedClient(streams: FoundryStreamEvent[][]) {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          const events = streams[calls.length - 1] ?? [];
+          const signal = options?.signal;
+          return {
+            async *[Symbol.asyncIterator]() {
+              try {
+                for (const event of events) yield event;
+              } finally {
+                // A real SDK abort rejects without setting `name` to
+                // AbortError. Closing the iterator must surface that shape.
+                if (signal?.aborted) throw new Error("request aborted");
+              }
+            },
+          };
+        },
+      },
+    };
+    return { client, calls };
+  }
+
+  function bodyOf(call: unknown): FoundryResponsesCreateBody {
+    return (call as [unknown, { body: FoundryResponsesCreateBody }])[1].body;
+  }
+
+  it("leaves the request uncapped when maxToolCalls is unset", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).toContain('"delta":"Done"');
+    expect(out).not.toContain("data-notice");
+    expect(out).not.toContain("Tool-call limit reached");
+  });
+
+  it("stops at the cap, asks for a final answer, and shows a status notice", async () => {
+    const first = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      mcpEvent("added", "c2", "tool_b"),
+      mcpEvent("done", "c2", "tool_b"),
+      mcpEvent("added", "c3", "tool_c"),
+      mcpEvent("done", "c3", "tool_c"),
+      { type: "response.output_text.delta", delta: "should not stream" },
+    ];
+    const second = [
+      { type: "response.output_text.delta", delta: "From the two results, " },
+      { type: "response.output_text.delta", delta: "the answer is 4." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([first, second]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("how many tables?")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "full",
+        maxToolCalls: 2,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+      tool_choice: "none",
+    });
+    const secondParams = (calls[1] as [{ input?: string }])[0];
+    expect(secondParams.input).toBeUndefined();
+
+    expect(out).toContain("tool_a");
+    expect(out).toContain("tool_b");
+    expect(out).not.toContain("tool_c");
+    expect(out).toContain('"type":"data-notice"');
+    expect(out).toContain(toolCallLimitNotice(2));
+    expect(out).toContain('"tone":"status"');
+    expect(out).toContain("From the two results, ");
+    expect(out).toContain("the answer is 4.");
+    expect(out).not.toContain("should not stream");
+    expect(out).not.toContain('"type":"error"');
+    expect(out).not.toContain("The assistant is unavailable");
+  });
+
+  it("does not notice a turn that finishes under the cap", async () => {
+    const events = [
+      mcpEvent("added", "c1", "tool_a"),
+      mcpEvent("done", "c1", "tool_a"),
+      { type: "response.output_text.delta", delta: "Just one lookup." },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 5,
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0]).max_tool_calls).toBe(5);
+    expect(out).toContain("Just one lookup.");
+    expect(out).not.toContain("data-notice");
+  });
+
+  it("retries without the override when the agent reference rejects it", async () => {
+    const calls: unknown[][] = [];
+    let creates = 0;
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_cap" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          creates += 1;
+          calls.push([params, options]);
+          if (creates === 1) {
+            const err = new Error("Not allowed when agent is specified") as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] =
+            creates === 2
+              ? [
+                  mcpEvent("added", "c1", "tool_a"),
+                  mcpEvent("done", "c1", "tool_a"),
+                  mcpEvent("added", "c2", "tool_b"),
+                  { type: "response.output_text.delta", delta: "partial" },
+                ]
+              : [
+                  { type: "response.output_text.delta", delta: "Final from the instruction." },
+                  { type: "response.completed" },
+                ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_cap",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 1,
+        openAIClientFactory: () => client,
+      }),
+    );
+
+    // First create sends max_tool_calls and is refused. The retry omits it.
+    expect(bodyOf(calls[0])).toMatchObject({ max_tool_calls: 1 });
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    // The follow-up tries tool_choice, is not sent because the override was
+    // already refused, and carries the bracketed instruction instead.
+    expect(bodyOf(calls[2])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+    });
+    expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
+    expect(out).toContain("tool_a");
+    expect(out).not.toContain("tool_b");
+    expect(out).toContain(toolCallLimitNotice(1));
+    expect(out).toContain("Final from the instruction.");
+    expect(out).not.toContain('"type":"error"');
+  });
+
+  it("sends the chat's /effort as reasoning.effort", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 3,
+        reasoningEffort: "high",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 3,
+      reasoning: { effort: "high" },
+    });
+  });
+
+  it("omits reasoning when no /effort is set, so the model keeps its default", async () => {
+    const events = [
+      { type: "response.output_text.delta", delta: "Done" },
+      { type: "response.completed" },
+    ];
+    const { client, calls } = scriptedClient([events]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(bodyOf(calls[0]).reasoning).toBeUndefined();
+  });
+
+  it.each([
+    "Not allowed when agent is specified",
+    "Unsupported value: 'reasoning.effort' does not support 'low' with this model.",
+  ])("drops only the effort when Foundry refuses it: %s", async (refusal) => {
+    const calls: unknown[][] = [];
+    const client: OpenAIResponsesClientLike = {
+      conversations: {
+        async create() {
+          return { id: "conv_effort" };
+        },
+      },
+      responses: {
+        async create(params, options) {
+          calls.push([params, options]);
+          if (options.body.reasoning) {
+            const err = new Error(refusal) as Error & { status?: number };
+            err.status = 400;
+            throw err;
+          }
+          const events: FoundryStreamEvent[] = [
+            { type: "response.output_text.delta", delta: "Answer at the default level." },
+            { type: "response.completed" },
+          ];
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (const event of events) yield event;
+            },
+          };
+        },
+      },
+    };
+    const out = await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "fixture-agent",
+        messages: [userMessage("hi")],
+        conversationId: "conv_effort",
+        responseHeaders: {},
+        activityDetail: "labels",
+        maxToolCalls: 2,
+        reasoningEffort: "low",
+        capacityRetryDelaysMs: [],
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(calls).toHaveLength(2);
+    expect(bodyOf(calls[0])).toMatchObject({ reasoning: { effort: "low" }, max_tool_calls: 2 });
+    // The tool cap survives; only the refused effort is dropped.
+    expect(bodyOf(calls[1])).toEqual({
+      agent_reference: { name: "fixture-agent", type: "agent_reference" },
+      max_tool_calls: 2,
+    });
+    expect(out).toContain("Answer at the default level.");
+    expect(out).not.toContain('"type":"error"');
   });
 });

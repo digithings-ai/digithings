@@ -100,7 +100,7 @@ export default function VariantCommandBar() {
         <Bleed className="border-b border-hair py-[var(--page-step)]">
           <BlockLabel>counted, not asserted</BlockLabel>
           <p className="mt-[0.7rem] mb-0 max-w-[60ch] text-[0.95rem] text-ink-soft">
-            Counted {COUNTS.countedAt} on a clean checkout — {COUNTS.shipping} shipping modules,{" "}
+            Counted {COUNTS.countedAt} on a clean checkout: {COUNTS.shipping} shipping modules,{" "}
             {COUNTS.compose} compose services, {COUNTS.backends} live vector backends,{" "}
             {COUNTS.keysStored} provider keys stored.
           </p>

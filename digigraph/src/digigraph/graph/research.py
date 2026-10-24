@@ -25,6 +25,7 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
+from digigraph.research_brief_models import strip_json_fence
 from digigraph.retrieval import (
     auto_load_notes,
     force_tool_messages,
@@ -45,6 +46,20 @@ LOCKED_SESSION_TOOLS = frozenset(
 )
 
 
+def mcp_failure_note(failures: dict[str, str]) -> str:
+    """The turn note that tells the model an integration is unreachable.
+
+    The server ids only: the reason stays in the log, so a prompt can never
+    carry an internal URL or a token out of a failed call.
+    """
+    ids = ", ".join(sorted(failures))
+    return (
+        f"Unreachable integrations: {ids}. Their tools could not be loaded because the "
+        f"integration did not answer. Say the integration is unavailable. Do not report "
+        f"an absence of data."
+    )
+
+
 def _tool_def_name(tool: object) -> str:
     if isinstance(tool, dict):
         fn = tool.get("function")
@@ -53,6 +68,26 @@ def _tool_def_name(tool: object) -> str:
         if isinstance(tool.get("name"), str):
             return tool["name"]
     return str(getattr(tool, "name", ""))
+
+
+_MAX_CONTINUATIONS = 2
+_CONTINUE_PROMPT = (
+    "Your last message stopped before the answer was complete. Continue now: call "
+    "the tools you still need (skills are loaded with get_skill; ticket data comes "
+    "from the zammad tools), then give the complete final answer."
+)
+_UNFINISHED_TAIL = re.compile(
+    r"(?:\b(?:let me|let's|i will|i'll|i am going to|i'm going to|now i|next,? i|lass mich|ich werde)\b[^.!?]{0,120}|[:,;\-\u2014])\s*$",
+    re.IGNORECASE,
+)
+
+
+def answer_looks_unfinished(content: str | None) -> bool:
+    """True for an answer that ends mid-intent (e.g. a trailing "Let me")."""
+    text = (content or "").strip()
+    if not text:
+        return True
+    return bool(_UNFINISHED_TAIL.search(text[-200:]))
 
 
 def _safe_stream_writer() -> StreamWriter:
@@ -116,14 +151,9 @@ def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
     return out or None
 
 
-def _strip_json_fence_llm(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
-
-
 def _parse_llm_json_object(content: str) -> dict[str, Any]:
     """Parse one JSON object from model output; allow fences, preamble, or trailing text."""
-    s = _strip_json_fence_llm(content)
+    s = strip_json_fence(content)
     decoder = json.JSONDecoder()
     try:
         obj, _ = decoder.raw_decode(s)
@@ -416,6 +446,7 @@ def _run_document_rag_path(
     from digigraph.orchestration.mcp_client import (
         expand_mcp_disabled_tokens,
         extra_tool_names_for_servers,
+        mcp_server_failures,
         resolve_mcp_force_id,
     )
 
@@ -436,9 +467,43 @@ def _run_document_rag_path(
             disabled_extra,
             enable_web_search=bool(state.get("enable_web_search")),
         )
+    # A server that could not be listed is not a server with no tools. The
+    # difference has to reach the model, or an outage is answered as an
+    # absence of data (DIG-5187).
+    mcp_failures = mcp_server_failures(mcp_servers) if mcp_servers else {}
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
+    # Dedicated per-index search tools (DIG-3269): when the tenant map names them,
+    # the model picks which corpus to search by picking the tool. The generic
+    # digisearch tools (which fan out over the tenant index) are hidden, and each
+    # dedicated tool is bound server-side to exactly one index.
+    tenant_search_tools = _tenant_digisearch_tools(state.get("digisearch_tools"))
+    # Per-tool session toggles (X-Digi-Disabled-Tools) name dedicated tenant
+    # search tools exactly; a disabled one is never offered.
+    _session_disabled = {
+        str(t).strip().lower() for t in (state.get("disabled_tools") or []) if str(t).strip()
+    }
+    if tenant_search_tools:
+        _had_search = any(
+            _tool_def_name(t) in ("digisearch", "digisearch_fetch_all") for t in tools_for_llm
+        )
+        tools_for_llm = [
+            t
+            for t in tools_for_llm
+            if _tool_def_name(t) not in ("digisearch", "digisearch_fetch_all")
+        ]
+        if _session_disabled:
+            tenant_search_tools = {
+                k: v for k, v in tenant_search_tools.items() if k.lower() not in _session_disabled
+            }
+        if _had_search:
+            tools_for_llm = [
+                *(_tenant_search_schema(n, s) for n, s in tenant_search_tools.items()),
+                *tools_for_llm,
+            ]
+        else:
+            tenant_search_tools = {}
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
 
@@ -451,10 +516,15 @@ def _run_document_rag_path(
             and data.get("name") in ("digisearch", "digisearch_fetch_all")
         ):
             data = {**data, "index_name": index_display_name}
+        elif event_type == "tool_call" and data and data.get("name") in tenant_search_tools:
+            data = {**data, "index_name": tenant_search_tools[data["name"]]["index"]}
         writer((event_type, data))
 
     def execute_one(name: str, args: dict) -> str | dict:
-        result = execute(name, args, context)
+        if name in tenant_search_tools:
+            result = _run_tenant_search_tool(tenant_search_tools[name]["index"], args, context)
+        else:
+            result = execute(name, args, context)
         if isinstance(result, dict) and result.get("stored_dataset_profile"):
             p = result["stored_dataset_profile"]
             if isinstance(p, dict) and p.get("ref"):
@@ -496,6 +566,8 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
+    if mcp_failures:
+        user_content = mcp_failure_note(mcp_failures) + "\n\n" + user_content
     if mcp_force:
         # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
         # the trailing separator is the id boundary, not the retired ``__`` form.
@@ -609,7 +681,27 @@ def _run_document_rag_path(
         tool_choice="auto"
         if forced
         else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
+        reasoning_effort=state.get("effort"),
     )
+    # A turn that stops mid-intent ("... Let me") after a tool error is not an
+    # answer: give the model up to two more tool-enabled passes to finish it
+    # (DIG-1210). The streamed prefix stays; the continuation appends to it.
+    for _ in range(_MAX_CONTINUATIONS):
+        if not answer_looks_unfinished(content):
+            break
+        llm_messages.append({"role": "assistant", "content": content})
+        llm_messages.append({"role": "user", "content": _CONTINUE_PROMPT})
+        more = run_tools(
+            model=get_model_for_mode(),
+            messages=llm_messages,
+            tools=tools_for_llm,
+            execute_tool=execute_search,
+            max_tool_rounds=4,
+            on_tool_step=stream_callback,
+            tool_choice="auto",
+            reasoning_effort=state.get("effort"),
+        )
+        content = f"{content}{more}" if more else content
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
     plan = state.get("plan") if isinstance(state.get("plan"), list) else None
@@ -742,6 +834,59 @@ def _run_quant_or_augmented_path(
     except Exception as e:
         err_msg, err_code, err_detail = _user_facing_llm_error(e)
         return _research_fail(err_msg, code=err_code, detail=err_detail)
+
+
+def _tenant_digisearch_tools(raw: Any) -> dict[str, dict[str, str]]:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(n): {"index": str(s["index"]), "description": str(s["description"])}
+        for n, s in raw.items()
+        if isinstance(s, dict) and s.get("index") and s.get("description")
+    }
+
+
+def _tenant_search_schema(name: str, spec: dict[str, str]) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": spec["description"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to look for, in any language.",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "How many results to return (default 5, max 20).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _run_tenant_search_tool(index: str, args: dict, context: Any) -> str | dict:
+    """Run digisearch against exactly one tenant-configured index (DIG-3269).
+
+    The index comes from the tenant map, never from the model: a model-supplied
+    ``index_name`` is overwritten by ``_handle_digisearch`` from the bound context.
+    """
+    import dataclasses
+
+    from digigraph.orchestration.digisearch_tools import _handle_digisearch
+
+    if context.allowed_tool_names is not None and "digisearch" not in context.allowed_tool_names:
+        return "Tool not allowed for this session."
+    clean = {"query": args.get("query", "")}
+    top_k = args.get("top_k")
+    if isinstance(top_k, int) and top_k > 0:
+        clean["top_k"] = min(top_k, 20)
+    return _handle_digisearch(clean, dataclasses.replace(context, index_name=index))
 
 
 def research_node(state: WorkflowState) -> dict:

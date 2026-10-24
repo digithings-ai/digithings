@@ -26,6 +26,7 @@ import ast
 import importlib.util
 import inspect
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -809,6 +810,262 @@ def test_the_batch_query_asks_for_the_review_authors_typename(
     assert "reviews(last: 80) { nodes { state author { login __typename } } }" in query
 
 
+def test_the_batch_query_asks_for_the_contexts_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin the one query form GitHub accepts.
+
+    `StatusCheckRollup` is an OBJECT with the fields `commit`, `contexts`,
+    `id` and `state`; it has no `nodes` field (`undefinedField, fieldName
+    nodes, typeName StatusCheckRollup`). Its `contexts` field is a
+    `StatusCheckRollupContextConnection` whose `nodes` are the union
+    `StatusCheckRollupContext = CheckRun | StatusContext`, so the query must
+    ask for `contexts(first: N) { nodes { ... } }` and spread the fragments
+    inside `nodes`. Both wrong forms shipped at some point and neither was
+    caught, because a rejected query exits 1 and the REST fallback answered
+    in its place.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    query = " ".join(crc._pr_batch_query([1894]).split())
+    assert "statusCheckRollup {" in query
+    assert "contexts(first: 100) { nodes {" in query
+    assert "statusCheckRollup { nodes" not in query
+    # A bare `contexts {` has no pagination boundary, and the fragments cannot
+    # be spread on the connection itself -- both are `undefinedField` /
+    # `cannotSpreadFragment` at GitHub.
+    assert "contexts {" not in query
+
+
+def test_the_parsed_check_list_is_not_empty_for_a_pr_with_a_known_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reader must find the checks GitHub actually sends.
+
+    `statusCheckRollup` is an object whose `contexts` connection carries the
+    checks. Reading `nodes` off the object returns an empty list for every
+    real PR, so the bot-check arms could never fire -- and the old fixture
+    agreed with the broken reader, so no test noticed. This is the check that
+    was missing: a PR with a known check must yield a NON-EMPTY list.
+
+    It is asserted through the PUBLIC path (`prefetch_pr_states` -> the state
+    it caches), not through a private helper name: a test pinned to a helper
+    that the next refactor renames fails for a typo reason, not a behaviour
+    reason, and says nothing about the gate.
+    """
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        return {
+            "data": {
+                "repository": {
+                    "p6047": _graphql_pr(
+                        number=6047,
+                        checks=[
+                            {"name": "CodeRabbit", "conclusion": "SUCCESS"},
+                            {"context": "local-ci", "state": "PENDING"},
+                        ],
+                    )
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([6047], cache, invalid)
+    assert 6047 in cache, "the PR must not be reported as invalid"
+    checks = cache[6047]["checks"]
+    assert checks, "the parsed check list must not be empty for a PR with a known check"
+    assert {c.get("name") or c.get("context") for c in checks} == {"CodeRabbit", "local-ci"}
+
+
+def test_the_bot_check_arms_fire_off_a_graphql_pr() -> None:
+    """Arm 1 (Bugbot) and arm 3 (CodeRabbit / Claude) must clear the gate
+    through the GraphQL path — not only through the REST fallback."""
+    bugbot = crc.state_from_graphql_pr(
+        _graphql_pr(checks=[{"name": "Cursor Bugbot", "conclusion": "SUCCESS"}])
+    )
+    reviewed, why = crc.verdict_for(bugbot)
+    assert reviewed, why
+    assert "Cursor Bugbot completed" in why
+
+    coderabbit = crc.state_from_graphql_pr(
+        _graphql_pr(checks=[{"name": "CodeRabbit", "conclusion": "SUCCESS"}])
+    )
+    reviewed, why = crc.verdict_for(coderabbit)
+    assert reviewed, why
+    assert "agent review by CodeRabbit" in why
+
+
+def test_a_rejected_graphql_query_is_reported_and_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A query GitHub rejects must not vanish.
+
+    `gh api graphql` exits 1 when the response carries errors, so a broken
+    query used to raise, fall back to REST, and leave the caller none the
+    wiser -- while printing one error line per alias of the rejected chunk
+    (25 for a 25-alias chunk) that nobody read. The fallback stays; it now
+    says so, once, naming the cause.
+
+    This test drives the diagnostic from a synthetic exception. The capture
+    itself, and the real `_gh_graphql`, are covered by
+    `test_the_graphql_stderr_is_captured_not_inherited`.
+    """
+
+    def boom(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        raise subprocess.CalledProcessError(
+            1,
+            ["gh", "api", "graphql"],
+            "",
+            "gh: Field 'nodes' doesn't exist on type 'StatusCheckRollup'",
+        )
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", boom)
+    monkeypatch.setattr(
+        crc,
+        "_pr_review_state",
+        lambda number: {
+            "labels": set(),
+            "approvals": [],
+            "bugbot": None,
+            "title": "",
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        },
+    )
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894], cache, invalid)
+    assert 1894 in cache, "the REST fallback must still answer"
+    err = capsys.readouterr().err
+    assert "GraphQL" in err
+    assert "doesn't exist on type 'StatusCheckRollup'" in err
+
+
+_REJECTED_QUERY_STDERR = "gh: Field 'nodes' doesn't exist on type 'StatusCheckRollup'"
+
+
+def _gh_that_rejects_graphql(tmp_path: Path) -> Path:
+    """A `gh` stub that rejects a GraphQL query the way GitHub does.
+
+    It writes to stderr and exits non-zero, which is exactly how `gh api
+    graphql` reports a query the schema refuses. The stub is a real program
+    on the PATH, so the test exercises the real `subprocess.run` -- a
+    monkeypatched `subprocess.run` would only prove that the fake it was
+    handed behaves as the fake behaves.
+    """
+    stub = tmp_path / "gh"
+    stub.write_text(f"#!/bin/sh\necho \"{_REJECTED_QUERY_STDERR}\" >&2\nexit 1\n")
+    stub.chmod(0o755)
+    return stub
+
+
+def test_the_graphql_stderr_is_captured_not_inherited(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The capture is the point of this change, so it needs a test of its own.
+
+    Every other test in this file monkeypatched `_gh_graphql` wholesale, so
+    `subprocess.run(..., capture_output=True)` never ran: reverting
+    `_gh_graphql` to the form it had before this change left the suite
+    byte-identical. This one lets the REAL `_gh_graphql` run against a `gh`
+    stub that rejects the query, and pins three things:
+
+    - the stderr is CAPTURED, so it never reaches the terminal;
+    - it rides on the exception, where the fallback can name it;
+    - the exception names the command that failed, `gh` included.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(subprocess.CalledProcessError) as caught:
+        crc._gh_graphql("query { repository { pullRequest { number } } }")
+
+    error = caught.value
+    assert _REJECTED_QUERY_STDERR in (error.stderr or "")
+    assert error.cmd[0] == "gh", "the failing command must name gh"
+    assert error.returncode == 1
+    assert _REJECTED_QUERY_STDERR not in capfd.readouterr().err, (
+        "the stderr must be captured, not printed to the terminal"
+    )
+
+
+def test_a_rejected_query_names_the_cause_once_end_to_end(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The real `_gh_graphql`, the real fallback, one line naming the cause.
+
+    The point of the capture is that a human reading the log learns WHY the
+    gate fell back to REST. So the whole path runs: the real `_gh_graphql`
+    against a `gh` stub that rejects the query, the fallback, and the
+    diagnostic -- which must name the cause exactly once, not once per alias
+    and not once per chunk.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_pr_review_state",
+        lambda number: {
+            "labels": set(),
+            "approvals": [],
+            "bugbot": None,
+            "title": "",
+            "owner_review": None,
+            "agent_tool": [],
+            "agent_review": None,
+        },
+    )
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894], cache, invalid)
+    assert 1894 in cache, "the REST fallback must still answer"
+
+    err = capfd.readouterr().err
+    assert err.count("the batched GraphQL query failed") == 1, (
+        f"the fallback must say so once, not once per alias: {err!r}"
+    )
+    assert _REJECTED_QUERY_STDERR in err
+
+
+def test_the_commit_lookup_fallback_names_the_cause_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The commit-lookup fallback has to say so too, and only once.
+
+    `prefetch_associated_prs` is the second GraphQL path, and its fallback
+    was just as silent as the first one. It now names the cause, once, for
+    the whole call -- the chunk loop is inside one try, so one rejected chunk
+    is one line.
+    """
+    _gh_that_rejects_graphql(tmp_path)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "associated_pr_number", lambda sha: None)
+
+    found = crc.prefetch_associated_prs(["a" * 40, "b" * 40])
+    assert found == {"a" * 40: None, "b" * 40: None}
+
+    err = capfd.readouterr().err
+    assert err.count("the batched GraphQL commit lookup failed") == 1, (
+        f"the fallback must say so once for the whole call: {err!r}"
+    )
+    assert _REJECTED_QUERY_STDERR in err
+
+
 def test_a_persons_approval_survives_the_bot_rule() -> None:
     """The rule exists to refuse bots, never to doubt a person: `is_bot: false`
     (what `gh` sends for every human account) keeps the approval countable."""
@@ -898,6 +1155,14 @@ def _graphql_pr(
     checks: list[dict[str, Any]] | None = None,
     labeled: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """A pullRequest node in GitHub's REAL shape.
+
+    `statusCheckRollup` is an object whose `contexts` connection carries the
+    checks, so the payload nests them under `contexts.nodes`. A flat list
+    under `contexts` is a shape GitHub never sends -- and it is exactly the
+    shape the old fixture used, which is why the broken query went unnoticed:
+    the fixture agreed with the reader even when the query could not run.
+    """
     return {
         "number": number,
         "title": title,
@@ -910,7 +1175,7 @@ def _graphql_pr(
                 {
                     "commit": {
                         "statusCheckRollup": {
-                            "contexts": checks or [],
+                            "contexts": {"nodes": checks or []},
                         }
                     }
                 }

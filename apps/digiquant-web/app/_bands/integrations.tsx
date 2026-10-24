@@ -1,11 +1,5 @@
 import { CtaLink, Marquee } from "@digithings/ui";
-import {
-  IntegrationMark,
-  RowMark,
-  integrationHref,
-  type IntegrationId,
-  type RowProviderId,
-} from "@/components/integrations/marks";
+import { IntegrationMark, integrationHref, RowMark, type IntegrationId, type RowProviderId } from "@/components/integrations/marks";
 import { Band } from "../_chrome/Band";
 import PROVIDERS from "./integrations.providers.json";
 

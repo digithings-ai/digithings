@@ -25,64 +25,8 @@ from digiquant.data.prices.r2_history import (  # noqa: E402
 )
 from digiquant.ops.checkpoint_archive import ArchiveVerifyError  # noqa: E402
 
-
-class FakeR2:
-    """In-memory StorageBackend double."""
-
-    def __init__(self) -> None:
-        self.objects: dict[str, bytes] = {}
-        self.puts: list[str] = []
-
-    def put(self, key: str, data: bytes) -> None:
-        self.objects[key] = bytes(data)
-        self.puts.append(key)
-
-    def get(self, key: str) -> bytes:
-        return bytes(self.objects[key])
-
-    def delete(self, key: str) -> None:
-        del self.objects[key]
-
-    def list_keys(self, prefix: str) -> list[str]:
-        return sorted(k for k in self.objects if k.startswith(prefix))
-
-
-class FakeRegistry:
-    """archive_objects double mirroring _insert_pointer idempotency."""
-
-    def __init__(self) -> None:
-        self.rows: list[dict[str, Any]] = []
-
-    def __call__(
-        self,
-        source_table: str,
-        source_key: dict[str, Any],
-        r2_key: str,
-        sha256: str,
-        size: int,
-    ) -> None:
-        for row in self.rows:
-            if row["r2_key"] == r2_key:
-                if row["sha256"] == sha256:
-                    return
-                raise ArchiveVerifyError(
-                    f"archive pointer conflict for {r2_key}: registry row kept"
-                )
-        self.rows.append(
-            {
-                "source_table": source_table,
-                "source_key": dict(source_key),
-                "r2_key": r2_key,
-                "sha256": sha256,
-                "size": size,
-            }
-        )
-
-    def lookup(self, r2_key: str) -> str | None:
-        for row in self.rows:
-            if row["r2_key"] == r2_key:
-                return str(row["sha256"])
-        return None
+# The R2 and registry doubles live with the base r2_history tests: one fake, one place.
+from tests.dq.data.test_r2_history import FakeR2, FakeRegistry  # noqa: E402
 
 
 @pytest.fixture
@@ -208,4 +152,6 @@ def test_macro_put_restatement(fakes: Any) -> None:
 
 
 def test_digest_helper_matches_store() -> None:
-    assert _digest(b"x") == hashlib.sha256(b"x").hexdigest()
+    # Known-answer vectors (cross-checked with sha256sum(1), not hashlib).
+    assert _digest(b"x") == "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    assert _digest(b"") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

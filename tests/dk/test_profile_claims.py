@@ -20,7 +20,6 @@ if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
     os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
 
 import digikey.db as digikey_db
-from digikey.db import init_db, session_factory
 from digikey.jwt_issue import issue_access_token
 from digikey.jwt_verify import decode_token
 from digikey.profile_pointer import (
@@ -44,7 +43,7 @@ def digikey_db_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("DIGIKEY_AUDIENCE", "digi-ecosystem")
     digikey_db._engine = None
     digikey_db._session_factory = None
-    init_db()
+    digikey_db.init_db()
 
 
 @pytest.fixture()
@@ -112,7 +111,7 @@ def test_issue_includes_paired_profile_claims(key_setup, monkeypatch):
 
 def test_claim_present_after_profile_create(digikey_db_env: None) -> None:
     subject = "user-alice"
-    sf = session_factory()
+    sf = digikey_db.session_factory()
     with sf() as session:
         pointer = create_profile_pointer(session, subject=subject, tenant_slug="acme")
         session.commit()
@@ -138,7 +137,7 @@ def test_claim_present_after_profile_create(digikey_db_env: None) -> None:
 
 def test_claim_bumps_on_profile_update(digikey_db_env: None) -> None:
     subject = "user-bob"
-    sf = session_factory()
+    sf = digikey_db.session_factory()
     with sf() as session:
         pointer = create_profile_pointer(session, subject=subject, tenant_slug="acme")
         session.commit()

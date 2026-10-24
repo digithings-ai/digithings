@@ -16,6 +16,7 @@
  * Spec: docs/superpowers/specs/2026-08-01-digichat-activity-protocol-design.md
  */
 
+import { isRecord } from "@digithings/ui/lib/record";
 import type { DigiChatActivity } from "@digithings/digichat-ui";
 import type { UIMessage } from "ai";
 
@@ -46,6 +47,14 @@ export type ActivityDetail = "off" | "labels" | "full";
 export type ActivityDocument = {
   title: string;
   path: string;
+  /**
+   * An opaque handle token for this document (`doc-<16 hex>`), derived from
+   * the source's own per-document id. Identity only — it is never rendered.
+   * A path names a location, not a document, so one document that surfaces
+   * through two locations (a web URL and a vault path) can only be recognised
+   * as one document by its handle. See `src/lib/document-identity.ts`.
+   */
+  docId?: string;
   tier?: string;
   year?: number;
   snippet?: string;
@@ -236,6 +245,15 @@ function toolResult(
   return out;
 }
 
+/**
+ * The shape of an opaque document handle token (`doc-<16 hex>`).
+ *
+ * The activity payload is client facing, so only a token of this shape may
+ * travel in it: a raw source id would expose a vault identifier to the
+ * browser. Anything that does not look like a token is dropped.
+ */
+const DOC_HANDLE_RE = /^doc-[0-9a-f]{16}$/;
+
 function documents(value: unknown): ActivityDocument[] | undefined {  if (!Array.isArray(value)) return undefined;
   const out: ActivityDocument[] = [];
   for (const entry of value) {
@@ -245,6 +263,8 @@ function documents(value: unknown): ActivityDocument[] | undefined {  if (!Array
     const path = str(record.path, MAX_DOC_FIELD_CHARS);
     if (!title || !path) continue;
     const doc: ActivityDocument = { title, path };
+    const docId = str(record.docId, MAX_DOC_FIELD_CHARS);
+    if (docId && DOC_HANDLE_RE.test(docId)) doc.docId = docId;
     const tier = str(record.tier, MAX_DOC_FIELD_CHARS);
     if (tier) doc.tier = tier;
     if (typeof record.year === "number" && Number.isFinite(record.year)) {
@@ -392,10 +412,6 @@ export function chatActivitySpan(
 
 const KEY_SEP = "\x1f";
 const toolKey = (name: string, query: string) => `${name}${KEY_SEP}${query}`;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
 
 /**
  * Rebuild ActivitySpan[] from 2.0 standard UI parts (tool / source / reasoning /

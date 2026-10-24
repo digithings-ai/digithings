@@ -61,7 +61,7 @@ Three verified negatives, as of 2026-10-06:
 
 GitHub's own Private Information Removal Policy says, under *"Ask Nicely First"*: *"They may have listed contact information on their public profile page or in the repository's README or Support file, or you could get in touch by creating an issue or pull request in the repository."* All three of those channels are available to us **except** the first two, which do not exist.
 
-One of them does contain an address: both forks carry our own `SECURITY.md`, which lists **`dany.stefan@matador.ai`** and instructs reporters **not** to open a public issue. That address is ours, not theirs, so it is not a route *to* them — and using a public issue as the channel would contradict the instruction in our own file.
+One of them does contain an address: both forks carry our own `SECURITY.md`, which lists a contact address and instructs reporters **not** to open a public issue. That address is ours, not theirs, so it is not a route *to* them — and using a public issue as the channel would contradict the instruction in our own file.
 
 **Routes, in order:**
 

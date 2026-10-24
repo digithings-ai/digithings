@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRefreshGeneration } from "../app-settings-store";
-import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
-import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { attributionBody } from "../../../../../clients/digiquant-tui/src/pages/attribution-format";
-import { holdingsBody } from "../../../../../clients/digiquant-tui/src/pages/holdings-format";
-import { ledgerBody } from "../../../../../clients/digiquant-tui/src/pages/ledger-format";
-import { portfolioBody } from "../../../../../clients/digiquant-tui/src/pages/portfolio-format";
-import { tearsheetBody } from "../../../../../clients/digiquant-tui/src/pages/tearsheet-format";
-import { thesesBody } from "../../../../../clients/digiquant-tui/src/pages/theses-format";
-import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { BLOCKS, layoutFor, type BlockKind } from "digiquant-tui/catalog";
+import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "digiquant-tui/read";
+import { attributionBody } from "digiquant-tui/pages/attribution-format";
+import { holdingsBody } from "digiquant-tui/pages/holdings-format";
+import { ledgerBody } from "digiquant-tui/pages/ledger-format";
+import { portfolioBody } from "digiquant-tui/pages/portfolio-format";
+import { tearsheetBody } from "digiquant-tui/pages/tearsheet-format";
+import { thesesBody } from "digiquant-tui/pages/theses-format";
+import { shapeLines, type PaneBody } from "digiquant-tui/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
+import { BenchmarksBlock } from "../blocks/benchmarks";
+import { CashLedgerBlock } from "../blocks/cash-ledger";
+import { NavSeriesBlock } from "../blocks/nav-series";
+import { PanelView } from "../panel-view";
 import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
@@ -365,12 +369,50 @@ export function AttributionPage() {
   return <AttributionHome />;
 }
 
-/** `/portfolio/ledger` only. Later portfolio pages stay on the line read. */
+/** The ledger mosaic, painted from reads. Exported so the panes can be rendered with a payload and no fetch. */
+export function LedgerPanes({ reads }: { reads: Record<string, OfficialRead> }) {
+  const path = "/portfolio/ledger";
+  const layout = layoutFor(path);
+  const { mount, style, pane } = useDeskMosaic(layout);
+
+  return (
+    <div ref={mount} className={PANE_MOSAIC}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paintLedger(placement.id, reads[placement.id]);
+        const read = reads[placement.id];
+        return (
+          <div
+            key={placement.id}
+            className={DESK_TILE}
+            style={style(placement.id)}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              dataAsOf={view.dataAsOf}
+              blocks={view.blocks}
+              body={placement.id === "cash" ? (
+                <PanelView id={placement.id} title={def.title} data={read?.data}>
+                  <CashLedgerBlock read={read?.result} data={read?.data} />
+                </PanelView>
+              ) : undefined}
+              tone={tone[view.status]}
+              {...pane(placement.id)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** `/portfolio/ledger` only. */
 function LedgerHome() {
   const path = "/portfolio/ledger";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
-  const layout = layoutFor(path);
-  const { mount, style, pane } = useDeskMosaic(layout);
   const refresh = useRefreshGeneration();
 
   useEffect(() => {
@@ -391,32 +433,7 @@ function LedgerHome() {
     };
   }, [refresh]);
 
-  return (
-    <div ref={mount} className={PANE_MOSAIC}>
-      {layout.map((placement) => {
-        const def = BLOCKS[placement.id];
-        if (!def) return null;
-        const view = paintLedger(placement.id, reads[placement.id]);
-        return (
-          <div
-            key={placement.id}
-            className={DESK_TILE}
-            style={style(placement.id)}
-          >
-            <DeskPane
-              title={def.title}
-              route={def.route}
-              asOf={view.asOf}
-              dataAsOf={view.dataAsOf}
-              blocks={view.blocks}
-              tone={tone[view.status]}
-              {...pane(placement.id)}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <LedgerPanes reads={reads} />;
 }
 
 function paintLedger(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
@@ -434,12 +451,58 @@ export function LedgerPage() {
   return <LedgerHome />;
 }
 
+/** The two tearsheet panes that paint a block: the tile still sizes from its PaneBody. */
+const BLOCK_PANES = new Set(["navtable", "benchmarks"]);
+
+/** The mosaic, painted from reads. Exported so the panes can be rendered with a payload and no fetch. */
+export function TearsheetPanes({ reads }: { reads: Record<string, OfficialRead> }) {
+  const layout = layoutFor("/portfolio/tearsheet");
+  const { mount, style, pane } = useDeskMosaic(layout);
+
+  return (
+    <div ref={mount} className={PANE_MOSAIC}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const read = reads[placement.id];
+        const view = paintTearsheet(placement.id, read);
+        const block = BLOCK_PANES.has(placement.id);
+        return (
+          <div
+            key={placement.id}
+            className={DESK_TILE}
+            style={style(placement.id)}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              dataAsOf={view.dataAsOf}
+              blocks={view.blocks}
+              body={block ? (
+                <PanelView id={placement.id} title={def.title} data={read?.data}>
+                  {placement.id === "navtable" ? (
+                    <NavSeriesBlock read={read?.result} data={read?.data} />
+                  ) : (
+                    <BenchmarksBlock read={read?.result} data={read?.data} />
+                  )}
+                </PanelView>
+              ) : undefined}
+              tone={tone[view.status]}
+              {...pane(placement.id)}
+              panel={!block && view.status === "ok" ? { id: placement.id, data: read?.data } : undefined}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** `/portfolio/tearsheet` only. `/performance` stays on the line read. */
 function TearsheetHome() {
   const path = "/portfolio/tearsheet";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
-  const layout = layoutFor(path);
-  const { mount, style, pane } = useDeskMosaic(layout);
   const refresh = useRefreshGeneration();
 
   useEffect(() => {
@@ -460,33 +523,7 @@ function TearsheetHome() {
     };
   }, [refresh]);
 
-  return (
-    <div ref={mount} className={PANE_MOSAIC}>
-      {layout.map((placement) => {
-        const def = BLOCKS[placement.id];
-        if (!def) return null;
-        const view = paintTearsheet(placement.id, reads[placement.id]);
-        return (
-          <div
-            key={placement.id}
-            className={DESK_TILE}
-            style={style(placement.id)}
-          >
-            <DeskPane
-              title={def.title}
-              route={def.route}
-              asOf={view.asOf}
-              dataAsOf={view.dataAsOf}
-              blocks={view.blocks}
-              tone={tone[view.status]}
-              {...pane(placement.id)}
-              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <TearsheetPanes reads={reads} />;
 }
 
 function paintTearsheet(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {

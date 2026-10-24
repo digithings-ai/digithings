@@ -11,9 +11,10 @@ import { HeroBanner } from "@digithings/hero-banner/web";
  *  rather than the definition's streaming LIVE pass. Reduced motion paints
  *  the settled mark with no scramble (inside `HeroBanner`, not in CSS). The
  *  fixed 140x20 box preserves the replaced SVG's intrinsic size (70x10 units
- *  at cell 2); the `span` keeps both callers' `<span>` nesting valid. SSR
- *  emits an empty canvas (paint is effect-only) where the old SVG carried
- *  settled pixels — first paint needs JS. */
+ *  at cell 2); the `span` keeps both callers' `<span>` nesting valid. The
+ *  server render and a no-JS page show the settled mark: `HeroBanner`
+ *  renders it as a CSS mask over the mark's colour, so the canvas is never an
+ *  empty box before it paints. */
 export function DigichatWordmark() {
   return (
     <span className="digichat-wordmark" style={{ display: "inline-block", width: 140, height: 20 }}>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseSlashInput, slashHelpText } from "@digithings/digichat-ui";
+import { slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
@@ -31,6 +31,9 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
+    setDensity: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -57,6 +60,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openEffort: vi.fn(),
     openSearchEngine: vi.fn(),
     openView: vi.fn(),
+    openDensity: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
@@ -70,48 +74,28 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
 }
 
 describe("slashSubmitAction", () => {
-  it("forces /digisearch and /digivault with the remainder as the user message", () => {
-    expect(slashSubmitAction("/digisearch RS256")).toEqual({
-      kind: "force",
-      forceTool: "digisearch",
-      text: "RS256",
-    });
-    expect(slashSubmitAction("/digivault notes")).toEqual({
-      kind: "force",
-      forceTool: "digivault",
-      text: "notes",
-    });
+  it("blocks direct tool commands", () => {
+    expect(slashSubmitAction("/digisearch RS256")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/digivault")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/websearch latest filings")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/desk")).toEqual({ kind: "block" });
+    expect(slashSubmitAction("/records pipeline status")).toEqual({ kind: "block" });
   });
 
-  it("runs empty /digisearch as a session toggle", () => {
-    expect(slashSubmitAction("/digisearch")).toMatchObject({
+  it("keeps a pane command in the composer until the option resolves", () => {
+    expect(slashSubmitAction("/language ")).toMatchObject({ kind: "pane", command: { id: "lang" } });
+    expect(slashSubmitAction("/language English")).toMatchObject({
       kind: "run",
-      command: { id: "digisearch" },
-      arg: "",
+      command: { id: "lang" },
+      arg: "English",
     });
-  });
-
-  it("forces /websearch query as this-send web search", () => {
-    expect(slashSubmitAction("/websearch latest filings")).toEqual({
-      kind: "force-web",
-      text: "latest filings",
-    });
-  });
-
-  it("forces extra MCP catalog ids", () => {
-    const extra = extraSlashDefs(
-      api({ catalogTools: [{ id: "datatap", label: "DataTap" }] }),
-    );
-    expect(slashSubmitAction("/datatap pipeline status", extra)).toEqual({
-      kind: "force",
-      forceTool: "datatap",
-      text: "pipeline status",
-    });
-    expect(slashSubmitAction("/datatap", extra)).toMatchObject({
+    expect(slashSubmitAction("/theme ")).toMatchObject({ kind: "pane", command: { id: "theme" } });
+    expect(slashSubmitAction("/theme dark")).toMatchObject({
       kind: "run",
-      command: { id: "datatap" },
-      arg: "",
+      command: { id: "theme" },
+      arg: "dark",
     });
+    expect(slashSubmitAction("/tools Search")).toMatchObject({ kind: "pane" });
   });
 
   it("runs /language dutch as a client command", () => {
@@ -140,14 +124,9 @@ describe("slashSubmitAction", () => {
     expect(slashSubmitAction("/not-a-command")).toEqual({ kind: "block" });
   });
 
-  it("does not treat a slashHelpText dump as /digisearch", () => {
-    const help = slashHelpText({
-      webSearch: true,
-      byok: true,
-      digisearch: true,
-      digivault: true,
-    });
-    expect(help.startsWith("/digisearch")).toBe(true);
+  it("does not treat a slashHelpText dump as a command", () => {
+    const help = slashHelpText({ webSearch: true, byok: true });
+    expect(help).not.toContain("/digisearch");
     expect(slashSubmitAction(help)).toEqual({ kind: "block" });
   });
 });
@@ -156,7 +135,7 @@ describe("catalogForceTool", () => {
   it("maps vault locate onto the BFF catalog id", () => {
     expect(catalogForceTool("digivault_search_notes")).toBe("digivault");
     expect(catalogForceTool("digisearch")).toBe("digisearch");
-    expect(catalogForceTool("datatap")).toBe("datatap");
+    expect(catalogForceTool("records")).toBe("records");
   });
 });
 
@@ -164,9 +143,9 @@ describe("buildProductSlashCommands", () => {
   it("includes catalog tools, mcp, models, and featured languages without per-row icons", () => {
     const cmds = buildProductSlashCommands(api({ allowUserMcp: true }));
     const ids = cmds.map((c) => c.id);
-    expect(ids).toContain("websearch");
-    expect(ids).toContain("digisearch");
-    expect(ids).toContain("digivault");
+    expect(ids).not.toContain("websearch");
+    expect(ids).not.toContain("digisearch");
+    expect(ids).not.toContain("digivault");
     expect(ids).toContain("mcp");
     expect(ids).toContain("models");
     expect(ids).toContain("dutch");
@@ -199,17 +178,39 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("thinking");
   });
 
-  it("adds extra MCP catalog commands", () => {
+  it("does not add a slash command per catalog tool", () => {
     const ids = buildProductSlashCommands(
-      api({ catalogTools: [{ id: "datatap", label: "DataTap" }] }),
+      api({ catalogTools: [{ id: "records", label: "Records" }] }),
     ).map((c) => c.id);
-    expect(ids).toContain("datatap");
+    expect(ids).not.toContain("records");
+    expect(ids).toContain("tools");
   });
 
-  it("still parses /digisearch as a tool command", () => {
-    expect(parseSlashInput("/digisearch")).toMatchObject({
-      kind: "command",
-      command: { id: "digisearch", kind: "tool" },
+  it("lists /export md and /export html, and bare /export stays markdown", () => {
+    const rows = buildProductSlashCommands(api());
+    const md = rows.find((c) => c.id === "export");
+    const html = rows.find((c) => c.id === "export-html");
+    expect(md?.label).toBe("/export md");
+    expect(html?.label).toBe("/export html");
+    expect(rows.indexOf(html!) - rows.indexOf(md!)).toBe(1);
+    expect(slashItemPrefixMatch({ id: "export", label: "/export md" }, "export md")).toBe(true);
+    expect(slashItemPrefixMatch({ id: "export-html", label: "/export html" }, "export html")).toBe(
+      true,
+    );
+    expect(slashSubmitAction("/export md")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "md",
+    });
+    expect(slashSubmitAction("/export html")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "html",
+    });
+    expect(slashSubmitAction("/export")).toMatchObject({
+      kind: "run",
+      command: { id: "export" },
+      arg: "",
     });
   });
 });
@@ -307,46 +308,50 @@ describe("executeSlashDef", () => {
     expect(a.openTools).toHaveBeenCalledOnce();
   });
 
-  it("exposes extra MCP servers as slash tools", () => {
-    const extra = extraSlashDefs(
-      api({
-        catalogTools: [{ id: "digisearch" }],
-        mcpServers: [{ id: "datatap", label: "DataTap" }],
-      }),
-    );
-    expect(extra.map((d) => d.names[0])).toEqual(["/datatap"]);
-    expect(slashSubmitAction("/datatap pipeline", extra)).toEqual({
-      kind: "force",
-      forceTool: "datatap",
-      text: "pipeline",
-    });
+  it("keeps /view on the three levels and folds the retired hidden one", () => {
+    const a = api();
+    const def = { id: "view" as const, names: ["/view"], needsArg: false, hint: "" };
+    executeSlashDef(def, "verbose", a);
+    expect(a.setView).toHaveBeenCalledWith("verbose");
+    // A stale invocation still says `hidden`; it means the titles only.
+    executeSlashDef(def, "hidden", a);
+    expect(a.setView).toHaveBeenLastCalledWith("quiet");
+    executeSlashDef(def, "nonsense", a);
+    expect(a.openView).toHaveBeenCalledOnce();
   });
 
-  it("exposes session MCP configs as slash tools", () => {
-    const extra = extraSlashDefs(
-      api({
-        catalogTools: [],
-        mcpServers: [],
-        prefs: {
-          ...DEFAULT_EMBED_CHAT_PREFS,
-          mcpCustom: [{ ...emptyMcpConfig(), id: "linear", label: "Linear" }],
-        },
-      }),
-    );
-    expect(extra.map((d) => d.names[0])).toEqual(["/linear"]);
+  it("sets /density from the three rhythms and opens the page otherwise", () => {
+    const a = api();
+    const def = { id: "density" as const, names: ["/density"], needsArg: false, hint: "" };
+    executeSlashDef(def, "compact", a);
+    expect(a.setDensity).toHaveBeenCalledWith("compact");
+    executeSlashDef(def, "Airy", a);
+    expect(a.setDensity).toHaveBeenLastCalledWith("airy");
+    executeSlashDef(def, "roomy", a);
+    expect(a.openDensity).toHaveBeenCalledOnce();
   });
 
-  it("toggles extra MCP tools", () => {
-    const a = api({
-      extraToolOn: () => true,
-      catalogTools: [{ id: "datatap" }],
-    });
-    executeSlashDef(
-      { id: "datatap", names: ["/datatap"], needsArg: false, hint: "", kind: "tool" },
-      "",
-      a,
-    );
-    expect(a.setExtraTool).toHaveBeenCalledWith("datatap", false);
+  it("does not expose catalog or session MCP ids as slash commands", () => {
+    expect(
+      extraSlashDefs(
+        api({
+          catalogTools: [{ id: "digisearch" }],
+          mcpServers: [{ id: "records", label: "Records" }],
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      extraSlashDefs(
+        api({
+          catalogTools: [],
+          mcpServers: [],
+          prefs: {
+            ...DEFAULT_EMBED_CHAT_PREFS,
+            mcpCustom: [{ ...emptyMcpConfig(), id: "linear", label: "Linear" }],
+          },
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -381,5 +386,54 @@ describe("/artifacts", () => {
       a,
     );
     expect(a.openArtifacts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("/toolbar and /scrollbar", () => {
+  const chrome = (prefs: Partial<EmbedChatPrefsApi["prefs"]> = {}) =>
+    api({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, toolbar: true, scrollbars: "always", ...prefs } });
+
+  it("lists both commands in the product palette", () => {
+    const ids = buildProductSlashCommands(chrome()).map((c) => c.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).toContain("toolbar");
+    expect(ids).toContain("scrollbar");
+  });
+
+  it("describes the current values", () => {
+    const on = new Map(buildProductSlashCommands(chrome()).map((c) => [c.id, c]));
+    expect(on.get("toolbar")?.description).toBe("On · visible");
+    expect(on.get("scrollbar")?.description).toBe("always visible");
+
+    const off = new Map(
+      buildProductSlashCommands(chrome({ toolbar: false, scrollbars: "auto" })).map((c) => [
+        c.id,
+        c,
+      ]),
+    );
+    expect(off.get("toolbar")?.description).toBe("Off · hidden");
+    expect(off.get("scrollbar")?.description).toBe("on scroll");
+  });
+
+  it("flips the visible toolbar off", () => {
+    const a = chrome();
+    executeSlashDef({ id: "toolbar", names: ["/toolbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setToolbar).toHaveBeenCalledOnce();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
+  });
+
+  it("flips always scrollbars to on-scroll", () => {
+    const a = chrome();
+    executeSlashDef({ id: "scrollbar", names: ["/scrollbar"], needsArg: false, hint: "" }, "", a);
+    expect(a.setScrollbars).toHaveBeenCalledOnce();
+    expect(a.setScrollbars).toHaveBeenCalledWith("auto");
+  });
+
+  it("runs the same flip from the palette row", () => {
+    const a = chrome();
+    const row = buildProductSlashCommands(a).find((c) => c.id === "toolbar");
+    expect(row).toBeDefined();
+    row?.execute?.();
+    expect(a.setToolbar).toHaveBeenCalledWith(false);
   });
 });

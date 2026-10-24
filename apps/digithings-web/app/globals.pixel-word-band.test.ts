@@ -29,7 +29,7 @@ import { DIGITHINGS } from "@digithings/hero-banner/definitions";
  */
 
 const CSS_PATH = join(__dirname, "globals.css");
-const MARK_PATH = join(__dirname, "../components/landing/PixelWordmark.tsx");
+const MARK_PATH = join(__dirname, "../../../packages/ui/src/components/landing/PixelWordmark.tsx"); // moved DIG-3695
 
 const css = readFileSync(CSS_PATH, "utf8");
 const markSrc = readFileSync(MARK_PATH, "utf8");
@@ -165,6 +165,14 @@ function resolveKeyword(decls: Decls, property: string): string | null {
   return length.raw;
 }
 
+/** Follow a single `var(--token)` reference to its declaration on the same rule. */
+function resolveLocalVar(decls: Decls, property: string): string | null {
+  const value = resolveKeyword(decls, property);
+  if (!value) return null;
+  const match = value.match(/^var\((--[\w-]+)\)$/);
+  return match ? resolveKeyword(decls, match[1]) : value;
+}
+
 type Frame = {
   viewport: number;
   /** Content-box width available to the mark. */
@@ -261,7 +269,7 @@ describe("footer wordmark band (DIG-2304)", () => {
     const band = declarations(css, ".pixel-word-band");
     expect(band.height).toBeUndefined();
     expect(band.maxHeight).toBeUndefined();
-    expect(resolveKeyword(band, "min-height")).toBe("clamp(4.5rem, 12vw, 9rem)");
+    expect(resolveLocalVar(band, "min-height")).toBe("clamp(4.5rem, 12vw, 9rem)");
   });
 
   it("clips the horizontal axis only", () => {

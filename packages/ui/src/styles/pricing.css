@@ -35,8 +35,15 @@
 
 /* ── billing toggle: .pm-toggle.on drives the knob (state + translate) ──── */
 .pm-toggle {
-  width: 38px;
-  height: 21px;
+  /* component tokens — billing toggle geometry */
+  --pm-toggle-w: 38px;
+  --pm-toggle-h: 21px;
+  --pm-knob: 15px;
+  --pm-knob-inset: 2px;
+  --pm-knob-travel: 17px;
+
+  width: var(--pm-toggle-w);
+  height: var(--pm-toggle-h);
   border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--surface);
@@ -47,10 +54,10 @@
 
 .pm-toggle .pm-knob {
   position: absolute;
-  top: 2px;
-  inset-inline-start: 2px;
-  width: 15px;
-  height: 15px;
+  top: var(--pm-knob-inset, 2px);
+  inset-inline-start: var(--pm-knob-inset, 2px);
+  width: var(--pm-knob, 15px);
+  height: var(--pm-knob, 15px);
   border-radius: 0;
   background: var(--ink-mute);
   transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
@@ -62,11 +69,11 @@
 }
 
 .pm-toggle.on .pm-knob {
-  transform: translateX(17px);
+  transform: translateX(var(--pm-knob-travel, 17px));
   background: var(--accent);
 }
 
 /* knob anchors at inline-start; checked travel is physical → mirror in RTL */
 [dir="rtl"] .pm-toggle.on .pm-knob {
-  transform: translateX(-17px);
+  transform: translateX(calc(-1 * var(--pm-knob-travel, 17px)));
 }

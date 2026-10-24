@@ -7,13 +7,9 @@
  */
 import { p } from "@/lib/base-path";
 import {
-  getDigichatWarmupPhase,
   setDigichatWarmupPhase,
   signalDigichatBootStep,
-  type DigichatWarmupPhase,
 } from "@digithings/ui/chat/boot-signal";
-
-export type WarmupPhase = DigichatWarmupPhase;
 
 /** Services sleep after ~3 min idle; re-check a bit before that. */
 const IDLE_RECHECK_MS = 150_000;
@@ -68,10 +64,6 @@ function runWarmup(showWakingAfterMs: number): Promise<boolean> {
   return inflight;
 }
 
-export function getWarmupPhase(): WarmupPhase {
-  return getDigichatWarmupPhase();
-}
-
 /** Page load: wake every service the tenant needs. */
 export function startWarmup(): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(true);
@@ -88,7 +80,7 @@ export async function ensureWarm(): Promise<void> {
   }
 }
 
-const TRANSIENT_RE = /container|not running|disconnected|digraph unreachable|upstream_auth|service_unavailable/i;
+const TRANSIENT_RE = /container|not running|disconnected|digraph unreachable|upstream_auth|upstream_unavailable|service_unavailable/i;
 
 /**
  * fetch for chat requests: waits out sleeping services first, and if the

@@ -60,7 +60,6 @@ MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
     "openwiki-update.yml": ("openwiki-update",),
     "token-canary.yml": ("token-canary",),
     "secret-staleness-check.yml": ("secret-staleness",),
-    "datatap-answer-check.yml": ("datatap-answer-check",),
     "production-deploy-gate-watchdog.yml": ("production-deploy-gate-watchdog",),
     "pipeline-checkpoint-archive.yml": ("checkpoint-archive",),
     "pipeline-market-data-refresh.yml": (

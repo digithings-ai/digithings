@@ -1,4 +1,4 @@
-export { DigiChatMark, DigiChatWordmark } from "./components/DigiChatMark";
+export { DigiChatMark } from "./components/DigiChatMark";
 export { MiniMarkdown } from "./components/MiniMarkdown";
 export { DocumentPane } from "./components/DocumentPane";
 export {
@@ -42,7 +42,14 @@ export {
   nextPaletteIndex,
   formatCliSettingLine,
   isLangCode,
-  catalogToolSlashDef,
+  commandOpensPane,
+  menuIdForCommand,
+  paletteFrame,
+  paletteSurfaces,
+  applyPaletteFrame,
+  paneDraftForId,
+  optionDraft,
+  submenuRows,
   SLASH_COMMANDS,
   SLASH_CATEGORIES,
   LANG_CODES,
@@ -55,6 +62,7 @@ export {
   SEARCH_ENGINE_CHOICES,
   isSearchEngine,
   VIEW_CODES,
+  VIEW_LABELS,
   VIEW_CHOICES,
   isViewCode,
   THINKING_CODES,
@@ -64,6 +72,10 @@ export {
   type SlashId,
   type SlashCategory,
   type SlashVisibility,
+  type PaletteFrame,
+  type PaletteKind,
+  type PaletteApply,
+  type SubmenuOption,
   type CliSettingRow,
   type LangCode,
   type SearchEngineCode,

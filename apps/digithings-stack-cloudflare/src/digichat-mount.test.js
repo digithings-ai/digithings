@@ -64,6 +64,12 @@ describe("digichat adapter (same predicate as the standalone worker)", () => {
       "/api/plan-proof/mint",
       "/api/health",
       "/_dtchat/_next/static/x.js",
+      // DIG-5121: the /chat cutover moved the public chat path off the Pages
+      // marketing shell onto the standalone worker (`digithings.ai/chat*`).
+      // The predicate is shared by construction, so /chat now matches here
+      // too — the stack itself still mounts no digichat route (see the
+      // separation pins below), it only borrows the same path table.
+      "/chat",
     ]) {
       expect(shouldProxyToDigiChat(path)).toBe(true);
     }
@@ -72,7 +78,8 @@ describe("digichat adapter (same predicate as the standalone worker)", () => {
   it("leaves Pages marketing/chat shells and other groups' paths alone", () => {
     for (const path of [
       "/",
-      "/chat",
+      // The OCC invite shell stays a Pages shell behind the worker's gate,
+      // so it is not a digichat container path (DIG-5121).
       "/chat/occ",
       "/docs",
       "/_next/static/x.js",

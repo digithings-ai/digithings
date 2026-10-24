@@ -22,6 +22,7 @@ _fixture_root() {
 # ── Fixture: a minimal git repo on a non-task branch (develop) ───────────────
 FAKE_ROOT="$(_fixture_root)"
 TASK_ROOT="$(_fixture_root)"
+REVERT_ROOT="$(_fixture_root)"
 cd "$FAKE_ROOT"
 git init -q
 git config user.email "test@example.com"
@@ -39,8 +40,17 @@ git checkout -b task/256-test 2>/dev/null || true
 git commit --allow-empty -m "init" 2>/dev/null || true
 cd "$REPO_ROOT"
 
+# ── Fixture: a minimal git repo on a revert/ branch ──────────────────────────
+cd "$REVERT_ROOT"
+git init -q
+git config user.email "test@example.com"
+git config user.name "test"
+git checkout -b revert/test-prefix 2>/dev/null || true
+git commit --allow-empty -m "init" 2>/dev/null || true
+cd "$REPO_ROOT"
+
 cleanup() {
-  rm -rf "$FAKE_ROOT" "$TASK_ROOT"
+  rm -rf "$FAKE_ROOT" "$TASK_ROOT" "$REVERT_ROOT"
 }
 trap cleanup EXIT
 
@@ -233,6 +243,10 @@ assert_allowed "echo x | tee /tmp/debug.log" \
 # Task branch allows protected writes (non-live-trading)
 assert_allowed "cat > .github/workflows/ci.yml on task branch (allowed)" \
   "cat > .github/workflows/ci.yml" "$TASK_ROOT"
+
+# revert/ branch allows protected writes (non-live-trading)
+assert_allowed "cat > .github/workflows/ci.yml on revert/ branch (allowed)" \
+  "cat > .github/workflows/ci.yml" "$REVERT_ROOT"
 
 # DIGI_ALLOW_PROTECTED=1 override
 assert_allowed "DIGI_ALLOW_PROTECTED=1 overrides deny" \

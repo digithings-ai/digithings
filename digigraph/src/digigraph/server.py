@@ -226,13 +226,24 @@ async def byok_header_context(request: Request, call_next):
                 service="digigraph",
             )
 
-    from digigraph.model_config import pop_house_model, push_house_model
+    from digigraph.model_config import (
+        pop_house_model,
+        pop_premium_models,
+        pop_router_models,
+        push_house_model,
+        push_premium_models,
+        push_router_models,
+    )
 
     tok = push_byok_header(request)
     house_tok = push_house_model(request.headers.get("x-digi-house-model"))
+    premium_tok = push_premium_models(request.headers.get("x-digi-premium-models"))
+    router_tok = push_router_models(request.headers.get("x-digi-router-models"))
     try:
         return await call_next(request)
     finally:
+        pop_router_models(router_tok)
+        pop_premium_models(premium_tok)
         pop_house_model(house_tok)
         pop_byok(tok)
 
@@ -325,7 +336,7 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and digiclaw (kept for back-compat)."""
+    """Legacy health check for Docker and digibot (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
 
 
@@ -428,7 +439,7 @@ def _resolve_request_id(request: Request) -> str | None:
 )
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
-    digiclaw custom skill: run_digigraph_workflow.
+    digibot custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
     # WorkflowRequest.require_tool_calls is body-only (no X-Require-Tool-Calls header,

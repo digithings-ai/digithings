@@ -871,7 +871,7 @@ class TestRejections:
     def test_float_nan_mark_is_data_unavailable_not_a_raise(self) -> None:
         """The marks signature is ``float | Decimal``; ``float(\"nan\")`` is in-bounds (#2497).
 
-        ``_decimal`` catches only ``(ArithmeticError, ValueError)``, so
+        ``opt_decimal`` catches only ``(ArithmeticError, ValueError)``, so
         ``Decimal(str(float(\"nan\")))`` returns ``Decimal(\"NaN\")`` and must decline.
         """
         chain = _Chain()

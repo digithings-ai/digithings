@@ -57,10 +57,10 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(fallback).not.toMatch(/`tool\(/);
   });
 
-  it("reasoning uses thought when done and expand caret", () => {
+  it("reasoning uses thought when done and the shared caret", () => {
     const reasoning = read("gallery-thread/reasoning.tsx");
     expect(reasoning).toMatch(/state=\{active \? "thinking" : "thought"\}/);
-    expect(reasoning).toMatch(/state="expand"/);
+    expect(reasoning).toMatch(/DisclosureChevron/);
   });
 
   it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {
@@ -91,6 +91,16 @@ describe("gallery Thread is the product digichat skin", () => {
     // loads first and loses every tie, so it must not re-declare them (#3818).
     expect(aui).not.toMatch(/\.aui-action-bar-more-content \{/);
     expect(aui).not.toMatch(/\.aui-composer-trigger-popover \{/);
+  });
+
+  it("product app command lists paint the canvas when the footer clears --bg", () => {
+    const chatbot = read("../../styles/chat-digichat.css");
+    const rule =
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .aui-composer-trigger-popover,\n' +
+      '[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .dc-composer-menu {\n' +
+      "  background: var(--term-bg);\n" +
+      "}";
+    expect(chatbot).toContain(rule);
   });
 
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {

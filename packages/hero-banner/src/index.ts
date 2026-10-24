@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./ssr";
 export { PIXEL_7X10, fontWith } from "./font";
 export { canonicalLayout, emptyFrame, fitTerminal, layoutFor, litCells, mulberry32, pixelAt, repack, setPixel, upscale } from "./layout";
 export {

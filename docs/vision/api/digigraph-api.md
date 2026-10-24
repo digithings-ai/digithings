@@ -88,7 +88,7 @@ curl $DIGIGRAPH_URL/v1/status -H "Authorization: Bearer $JWT"
 ```
 
 ### POST /workflow
-Run the full research + backtest graph (digiclaw custom skill).
+Run the full research + backtest graph (digibot custom skill).
 
 auth: digigraph:workflow · rate: 10/min/IP
 

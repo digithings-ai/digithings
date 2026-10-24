@@ -20,6 +20,45 @@
   --on-accent: var(--bg);
   --radius: 0;
   --composer-radius: 0;
+  /* Sizing tokens (chat-digichat). Shared by every rule below and by the
+     gallery stage and the product skin alike. */
+  --dc-body-fs: 0.82rem;          /* welcome copy + suggestion labels */
+  --dc-md-fs: 0.88rem;            /* rendered markdown body */
+  --dc-msg-col: 1.25rem;          /* marker / suggestion glyph column */
+  --dc-gap-1: 0.55rem;
+  --dc-gap-2: 0.45rem;
+  --dc-text-sm: 0.7rem;           /* trace-row voice */
+  --dc-text-xs: 0.68rem;          /* trace detail voice */
+  --dc-row-pad-y: 0.2rem;
+  --dc-composer-fs: 0.88rem;
+  --dc-composer-line: 1.375rem;   /* one text row; also the caret row pitch */
+  --dc-composer-pad-y: 0.2rem;
+  --dc-composer-rows: 5;
+  --dc-composer-pad: 0.25rem 0.375rem;  /* compact shell: 4px 6px */
+  --dc-composer-gap: 0.25rem;
+  --dc-composer-inset-x: 0.625rem;
+  --dc-chevron: 0.55rem;
+  --dc-icon: 0.75rem;
+  --dc-icon-lg: 0.85rem;
+  --dc-marker-w: 1.25rem;
+  --dc-marker-offset: 0.2rem;
+  --dc-viewport-pad-x: 0.9rem;
+  --dc-viewport-pad-top: 0.75rem;
+  --dc-group-gap: 0.85rem;
+  --dc-group-mb: 1rem;
+  --dc-chip-max-w: 16rem;
+  --dc-chip-gap: 0.35rem;
+  --dc-chip-pad: 0.15rem 0.45rem;
+  --dc-chip-fs: 0.66rem;
+  --dc-reasoning-max-h: 12rem;
+  --dc-dump-max-h: 8.5rem;
+  --dc-launcher-composer-max-h: 4.5rem;
+  --dc-json-max-h: 18rem;
+  --dc-sidebar-w: 11.5rem;
+  --dc-list-pad-x: 0.7rem;
+  --dc-label-fs: 0.62rem;
+  --dc-chrome-fs: 0.66rem;
+  --dc-item-fs: 0.78rem;
 }
 
 .aui-theme-stage > * {
@@ -57,7 +96,7 @@
      instead of a narrow column hugging the left edge. */
   max-width: none;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: var(--dc-body-fs);
   line-height: 1.45;
   color: var(--ink-soft);
 }
@@ -103,17 +142,17 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestion {
   display: grid;
-  grid-template-columns: 1.25rem minmax(0, 1fr);
+  grid-template-columns: var(--dc-msg-col) minmax(0, 1fr);
   align-items: center;
-  gap: 0.55rem;
+  gap: var(--dc-gap-1);
   width: 100%;
   height: auto;
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 0.2rem 0;
+  padding: var(--dc-row-pad-y) 0;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: var(--dc-body-fs);
   font-weight: 400;
   line-height: 1.45;
   color: var(--ink-soft);
@@ -138,20 +177,23 @@
    composer, so typing cannot shove the welcome around. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-viewport-footer {
   margin-top: auto;
-  gap: 0.55rem;
-  padding-bottom: 0.45rem;
+  gap: var(--dc-gap-1);
+  padding-bottom: var(--dc-gap-2);
 }
 
 /* The stock thread column uses px-4 / gap-y-6 / mb-14. Pull that air in so
    turns, the welcome, and the composer share one inset. */
+/* The stock thread column uses px-4 / gap-y-6 / mb-14. Pull that air in so
+   turns, the welcome, and the composer share one inset, and let density own
+   the turn-to-turn gap instead of the utility. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] > div {
-  padding-inline: 0.9rem;
-  padding-top: 0.75rem;
+  padding-inline: var(--dc-viewport-pad-x);
+  padding-top: var(--dc-viewport-pad-top);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_message-group"] {
-  gap: 0.85rem;
-  margin-bottom: 1rem;
+  gap: var(--density-gap-4, 0.75rem);
+  margin-bottom: var(--density-gap-3, 0.625rem);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
@@ -163,19 +205,26 @@
 /* Scrollbars: square, and slimmer with depth. The thread is the outer
    surface (10px), menus and the composer sit inside it (6px), and the
    tool-call dumps are the deepest scroll (4px). Styling ::-webkit-scrollbar
-   also makes the thumb square on macOS, whose overlay bar is rounded. */
+   also makes the thumb square on macOS, whose overlay bar is rounded.
+   The square webkit sizing belongs to the "always" mode: a styled
+   ::-webkit-scrollbar is a classic bar that reserves its own track and
+   never becomes an overlay, so "auto" mode must leave the native bar
+   untouched. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
   scrollbar-width: auto;
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 38%, transparent) transparent;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar {
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-track,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-corner {
+/* The track and the corner are styled with the square bar: in Blink a
+   styled ::-webkit-scrollbar pseudo turns the native overlay into a classic
+   bar that reserves its own track, so it belongs to the always mode. */
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar-track,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -183,65 +232,163 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 30%, transparent) transparent;
+  scrollbar-gutter: stable;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-composer-input::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] .dc-composer-menu-body::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--ink-mute) 24%, transparent) transparent;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar {
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-fallback-dump"]::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="reasoning-text"]::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-group-content"]::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-args-value::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-result-content::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-composer-input::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] .dc-composer-menu-body::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="reasoning-text"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-group-content"]::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-args-value::-webkit-scrollbar-thumb,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-result-content::-webkit-scrollbar-thumb {
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-composer-input::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] .dc-composer-menu-body::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-fallback-dump"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="reasoning-text"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="tool-group-content"]::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-args-value::-webkit-scrollbar-thumb:hover,
+[data-thread-skin="digichat"][data-scrollbars="always"] .aui-tool-fallback-result-content::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
 }
 
-/* Menu body: Safari's overlay scrollbar is an OS capsule and ignores the
-   shape rules above, so the native bar is hidden and the menu paints this
-   square 6px thumb instead (MenuScrollbar in embed-composer-menu). */
+/* The menu keeps its bar in place: 6px track always shown, and the stable
+   gutter reserves that width so the thumb never sits over the row text. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body {
-  scrollbar-width: none;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu-body::-webkit-scrollbar {
+/* data-scrollbars="auto" — the native overlay bar, shown only while the
+   surface is scrolling or the pointer is over it, and never reserving a
+   gutter. "always" keeps every rule above: 6px/10px/4px square bars in a
+   stable gutter. The square ::-webkit-scrollbar sizing is scoped to
+   "always" as well: a styled webkit scrollbar is a classic bar that
+   reserves its own track and never becomes an overlay, so in "auto" mode
+   no ::-webkit-scrollbar pseudo is styled at all.
+   The mode attribute rides on the thread root, next to data-thread-skin, so
+   every mode rule is keyed on that one element and names the mode value.
+   A mode rule keyed on an ancestor that only carries the skin (the app
+   shell sets data-thread-skin without the mode) would reach a thread in
+   "auto" mode and take the native bar away from it.
+   The custom overlay bars are switched off here so a surface never draws
+   the native bar and the component bar together. */
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  [data-slot="aui_thread-viewport"] {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  .aui-composer-input,
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  .dc-composer-menu-body {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  [data-slot="tool-fallback-dump"],
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  [data-slot="reasoning-text"],
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  [data-slot="tool-group-content"],
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  .aui-tool-fallback-args-value,
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  .aui-tool-fallback-result-content {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+/* The palette list sits inside the composer root, inside the thread root, so
+   it is matched by ancestry from the carrier. The document-level html:has()
+   form would reach the palette of a thread in the other mode on a page that
+   carries both. */
+[data-thread-skin="digichat"][data-scrollbars="auto"]
+  [data-slot="composer-trigger-popover-items"] {
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+
+/* One bar per surface: the React overlay bars are inert under "auto". */
+[data-thread-skin="digichat"][data-scrollbars="auto"] .aui-overlay-scroll,
+[data-thread-skin="digichat"][data-scrollbars="auto"] .dc-composer-menu-scroll {
   display: none;
-  width: 0;
-  height: 0;
 }
 
 [data-slot="composer-trigger-popover-items"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ink-mute) 30%, transparent) transparent;
+  scrollbar-gutter: stable;
+}
+
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+}
+
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink-mute) 48%, transparent);
+}
+
+/* Always mode paints a square overlay bar; the native bar must not draw a
+   second, rounded capsule underneath it (Safari ignores the webkit shape).
+   The suppression is keyed on the thread root, the one element that carries
+   the mode, and it names the mode value: the auto rules switch the component
+   bars off, so an unscoped suppression here leaves those surfaces with no bar
+   at all, and a suppression keyed on an ancestor that only carries the skin
+   takes the native bar away from a thread that is in auto mode. */
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"],
+[data-thread-skin="digichat"][data-scrollbars="always"] .dc-composer-menu-body,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="reasoning-text"],
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="composer-trigger-popover-items"] {
   scrollbar-width: none;
 }
 
-[data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="aui_thread-viewport"]::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] .dc-composer-menu-body::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="reasoning-text"]::-webkit-scrollbar,
+[data-thread-skin="digichat"][data-scrollbars="always"] [data-slot="composer-trigger-popover-items"]::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
@@ -262,6 +409,7 @@
   left: 0;
   border-radius: 0;
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+  pointer-events: auto;
 }
 
 .aui-overlay-thumb:hover {
@@ -292,15 +440,17 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input {
   font-family: var(--font-mono);
-  font-size: 0.88rem;
-  line-height: 1.375rem;
-  padding-block: 0.2rem;
-  min-height: calc(1.375rem + 0.4rem);
+  font-size: var(--dc-composer-fs);
+  line-height: var(--dc-composer-line);
+  padding-block: var(--dc-composer-pad-y);
+  min-height: calc(var(--dc-composer-line) + (2 * var(--dc-composer-pad-y)));
   color: var(--ink);
   field-sizing: content;
   /* Long input wraps and the box grows to 5 rows, then scrolls (the old
      overflow:hidden clipped everything past max-height with no scroll). */
-  max-height: calc(5 * 1.375rem + 0.4rem);
+  max-height: calc(
+    var(--dc-composer-rows) * var(--dc-composer-line) + (2 * var(--dc-composer-pad-y))
+  );
   overflow-x: hidden;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -325,9 +475,8 @@
    inline padding as the input text, not tucked under a missing edge. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-toolbar"] {
   margin-top: 0.4rem;
-  padding-inline: 0.625rem;
+  padding-inline: var(--dc-composer-inset-x);
 }
-
 /* Send is as pale as an unlit context cell until there is text; enabled
    brightens, hover brightens again. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send:disabled {
@@ -413,6 +562,46 @@
   background: color-mix(in oklab, var(--ink) 35%, transparent);
 }
 
+/* Usage meter: the gate's turn budget in the same cube bar. It fills with
+   the used fraction — empty for a fresh visitor, full for a spent budget —
+   so it reads the way the context bar reads. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-usage-meter .aui-context-bar-cell.is-usage {
+  background: var(--ink);
+}
+
+/* The fill scale both bars share: amber past half spent, orange past four
+   fifths, red past nine tenths. Scoped to the lit cells so an unlit grid
+   stays quiet, and to the bar itself so the legend swatches keep the
+   colours that explain the context split. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-warn
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: var(--warn);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-hot
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: color-mix(in oklab, var(--warn) 45%, var(--danger));
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-critical
+  .aui-context-meter
+  > .aui-context-bar-cell:is(.is-system, .is-tools, .is-user, .is-usage) {
+  background: var(--danger);
+}
+
+/* The number in the card takes the tone of the bar it describes. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"])
+  .aui-context-meter-wrap.is-critical
+  .aui-context-card-total
+  > span:last-child {
+  color: var(--danger);
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-context-legend {
   display: inline-flex;
   align-items: center;
@@ -453,7 +642,7 @@
   align-items: center;
   gap: 0.32rem;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   line-height: 1.25;
   color: color-mix(in oklab, var(--ink-soft) 72%, transparent);
 }
@@ -504,10 +693,10 @@
   width: 1ch;
   height: 1em;
   left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
-  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0px));
+  top: calc(var(--caret-row, 0) * var(--dc-composer-line) + var(--caret-pad-top, 0px));
   background: var(--ink);
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: var(--dc-composer-fs);
   pointer-events: none;
   animation: aui-caret-blink 1.06s steps(1) infinite;
 }
@@ -526,8 +715,8 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"])
   [data-layout="expanded"]
   .aui-block-caret {
-  --caret-pad-left: 0.625rem;
-  --caret-pad-top: 0.2rem;
+  --caret-pad-left: var(--dc-composer-inset-x);
+  --caret-pad-top: var(--dc-composer-pad-y);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -557,9 +746,11 @@
 }
 
 .digichat-launcher .aui-composer-input {
-  line-height: 1.375rem;
-  padding-block: 0.2rem;
-  min-height: calc(1.375rem + 0.4rem);
+  line-height: var(--dc-composer-line, 1.375rem);
+  padding-block: var(--dc-composer-pad-y, 0.2rem);
+  min-height: calc(
+    var(--dc-composer-line, 1.375rem) + (2 * var(--dc-composer-pad-y, 0.2rem))
+  );
   field-sizing: content;
   overflow: hidden;
   box-sizing: border-box;
@@ -580,15 +771,15 @@
    share min-height: 1lh — do not shorten :placeholder-shown. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-layout="compact"],
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] {
-  --composer-padding: 4px;
+  --composer-padding: 0.25rem;
   gap: 0;
-  padding: 4px 6px;
+  padding: var(--dc-composer-pad, 0.25rem 0.375rem);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-main,
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-main {
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--dc-composer-gap, 0.25rem);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input,
@@ -597,7 +788,7 @@
   field-sizing: content;
   min-height: 1lh;
   padding-block: 0;
-  line-height: 1.375rem;
+  line-height: var(--dc-composer-line, 1.375rem);
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -632,7 +823,7 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-edit-composer-input {
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: var(--dc-composer-fs);
   color: var(--ink);
   caret-color: var(--ink);
   caret-shape: block;
@@ -873,8 +1064,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  margin-top: 0.2rem;
+  width: var(--dc-marker-w);
+  margin-top: var(--dc-marker-offset);
   color: var(--ink);
   user-select: none;
 }
@@ -897,6 +1088,8 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-message-content {
   font-family: var(--font-mono);
   font-size: 0.88rem;
+  line-height: var(--density-leading, 1.6);
+  letter-spacing: var(--density-tracking, 0em);
   color: var(--ink);
   white-space: pre-wrap;
   background: transparent;
@@ -907,10 +1100,30 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content .aui-md {
   font-family: var(--font-mono);
   font-size: 0.88rem;
+  line-height: var(--density-leading, 1.6);
+  letter-spacing: var(--density-tracking, 0em);
   color: var(--ink-soft);
   /* Outside markers / fence frames paint in padding. A y-scroll viewport
      computes overflow-x to auto and would clip hanging ink. */
   overflow: visible;
+}
+
+/* DENSITY: the assistant turn is one flex stack. Reasoning, tool groups and the
+   answer are spaced by this gap — no element in here carries a stack margin. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-gap-2, 0.5rem);
+}
+
+/* The answer's own outer margins would land on top of that gap, so the stack
+   owns the edges and markdown only spaces its internal blocks. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content .aui-md > :first-child {
+  margin-top: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-assistant-message-content .aui-md > :last-child {
+  margin-bottom: 0;
 }
 
 /* Markdown stream cursor: block bar, same as the composer caret. */
@@ -998,7 +1211,16 @@
   color: var(--up);
 }
 
+:is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix"] {
+  position: relative;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"], .cube-matrix-legend) [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   overflow: visible;
 }
 
@@ -1007,23 +1229,122 @@
   stroke: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"] [data-slot="dot-matrix"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] [data-slot="dot-matrix"],
+/* Status glyphs only. The disclosure caret is nested, and stays 0.55rem. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] > [data-slot="dot-matrix"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] [data-slot="dot-matrix"] {
+  /* 12px marker: loading-row.source.test.ts pins these two declarations. */
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip [data-slot="dot-matrix"] {
-  width: 0.85rem;
-  height: 0.85rem;
+  width: var(--dc-icon-lg);
+  height: var(--dc-icon-lg);
+}
+
+/* ── The one loading row (#4459) ───────────────────────────────────────────
+   The pre-response loader and the Working / Worked header are the same row
+   (`.aui-work-status` + `WorkStatusLead`): a 12px marker, mono 0.7rem,
+   `--ink-mute`, flush left, 0.45rem to the label. The handoff changes the
+   words in `aui_work-status-label`; the marker does not move. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-indicator"].aui-work-status,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-chain-trigger"].aui-work-status {
+  display: flex;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  /* gap + font-size stay literal: loading-row.source.test.ts and
+     trace-spacing.source.test.ts pin this shared row box. */
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+  text-align: start;
+  min-height: var(--dc-icon);
+}
+
+/* The pre-response row must not be shoved down when the work chain mounts.
+   The assistant content is a flex column with a 0.5rem gap, and the chain's
+   part comes before the indicator in the message stream: the moment the chain
+   mounts it becomes the first flow child and the gap alone pushes the marker
+   down by 8px — the visible jump at the handoff, before any tool row settles.
+   Pin the row to the content's top edge and keep the content's height while
+   the row is on its own, so the chain grows underneath the marker and the
+   swap moves nothing (#4459). Scoped to the digichat skin: the base skin
+   renders the indicator without the `hasContent` guard, so overlaying it
+   there would hide a live chain trigger. */
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]:has(
+    > [data-slot="aui_assistant-message-indicator"]
+  ) {
+  position: relative;
+  min-height: 0.75rem;
+}
+
+[data-thread-skin="digichat"]
+  [data-slot="aui_assistant-message-content"]
+  > [data-slot="aui_assistant-message-indicator"] {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  margin: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] {
+  display: inline-flex;
+  width: var(--dc-icon);
+  height: var(--dc-icon);
+  flex: 0 0 var(--dc-icon);
+  align-items: center;
+  justify-content: center;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-marker"] [data-slot="dot-matrix"] {
+  width: var(--dc-icon);
+  height: var(--dc-icon);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-status-label"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root {
   align-items: flex-start;
-  gap: 0.55rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--danger);
+  gap: var(--dc-gap-2);
+  /* DIG-4459: boxed and red-tinted like other chat products; the shared
+     .aui-chat-notice rules below carry the box. */
+  color: var(--ink-soft);
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: var(--dc-text-sm, 0.7rem);
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+
+/* The row is muted like the rest of the trace; the red cross and the retry
+   action carry the failure. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root .aui-message-error-message {
+  color: inherit;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-message-error-root [data-slot="dot-matrix"] {
@@ -1070,7 +1391,7 @@
 
 .cube-matrix-legend-caption {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   letter-spacing: 0.06em;
   text-transform: lowercase;
   color: var(--ink-mute);
@@ -1112,7 +1433,7 @@
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-item {
   border-radius: 0;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   line-height: 1.3;
   color: var(--ink-mute);
   background: transparent;
@@ -1186,6 +1507,13 @@
   display: inline-flex;
 }
 
+/* The settings menu reuses the popover class for placement, so the palette's
+   "only the highlighted row" rule would hide its own cursor row. The menu
+   marks the cursor with data-cursor on every page. */
+.dc-composer-menu [data-cursor="true"] .aui-menu-cursor {
+  display: inline-flex;
+}
+
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],
 :is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-embed-settings],
 [data-thread-skin="digichat"][data-embed-settings],
@@ -1198,6 +1526,16 @@
   font-family: var(--font-mono);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* App chrome clears --bg on the thread and the footer so those surfaces sit
+   on the canvas. Both command lists are positioned inside that footer, so
+   var(--bg) is transparent and the welcome paints through every list, not
+   only /theme. --term-bg is the canvas colour and is not cleared. Gallery
+   and embed keep the var(--bg) rule above. */
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .aui-composer-trigger-popover,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .dc-composer-menu {
+  background: var(--term-bg);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings] h2,
@@ -1220,25 +1558,21 @@
   width: 1.5rem;
   min-height: 1.5rem;
 }
-
-/* Increment 5 — reasoning. Ghost disclosure, square caret, hairline rail. */
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-root"] {
-  --animation-duration: 0ms;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"] {
-  margin-bottom: 1rem;
-}
+/* Increment 5 — reasoning. Ghost disclosure, square caret, hairline rail.
+   The disclosure keeps the upstream 200ms collapse: switching it off made the
+   chain snap shut between two tool calls. */
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"] {
   max-width: none;
-  width: 100%;
+  /* The row hugs its content: a button is centred by default, which is what
+     put the title in the middle and the arrow at the far edge. */
+  width: fit-content;
+  text-align: left;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--dc-gap-2);
   padding: 0;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--dc-text-sm, 0.7rem);
   letter-spacing: 0.02em;
   color: var(--ink-mute);
   text-transform: lowercase;
@@ -1263,50 +1597,93 @@
   box-shadow: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-icon"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-reasoning-trigger-icon {
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: var(--dc-icon);
+  height: var(--dc-icon);
   flex-shrink: 0;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"] {
-  flex: 1;
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"] {
+  /* The trace is one voice: the same mono, the same size, the same muted ink
+     on the chain header, the reasoning row, the tool-group row and the tool
+     rows. */
+  width: fit-content;
+  max-width: 100%;
+  text-align: left;
+  align-items: center;
+  gap: var(--dc-gap-2);
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--dc-text-sm, 0.7rem);
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  outline: none;
+  box-shadow: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-label"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {
+  flex: 0 1 auto;
   min-width: 0;
   background: none;
   animation: none;
+  font-size: inherit;
+  font-weight: 400;
   color: inherit;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-chevron"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-chevron"] {
+/* Same caret on every trace disclosure. Closed points right. Open rotates
+   the cube svg only (`dot-matrix-grid`), and only when this row's trigger
+   is open. The wrapper and its screen-reader name stay put: a transform on
+   either turns the words. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] {
   display: inline-flex;
+  position: relative;
+  /* Width/height stay literal: disclosure-chevron.source.test.ts pins them. */
   width: 0.55rem;
   height: 0.55rem;
-  flex-shrink: 0;
+  flex: 0 0 0.55rem;
   align-items: center;
   justify-content: center;
-  color: var(--ink-mute);
+  color: inherit;
   transform: none;
-  transform-origin: 50% 50%;
-  transition: none;
   animation: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger-chevron"] [data-slot="dot-matrix"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-chevron"] [data-slot="dot-matrix"] {
-  width: 0.55rem;
-  height: 0.55rem;
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix"] {
+  width: var(--dc-chevron);
+  height: var(--dc-chevron);
+  max-width: var(--dc-chevron);
+  max-height: var(--dc-chevron);
+  transform: none;
+  animation: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-root"][data-state="open"] [data-slot="reasoning-trigger-chevron"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-root"][data-state="open"] [data-slot="tool-fallback-trigger-chevron"] {
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease;
+  animation: none;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [aria-expanded="true"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-panel-open] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-state="open"] > [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
   transform: rotate(90deg);
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-trigger"]:hover [data-slot="reasoning-trigger-chevron"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"]:hover [data-slot="tool-fallback-trigger-chevron"] {
-  color: var(--ink-soft);
+@media (prefers-reduced-motion: reduce) {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="disclosure-chevron"] [data-slot="dot-matrix-grid"] {
+    transition: none;
+  }
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-content"],
@@ -1317,16 +1694,12 @@
   transition: none;
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-root"] {
-  margin-bottom: 1.25rem;
-}
-
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger"] {
-  gap: 0;
+  gap: var(--dc-chip-gap);
   padding: 0;
   font-family: var(--font-mono);
   font-size: 0.7rem;
-  letter-spacing: 0.02em;
+  letter-spacing: calc(var(--density-tracking-mono, 0.01em) + 0.01em);
   color: var(--ink-mute);
   text-transform: lowercase;
   outline: none;
@@ -1338,9 +1711,21 @@
   color: var(--ink-soft);
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-chevron"],
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] {
-  display: none;
+  display: inline-flex;
+  width: var(--dc-icon);
+  height: var(--dc-icon);
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix"],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-loader"] [data-slot="dot-matrix-grid"] {
+  width: var(--dc-icon);
+  height: var(--dc-icon);
+  max-width: var(--dc-icon);
+  max-height: var(--dc-icon);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-trigger-label"] {
@@ -1353,39 +1738,67 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-content"] {
   font-size: 0.68rem;
-  line-height: 1.4;
+  line-height: var(--density-leading-tight, 1.4);
+  letter-spacing: var(--density-tracking-mono, 0.01em);
   color: var(--ink-mute);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] {
   max-height: 12rem;
-  margin-top: 0.45rem;
-  padding: 0.2rem 0 0.15rem 0.85rem;
+  /* DENSITY: the header/body relationship is one gap (header-gap alias), and
+     `padding-block` below is the only vertical padding the body gets. */
+  margin-top: var(--trace-header-gap, 0.25rem);
+  padding-block: var(--trace-body-pad, 0.125rem);
+  padding-inline: var(--trace-body-indent, 0.75rem) 0;
   border-left: 1px solid var(--hair);
   font-family: var(--font-mono);
   font-size: 0.68rem;
-  line-height: 1.4;
+  line-height: var(--density-leading-tight, 1.4);
+  letter-spacing: var(--density-tracking-mono, 0.01em);
   color: var(--ink-mute);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-md,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content {
   font-size: 0.68rem;
+  line-height: var(--density-leading-tight, 1.4);
+  letter-spacing: var(--density-tracking-mono, 0.01em);
   color: var(--ink-mute);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content > * + * {
-  margin-top: 0.35rem;
+  margin-top: var(--density-gap-1, 0.25rem);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content > :first-child {
+  margin-top: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="reasoning-text"] .aui-reasoning-text-content > :last-child {
+  margin-bottom: 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-chain-trigger"] {
+  /* Box metrics live on `.aui-work-status`, shared with the pre-response
+     loader. This only adds the header's own voice. */
+  text-transform: lowercase;
+  outline: none;
+  cursor: pointer;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_work-chain-trigger"]:hover {
+  color: var(--ink-soft);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger"] {
   align-items: center;
-  width: 100%;
+  width: fit-content;
+  text-align: left;
   gap: 0.45rem;
   padding: 0;
   font-family: var(--font-mono);
   font-size: 0.7rem;
-  letter-spacing: 0.02em;
+  letter-spacing: calc(var(--density-tracking-mono, 0.01em) + 0.01em);
   color: var(--ink-mute);
   transform: none;
   transition: none;
@@ -1396,7 +1809,7 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-trigger-label"] {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: 400;
   font-size: inherit;
@@ -1405,48 +1818,15 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-duration"] {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   color: var(--ink-mute);
 }
 
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_tool-chain"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-group-content"] > div {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_tool-chain"] {
-  margin-bottom: 1rem;
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-root"] {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
+/* The tool chain's flex rhythm lives once, in chat-aui.css. This sheet keeps
+   only the skin's own voice for the fallback body. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-content"] {
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   color: var(--ink-mute);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-content"] > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-top: 0;
-  padding: 0;
-  border: 1px solid var(--hair);
-}
-
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-args"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-result"],
-:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-error"] {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.75rem 0.8rem;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-result"],
@@ -1459,9 +1839,9 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-tool-fallback-error-header {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   font-weight: 400;
-  letter-spacing: 0.04em;
+  letter-spacing: calc(var(--density-tracking-mono, 0.01em) + 0.03em);
   text-transform: lowercase;
   color: var(--ink-mute);
 }
@@ -1477,31 +1857,51 @@
   border-radius: 0;
   font-family: var(--font-mono);
   font-size: 0.68rem;
-  line-height: 1.45;
+  line-height: var(--density-leading-tight, 1.4);
+  letter-spacing: var(--density-tracking-mono, 0.01em);
   color: var(--ink-soft);
-  max-height: 8.5rem;
+  /* DIG-4459: arguments are never cut; long ones scroll inside an 18rem
+     area (no expand button). */
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 
-/* Increment 7 — markdown / code. Hairline frames, no card wash. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-dump"] {
+  max-height: var(--dc-dump-max-h);
+}
+
+/* Increment 7 — markdown / code. Hairline frames, no card wash.
+   DENSITY: block rhythm reads the gap scale, so paragraph/list spacing scales
+   with the mode instead of pinning one rem value for every density. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h1,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h2,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h3,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h4,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h5,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-h6 {
-  margin-top: 0.85rem;
-  margin-bottom: 0.35rem;
+  margin-top: var(--density-gap-2, 0.5rem);
+  margin-bottom: var(--density-gap-1, 0.25rem);
   font-size: inherit;
   font-weight: 500;
   color: var(--ink);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-p {
-  margin-top: 0.55rem;
-  margin-bottom: 0.55rem;
+  margin-top: var(--density-gap-2, 0.5rem);
+  margin-bottom: var(--density-gap-2, 0.5rem);
+  line-height: var(--density-leading, 1.6);
+  letter-spacing: var(--density-tracking, 0em);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-li {
+  line-height: var(--density-leading, 1.6);
+  letter-spacing: var(--density-tracking, 0em);
+}
+
+/* One li gap, from the list's own stack — not from a `[&>li]:mt-1` utility. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-li + .aui-md-li {
+  margin-top: var(--density-gap-1, 0.25rem);
 }
 
 /* Tailwind preflight zeroes ul/ol padding. `ms-*` leaves outside markers in
@@ -1509,7 +1909,9 @@
    (ol digits gone, ul discs nicked). Keep markers in padding. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ul,
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-ol {
+  margin-block: var(--density-gap-2, 0.5rem);
   margin-inline-start: 0;
+  /* Indents stay literal: gallery-thread.source.test.ts pins the source text. */
   padding-inline-start: 1.75rem;
   list-style-position: outside;
 }
@@ -1533,7 +1935,7 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-blockquote {
-  margin: 0.55rem 0;
+  margin: var(--density-gap-2, 0.5rem) 0;
   padding: 0 0 0 0.85rem;
   border: none;
   border-left: 1px solid var(--hair);
@@ -1546,7 +1948,7 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-root {
-  margin-top: 0.7rem;
+  margin-top: var(--density-gap-2, 0.5rem);
   padding: 0.3rem 0.55rem;
   border: 1px solid var(--hair);
   border-bottom: none;
@@ -1556,9 +1958,9 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-code-header-language {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--dc-text-xs, 0.68rem);
   font-weight: 400;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(var(--density-tracking-mono, 0.01em) + 0.05em);
   color: var(--ink-mute);
 }
 
@@ -1584,7 +1986,8 @@
   border-radius: 0;
   background: transparent;
   font-size: 0.78rem;
-  line-height: 1.45;
+  line-height: var(--density-leading-tight, 1.4);
+  letter-spacing: var(--density-tracking-mono, 0.01em);
   color: var(--ink-soft);
   max-width: 100%;
   overflow-x: auto;
@@ -1600,28 +2003,29 @@
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-table-wrapper {
-  margin: 0.7rem 0;
+  margin: var(--density-gap-2, 0.5rem) 0;
   max-width: 100%;
   overflow-x: auto;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-th {
-  padding: 0.28rem 0.7rem 0.28rem 0;
+  padding: var(--density-gap-1, 0.25rem) 0.7rem var(--density-gap-1, 0.25rem) 0;
   border: none;
   border-bottom: 1px solid var(--hair);
   border-radius: 0;
   background: transparent;
   font-weight: 400;
   font-size: 0.68rem;
-  letter-spacing: 0.04em;
+  letter-spacing: calc(var(--density-tracking-mono, 0.01em) + 0.03em);
   text-transform: lowercase;
   color: var(--ink-mute);
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md-td {
-  padding: 0.35rem 0.7rem 0.35rem 0;
+  padding: var(--density-gap-1, 0.25rem) 0.7rem var(--density-gap-1, 0.25rem) 0;
   border: none;
   border-bottom: 1px solid var(--hair);
+  line-height: var(--density-leading, 1.6);
   color: var(--ink-soft);
 }
 
@@ -1641,14 +2045,14 @@
 /* Increment 9 — attachments. Filename chip, not a thumbnail tile. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-attachment-chip {
   display: inline-flex;
-  max-width: 16rem;
+  max-width: var(--dc-chip-max-w);
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.15rem 0.45rem;
+  gap: var(--dc-chip-gap);
+  padding: var(--dc-chip-pad);
   border: 1px solid var(--hair);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--dc-chip-fs);
   line-height: 1.3;
   color: var(--ink-soft);
 }
@@ -1742,7 +2146,7 @@
 
 .aui-chrome-desk-split {
   display: grid;
-  grid-template-columns: 11.5rem minmax(0, 1fr);
+  grid-template-columns: var(--dc-sidebar-w, 11.5rem) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -1761,14 +2165,14 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 0.45rem;
-  padding: 0.55rem 0.7rem;
+  gap: var(--dc-gap-2, 0.45rem);
+  padding: var(--dc-gap-1, 0.55rem) var(--dc-list-pad-x, 0.7rem);
   border-bottom: 1px solid var(--hair);
 }
 
 .aui-chrome-thread-list-label {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: var(--dc-label-fs, 0.62rem);
   letter-spacing: 0.06em;
   text-transform: lowercase;
   color: var(--ink-mute);
@@ -1779,7 +2183,7 @@
   border: 0;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: var(--dc-chrome-fs, 0.66rem);
   letter-spacing: 0.02em;
   color: var(--ink-mute);
   cursor: pointer;
@@ -1806,11 +2210,11 @@
   display: block;
   width: 100%;
   overflow: hidden;
-  padding: 0.4rem 0.7rem;
+  padding: 0.4rem var(--dc-list-pad-x, 0.7rem);
   border: 0;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--dc-item-fs, 0.78rem);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1871,7 +2275,7 @@
 }
 
 .aui-chrome-launcher-stage .aui-composer-input {
-  max-height: 4.5rem;
+  max-height: var(--dc-launcher-composer-max-h, 4.5rem);
 }
 
 /* digichat popup only — dark canvas + ink, not a light shadcn popover. */
@@ -1897,7 +2301,7 @@
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"] {
-  gap: 0.25rem;
+  gap: var(--dc-composer-gap, 0.25rem);
   --composer-bg: transparent;
   background: transparent;
 }
@@ -2073,4 +2477,78 @@ html:has(.aui-theme-stage) :focus-visible {
 [data-stock-product]:not([data-boot-reveal="true"]) .aui-thread-welcome-suggestion,
 [data-stock-product]:not([data-boot-reveal="true"]) .aui-composer-root {
   opacity: 0;
+}
+
+/* ── Chat notices (DIG-4459) ──────────────────────────────────────────────
+   One box for what the backend says outside the answer: the failed turn
+   (ErrorPrimitive.Root), a failed tool call (under its arguments) and a
+   status line. Error is red-tinted, status neutral; both mono like the
+   trace. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dc-gap-2);
+  padding: var(--dc-gap-1) var(--dc-list-pad-x);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: var(--dc-text-sm, 0.7rem);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] {
+  /* Faded red (Chris, 21 Oct): the danger hue pulled 28% toward the muted
+     ink (HSL saturation 0.76 → 0.49), a 5% wash and a 24% hairline. The
+     same rules serve dark and light: the vars switch per theme. */
+  --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));
+  border: 1px solid color-mix(in srgb, var(--notice-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--notice-danger) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+/* Title: the faded red nudged toward the ink so it clears WCAG AA on the
+   wash in both themes (dark ≈ 5.9:1, light ≈ 4.7:1). */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
+  color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="status"] {
+  border: 1px solid var(--hair);
+  background: color-mix(in oklab, var(--ink-mute) 6%, transparent);
+  color: var(--ink-mute);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  color: var(--ink-soft);
+  font-size: var(--dc-chip-fs);
+}
+
+/* Inside the tool box the notice is the last section: it keeps its tint but
+   sits flush with the frame instead of floating inside it. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="tool-fallback-error"].aui-chat-notice {
+  flex-direction: row;
+  border-width: 1px 0 0 0;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-view,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice-detail {
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-height: var(--dc-json-max-h);
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-key { color: color-mix(in oklab, var(--ink) 80%, #6aa9ff); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-string { color: color-mix(in oklab, var(--ink-soft) 70%, #5fbf8a); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-number { color: color-mix(in oklab, var(--ink-soft) 70%, #e0a84f); }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-json-literal { color: color-mix(in oklab, var(--ink-soft) 70%, #b48ef0); }
+
+/* DENSITY: the assistant footer reserves the action bar's row (min-h-7.5 +
+   pt-1.5, ~30px) only while it has something to show. On earlier turns the
+   bar autohides (`autohide="not-last"`) and the branch picker hides on a single
+   branch, so an empty footer collapses and the message-group gap alone spaces
+   assistant → user. When the bar appears (hover, or always on the last turn)
+   the footer takes its row back in flow, so it never overlaps the next turn. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_assistant-message-footer"]:not(:has(> *)) {
+  min-height: 0;
+  padding-top: 0;
 }

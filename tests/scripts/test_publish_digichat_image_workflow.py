@@ -435,13 +435,25 @@ def test_the_probe_fails_closed() -> None:
     assert "set -euo pipefail" in probe
     assert "/healthz" in probe and '!= "200"' in probe
     assert "jq -r '.ok'" in probe and '!= "true"' in probe, "the body must say ok=true, not just 200"
-    assert "/api/health" in probe and '!= "$VERSION"' in probe
+    assert "/api/health" in probe
+    # The rules live in one place: scripts/digichat_probe_verdict.mjs, which the
+    # local rehearsal calls too. The two lanes used to keep their own copy and
+    # drifted, and a drift that only the local lane has is a rehearsal that
+    # passes where the release fails. The helper's own rules are pinned by
+    # behaviour in tests/scripts/test_digichat_probe_verdict.py.
+    assert "scripts/digichat_probe_verdict.mjs" in probe, (
+        "the lane must judge the image with the shared probe verdict helper"
+    )
+    assert '--status "$api_status"' in probe and '--version "$VERSION"' in probe, (
+        "the helper has to be given the status the probe read and the version "
+        "the image was built as"
+    )
 
     for marker in (
         "the container exited before it served one probe",
         "never returned 200",
         "did not report ok=true",
-        "but this image was built as",
+        "sed -e 's/^REFUSE //'",
     ):
         assert _refuses(probe, marker), (
             f"the probe reports {marker!r} but no exit 1 follows it — a diagnostic "
@@ -567,4 +579,171 @@ def test_the_probe_starts_the_image_with_no_environment_at_all() -> None:
     assert "ENV PORT=3000" in _runner_stage(), (
         "the probe hardcodes container port 3000; the runner stage of "
         "apps/digichat/Dockerfile no longer declares it"
+    )
+
+
+def test_the_probe_reads_the_health_status_instead_of_demanding_a_200() -> None:
+    """A standalone container cannot reach the ecosystem services, so 503 is the
+    expected answer, not a broken image.
+
+    The image enables digigraph/digisearch/digiquant/digitrace by default
+    (apps/digichat/src/lib/capabilities.ts) and a probe container has none of
+    them, so /api/health answers 503. ``curl --fail`` on that URL is what killed
+    the lane: run 39541165954, the digichat-v2.6.4 tag push, failed in the probe
+    with "curl: (22) The requested URL returned error: 503", and every run
+    before it failed the same way.
+
+    So the probe reads the status code, asserts the version the image serves,
+    and tolerates a failure whose only failing checks are the four ecosystem
+    services the container cannot reach. Anything else is a real fault.
+    """
+    probe = _no_comments(_step_by_id(_doc(), "probe")["run"])
+    assert '--fail "$base/api/health"' not in probe, (
+        "a bare container answers /api/health with 503 because the four "
+        "ecosystem services are enabled by default and unreachable; --fail "
+        "turns that expected degradation into a red lane"
+    )
+    assert "api_status" in probe, "the probe must read the status code, not demand one"
+    # The rules live in one helper, which the local rehearsal calls too: the
+    # two lanes used to keep their own copy and drifted, and a drift only the
+    # local lane has is a rehearsal that passes where the release fails. The
+    # helper's own rules - the two honest statuses, the four services a
+    # standalone container cannot reach, the version the image serves - are
+    # pinned by behaviour in tests/scripts/test_digichat_probe_verdict.py.
+    assert "scripts/digichat_probe_verdict.mjs" in probe, (
+        "the lane must judge the image with the shared probe verdict helper"
+    )
+    assert '--status "$api_status"' in probe, (
+        "the status the probe read has to be handed to the helper that judges it"
+    )
+    assert '--version "$VERSION"' in probe, (
+        "the version the image was built as has to be handed to the helper"
+    )
+    # And the refusal has to actually exit.
+    assert _refuses(probe, "sed -e 's/^REFUSE //'")
+
+
+def test_a_tag_push_resolves_the_release_name() -> None:
+    """The release trigger is the tag push, and inputs.tag is only set by workflow_dispatch.
+
+    Without this the lane fell through to the rehearsal branch on a tag push
+    and published sha-<commit>: run 39541165954, the digichat-v2.6.4 tag push,
+    probed ghcr.io/digithings-ai/digichat:sha-800f5e89a419 and never v2.6.4, so
+    the release name was never even attempted.
+    """
+    resolve = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert '"$EVENT_NAME" = "push"' in resolve, (
+        "the tag push has to be recognised as the release trigger"
+    )
+    assert '"${GITHUB_REF_TYPE:-}" = "tag"' in resolve, (
+        "a push of a branch is not a release; only a tag push is"
+    )
+    assert 'tag="${GITHUB_REF_NAME:-}"' in resolve, (
+        "the release tag on a push event is the ref the event carries"
+    )
+
+
+def test_the_image_is_bound_to_the_tree_that_was_built() -> None:
+    """The label has to name the commit the image was built from.
+
+    The checkout is pinned to the tag, so the tree that gets built is the tag's
+    tree. The commit the image is labelled with used to be resolved a second
+    time, on its own, with `git rev-list -n1 <tag>`: a tag that moved between
+    the checkout and the resolve step would then label the image with a commit
+    the tree was never built from — the exact image→commit hole this lane
+    exists to close.
+    """
+    resolve = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert 'commit="$(git rev-parse HEAD' in resolve, (
+        "the commit the image is labelled with must be the tree that is built"
+    )
+    assert 'tag_commit="$(git rev-list -n1 "$tag"' in resolve, (
+        "the tag has to be resolved as well, to prove the two agree"
+    )
+    assert _refuses(
+        resolve, "refusing to bind an image to a tree it was not built from"
+    ), "the two commits must be compared, and a mismatch must stop the lane"
+
+
+def test_the_build_context_carries_the_packaged_inputs() -> None:
+    """The digichat image installs from image-packages/, which is generated.
+
+    A fresh checkout has no image-packages/ — it is gitignored — so the build
+    context had no such directory and the build died computing its cache key
+    before a single build step ran. The lane must package the inputs before it
+    builds, and only the npm ones: this image installs no wheel.
+    """
+    doc = _doc()
+    steps = _steps(doc)
+    package = next(
+        (s for s in steps if "package_r5_image_inputs" in str(s.get("run", ""))), None
+    )
+    assert package is not None, "the lane never packages the image inputs"
+    build = _build_step(doc)
+    assert steps.index(package) < steps.index(build), (
+        "the inputs must be packaged before the build, or the build context "
+        "carries no image-packages/ and the build dies on its cache key"
+    )
+    assert package.get("if") == build.get("if"), (
+        "nothing is packaged when the version is already published; the "
+        "packaging step must share the build step's gate"
+    )
+    assert "--npm-only" in package["run"], (
+        "only the npm inputs are packaged: the digichat image installs no wheel"
+    )
+    # The refusal has to actually exit. A diagnostic without an exit behind it
+    # leaves the step successful and the build runs on an empty context.
+    assert _refuses(_no_comments(package["run"]), "image-packages/digichat/npm is empty")
+
+
+def test_a_multi_line_tags_value_is_written_with_the_heredoc_form() -> None:
+    """The release path publishes two names, so `tags` is a two-line value.
+
+    A plain ``echo "tags=$tags"`` writes the second name as its own line. The
+    runner reads every line of ``$GITHUB_OUTPUT`` as an output key, so that
+    line carries no ``=`` and the step dies with "Unable to process file
+    command 'output' successfully" and "Invalid format
+    'ghcr.io/digithings-ai/digichat:latest'" before anything is built (run
+    39334695847, 2026-10-19, DIG-4505). The multi-line form is ``key<<EOF``
+    … ``EOF``, which the runner reads back as one value.
+
+    The value cannot be made single-line by dropping the second name: the
+    release path must publish both the version tag and ``:latest`` from the
+    tag's commit, which the sibling test above already pins.
+    """
+    resolve = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert 'echo "tags<<EOF"' in resolve, (
+        "the release path publishes two names, so `tags` is a multi-line value "
+        "and must be written with the heredoc form (tags<<EOF ... EOF)"
+    )
+    assert 'echo "$tags"' in resolve, "the heredoc block must write the value itself"
+    assert 'echo "tags=$tags"' not in resolve, (
+        "a plain echo splits a multi-line value at the newline, and the runner "
+        "then reads the second name as an output key and rejects it"
+    )
+
+
+def test_the_probe_decides_on_the_verdict_text_and_not_on_the_exit_status() -> None:
+    """The helper's OUTPUT is the decision.
+
+    If the exit status were the decision, a wrapper that swallowed it would
+    turn a refusal into a pass, the step would report success, and the push
+    step (gated on that success) would publish the refused image.
+    """
+    guards = _guards(_doc())
+    assert 'case "$verdict" in' in guards
+    assert '"OK "*)' in guards
+    assert "sed -e 's/^REFUSE //'" in guards
+    assert '--version "$VERSION" || true)' in guards
+    assert '"$VERSION")" || {' not in guards
+
+
+def test_the_probe_helper_falls_back_to_the_workflow_commit_for_an_older_tag() -> None:
+    """A repair dispatch for a tag cut before the helper existed still works."""
+    guards = _guards(_doc())
+    assert 'helper="scripts/digichat_probe_verdict.mjs"' in guards
+    assert 'helper="/tmp/digichat_probe_verdict.mjs"' in guards
+    assert (
+        "raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+        "/scripts/digichat_probe_verdict.mjs" in guards
     )

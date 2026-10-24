@@ -4,12 +4,18 @@
  */
 
 .dc-brand {
+  /* Brand strip measures — the same values as the CLI session strip in
+     session.css, kept local so each sheet can be retuned on its own. */
+  --dc-brand-pad: 0.55rem 0.75rem;
+  --dc-brand-gap: 0.35rem;
+  --dc-brand-size: 0.82rem;
+
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
+  gap: var(--dc-brand-gap);
   border-bottom: 1px solid var(--border);
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
+  padding: var(--dc-brand-pad);
+  font-size: var(--dc-brand-size);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -64,17 +70,33 @@
    ancestor that merely *contains* it un-hid the whole column (the credit is a
    descendant, not a direct child), so the column's content showed through a
    transparent wide overlay. Instead the credit lifts itself above the overlay
-   with its own stacking context (`.dc-attribution` above), which keeps it
-   visible through the animation while the column still hides (m3). */
+   with its own stacking context (the `[data-slot="aui_credit"]` boot rule
+   below), which keeps it visible through the animation while the column
+   still hides (m3). */
 [data-stock-product][data-boot-active="true"] > :not(.dboot-overlay) {
   visibility: hidden;
 }
 
 /* A hidden ancestor still hides the credit (visibility inherits), so the
-   credit re-asserts its own visibility — the stacking context above only
-   handles paint order, not the inherited hide. */
+   credit re-asserts its own visibility. No color/size/opacity changes here
+   on purpose: the credit must read exactly the same during boot as settled,
+   and it sits over the flat overlay background (same canvas token), so the
+   settled styling carries over untouched. */
 [data-stock-product][data-boot-active="true"] [data-slot="aui_credit"] {
   visibility: visible;
+  position: relative;
+  z-index: 60;
+}
+
+/* The credit's own z-index can never escape the sticky viewport footer:
+   sticky forms a stacking context (even with z-index auto), so the footer
+   subtree paints as one unit below the overlay no matter how high the
+   credit's z-index goes. Lift the whole footer above the overlay instead —
+   everything inside stays hidden except the credit, which re-asserts its
+   own visibility above. Static footers ignore z-index, so only the sticky
+   ones move; all of it vanishes with boot-active. */
+[data-stock-product][data-boot-active="true"] .aui-thread-viewport-footer {
+  z-index: 50;
 }
 
 .dc-inline-link {
@@ -154,15 +176,17 @@
 
 .dc-embed-shell [data-thread-skin] .aui-block-caret {
   --caret-pad-left: 0.375rem;
+  --caret-row-h: 1.375rem;
+  --caret-size: 0.88rem;
   display: none;
   position: absolute;
   width: 1ch;
-  height: 1.375rem;
+  height: var(--caret-row-h);
   left: calc(var(--caret-col, 0) * 1ch + var(--caret-pad-left));
-  top: calc(var(--caret-row, 0) * 1.375rem + var(--caret-pad-top, 0px));
+  top: calc(var(--caret-row, 0) * var(--caret-row-h) + var(--caret-pad-top, 0px));
   background: var(--tenant-accent, var(--accent, var(--primary)));
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: var(--caret-size);
   pointer-events: none;
   animation: aui-caret-blink 1.06s steps(1) infinite;
 }
@@ -197,16 +221,37 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 }
 
 /* BYOK / paywall — stock-token remapping of former session.css classes */
+/* Gate chrome: one measure across the BYOK list, key input, action row and the
+   paywall card. Declared on the gate roots so the tokens travel with each
+   element instead of relying on a single wrapper. */
+.dc-byok-flow,
+.dc-byok-option-list,
+.dc-byok-input,
+.dc-paywall,
+.dc-gate-card,
+.dc-term-row {
+  --dc-gate-max-w: 28rem;
+  --dc-gate-gap: 0.75rem;
+  --dc-gate-size: 0.875rem;
+  --dc-gate-hint-size: 0.75rem;
+  --dc-gate-hint-gap: 0.4rem;
+  --dc-gate-input-pad: 0.5rem 0.65rem;
+  --dc-gate-input-gap: 0.25rem;
+  --dc-gate-option-gap: 0.4rem;
+  --dc-gate-option-pad: 0.35rem 0.5rem;
+  --dc-gate-marker-gap: 0.35rem;
+}
+
 .dc-byok-flow,
 .dc-term-row {
-  margin-top: 0.75rem;
-  font-size: 0.875rem;
+  margin-top: var(--dc-gate-gap);
+  font-size: var(--dc-gate-size);
   color: var(--foreground);
 }
 
 .dc-term-marker {
   color: var(--muted-foreground);
-  margin-right: 0.35rem;
+  margin-right: var(--dc-gate-marker-gap);
 }
 
 .dc-term-body {
@@ -214,8 +259,8 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 }
 
 .dc-byok-prompt {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
+  margin: 0 0 var(--dc-gate-hint-gap);
+  font-size: var(--dc-gate-hint-size);
   color: var(--muted-foreground);
 }
 
@@ -223,16 +268,16 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 28rem;
+  max-width: var(--dc-gate-max-w);
 }
 
 .dc-byok-option {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--dc-gate-option-gap);
   width: 100%;
   margin: 0;
-  padding: 0.35rem 0.5rem;
+  padding: var(--dc-gate-option-pad);
   border: 0;
   border-radius: calc(var(--radius) - 2px);
   background: transparent;
@@ -260,15 +305,15 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 .dc-byok-input {
   display: block;
   width: 100%;
-  max-width: 28rem;
-  margin-top: 0.25rem;
-  padding: 0.5rem 0.65rem;
+  max-width: var(--dc-gate-max-w);
+  margin-top: var(--dc-gate-input-gap);
+  padding: var(--dc-gate-input-pad);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
   background: var(--background);
   color: var(--foreground);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--dc-gate-size);
   outline: none;
 }
 
@@ -280,8 +325,8 @@ body:has(.dc-embed-shell[data-wide="1"]) {
 .dc-byok-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: var(--dc-gate-gap);
+  margin-top: var(--dc-gate-gap);
 }
 
 .dc-byok-action {
@@ -291,7 +336,7 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   background: none;
   color: var(--muted-foreground);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--dc-gate-hint-size);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -305,17 +350,22 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--destructive);
 }
 
+/* Faded red (Chris, 21 Oct, DIG-4459): a 4% wash and a 20% hairline; the
+   text keeps the full destructive colour so it stays WCAG AA. */
 .aui-message-error-root {
   color: var(--destructive);
-  border-color: color-mix(in oklch, var(--destructive) 40%, transparent);
-  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+  border-color: color-mix(in oklch, var(--destructive) 20%, transparent);
+  background: color-mix(in oklch, var(--destructive) 4%, transparent);
 }
 
 .dc-paywall,
 .dc-gate-card {
-  margin: 1rem auto;
-  max-width: 28rem;
-  padding: 1rem 1.1rem;
+  --dc-card-margin: 1rem auto;
+  --dc-card-pad: 1rem 1.1rem;
+
+  margin: var(--dc-card-margin);
+  max-width: var(--dc-gate-max-w);
+  padding: var(--dc-card-pad);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
@@ -336,6 +386,15 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   --term-ink: #e7eaec;
   --term-mute: #7e858b;
   --term-hair: #2a2e33;
+
+  /* Terminal chrome measures: the shared row height, tool chip, gutter and
+     meta type size for this skin. */
+  --term-row-h: 2.25rem;
+  --term-tool-h: 1.375rem;
+  --term-chip-pad-inline: 0.45rem;
+  --term-gutter: 0.75rem;
+  --term-gap: 0.5rem;
+  --term-meta-size: 0.6875rem;
 }
 
 :root[data-theme="light"] [data-stock-product][data-thread-skin="digichat"] {
@@ -376,27 +435,27 @@ body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app
 [data-stock-product][data-thread-skin="digichat"] .digichat-thread-list > :first-child,
 [data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
   box-sizing: border-box;
-  height: 2.25rem;
+  height: var(--term-row-h);
   border-bottom: 1px solid var(--term-hair);
 }
 
 [data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
   flex-wrap: nowrap;
-  gap: 0.5rem;
-  padding: 0 0.75rem;
+  gap: var(--term-gap);
+  padding: 0 var(--term-gutter);
   overflow-x: auto;
 }
 
 [data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button {
-  height: 1.375rem;
+  height: var(--term-tool-h);
   border: 1px solid var(--term-hair);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  padding: 0 0.45rem;
+  padding: 0 var(--term-chip-pad-inline);
   color: var(--term-mute);
   font-family: inherit;
-  font-size: 0.6875rem;
+  font-size: var(--term-meta-size);
 }
 
 [data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button[aria-pressed="true"] {
@@ -414,7 +473,7 @@ body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app
    aria-current), not on the trigger, so the row is keyed off its parent. */
 [data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item {
   color: var(--term-mute);
-  font-size: 0.6875rem;
+  font-size: var(--term-meta-size);
 }
 
 [data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item:hover,
@@ -447,10 +506,13 @@ body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app
 }
 
 .dc-presentation__panel {
+  /* Docked panel width — the one knob for chrome.mode: sidebar. */
+  --dc-panel-w: min(380px, 100vw);
+
   display: flex;
   flex-direction: column;
   flex: none;
-  width: min(380px, 100vw);
+  width: var(--dc-panel-w);
   height: 100%;
   min-height: 0;
   overflow: hidden;

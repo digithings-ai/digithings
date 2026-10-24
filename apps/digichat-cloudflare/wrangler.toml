@@ -12,20 +12,46 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# ROUTE HOLD (2026-10-18): the zone routes were moved to digithings-stack in code
-# (cost epic: one DigiChat container, not two), but that cutover has NOT been
-# deployed - the stack's live deployment predates it and still carries only
-# graph/key/search. Deploying this worker with only /chat/occ* would therefore
-# DELETE the seven live routes below and Pages would 404 /embed and /api/chat,
-# taking OCC down.
+# ROUTE OWNERSHIP (this file owns the digichat surface; the 2026-10-18
+# "ROUTE HOLD" note is retired — DIG-5121, 2026-10-22).
 #
-# OCC is in active use, so this deploy re-asserts the CURRENT live route set
-# (verified live: all eight routes resolve to digithings-digichat) and changes
-# nothing about traffic. The /api/mcp/zammad* route below is additive and
-# secret-gated (stage 1 of moving the OCC helpdesk MCP off the shared base
-# stack); nothing consumes it yet. To complete the cutover later: remove these
-# seven from here, keep them on apps/digithings-stack-cloudflare/wrangler.toml,
-# and deploy the stack first.
+# That note said the zone routes had been folded into digithings-stack in code
+# (cost epic: one DigiChat container, not two) and that the seven routes below
+# would MOVE there once that cutover was deployed. The fold is dead. Chris
+# decided on 2026-10-19 (recorded in
+# apps/digithings-stack-cloudflare/wrangler.toml) that OCC is client work and
+# must not ride the base digithings platform: every digithings.ai digichat path
+# — embed, api/chat, api/embed, api/byok, api/plan-proof, api/health, _dtchat,
+# chat/occ and now chat* — is owned by THIS Worker and its own container. The
+# stack Worker serves only its own custom domains (graph/key/search), which is
+# what ended every stack deploy failing with `Can't deploy routes that are
+# assigned to another worker`.
+#
+# So the seven routes below are this Worker's live surface and they STAY here.
+# They are not a temporary bridge with a stack move behind them, and the stack
+# holds no fallback copy of them: dropping them here drops them from the zone,
+# and Pages would 404 /embed and /api/chat with OCC in active use. Do not
+# "complete the cutover" by moving them to the stack — the decision is the
+# other way round.
+#
+# The /api/mcp/zammad* route below is additive and secret-gated (stage 1 of
+# moving the OCC helpdesk MCP off the shared base stack); nothing consumes it
+# yet.
+#
+# DIG-5121 (2026-10-22): this deploy is no longer traffic-neutral. The route
+# set now ALSO claims digithings.ai/chat*, so the canonical /chat path stops
+# being the Pages marketing shell and becomes the digichat app — the Container
+# is built with DIGICHAT_BASE_PATH=/chat, so the app answers under /chat and
+# the legacy paths below keep working through the Worker (see
+# src/paths.ts: containerPathFor).
+#
+# Compatibility window (ADR 0018): the seven routes below stay declared.
+# /embed* stays for good — the OCC shell's iframe points at
+# digithings.ai/embed?host=… and the marketing site's own shell points it at
+# digithings.ai/embed?host=digithings.ai, so that route is not a temporary
+# bridge. The /api/* routes below are the legacy spelling of what the app now
+# serves under /chat/api/*; they are reviewed once the cutover is verified
+# live. The OCC shell (/chat/occ*) stays a Pages shell behind the invite gate.
 #
 # To roll back: this exact route list IS the rollback shape.
 [[routes]]
@@ -76,16 +102,34 @@ zone_name = "digithings.ai"
 
 # Read-only OCC helpdesk MCP (stage 1): secret-gated by x-digi-mcp-key ==
 # ZAMMAD_EDGE_KEY, then served by the in-container zammad-mcp through the
-# trusted proxy. ADDITIVE — no live traffic uses it until stage 2.
+# trusted proxy. The OCC assistant's MCP row points at
+# https://digithings.ai/api/mcp/zammad/mcp and sends that key
+# (infra/digichat-digithings/README.md). The base-path spelling
+# (/chat/api/mcp/zammad*) is gated by the same key and mapped onto this
+# container-local path (src/paths.ts).
 [[routes]]
 pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"
 
-# DIG-3585: the invite-gated OCC Pages shell. Same pattern is on
-# apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy keeps the gate.
-# Valid ?token= or the occ_invite cookie passes through to Pages.
+# DIG-3585: the invite-gated OCC Pages shell. Valid ?token= or the
+# occ_invite cookie passes through to Pages.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
+
+# DIG-5121: the canonical digichat surface. The app is served under /chat by
+# the Container, so without this route the path never reaches this Worker and
+# Pages keeps answering it. The trailing `*` (not `/chat/*`) claims the bare
+# /chat too, so the canonical URL is served directly instead of bouncing off
+# the Pages trailing-slash redirect — the same shape as the /embed* and
+# /api/chat* routes above.
+#
+# The OCC shell stays a Pages shell because THIS Worker gates it: every
+# request is matched by the /chat* pattern below, and the Worker answers
+# /chat/occ itself (src/occ-gate.ts) before anything is proxied. That in-Worker
+# gate is the guarantee — it holds whichever order the routes are matched in.
+[[routes]]
+pattern = "digithings.ai/chat*"
 zone_name = "digithings.ai"
 
 [[containers]]
@@ -100,9 +144,15 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-# 2, not 1: a rolling deploy must be able to start the new revision while the
-# old one drains, or the account's container-instance cap refuses the start
-# (DIG-4459). Only one instance serves traffic once the rollout settles; the
+# Two slots, not one: a rolling deploy must be able to start the new revision
+# while the old one drains, or the account's container-instance cap refuses the
+# start (DIG-4459). The digichat container id is derived from the deploying
+# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
+# id's instance is still running — warm, or draining for up to 15 minutes after
+# the rollout's SIGTERM. With one slot the new instance cannot start until the
+# old one has fully exited, so every request that needs a container start then
+# fails with "Maximum number of running container instances exceeded"
+# (DIG-4487). Only one instance serves traffic once the rollout settles; the
 # second slot is rollout headroom, not steady-state cost.
 max_instances = 2
 instance_type = "basic"
@@ -143,6 +193,15 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
 #   DIGIKEY_URL=https://key.digithings.ai
 # Never use Mac Compose / *.trycloudflare.com quick tunnels in production.
+
+# Embed tenant config (DIG-1210): non-secret JSON in KV key `embed-tenants`,
+# credentials referenced by name (tokenEnv) and set as Worker secrets.
+# Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
+# (created 2026-10-13). Without the binding the Worker uses
+# the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
+[[kv_namespaces]]
+binding = "DIGICHAT_TENANTS_KV"
+id = "361b710bee56466097053275404535ba"
 
 [vars]
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy

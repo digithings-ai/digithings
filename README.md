@@ -51,7 +51,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
 | **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
-| **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
+| **digibot** | Heartbeat, audit, MCP skill → digigraph | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
 | **digillm** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
@@ -66,7 +66,7 @@ Python members live in their own directories. The import name is the directory n
 | Package | Path |
 |---------|------|
 | digibase | [digibase/](digibase/) |
-| digiclaw | [digiclaw/](digiclaw/) |
+| digibot | [digibot/](digibot/) |
 | digifetch | [digifetch/](digifetch/) |
 | digigraph | [digigraph/](digigraph/) |
 | digikey | [digikey/](digikey/) |
@@ -159,19 +159,39 @@ With venv: `pytest -v` or `pytest -m unit -v`.
 
 ```
 digithings/
+├── apps/         # 15 apps. digithings-web (marketing + digibook),
+│                 # digiquant-web (the desk at /app), digichat, dashboard,
+│                 # reference (pattern gallery), plus the API, runner and
+│                 # worker apps: dashboard-api, digidata-api, corpus-index,
+│                 # digiquant-runner, twelvex-runner, digithings-cron,
+│                 # digichat-cloudflare, digithings-stack-cloudflare,
+│                 # digitrace-langfuse, and digiquant-app (parked).
+├── packages/     # 10 shared npm packages: ui, design, brand, catalog,
+│                 # contract, digichat-ui, hero-banner, surface-config,
+│                 # tui-frame, durable-object-reconnect.
+├── clients/      # 4 terminal clients: digichat-tui, digiquant-tui,
+│                 # digivoice-tui, digichat-devkit.
 ├── digigraph/    # LangGraph orchestration, agents, digistore
 ├── digiquant/    # Nautilus + Polars, backtest/optimize
 ├── digisearch/   # RAG, document search, ingestion
-├── digichat/     # Next.js BFF + chat UI
+├── digifetch/    # shared fetch/scrape engine
+├── digillm/      # OpenAI-compatible LLM client
+├── digiskills/   # compile a repo into an Agent Skill package
+├── digivault/    # markdown vault management
+├── digivoice/    # local speech tools (dictation, speech)
 ├── digikey/      # API keys + JWT
 ├── digitrace/    # Tracing helpers + status API
-├── digiclaw/     # Heartbeat, audit, MCP skill
+├── digibot/      # Heartbeat, audit, MCP skill
 ├── digibase/     # Shared HTTP/audit library
+├── digidev/      # Agentic coding workflow kit
+├── infra/        # Deployment infrastructure
+├── openspec/     # Change proposals and specs
+├── openwiki/     # Generated repo wiki
 ├── config/       # LiteLLM, model modes
-├── projects/     # Confidential pilots/engagements (gitignored)
+├── projects/     # confidential pilots (gitignored)
 ├── scripts/      # Makefile-driven helpers
 ├── tests/        # pytest (dg, dq, ds, dc, ...)
-├── docs/         # VISION, ADRs, scoring rubrics, workflow
+├── docs/         # VISION, ADRs, design language, workflow
 ├── docker-compose.yml
 ├── Makefile
 └── .env.example

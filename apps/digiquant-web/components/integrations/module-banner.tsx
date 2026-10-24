@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BANNERS } from "../../../../packages/hero-banner/src/definitions";
-import type { BannerDefinition } from "../../../../packages/hero-banner/src/types";
-import { preparedBanner } from "../../../../packages/hero-banner/src/engine";
-import { HeroBanner } from "../../../../packages/hero-banner/src/web";
+import { BANNERS } from "@digithings/hero-banner/definitions";
+import type { BannerDefinition } from "@digithings/hero-banner";
+import { preparedBanner } from "@digithings/hero-banner";
+import { HeroBanner } from "@digithings/hero-banner/web";
 
 /** One banner pixel, so every word draws at the same cap height. */
 const CELL_REM = 0.15;
@@ -14,7 +14,7 @@ const WORD_ROWS = 10;
  *  carries its animation functions, which cannot cross from a server component.
  *  The banner stays blank until it scrolls into view, so its build plays where
  *  the reader sees it, not off screen while the top of the page loads. Height
- *  follows the banner's rows, and rows above the word (digiclaw's rail) rise
+ *  follows the banner's rows, and rows above the word (digibot's rail) rise
  *  into the space above, so every word sits on the same line at the same size. */
 export function ModuleBanner({ name, className }: { name: string; className?: string }) {
   const def = (BANNERS as Record<string, BannerDefinition>)[name];

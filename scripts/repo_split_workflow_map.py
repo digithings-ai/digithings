@@ -1,7 +1,8 @@
 """Destination of each workflow the repo split must not carry into a private repo.
 
 Chris, 2026-10-14 (DIG-3605): no ``.github/workflows`` file moves into a private
-repo. Each listed file is a Cloudflare cron, a local-ci job, or a deletion.
+repo. Each listed file is a Cloudflare cron, a local-ci job, a manual-dispatch
+workflow with no clock, or a deletion.
 This module is that record. It does not deploy, and it does not call Cloudflare.
 
 Deploy-type Worker workflows point at the signed-tag jobs in DIG-3697
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-DISPOSITIONS = ("cloudflare-cron", "local-ci", "deletion")
+DISPOSITIONS = ("cloudflare-cron", "local-ci", "manual-dispatch", "deletion")
 
 
 @dataclass(frozen=True)
@@ -181,8 +182,13 @@ ROWS: tuple[Row, ...] = (
     Row(
         "R6",
         ".github/workflows/datatap-answer-check.yml",
-        "cloudflare-cron",
-        clock_ids=("datatap-answer-check",),
+        "manual-dispatch",
+        note=(
+            "Retired 2026-10-18 (Chris): the client manages their own "
+            "infrastructure, so we do not probe them on a schedule. No clock "
+            "row and no [triggers] entry (DIG-4435). The file stays on develop "
+            "and a human can still start it by hand."
+        ),
     ),
     Row(
         "R6",

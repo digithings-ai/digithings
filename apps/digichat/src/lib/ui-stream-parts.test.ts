@@ -479,7 +479,7 @@ describe("writeStandardActivity", () => {
       const starts = chunks.filter((c) => c.type === "tool-input-start");
       expect(starts).toHaveLength(1);
       expect(starts[0]).toMatchObject({ toolName: tool });
-      expect(String(starts[0].title)).toMatch(/^DigiSearch /);
+      expect(String(starts[0].title)).toBe(tool);
       const outs = chunks.filter((c) => c.type === "tool-output-available");
       expect(outs).toHaveLength(1);
       expect(outs[0].toolCallId).toBe(starts[0].toolCallId);
@@ -725,5 +725,77 @@ describe("writeStandardActivity sources (OCC digisearch + digivault_get_note)", 
     // The tool results still carry their documents for the tool block.
     const outputs = chunks.filter((c) => c.type === "tool-output-available");
     expect(outputs).toHaveLength(3);
+  });
+});
+
+describe("writeStandardActivity source identity (DIG-4591)", () => {
+  it("writes two documents that only share a title", () => {
+    // The source gave no usable path for either document, so the path is the
+    // title — the shape in which the two documents used to collapse.
+    const chunks = collect([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "digisearch",
+        toolName: "digisearch",
+        documents: [
+          { title: "Shared title", path: "Shared title", docId: "doc-0000000000000001" },
+          { title: "Shared title", path: "Shared title", docId: "doc-0000000000000002" },
+        ],
+      },
+    ] as ActivitySpan[]);
+    const sources = chunks.filter(
+      (c) => c.type === "source-url" || c.type === "source-document"
+    );
+    expect(sources).toHaveLength(2);
+  });
+
+  it("writes two documents that share a title and sit at different paths", () => {
+    const chunks = collect([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "digisearch",
+        toolName: "digisearch",
+        documents: [
+          { title: "Shared title", path: "docs/one.md" },
+          { title: "Shared title", path: "docs/two.md" },
+        ],
+      },
+    ] as ActivitySpan[]);
+    const sources = chunks.filter(
+      (c) => c.type === "source-url" || c.type === "source-document"
+    );
+    expect(sources).toHaveLength(2);
+    expect(sources.map((s) => (s as { filename?: string }).filename)).toEqual([
+      "docs/one.md",
+      "docs/two.md",
+    ]);
+  });
+
+  it("writes one document that surfaces as a web URL and as a vault path once", () => {
+    const chunks = collect([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "digisearch",
+        toolName: "digisearch",
+        documents: [
+          { title: "Auth doc", path: "https://example.com/auth", docId: "doc-0000000000000001" },
+        ],
+      },
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "digivault_get_note",
+        toolName: "digivault_get_note",
+        documents: [{ title: "Auth doc", path: "vault/auth.md", docId: "doc-0000000000000001" }],
+      },
+    ] as ActivitySpan[]);
+    const sources = chunks.filter(
+      (c) => c.type === "source-url" || c.type === "source-document"
+    );
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.type).toBe("source-url");
   });
 });

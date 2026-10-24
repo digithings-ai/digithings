@@ -374,6 +374,11 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digisearch_index"] = req.digisearch_index
     initial["vault_path_prefix"] = req.vault_path_prefix
     initial["research_system_prompt_override"] = req.research_system_prompt_override
+    # Tenant session-control lock (same corpus map entry). Unconditional so a prior
+    # turn's True never sticks on the same thread (LangGraph checkpoints are
+    # per-key last-write-wins) and so an unlocked tenant clears it to False.
+    initial["lock_session_controls"] = bool(req.lock_session_controls)
+    initial["digisearch_tools"] = req.digisearch_tools
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
@@ -818,7 +823,7 @@ def run_digigraph_workflow_streaming(
             tool_name = data.get("name")
             name = tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else ""
             has_sources = "rag_sources" in data
-            if has_sources or name in _RETRIEVAL_TOOL_NAMES:
+            if has_sources or name in _RETRIEVAL_TOOL_NAMES or name.startswith("digisearch_"):
                 sources = data.get("rag_sources") if has_sources else []
                 if not isinstance(sources, list):
                     sources = []

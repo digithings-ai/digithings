@@ -33,7 +33,7 @@ export type Job = {
   /** Set when kind is "probe". Worker fetch; does not start the container. */
   probe?: "site" | "stack";
   /** Set when kind is "twelvex". POST /run/{route} on twelvex-runner. */
-  route?: "ingest" | "heartbeat";
+  route?: "ingest" | "heartbeat" | "session";
   /**
    * Set when kind is "watch". The service this job only READS. There is no
    * `command`: a watch job has nothing to start, and nothing to time out. Its
@@ -189,7 +189,7 @@ function cj(
 function tx(
   id: string,
   cron: string,
-  route: "ingest" | "heartbeat",
+  route: "ingest" | "heartbeat" | "session",
   workflow: string,
   opts: {
     inputs?: Record<string, string>;
@@ -206,7 +206,8 @@ function tx(
     inputs: opts.inputs,
     ref: DEVELOP,
     enabled: true,
-    timeoutSeconds: opts.timeoutSeconds ?? (route === "ingest" ? 1200 : 300),
+    timeoutSeconds:
+      opts.timeoutSeconds ?? (route === "ingest" ? 1200 : route === "session" ? 7200 : 300),
   };
 }
 
@@ -447,17 +448,42 @@ export const JOBS: readonly Job[] = [
   // land in one review window.
   wd("dependency-freshness", "23 6 * * MON", MONOREPO, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
-  // Hourly answer-integrity probe against DataTap production. Clock lives here,
-  // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
-  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml"),
+  // The hourly answer-integrity probe had its clock here (DIG-306). Chris
+  // retired it on 2026-10-18: the client manages their own infrastructure, so
+  // we do not probe them on a schedule. The workflow file stays, dispatchable
+  // by hand; no clock dispatches it any more (DIG-4435).
+  //
+  // The row stays, disabled, rather than being deleted. The deployed Worker
+  // still carries the "17 * * * *" trigger until the next digithings-cron
+  // deploy, and the deployed-trigger contract (src/trigger-contract.ts) fails
+  // a deployed cron that no job row claims - not even a disabled one. Deleting
+  // the row would red local-ci with unrecognised_cron "17 * * * *" and
+  // deadlock the very merge that has to remove the clock. A disabled row still
+  // claims its cron (the contract agrees with the quiet tick in src/index.ts),
+  // so the contract stays green and the next deploy drops the trigger. Do not
+  // re-enable this row without a new order from Chris.
+  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml", {
+    enabled: false,
+  }),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
   // Add a twelve-x wd() row only with a known cron from that repo.
-  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
-  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
+  // FX research sessions: the client-visible feed. They run on the runner
+  // now, with the session the workflow used to pass as an input.
+  tx("twelve-x-asia", "7 0 * * MON-FRI", "session", "daily_run_asia.yml", {
+    inputs: { session: "asia" },
+    timeoutSeconds: 7200,
+  }),
+  tx("twelve-x-london", "12 7 * * MON-FRI", "session", "daily_run_london.yml", {
+    inputs: { session: "london" },
+    timeoutSeconds: 7200,
+  }),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
-  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
+  tx("twelve-x-new-york", "17 12 * * MON-FRI", "session", "daily_run_new_york.yml", {
+    inputs: { session: "new_york" },
+    timeoutSeconds: 7200,
+  }),
   tx("twelve-x-market-context-intraday", "4 */4 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
     timeoutSeconds: 1200,
@@ -538,7 +564,7 @@ export const JOBS: readonly Job[] = [
   // in order, needs no reshuffle. Minute :22 is five minutes after the Monday
   // 09:17 house-run start, so a POST that never arrived is raised inside the
   // grace DIG-4416 sets; it is also clear of the :17 cluster
-  // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
+  // (production-deploy-gate-watchdog, secret-staleness, smoke-site), :41
   // (token-canary) and :47.
   wj("digiquant-house-run-watch", "22 * * * *", "digiquant-runner"),
   // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.

@@ -70,7 +70,7 @@ cutover; mono renamed private then archived):
 `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`,
 `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
 `CURSOR_API_KEY`), `DIGISEARCH_SEED_API_KEY`, `DIGIGRAPH_UPSTREAM_API_KEY`,
-`DIGICLAW_DIGIKEY_API_KEY`, `DIGIQUANT_VAULT_MASTER_KEY`,
+`DIGIBOT_DIGIKEY_API_KEY`, `DIGIQUANT_VAULT_MASTER_KEY`,
 `E2E_BEARER_TOKEN`, `DIGISEARCH_MONITORS_DB`.
 Worker `[vars]` (non-secret config such as `SUPABASE_URL` public anon URL,
 `DIGICHAT_EMBED_HOSTS`, `DIGISEARCH_URL`) are not secrets and stay as vars;
@@ -163,7 +163,8 @@ gate/palette become pluggable (D-X1).
 ## OCC invite key + tenant tokens + edge keys (Keychain, names only)
 
 Live human-held names (Keychain service names, values never touched):
-`digithings.occ-invite-key`, `digithings.mcp-edge-key`,
+`digithings.occ-invite-key`,
+`digithings.mcp-edge-key`,
 `digithings.zammad-edge-key`, `digithings.tenant-token-digiquant-io`,
 `digithings.tenant-token-digithings-ai`.
 These stay in Keychain + Cloudflare Worker secrets + KV. They are **never
@@ -171,11 +172,25 @@ committed** to any repo (R0/R5/R6 hold procedure and `tokenEnv` names only,
 per DIG-1612/#5308). Rotation is a human/Keymaster action, not part of the
 file move.
 
+`digithings.occ-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
+and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524), on the
+reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the OCC
+tenant resolving at no credential (DIG-1381) — and that the token was being echoed into served
+HTML (DIG-3523). The production copies were not revoked: the Worker secret, the Pages secret and
+the OCC tenant `token` still held the value, and all of those surfaces are write-only, so the
+live value could not be read back from them. The value survived in the local host
+secret store (`~/.config/digithings/secrets/`), and on 2026-10-21 the sanctioned
+copy was restored to the Keychain and proved against production (DIG-4810:
+`EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS). **No rotation
+was performed** — the value that is live is the value that was installed on
+2026-10-11. Runbook `docs/ops/OCC_INVITE_KEY.md`; inventory row `OCC_INVITE_KEY`
+and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
+
 ## Local-only Keychain (`digithings-local/*`, never moves)
 
 `digithings-local/CHEAPERINFERENCE_API_KEY`,
 `digithings-local/DIGICHAT_API_KEY`,
-`digithings-local/DIGICLAW_DIGIKEY_API_KEY`,
+`digithings-local/DIGIBOT_DIGIKEY_API_KEY`,
 `digithings-local/DIGIGRAPH_UPSTREAM_API_KEY`,
 `digithings-local/DIGIKEY_ADMIN_TOKEN`,
 `digithings-local/DIGIKEY_BFF_TOKEN`,

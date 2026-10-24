@@ -57,7 +57,8 @@ describe("editor group tabs", () => {
     const user = userEvent.setup();
     renderEditors();
     await user.click(screen.getByRole("button", { name: "Appearance" }));
-    expect(screen.getByRole("combobox", { name: /skin/i })).not.toBeNull();
+    expect(screen.getByRole("group", { name: /skin — pick one/i })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^skin digichat / })).not.toBeNull();
     expect(screen.queryByText("Identity")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 # digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The served desk is `/app` on `apps/digiquant-web`. This package (npm name `dashboard`, folder `apps/dashboard`) stays in the tree. This release the sidebar and command palette list FX Hub only; brief, portfolio, and pipeline are the brief desk at `/app`. FX Hub stays at `/dashboard/twelve-x`, and `?invite=` on `/dashboard` is unchanged. Joins the root npm workspace and consumes the shared design system via
+Next.js 16 (pin 16.4.0) investment-intelligence dashboard for **digiquant**. The operator surface is the desk at `/app` on `apps/digiquant-web` (ADR D2); this package (npm name `dashboard`, folder `apps/dashboard`) stays in the tree with FX Hub and its own research and portfolio routes. This release the sidebar and command palette list FX Hub only; brief, portfolio, and pipeline are the brief desk at `/app`. FX Hub stays at `/dashboard/twelve-x`, and `?invite=` on `/dashboard` is unchanged. Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
@@ -319,6 +319,33 @@ The `freshness` job in that workflow reads the live stamp through
 days. Why the *cause* of a freeze is not detectable here: Pages' deployment list,
 build log, production branch and watch-path config are visible only in the
 Cloudflare dashboard.
+
+### Recorded TUI frame preview (D9 — DIG-2698)
+
+The dashboard shell renders the **recorded** terminal frames committed under
+`fixtures/tui-frames/` (OpenTUI `captureCharFrame()` output, shown as Geist
+Mono text by `components/tui-frame-preview.tsx`). Recorded frames only — no
+live socket in 1.0 (ADR D7) — so the surface needs no service, no entitlement
+and no CSP change. A recorded frame is a snapshot of a terminal, so every
+record carries the moment it was taken and the block labels it with that
+moment. The block ships collapsed; opening it shows the frame.
+
+Frames are written by the exporter of their TUI
+(`clients/digiquant-tui/src/export-frame.ts`,
+`clients/digichat-tui/src/export-frame.ts`), which renders the client through
+the OpenTUI harness, waits for its reads to settle and crops the pane it
+previews. Both exporters write the record declared once in
+`packages/tui-frame` — the type, its guard, the fixture server and the flag
+parser — so the dashboard and the producers cannot drift on what a field means;
+the digiquant exporter refuses to write a frame that still says `loading…` or
+`could not be reached`. The fixture server binds an ephemeral port, so two
+exporters can run at once, and `--captured-at` pins the one field that would
+otherwise move between two captures. `fixtures/tui-frames/manifest.json` lists
+the committed frames and the screenshots that belong to them, and
+`lib/tui-frames-manifest.test.ts` fails the suite when the directory and the
+manifest drift apart.
+
+Kill the block with `NEXT_PUBLIC_DIGI_TUI_PREVIEW=0`.
 
 ## Settings workspace (T3)
 

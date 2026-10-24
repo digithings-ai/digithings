@@ -2,10 +2,9 @@
 "use client";
 
 /**
- * Force-web arm is tenant-gated (#3871): a deny tenant (datatap-shape,
- * tenantAllowsWeb false) typing `/websearch foo` must not set the pending
- * web-search flag, while an allowed tenant still arms this-send web search.
- * The BFF deny stays as backstop; this pins the client arm point.
+ * `/websearch` is not a palette command. Submitting it must not arm the
+ * pending web-search flag for a deny tenant or an allowed one. Web search
+ * is toggled in `/tools`. The BFF deny stays as backstop.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -44,6 +43,8 @@ vi.mock("@assistant-ui/react", async () => {
   return {
     ...actual,
     useAui: () => aui,
+    useAuiState: (selector: (state: { composer: { text: string } }) => unknown) =>
+      selector({ composer: { text: composerState.text } }),
     unstable_useSlashCommandAdapter: () => ({ adapter: {}, action: {} }),
     unstable_useMentionAdapter: () => ({ adapter: {}, directive: {} }),
   };
@@ -76,6 +77,9 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setModel: vi.fn(),
     setEffort: vi.fn(),
     setSearchEngine: vi.fn(),
+    setToolbar: vi.fn(),
+    setScrollbars: vi.fn(),
+    setDensity: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -97,6 +101,7 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openEffort: vi.fn(),
     openSearchEngine: vi.fn(),
     openView: vi.fn(),
+    openDensity: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
@@ -121,8 +126,8 @@ function submitAs(api: EmbedChatPrefsApi, text: string): void {
   capture.submit!({ preventDefault: () => {} });
 }
 
-describe("DigichatSkin force-web arm (#3871)", () => {
-  it("datatap-shape deny tenant typing /websearch foo emits no pending flag", () => {
+describe("DigichatSkin direct tool commands", () => {
+  it("a deny tenant typing /websearch foo does not arm web search", () => {
     const sessionKey = "deny-tenant-websearch";
     submitAs(
       prefsApi({ tenantAllowsWeb: false, sessionKey, catalogTools: [] }),
@@ -131,9 +136,9 @@ describe("DigichatSkin force-web arm (#3871)", () => {
     expect(takePendingWebSearchForce(sessionKey)).toBe(false);
   });
 
-  it("allowed tenant typing /websearch foo still arms this-send web search", () => {
+  it("an allowed tenant typing /websearch foo does not arm web search either", () => {
     const sessionKey = "allow-tenant-websearch";
     submitAs(prefsApi({ tenantAllowsWeb: true, sessionKey }), "/websearch foo");
-    expect(takePendingWebSearchForce(sessionKey)).toBe(true);
+    expect(takePendingWebSearchForce(sessionKey)).toBe(false);
   });
 });

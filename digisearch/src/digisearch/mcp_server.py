@@ -84,7 +84,7 @@ def semantic(
 
             response = SearchResponse(results=results)
         except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
-            logger.error("digisearch client query failed: %s", e)
+            logger.exception("digisearch client query failed: %s", e)
             return f"[digisearch query error: {e}]"
     else:
         allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
@@ -194,7 +194,7 @@ def web_search(
         logger.info("web_search rejected input: %s", e)
         return f"[web_search error: {e}]"
     except WebProviderError as e:
-        logger.error("web_search provider failure: %s", e)
+        logger.exception("web_search provider failure: %s", e)
         return f"[web_search error: {e}]"
 
 
@@ -288,7 +288,7 @@ def _monitor_store_or_none() -> MonitorStore | None:
     try:
         return get_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch monitor store unavailable: %s", e)
+        logger.exception("digisearch monitor store unavailable: %s", e)
         return None
 
 
@@ -307,7 +307,7 @@ def monitors_create_watch(
 
     The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
     this response only — never on list/read. Provide ``schedule_cron`` (5-field
-    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    digibot grammar) or ``interval_seconds`` (>= 60); cron wins when both are
     given. The watch is named after the query. ``delivery_mode`` other than
     ``poll`` needs targets, which this surface cannot set, so those are rejected.
     This surface creates oss watches only: an EXA-backed watch (``backend``,
@@ -422,7 +422,7 @@ def _webset_store_or_none() -> WebsetStore | None:
     try:
         return get_webset_store()
     except (OSError, sqlite3.Error) as e:
-        logger.error("digisearch webset store unavailable: %s", e)
+        logger.exception("digisearch webset store unavailable: %s", e)
         return None
 
 
@@ -641,11 +641,14 @@ def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
 
 
 # --- Art. 9 screen on the MCP surface (DIG-1083 leaf 10; spec DIG-912 §5.4) --
-# This server is loopback-bound and unauthenticated by default: ``DIGI_MCP_REQUIRE_AUTH``
-# is read in exactly one place repo-wide and it is not here. Screening is therefore the
-# only control standing in front of the surface, which is why the surface is declared
-# explicitly (``digisearch.client.SURFACE_MCP``) rather than left to the path-keyed floor
-# in ``digibase.art9`` — a registry keyed by path cannot see a surface that has no path.
+# This server is loopback-bound by default - the local stack overrides the bind to
+# 0.0.0.0 inside the container so its published port answers (docker-compose.yml),
+# which leaves the compose network as the reachable surface - and unauthenticated:
+# ``DIGI_MCP_REQUIRE_AUTH`` is read in exactly one place repo-wide and it is not
+# here. Screening is therefore the only control standing in front of the surface,
+# which is why the surface is declared explicitly (``digisearch.client.SURFACE_MCP``)
+# rather than left to the path-keyed floor in ``digibase.art9`` - a registry keyed
+# by path cannot see a surface that has no path.
 #
 # FastMCP 1.9.3 has no middleware hook (``mcp.server.fastmcp.middleware`` does not exist),
 # so the seam is the registered ``Tool.fn``: dispatch runs

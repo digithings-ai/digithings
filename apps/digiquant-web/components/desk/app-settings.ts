@@ -1,4 +1,5 @@
 import rawModels from "../../../digichat/config/digichat-deploy-models.json";
+import { isRecord } from "@digithings/ui/lib/record";
 
 /**
  * Desk preferences the settings page can change.
@@ -16,7 +17,11 @@ if (!models.available.includes(models.default)) {
 
 export const CHAT_MODELS: readonly string[] = models.available;
 
-export const THEMES = ["dark", "light"] as const;
+/**
+ * The desk has one scheme: dark. A stored "light" theme is dropped here, so the
+ * desk never asks the document for a scheme it does not have.
+ */
+export const THEMES = ["dark"] as const;
 export const DENSITIES = ["regular", "compact"] as const;
 export const REFRESH_SECONDS = [0, 15, 30, 60, 120] as const;
 export const STALE_SESSIONS = [1, 2, 3, 5] as const;
@@ -76,10 +81,6 @@ export function normalizeSettings(input: Partial<AppSettings>): AppSettings {
     notify: oneOf(input.notify, NOTIFY_MODES, DEFAULT_SETTINGS.notify),
     chatModel: allowedModel(typeof input.chatModel === "string" ? input.chatModel : ""),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Read a stored document. Unknown fields, including any key, are ignored. */

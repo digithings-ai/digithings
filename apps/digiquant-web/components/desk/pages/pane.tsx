@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Button } from "@digithings/ui/ui";
-import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/format";
+import { asOfStatus, toneOf } from "digiquant-tui/format";
 import { staleBanner } from "../app-settings";
 import { useAppSettings } from "../app-settings-store";
-import { expandLayout, type Need } from "../../../../../clients/digiquant-tui/src/expand";
-import { COLS, ROWS, type Layout, type Placement } from "../../../../../clients/digiquant-tui/src/grid";
-import { shapeLines, tidyBody, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
-import { bodySize, compactBody, hiddenLabel } from "../../../../../clients/digiquant-tui/src/pages/pane-fit";
+import { expandLayout, type Need } from "digiquant-tui/expand";
+import { COLS, ROWS, type Layout, type Placement } from "digiquant-tui/grid";
+import { shapeLines, tidyBody, type PaneBody, type PaneBlock } from "digiquant-tui/pages/shape";
+import { bodySize, compactBody, hiddenLabel } from "digiquant-tui/pages/pane-fit";
 import { PanelView } from "../panel-view";
 import { columnRoles } from "../table-columns";
 
@@ -230,6 +230,7 @@ export function DeskPane({
   dataAsOf,
   lines,
   blocks,
+  body,
   tone,
   id,
   focused,
@@ -248,20 +249,22 @@ export function DeskPane({
   dataAsOf?: string | null;
   lines?: string[];
   blocks?: PaneBody;
+  /** A rich block that paints instead of `blocks`. The blocks still size the tile. */
+  body?: ReactNode;
   tone: string;
   /** The read's data, for a block that can also draw as a chart. Pass it only on an ok read. */
   panel?: { id: string; data: unknown };
 } & PaneControls) {
-  const body = tidyBody(blocks ?? shapeLines(lines ?? []));
+  const faceBody = tidyBody(blocks ?? shapeLines(lines ?? []));
   const settings = useAppSettings();
   const status = asOfStatus(route, asOf, dataAsOf, undefined, settings.staleSessions);
   const banner = staleBanner(status.state, settings.notify);
   const dates = status.age ? status.label.slice(0, status.label.indexOf(` · ${status.age}`)) : status.label;
   const { ref: bodyRef, fit } = useBodyFit();
-  const face = open || fit === null ? { body, hidden: null } : compactBody(body, fit);
+  const face = open || fit === null ? { body: faceBody, hidden: null } : compactBody(faceBody, fit);
   const more = face.hidden ? hiddenLabel(face.hidden) : null;
   const toggle = () => {
-    const size = bodySize(body);
+    const size = bodySize(faceBody);
     onToggle({ w: size.chars * CHAR_PX + BODY_PAD, h: size.lines * ROW_PX + CHROME_PX });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -301,13 +304,16 @@ export function DeskPane({
       </header>
       <div
         ref={bodyRef}
+        role="region"
+        aria-label={`${title} body`}
+        tabIndex={0}
         className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}
         onClick={() => {
           if (window.getSelection()?.toString()) return;
           toggle();
         }}
       >
-        {panel ? (
+        {body ?? (panel ? (
           <div onClick={(event) => event.stopPropagation()}>
             <PanelView id={panel.id} title={title} data={panel.data}>
               {face.body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />)}
@@ -315,7 +321,7 @@ export function DeskPane({
           </div>
         ) : (
           face.body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />)
-        )}
+        ))}
       </div>
       <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
         <span className="flex min-w-0 items-center gap-2">

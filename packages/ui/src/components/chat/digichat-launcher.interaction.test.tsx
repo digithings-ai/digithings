@@ -28,11 +28,11 @@ describe("DigichatLauncher interactions", () => {
   function renderLauncher(onOpenChange = vi.fn()) {
     act(() => {
       root.render(
-        createElement(
-          DigichatLauncher,
-          { portal: false, onOpenChange },
-          createElement("div", { "data-chat-body": "1" }),
-        ),
+        createElement(DigichatLauncher, {
+          portal: false,
+          onOpenChange,
+          children: createElement("div", { "data-chat-body": "1" }),
+        }),
       );
     });
     return onOpenChange;
@@ -73,6 +73,9 @@ describe("DigichatLauncher interactions", () => {
     expect(container.querySelector(".digichat-launcher__panel")).not.toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(true);
     const chatBody = container.querySelector("[data-chat-body]");
+    // the caller's child is a required prop, so the body has to be in the DOM:
+    // without this the reopen check below would compare null with null.
+    expect(chatBody).not.toBeNull();
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -146,11 +149,12 @@ describe("DigichatLauncher interactions", () => {
     function renderWithHotkey(hotkey: string, onOpenChange = vi.fn()) {
       act(() => {
         root.render(
-          createElement(
-            DigichatLauncher,
-            { portal: false, hotkey, onOpenChange },
-            createElement("div", { "data-chat-body": "1" }),
-          ),
+          createElement(DigichatLauncher, {
+            portal: false,
+            hotkey,
+            onOpenChange,
+            children: createElement("div", { "data-chat-body": "1" }),
+          }),
         );
       });
       return onOpenChange;
@@ -232,11 +236,11 @@ describe("DigichatLauncher interactions", () => {
       const onOpenChange = vi.fn();
       act(() => {
         root.render(
-          createElement(
-            DigichatLauncher,
-            { portal: false, onOpenChange },
-            createElement("div", { "data-chat-body": "1" }),
-          ),
+          createElement(DigichatLauncher, {
+            portal: false,
+            onOpenChange,
+            children: createElement("div", { "data-chat-body": "1" }),
+          }),
         );
       });
 

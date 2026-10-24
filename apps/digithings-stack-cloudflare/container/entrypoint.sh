@@ -29,26 +29,84 @@ export DIGITRACE_URL="${DIGITRACE_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 # House default: merge Cheaper Inference overlay when key present (unless forced OR).
+# ENV_LITELLM_CONFIG is what supervisord expands in the [program:litellm] command,
+# so it must be set on EVERY path: an unset value expands to an empty --config and
+# litellm then serves no model at all while the health probe stays green
+# (DIG-4512). The merge below replaces both values with the merged file.
 export LITELLM_CONFIG="${LITELLM_CONFIG:-/app/config/litellm.yaml}"
+export ENV_LITELLM_CONFIG="${ENV_LITELLM_CONFIG:-$LITELLM_CONFIG}"
 _ci_key="${CHEAPERINFERENCE_API_KEY:-}"
 _upstream="$(printf '%s' "${DIGI_HOUSE_UPSTREAM:-}" | tr '[:upper:]' '[:lower:]')"
 _ci_house="$(printf '%s' "${CHEAPERINFERENCE_HOUSE:-}" | tr '[:upper:]' '[:lower:]')"
 _force_or=0
 case "$_upstream" in openrouter|or) _force_or=1 ;; esac
 case "$_ci_house" in 0|false|no|off) _force_or=1 ;; esac
+# Loud boot lines go to the container stderr AND to a file the operator can
+# read afterwards. supervisord only manages its own program logs, so a line
+# that only reached stderr was invisible to every diagnostic except the
+# container console (DIG-4512).
+_log() {
+  printf '%s\n' "$*" >> /var/log/supervisor/stack-entrypoint.log 2>/dev/null || true
+  printf '%s\n' "$*" >&2
+}
 if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
   export CHEAPERINFERENCE_API_BASE="${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}"
-  if [ -f /app/scripts/merge_litellm_cheaperinference.py ] \
-    && [ -f /app/config/litellm.cheaperinference.yaml ] \
-    && [ -f /app/config/litellm.yaml ]; then
-    python3 /app/scripts/merge_litellm_cheaperinference.py \
+  # Every asset the merge needs must be present. A missing asset used to skip the
+  # whole merge block in silence, which left the base config in place.
+  _missing=""
+  for _asset in /app/scripts/merge_litellm_cheaperinference.py \
+    /app/config/litellm.cheaperinference.yaml \
+    /app/config/litellm.yaml; do
+    [ -f "$_asset" ] || _missing="$_missing $_asset"
+  done
+  # A missing asset or a failed merge must NOT abort the boot. The container
+  # cold-starts on every request (ports.ts sleepAfter 1m), so a dead container
+  # takes digisearch, digivault and digikey down with it for every request
+  # after an idle minute - a wider outage than the curated-model 404 it
+  # prevents, on a live invite-gated tenant. The base config is a build-time
+  # COPY, so it is always present: degrade to it and keep the verdict loud
+  # in the log file instead of serving it silently (DIG-4512).
+  _merge_rc=0
+  _merge_detail=""
+  if [ -n "$_missing" ]; then
+    _merge_rc=1
+    _merge_detail="overlay asset missing:$_missing"
+  else
+    # The merge must produce a model_list that carries every curated house
+    # model. Its own message names the ones that are missing.
+    _merge_detail="$(python3 /app/scripts/merge_litellm_cheaperinference.py \
       --base /app/config/litellm.yaml \
       --overlay /app/config/litellm.cheaperinference.yaml \
-      -o /app/config/litellm.runtime.yaml \
-      && export LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      && export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
-      || echo "cheaperinference: merge failed; using default litellm.yaml" >&2
+      --require-curated-ids \
+      -o /app/config/litellm.runtime.yaml 2>&1)" || _merge_rc=$?
   fi
+  if [ "$_merge_rc" -eq 0 ]; then
+    export LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    export ENV_LITELLM_CONFIG=/app/config/litellm.runtime.yaml
+    _log "digithings-stack: INFO cheaperinference: curated-models OK (overlay merged into $LITELLM_CONFIG)"
+  else
+    _log "digithings-stack: ERROR cheaperinference: merge failed (${_merge_detail:-no detail}); curated-models CHECK-FAILED - serving the base config $LITELLM_CONFIG"
+  fi
+else
+  # No overlay: the effective config is the base file the image ships, and it
+  # carries none of the curated house models, so every curated tenant model
+  # answers model-not-found while /health stays green. The gap is named here
+  # and in the log file instead of being served silently (DIG-4512).
+  # This path does NOT abort the boot: the container cold-starts on every
+  # request (ports.ts sleepAfter 1m), so an abort here would take digisearch,
+  # digivault and digikey down with it for every request after an idle
+  # minute. The merge branch above does not abort either: it degrades to the
+  # same base config, so both paths keep the container up and name the
+  # verdict in the log file.
+  _curated_check_rc=0
+  _curated_missing=""
+  _curated_missing="$(python3 /app/scripts/merge_litellm_cheaperinference.py --check-config "$LITELLM_CONFIG" 2>/dev/null)" || _curated_check_rc=$?
+  case "$_curated_check_rc" in
+    0) _curated_sev="INFO"; _curated_note="curated-models OK" ;;
+    1) _curated_sev="ERROR"; _curated_note="curated-models MISSING (${_curated_missing:-none reported})" ;;
+    *) _curated_sev="ERROR"; _curated_note="curated-models CHECK-FAILED (rc=$_curated_check_rc)" ;;
+  esac
+  _log "digithings-stack: $_curated_sev cheaperinference: overlay not applied; $_curated_note - serving $LITELLM_CONFIG"
 fi
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"

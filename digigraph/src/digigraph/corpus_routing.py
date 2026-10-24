@@ -17,6 +17,19 @@ re-enable client corpus selection — the exact CWE-639 bypass ``#2366`` closed
 for a *valid* map. Invalid JSON, a non-object top level, or a map whose every
 entry is individually dropped therefore raises ``TenantCorpusMapError`` here
 too, never silently "map unset."
+
+**A known key carrying a bad value fails closed.** ``lockSessionControls``
+hides the session model / MCP / tool controls, so a non-boolean value (a
+JSON string ``"true"``, ``1``, ``null``) is a safety problem, not a
+forward-compatibility problem: the entry is kept and the flag is forced to
+**locked**, with a warning naming the tenant slug, the field and the JSON
+type (never the value). Dropping the entry is forbidden — a missing entry
+defaults to unlocked *and* loses the tenant's corpus routing, which would
+re-point the corpus. The digichat registry validator
+(``apps/digichat/src/lib/embed-tenants.ts``) rejects the same field with
+"lockSessionControls must be a boolean"; both surfaces accept only a real
+boolean and differ only in failure model (one registry document versus
+per-tenant map entries). See ADR-0035.
 """
 
 from __future__ import annotations
@@ -36,9 +49,34 @@ _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # One index name, or a comma-separated fan-out list (e.g. "occ_help,occ_tickets",
 # #4756): each element follows the single-index shape; empty elements rejected.
 _INDEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}(,[a-zA-Z0-9][a-zA-Z0-9._-]{0,127})*$")
+# Dedicated per-index digisearch tools (DIG-3269): name -> {index, description}.
+_TOOL_NAME = re.compile(r"^digisearch_[a-z0-9_]{1,48}$")
+_RESERVED_TOOL_NAMES = frozenset(
+    {"digisearch_fetch_all", "digisearch_research_delegate", "digisearch_semantic"}
+)
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
 _HEADER_TENANT = "x-digi-tenant"
+# Every entry key this parser understands — the camelCase and the snake_case
+# spelling of each known field. An entry key outside this set is *ignored*
+# (forward compatibility: a newer map may carry fields this build predates),
+# but it is never ignored silently. The map is read key by key and the override
+# is built from explicit keyword arguments, so an unknown key would otherwise
+# vanish with no log line and no error — a renamed or misspelled field would
+# look exactly like a working map. DIG-4459 decision note D2 requires a warning
+# that names the key; the VALUE of an unknown key is never logged.
+_KNOWN_ENTRY_KEYS = frozenset(
+    {
+        "digisearchIndex",
+        "digisearch_index",
+        "vaultPathPrefix",
+        "vault_path_prefix",
+        "researchSystemPrompt",
+        "research_system_prompt",
+        "lockSessionControls",
+        "lock_session_controls",
+    }
+)
 
 
 class TenantCorpusMapError(RuntimeError):
@@ -58,11 +96,45 @@ class TenantCorpusOverride(BaseModel):
     research_system_prompt: str | None = Field(
         default=None, description="Optional research system prompt override"
     )
+    digisearch_tools: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description="Dedicated digisearch tools for this tenant: tool name -> "
+        "{index, description}. When set, the generic digisearch tools are hidden and "
+        "each named tool queries only its own index (the model picks the tool).",
+    )
     lock_session_controls: bool = Field(
         default=False,
         description="Hide model/MCP/tool session controls (session_set_model, "
         "session_upsert_mcp, session_remove_mcp, session_toggle_tool) from this tenant",
     )
+
+
+def _parse_digisearch_tools(raw: Any, slug: str) -> dict[str, dict[str, str]] | None:
+    """Validate ``digisearchTools``; invalid entries are dropped with a warning."""
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("%s[%s]: digisearchTools must be an object", _ENV_VAR, slug)
+        return None
+    out: dict[str, dict[str, str]] = {}
+    for name, spec in raw.items():
+        if (
+            not isinstance(name, str)
+            or not _TOOL_NAME.match(name)
+            or name in _RESERVED_TOOL_NAMES
+            or not isinstance(spec, dict)
+        ):
+            logger.warning("%s[%s]: skip invalid digisearch tool %r", _ENV_VAR, slug, name)
+            continue
+        index = str(spec.get("index") or "").strip()
+        description = str(spec.get("description") or "").strip()
+        if not index or "," in index or not _INDEX.match(index) or not description:
+            logger.warning(
+                "%s[%s]: skip digisearch tool %r (index/description)", _ENV_VAR, slug, name
+            )
+            continue
+        out[name] = {"index": index, "description": description}
+    return out or None
 
 
 def _normalize_prefix(raw: str) -> str:
@@ -75,6 +147,9 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
     Genuinely unset / empty → ``{}`` (single-tenant; headers may select corpus).
     Set but unusable (bad JSON, non-object, or every entry dropped) →
     ``TenantCorpusMapError`` — same discipline as digivault ``tenant_scope``.
+
+    An entry key this build does not know is ignored, but it is warned about
+    (tenant slug + key names, never values) rather than dropped in silence.
     """
     text = (raw if raw is not None else "").strip()
     if not text:
@@ -99,16 +174,40 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         if not isinstance(value, dict):
             logger.warning("%s[%s]: entry must be an object", _ENV_VAR, normalized_slug)
             continue
+        unknown_keys = sorted(str(key) for key in value if key not in _KNOWN_ENTRY_KEYS)
+        if unknown_keys:
+            # Key names only, never values (DIG-4569 / DIG-4459 note D2).
+            logger.warning(
+                "%s[%s]: ignoring unknown key(s): %s",
+                _ENV_VAR,
+                normalized_slug,
+                ", ".join(unknown_keys),
+            )
         idx = value.get("digisearchIndex") or value.get("digisearch_index")
         prefix = value.get("vaultPathPrefix") or value.get("vault_path_prefix")
         prompt = value.get("researchSystemPrompt") or value.get("research_system_prompt")
         lock = value.get("lockSessionControls", value.get("lock_session_controls", False))
+        tools = _parse_digisearch_tools(
+            value.get("digisearchTools") or value.get("digisearch_tools"), normalized_slug
+        )
+        if not isinstance(lock, bool):
+            # A known key carrying a bad value is a safety problem, not a
+            # forward-compatibility problem: fail closed to LOCKED for this
+            # entry and say so loudly. The offending VALUE is never logged.
+            logger.warning(
+                "%s[%s]: lockSessionControls must be a boolean, got %s - failing closed to locked",
+                _ENV_VAR,
+                normalized_slug,
+                type(lock).__name__,
+            )
+            lock = True
         try:
             out[normalized_slug] = TenantCorpusOverride(
                 digisearch_index=str(idx).strip() if idx else None,
                 vault_path_prefix=_normalize_prefix(str(prefix)) if prefix else None,
                 research_system_prompt=str(prompt).strip() if prompt else None,
-                lock_session_controls=lock is True,
+                lock_session_controls=lock,
+                digisearch_tools=tools,
             )
         except Exception as exc:
             logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
@@ -205,6 +304,7 @@ def resolve_corpus_override(
             vault_path_prefix=mapped.vault_path_prefix,
             research_system_prompt=mapped.research_system_prompt,
             lock_session_controls=mapped.lock_session_controls,
+            digisearch_tools=mapped.digisearch_tools,
         )
 
     # Single-tenant (map unset): headers may select corpus.

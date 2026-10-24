@@ -21,6 +21,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { p, stripBasePath } from "../../../lib/base-path";
+import { StateBlock } from "../../desk/StateBlock";
 
 /** The list route the server already ships (see `.../artifacts/route.ts`). */
 export type ArtifactRow = {
@@ -37,9 +39,15 @@ export type ArtifactRow = {
   viewable: boolean;
 };
 
-/** `GET /api/conversations/[id]/artifacts` - the panel's only read. */
+/**
+ * `GET /api/conversations/[id]/artifacts` - the panel's only read.
+ *
+ * The path carries the base path the app is served under (DIG-5121): the app
+ * answers under /chat/api/conversations/… and nowhere else, so a
+ * root-absolute path would 404 the moment the app moves.
+ */
 export function artifactListPath(conversationId: string): string {
-  return `/api/conversations/${encodeURIComponent(conversationId)}/artifacts`;
+  return p(`/api/conversations/${encodeURIComponent(conversationId)}/artifacts`);
 }
 
 /** The link target, carrying the token the store minted. */
@@ -54,11 +62,15 @@ const BLOB_PATH = /^\/api\/conversations\/[^/]+\/artifacts\/blob$/;
  * so it runs identically in the browser and in a test - `new URL(href, base)`
  * would make an href without a scheme host-dependent, and a link that is
  * "maybe an artifact" depending on where it was parsed is not a predicate.
+ *
+ * The base path is stripped first: the app hands out the link already
+ * prefixed (/chat/api/conversations/…), and the predicate is about the app's
+ * own path, not about where the app happens to be served.
  */
 export function isArtifactBlobHref(href: string | undefined | null): boolean {
   if (!href) return false;
   const path = href.split(/[?#]/, 1)[0] ?? "";
-  return BLOB_PATH.test(path);
+  return BLOB_PATH.test(stripBasePath(path));
 }
 
 /** Deterministic, locale-free size label. Never used to decide anything. */
@@ -149,40 +161,54 @@ export function ArtifactsPanel({
 
   return (
     <div
-      className="aui-artifacts-panel border-border bg-popover fixed inset-y-0 end-0 z-50 flex w-full max-w-sm flex-col border-s shadow-lg"
+      className="aui-artifacts-panel border-hair bg-surface-2 fixed inset-y-0 end-0 z-50 flex w-full max-w-sm flex-col border-s"
       data-artifacts-panel=""
       role="dialog"
       aria-label="Session artifacts"
     >
-      <header className="border-border flex items-center justify-between border-b px-4 py-3">
+      <header className="border-hair flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">Files this session produced</h2>
         <button
           type="button"
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground text-sm"
+          className="text-ink-mute hover:text-ink text-sm"
         >
           Close
         </button>
       </header>
 
       {!conversationId ? (
-        <p className="text-muted-foreground px-4 py-6 text-sm">
-          This chat has no session store, so it has no artifacts.
-        </p>
+        <StateBlock
+          kind="withheld"
+          title="No session store."
+          reason="This chat was not opened with a conversation, so it cannot list artifacts."
+          className="m-4"
+        />
       ) : state === "loading" ? (
-        <p className="text-muted-foreground px-4 py-6 text-sm">Loading...</p>
+        <StateBlock
+          kind="loading"
+          title="Reading session files."
+          className="m-4"
+        />
       ) : state === "error" ? (
-        <p className="text-muted-foreground px-4 py-6 text-sm" role="alert">
-          Could not load this session&apos;s files.
-        </p>
+        <StateBlock
+          kind="error"
+          title="Could not load this session's files."
+          reason="The artifact route did not answer."
+          onRetry={() => void load()}
+          className="m-4"
+        />
       ) : !rows || rows.length === 0 ? (
-        <p className="text-muted-foreground px-4 py-6 text-sm">
-          No files in this session yet.
-        </p>
+        <StateBlock
+          kind="empty"
+          title="No files in this session yet."
+          reason="They appear here as the assistant produces them."
+          className="m-4"
+        />
       ) : (
         <ul className="flex-1 overflow-y-auto">
           {rows.map((row) => (
-            <li key={row.id} className="border-border border-b last:border-b-0">
+            <li key={row.id} className="border-hair border-b last:border-b-0">
               <button
                 type="button"
                 className="flex w-full flex-col gap-1 px-4 py-3 text-start hover:bg-accent/50"
@@ -198,7 +224,7 @@ export function ArtifactsPanel({
                 }}
               >
                 <span className="text-sm font-medium">{row.name}</span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-ink-mute text-xs">
                   {row.mediaType} · {formatArtifactSize(row.byteSize)} ·{" "}
                   {formatArtifactDate(row.createdAt)}
                 </span>
@@ -260,7 +286,7 @@ export function ArtifactLink({
     <>
       <a
         className={cn(
-          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+          "aui-md-a text-accent hover:text-accent/80 underline underline-offset-2",
           className,
         )}
         href={href}
@@ -269,7 +295,7 @@ export function ArtifactLink({
         {children}
       </a>
       {expired ? (
-        <span className="aui-artifact-expired text-muted-foreground ms-1 text-xs">
+        <span className="aui-artifact-expired text-ink-mute ms-1 text-xs">
           This artifact link belongs to a chat session that has ended. Open
           /artifacts in the current chat to list this session&apos;s files.
         </span>

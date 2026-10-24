@@ -6,7 +6,7 @@ import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { PixelField } from "@/components/landing/PixelField";
-import { PixelWordmark } from "@/components/landing/PixelWordmark";
+import { PixelWordmark } from "@digithings/ui/pixel-wordmark";
 import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
@@ -165,7 +165,7 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
           guided walk, a box-by-box morph to the digithings stack, and a
           sticky live invoice. `WhyStack` is a thin alias for it; the section
           keeps only the anchor and the band rules. */}
-      <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
+      <section id="why" className="line-b px-[var(--page-pad)] pb-[var(--page-step)]">
         <WhyStack />
       </section>
 

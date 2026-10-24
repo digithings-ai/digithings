@@ -18,15 +18,19 @@
 }
 
 .dtc-chip {
+  /* Tenant-credit chip: one size/pad pair for every credit surface. */
+  --dtc-chip-size: 0.72rem;
+  --dtc-chip-pad: 0.18rem 0.55rem;
+
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--dtc-chip-size);
   color: var(--ink-soft);
-  background: var(--accent-weak, color-mix(in srgb, var(--accent) 13%, transparent));
+  background: var(--accent-weak);
   border: 1px solid var(--hair);
   border-radius: 0;
-  padding: 0.18rem 0.55rem;
+  padding: var(--dtc-chip-pad);
   cursor: pointer;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dtc-chip:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -37,9 +41,12 @@
   cursor: default;
 }
 .dtc-error {
-  margin: 0.3rem 0 0;
-  font-size: 0.8rem;
-  color: color-mix(in srgb, var(--down) 80%, var(--ink));
+  --dtc-error-gap: 0.3rem;
+  --dtc-error-size: 0.8rem;
+
+  margin: var(--dtc-error-gap) 0 0;
+  font-size: var(--dtc-error-size);
+  color: color-mix(in srgb, var(--danger) 80%, var(--ink));
 }
 .dtc-error .dc-inline-link {
   color: var(--accent-digichat, var(--accent));
@@ -49,16 +56,4 @@
   .dtc-chip {
     transition: none;
   }
-}
-
-.dc-wordmark {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.dc-wordmark .dc-wm-d {
-  color: var(--ink);
-}
-.dc-wordmark .dc-wm-s {
-  color: var(--accent-digichat, var(--accent));
 }

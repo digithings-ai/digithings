@@ -21,13 +21,20 @@
   padding-bottom: 0;
 }
 
+.ns-stage {
+  /* component tokens — stage spine geometry */
+  --ns-spine-inline: 1.7rem;
+  --ns-spine-top: 1.9rem;
+  --ns-spine-bottom: -0.1rem;
+}
+
 /* the spine line runs through the node column, behind the badges */
 .ns-stage::before {
   content: "";
   position: absolute;
-  inset-inline-start: calc(1.7rem - 0.5px);
-  top: 1.9rem;
-  bottom: -0.1rem;
+  inset-inline-start: calc(var(--ns-spine-inline) - 0.5px);
+  top: var(--ns-spine-top);
+  bottom: var(--ns-spine-bottom);
   width: 1px;
   background: var(--hair);
 }
@@ -37,10 +44,15 @@
 }
 
 .ns-node {
+  /* component tokens — badge box */
+  --ns-node-w: 3.4rem;
+  --ns-node-h: 2rem;
+  --ns-node-font: 0.78rem;
+
   position: relative;
   z-index: 1;
-  width: 3.4rem;
-  height: 2rem;
+  width: var(--ns-node-w);
+  height: var(--ns-node-h);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -48,7 +60,7 @@
   border-radius: 0;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--ns-node-font);
   /* Accent-as-text on its own 10% tint: the raw livery measured 2.74–3.66:1
      in light theme (canon-audit S2) because the light module accents are
      tuned to 3:1 for graphics. Mix toward the theme ink — worst light livery

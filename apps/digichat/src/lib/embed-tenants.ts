@@ -13,16 +13,32 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
-import type { PageContextMode } from "@/lib/deploy-config/schema";
+import {
+  GuardrailsSchema,
+  SEARCH_ENGINES,
+  toolCallCapIssue,
+  type GuardrailsConfig,
+  type ModelOffer,
+  type PageContextMode,
+} from "@/lib/deploy-config/schema";
+import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  LimitsSchema,
+  type LimitsConfig,
+} from "@/lib/limits/schema";
 import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
 } from "@/lib/deploy-config/mcp-servers";
 import { HEX_COLOR } from "@/lib/hex-color";
+import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
   VIEW_MODES,
+  isLegacyViewMode,
+  normalizeViewMode,
   type ThinkingMode,
   type ViewMode,
 } from "@/lib/view-modes";
@@ -49,7 +65,16 @@ export type EmbedBackendConfig =
       /** digivault path prefix forwarded as X-Digi-Vault-Prefix */
       vaultPathPrefix?: string;
     }
-  | { type: "foundry"; projectEndpoint: string; agentName: string }
+  | {
+      type: "foundry";
+      projectEndpoint: string;
+      agentName: string;
+      /**
+       * Per-turn tool-call cap. Same key as the deployment YAML
+       * (`backend.maxToolCalls`). Omit for no cap.
+       */
+      maxToolCalls?: number;
+    }
   | {
       type: "openai-completions" | "openai-responses";
       /** https OpenAI-compatible base URL. */
@@ -119,6 +144,10 @@ export type EmbedTenantConfig = {
   slug: string;
   aliases?: string[];
   backend: EmbedBackendConfig;
+  /** Same block as the deployment YAML. Omit and every guard is off. */
+  guardrails?: GuardrailsConfig;
+  /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
+  limits?: LimitsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -164,6 +193,12 @@ export type EmbedTenantConfig = {
    */
   showLanguageSelector?: boolean;
   /**
+   * Gates the composer context meter on slugs `digithings` and
+   * `digithings-ai`. The live house publishes no models, so this release
+   * shows no bar there. Any other slug that sets the field is refused.
+   */
+  showContextMeter?: boolean;
+  /**
    * When true, this tenant pins the house default model and hides the
    * per-session model/MCP/tool controls: the X-Digi-Model header is ignored
    * (house default model) and digigraph hides session_set_model /
@@ -180,8 +215,11 @@ export type EmbedTenantConfig = {
   webSearch?: boolean;
   /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
-   * hidden / compact / balanced / detailed. `balanced` (default) opens
-   * reasoning + tool groups while they stream and collapses them when done.
+   * quiet / balanced / verbose. `balanced` (default) opens reasoning + tool
+   * groups while they stream and collapses them when done; `quiet` keeps the
+   * chain folded to its titles, where the header reads as a status line. The
+   * retired ids fold forward: `hidden` and `compact` → `quiet`, `detailed` →
+   * `verbose`.
    */
   view?: ViewMode;
   /**
@@ -189,6 +227,18 @@ export type EmbedTenantConfig = {
    * collapsed (pinned closed), open (pinned expanded).
    */
   thinking?: ThinkingMode;
+  /** Worked-chain rhythm. Omit keeps `default`. */
+  density?: "compact" | "default" | "airy";
+  /** Session effort seed. Omit keeps `medium`. */
+  effort?: "low" | "medium" | "high";
+  /** Composer toolbar. Omit keeps it on. */
+  toolbar?: boolean;
+  /** Scrollbar gutter. Omit keeps `always`. */
+  scrollbars?: "always" | "auto";
+  /** Whether the thread follows the answer. Omit keeps `follow`. */
+  scroll?: { mode: "follow" | "free" };
+  /** Web-search engine name. Omit means auto. */
+  searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -252,10 +302,16 @@ export type EmbedTenantConfig = {
       default?: boolean;
       label?: string;
       /** Individual tools under this catalog entry (per-tool session toggles). */
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
-  models?: { default?: string; available?: string[]; allowPicker?: boolean };
+  /**
+   * The model offer, in the SAME shape the deployment config uses
+   * (`ModelOffer`, DIG-4589): one artefact, one shape, whichever source the
+   * offer came from. The registry leaves `available` optional; an absent list
+   * means "no restriction", the same as an empty one.
+   */
+  models?: ModelOffer;
   /**
    * LLM spend policy for this embed. Independent of gateMode — digithings.ai
    * is `ungated` + `free_then_byok` so free-quota errors still open BYOK.
@@ -346,6 +402,9 @@ function validateApiKeyEnv(value: unknown, ctx: string): string {
   return value;
 }
 
+/** House product slugs. A registry entry for any other slug may not set the meter flag. */
+const HOUSE_CONTEXT_METER_SLUGS = new Set(["digithings", "digithings-ai"]);
+
 function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   const ctx = `DIGICHAT_EMBED_TENANTS["${hostKey}"]`;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -395,7 +454,24 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     if (typeof backend.agentName !== "string" || !backend.agentName.trim()) {
       throw new Error(`${ctx}: foundry backend requires an "agentName"`);
     }
-    backendCfg = { type: "foundry", projectEndpoint: backend.projectEndpoint, agentName: backend.agentName };
+    let maxToolCalls: number | undefined;
+    if (backend.maxToolCalls !== undefined) {
+      if (
+        typeof backend.maxToolCalls !== "number" ||
+        !Number.isInteger(backend.maxToolCalls) ||
+        backend.maxToolCalls < 1 ||
+        backend.maxToolCalls > 100
+      ) {
+        throw new Error(`${ctx}: foundry backend.maxToolCalls must be an integer from 1 to 100`);
+      }
+      maxToolCalls = backend.maxToolCalls;
+    }
+    backendCfg = {
+      type: "foundry",
+      projectEndpoint: backend.projectEndpoint,
+      agentName: backend.agentName,
+      ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
+    };
   } else if (backend?.type === "openai-completions" || backend?.type === "openai-responses") {
     // OpenAI-compatible AI-SDK backends (#4535). Same field shape for both; the
     // wire format is the only difference. `apiKeyEnv` must name a
@@ -605,14 +681,65 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.showContextMeter !== undefined && typeof v.showContextMeter !== "boolean") {
+    throw new Error(`${ctx}: showContextMeter must be a boolean`);
+  }
+  if (typeof v.showContextMeter === "boolean" && !HOUSE_CONTEXT_METER_SLUGS.has(v.slug)) {
+    throw new Error(
+      `${ctx}: showContextMeter is only valid for slugs digithings and digithings-ai, ` +
+        `not "${v.slug}"`,
+    );
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
-  if (v.view !== undefined && !VIEW_MODES.includes(v.view as ViewMode)) {
-    throw new Error(`${ctx}: view must be "hidden", "compact", "balanced", or "detailed"`);
+  if (
+    v.view !== undefined &&
+    !VIEW_MODES.includes(v.view as ViewMode) &&
+    !isLegacyViewMode(v.view)
+  ) {
+    throw new Error(
+      `${ctx}: view must be "quiet", "balanced", or "verbose" (retired: "hidden", "compact", "detailed")`,
+    );
   }
   if (v.thinking !== undefined && !THINKING_MODES.includes(v.thinking as ThinkingMode)) {
     throw new Error(`${ctx}: thinking must be "auto", "collapsed", or "open"`);
+  }
+  const density =
+    typeof v.density === "string" ? normalizeTraceDensity(v.density) : null;
+  if (v.density !== undefined && !density) {
+    throw new Error(`${ctx}: density must be "compact", "default", or "airy"`);
+  }
+  if (
+    v.effort !== undefined &&
+    v.effort !== "low" &&
+    v.effort !== "medium" &&
+    v.effort !== "high"
+  ) {
+    throw new Error(`${ctx}: effort must be "low", "medium", or "high"`);
+  }
+  if (v.toolbar !== undefined && typeof v.toolbar !== "boolean") {
+    throw new Error(`${ctx}: toolbar must be a boolean`);
+  }
+  if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
+    throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
+  }
+  const scrollMode = (v.scroll as { mode?: unknown } | undefined)?.mode;
+  if (v.scroll !== undefined && scrollMode !== "follow" && scrollMode !== "free") {
+    throw new Error(`${ctx}: scroll.mode must be "follow" or "free"`);
+  }
+  // An embed pins its own document theme (embed-route-shell), so a tenant
+  // palette could never paint. Refuse it rather than accept a no-op key; the
+  // deploy YAML's chrome.palette works for mode: app.
+  if (v.palette !== undefined) {
+    throw new Error(`${ctx}: palette is not supported on embeds (the embed owns its theme)`);
+  }
+  if (
+    v.searchEngine !== undefined &&
+    (typeof v.searchEngine !== "string" ||
+      !(SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase()))
+  ) {
+    throw new Error(`${ctx}: searchEngine is not a known engine`);
   }
   if (v.attachments !== undefined && typeof v.attachments !== "boolean") {
     throw new Error(`${ctx}: attachments must be a boolean`);
@@ -774,11 +901,47 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     };
   }
 
+  let guardrails: GuardrailsConfig | undefined;
+  if (v.guardrails !== undefined) {
+    const parsed = GuardrailsSchema.safeParse(v.guardrails);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid guardrails";
+      throw new Error(`${ctx}: guardrails ${message}`);
+    }
+    guardrails = parsed.data;
+  }
+  const capIssue = toolCallCapIssue(
+    backendCfg.type,
+    guardrails?.maxToolCallsPerTurn ??
+      (backendCfg.type === "foundry" ? backendCfg.maxToolCalls : undefined),
+  );
+  if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
+
+  let limits: LimitsConfig | undefined;
+  if (v.limits !== undefined) {
+    const parsed = LimitsSchema.safeParse(v.limits);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid limits";
+      throw new Error(`${ctx}: limits ${message}`);
+    }
+    const backendType = typeof backendCfg.type === "string" ? backendCfg.type : "unknown";
+    const issues = collectLimitIssues(parsed.data, backendType);
+    if (issues.length) {
+      throw new Error(`${ctx}: ${issues[0]?.message ?? "invalid limits"}`);
+    }
+    limits =
+      (parsed.data.onUnsupported ?? "reject") === "warn"
+        ? applyUnsupportedPolicy(parsed.data, backendType).limits
+        : parsed.data;
+  }
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
+    ...(guardrails ? { guardrails } : {}),
+    ...(limits ? { limits } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:
@@ -801,12 +964,33 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    ...(typeof v.showContextMeter === "boolean" ? { showContextMeter: v.showContextMeter } : {}),
     ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
-    view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
+    view: v.view !== undefined ? normalizeViewMode(v.view) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)
       : undefined,
+    ...(density ? { density } : {}),
+    ...(v.effort === "low" || v.effort === "medium" || v.effort === "high"
+      ? { effort: v.effort }
+      : {}),
+    ...(v.toolbar === false ? { toolbar: false as const } : {}),
+    ...(v.scrollbars === "always" || v.scrollbars === "auto"
+      ? { scrollbars: v.scrollbars }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "follow"
+      ? { scroll: { mode: "follow" as const } }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "free"
+      ? { scroll: { mode: "free" as const } }
+      : {}),
+    ...(typeof v.searchEngine === "string" &&
+    (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
+      ? {
+          searchEngine: v.searchEngine.trim().toLowerCase() as (typeof SEARCH_ENGINES)[number],
+        }
+      : {}),
     attachments: typeof v.attachments === "boolean" ? v.attachments : undefined,
     dictation: typeof v.dictation === "boolean" ? v.dictation : undefined,
     speech: typeof v.speech === "boolean" ? v.speech : undefined,
@@ -854,7 +1038,11 @@ function parseTenantTools(
           if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
             throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
           }
-          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+          return {
+            id: st.id,
+            ...(typeof st.label === "string" ? { label: st.label } : {}),
+            ...(typeof st.group === "string" && st.group.trim() ? { group: st.group.trim() } : {}),
+          };
         })
       : undefined;
     return {
@@ -872,7 +1060,9 @@ function parseTenantTools(
   };
 }
 
-/** Optional `models` session picker list (model slugs only). */
+const MODEL_PRESET_IDS = ["auto", "reasoning", "fast", "light", "router"] as const;
+
+/** Optional `models` session picker. A catalog policy is resolved later; a raw list is kept as written. */
 function parseTenantModels(
   raw: unknown,
   hostKey: string,
@@ -883,11 +1073,93 @@ function parseTenantModels(
   const available = Array.isArray(r.available)
     ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
     : [];
+  let presets: Array<(typeof MODEL_PRESET_IDS)[number]> | undefined;
+  if (r.presets !== undefined) {
+    if (!Array.isArray(r.presets) || r.presets.some((id) => typeof id !== "string")) {
+      throw new Error(`embed tenant "${hostKey}": models.presets must be a list of preset ids`);
+    }
+    presets = [];
+    for (const id of r.presets) {
+      if (!(MODEL_PRESET_IDS as readonly string[]).includes(id)) {
+        throw new Error(`embed tenant "${hostKey}": models.presets has unknown id ${id}`);
+      }
+      presets.push(id as (typeof MODEL_PRESET_IDS)[number]);
+    }
+  }
+  if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
+  }
+  if (r.occPicker !== undefined && typeof r.occPicker !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.occPicker must be a boolean`);
+  }
+  if (
+    r.priceCapUsdPerMillion !== undefined &&
+    (typeof r.priceCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.priceCapUsdPerMillion) ||
+      r.priceCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.priceCapUsdPerMillion must be a positive number`);
+  }
+  if (
+    r.premiumCapUsdPerMillion !== undefined &&
+    (typeof r.premiumCapUsdPerMillion !== "number" ||
+      !Number.isFinite(r.premiumCapUsdPerMillion) ||
+      r.premiumCapUsdPerMillion <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.premiumCapUsdPerMillion must be a positive number`);
+  }
+  let costPerWindow: { usd: number; windowSeconds?: number } | undefined;
+  if (r.costPerWindow !== undefined) {
+    const cost = r.costPerWindow;
+    if (!cost || typeof cost !== "object" || Array.isArray(cost)) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow must be an object`);
+    }
+    const usd = (cost as { usd?: unknown }).usd;
+    const windowSeconds = (cost as { windowSeconds?: unknown }).windowSeconds;
+    if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) {
+      throw new Error(`embed tenant "${hostKey}": models.costPerWindow.usd must be a positive number`);
+    }
+    if (
+      windowSeconds !== undefined &&
+      (typeof windowSeconds !== "number" || !Number.isInteger(windowSeconds) || windowSeconds <= 0)
+    ) {
+      throw new Error(
+        `embed tenant "${hostKey}": models.costPerWindow.windowSeconds must be a positive integer`,
+      );
+    }
+    costPerWindow = {
+      usd,
+      ...(typeof windowSeconds === "number" ? { windowSeconds } : {}),
+    };
+  }
+  if (r.showFullList !== undefined && typeof r.showFullList !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.showFullList must be a boolean`);
+  }
+  if (
+    r.minContextTokens !== undefined &&
+    (typeof r.minContextTokens !== "number" ||
+      !Number.isInteger(r.minContextTokens) ||
+      r.minContextTokens <= 0)
+  ) {
+    throw new Error(`embed tenant "${hostKey}": models.minContextTokens must be a positive integer`);
+  }
   return {
     models: {
       ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
       available,
       ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+      ...(r.catalog === true ? { catalog: true } : {}),
+      ...(typeof r.occPicker === "boolean" ? { occPicker: r.occPicker } : {}),
+      ...(typeof r.priceCapUsdPerMillion === "number"
+        ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
+        : {}),
+      ...(typeof r.premiumCapUsdPerMillion === "number"
+        ? { premiumCapUsdPerMillion: r.premiumCapUsdPerMillion }
+        : {}),
+      ...(costPerWindow ? { costPerWindow } : {}),
+      ...(presets ? { presets } : {}),
+      ...(typeof r.showFullList === "boolean" ? { showFullList: r.showFullList } : {}),
+      ...(typeof r.minContextTokens === "number" ? { minContextTokens: r.minContextTokens } : {}),
     },
   };
 }

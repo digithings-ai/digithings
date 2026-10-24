@@ -26,7 +26,7 @@ R2_ONLY_SCRIPTS: tuple[str, ...] = (
     "backfill_context.py",
     "backfill_execution_prices.py",
     "execute_at_open.py",
-    "fill-entry-prices.py",
+    "fill_entry_prices.py",
     "finalize_period_accounting.py",
     "position_entry_from_events.py",
     "refresh_attribution.py",

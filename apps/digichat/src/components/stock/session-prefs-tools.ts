@@ -7,6 +7,7 @@ import {
   isEffortCode,
   isSearchEngine,
 } from "@digithings/digichat-ui";
+import { asRecord } from "@digithings/ui/lib/record";
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
 import {
   MCP_ID_RE,
@@ -36,12 +37,6 @@ export function isSessionToolName(name: string): name is SessionToolName {
   return (SESSION_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 function str(args: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     const v = args[k];
@@ -69,7 +64,7 @@ export function applySessionTool(
   rawArgs: unknown,
   api: EmbedChatPrefsApi,
 ): ApplySessionToolResult {
-  const args = asRecord(rawArgs);
+  const args = asRecord(rawArgs) ?? {};
   if (name === "session_set_language") {
     const code = tryResolveLanguageInput(str(args, "code", "language"));
     if (!code) return { ok: false, message: "Unknown language." };
@@ -99,7 +94,7 @@ export function applySessionTool(
   if (name === "session_set_view") {
     const mode = str(args, "mode", "view").toLowerCase();
     if (!isViewMode(mode)) {
-      return { ok: false, message: "View must be hidden, compact, balanced, or detailed." };
+      return { ok: false, message: "View must be quiet, balanced, or verbose." };
     }
     api.setView(mode);
     return { ok: true, message: `View set to ${mode}.` };
@@ -119,14 +114,11 @@ export function applySessionTool(
     return { ok: true, message: enabled ? "Thinking open." : "Thinking collapsed." };
   }
   if (name === "session_toggle_tool") {
-    const id = str(args, "id", "tool").toLowerCase();
-    const enabled = bool(args, "enabled");
-    if (!id || enabled === undefined) return { ok: false, message: "Need id and enabled." };
-    if (id === "digisearch") api.setDigisearch(enabled);
-    else if (id === "digivault") api.setVault(enabled);
-    else if (id === "websearch" || id === "web_search") api.setWebSearch(enabled);
-    else api.setExtraTool(id, enabled);
-    return { ok: true, message: `${id} ${enabled ? "on" : "off"}.` };
+    // /tools calls the setters itself. This model path must not flip a tool.
+    if (api.toolControl === "agent" || api.toolControl === "locked") {
+      return { ok: false, message: "Tools are locked for this host." };
+    }
+    return { ok: false, message: "Tools are changed in /tools." };
   }
   if (name === "session_remove_mcp") {
     const id = str(args, "id").toLowerCase();
@@ -185,14 +177,14 @@ function toolNameFromType(type: string): string | null {
 export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[] {
   const out: ToolCallHit[] = [];
   for (const msg of messages) {
-    const rec = asRecord(msg);
+    const rec = asRecord(msg) ?? {};
     const role = rec.role;
     if (role && role !== "assistant") continue;
     const bags: unknown[] = [];
     if (Array.isArray(rec.parts)) bags.push(...rec.parts);
     if (Array.isArray(rec.content)) bags.push(...rec.content);
     for (const part of bags) {
-      const p = asRecord(part);
+      const p = asRecord(part) ?? {};
       const type = typeof p.type === "string" ? p.type : "";
       const named =
         (typeof p.toolName === "string" && p.toolName) ||
@@ -204,7 +196,7 @@ export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[]
         if (state === "partial-call" || state === "input-streaming") continue;
       }
       const id = String(p.toolCallId ?? p.id ?? `${named}:${out.length}`);
-      const args = asRecord(p.input ?? p.args ?? p.arguments);
+      const args = asRecord(p.input ?? p.args ?? p.arguments) ?? {};
       out.push({ id, name: named, args });
     }
   }

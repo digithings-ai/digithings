@@ -14,6 +14,7 @@ import {
   ALERT_REPO,
   checkHouseRuns,
   DISPATCH_CONFIRM_GRACE_SECONDS,
+  dispatchMissingBody,
   dispatchMissingTitle,
   evaluateDispatchMissing,
   evaluateHouseRun,
@@ -22,7 +23,11 @@ import {
   HOUSE_RUN_LOST_ERROR,
   HOUSE_RUN_WATCH_LABEL,
   lastMondayRunDate,
+  neverLandedBody,
   neverLandedTitle,
+  occurrenceMarker,
+  raiseHouseRunAlarm,
+  raiseNeverLandedAlarm,
   readHouseStatus,
   readOpenRuns,
   readRun,
@@ -780,5 +785,354 @@ describe("the never-landed arm (DIG-3456, refocused by DIG-4416)", () => {
     expect(result.raised).toEqual([
       { run_id: "house-run:2026-10-12", raised: false, url: "https://gh/11" },
     ]);
+  });
+});
+
+/**
+ * One issue per occurrence (DIG-4566).
+ *
+ * The duplicate check used to filter the repository by the class label. The
+ * label could not be created with this token, GitHub dropped it from every
+ * issue it filed, so the filter matched nothing and every tick filed a new
+ * issue (CHR-948..960). The check now reads the title and a marker in the
+ * body, and the label is bookkeeping it does not depend on.
+ */
+describe("one issue per occurrence", () => {
+  type GithubCall = { url: string; method: string; body?: string };
+
+  /**
+   * A GitHub mock that answers the way GitHub answers. The arm that matters:
+   * a label-filtered query returns only the rows that carry the label, so a
+   * duplicate check that filters by label cannot see an occurrence GitHub
+   * filed without one. That is the regression the old code had.
+   */
+  function githubMock(opts: {
+    open?: unknown[];
+    labelStatus?: number;
+    labelCreateStatus?: number;
+    labelApplyStatus?: number;
+    create?: unknown;
+  }) {
+    const calls: GithubCall[] = [];
+    const fetcher: WatchFetch = vi.fn(async (url: string, init: RequestInit) => {
+      const method = String(init.method);
+      calls.push({ url, method, body: init.body ? String(init.body) : undefined });
+      if (url.includes("/issues?")) {
+        const rows = opts.open ?? [];
+        const body = url.includes("labels=")
+          ? rows.filter((row) => {
+              const labels = (row as { labels?: unknown }).labels;
+              return Array.isArray(labels) && labels.includes(HOUSE_RUN_WATCH_LABEL);
+            })
+          : rows;
+        return Response.json(body);
+      }
+      if (url.includes("/issues/") && url.endsWith("/labels")) {
+        return new Response("[]", { status: opts.labelApplyStatus ?? 200 });
+      }
+      if (url.includes("/labels/")) {
+        if (opts.labelStatus === 404) return new Response("not found", { status: 404 });
+        return Response.json({ name: HOUSE_RUN_WATCH_LABEL });
+      }
+      if (url.endsWith("/labels")) {
+        return new Response("{}", { status: opts.labelCreateStatus ?? 201 });
+      }
+      return Response.json(opts.create ?? { html_url: "https://gh/1" }, { status: 201 });
+    }) as unknown as WatchFetch;
+    return { fetcher, calls };
+  }
+
+  const issuePosts = (calls: GithubCall[]) =>
+    calls.filter((call) => call.method === "POST" && call.url.endsWith("/issues"));
+
+  it("does not file a second issue when the open occurrence carries no label", async () => {
+    // The real CHR-948: GitHub filed it, the label never stuck.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 5945,
+          title: neverLandedTitle("2026-10-19"),
+          body: "no marker in this body",
+          html_url: "https://github.com/digithings-ai/digithings/issues/5945",
+          labels: [],
+          state: "open",
+        },
+      ],
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result).toEqual({
+      run_id: "house-run:2026-10-19",
+      raised: false,
+      url: "https://github.com/digithings-ai/digithings/issues/5945",
+    });
+    expect(issuePosts(calls)).toHaveLength(0);
+  });
+
+  it("finds an open occurrence by its body marker when the title was edited", async () => {
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 5945,
+          title: `${neverLandedTitle("2026-10-19")} (reopened by hand)`,
+          body: `something\n${occurrenceMarker("never-landed:2026-10-19")}`,
+          html_url: "https://gh/5945",
+          labels: [],
+          state: "open",
+        },
+      ],
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(false);
+    expect(result.url).toBe("https://gh/5945");
+    expect(issuePosts(calls)).toHaveLength(0);
+  });
+
+  it("does not let a foreign issue that quotes the marker suppress the alarm", async () => {
+    // An operator pasting an alarm body into a tracker issue must not silence
+    // the live alert for that occurrence.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 6300,
+          title: "[run-watch] house-run: no book for 2026-10-19",
+          body: `copied from the alert\n${occurrenceMarker("never-landed:2026-10-19")}`,
+          html_url: "https://gh/6300",
+          labels: [],
+          state: "open",
+        },
+      ],
+      create: { number: 6301, html_url: "https://gh/6301", labels: [] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("does not file a second issue when the occurrence it found has no usable url", async () => {
+    // The occurrence is right there; a missing html_url is not a reason to
+    // raise it a second time.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 6302,
+          title: neverLandedTitle("2026-10-19"),
+          body: "",
+          html_url: null,
+          labels: [],
+          state: "open",
+        },
+      ],
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(false);
+    expect(issuePosts(calls)).toHaveLength(0);
+  });
+
+  it("says so when the open issues cannot be read", async () => {
+    // The house trade-off is to raise rather than dedupe blind; the refusal
+    // is logged so a duplicate is explainable rather than mysterious.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const github: WatchFetch = vi.fn(async (url: string) => {
+        if (url.includes("/issues?")) return new Response("boom", { status: 500 });
+        return Response.json({ html_url: "https://gh/6303" }, { status: 201 });
+      }) as unknown as WatchFetch;
+      const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, github, true);
+      expect(result.raised).toBe(true);
+      const lines = log.mock.calls.map((call) => String(call[0]));
+      expect(lines.some((line) => line.includes("open issues could not be read"))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("creates the class label when the repository does not have it", async () => {
+    const { fetcher, calls } = githubMock({
+      open: [],
+      labelStatus: 404,
+      labelCreateStatus: 201,
+      create: { number: 5946, html_url: "https://gh/5946", labels: [HOUSE_RUN_WATCH_LABEL] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    const created = calls.find(
+      (call) => call.method === "POST" && call.url === `https://api.github.com/repos/${ALERT_REPO}/labels`,
+    );
+    expect(created).toBeDefined();
+    expect(JSON.parse(created?.body as string)).toMatchObject({ name: HOUSE_RUN_WATCH_LABEL });
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("applies the class label to an issue GitHub created without it", async () => {
+    const { fetcher, calls } = githubMock({
+      open: [],
+      labelStatus: 200,
+      create: { number: 5947, html_url: "https://gh/5947", labels: [] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    const applied = calls.find(
+      (call) => call.method === "POST" && call.url.endsWith("/issues/5947/labels"),
+    );
+    expect(applied).toBeDefined();
+    expect(JSON.parse(applied?.body as string)).toEqual({ labels: [HOUSE_RUN_WATCH_LABEL] });
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("files exactly one issue when the label can neither be created nor applied", async () => {
+    // The alarm is the deliverable; the label is bookkeeping. A label this
+    // token cannot write must not cost the occurrence, and must never cost a
+    // second one on the next tick.
+    const { fetcher, calls } = githubMock({
+      open: [],
+      labelStatus: 404,
+      labelCreateStatus: 403,
+      labelApplyStatus: 403,
+      create: { number: 5948, html_url: "https://gh/5948", labels: [] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("does not let a closed occurrence block the alert", async () => {
+    // GitHub's own `state=open` query would not return this row at all; the
+    // mock returns it anyway, so the client-side check is what has to hold.
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 5945,
+          title: neverLandedTitle("2026-10-19"),
+          body: "",
+          html_url: "https://gh/5945",
+          labels: [HOUSE_RUN_WATCH_LABEL],
+          state: "closed",
+        },
+      ],
+      create: { number: 5949, html_url: "https://gh/5949", labels: [HOUSE_RUN_WATCH_LABEL] },
+    });
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("finds the occurrence it filed itself, by the marker it wrote", async () => {
+    const first = githubMock({
+      open: [],
+      create: { number: 6001, html_url: "https://gh/6001", labels: [] },
+    });
+    const filed = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, first.fetcher, true);
+    expect(filed.raised).toBe(true);
+    const payload = JSON.parse(
+      issuePosts(first.calls)[0].body as string,
+    ) as { title: string; body: string };
+    expect(payload.body).toContain(occurrenceMarker("never-landed:2026-10-19"));
+
+    const second = githubMock({
+      open: [
+        {
+          number: 6001,
+          title: payload.title,
+          body: payload.body,
+          html_url: "https://gh/6001",
+          labels: [],
+          state: "open",
+        },
+      ],
+    });
+    const again = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, second.fetcher, true);
+    expect(again.raised).toBe(false);
+    expect(issuePosts(second.calls)).toHaveLength(0);
+  });
+
+  it("writes the occurrence marker into every body it files", () => {
+    const lost = evaluateHouseRun("run-lost", openRun(DEADLINE + 60), {
+      nowMs: NOW,
+      deadlineSeconds: DEADLINE,
+    });
+    expect(alarmBody(lost, DEADLINE)).toContain(occurrenceMarker(`lost:${lost.run_id}`));
+    expect(dispatchMissingBody("2026-10-19", DISPATCH_CONFIRM_GRACE_SECONDS)).toContain(
+      occurrenceMarker("dispatch:2026-10-19"),
+    );
+    expect(neverLandedBody("2026-10-19", DEADLINE)).toContain(
+      occurrenceMarker("never-landed:2026-10-19"),
+    );
+  });
+
+  it("gives the lost-run arm its own marker, so it never dedupes against a Monday arm", async () => {
+    const lost = evaluateHouseRun("run-lost", openRun(DEADLINE + 60), {
+      nowMs: NOW,
+      deadlineSeconds: DEADLINE,
+    });
+    const { fetcher, calls } = githubMock({
+      open: [
+        {
+          number: 6100,
+          title: neverLandedTitle("2026-10-19"),
+          body: `a Monday occurrence\n${occurrenceMarker("never-landed:2026-10-19")}`,
+          html_url: "https://gh/6100",
+          labels: [],
+          state: "open",
+        },
+      ],
+      create: { number: 6101, html_url: "https://gh/6101", labels: [] },
+    });
+    const result = await raiseHouseRunAlarm("gh-token", lost, DEADLINE, fetcher);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("raises the occurrence even when the label route throws", async () => {
+    // The label is bookkeeping the duplicate check does not read, so a
+    // transport failure on the label route must not swallow the alarm.
+    const { fetcher, calls } = githubMock({
+      open: [],
+      create: { number: 6200, html_url: "https://gh/6200", labels: [] },
+    });
+    const throwing: WatchFetch = (async (url: string, init: RequestInit) => {
+      if (url.includes("/labels")) throw new Error("labels route down");
+      return fetcher(url, init);
+    }) as unknown as WatchFetch;
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, throwing, true);
+    expect(result.raised).toBe(true);
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("keeps the raised receipt when the follow-up label call throws", async () => {
+    // The issue was created: the tick must still report it as raised.
+    const { fetcher, calls } = githubMock({
+      open: [],
+      labelStatus: 200,
+      create: { number: 6201, html_url: "https://gh/6201", labels: [] },
+    });
+    const throwing: WatchFetch = (async (url: string, init: RequestInit) => {
+      if (url.includes("/issues/6201/labels")) throw new Error("apply failed");
+      return fetcher(url, init);
+    }) as unknown as WatchFetch;
+    const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, throwing, true);
+    expect(result).toEqual({
+      run_id: "house-run:2026-10-19",
+      raised: true,
+      url: "https://gh/6201",
+    });
+    expect(issuePosts(calls)).toHaveLength(1);
+  });
+
+  it("says so when the class label is not available", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { fetcher } = githubMock({
+        open: [],
+        labelStatus: 404,
+        labelCreateStatus: 403,
+        create: { number: 6202, html_url: "https://gh/6202", labels: [] },
+      });
+      const result = await raiseNeverLandedAlarm("gh-token", "2026-10-19", DEADLINE, fetcher, true);
+      expect(result.raised).toBe(true);
+      const lines = log.mock.calls.map((call) => String(call[0]));
+      expect(lines.some((line) => line.includes(HOUSE_RUN_WATCH_LABEL))).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
   });
 });

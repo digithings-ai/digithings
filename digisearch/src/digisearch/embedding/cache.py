@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import sqlite3
@@ -61,8 +62,6 @@ class EmbeddingCache(EmbeddingProvider):
 
         Uses a single batched SELECT WHERE hash IN (...) query instead of N per-row queries.
         """
-        import json
-
         if not texts:
             return [], []
         conn = self._get_conn()
@@ -84,8 +83,6 @@ class EmbeddingCache(EmbeddingProvider):
 
     def set(self, texts: list[str], embeddings: list[list[float]]) -> None:
         """Cache embeddings."""
-        import json
-
         conn = self._get_conn()
         for t, emb in zip(texts, embeddings):
             h = self._hash(t)

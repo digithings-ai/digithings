@@ -78,5 +78,5 @@ precedence `{SERVICE}_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy
 `[REDACTED]` (additive key-substring patterns — never narrow them), and
 `audit.emit_event(...)` appends canonical `AuditEvent` JSONL lines
 (`ts`, `event_type`, `agent_id`, redacted `payload`, plus sparse digikey
-correlation fields). digiclaw's `audit_log()` delegates here; every
+correlation fields). digibot's `audit_log()` delegates here; every
 `audit.jsonl` writer must pass through redaction first.

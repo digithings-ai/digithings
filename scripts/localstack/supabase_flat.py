@@ -38,10 +38,17 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence
+
+try:  # imported as part of the scripts package
+    from .supabase_ports import PORT_KEYS, api_port as env_api_port, ports_for_api_port
+except ImportError:  # run as a script
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from supabase_ports import PORT_KEYS, api_port as env_api_port, ports_for_api_port
 
 #: The checked-in Supabase project dir, relative to the repository root.
 PROJECT_REL = "digiquant/supabase"
@@ -49,9 +56,66 @@ PROJECT_REL = "digiquant/supabase"
 DERIVED_REL = "digiquant/.supabase-local"
 #: Apply order (D-Q6′, DIG-3694): ``engine/`` first, then ``prod/``.
 LAYERS = ("engine", "prod")
-#: Entries the CLI reads from ``<project>/supabase/`` that the generated tree
-#: points at with a relative symlink. ``migrations/`` is handled separately.
+#: Entries the CLI reads from ``<project>/supabase/``. ``migrations/`` is
+#: handled separately. ``config.toml`` is a real, port-rewritten copy (it
+#: carries the Supabase ports and the CLI has no port flags); the rest are
+#: relative symlinks.
 LINKED = ("config.toml", "seed.sql", "roles.sql", "functions")
+#: Entries the CLI reads from the PROJECT ROOT rather than from
+#: ``<project>/supabase/``. Supabase CLI 2.117.0 reads
+#: ``docs/schemas/execution_policy.v1.json`` from the project root, so the
+#: generated root has to carry it: the CLI resolves the workdir as the project
+#: root and fails with "failed to read file" when the schema is missing.
+PROJECT_ROOT_LINKED = ("docs",)
+
+#: A ``port = <n>`` / ``shadow_port = <n>`` line in a config.toml.
+_PORT_LINE = re.compile(r"^(\s*)(port|shadow_port)(\s*=\s*)(\d+)(\s*(#.*)?)?$")
+#: A ``[table]`` header in a config.toml.
+_TABLE_LINE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+
+
+def rewrite_ports(text: str, port_map: Mapping[str, int]) -> str:
+    """Rewrite the Supabase ports in a config.toml.
+
+    Only the ``port``/``shadow_port`` keys of the tables named in ``PORT_KEYS``
+    are touched, and only inside the table they belong to. Every other byte
+    (comments, order, spacing) is preserved, so the generated file stays
+    reviewable against the checked-in one.
+    """
+    by_table: dict[str, dict[str, int]] = {}
+    for name, (table, key) in PORT_KEYS.items():
+        if name in port_map:
+            by_table.setdefault(table, {})[key] = port_map[name]
+
+    out: list[str] = []
+    table = ""
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip("\n")
+        header = _TABLE_LINE.match(stripped)
+        if header:
+            table = header.group(1).strip()
+        else:
+            match = _PORT_LINE.match(stripped)
+            if match:
+                key = match.group(2)
+                port = by_table.get(table, {}).get(key)
+                if port is not None:
+                    ending = "\n" if line.endswith("\n") else ""
+                    comment = match.group(5) or ""
+                    line = f"{match.group(1)}{key}{match.group(3)}{port}{comment}{ending}"
+        out.append(line)
+    return "".join(out)
+
+
+def write_config(target: Path, source: Path, port_map: Mapping[str, int]) -> None:
+    """Write a real, port-rewritten copy of ``source`` to ``target``.
+
+    The link that used to be here is removed BEFORE the write: a symlink would
+    send the write straight into the checked-in config.toml.
+    """
+    _unlink(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rewrite_ports(source.read_text(), port_map))
 
 
 def repo_root() -> Path:
@@ -126,13 +190,15 @@ def _unlink(entry: Path) -> None:
         shutil.rmtree(entry)
 
 
-def materialize(root: Optional[Path] = None, dest: Optional[Path] = None) -> Path:
+def materialize(root: Optional[Path] = None, dest: Optional[Path] = None,
+                api_port: Optional[int] = None) -> Path:
     """Build the flat view and return the project root to hand to ``--workdir``.
 
     Idempotent: it rebuilds the generated ``migrations/`` from the layered chain
     every call, so a file that moved between layers cannot leave a stale link.
     """
     root = (root or repo_root()).resolve()
+    port_map = ports_for_api_port(api_port if api_port is not None else env_api_port())
     project = root / PROJECT_REL
     if dest is None:
         dest = root / DERIVED_REL
@@ -155,11 +221,29 @@ def materialize(root: Optional[Path] = None, dest: Optional[Path] = None) -> Pat
 
     for name in LINKED:
         source = project / name
+        if name == "config.toml":
+            # The config.toml carries the Supabase ports, and the CLI has no
+            # port flags to override them. A symlink cannot carry an override
+            # (writing through it would edit the checked-in file), so the
+            # generated tree holds a real, rewritten copy.
+            write_config(supabase / name, source, port_map)
+            continue
         if source.exists() or source.is_symlink():
             _relink(supabase / name, source)
         else:
             # the source is gone: drop the link so the CLI cannot read a stale file
             stale = supabase / name
+            if stale.is_symlink() or stale.exists():
+                _unlink(stale)
+
+    for name in PROJECT_ROOT_LINKED:
+        # The CLI resolves the workdir as the project root, so a file it reads
+        # from the root of the real project has to be reachable there too.
+        source = project.parent / name
+        if source.exists() or source.is_symlink():
+            _relink(dest / name, source)
+        else:
+            stale = dest / name
             if stale.is_symlink() or stale.exists():
                 _unlink(stale)
 
@@ -183,9 +267,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--dest", type=Path, default=None,
         help=f"generated project root (default: {DERIVED_REL})",
     )
+    parser.add_argument(
+        "--api-port", type=int, default=None,
+        help="Supabase API port for the generated config.toml (default: DT_SUPABASE_PORT)",
+    )
     args = parser.parse_args(argv)
     try:
-        dest = materialize(args.root, args.dest)
+        dest = materialize(args.root, args.dest, args.api_port)
     except (FileNotFoundError, ValueError) as exc:
         print(f"supabase-flat: {exc}", file=sys.stderr)
         return 1

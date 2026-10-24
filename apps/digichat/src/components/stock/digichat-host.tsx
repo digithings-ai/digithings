@@ -51,7 +51,6 @@ import {
 } from "@/lib/embed-chat-error";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
 import { cn } from "@/lib/utils";
-import { ToolCatalogBar } from "@/components/stock/tool-catalog-bar";
 import { SessionPrefsToolBridge } from "@/components/stock/session-prefs-tool-bridge";
 import type { ProductRuntimeAdapters } from "./product-shell";
 
@@ -181,9 +180,6 @@ export function DigiChatHost({
   sideSlot,
   headerSlot,
   footerSlot,
-  sessionKey,
-  webSearchScope,
-  onWebSearchChange,
   className,
   composerLayout,
 }: DigiChatHostProps) {
@@ -207,6 +203,7 @@ export function DigiChatHost({
             <SessionPrefsToolBridge />
             <div
               data-stock-product
+              data-deployment={clientConfig.slug}
               data-chrome-mode={clientConfig.chrome.mode}
               data-thread-skin={clientConfig.chrome.skin}
               data-persistence={mode}
@@ -229,7 +226,7 @@ export function DigiChatHost({
             >
               {!bootVisible || bootHidden ? null : (
                 <div
-                  className="dboot-overlay bg-background"
+                  className="dboot-overlay bg-surface"
                   data-done={bootDone ? "true" : "false"}
                   data-instant={bootVariant && !handoffLive ? "true" : "false"}
                   data-drift={handoff?.drift ? "true" : "false"}
@@ -269,14 +266,6 @@ export function DigiChatHost({
 
               >
                 {ownsPage || clientConfig.chrome.skin === "digichat" ? null : headerSlot}
-                {!ownsPage && sessionKey && clientConfig.chrome.mode === "app" ? (
-                  <ToolCatalogBar
-                    clientConfig={clientConfig}
-                    sessionKey={sessionKey}
-                    webSearchScope={webSearchScope}
-                    onWebSearchChange={onWebSearchChange}
-                  />
-                ) : null}
                 <div className="min-h-0 flex-1">
                   <SkinRuntimeProvider value={SKIN_RUNTIME}>
                     <ThreadSkinView

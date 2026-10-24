@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
+from typing import Any
 
 import pytest
-from digiquant.notify.cloudflare_email import CloudflareEmailConfig
+from digiquant.notify import cloudflare_email as cf_mod
+from digiquant.notify.cloudflare_email import CloudflareEmailClient, CloudflareEmailConfig
 from digiquant.notify.dispatch import (
     dispatch_workspace,
     format_digest_dry_run,
@@ -15,6 +18,7 @@ from digiquant.notify.dispatch import (
 )
 
 from tests.dq.notify.conftest import FakeSupabase
+from tests.dq.notify.test_cloudflare_email import _Capture, _config
 
 pytestmark = pytest.mark.unit
 
@@ -235,3 +239,136 @@ def test_dry_run_never_dispatches_or_claims(monkeypatch: pytest.MonkeyPatch) -> 
         log=lambda _line: None,
     )
     assert rc == 0
+
+
+def _pref() -> dict[str, object]:
+    return {
+        "workspace_id": "w1",
+        "email": "ops@example.com",
+        "daily_digest": True,
+        "holding_change_alerts": False,
+        "execution_alerts": False,
+        "digest_hour_utc": 12,
+    }
+
+
+def _store() -> Any:
+    return FakeSupabase(
+        tables={
+            "notification_prefs": [_pref()],
+            "workspaces": [{"id": "w1", "plan_tier": "free", "name": "House"}],
+            "daily_snapshots": [
+                {"date": "2026-08-30", "snapshot": {"regime": {"bias": "neutral", "summary": "ok"}}}
+            ],
+            "notification_claim": [],
+            "notification_log": [],
+        }
+    )
+
+
+def test_successful_send_claims_then_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real send leaves the mutable claim *and* the append-only record (#4384)."""
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    sb = _store()
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture())
+    dispatch_workspace(
+        sb, CloudflareEmailClient(cfg), cfg, _pref(), date(2026, 8, 30), 12, force_digest=True
+    )
+    assert len(sb.tables["notification_claim"]) == 1
+    assert len(sb.tables["notification_log"]) == 1
+
+
+def test_existing_claim_dedupes_without_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The claim, not the log, is what stops a second send the same day."""
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    sb = _store()
+    sb.tables["notification_claim"].append(
+        {"workspace_id": "w1", "event_key": "digest:2026-08-30", "sent_date": "2026-08-30"}
+    )
+    capture = _Capture()
+    monkeypatch.setattr(cf_mod, "urlopen", capture)
+    dispatch_workspace(
+        sb, CloudflareEmailClient(cfg), cfg, _pref(), date(2026, 8, 30), 12, force_digest=True
+    )
+    assert capture.request is None
+    assert sb.tables["notification_log"] == []
+
+
+def test_suppressed_send_releases_claim_without_recording(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Suppression is not a send: the claim must go, and no log row appears (#4384)."""
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    sb = _store()
+    dropped = json.dumps(
+        {"success": True, "result": {"suppressed_recipients": ["ops@example.com"]}}
+    ).encode()
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture(dropped))
+    dispatch_workspace(
+        sb, CloudflareEmailClient(cfg), cfg, _pref(), date(2026, 8, 30), 12, force_digest=True
+    )
+    assert sb.tables["notification_claim"] == []
+    assert sb.tables["notification_log"] == []
+
+
+@pytest.mark.parametrize("site", ["holding", "execution"])
+@pytest.mark.parametrize("suppressed", [False, True])
+def test_alert_sites_claim_record_and_release(
+    monkeypatch: pytest.MonkeyPatch, site: str, suppressed: bool
+) -> None:
+    """Both alert sites share the digest contract: claim, send, record, release (#4384)."""
+    from digiquant.notify import dispatch as dispatch_mod
+    from digiquant.notify.events import ExecutionAlertEvent, HoldingChangeEvent
+
+    if site == "holding":
+        event: Any = HoldingChangeEvent(
+            workspace_id="w1",
+            run_date="2026-08-30",
+            ticker="AAPL",
+            change_kind="new",
+            current_weight_pct=5.0,
+            prior_weight_pct=None,
+            delta_pp=5.0,
+            unsubscribe_url="https://example.com/unsub",
+        )
+        pref = {**_pref(), "daily_digest": False, "holding_change_alerts": True}
+        monkeypatch.setattr(dispatch_mod, "detect_holding_changes", lambda *a, **k: [event])
+    else:
+        event = ExecutionAlertEvent(
+            workspace_id="w1",
+            run_date="2026-08-30",
+            symbol="AAPL",
+            side="buy",
+            quantity="1",
+            price="100.00",
+            executed_at="2026-08-30T14:00:00Z",
+            unsubscribe_url="https://example.com/unsub",
+            fill_id="fill-1",
+        )
+        pref = {**_pref(), "daily_digest": False, "execution_alerts": True}
+        monkeypatch.setattr(dispatch_mod, "detect_execution_alerts", lambda *a, **k: [event])
+    monkeypatch.setattr(dispatch_mod, "can", lambda *a, **k: True)
+
+    sb = FakeSupabase(
+        tables={
+            "notification_prefs": [pref],
+            "workspaces": [{"id": "w1", "plan_tier": "free", "name": "House"}],
+            "notification_claim": [],
+            "notification_log": [],
+        }
+    )
+    cfg = _config(unsubscribe_base="https://example.com/settings")
+    dropped = json.dumps(
+        {"success": True, "result": {"suppressed_recipients": ["ops@example.com"]}}
+    ).encode()
+    body = dropped if suppressed else b'{"success": true}'
+    monkeypatch.setattr(cf_mod, "urlopen", _Capture(body))
+
+    dispatch_workspace(sb, CloudflareEmailClient(cfg), cfg, pref, date(2026, 8, 30), 12)
+
+    claim_keys = [row["event_key"] for row in sb.tables["notification_claim"]]
+    log_keys = [row["event_key"] for row in sb.tables["notification_log"]]
+    if suppressed:
+        assert claim_keys == []
+        assert log_keys == []
+    else:
+        assert claim_keys == [event.event_key]
+        assert log_keys == [event.event_key]

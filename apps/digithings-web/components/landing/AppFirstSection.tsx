@@ -39,7 +39,7 @@ const LEDE =
   "m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft";
 const LABEL = "font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute";
 const TAB_BASE =
-  "-ms-px flex w-full min-w-0 items-baseline gap-[0.6rem] border border-hair px-[0.95rem] py-[0.7rem] text-start font-mono text-[0.8rem] leading-[1.35] transition-[color,background-color,box-shadow] duration-200 first:ms-0 max-[640px]:px-[0.6rem] max-[640px]:text-[0.74rem]";
+  "whyx__app-tab -ms-px w-full min-w-0 border border-hair text-start font-mono transition-[color,background-color,box-shadow] duration-200 first:ms-0 active:bg-surface-2";
 const TAB = `${TAB_BASE} bg-bg text-ink-soft hover:bg-surface hover:text-ink`;
 const TAB_ON = `${TAB_BASE} relative z-10 border-b-transparent bg-surface text-ink shadow-[inset_0_2px_0_var(--accent)]`;
 /** How long the graph's build entrance runs before the class is dropped. */
@@ -153,13 +153,13 @@ export function AppFirstSection() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPop(null);
     };
-    /* Any scroll that moves the page or the graph dismisses the menu. A
-       scroll inside the menu itself (a long model list) does not. */
-    const onScroll = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Node && menuRef.current?.contains(target)) return;
-      setPop(null);
-    };
+    /* The page's own scroll has to dismiss the menu: the graph's camera moves
+       with it while the popover stays anchored to a fixed point in the section,
+       so the two would drift apart. It is a plain window listener rather than a
+       capture-phase one — scroll does not bubble, so the capture flag was only
+       making it fire for every nested scroller (a long option list, the tour
+       itself) that cannot move the anchor at all. */
+    const onScroll = () => setPop(null);
     const onPointer = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -168,11 +168,11 @@ export function AppFirstSection() {
       setPop(null);
     };
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("pointerdown", onPointer);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("scroll", onScroll);
       document.removeEventListener("pointerdown", onPointer);
     };
   }, [pop]);
@@ -334,7 +334,7 @@ export function AppFirstSection() {
         header={
           <div className="flex w-full min-w-0 flex-col gap-[0.7rem]">
             <h2 className={HEADLINE}>
-              <span className="why-rent">Anyones AI stack,</span>{" "}
+              <span className="why-rent">{"Anyone's AI stack,"}</span>{" "}
               <span className="why-own">or a digithings stack</span>
             </h2>
             {tourMode === "static" ? (
@@ -347,8 +347,12 @@ export function AppFirstSection() {
                 left, and the digithings stack slides in. Click a box to change that layer.
               </p>
             )}
-            <div className="whyx__apps mt-[0.8rem] flex min-w-0 flex-col">
-              <div className="grid grid-cols-3 gap-0" role="tablist" aria-label="Application">
+            <div className="whyx__apps flex min-w-0 flex-col">
+              <div
+                className="whyx__app-tabs grid grid-cols-3 gap-0"
+                role="tablist"
+                aria-label="Application"
+              >
                 {APP_PRESETS.map((app, i) => (
                   <button
                     key={app.id}
@@ -362,7 +366,7 @@ export function AppFirstSection() {
                     onClick={() => selectApp(app.id)}
                   >
                     <span
-                      className="text-[0.68rem] text-ink-mute max-[640px]:hidden"
+                      className="whyx__app-tab-index text-ink-mute max-[640px]:hidden"
                       aria-hidden="true"
                     >
                       {String(i + 1).padStart(2, "0")}
@@ -374,12 +378,12 @@ export function AppFirstSection() {
               {/* Every app's description sits in the same cell, only the
                   selected one visible, so the strip is always as tall as the
                   longest and the graph box below never changes size. */}
-              <div className="grid border-x border-hair bg-surface px-[0.95rem] pt-[0.75rem] pb-[0.6rem]">
+              <div className="whyx__app-subhead">
                 {APP_PRESETS.map((app) => (
                   <p
                     key={app.id}
                     aria-hidden={app.id !== shownId}
-                    className={`col-start-1 row-start-1 m-0 text-[0.9rem] leading-[1.65] text-ink-soft transition-opacity duration-300 ${
+                    className={`whyx__app-subhead-line transition-opacity duration-300 ${
                       app.id === shownId ? "opacity-100" : "invisible opacity-0"
                     }`}
                   >
@@ -443,7 +447,7 @@ export function AppFirstSection() {
                 type="button"
                 role="option"
                 aria-selected={selected}
-                className={`flex w-full items-baseline justify-between gap-[0.75rem] px-[0.7rem] py-[0.5rem] text-start font-mono text-[0.82rem] leading-[1.35] ${
+                className={`flex w-full items-baseline justify-between gap-[0.75rem] px-[0.7rem] py-[0.5rem] text-start font-mono text-[0.82rem] leading-[1.35] active:bg-surface ${
                   selected
                     ? "bg-bg text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
                     : "text-ink-soft hover:bg-bg hover:text-ink"

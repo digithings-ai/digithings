@@ -34,6 +34,10 @@ import {
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { tenantIdBySlug } from "@/lib/conversations-repo";
 import { bindLink, registerSession } from "@/lib/session-links";
+// The link is fetched by whoever produced the row, so it has to carry the
+// base path the app is served under (DIG-5121: /chat on digithings.ai) —
+// an unprefixed link would 404 for every caller once the app moved.
+import { p } from "@/lib/base-path";
 
 /** Mirrors the ceiling in the conversation-scoped route: one 25 MiB write. */
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
@@ -146,7 +150,13 @@ export async function POST(req: Request) {
   bindLink(conversationId, token);
 
   return Response.json(
-    { id, storageKey, link: `/api/conversations/${conversationId}/artifacts/blob?token=${token}` },
+    {
+      id,
+      storageKey,
+      link: p(
+        `/api/conversations/${conversationId}/artifacts/blob?token=${token}`
+      ),
+    },
     { status: 201 }
   );
 }

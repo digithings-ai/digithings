@@ -36,8 +36,20 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
-import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
+import {
+  CONTAINER_RETRY_AFTER_SECONDS,
+  classifyContainerHopFailure,
+  containerEvictedResponse,
+  containerFailedResponse,
+  containerRestartMessage,
+  containerUnavailableResponse,
+  isContainerEvictedError,
+  isContainerFailedError,
+  safeErrorMessage,
+} from "./container-errors";
+import { fetchWithContainerRetry } from "./container-retry";
 import { getStackStatus, runIsolated } from "./route-modules";
+import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
 // the file is dependency-free constants, so it cannot fail independently of
@@ -79,8 +91,13 @@ export class DigiStackContainer extends Container {
    * the JWKS the verifiers fetch), so it can never be optional.
    */
   requiredPorts = [DIGIGRAPH_PORT];
-  /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "1m";
+  /**
+   * Cold starts are seamless (#4323), but the idle timer also runs while
+   * supervisord is still booting: at 1m a slow cold boot (digigraph + digikey
+   * well past 60s) was stopped mid-boot by "Activity expired" and never bound
+   * its ports (OCC outage 2026-10-14). 5m covers the 180s port wait.
+   */
+  sleepAfter = "5m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -107,11 +124,12 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     // Session model picker (OCC settings): house-upstream slugs a visitor may
-    // pick per session, set in wrangler.toml [vars]. digigraph binds only slugs
-    // on this list, so the empty fallback disables the picker.
-    // Configured in wrangler [vars]; no code fallback, so the allowlist can
-    // never drift from config (check_model_name_literals).
-    DIGI_SESSION_MODEL_ALLOWLIST: env.DIGI_SESSION_MODEL_ALLOWLIST ?? "",
+    // pick per session. digigraph binds only slugs on this list. Set in
+    // wrangler.toml [vars] when present, and config wins; the code fallback is
+    // derived from the set the deployment publishes, so it can never drift
+    // from it — see ./session-model-allowlist and check_model_name_literals.
+    DIGI_SESSION_MODEL_ALLOWLIST:
+      env.DIGI_SESSION_MODEL_ALLOWLIST ?? SESSION_MODEL_ALLOWLIST_DEFAULT,
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
@@ -134,9 +152,16 @@ export class DigiStackContainer extends Container {
     // so ingest, backfill, and query must agree on exactly this value.
     DIGISEARCH_EMBEDDING_PROVIDER:
       env.DIGISEARCH_EMBEDDING_PROVIDER ?? "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+    // Per-index bge-m3 override (DIG-4657): the indexes listed here are queried
+    // with Cloudflare Workers AI @cf/baai/bge-m3 (1024 dims) instead of the
+    // global 384-dim provider above. The corpus-index worker writes those
+    // indexes with bge-m3, so the query side must use the same model or the
+    // query vector does not match the stored vectors and retrieval silently
+    // misses. Digisearch reads the list per query (search/_stub.py).
+    DIGISEARCH_WORKERS_AI_INDEXES: env.DIGISEARCH_WORKERS_AI_INDEXES ?? "",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\"in Bearbeitung\\"), or: I searched for mailbox (\\"Postfach\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings","researchSystemPrompt":"You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings."},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\"in Bearbeitung\\"), or: I searched for mailbox (\\"Postfach\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -152,14 +177,15 @@ export class DigiStackContainer extends Container {
   /**
    * A request waiting on a cold start must not have the container stopped under
    * it. `startAndWaitForPorts` does NOT renew the activity timer, so with
-   * sleepAfter = "1m" the idle alarm fires mid-boot and SIGTERMs the container
+   * sleepAfter = "5m" the idle alarm fires mid-boot and SIGTERMs the container
    * before its port opens; the port wait then fails with "The container is not
    * running, consider calling start()" and every caller gets 503
    * container_booting while the container itself logs a clean boot (no errors,
-   * every supervisord program RUNNING). Observed 2026-10-18: after the R5 wheel
-   * install (#5762) the boot takes ~60s at 0.5 vCPU, which is exactly the
-   * sleepAfter window. Holding the window open for the life of the request is
-   * the fix; the 1m idle tail itself is unchanged once requests stop.
+   * every supervisord program RUNNING). Observed 2026-10-18 with the previous
+   * 1m window: after the R5 wheel install (#5762) the boot takes ~60s at 0.5
+   * vCPU, which is exactly that window. Holding the window open for the life of
+   * the request is the fix; the idle tail itself is unchanged once requests
+   * stop.
    */
   private keepAwakeForRequest = false;
 
@@ -207,29 +233,79 @@ export class DigiStackContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: a confirmed eviction is not a cold start — return the
       // non-retryable 410 so callers stop retrying a container that is gone
       // (same distinction as digiquant-runner RunLostError, runner.ts).
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("stack", message);
       }
+      // DIG-4477: the container was RECYCLED or FAILED under the request (a
+      // rollout exit, an unexpected exit, "no container instance"). That is not
+      // a cold boot: a fresh instance can serve the request, so answer with
+      // the retryable `container_failed` code and let the Worker retry once
+      // instead of surfacing the failure to the client. The matched shapes are
+      // the @cloudflare/containers producer constants listed in
+      // ./container-errors.ts; this Worker's documented cold-boot kill
+      // (index.ts #5762) is deliberately NOT one of them and keeps 503
+      // `container_booting`.
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     } finally {
       this.keepAwakeForRequest = false;
     }
-    // An eviction can also land between start and fetch: map only the
-    // confirmed-evicted signal to 410, rethrow everything else so the
-    // existing failure behavior is unchanged.
+    // An eviction can also land between start and fetch: map the confirmed
+    // signals (evicted -> 410, failed -> retryable 503) and rethrow
+    // everything else so the existing failure behavior is unchanged.
+    let response: Response;
     try {
-      return await this.containerFetch(request, targetPort);
+      response = await this.containerFetch(request, targetPort);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("stack", message);
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          failure.description,
+        );
+        return containerUnavailableResponse("stack");
+      }
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("stack", failure.message);
+      }
+      if (failure.kind === "failed") {
+        return containerFailedResponse("stack", failure.message);
       }
       throw err;
     }
+    // @cloudflare/containers catches a container that died mid-request ITSELF
+    // and answers with a 500 instead of throwing (its own comment on that
+    // branch: "This error means that the container might've just restarted"),
+    // so the recycle has to be recognised on the RESPONSE. Convert it into
+    // the machine-readable failed-container code so the Worker retries it
+    // once (see ./container-retry.ts) instead of surfacing a bare 500.
+    const restart = await containerRestartMessage(response);
+    if (restart !== null) {
+      return containerFailedResponse("stack", restart);
+    }
+    return response;
   }
 }
 
@@ -295,24 +371,63 @@ export class DigiQuantMcpContainer extends Container {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeErrorMessage(err);
       // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
       if (isContainerEvictedError(message)) {
         return containerEvictedResponse("mcp", message);
+      }
+      // DIG-4477: recycled / failed container -> retryable 503, one fresh
+      // attempt from the Worker (see ./container-retry.ts).
+      if (isContainerFailedError(message)) {
+        return containerFailedResponse("mcp", message);
       }
       return containerBootingResponse("mcp", message);
     } finally {
       this.keepAwakeForRequest = false;
     }
+    let response: Response;
     try {
-      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+      response = await this.containerFetch(request, DIGIQUANT_MCP_PORT);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("mcp", message);
+      // A hop that rejected with a value that is not an Error (DIG-4928): the
+      // @cloudflare/containers package rethrows such a value verbatim from its
+      // proxy catch, so it would leave this Durable Object as an uncaught
+      // exception and the platform would record it as it stands — a thrown
+      // Date leaves nothing but a bare date in the log.
+      //
+      // Such a value states no failure of its own, so it is neither an
+      // eviction nor a failed container: it cannot be classified, and it is
+      // not replayed either (a value that came out of the hop says nothing
+      // about whether the request reached the container). The client is told
+      // to come back instead.
+      //
+      // The classification is decided in ONE place (classifyContainerHopFailure),
+      // so the order of the checks cannot drift between the two container
+      // classes: a value that is not an Error is read before the eviction and
+      // the failed vocabulary, whatever its text says.
+      const failure = classifyContainerHopFailure(err);
+      if (failure.kind === "unavailable") {
+        console.error(
+          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
+          failure.description,
+        );
+        return containerUnavailableResponse("mcp");
+      }
+      if (failure.kind === "evicted") {
+        return containerEvictedResponse("mcp", failure.message);
+      }
+      if (failure.kind === "failed") {
+        return containerFailedResponse("mcp", failure.message);
       }
       throw err;
     }
+    // A container that died mid-request answers with a 500, not a throw —
+    // see the DigiStackContainer note and ./container-errors.ts.
+    const restart = await containerRestartMessage(response);
+    if (restart !== null) {
+      return containerFailedResponse("mcp", restart);
+    }
+    return response;
   }
 }
 
@@ -338,17 +453,12 @@ function targetPortFromRequest(request: Request): number {
 export const CONTAINER_BOOTING_CODE = "container_booting";
 
 /**
- * Poll hint (seconds) for a booting container. Small enough that a ready
- * container is picked up promptly, large enough that a full ~240s boot costs
- * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ * JSON 503 with the boot code + Retry-After for all three containers.
  *
- * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
- * uses this code — it answers 410 `container_evicted` with no `Retry-After`
- * so callers stop retrying an instance that is gone.
+ * The poll hint itself lives in ./container-errors.ts
+ * (CONTAINER_RETRY_AFTER_SECONDS) so the boot 503 and the failed-container
+ * 503 cannot drift apart.
  */
-const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
-
-/** JSON 503 with the boot code + Retry-After for all three containers. */
 export function containerBootingResponse(
   service: "stack" | "mcp" | "digichat",
   message: string,
@@ -357,7 +467,7 @@ export function containerBootingResponse(
     { code: CONTAINER_BOOTING_CODE, message: `${service} container not ready: ${message}` },
     {
       status: 503,
-      headers: { "Retry-After": String(CONTAINER_BOOT_RETRY_AFTER_SECONDS) },
+      headers: { "Retry-After": String(CONTAINER_RETRY_AFTER_SECONDS) },
     },
   );
 }
@@ -386,6 +496,7 @@ export interface Env {
   STACK_CONTAINER_REV?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
+  /** House-upstream model slugs a visitor may pick per session (OCC picker). */
   DIGI_SESSION_MODEL_ALLOWLIST?: string;
   CHROMA_PATH?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
@@ -398,6 +509,12 @@ export interface Env {
   DIGIVAULT_ROOT?: string;
   DIGISEARCH_INDEX?: string;
   DIGISEARCH_EMBEDDING_PROVIDER?: string;
+  /**
+   * Comma-separated index names queried with Workers AI bge-m3 (1024 dims)
+   * instead of the global provider. Shipped in wrangler.toml [vars]; the
+   * corpus-index worker writes those indexes with bge-m3 (DIG-4657).
+   */
+  DIGISEARCH_WORKERS_AI_INDEXES?: string;
   DIGI_TENANT_CORPUS_MAP?: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
@@ -573,7 +690,15 @@ export default {
       // only these paths (503); every other group keeps serving.
       return runIsolated("key-proxy", () => import("./ports"), async ({ DIGIKEY_PORT }) => {
         const container = stackContainer(workerEnv);
-        return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
+        // DIG-4477: a recycled container must not fail the client request —
+        // the Durable Object id is a NAME, so one fresh attempt reaches the
+        // live instance (see ./container-retry.ts). The clone per attempt is
+        // what makes the replay possible: a consumed body cannot be re-sent.
+        return fetchWithContainerRetry(() =>
+          container.fetch(
+            switchPort(rewriteKeyStackPath(request.clone()), DIGIKEY_PORT),
+          ),
+        );
       });
     }
 
@@ -603,9 +728,14 @@ export default {
           const stripped = slash === -1 ? "/" : rest.slice(slash);
           const target = new URL(url.toString());
           target.pathname = stripped;
-          const forwarded = new Request(target.toString(), request);
           const container = stackContainer(workerEnv);
-          return container.fetch(switchPort(forwarded, port));
+          // DIG-4477: retry once on a recycled container (see
+          // ./container-retry.ts); the clone per attempt is what makes the
+          // replay possible.
+          return fetchWithContainerRetry(() => {
+            const forwarded = new Request(target.toString(), request.clone());
+            return container.fetch(switchPort(forwarded, port));
+          });
         });
       }
     }
@@ -658,7 +788,12 @@ export default {
       // Lazy ports import per route group (#4685).
       return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
         const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-        return container.fetch(request);
+        // DIG-4477: retry once on a recycled container (see
+        // ./container-retry.ts). DIG-4928: the answer for a hop that rejected
+        // with a value that is not an Error names the container it came from.
+        return fetchWithContainerRetry(() => container.fetch(request.clone()), {
+          service: "mcp",
+        });
       });
     }
 
@@ -690,7 +825,12 @@ export default {
           return sleepingHealthResponse(request);
         }
       }
-      return container.fetch(switchPort(request, port));
+      // DIG-4477: retry once on a recycled container (see
+      // ./container-retry.ts). The clone per attempt is what makes the replay
+      // possible: a consumed body cannot be re-sent.
+      return fetchWithContainerRetry(() =>
+        container.fetch(switchPort(request.clone(), port)),
+      );
     });
   },
 };

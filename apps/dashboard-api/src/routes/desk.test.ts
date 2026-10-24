@@ -31,7 +31,9 @@ describe("phase 4 shell, settings, chat", () => {
     const features = await app.fetch(new Request("https://x/features"), ENV);
     const flags = ((await features.json()) as { data: { flags: { key: string; tag: string }[] } }).data.flags;
     expect(flags.some((f) => f.key === "/tools/terminal" && f.tag === "soon")).toBe(true);
-    expect(flags.some((f) => f.key === "/tools/chat" && f.tag === "wip")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/gloomberb" && f.tag === "soon")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/vela" && f.tag === "soon")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/digichat" && f.tag === "wip")).toBe(true);
     const spine = await app.fetch(new Request("https://x/desks/active/spine"), ENV);
     const items = ((await spine.json()) as { data: { desk_id: string; items: { href: string }[] } }).data;
     expect(items.desk_id).toBe("baseline");
@@ -89,6 +91,88 @@ describe("phase 4 shell, settings, chat", () => {
     expect(renamed.status).toBe(503);
     const sent = await app.fetch(new Request("https://x/chat/sessions/s1/messages", { method: "POST", headers: user, body: "{}" }), BRIEF);
     expect(sent.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("opens a financial session from KV and forwards with the machine key on the header only", async () => {
+    const key = "digi_live_machine-key-sentinel";
+    const tenant = {
+      slug: "digiquant",
+      cheapModel: "groq/llama-3.1-8b-instant",
+      digichatOrigin: "https://chat.digithings.ai",
+      gloomberbTools: ["gloomberb_quote"],
+    };
+    const kv = { DIGICHAT_MACHINE_KEY: key, DIGICHAT_TENANT: { get: async () => JSON.stringify(tenant) } };
+    const configured: Env = { ...BRIEF, ...kv };
+    const fxCaller: Env = { ...ENV, ...kv };
+    const stream = [
+      `data: ${JSON.stringify({ type: "text-delta", id: "t1", delta: "baseline desk run" })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const current = await app.fetch(new Request("https://x/chat/sessions/current?desk=baseline"), configured);
+    const currentBody = (await current.json()) as {
+      data: { id: string; context: string; tools: { gloomberb: string[]; luxalgo: string[]; app: string[] } };
+    };
+    expect(current.status).toBe(200);
+    expect(currentBody.data.id).toBe("fin-baseline");
+    expect(currentBody.data.context).toBe("baseline desk run");
+    expect(currentBody.data.tools.gloomberb).toEqual(["gloomberb_quote"]);
+    expect(currentBody.data.tools.luxalgo).toContain("luxalgo_library_search");
+    expect(currentBody.data.tools.app).toEqual(["/portfolio", "/pipeline/runs/latest", "/theses"]);
+    expect(JSON.stringify(currentBody)).not.toContain(key);
+    const fx = await app.fetch(new Request("https://x/chat/sessions/current?desk=fx"), fxCaller);
+    const fxBody = (await fx.json()) as { data: { context: string; tools: { app: string[] } } };
+    expect(fx.status).toBe(200);
+    expect(fxBody.data.context).toBe("FX Hub");
+    expect(fxBody.data.tools.app).toContain("/fx/pairs");
+    const sent = await app.fetch(
+      new Request("https://x/chat/sessions/fin-fx/messages?desk=fx", {
+        method: "POST",
+        headers: user,
+        body: JSON.stringify({ text: "levels?" }),
+      }),
+      fxCaller,
+    );
+    const sentBody = (await sent.json()) as { data: { reply: string; context: string } };
+    expect(sent.status).toBe(200);
+    expect(sentBody.data.reply).toBe("baseline desk run");
+    expect(sentBody.data.context).toBe("FX Hub");
+    expect(JSON.stringify(sentBody)).not.toContain(key);
+    const init = fetchMock.mock.calls[0]?.[1];
+    if (init === undefined) throw new Error("missing request init");
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${key}`);
+    expect(String(init.body)).not.toContain(key);
+    expect(String(init.body)).toContain("/fx/pairs");
+  });
+
+  it("refuses the FX desk to a caller outside the 12x group", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const configured: Env = {
+      ...BRIEF,
+      DIGICHAT_MACHINE_KEY: "digi_live_machine-key-sentinel",
+      DIGICHAT_TENANT: {
+        get: async () =>
+          JSON.stringify({ slug: "digiquant", cheapModel: "groq/llama-3.1-8b-instant", digichatOrigin: "https://chat.digithings.ai" }),
+      },
+    };
+    for (const path of ["/chat/sessions?desk=fx", "/chat/sessions/current?desk=fx", "/chat/sessions/current/messages?desk=fx"]) {
+      const res = await app.fetch(new Request(`https://x${path}`), configured);
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(await res.json())).not.toMatch(/fx hub|\/fx\//i);
+    }
+    const created = await app.fetch(new Request("https://x/chat/sessions?desk=fx", { method: "POST", headers: user, body: "{}" }), configured);
+    expect(created.status).toBe(403);
+    const sent = await app.fetch(
+      new Request("https://x/chat/sessions/fin-fx/messages", { method: "POST", headers: user, body: JSON.stringify({ desk: "fx", text: "levels?" }) }),
+      configured,
+    );
+    expect(sent.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

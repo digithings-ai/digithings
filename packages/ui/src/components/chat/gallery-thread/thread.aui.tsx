@@ -7,6 +7,12 @@ import {
   UserMessageAttachments,
   useHiddenAttachmentNames,
 } from "./attachment.aui";
+import {
+  composerHasText,
+  dismissComposerKeyboard,
+  dismissKeyboardIfCoarse,
+  isCoarsePointer,
+} from "./composer-keyboard";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
@@ -17,14 +23,27 @@ import {
   ReasoningRoot,
   ReasoningText,
   ReasoningTrigger,
-} from "./reasoning.aui";
+} from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import {
+  DEFAULT_SCROLL_MODE,
+  scrollModeProps,
+  useFollowStream,
+  type ScrollMode,
+} from "./scroll-mode";
+import { WorkChain } from "./work-chain";
+import { WorkChainSummary } from "./work-chain-summary";
+import {
+  resolveWorkDisclosure,
+  type WorkVisibility,
+} from "../stock/skin-types";
+import { BackendNotice } from "../stock/chat-notice";
 import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
   ToolGroupTrigger,
-} from "./tool-group.aui";
+} from "../stock/tool-group.aui";
 import {
   CheckActionIcon,
   CopyActionIcon,
@@ -32,6 +51,11 @@ import {
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
+import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
+import { messageAnchor } from "../../../replay/snapshot";
+import { downloadMarkdown } from "../transcript";
+import { connectionStatusText } from "../connection-status";
+import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
 import { SkinCredit } from "../stock/skin-credit";
@@ -72,7 +96,6 @@ import {
 import { ComposerTriggerPopover } from "./composer-trigger-popover.aui";
 import { MessageError } from "./message-error.aui";
 import { ComposerBlockCaret } from "./block-caret";
-import { ThreadSource } from "./source";
 import { TypedWelcomeCopy } from "./typed-welcome-copy";
 import { useDigichatWarmupPhase } from "../use-warmup-phase";
 import { OverlayScrollbar } from "../overlay-scrollbar";
@@ -169,11 +192,27 @@ export type ThreadProps = {
   /** Disclosure mode for grouped tool-call runs. Default collapsed. */
   toolCallsMode?: GroupDisclosureMode | undefined;
   /**
+   * How much of the agent's work the user sees: `quiet` (the titles only,
+   * with the folded header as a live status line), `balanced` (open while it
+   * runs, collapsed when it finishes) or `verbose` (stays open). The client's
+   * `features.view` picks the default; the user can change it per session.
+   */
+  workVisibility?: WorkVisibility | undefined;
+  /**
    * Rendered as a row inside the composer border, under the input. The
    * digichat skin passes its model / tools / search / view / context chips;
    * other hosts leave it unset.
    */
   composerToolbar?: ReactNode;
+  /** `always` reserves a scrollbar gutter; `auto` shows bars only on scroll. */
+  scrollbars?: "always" | "auto";
+  /** Worked-chain rhythm. `default` is the fixed spacing. */
+  density?: "compact" | "default" | "airy";
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. See `scroll-mode.ts`.
+   */
+  scrollMode?: ScrollMode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -190,6 +229,44 @@ export type ThreadMentionTrigger = {
   directive: NonNullable<SlashPopoverProps["directive"]>;
   iconMap?: SlashPopoverProps["iconMap"];
 };
+
+/**
+ * The chain grouping.
+ *
+ * A source or a status part between two work runs must not split the chain:
+ * only text ends a work run, so two runs with nothing but a source between
+ * them are one chain, not two. The library's helper covers the part types it
+ * knows; the status parts (`data-*`) are matched here, and the memo
+ * fingerprint is kept so the tree is not rebuilt on every render.
+ */
+const chainGroupBy = (() => {
+  const base = groupPartByType({
+    reasoning: ["group-chainOfThought", "group-reasoning"],
+    "tool-call": ["group-chainOfThought", "group-tool"],
+    "standalone-tool-call": [],
+    source: ["group-chainOfThought", "group-tool"],
+  });
+  const fn = (part: { type: string; name?: string }, context?: unknown) => {
+    const dataName =
+      part.type === "data"
+        ? part.name
+        : part.type.startsWith("data-")
+          ? part.type.slice("data-".length)
+          : undefined;
+    // A data-notice (tool-call limit, and any other status notice) stays
+    // outside the chain. The chain folds once the answer arrives, which would
+    // hide the notice inside the collapsed work block.
+    if (dataName === "notice") return base(part as never, context as never);
+    if (part.type === "data" || part.type.startsWith("data-")) {
+      return ["group-chainOfThought", "group-tool"] as const;
+    }
+    return base(part as never, context as never);
+  };
+  (fn as unknown as Record<symbol, string>)[
+    Symbol.for("@assistant-ui/groupBy.memoKey")
+  ] = "digichat:chain-v3";
+  return fn;
+})();
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
   undo: true,
@@ -208,11 +285,13 @@ const ThreadComponentsContext =
 type ThreadGroupDisclosure = {
   reasoning: GroupDisclosureMode;
   toolCalls: GroupDisclosureMode;
+  visibility: WorkVisibility;
 };
 
 const DEFAULT_GROUP_DISCLOSURE: ThreadGroupDisclosure = {
   reasoning: "collapsed",
   toolCalls: "collapsed",
+  visibility: "balanced",
 };
 
 const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
@@ -246,8 +325,10 @@ const ThreadViewportElContext = createContext<HTMLElement | null>(null);
  * Edit-in-composer: clicking edit on a user message loads its text into the
  * main composer (the only place messages are typed or changed). Resubmitting
  * replaces that message and regenerates from it; unchanged text is a no-op
- * (treated as a misclick). Escape, the exit control, or a click outside the
- * composer cancels and restores whatever draft was there before.
+ * (treated as a misclick), as is an empty or whitespace-only composer.
+ * Escape or a click outside the composer cancels and restores whatever draft
+ * was there before. The composer itself carries no editing chrome: it looks
+ * like a normal text box while a message is being edited.
  */
 type ComposerEditState = {
   messageId: string;
@@ -269,6 +350,19 @@ const ComposerEditContext = createContext<ComposerEditApi>({
 
 export function isUnchangedEdit(original: string, next: string): boolean {
   return original.trim() === next.trim();
+}
+
+/**
+ * Should an in-composer edit be sent at all?
+ *
+ * No when the composer is empty or holds only whitespace (there is nothing to
+ * say), and no when the text is the message being edited (an edit that
+ * changes nothing is not worth a resend). Both cases end the edit without
+ * touching the message.
+ */
+export function shouldCommitEdit(original: string, next: string): boolean {
+  if (!next.trim()) return false;
+  return !isUnchangedEdit(original, next);
 }
 
 const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
@@ -296,7 +390,7 @@ const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
     (text: string) => {
       const cur = editingRef.current;
       if (!cur) return;
-      if (!text.trim() || isUnchangedEdit(cur.original, text)) {
+      if (!shouldCommitEdit(cur.original, text)) {
         cancel();
         return;
       }
@@ -340,13 +434,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -372,7 +466,11 @@ export const Thread: FC<ThreadProps> = ({
   hiddenAttachmentNames,
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
+  workVisibility = "balanced",
   composerToolbar,
+  scrollbars = "always",
+  density = "default",
+  scrollMode = DEFAULT_SCROLL_MODE,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -393,7 +491,11 @@ export const Thread: FC<ThreadProps> = ({
         <ThreadActionsContext.Provider value={resolvedActions}>
           <ThreadComponentsContext.Provider value={components}>
             <ThreadGroupDisclosureContext.Provider
-              value={{ reasoning: reasoningMode, toolCalls: toolCallsMode }}
+              value={{
+                reasoning: reasoningMode,
+                toolCalls: toolCallsMode,
+                visibility: workVisibility,
+              }}
             >
               <ComposerEditProvider>
                 <ThreadRoot
@@ -401,6 +503,9 @@ export const Thread: FC<ThreadProps> = ({
                   placeholder={placeholder}
                   composerLayout={composerLayout}
                   composerToolbar={composerToolbar}
+                  scrollbars={scrollbars}
+                  density={density}
+                  scrollMode={scrollMode}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -421,12 +526,29 @@ export const Thread: FC<ThreadProps> = ({
  */
 const ThreadFooter: FC = () => <SkinCredit />;
 
+/**
+ * Keeps the viewport on the stream while following. A component rather than a
+ * hook call in `ThreadRoot` because the message count lives in the thread
+ * store, which only exists inside `ThreadPrimitive.Root`.
+ */
+const ScrollFollower: FC<{ viewport: HTMLElement | null; enabled: boolean }> = ({
+  viewport,
+  enabled,
+}) => {
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  useFollowStream(viewport, enabled, messageCount);
+  return null;
+};
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
   composerLayout: ComposerLayout;
   composerToolbar?: ReactNode;
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar }) => {
+  scrollbars: "always" | "auto";
+  density: "compact" | "default" | "airy";
+  scrollMode: ScrollMode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density, scrollMode }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -437,10 +559,12 @@ const ThreadRoot: FC<{
     setViewportEl(node);
   }, []);
 
+  const viewportProps = scrollModeProps(scrollMode);
+
   return (
     <ThreadPrimitive.Root
       className={cn(
-        "aui-root aui-thread-root digichat-thread bg-background @container flex h-full flex-col",
+        "aui-root aui-thread-root digichat-thread bg-surface @container flex h-full flex-col",
         className,
       )}
       data-user-align="left"
@@ -451,6 +575,8 @@ const ThreadRoot: FC<{
       // /baseline catalog, the embed shell, and the production shells — instead
       // of each surface having to remember to wrap the Thread.
       data-thread-skin="digichat"
+      data-scrollbars={scrollbars}
+      data-density={density}
       style={{
         ["--thread-max-width" as string]: "44rem",
         // `--card` (not `--color-card`) so a scoped palette wins: the
@@ -458,7 +584,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -469,8 +596,8 @@ const ThreadRoot: FC<{
       <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
         ref={attachViewport}
-        turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        {...viewportProps}
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
@@ -479,6 +606,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
+        <ScrollFollower viewport={viewportEl} enabled={scrollMode === "follow"} />
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
@@ -486,7 +614,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -497,7 +625,7 @@ const ThreadRoot: FC<{
       <OverlayScrollbar targetRef={viewportRef} width={10} />
       </div>
         <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
-          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-surface relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -619,9 +747,9 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom border-hair bg-surface hover:bg-surface-2 absolute -top-12 z-10 self-center rounded-none p-4 disabled:invisible"
       >
-        <DotMatrix state="scroll" label="Scroll to bottom" className="size-3.5" />
+        <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -634,7 +762,7 @@ const ThreadWelcome: FC = () => {
       data-slot="aui_thread-welcome"
       className="aui-thread-welcome-root flex flex-col items-start text-start"
     >
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-(--duration-hover)">
         {welcome}
       </h1>
       <TypedWelcomeCopy lines={welcomeBody} />
@@ -648,7 +776,7 @@ const ThreadWelcome: FC = () => {
  * they came from the runtime or from `chrome.suggestions`.
  */
 const SUGGESTION_BUTTON_CLASS =
-  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200";
+  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-(--duration-hover)";
 
 const ThreadSuggestions: FC = () => {
   const { suggestions } = useContext(ThreadChromeContext);
@@ -675,6 +803,9 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       type="button"
       onClick={() => {
         if (aui.thread.getState().isRunning) return;
+        // A tapped example is a send: on iOS a button does not take focus, so
+        // the composer would keep the keyboard up over the answer.
+        dismissKeyboardIfCoarse();
         aui.thread.append({
           content: [{ type: "text", text: prompt }],
           runConfig: aui.composer.getState().runConfig,
@@ -685,7 +816,7 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       <span className="aui-msg-marker" aria-hidden="true">
         <DotMatrix
           state="example"
-          label="Example"
+          decorative
           className="aui-thread-welcome-suggestion-mark size-3.5"
         />
       </span>
@@ -699,11 +830,15 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
+      <button
+        type="button"
+        className={SUGGESTION_BUTTON_CLASS}
+        onClick={() => dismissKeyboardIfCoarse()}
+      >
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
-            label="Example"
+            decorative
             className="aui-thread-welcome-suggestion-mark size-3.5"
           />
         </span>
@@ -729,14 +864,31 @@ const Composer: FC<{
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRootRef = useRef<HTMLFormElement | null>(null);
   const isEditingMessage = edit.editing !== null;
+  // Read after mount, not during render: the server has no matchMedia, and a
+  // phone reporting "coarse" on its first render would hydrate a different
+  // tree than the one that was sent.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(isCoarsePointer());
+  }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (edit.editing) {
       event.preventDefault();
       edit.commit(aui.composer().getState().text);
+      // An edit is a send: the corrected text goes off and the answer starts
+      // streaming. Leaving the keyboard up would hide it, so the same
+      // dismissal runs here as on a normal submit.
+      dismissKeyboardIfCoarse();
       return;
     }
+    // Captured before the send clears the textarea — see composerHasText.
+    const sent = composerHasText(composerRootRef.current);
     onComposerSubmit?.(event);
+    // On a phone the keyboard would otherwise stay up over the streaming
+    // answer; blurring retracts it and leaves the thread in full view. A
+    // no-op on a fine pointer, so a desktop keeps its caret for the next turn.
+    if (sent) dismissComposerKeyboard(composerRootRef.current);
   };
 
   // Click outside the composer cancels an in-progress edit. The edit button
@@ -812,7 +964,6 @@ const Composer: FC<{
     <ComposerPrimitive.Root
       ref={composerRootRef}
       className="aui-composer-root relative flex w-full flex-col"
-      data-editing={isEditingMessage ? "true" : undefined}
       onSubmit={handleSubmit}
       onKeyDownCapture={(event) => {
         if (isEditingMessage && event.key === "Escape") {
@@ -826,26 +977,9 @@ const Composer: FC<{
         <div
           data-slot="aui_composer-shell"
           data-layout={layout}
-          data-editing={isEditingMessage ? "true" : undefined}
           onMouseDown={handleShellMouseDown}
-          className="data-[editing=true]:border-primary/50 border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-hair data-[dragging=true]:border-accent flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding,0.5rem) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_50%,var(--bg))]"
         >
-          {isEditingMessage ? (
-            <div
-              data-slot="aui_composer-editing"
-              className="aui-composer-editing text-muted-foreground flex items-center justify-between gap-2 px-2.5 text-xs"
-            >
-              <span>Editing message · Enter to resend · Esc to cancel</span>
-              <button
-                type="button"
-                aria-label="Cancel edit"
-                className="hover:text-foreground rounded px-1 leading-none"
-                onClick={() => edit.cancel()}
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
               row inside the same border, which read as a two-line text box. */}
@@ -858,7 +992,7 @@ const Composer: FC<{
               <ComposerPrimitive.Input
                 placeholder={placeholder}
                 className={cn(
-                  "aui-composer-input placeholder:text-muted-foreground/60 w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
+                  "aui-composer-input placeholder:text-ink-mute w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
                   compact
                     ? "min-h-7 max-h-[8.75rem] px-1.5 py-0 text-sm leading-7"
                     : "min-h-[1.375rem] max-h-[7.75rem] px-2.5 py-0.5 text-base leading-6",
@@ -868,6 +1002,12 @@ const Composer: FC<{
                 autoFocus={autoFocus}
                 submitMode="enter"
                 enterKeyHint="send"
+                // assistant-ui refocuses the composer when a run starts and
+                // when the viewport scrolls back to the bottom. On a phone
+                // that reopens the keyboard over the answer we just revealed,
+                // so both are off there; on a desktop the caret is welcome.
+                unstable_focusOnRunStart={!coarsePointer}
+                unstable_focusOnScrollToBottom={!coarsePointer}
                 aria-label="Message"
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
@@ -946,12 +1086,12 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-dictate text-muted-foreground hover:text-foreground size-7 rounded-full"
+              className="aui-composer-dictate text-ink-mute hover:text-ink size-7 rounded-none"
               aria-label="Start voice input"
             >
               <DotMatrix
                 state="dictate"
-                label="Voice input"
+                decorative
                 className="aui-composer-dictate-icon size-3.5"
               />
             </TooltipIconButton>
@@ -965,12 +1105,12 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
+              className="aui-composer-stop-dictation text-danger size-7 rounded-none"
               aria-label="Stop voice input"
             >
               <DotMatrix
                 state="stop"
-                label="Stop dictation"
+                decorative
                 className="aui-composer-stop-dictation-icon size-3.5"
               />
             </TooltipIconButton>
@@ -985,14 +1125,14 @@ const ComposerSendControls: FC = () => {
           type="submit"
           variant="ghost"
           size="icon"
-          className="aui-composer-send size-7 rounded-full"
+          className="aui-composer-send size-7 rounded-none"
           aria-label="Send message"
           disabled={sendDisabled}
           onClick={submitComposer}
         >
           <DotMatrix
             state="send"
-            label="Send"
+            decorative
             className="aui-composer-send-icon size-3.5"
           />
         </Button>
@@ -1003,12 +1143,12 @@ const ComposerSendControls: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className="aui-composer-cancel size-7 rounded-full"
+            className="aui-composer-cancel size-7 rounded-none"
             aria-label="Stop generating"
           >
             <DotMatrix
               state="stop"
-              label="Stop generating"
+              decorative
               className="aui-composer-cancel-icon size-3.5"
             />
           </Button>
@@ -1025,38 +1165,23 @@ const AssistantWorkingIndicator: FC = () => {
       (part) => part.type === "tool-call" && part.status.type === "running",
     ),
   );
-  // Latest data-connection state wins: the BFF replaces `connecting` with
-  // `warming_up` while it retries a booting upstream (#4753) and with
-  // `connected` once the stream starts.
-  const connectionState = useAuiState((s) => {
-    let state: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type === "data" && part.name === "connection") {
-        const next = (part.data as { state?: string } | undefined)?.state;
-        if (typeof next === "string") state = next;
-      }
-    }
-    return state;
-  });
+  // Text only when the server sent a status message (DIG-4459): a bare
+  // `connecting` is the plain wait for a response, so the row is the
+  // animation alone. No client-side default copy.
+  const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
   const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
+  const statusLabel = wakePhase === "waking" ? "Waking up services…" : statusText;
   return (
     <span
       data-slot="aui_assistant-message-indicator"
-      className="flex items-center gap-2"
+      className="aui-work-status"
     >
-      <DotMatrix
-        state="loading"
-        label="Assistant is working"
-        className="size-3.5"
+      <WorkStatusLead
+        marker="loading"
+        markerLabel="Assistant is working"
+        label={statusLabel}
       />
-      {wakePhase === "waking" ? (
-        <span className="text-sm text-muted-foreground">Waking up services…</span>
-      ) : connectionState === "warming_up" ? (
-        <span className="text-sm text-muted-foreground">Warming up…</span>
-      ) : connectionState === "connecting" ? (
-        <span className="text-sm text-muted-foreground">Connecting…</span>
-      ) : null}
     </span>
   );
 };
@@ -1066,11 +1191,38 @@ const AssistantMessage: FC = () => {
     ToolFallback: ToolFallbackComponent = ToolFallback,
     ToolGroup,
     ReasoningGroup,
-    Source: SourceComponent = ThreadSource,
   } = useContext(ThreadComponentsContext);
-  const { reasoning: reasoningMode, toolCalls: toolCallsMode } = useContext(
-    ThreadGroupDisclosureContext,
+  const {
+    reasoning: reasoningMode,
+    toolCalls: toolCallsMode,
+    visibility,
+  } = useContext(ThreadGroupDisclosureContext);
+  const disclosure = resolveWorkDisclosure(visibility);
+  // The whole turn, not just the group: the tools answer faster than the
+  // chain can fold, and a group that closes between two of them flickers.
+  const turnRunning = useAuiState((s) => s.thread.isRunning);
+  // The message parts, to tell a chain that holds real work from one that
+  // only holds a source or a status part.
+  const messageParts = useAuiState((s) => s.message.parts);
+  // Only text ends a work run: a chain with a text part after it has
+  // answered, so its work is over. A chain without one is still the agent's
+  // current work, even if the model streams another run of tool calls.
+  const hasWork = messageParts.some(
+    (part) => part.type === "reasoning" || part.type === "tool-call",
   );
+  // Anything real that arrived from the agent — reasoning, a tool call, the
+  // answer itself. A status part (the connection state) is not content: it is
+  // the pre-response phase, which is exactly when the loading row belongs.
+  const hasContent = messageParts.some((part) => part.type !== "data");
+  const followedByText = (indices: readonly number[]) => {
+    const last = indices.length > 0 ? indices[indices.length - 1] : -1;
+    return messageParts.some((part, index) => {
+      if (index <= last) return false;
+      if (part.type !== "text") return false;
+      const text = (part as { text?: unknown }).text;
+      return typeof text === "string" && text.trim() !== "";
+    });
+  };
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1080,43 +1232,95 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-(--dur-fast)"
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
+        className="aui-assistant-message-content text-ink min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={chainGroupBy}
         >
           {({ part, children }) => {
             switch (part.type) {
-              case "group-chainOfThought":
+              case "group-chainOfThought": {
+                // A status part is not work. The grouping puts the
+                // connection state into the chain, so without this guard the
+                // chain header appears before the model has said anything —
+                // right next to the loading row, which is the double
+                // animation we do not want. No reasoning and no tool call in
+                // the group means no work block: the loading row covers that
+                // phase on its own.
+                const holdsWork = part.indices.some((index) => {
+                  const kind = messageParts[index]?.type;
+                  return kind === "reasoning" || kind === "tool-call";
+                });
+                // The parts still render bare: a backend notice (DIG-4459)
+                // rides a data part and must not vanish with the header.
+                if (!holdsWork) return <>{children}</>;
+                // The chain is the one disclosure boundary: every work part
+                // nests under it (see `chainGroupBy`), so the level's fold
+                // rule here reaches a reasoning-only, a tool-only and a
+                // combined turn alike. The rows inside take their own rule
+                // from the same disclosure. See the decision note in
+                // packages/ui/ARCHITECTURE.md.
+                //
+                // The `hidden` level this branch served is retired: the
+                // `summaryOnly` field is always false now, and a quiet
+                // client gets the folded chain below instead of a summary
+                // line. The branch stays until the field goes.
+                if (disclosure.summaryOnly) {
+                  return (
+                    <div data-slot="aui_chain-of-thought">
+                      <WorkChainSummary indices={part.indices} />
+                    </div>
+                  );
+                }
+                // One header for the whole chain: the reasoning and the tool
+                // calls collapse together.
                 return (
-                  <div data-slot="aui_chain-of-thought">{children}</div>
+                  <div data-slot="aui_chain-of-thought">
+                    <WorkChain
+                      indices={part.indices}
+                      openAtRest={disclosure.openAtRest}
+                      foldOnAnswer={disclosure.foldOnAnswer}
+                      running={part.status.type === "running"}
+                      followedByText={followedByText(part.indices)}
+                    >
+                      {children}
+                    </WorkChain>
+                  </div>
                 );
+              }
               case "group-tool": {
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
                 const locked = toolCallsMode === "locked_open";
+                const running = part.status.type === "running";
+                // The group can hold the source and status parts that sit
+                // between two tool runs; the count is the tool calls only.
+                const toolCount = part.indices.filter(
+                  (index) => messageParts[index]?.type === "tool-call",
+                ).length;
+                if (toolCount === 0) {
+                  return <div data-slot="aui_chain-of-thought">{children}</div>;
+                }
                 return (
                   <ToolGroupRoot
                     variant="ghost"
-                    defaultOpen={toolCallsMode === "expanded" || locked}
+                    defaultOpen={
+                      disclosure.openAtRest || toolCallsMode === "expanded" || locked
+                    }
                     streamingOpen={
-                      toolCallsMode === "balanced" &&
-                      part.status.type === "running"
+                      (disclosure.openWhileRunning || toolCallsMode === "balanced") &&
+                      (running || turnRunning)
                     }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
-                      count={part.indices.length}
+                      count={toolCount}
                       active={part.status.type === "running"}
                       disabled={locked}
                     />
@@ -1136,10 +1340,17 @@ const AssistantMessage: FC = () => {
                 return (
                   <ReasoningRoot
                     variant="ghost"
-                    streaming={running && reasoningMode === "balanced"}
-                    defaultOpen={reasoningMode === "expanded" || locked}
+                    streaming={
+                      (running || turnRunning) &&
+                      (disclosure.openWhileRunning || reasoningMode === "balanced")
+                    }
+                    defaultOpen={
+                      disclosure.openAtRest || reasoningMode === "expanded" || locked
+                    }
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
+                    {/* Upstream's structure: the reasoning is a sub-step with
+                        its own disclosure inside the chain. */}
                     <ReasoningTrigger active={running} disabled={locked} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -1157,7 +1368,9 @@ const AssistantMessage: FC = () => {
                 if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
-                return part.dataRendererUI;
+                // DIG-4459: a backend notice (data-notice, or a data-status
+                // with a message) shows as a boxed status/error line.
+                return part.dataRendererUI ?? <BackendNotice part={part} />;
               case "file":
                 return (
                   <div data-slot="aui_assistant-message-file" className="py-1">
@@ -1171,7 +1384,13 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return <AssistantWorkingIndicator />;
+                // One loading affordance per turn. Before the agent answers,
+                // the row stands alone (with the phase text when we know it:
+                // waking, connecting, warming up). The moment anything real
+                // arrives — reasoning, a tool call, the answer — the work
+                // block takes over and this row is gone, so the two never
+                // stack.
+                return hasContent ? null : <AssistantWorkingIndicator />;
               case "source":
                 // Citations are inline markdown links in the answer (DIG-1210);
                 // rendering source parts here stacked duplicate rows between
@@ -1207,11 +1426,20 @@ const AssistantMessage: FC = () => {
 
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
+  const messageId = useAuiState((s) => s.message.id);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const exportMessage = useRef<HTMLElement | null>(null);
+  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
+      // Earlier turns: the bar is unmounted until the turn is hovered, then it
+      // takes its footer row back in flow. It cannot float in the message gap —
+      // the bar is 24px tall and the gap is 12/8/20px by density, so a float
+      // paints over the next turn's first line. The empty-footer collapse in
+      // chat-digichat.css keeps the un-hovered turns at one message gap.
+      className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-(--duration-hover)"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -1231,34 +1459,51 @@ const AssistantActionBar: FC = () => {
         >
           <BranchPickerPrimitive.Previous asChild>
             <TooltipIconButton tooltip="Undo">
-              <DotMatrix state="prev" label="Undo" className="size-3.5" />
+              <DotMatrix state="prev" decorative className="size-3.5" />
             </TooltipIconButton>
           </BranchPickerPrimitive.Previous>
         </AuiIf>
       ) : null}
       <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Redo">
-          <DotMatrix state="refresh" label="Redo" className="size-3.5" />
+          <DotMatrix state="refresh" decorative className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
       {feedback ? (
         <>
           <ActionBarPrimitive.FeedbackPositive asChild>
             <TooltipIconButton tooltip="Good response">
-              <DotMatrix state="thumbsUp" label="Good response" className="size-3.5" />
+              <DotMatrix state="thumbsUp" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackPositive>
           <ActionBarPrimitive.FeedbackNegative asChild>
             <TooltipIconButton tooltip="Bad response">
-              <DotMatrix state="thumbsDown" label="Bad response" className="size-3.5" />
+              <DotMatrix state="thumbsDown" decorative className="size-3.5" />
             </TooltipIconButton>
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
+      <ActionBarMorePrimitive.Root
+        onOpenChange={(open) => {
+          if (open || !exportHtmlAfterClose.current) return;
+          exportHtmlAfterClose.current = false;
+          const doc = document;
+          const message = exportMessage.current;
+          exportMessage.current = null;
+          const id = messageId;
+          requestAnimationFrame(() => {
+            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
+              (error: unknown) => {
+                const message = error instanceof Error ? error.message : "HTML export failed.";
+                showSnapshotError(doc, message);
+              },
+            );
+          });
+        }}
+      >
+        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
           <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" label="More" className="size-3.5" />
+            <DotMatrix state="more" decorative className="size-3.5" />
           </TooltipIconButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
@@ -1267,12 +1512,27 @@ const AssistantActionBar: FC = () => {
           sideOffset={6}
           className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
         >
-          <ActionBarPrimitive.ExportMarkdown asChild>
+          <ActionBarPrimitive.ExportMarkdown
+            asChild
+            onExport={(content) => {
+              downloadMarkdown("digichat.md", content);
+            }}
+          >
             <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" label="Export" className="size-3.5" />
+              <DotMatrix state="export" decorative className="size-3.5" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>
           </ActionBarPrimitive.ExportMarkdown>
+          <ActionBarMorePrimitive.Item
+            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+            onClick={() => {
+              exportMessage.current = messageAnchor(triggerRef.current, messageId);
+              exportHtmlAfterClose.current = true;
+            }}
+          >
+            <DotMatrix state="export" decorative className="size-3.5" />
+            Export as HTML
+          </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
       <MessageTiming />
@@ -1300,7 +1560,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-(--dur-fast)"
       data-role="user"
     >
       <span className="aui-msg-marker" aria-hidden="true">
@@ -1308,7 +1568,7 @@ const UserMessage: FC = () => {
       </span>
       <div className="aui-user-message-content-wrapper relative min-w-0">
         <UserMessageAttachments />
-        <div className="aui-user-message-content text-foreground wrap-break-word empty:hidden">
+        <div className="aui-user-message-content text-ink wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />
@@ -1347,7 +1607,7 @@ const UserActionBar: FC = () => {
         className="aui-user-action-edit"
         onClick={onEdit}
       >
-        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+        <DotMatrix state="edit" decorative className="size-3.5" />
       </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
@@ -1361,14 +1621,14 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
       className={cn(
-        "aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs",
+        "aui-branch-picker-root text-ink-mute -ms-2 me-2 inline-flex items-center text-xs",
         className,
       )}
       {...rest}
     >
       <BranchPickerPrimitive.Previous asChild>
         <TooltipIconButton tooltip="Previous">
-          <DotMatrix state="prev" label="Previous" className="size-3.5" />
+          <DotMatrix state="prev" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
       <span className="aui-branch-picker-state font-medium">
@@ -1376,7 +1636,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       </span>
       <BranchPickerPrimitive.Next asChild>
         <TooltipIconButton tooltip="Next">
-          <DotMatrix state="next" label="Next" className="size-3.5" />
+          <DotMatrix state="next" decorative className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>

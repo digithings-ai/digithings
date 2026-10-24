@@ -22,6 +22,16 @@ from digiquant.brokers.luxalgo_tradier_mirror import (
     summarize_mirror,
 )
 
+from tests.dq.brokers.luxalgo_mirror_cases import (
+    AccountExpectation,
+    FillExpectation,
+    assert_account_snapshot,
+    assert_enrichment_appends_read_only,
+    assert_fills_map_with_fetched_at_fallback,
+    assert_missing_symbol_raises,
+    assert_summary_counts,
+)
+
 pytestmark = pytest.mark.unit
 
 
@@ -85,11 +95,14 @@ class TestSnapshotToContracts:
     def test_account_snapshot_exact_decimals_and_utc(self) -> None:
         account = _golden_snapshot()["accounts"][0]
         snap, _, _ = snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
-        assert snap.account_id == "VA000001"
-        assert snap.equity == Decimal("25000.5")
-        assert snap.cash == Decimal("5000")
-        assert snap.currency == "USD"
-        assert snap.as_of == datetime(2026, 8, 6, 12, 0, tzinfo=UTC)
+        assert_account_snapshot(
+            snap,
+            fetched_at=_golden_snapshot()["fetchedAt"],
+            account_id="VA000001",
+            equity=Decimal("25000.5"),
+            currency="USD",
+            cash=Decimal("5000"),
+        )
 
     def test_position_without_market_value_stays_zero(self) -> None:
         """Tradier reports cost basis, not market value — never fabricated."""
@@ -115,15 +128,22 @@ class TestSnapshotToContracts:
         account = _golden_snapshot()["accounts"][0]
         fetched_at = _golden_snapshot()["fetchedAt"]
         _, _, fills = snapshot_to_contracts(account, fetched_at=fetched_at)
-        assert fills[0].symbol == "SPY"
-        assert fills[0].quantity == Decimal("10")
-        assert fills[0].price == Decimal("500")
-        assert fills[0].executed_at == datetime(2026, 8, 1, 0, 0, tzinfo=UTC)
-        # Missing executedAt falls back to the snapshot fetchedAt, never naive.
-        assert fills[2].symbol == "QQQ"
-        assert fills[2].price == Decimal("400.25")
-        assert fills[2].executed_at == datetime(2026, 8, 6, 12, 0, tzinfo=UTC)
-        assert fills[2].executed_at.tzinfo is not None
+        assert_fills_map_with_fetched_at_fallback(
+            fills,
+            fetched_at=fetched_at,
+            expected=[
+                FillExpectation(
+                    index=0,
+                    symbol="SPY",
+                    quantity=Decimal("10"),
+                    price=Decimal("500"),
+                    executed_at=datetime(2026, 8, 1, 0, 0, tzinfo=UTC),
+                ),
+                FillExpectation(
+                    index=2, symbol="QQQ", price=Decimal("400.25"), falls_back_to_fetched_at=True
+                ),
+            ],
+        )
 
     def test_no_fx_fabrication_single_currency_preserved(self) -> None:
         account = _golden_snapshot()["accounts"][0]
@@ -136,46 +156,47 @@ class TestSnapshotToContracts:
         account["positions"] = [
             {"quantity": 10.0, "averageEntryPrice": 150.0, "assetClass": "equity"},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
     def test_position_none_symbol_raises(self) -> None:
         account = dict(_golden_snapshot()["accounts"][0])
         account["positions"] = [
             {"symbol": None, "quantity": 10.0, "averageEntryPrice": 150.0},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
     def test_trade_missing_symbol_raises(self) -> None:
         account = dict(_golden_snapshot()["accounts"][0])
         account["trades"] = [
             {"side": "buy", "quantity": 5.0, "price": 400.25},
         ]
-        with pytest.raises(ValueError, match="symbol"):
-            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+        assert_missing_symbol_raises(
+            snapshot_to_contracts, account, _golden_snapshot()["fetchedAt"]
+        )
 
 
 class TestSummarizeMirror:
     def test_equity_by_account_and_position_count(self) -> None:
         summary = summarize_mirror(_golden_snapshot())
-        assert summary["broker"] == "tradier"
-        assert summary["total_positions"] == 1
-        by_id = {row["account_id"]: row for row in summary["accounts"]}
-        assert by_id["VA000001"]["equity"] == "25000.5"
-        assert by_id["VA000001"]["position_count"] == 1
-        assert by_id["VA000001"]["currency"] == "USD"
+        assert_summary_counts(
+            summary,
+            broker="tradier",
+            total_positions=1,
+            accounts=[
+                AccountExpectation(
+                    account_id="VA000001", position_count=1, equity="25000.5", currency="USD"
+                ),
+            ],
+        )
 
 
 class TestEnrichBriefing:
     def test_enrichment_appends_read_only_section_without_mutating(self) -> None:
         briefing = {"date": "2026-08-06", "body": "Market rallied.", "regime_label": "risk-on"}
+        original = dict(briefing)
         enriched = enrich_briefing_with_mirror(briefing, _golden_snapshot())
-        assert enriched["date"] == "2026-08-06"
-        assert enriched["regime_label"] == "risk-on"
-        assert "Market rallied." in enriched["body"]
-        assert "VA000001" in enriched["body"]
-        assert "read-only" in enriched["body"].lower()
-        # Input mapping is untouched; nothing is written into positions.
-        assert briefing["body"] == "Market rallied."
-        assert "positions" not in enriched
+        assert_enrichment_appends_read_only(enriched, briefing, original, account_id="VA000001")

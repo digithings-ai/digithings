@@ -30,7 +30,7 @@ Prefer `agents.yml` `components[].test_cmd` (kept in sync with
 | digiquant | `pytest tests/dq/ -m unit -v --tb=short` |
 | digisearch | `pytest tests/ds/ -m unit -v --tb=short` |
 | digitrace | `pytest tests/dsm/ -m unit -v --tb=short` |
-| digiclaw | `pytest tests/dc/ -m unit -v --tb=short` |
+| digibot | `pytest tests/dc/ -m unit -v --tb=short` |
 | digibase | `pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short` |
 | digikey | `pytest tests/dk/ -m unit -v --tb=short` |
 | digiskills | `pytest tests/dsk/ -m unit -v --tb=short` |

@@ -24,7 +24,10 @@ const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"
 
 // Manual-only rows: no Cloudflare clock by design, kick-addressed by cron.
 // DIG-1335: twelve-x-backfill is on-demand (one missed date per kick).
-const MANUAL_ONLY_IDS = ["twelve-x-backfill"] as const;
+// DIG-4435: datatap-answer-check was retired on 2026-10-18; the row stays
+// disabled so the deployed trigger that still carries "17 * * * *" keeps a
+// claimant until the next digithings-cron deploy drops it.
+const MANUAL_ONLY_IDS = ["twelve-x-backfill", "datatap-answer-check"] as const;
 
 const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
@@ -45,7 +48,6 @@ const PATH_A_ENABLED_IDS = [
   "secret-staleness",
   "dependency-freshness",
   "smoke-site",
-  "datatap-answer-check",
   "digiquant-house-run-watch",
 ] as const;
 
@@ -313,13 +315,31 @@ describe("jobsForCron", () => {
       const job = JOBS.find((row) => row.id === id);
       expect(job?.enabled).toBe(true);
       const onRunner =
-        id.startsWith("twelve-x-market-context-") || id === "twelve-x-primemarket-heartbeat";
+        id.startsWith("twelve-x-market-context-") ||
+        id === "twelve-x-primemarket-heartbeat" ||
+        id === "twelve-x-asia" ||
+        id === "twelve-x-london" ||
+        id === "twelve-x-new-york";
       if (onRunner) {
         expect(job?.kind).toBe("twelvex");
       } else {
         expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
       }
       expect(job?.repo).toBe("digithings-ai/twelve-x");
+    }
+    for (const [id, session] of [
+      ["twelve-x-asia", "asia"],
+      ["twelve-x-london", "london"],
+      ["twelve-x-new-york", "new_york"],
+    ] as const) {
+      expect(JOBS.find((row) => row.id === id)).toMatchObject({
+        kind: "twelvex",
+        route: "session",
+        inputs: { session },
+        timeoutSeconds: 7200,
+        repo: "digithings-ai/twelve-x",
+        enabled: true,
+      });
     }
     const occHelp = JOBS.find((job) => job.id === "occ-help-recrawl");
     expect(occHelp).toMatchObject({

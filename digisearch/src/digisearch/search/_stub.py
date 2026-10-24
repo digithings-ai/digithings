@@ -69,11 +69,6 @@ def register_backend(fn: _BackendFn) -> _BackendFn:
     return fn
 
 
-def _clear_backends() -> None:
-    """Remove all registered backends (test helper)."""
-    _backends.clear()
-
-
 @register_backend
 def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     """Azure AI Search backend. Active when AZURE_SEARCH_ENDPOINT is configured."""
@@ -125,7 +120,7 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
             index_name,
             account_id=account_id,
             api_token=api_token,
-            embedding_provider=_resolved_embedding_provider(),
+            embedding_provider=_embedding_provider_for(index_name, account_id, api_token),
         )
         results = backend.query(query)
     except Exception as exc:
@@ -134,6 +129,31 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
         # raised message, so re-raising it here cannot leak one either.
         raise VectorizeBackendError(str(exc)) from exc
     return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
+
+
+def _workers_ai_indexes() -> frozenset[str]:
+    """Indexes written by the corpus-index worker with bge-m3 (1024-dim).
+
+    ``DIGISEARCH_WORKERS_AI_INDEXES`` is a comma list. Those indexes are queried
+    with the Workers AI bge-m3 embedder; every other index keeps the configured
+    default provider, so 384-dim MiniLM indexes are untouched.
+    """
+    raw = os.environ.get("DIGISEARCH_WORKERS_AI_INDEXES", "")
+    return frozenset(n.strip() for n in raw.split(",") if n.strip())
+
+
+def _embedding_provider_for(index_name: str, account_id: str, api_token: str) -> object:
+    if index_name in _workers_ai_indexes():
+        from digisearch.embedding.providers.workers_ai import WorkersAiEmbedder
+
+        # Prefer a dedicated embed endpoint when set, so the Vectorize token does
+        # not also need Workers AI permission.
+        embed_url = os.environ.get("DIGISEARCH_BGE_M3_EMBED_URL", "").strip()
+        embed_token = os.environ.get("DIGISEARCH_BGE_M3_EMBED_TOKEN", "").strip()
+        if embed_url and embed_token:
+            return WorkersAiEmbedder(url=embed_url, api_token=embed_token)
+        return WorkersAiEmbedder(account_id=account_id, api_token=api_token)
+    return _resolved_embedding_provider()
 
 
 def _resolved_embedding_provider() -> object:
@@ -543,7 +563,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         except ImportError as exc:
             raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
         except _BACKEND_ERRORS as exc:
-            logger.error("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
+            logger.exception("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
             raise
     if chroma_path:
         try:
@@ -562,7 +582,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         except ImportError as exc:
             raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
         except _BACKEND_ERRORS as exc:
-            logger.error("Chroma ingest failed for index %s: %s", index_name, exc)
+            logger.exception("Chroma ingest failed for index %s: %s", index_name, exc)
             raise
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (

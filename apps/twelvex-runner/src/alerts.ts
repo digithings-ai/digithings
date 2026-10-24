@@ -9,12 +9,16 @@
 export const SOURCE_LABEL = "market-context-failure";
 export const TRANSPORT_LABEL = "market-context-transport-failure";
 export const SESSION_LABEL = "primemarket-session-expired";
+/** The label the twelve-x workflow files the FX research run under. */
+export const FX_LABEL = "daily-run-failure";
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
 export const HEARTBEAT_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const REPO = "digithings-ai/twelve-x";
 export const SESSION_OWNER = "chrizefan";
+/** Maximum characters of the container log tail carried in an alert body. */
+export const LOG_TAIL_LIMIT = 2000;
 
-export type Route = "ingest" | "heartbeat";
+export type Route = "ingest" | "heartbeat" | "session";
 
 export type OpenIssue = {
   number: number;
@@ -38,9 +42,22 @@ export type AlertDecision =
 export function labelFor(route: Route, exitCode: number): string | null {
   if (exitCode === 0) return null;
   if (route === "heartbeat") return SESSION_LABEL;
+  // The FX research job has no exit-code split in the workflow: any non-zero
+  // exit files one daily-run-failure occurrence.
+  if (route === "session") return FX_LABEL;
   if (exitCode === 2) return null;
   if (exitCode === 3) return TRANSPORT_LABEL;
   return SOURCE_LABEL;
+}
+
+/**
+ * The last line the run actually said. The FX research graph prints no
+ * verdict token, so the tail's last meaningful line is the reason.
+ */
+export function lastMeaningfulLine(logTail: string): string {
+  const lines = logTail.split("\n").map((row) => row.trim()).filter((row) => row.length > 0);
+  if (lines.length === 0) return "no output was recorded";
+  return lines[lines.length - 1].replace(/\s+/g, " ").slice(0, 400);
 }
 
 export function verdictLine(logTail: string): string {
@@ -53,7 +70,9 @@ export function decideAlert(input: {
   route: Route;
   exitCode: number;
   bucket?: string;
+  session?: string;
   reason: string;
+  logTail?: string;
   now: number;
   open: OpenIssue[];
 }): AlertDecision {
@@ -93,9 +112,13 @@ export function decideAlert(input: {
   const title =
     input.route === "heartbeat"
       ? `PrimeMarket desk session expired — ${day}`
-      : `Market context ingest failed — ${day}`;
+      : input.route === "session"
+        ? `FX research run failed — ${day}`
+        : `Market context ingest failed — ${day}`;
   const closeNumbers =
-    input.route === "ingest" ? input.open.map((issue) => issue.number) : [];
+    input.route === "ingest" || input.route === "session"
+      ? input.open.map((issue) => issue.number)
+      : [];
   return {
     action: "create",
     label,
@@ -106,8 +129,26 @@ export function decideAlert(input: {
   };
 }
 
+/**
+ * The container log tail, so a failing run names its cause instead of only
+ * its exit code. The tail is already redacted inside the container.
+ */
+function logTailLines(logTail?: string): string[] {
+  if (!logTail) return [];
+  const trimmed =
+    logTail.length > LOG_TAIL_LIMIT ? logTail.slice(logTail.length - LOG_TAIL_LIMIT) : logTail;
+  return ["", `Log tail (last ${trimmed.length} characters):`, "````", trimmed, "````"];
+}
+
 function occurrenceBody(
-  input: { route: Route; exitCode: number; bucket?: string; reason: string },
+  input: {
+    route: Route;
+    exitCode: number;
+    bucket?: string;
+    session?: string;
+    reason: string;
+    logTail?: string;
+  },
   escalate: boolean,
 ): string {
   const lines = [
@@ -117,6 +158,8 @@ function occurrenceBody(
     `- Reason: ${input.reason}`,
   ];
   if (input.bucket) lines.push(`- Bucket: ${input.bucket}`);
+  if (input.session) lines.push(`- Session: ${input.session}`);
+  lines.push(...logTailLines(input.logTail));
   if (escalate) {
     lines.push(
       "",
@@ -132,8 +175,20 @@ function createBody(input: {
   route: Route;
   exitCode: number;
   bucket?: string;
+  session?: string;
   reason: string;
+  logTail?: string;
 }): string {
+  if (input.route === "session") {
+    return [
+      `The FX research run (session '${input.session ?? "unknown"}') failed.`,
+      "",
+      `- Exit code: ${input.exitCode}`,
+      `- Reason: ${input.reason}`,
+      "- Workflow: daily_run_reusable.yml",
+      ...logTailLines(input.logTail),
+    ].join("\n");
+  }
   if (input.route === "heartbeat") {
     return [
       "The interim desk session (PRIMEMARKET_SESSION_TOKEN) is no longer valid.",
@@ -144,6 +199,7 @@ function createBody(input: {
       `- Exit code: ${input.exitCode}`,
       `- Reason: ${input.reason}`,
       "- Workflow: primemarket_session_heartbeat.yml",
+      ...logTailLines(input.logTail),
     ].join("\n");
   }
   return [
@@ -152,6 +208,7 @@ function createBody(input: {
     `- Exit code: ${input.exitCode}`,
     `- Reason: ${input.reason}`,
     "- Workflow: market_context_ingest.yml",
+    ...logTailLines(input.logTail),
   ].join("\n");
 }
 
@@ -254,7 +311,9 @@ async function ensureLabel(token: string, label: string, fetchImpl: typeof fetch
           ? "Automated alert: the desk was unreachable (ingest exit 3)"
           : label === SESSION_LABEL
             ? "Automated alert: the interim desk session has expired"
-            : "Automated alert: market-context ingest failed",
+            : label === FX_LABEL
+              ? "Automated alert: the FX research daily run failed"
+              : "Automated alert: market-context ingest failed",
     }),
   });
   if (!created.ok && created.status !== 422) {

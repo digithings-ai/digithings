@@ -29,19 +29,19 @@ docker compose \
   up -d
 ```
 
-Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).
+Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat's published image is private: the publish workflow builds one per `digichat-vX.Y.Z` tag, and `v2.6.4` is the first since `digichat-v2.3.2` (2026-10-21), so without a `ghcr.io` credential digichat builds from source here.
 
 ### Profiles
 
 - `digichat` — digichat + Postgres
 - `digivault` — digivault
-- `heartbeat` — digiclaw loop
+- `heartbeat` — digibot loop
 - `litellm-cache` — Redis for LiteLLM
 - `observability` — Prometheus + Grafana
 
 ### Image tags
 
-- `DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).
+- `DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digibot (pin `sha-<12>` in production).
 - `DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.
 
 All services bind loopback by default. Use Tailscale or Cloudflare Tunnel for remote access — never expose ports publicly. Full notes: `docs/templates/self-host/README.md` and `docs/DEPLOYMENT.md` in the repo.

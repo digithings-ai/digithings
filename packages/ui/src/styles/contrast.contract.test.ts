@@ -2,9 +2,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Single `__dirname` usage: the tsconfig carries no node types, so this file
-// reports TS2304 for it (pre-existing, like its node: imports — see
-// web-theme.test.ts).
 const here = __dirname;
 
 const tokens = readFileSync(
@@ -151,7 +148,7 @@ describe("canon contrast contract (#4306, canon-audit S2)", () => {
       "accent-digilink": hexToken(light, "accent-digilink"),
       "accent-digichat": hexToken(light, "accent-digichat"),
       "accent-digikey": hexToken(light, "accent-digikey"),
-      "accent-digiclaw": hexToken(light, "accent-digiclaw"),
+      "accent-digibot": hexToken(light, "accent-digibot"),
       "accent-digistore": hexToken(light, "accent-digistore"),
     };
     const lightInk = hexToken(light, "ink");

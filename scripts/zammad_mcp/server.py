@@ -63,6 +63,18 @@ def _allowed_host_patterns(raw: str) -> list[str]:
     return patterns
 
 
+# The MCP SDK (mcp >= 1.26) guards its HTTP transport against DNS rebinding: a
+# Host it cannot allow-list is answered with 421 "Invalid Host header". It
+# allow-lists the loopback names only with a port ("127.0.0.1:*",
+# "localhost:*", "[::1]:*"), and only when the server was bound to a loopback
+# host, so the portless spellings are refused. This server is a loopback
+# service: the edge sends the public Host and the digichat entrypoint
+# forwards it, so the loopback names are allow-listed here rather than left to
+# the SDK's construction-time default. The environment variable adds to them;
+# it does not replace them (the compose stack path still needs its own name).
+DEFAULT_ALLOWED_HOSTS = "127.0.0.1, localhost"
+
+
 def _client() -> ZammadClient:
     return ZammadClient()
 
@@ -409,16 +421,18 @@ def run_mcp(
     bind = host or os.environ.get("ZAMMAD_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
     mcp.settings.port = port
+    default_hosts = _allowed_host_patterns(DEFAULT_ALLOWED_HOSTS)
     extra_hosts = _allowed_host_patterns(os.environ.get("ZAMMAD_MCP_ALLOWED_HOSTS", ""))
-    if extra_hosts:
+    allowed_hosts = default_hosts + [p for p in extra_hosts if p not in default_hosts]
+    if allowed_hosts:
         # Older mcp builds (the stack image resolves 1.9.x) have no
         # transport_security on Settings; host allowlisting then just
         # stays unavailable instead of crashing the program.
         security = getattr(mcp.settings, "transport_security", None)
         if security is not None:
             allowed = security.allowed_hosts
-            allowed.extend(pattern for pattern in extra_hosts if pattern not in allowed)
-        else:
+            allowed.extend(pattern for pattern in allowed_hosts if pattern not in allowed)
+        elif extra_hosts:
             logger.warning(
                 "ZAMMAD_MCP_ALLOWED_HOSTS is set but this mcp version has no "
                 "transport_security; host allowlisting is unavailable"

@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-M137 = MIGRATIONS_DIR / "137_rename_atlas_and_h8_objects.sql"
+M137 = MIGRATIONS_DIR / "prod" / "137_rename_atlas_and_h8_objects.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])(begin|commit)[\s]*;", re.IGNORECASE)
 

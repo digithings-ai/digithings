@@ -18,9 +18,22 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import {
+  applyDocumentTheme,
+  matchThemeStep,
+  nextThemeStep,
+  readPaintedTheme,
+  readThemeState,
+  THEME_CHANGE_EVENT,
+  type PaletteName,
+  type ResolvedTheme,
+  type ThemePreference,
+  type ThemeStep,
+} from "../theme/apply-theme";
 import { IconButton } from "../ui/icon-button";
 
 /** Text direction. The kit defaults to `"ltr"`; RTL is always opt-in. */
@@ -71,35 +84,27 @@ export function DirectionProvider({
   );
 }
 
-type Theme = "light" | "dark";
-const KEY = "dt-theme";
-
-/** Browser-chrome colour per theme; must match --bg in tokens.css. */
-const THEME_BG: Record<Theme, string> = { light: "#FBFBF9", dark: "#0A0E0C" };
-
-/**
- * Point the single <meta name="theme-color"> at the active theme's --bg so the
- * browser toolbar/status bar matches the page. Keying theme-color off
- * prefers-color-scheme instead leaves a dark bar above a light page (and vice
- * versa) whenever the OS scheme and the chosen site theme disagree.
- */
-function applyThemeColor(t: Theme) {
-  try {
-    let m = document.querySelector('meta[name="theme-color"]');
-    if (!m) {
-      m = document.createElement("meta");
-      m.setAttribute("name", "theme-color");
-      document.head.appendChild(m);
-    }
-    m.setAttribute("content", THEME_BG[t]);
-  } catch {}
-}
+export type { PaletteName, ResolvedTheme, ThemePreference };
 
 // themeInitScript lives in ./themeInit.ts (a plain module) — see there.
 export { themeInitScript } from "./themeInit";
 
+export type ThemeContextValue = {
+  /** Resolved light/dark currently painted. Existing callers read this. */
+  theme: ResolvedTheme;
+  /** Advance one stop: default dark, default light, then each palette. */
+  toggle: () => void;
+  /** Stored mode. `auto` means `dt-theme` is absent and the OS is followed. */
+  preference: ThemePreference;
+  setTheme: (preference: ThemePreference) => void;
+  /** `default` or one of the 32 DigiVoice palette ids. Stored in `dt-palette`. */
+  palette: PaletteName;
+  setPalette: (palette: string) => void;
+  /** Paint one cycle stop (mode and palette together). */
+  applyStep: (step: ThemeStep) => void;
+};
 
-const ThemeCtx = createContext<{ theme: Theme; toggle: () => void } | null>(null);
+const ThemeCtx = createContext<ThemeContextValue | null>(null);
 
 export function useTheme() {
   const ctx = useContext(ThemeCtx);
@@ -115,35 +120,92 @@ export function ThemeProvider({
   /** Text direction applied to <html>. Defaults to `"ltr"`; RTL is opt-in. */
   dir?: Direction;
 }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setResolved] = useState<ResolvedTheme>("dark");
+  const [preference, setPreferenceState] = useState<ThemePreference>("auto");
+  const [palette, setPaletteState] = useState<PaletteName>("default");
+  const preferenceRef = useRef<ThemePreference>("auto");
+  const setPreference = useCallback((next: ThemePreference) => {
+    preferenceRef.current = next;
+    setPreferenceState(next);
+  }, []);
 
   useEffect(() => {
-    const current = (document.documentElement.getAttribute("data-theme") as Theme) || "dark";
-    setTheme(current);
+    // The document is the source of truth; storage is only where a user's
+    // choice is kept. Mount READS what is painted and never paints or writes:
+    // themeInitScript has already applied the stored mode and palette on the
+    // surfaces that use it, a pinned embed (data-theme-pin) painted its
+    // tenant's theme, and digiquant.io paints dark itself with no
+    // themeInitScript. Applying storage here flipped such a page to whatever
+    // the dashboard last mirrored into `dt-theme` on that origin.
+    const sync = () => {
+      const painted = readPaintedTheme();
+      const stored = readThemeState().preference;
+      // A stored mode the page did not paint (a pinned surface) is not this
+      // page's preference; the painted mode is.
+      setPreference(stored === "auto" || stored === painted.resolved ? stored : painted.resolved);
+      setPaletteState(painted.palette);
+      setResolved(painted.resolved);
+    };
+    sync();
+    // A pinned embed owns its document: no OS follow there.
+    if (document.documentElement.getAttribute("data-theme-pin") === "1") return;
+    // Any painter (the /theme command, the picker, this provider) goes through
+    // applyDocumentTheme, which announces the change; re-read so the context
+    // and the OS guard below never disagree with what is painted.
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
     const mq = matchMedia("(prefers-color-scheme: light)");
-    const onOS = (e: MediaQueryListEvent) => {
-      try { if (localStorage.getItem(KEY)) return; } catch {}
-      const t = e.matches ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", t);
-      applyThemeColor(t);
-      setTheme(t);
+    const onOS = () => {
+      // As before this provider existed: a stored mode means a choice was
+      // made, so the OS does not override it.
+      if (readThemeState().preference !== "auto") return;
+      // Repaint only; the OS changing is not a choice to store.
+      setResolved(
+        applyDocumentTheme("auto", readPaintedTheme().palette, undefined, { persist: false }),
+      );
     };
     mq.addEventListener("change", onOS);
-    return () => mq.removeEventListener("change", onOS);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, sync);
+      mq.removeEventListener("change", onOS);
+    };
+  }, [setPreference]);
+
+  const setTheme = useCallback(
+    (next: ThemePreference) => {
+      setPreference(next);
+      setResolved(applyDocumentTheme(next, readPaintedTheme().palette));
+    },
+    [setPreference],
+  );
+
+  const setPalette = useCallback((next: string) => {
+    const resolved = applyDocumentTheme(preferenceRef.current, next);
+    setPaletteState(readPaintedTheme().palette);
+    setResolved(resolved);
   }, []);
+
+  const applyStep = useCallback(
+    (step: ThemeStep) => {
+      const resolved = applyDocumentTheme(step.mode, step.palette);
+      setPreference(step.mode);
+      setPaletteState(step.palette);
+      setResolved(resolved);
+    },
+    [setPreference],
+  );
 
   const toggle = useCallback(() => {
-    setTheme((prev) => {
-      const next: Theme = prev === "light" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", next);
-      applyThemeColor(next);
-      try { localStorage.setItem(KEY, next); } catch {}
-      return next;
-    });
-  }, []);
+    const painted = readPaintedTheme();
+    applyStep(nextThemeStep("auto", painted.palette, painted.resolved));
+  }, [applyStep]);
+
+  const value = useMemo(
+    () => ({ theme, toggle, preference, setTheme, palette, setPalette, applyStep }),
+    [theme, toggle, preference, setTheme, palette, setPalette, applyStep],
+  );
 
   return (
-    <ThemeCtx.Provider value={{ theme, toggle }}>
+    <ThemeCtx.Provider value={value}>
       <DirectionProvider root dir={dir}>
         {children}
       </DirectionProvider>
@@ -151,26 +213,41 @@ export function ThemeProvider({
   );
 }
 
+/**
+ * Theme control for the nav tail.
+ *
+ * One glyph, not two: the control moves through *theme* (default dark, default
+ * light, then 32 palettes), so a sun/moon pair only ever described two stops of
+ * a longer cycle and read as a mode switch that it is not. The contrast mark —
+ * a ring with half of it filled — is the general "appearance" signifier, and it
+ * stays put as the cycle advances. `aria-label` is the stable action name the
+ * kit test pins; `title` names the next stop.
+ */
 export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, toggle } = useTheme();
+  const { theme, preference, palette, toggle } = useTheme();
+  const step = matchThemeStep(preference, palette, theme);
   return (
     <IconButton
       type="button"
       onClick={toggle}
       aria-label="Toggle colour theme"
-      title="Toggle theme"
+      title={step.label}
       className={className ?? "theme-toggle"}
     >
-      {theme === "dark" ? (
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-          <circle cx="12" cy="12" r="4.2" />
-          <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
-          <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
-        </svg>
-      )}
+      <svg
+        viewBox="0 0 24 24"
+        width="17"
+        height="17"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {/* Ring + filled right half: the contrast/appearance glyph. */}
+        <circle cx="12" cy="12" r="8.4" />
+        <path d="M12 3.6a8.4 8.4 0 0 1 0 16.8z" fill="currentColor" stroke="none" />
+      </svg>
     </IconButton>
   );
 }

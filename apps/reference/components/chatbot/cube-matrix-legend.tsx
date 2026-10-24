@@ -49,7 +49,9 @@ function LegendGroup({
     <ul className="cube-matrix-legend">
       {items.map(({ state, caption }) => (
         <li key={state} className="cube-matrix-legend-item">
-          <DotMatrix state={state} label={caption} />
+          {/* The caption beside it says the state, so the glyph is decorative:
+              a named glyph would read the caption twice. */}
+          <DotMatrix state={state} decorative />
           <span className="cube-matrix-legend-caption">{caption}</span>
         </li>
       ))}

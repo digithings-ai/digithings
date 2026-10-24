@@ -17,7 +17,7 @@ body:
       options:
         - digibase
         - digichat
-        - digiclaw
+        - digibot
         - digifetch
         - digigraph
         - digikey

@@ -398,13 +398,6 @@ def _existing_file(path: Path) -> Path | None:
     return None
 
 
-def _named_under(root: Path, name: str) -> Path | None:
-    if not root.is_dir():
-        return None
-    matches = [path for path in root.rglob(name) if path.is_file() and path.name == name]
-    return matches[0] if matches else None
-
-
 def _phon_dir(path: Path) -> Path | None:
     if (path / _ESPEAK_PHON).is_file():
         return path

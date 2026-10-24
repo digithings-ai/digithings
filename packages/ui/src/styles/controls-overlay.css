@@ -103,8 +103,13 @@
 
 @layer components {
   .ctl-menu-pane {
+    /* component tokens — menu pane geometry */
+    --ctl-menu-min: 8rem;
+    --ctl-menu-icon: 1rem;
+    --ctl-menu-ref-font: 0.8rem;
+
     width: var(--anchor-width);
-    min-width: 8rem;
+    min-width: var(--ctl-menu-min);
     max-height: var(--available-height);
     background: var(--surface);
     color: var(--ink);
@@ -118,8 +123,10 @@
 
   /* submenu pane: auto width + the heavier shadow-lg read */
   .ctl-menu-pane--sub {
+    --ctl-menu-sub-min: 96px;
+
     width: auto;
-    min-width: 96px;
+    min-width: var(--ctl-menu-sub-min);
     box-shadow:
       0 0 0 1px color-mix(in oklab, var(--ink) 10%, transparent),
       0 10px 15px -3px rgb(0 0 0 / 0.1),
@@ -162,8 +169,8 @@
 
   /* unsized icons get the size-4 read; explicit size-* utilities win */
   .ctl-menu-item svg:not([class*="size-"]) {
-    width: 1rem;
-    height: 1rem;
+    width: var(--ctl-menu-icon, 1rem);
+    height: var(--ctl-menu-icon, 1rem);
   }
 
   .ctl-menu-item:focus .ctl-menu-shortcut {
@@ -191,7 +198,7 @@
 
   .ctl-menu-pane--ref .ctl-menu-item {
     color: var(--ink-soft);
-    font-size: 0.8rem;
+    font-size: var(--ctl-menu-ref-font, 0.8rem);
   }
 
   .ctl-menu-pane--ref .ctl-menu-item:focus,
@@ -211,13 +218,16 @@
 @layer components {
   /* default skin: digichat's inverted bubble (ink on bg) */
   .ctl-tip {
+    /* component tokens — tooltip skin geometry */
+    --ctl-tip-kbd-pad: 0.375rem;
+
     background: var(--ink);
     color: var(--bg);
   }
 
   /* kbd affordance carried over from digichat's bubble */
   .ctl-tip:has([data-slot="kbd"]) {
-    padding-inline-end: 0.375rem;
+    padding-inline-end: var(--ctl-tip-kbd-pad);
   }
 
   .ctl-tip [data-slot="kbd"] {
@@ -228,8 +238,11 @@
   }
 
   .ctl-tip-arrow {
-    width: 0.625rem;
-    height: 0.625rem;
+    --ctl-tip-arrow: 0.625rem;
+    --ctl-tip-arrow-offset: 0.25rem;
+
+    width: var(--ctl-tip-arrow);
+    height: var(--ctl-tip-arrow);
     translate: 0 calc(-50% - 2px);
     rotate: 45deg;
     border-radius: 0;
@@ -240,13 +253,15 @@
   /* — reference skin (opt-in, skin="reference") — the tt-bubble grammar:
        surface pane, hair border, mono type, bordered arrow. */
   .ctl-tip--ref {
+    --ctl-tip-ref-font: 0.7rem;
+
     background: color-mix(in srgb, var(--surface) 96%, var(--bg));
     color: var(--ink);
     border: 1px solid var(--hair);
     border-radius: 0;
     box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.6);
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--ctl-tip-ref-font, 0.7rem);
     line-height: 1.45;
   }
 
@@ -281,36 +296,36 @@
 /* arrow placement — ports digichat's per-side offsets; !important beats the
    inline top/left Base UI writes while positioning the arrow */
 .ctl-tip-arrow[data-side="top"] {
-  bottom: -0.625rem;
+  bottom: calc(-1 * var(--ctl-tip-arrow, 0.625rem));
 }
 
 .ctl-tip-arrow[data-side="bottom"] {
-  top: 0.25rem;
+  top: var(--ctl-tip-arrow-offset, 0.25rem);
 }
 
 /* `left`/`right` are physical placements (the arrow sits on the opposite,
    physical edge); `inline-start`/`inline-end` are logical and mirror. */
 .ctl-tip-arrow[data-side="left"] {
   top: 50% !important;
-  right: -0.25rem;
+  right: calc(-1 * var(--ctl-tip-arrow-offset, 0.25rem));
   translate: 0 -50%;
 }
 
 .ctl-tip-arrow[data-side="inline-start"] {
   top: 50% !important;
-  inset-inline-end: -0.25rem;
+  inset-inline-end: calc(-1 * var(--ctl-tip-arrow-offset, 0.25rem));
   translate: 0 -50%;
 }
 
 .ctl-tip-arrow[data-side="right"] {
   top: 50% !important;
-  left: -0.25rem;
+  left: calc(-1 * var(--ctl-tip-arrow-offset, 0.25rem));
   translate: 0 -50%;
 }
 
 .ctl-tip-arrow[data-side="inline-end"] {
   top: 50% !important;
-  inset-inline-start: -0.25rem;
+  inset-inline-start: calc(-1 * var(--ctl-tip-arrow-offset, 0.25rem));
   translate: 0 -50%;
 }
 
@@ -318,8 +333,14 @@
 
 @layer components {
   .nb-cal {
-    width: 17.5rem;
-    padding: 0.75rem;
+    /* component tokens — calendar geometry */
+    --nb-cal-w: 17.5rem;
+    --nb-cal-pad: 0.75rem;
+    --nb-cal-nav: 1.75rem;
+    --nb-cal-gap: 0.15rem;
+
+    width: var(--nb-cal-w);
+    padding: var(--nb-cal-pad);
     border: 1px solid var(--hair);
     border-radius: 0;
     background: color-mix(in oklab, var(--term-bg) 92%, var(--surface));
@@ -330,7 +351,7 @@
 
   .nb-cal-head {
     display: grid;
-    grid-template-columns: 1.75rem 1fr 1.75rem;
+    grid-template-columns: var(--nb-cal-nav, 1.75rem) 1fr var(--nb-cal-nav, 1.75rem);
     align-items: center;
     gap: 0.35rem;
     margin-bottom: 0.65rem;
@@ -338,7 +359,7 @@
 
   .nb-cal-title {
     text-align: center;
-    font-size: 0.75rem;
+    font-size: var(--type-meta);
     font-weight: 500;
     color: var(--ink);
     letter-spacing: 0.01em;
@@ -348,8 +369,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--nb-cal-nav, 1.75rem);
+    height: var(--nb-cal-nav, 1.75rem);
     margin: 0;
     padding: 0;
     border: none;
@@ -376,27 +397,32 @@
   .nb-cal-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 0.15rem;
+    gap: var(--nb-cal-gap, 0.15rem);
   }
 
   .nb-cal-grid {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: var(--nb-cal-gap, 0.15rem);
   }
 
   .nb-cal-weekday {
+    --nb-cal-weekday-h: 1.35rem;
+    --nb-cal-weekday-font: 0.62rem;
+
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 1.35rem;
-    font-size: 0.62rem;
+    height: var(--nb-cal-weekday-h, 1.35rem);
+    font-size: var(--nb-cal-weekday-font, 0.62rem);
     color: var(--ink-mute);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   .nb-cal-day {
+    --nb-cal-day-font: 0.72rem;
+
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -409,7 +435,7 @@
     background: transparent;
     color: var(--ink-soft);
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--nb-cal-day-font, 0.72rem);
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition:
@@ -456,40 +482,52 @@
   }
 
   .ctl-dialog-popup {
+    --ctl-dialog-gutter: 1rem;
+
     position: fixed;
     inset: 0;
     z-index: 50;
     display: grid;
     place-items: center;
-    padding: 1rem;
+    padding: var(--ctl-dialog-gutter);
     pointer-events: none;
   }
 
   .ctl-dialog-card {
+    --ctl-dialog-desc-font: 0.85rem;
+    --ctl-dialog-desc-top: 0.4rem;
+    --ctl-dialog-footer-gap: 0.6rem;
+    --ctl-dialog-x-icon: 1rem;
+    --ctl-dialog-max: 28rem;
+    --ctl-dialog-pad-block: 1.4rem;
+    --ctl-dialog-pad-inline: 1.5rem;
+
     position: relative;
     pointer-events: auto;
     width: 100%;
-    max-width: 28rem;
+    max-width: var(--ctl-dialog-max);
     background: var(--surface);
     border: 1px solid var(--hair);
     border-radius: 0;
-    padding: 1.4rem 1.5rem;
+    padding: var(--ctl-dialog-pad-block) var(--ctl-dialog-pad-inline);
   }
 
   .ctl-dialog-title {
+    --ctl-dialog-title-pad: 2rem;
+
     font-family: var(--font-mono);
     font-weight: 600;
-    font-size: 1rem;
+    font-size: var(--type-body);
     color: var(--ink);
     margin: 0;
-    padding-inline-end: 2rem;
+    padding-inline-end: var(--ctl-dialog-title-pad, 2rem);
   }
 
   .ctl-dialog-description {
     color: var(--ink-soft);
-    font-size: 0.85rem;
+    font-size: var(--ctl-dialog-desc-font, 0.85rem);
     line-height: 1.6;
-    margin: 0.4rem 0 0;
+    margin: var(--ctl-dialog-desc-top, 0.4rem) 0 0;
   }
 
   .ctl-dialog-header {
@@ -500,19 +538,22 @@
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 0.6rem;
-    margin-top: 1.4rem;
+    gap: var(--ctl-dialog-footer-gap, 0.6rem);
+    margin-top: var(--ctl-dialog-pad-block, 1.4rem);
   }
 
   .ctl-dialog-x {
+    --ctl-dialog-x-inset: 0.7rem;
+    --ctl-dialog-x-size: 1.75rem;
+
     position: absolute;
-    top: 0.7rem;
-    inset-inline-end: 0.7rem;
+    top: var(--ctl-dialog-x-inset);
+    inset-inline-end: var(--ctl-dialog-x-inset);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--ctl-dialog-x-size);
+    height: var(--ctl-dialog-x-size);
     border: 1px solid transparent;
     border-radius: 0;
     background: transparent;
@@ -523,8 +564,8 @@
   }
 
   .ctl-dialog-x svg {
-    width: 1rem;
-    height: 1rem;
+    width: var(--ctl-dialog-x-icon, 1rem);
+    height: var(--ctl-dialog-x-icon, 1rem);
   }
 }
 

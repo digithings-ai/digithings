@@ -623,14 +623,14 @@ Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capabili
 
 | Capability | Pool (cheap tier) | Example phases |
 |------------|-------------------|----------------|
-| **extraction** | `deepseek/deepseek-v4-flash`, `google/gemini-3.7-flash` | `alt-*`, `inst-*`, 7C per-ticker analysts |
-| **research** | `deepseek/deepseek-v4-flash`, `google/gemini-3.7-flash` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
-| **reasoning** | `deepseek/deepseek-v4-flash` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
+| **extraction** | `deepseek/deepseek-v4.1-flash-1017`, `google/gemini-3.7-flash` | `alt-*`, `inst-*`, 7C per-ticker analysts |
+| **research** | `deepseek/deepseek-v4.1-flash-1017`, `google/gemini-3.7-flash` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
+| **reasoning** | `deepseek/deepseek-v4.1-flash-1017` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
 | **web search** (grounding pre-pass only) | first-party digisearch `web_search` tool (no synthesis pin) | live-search grounding; never phase/tool calls |
 
-Pools rebalanced in #2368 (2026-08-14; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` (+ `gemini-3.7-flash`) on cheap; `deepseek-v4-flash`/`gemini-3.7-flash`/`gpt-5.6-luna`/`deepseek-v4-pro` on balanced; `deepseek-v4-pro`/`gpt-5.6-sol`/`gemini-3.7-flash` on quality. The CI-only house cutover (#3660 / #3788) then retired the OpenRouter-only pins (`meta-llama/llama-4-maverick`, `x-ai/grok-4.3`/`4.6`, `anthropic/claude-sonnet-5`, `perplexity/sonar`, and their `:online` aliases) from `config/litellm.yaml` and every pool. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
+Pools rebalanced in #2368 (2026-08-14; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows. Every DeepSeek flash pin moved to `deepseek/deepseek-v4.1-flash-1017` on 2026-10-21 (DIG-4782), so the pools read: `deepseek-v4.1-flash-1017` (+ `gemini-3.7-flash`) on cheap; `deepseek-v4.1-flash-1017`/`gemini-3.7-flash`/`gpt-5.6-luna`/`deepseek-v4-pro` on balanced; `deepseek-v4.1-flash-1017`/`deepseek-v4-pro`/`gpt-5.6-sol`/`gemini-3.7-flash` on quality. The CI-only house cutover (#3660 / #3788) then retired the OpenRouter-only pins (`meta-llama/llama-4-maverick`, `x-ai/grok-4.3`/`4.6`, `anthropic/claude-sonnet-5`, `perplexity/sonar`, and their `:online` aliases) from `config/litellm.yaml` and every pool. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4.1-flash-1017` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Pooled slugs are **endpoint-checked** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py` — a **manual, paid-call gate**: it needs `OPENROUTER_API_KEY`, and no CI workflow runs it (there is no `validate-digiquant-pools.yml` in `.github/workflows/`), so run it by hand before you move a pool pin. The script calls OpenRouter with the raw pooled slug, so it only covers OpenRouter-served ids: a CI-only slug has no OpenRouter id (`config/litellm.yaml`) and 404s there — `deepseek/deepseek-v4.1-flash-1017` is checked on the house upstream instead. The five-call live check on the 1017 pin on 2026-10-21 (results in PR #6107) was the separate Chris-approved probe, **not** that script; it passed function tools, strict `json_schema` and a real `AnalystPayload`, but the endpoint answers 400 for a native PDF `file` part — 1017 has no native file part. No Python path sends native file parts today, so no house phase is affected. The house upstream is Cheaper Inference, which serves the 1017 checkpoint; the non-CI route has no OpenRouter 1017 id and uses OpenRouter's `deepseek-v4.1-flash` (`config/litellm.yaml`).
 
-> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
+> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `deepseek/deepseek-v4.1-flash-1017` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
 
 ### Observed token volume
 
@@ -656,10 +656,10 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 phase_models:
   # deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
-  portfolio/deliberation-: deepseek/deepseek-v4-flash   # trailing '-' = prefix match
+  portfolio/deliberation-: deepseek/deepseek-v4.1-flash-1017   # trailing '-' = prefix match
   # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
   # removes the #1559 64k synthesis ceiling (#1622).
-  master-digest: deepseek/deepseek-v4-flash
+  master-digest: deepseek/deepseek-v4.1-flash-1017
 ```
 
 House traffic is caller → digillm → LiteLLM. Unprefixed OpenRouter slugs (`deepseek/…`, `anthropic/…`) are `config/litellm.yaml` `model_name` keys. Leftover `openrouter/` / `gemini/` / `xai/` prefixes are vendor-client diagnostics when no LiteLLM proxy is configured (`digillm/src/digillm/client.py`).
@@ -700,7 +700,7 @@ Pin a phase via the `phase_models` block in `config/model_modes.yaml` (exact slu
 
 ```yaml
 phase_models:
-  master-digest: "deepseek/deepseek-v4-flash"   # pin synthesis to one pool model
+  master-digest: "deepseek/deepseek-v4.1-flash-1017"   # pin synthesis to one pool model
   "sector-":     "openrouter/mistralai/mistral-large"  # prefix match: sector-tech, sector-energy, …
 ```
 
@@ -728,7 +728,7 @@ instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
 Entry point: `digiquant.research.graph.build_research_graph` plus `ResearchInput`.
-digiclaw (issue #219) invokes this on a cron schedule.
+digibot (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
 

@@ -169,7 +169,7 @@ def _fetch_context_r2(as_of_date: str) -> dict[str, Any]:
     a false "first run".
     """
     # Imported per call (cached in sys.modules afterwards) so loading the module needs no
-    # digiquant import at module scope, matching fill-entry-prices.py.
+    # digiquant import at module scope, matching fill_entry_prices.py.
     from digiquant.research.data.queries import (
         get_price_technicals,
         r2_close_rows,

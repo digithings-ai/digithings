@@ -1,6 +1,6 @@
 # Recovering a wedged digichat container
 
-How to recover `digithings-digichat` when its single Container instance stops
+How to recover `digithings-digichat` when a Container instance stops
 serving and will not be reclaimed. Written 2026-10-19 after the fourth
 occurrence, with the reset lever added the same day.
 
@@ -19,8 +19,12 @@ Two things that are **not** signals, measured on 2026-10-19:
   normal steady state while running — it reported exactly that after a
   perfectly successful cold start. It reports `healthy: 1` only while
   stopped/inactive. Do not page on this field.
-- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. Wait it
-  out; do not reset a container that is still starting.
+- **A 5xx within ~90 seconds of a deploy.** That is a rollout artefact. The
+  deploy resets the Durable Object and signals the instance to exit, so the
+  request in flight fails. The Worker now answers that with a retryable 503
+  and a `Retry-After` header, and retries a request without a body once
+  itself. Back off and repeat the request; do not reset a container that is
+  still starting.
 
 ## Application ids
 
@@ -65,18 +69,34 @@ Status codes are deliberate:
 The key is Worker-only (`DIGICHAT_ADMIN_KEY`); it is never forwarded into the
 container. Rotation: [SECRETS_ROTATION.md](SECRETS_ROTATION.md) §15.
 
-## Step 3 — retry the user path, expecting one possible false 502
+## Step 3 — retry the user path, expecting one possible 503
 
 The first request after a restart can answer:
 
 ```json
-{"error":"upstream_auth","message":"digikey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and digikey configuration)."}
+{"error":"upstream_unavailable","message":"digikey did not answer the bff_session exchange — it is cold or unreachable (last answer: 503). This is not a DIGIKEY_BFF_TOKEN problem; retry in a few seconds."}
 ```
 
-That message is misleading. digikey runs **inside the stack container**, which
-sleeps, so a cold digikey can fail the exchange. Retry once. If it persists, it
-really is a token problem: compare the digichat and stack copies per
-[SECRETS_ROTATION.md](SECRETS_ROTATION.md) §2.
+That is the cold-dependency case, and it is retryable: the response is `503`
+with a `Retry-After: 5` header. digikey runs **inside the stack container**,
+which sleeps, so a cold digikey fails the exchange until the container is
+awake. Retry after the `Retry-After` window.
+
+A **rejected token** answers differently — `502` with
+`{"error":"upstream_auth","message":"digikey rejected the bff_session exchange (answered 401). Check DIGIKEY_BFF_TOKEN and digikey configuration."}`.
+That one is a real credential problem and a retry does not clear it: compare
+the digichat and stack copies per [SECRETS_ROTATION.md](SECRETS_ROTATION.md) §2.
+
+A **digikey with no grant** answers `502 upstream_auth` as well, with
+`"digikey has no DIGIKEY_BFF_TOKEN configured (the bff_session grant is not set on the digikey side). Check the digikey side, not only the digichat copy."`.
+digikey answers this with `503 {"detail":"bff_session grant not configured (DIGIKEY_BFF_TOKEN)"}`
+when it has no `DIGIKEY_BFF_TOKEN` in its own env; the copy on the digichat
+side is then irrelevant. This one is permanent: a retry does not clear it.
+
+The three are distinct on purpose (DIG-4424): before, a cold digikey, a
+digikey with no grant and a refused token all answered `502 upstream_auth` and
+all pointed at `DIGIKEY_BFF_TOKEN`, which sent the diagnosis at the wrong
+subsystem.
 
 ## Step 4 — fallback: move the instance id by redeploying
 
@@ -101,10 +121,11 @@ instances but not stop one, and the REST API exposes only listing and SSH.
 
 ## Why it happens
 
-`max_instances = 1` (`apps/digichat-cloudflare/wrangler.toml`), so one bad
-instance is the entire capacity. The only reaper is `sleepAfter = "1m"` via the
-base `onActivityExpired()`, which calls `stop()` — and `stop()` is a no-op
-unless the container is `running`.
+`max_instances = 2` (`apps/digichat-cloudflare/wrangler.toml`, DIG-4487), so
+one bad instance still leaves a slot for a cold start; **two** bad instances
+are the entire capacity, and then the pool is exhausted. The only reaper is
+`sleepAfter = "1m"` via the base `onActivityExpired()`, which calls `stop()` —
+and `stop()` is a no-op unless the container is `running`.
 
 **Hypothesis, not yet proven:** `isActivityExpired()` returns false while
 `inflightRequests > 0`, and that counter is incremented in `containerFetch` but

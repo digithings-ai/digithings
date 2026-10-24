@@ -12,9 +12,11 @@
  * `trigger-contract.test.ts` reads the real cron list, and imports the real
  * entrypoint export: the assertion of record is what the repo would deploy.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DurableObject } from "cloudflare:workers";
+import { BackfillLedger } from "./backfill-do";
 import { StartCounter } from "./index";
 
 // Resolved from the working directory because both entry points run the suite
@@ -67,5 +69,78 @@ describe("START_COUNTER deploy contract (DIG-4384)", () => {
       (block) => !/^\s*tag\s*=\s*"v2"\s*$/m.test(block),
     );
     for (const block of older) expect(block).not.toContain("StartCounter");
+  });
+});
+
+
+/**
+ * Every class the Worker deploys, by class name: the file that declares it
+ * and that file's source.
+ */
+function declaredClasses(): Map<string, { file: string; source: string }> {
+  const out = new Map<string, { file: string; source: string }>();
+  for (const file of readdirSync(resolve(process.cwd(), "src"))) {
+    if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
+    const source = readFileSync(resolve(process.cwd(), "src", file), "utf8");
+    for (const match of source.matchAll(/export class (\w+)/g)) {
+      out.set(match[1], { file, source });
+    }
+  }
+  return out;
+}
+
+/** The class names every `new_sqlite_classes` migration creates. */
+function sqliteClasses(): string[] {
+  const names: string[] = [];
+  for (const block of blocks("[[migrations]]")) {
+    const match = block.match(/new_sqlite_classes\s*=\s*\[([^\]]*)\]/);
+    if (!match) continue;
+    for (const name of match[1].matchAll(/"([^"]+)"/g)) names.push(name[1]);
+  }
+  return names;
+}
+
+/**
+ * A Durable Object class that does not extend `DurableObject` has no callable
+ * methods on its stub, and the runtime refuses the call with "The receiving
+ * Durable Object does not support RPC, because its class was not declared with
+ * `extends DurableObject`". The claim path then fails open on every tick and
+ * the dedupe never runs - with every unit test green, because the tests call
+ * the class directly and never through a stub.
+ *
+ * So the contract is pinned here, against the real `wrangler.toml` and the real
+ * class sources: a class the deploy creates as SQLite-backed must be
+ * RPC-capable. This is the check whose absence let DIG-4384 ship a Worker
+ * whose dedupe guard was inert from its first deploy.
+ */
+describe("Durable Object classes are RPC-capable (DIG-4516)", () => {
+  it("declares every SQLite-backed Durable Object class as `extends DurableObject`", () => {
+    const classes = declaredClasses();
+    const names = sqliteClasses();
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      const found = classes.get(name);
+      expect(found, `${name} is not declared in src/`).toBeDefined();
+      expect(
+        found!.source,
+        `${name} must extend DurableObject to be callable over RPC`,
+      ).toMatch(new RegExp(`export class ${name} extends DurableObject\\b`));
+      expect(
+        found!.source,
+        `${name} must import DurableObject from "cloudflare:workers"`,
+      ).toMatch(/import \{[^}]*DurableObject[^}]*\} from "cloudflare:workers"/);
+    }
+  });
+
+  it("gives the deployed classes the RPC-capable prototype chain", () => {
+    for (const [name, value] of [
+      ["StartCounter", StartCounter],
+      ["BackfillLedger", BackfillLedger],
+    ] as const) {
+      expect(
+        value.prototype,
+        `${name} must inherit from DurableObject`,
+      ).toBeInstanceOf(DurableObject);
+    }
   });
 });

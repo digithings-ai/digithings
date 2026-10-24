@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "105_documents_workspace_id.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "105_documents_workspace_id.sql"
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 SQL_STRING = r"'(?:[^']|'')*'"
 
@@ -45,7 +45,7 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_105() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("105_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("105_*.sql")) == [MIGRATION_PATH]
 
 
 def test_header_enumerates_every_documents_writer(raw: str) -> None:

@@ -44,6 +44,7 @@ import {
 } from "@digithings/ui/chat/boot-signal";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
+import { applyDeployedPalette } from "@/lib/palette-prefs";
 import {
   effectiveReasoningMode,
   effectiveToolCallsMode,
@@ -174,6 +175,10 @@ export function ProductStockShell({
   const thinking = chatPrefs?.prefs.thinking ?? features.thinking;
   const reasoningMode = effectiveReasoningMode(view, thinking);
   const toolCallsMode = effectiveToolCallsMode(view);
+
+  useEffect(() => {
+    applyDeployedPalette(cfg.chrome.palette);
+  }, [cfg.chrome.palette]);
 
   // Boot animation lifecycle: sweep, park after BOOT_MIN_MS, fade, unmount.
   // A document that already settled (soft navigation, warm container) starts
@@ -323,10 +328,19 @@ export function ProductStockShell({
     () => ({
       reasoning: reasoningMode,
       toolCalls: toolCallsMode,
+      view,
+      thinking,
       userAlign:
         cfg.chrome.skin === "digichat" ? "left" : cfg.chrome.transcript.userAlign,
     }),
-    [reasoningMode, toolCallsMode, cfg.chrome.skin, cfg.chrome.transcript.userAlign],
+    [
+      reasoningMode,
+      toolCallsMode,
+      view,
+      thinking,
+      cfg.chrome.skin,
+      cfg.chrome.transcript.userAlign,
+    ],
   );
 
   const skinChrome = useMemo<SkinChromeValue>(
@@ -368,7 +382,7 @@ export function ProductStockShell({
     welcome?.trim() ||
     cfg.chrome.welcome?.trim() ||
     cfg.chrome.title?.trim() ||
-    "How can I help you today?";
+    "Ask the stack.";
   const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";

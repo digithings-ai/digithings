@@ -30,8 +30,19 @@
    can never leave the viewport half-revealed. Keep the track short: the tail
    after the pin is dead scroll. */
 .wr-track {
+  /* component tokens — pinned track + display line */
+  --wr-track-h: 150vh;
+  --wr-static-pad: 2.5rem;
+  --wr-line-font: clamp(1.55rem, 4.2vw, 2.6rem);
+  --wr-measure: 24ch;
+  --wr-word-gap: 0.35em;
+  --tw-caret-w: 0.55em;
+  --tw-caret-h: 1.05em;
+  --tw-caret-lead: 0.08em;
+  --tw-caret-trail: -0.63em;
+
   position: relative;
-  height: 150vh;
+  height: var(--wr-track-h);
 }
 
 .wr-sticky {
@@ -51,22 +62,22 @@
 .wr-track.is-static .wr-sticky {
   position: static;
   min-height: 0;
-  padding: 2.5rem 0;
+  padding: var(--wr-static-pad, 2.5rem) 0;
 }
 
 /* ── display line ──────────────────────────────────────────────────────────── */
 .word-line {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.55rem, 4.2vw, 2.6rem);
+  font-size: var(--wr-line-font, clamp(1.55rem, 4.2vw, 2.6rem));
   letter-spacing: -0.02em;
   line-height: 1.15;
-  max-width: 24ch;
+  max-width: var(--wr-measure, 24ch);
 }
 
 .word {
   display: inline-block;
-  margin-inline-end: 0.35em;
+  margin-inline-end: var(--wr-word-gap, 0.35em);
   will-change: transform, opacity, filter;
 }
 
@@ -81,7 +92,7 @@
   .wr-sticky {
     position: static;
     min-height: 0;
-    padding: 2.5rem 0;
+    padding: var(--wr-static-pad, 2.5rem) 0;
   }
 
   .word {
@@ -104,7 +115,7 @@ html.no-js .wr-track {
 html.no-js .wr-sticky {
   position: static;
   min-height: 0;
-  padding: 2.5rem 0;
+  padding: var(--wr-static-pad, 2.5rem) 0;
 }
 
 html.no-js .word {
@@ -145,10 +156,10 @@ html.no-js .word {
    appearing and retiring never rewraps the line it is attached to. */
 .tw-caret {
   display: inline-block;
-  width: 0.55em;
-  height: 1.05em;
-  margin-inline-start: 0.08em;
-  margin-inline-end: -0.63em;
+  width: var(--tw-caret-w, 0.55em);
+  height: var(--tw-caret-h, 1.05em);
+  margin-inline-start: var(--tw-caret-lead, 0.08em);
+  margin-inline-end: var(--tw-caret-trail, -0.63em);
   vertical-align: text-bottom;
   background: var(--accent);
   animation: tw-caret-blink 1.06s steps(1) infinite;
