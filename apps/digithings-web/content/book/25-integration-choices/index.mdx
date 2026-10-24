@@ -30,7 +30,7 @@ data API and the scheduled jobs all run there, with durable state and
 object storage from the same provider. The alternative — serving
 everything from containers on rented machines — was rejected for the
 surfaces where global placement and zero upkeep matter, and kept where
-they do not: the chat container still runs beside its worker, because
+they do not: the chat container runs beside its worker, because
 some workloads want a full machine.
 
 Data lives in one database family with migrations as the contract, an

@@ -69,10 +69,10 @@ flowchart TB
   QUANT -.->|"reads"| R2
 ```
 
-Read it for three things. First, **digichat never calls a vertical**. Every
-capability the interface offers is reached through the hub, which means there is
-one place that decides which tools a user may use, one place that records what
-happened, and one interface to keep stable.
+Read it for three things. First, **the surface talks to the hub, not to the
+modules**. Every capability the interface offers is reached through one door,
+which means there is one place that decides which tools a user may use, one
+place that records what happened, and one interface to keep stable.
 
 Second, **digikey sits on every service-to-service edge**, not only at the front
 door. The verticals verify the caller's identity themselves instead of trusting

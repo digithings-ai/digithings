@@ -26,15 +26,17 @@ For a team, the pipeline moves to a shared server, backtests run on a timetable,
 ## Voice
 
 Speech is the input people are least willing to share, and the usual way to
-process it is to stream it to someone else's servers. digivoice keeps the
-whole loop local: capture, transcription, an optional rewrite for where the
-text is going, and speech back. Nothing leaves the machine.
+process it is to stream it to someone else's servers. digivoice starts from
+the opposite default: capture, transcription, an optional rewrite for where
+the text is going, and speech back, all done where the speaker can see it
+happen. A hosted model can fill any of those stations when the operator
+chooses one, in the same way it can fill a model call anywhere else.
 
 Because the output is ordinary text, voice becomes a way into the rest of the
 stack. A finished transcript pastes into whatever is in focus: a question in the
-chat, a research brief, made out loud while the hands are busy.
-Voice grows differently from the other three: each person runs a loop on their own
-machine, and there is nothing central to size.
+chat, a research brief, made out loud while the hands are busy. The same loop
+also runs inside the chat surface, so a question can be spoken and an answer
+read back without leaving the conversation.
 
 ## Retrieval over your own documents
 
@@ -66,7 +68,7 @@ adding a tool, not building a new agent framework around it.
 | Use case | Modules it runs | Starts on | Grows into |
 | --- | --- | --- | --- |
 | Financial research | digiquant, digigraph, digisearch, digichat | One analyst's machine | A shared research server with scheduled runs and access by role |
-| Voice | digivoice, digichat | The machine with the microphone | Every machine where someone wants it, with no service to run |
+| Voice | digivoice, digichat | The machine with the microphone | Wherever the conversation already happens, with dictation and read-back in the chat |
 | Retrieval | digisearch, digivault, digillm, digichat | A folder on a laptop | A department's archive on managed storage, with access rules per query |
 | Agents | digigraph, MCP tools, digitrace | Your own tools, described over MCP | Many tool servers under one approval gate, shared with outside agents |
 

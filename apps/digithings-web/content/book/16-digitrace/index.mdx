@@ -19,8 +19,8 @@ that fails one time in ten, stands out at once.
 
 digitrace has two faces. As a library, it gives every service a thin helper
 that records when tracing is configured and costs nothing when it is not.
-Services adopt it without depending on any tracing vendor. As a small
-service, it reports whether tracing is active and healthy, so the hub and the
+Services adopt it without depending on any tracing vendor. It also reports
+whether tracing is active and healthy, so the hub and the
 dashboards can show its status without touching sensitive configuration.
 
 ```mermaid one request, one story: the trail follows it across every service it touches

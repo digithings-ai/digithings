@@ -1,54 +1,70 @@
 ---
-title: digivoice, the voice loop on your machine
+title: digivoice, speaking to the stack
 order: 14
 summary: >-
-  Speak, transcribe, rewrite and hear the result locally. Voice input stays on the machine.
+  Voice as a surface rather than a product: speech in, text out, and the
+  choice of where the audio is processed left with the person using it.
 ---
 
 Typing is not always how people think. A thought often arrives spoken and
 half-formed, while walking or with the hands busy. digivoice catches it:
-capture speech, transcribe it, reshape the transcript for where it is going
-and speak results back. The whole loop runs on your own machine, and the
-audio never leaves it.
+capture speech, transcribe it, reshape the transcript for where it is going,
+and speak results back.
 
-The common alternative is to send audio to a hosted service, which trades
-away the most personal stream a person produces: their voice and everything
-in the room behind it. digivoice starts from the observation that the machine
-in front of you is already fast enough. Running locally makes the loop
-private because there is nowhere else for the audio to go, and it keeps
-working offline.
+Voice is not a separate product in that view. It is a surface on the same
+stack, in the same way the chat window is, and it should be able to sit
+wherever the work already happens: beside a person's own machine, inside the
+chat, or as one step in a longer flow.
+
+## The most personal stream
+
+Speech carries more than words: the room, the people in it, the things
+someone says only once. The default position is that audio is processed
+where the person speaking can see it happen, on their own machine, and that
+this is a choice rather than a limitation. Local models are fast enough for
+the loop, they work without a connection, and nothing about the audio needs
+to leave the room.
+
+Where a hosted model earns its place, the operator chooses it, the way they
+choose a model provider anywhere else in the stack. The interface stays the
+same and the credentials stay theirs. What makes the position durable is not
+that voice is always local; it is that whether it is local remains someone's
+decision.
 
 ## How it works
 
-The loop has four stations. Capture records from the microphone to a local
-audio file. A local speech model turns it into text. An optional rewrite pass
-reshapes the transcript for its destination, a message, a note or a command,
-using a small local model. Synthesis reads results back in a local voice.
+The loop has four stations. Capture takes speech in. A speech model turns it
+into text. An optional rewrite pass reshapes the transcript for its
+destination: a message, a note, a question for the chat, a command. Synthesis
+reads results back in a voice the listener chose.
 
-```mermaid the loop completes on the machine; only the finished text travels further
+```mermaid the loop is the same whichever models fill it
 flowchart LR
   MIC[speak] --> TRN[transcribe]
   TRN --> REW[rewrite]
   REW --> OUT[speak back]
 ```
 
-The recording stays on disk as audio and every take lands in the history, so
-a rewrite can be thrown away without losing what was said, and a failed
-rewrite falls back to the raw transcript. History is an append-only log on
-the machine that you can search and revisit. Settings can be read and
-changed from the command line, so other tools can drive the loop, and a
-built-in checkup reports plainly what the host can and cannot do.
+Each station is a replaceable part, which is the point: a small local model
+and a hosted one are the same station with different physics, and swapping one
+for the other changes configuration, not the shape of the loop.
 
 ## Where it fits
 
-digivoice barely touches the rest of the stack. It never calls
-the hub in the middle of a loop. When it is done, it pastes ordinary text into whatever is in focus: the chat, a research
-brief, a note.
+digivoice is a utility rather than a vertical. It has no conversation of its
+own and holds no state the rest of the stack depends on. What it produces is
+plain text, which is why it can sit in front of a chat, a research brief or a
+note without any of them knowing it was voice.
 
-It has one home, the machine with the microphone. There is no voice service
-to deploy, scale or pay for, because the voice was never hosted in the first
-place.
+The rewrite pass inside it is where the interesting risk lives: a transcript
+is data, but a model reads everything as a potential instruction. Keeping the
+transcript wrapped and labelled as source text, and asking for a faithful
+reshaping rather than for judgement, is what keeps content as content.
 
 <Reference kind="architecture" href="repo:digivoice/ARCHITECTURE.md" title="digivoice architecture">
-  The loop stations, the settings surface and the local-first rules.
+  The loop stations, the settings surface and the local-first defaults.
 </Reference>
+
+> **Why digithings.** A hosted voice pipeline can promise privacy; you are
+> trusting the promise. Here the default is set in code you can read, and the
+> choice to leave it is yours to make.

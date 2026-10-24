@@ -9,6 +9,11 @@
  *
  * Each chapter is written to fill exactly its pages in print (one page, two
  * for the use cases). A chapter added here needs the same fitting pass.
+ *
+ * digivoice is deliberately absent. It is a utility rather than a vertical:
+ * it has no conversation of its own and no place of its own in the stack, and
+ * it belongs in the print argument as a capability of the interface, not as a
+ * chapter beside the modules. The web chapter carries the depth.
  */
 export const BRIEF: readonly string[] = [
   "01-why-a-book",
@@ -22,7 +27,6 @@ export const BRIEF: readonly string[] = [
   "20-mcp",
   "17-digisearch",
   "13-digiquant",
-  "14-digivoice",
   "12-digichat",
   "15-digikey",
   "16-digitrace",
