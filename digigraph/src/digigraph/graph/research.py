@@ -25,6 +25,7 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
+from digigraph.research_brief_models import strip_json_fence
 from digigraph.retrieval import (
     auto_load_notes,
     force_tool_messages,
@@ -150,14 +151,9 @@ def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
     return out or None
 
 
-def _strip_json_fence_llm(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
-
-
 def _parse_llm_json_object(content: str) -> dict[str, Any]:
     """Parse one JSON object from model output; allow fences, preamble, or trailing text."""
-    s = _strip_json_fence_llm(content)
+    s = strip_json_fence(content)
     decoder = json.JSONDecoder()
     try:
         obj, _ = decoder.raw_decode(s)

@@ -1,3 +1,20 @@
+/* Zero radius is the rule for the chrome, not a per-rule decision. Every
+   control inherits it from this one declaration; a rounded corner is a
+   geometry decision and would have to name its own value. */
+.dc-code-inline,
+.dc-code-block pre,
+.dc-code-copy,
+.dc-msg-copy,
+.dc-textarea,
+.dc-edit-textarea,
+.dc-send,
+.dc-stop,
+.dc-quota-banner,
+.dc-byok-option,
+.dc-byok-input {
+  border-radius: 0;
+}
+
 .dc-page {
   min-height: 100vh;
   padding: calc(var(--dq-nav-h, 62px) + 0.6rem) clamp(0.7rem, 3vw, 1.4rem) clamp(0.7rem, 3vw, 1.2rem);
@@ -126,7 +143,6 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 0;
   padding: 0.05rem 0.3rem;
 }
 .dc-code-block {
@@ -137,7 +153,6 @@
   margin: 0;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: 0.7rem 0.8rem;
   overflow-x: auto;
 }
@@ -155,11 +170,10 @@
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: 0.12rem 0.4rem;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s var(--ease, ease);
+  transition: opacity var(--dur-fast) var(--ease);
 }
 .dc-code-copy {
   position: absolute;
@@ -195,7 +209,6 @@
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: 0.45rem 0.55rem;
   box-sizing: border-box;
 }
@@ -288,22 +301,26 @@
 .dc-textarea::placeholder {
   color: var(--ink-soft);
 }
-.dc-textarea:focus {
-  outline: none;
+/* The canon focus state for the controls this sheet owns: 2px accent outline.
+   These rules used to switch the indicator off — or paint a 1px 50% one —
+   which left the composer with no visible focus at all. */
+.dc-textarea:focus-visible,
+.dc-byok-input:focus-visible,
+.dc-byok-option-list:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .dc-send,
 .dc-stop {
   font: inherit;
   align-self: stretch;
   border: 1px solid var(--hair);
-  border-radius: 0;
   cursor: pointer;
   padding: 0.3rem 0.65rem;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dc-send {
   font-size: 1rem;
-  border-radius: 0;
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
@@ -453,8 +470,6 @@
 .dc-act-brief-q-heading {
   margin: 0 0 0.2rem;
   font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--ink-mute);
 }
 .dc-act-brief-questions ol {
@@ -485,9 +500,9 @@
 .dc-quota-banner {
   margin: 0.2rem 0 0 1.6rem;
   padding: 0.45rem 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
-  border-radius: 0;
-  background: color-mix(in srgb, var(--down) 8%, transparent);
+  /* A quota notice is a warning, not a market move. */
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--hair));
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
   font-size: 0.74rem;
   color: var(--ink-soft);
 }
@@ -502,8 +517,8 @@
 }
 .dc-byok-prompt {
   margin: 0 0 0.4rem;
-  font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   color: var(--ink-soft);
 }
 .dc-byok-option-list {
@@ -511,11 +526,6 @@
   margin: 0;
   padding: 0;
   max-width: 28rem;
-  outline: none;
-}
-.dc-byok-option-list:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: 2px;
 }
 .dc-byok-option {
   display: flex;
@@ -530,7 +540,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -540,7 +549,7 @@
   display: inline-block;
   width: 1ch;
   color: var(--accent);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-mono);
 }
 .dc-byok-input {
   display: block;
@@ -549,15 +558,10 @@
   margin-top: 0.25rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--bg-term, transparent);
+  background: var(--term-bg);
   color: var(--ink);
-  font-family: var(--font-family-mono);
-  font-size: 13px;
-  outline: none;
-}
-.dc-byok-input:focus {
-  border-color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 .dc-byok-actions {
   display: flex;
@@ -570,8 +574,8 @@
   border: 0;
   background: none;
   color: var(--ink-soft);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -580,7 +584,8 @@
   color: var(--ink);
 }
 .dc-byok-action-danger {
-  color: var(--down, #e0654b);
+  /* State red; `--down` is the market direction. */
+  color: var(--danger);
 }
 
 .dc-session-main {

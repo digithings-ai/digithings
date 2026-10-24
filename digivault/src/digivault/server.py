@@ -47,7 +47,8 @@ from digivault.orchestrator_tools import (
     build_orchestrator_tool_manifest,
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
-from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
+from digivault.store_helpers import first_env
+from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.tenant_scope import enforce_tenant_path_prefix, mapped_tenant_path_prefix
 from digivault.tool_dispatch import (
     ART9_REFUSED,
@@ -209,12 +210,12 @@ def _d1_credentials() -> tuple[str, str]:
     names when the canonical ones are unset. This keeps the rename zero-downtime: the
     deployed Worker's live ``VECTORIZE_ACCOUNT_ID``/``VECTORIZE_API_TOKEN`` secrets
     keep working the moment this ships, with no coordinated secret-rotation required
-    before deploy. Reuses ``supabase_store._first_env``'s multi-name lookup shape.
+    before deploy. Reuses ``store_helpers.first_env``'s multi-name lookup shape.
     """
     _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
-    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    account_id = first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     return account_id, api_token
 
 

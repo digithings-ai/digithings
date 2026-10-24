@@ -39,8 +39,8 @@ from digiquant.portfolio.models.forecast_calibration import (
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.models.risk_policy import CovarianceSnapshot, RiskPolicy
+from digiquant.scalars import is_cash
 
-_CASH = "CASH"
 # Common portfolio forecast horizon (trading sessions). Used as shadow fill when deliberation
 # did not attach an effective forecast for every direction roster ticker.
 DEFAULT_FORECAST_HORIZON_SESSIONS = 21
@@ -50,12 +50,8 @@ class AllocationInputAssemblyError(ValueError):
     """Raised when sizing cannot form one coherent allocation input identity."""
 
 
-def _is_cash(ticker: str) -> bool:
-    return ticker.strip().upper() == _CASH
-
-
 def _canonical_asset_order(memo: PMDirectionMemo) -> tuple[str, ...]:
-    tickers = [entry.ticker for entry in memo.roster if not _is_cash(entry.ticker)]
+    tickers = [entry.ticker for entry in memo.roster if not is_cash(entry.ticker)]
     if len(tickers) != len(set(tickers)):
         raise AllocationInputAssemblyError("direction roster tickers must be unique")
     return tuple(sorted(tickers))
@@ -76,7 +72,7 @@ def _mandate_for(entry: TickerDirection) -> MandateReference:
 def _direction_memo_hash(memo: PMDirectionMemo, *, session_date: date) -> str:
     roster_rows: list[dict[str, object]] = []
     for entry in memo.roster:
-        if _is_cash(entry.ticker):
+        if is_cash(entry.ticker):
             continue
         ref = entry.forecast_reference
         roster_rows.append(
@@ -185,7 +181,7 @@ def _prior_book(
     entries = tuple(
         PriorWeightEntry(ticker=ticker, weight_pct=float(weight))
         for ticker, weight in sorted(prior_risky_weights.items())
-        if not _is_cash(ticker) and float(weight) > 0
+        if not is_cash(ticker) and float(weight) > 0
     )
     return PriorBookSnapshot(entries=entries, cash_weight_pct=float(cash_weight_pct))
 
@@ -260,7 +256,7 @@ def assemble_allocation_input_bundle(
         expected_horizon_sessions=expected_horizon_sessions,
     )
 
-    by_ticker = {entry.ticker: entry for entry in memo.roster if not _is_cash(entry.ticker)}
+    by_ticker = {entry.ticker: entry for entry in memo.roster if not is_cash(entry.ticker)}
     mandates = tuple(_mandate_for(by_ticker[ticker]) for ticker in order)
     calibrated_returns = tuple(
         _calibrated_slice(
@@ -369,7 +365,7 @@ def _prior_weights_from_state(state: Any) -> tuple[dict[str, float], float]:
             weight = float(value)
         except (TypeError, ValueError):
             continue
-        if _is_cash(str(key)):
+        if is_cash(str(key)):
             cash += weight
             continue
         if weight > 0:

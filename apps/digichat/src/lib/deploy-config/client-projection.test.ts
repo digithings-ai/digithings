@@ -249,3 +249,20 @@ describe("client fallback matches house", () => {
     expect(client.gate.searchEngine).toBeUndefined();
   });
 });
+
+describe("chrome.scroll client projection", () => {
+  it("defaults to follow when the deployment does not say", () => {
+    const client = toDigichatClientConfig(depWithCatalog([]));
+    expect(client.chrome.scroll).toEqual({ mode: "follow" });
+    expect(DEFAULT_CLIENT_CONFIG.chrome.scroll).toEqual({ mode: "follow" });
+  });
+
+  it("carries free through to the client", () => {
+    const dep = depWithCatalog([]);
+    const free = {
+      ...dep,
+      chrome: { ...dep.chrome, scroll: { mode: "free" as const } },
+    } as DigichatDeployment;
+    expect(toDigichatClientConfig(free).chrome.scroll).toEqual({ mode: "free" });
+  });
+});

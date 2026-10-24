@@ -22,6 +22,30 @@ class SegmentSlotCollisionError(RuntimeError):
     """Two nodes wrote the same segment slug in one run — a wiring bug."""
 
 
+def _merge_dicts[T](
+    left: dict[str, T] | None,
+    right: dict[str, T] | None,
+    *,
+    collision_error: str | None = None,
+) -> dict[str, T]:
+    """Merge two dicts written concurrently into one LangGraph field.
+
+    ``collision_error`` is the message prefix used when a key is written by
+    both sides; ``None`` means right-wins. Every reducer below is this function
+    with a policy, so the merge itself cannot drift between fields.
+    """
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    collisions = set(left) & set(right)
+    if collisions and collision_error is not None:
+        raise SegmentSlotCollisionError(f"{collision_error}: {sorted(collisions)}")
+    merged = dict(left)
+    merged.update(right)
+    return merged
+
+
 def _merge_segment_dict(
     left: dict[str, "SegmentSlot"] | None,
     right: dict[str, "SegmentSlot"] | None,
@@ -37,18 +61,7 @@ def _merge_segment_dict(
     wiring bug and fails loud here. Silent right-wins would mask a
     mis-wired graph and produce nondeterministic output.
     """
-    if not left:
-        return dict(right or {})
-    if not right:
-        return dict(left)
-    collisions = set(left) & set(right)
-    if collisions:
-        raise SegmentSlotCollisionError(
-            f"two nodes wrote the same segment slug(s): {sorted(collisions)}"
-        )
-    merged = dict(left)
-    merged.update(right)
-    return merged
+    return _merge_dicts(left, right, collision_error="two nodes wrote the same segment slug(s)")
 
 
 def _merge_right_wins_dict[T](
@@ -62,46 +75,7 @@ def _merge_right_wins_dict[T](
     duplicates an entry. Named (not inline lambda) so reducers stay importable
     and testable like ``_merge_segment_dict``.
     """
-    if not left:
-        return dict(right or {})
-    if not right:
-        return dict(left)
-    merged = dict(left)
-    merged.update(right)
-    return merged
-
-
-def _merge_specialist_dict(
-    left: dict[str, dict[str, dict[str, Any]]] | None,
-    right: dict[str, dict[str, dict[str, Any]]] | None,
-) -> dict[str, dict[str, dict[str, Any]]]:
-    """Reducer for Phase 7C 4-axis specialist writes (#430).
-
-    Outer key is ticker, inner key is axis ("technical" / "sentiment" /
-    "news" / "fundamental"). Specialists run in parallel and each writes
-    a single inner key for one ticker — collision on the outer key is
-    expected, collision on the *inner* key would be a wiring bug. Merge
-    inner dicts when the outer key is shared; raise on inner collision
-    so two specialists writing the same axis fail loud.
-    """
-    if not left:
-        return {ticker: dict(axes) for ticker, axes in (right or {}).items()}
-    if not right:
-        return {ticker: dict(axes) for ticker, axes in left.items()}
-    merged: dict[str, dict[str, dict[str, Any]]] = {
-        ticker: dict(axes) for ticker, axes in left.items()
-    }
-    for ticker, axes in right.items():
-        if ticker not in merged:
-            merged[ticker] = dict(axes)
-            continue
-        for axis, payload in axes.items():
-            if axis in merged[ticker]:
-                raise SegmentSlotCollisionError(
-                    f"two specialists wrote axis {axis!r} for ticker {ticker!r}"
-                )
-            merged[ticker][axis] = payload
-    return merged
+    return _merge_dicts(left, right)
 
 
 def _merge_append_list[T](left: list[T] | None, right: list[T] | None) -> list[T]:

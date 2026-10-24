@@ -12,17 +12,13 @@
  */
 
 import { PIPELINE_STAGES, type StageName } from "@/app/_stages";
+import { isRecord } from "@digithings/ui/lib/record";
 import type { RunSnapshot, StageSnapshot } from "@/lib/run-snapshot";
 
 export const PRODUCTION_API_BASE = "https://graph.digithings.ai/dashboard-api";
 export const DEV_API_PROXY = "/official-api";
 
-export const HOUSE_BOOK_ROUTES = ["/portfolio", "/brief", "/nav-series", "/allocations", "/performance"] as const;
-export const PIPELINE_ROUTE = "/v1/tables/documents";
 export const STRATEGY_ROUTE = "/v1/tables/strategy_tearsheets";
-export const TAPE_ROUTE = "/benchmarks";
-
-
 
 /** Where a statically served local desk reads from; mirrors next.config.mjs. */
 const LOCAL_STATIC_API_ORIGIN = "http://127.0.0.1:8788";
@@ -50,10 +46,6 @@ export interface OfficialFailure {
 export interface OfficialSuccess {
   ok: true;
   body: unknown;
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 function errorMessage(body: unknown): string | null {

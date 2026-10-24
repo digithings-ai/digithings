@@ -56,9 +56,9 @@ export default function VariantSpecimen() {
               <div className="grid items-center gap-[1.4rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                 <div>
                   <BlockLabel>one file</BlockLabel>
-                  <h3 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
+                  <h2 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
                     Self-hosted, loopback by default
-                  </h3>
+                  </h2>
                   <p className="mt-[0.6rem] mb-0 max-w-[42ch] text-[0.92rem] text-ink-soft">
                     One <Mono>docker-compose.yml</Mono> brings up {COUNTS.compose} services, every
                     one bound to <Mono>127.0.0.1</Mono>.
@@ -70,9 +70,9 @@ export default function VariantSpecimen() {
                 <ByokCrop />
                 <div>
                   <BlockLabel>bring your own key</BlockLabel>
-                  <h3 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
+                  <h2 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
                     Forwarded per request, never stored
-                  </h3>
+                  </h2>
                   <p className="mt-[0.6rem] mb-0 max-w-[42ch] text-[0.92rem] text-ink-soft">
                     The key lives in the page&rsquo;s memory for one tab; the site persists two
                     preference strings and {COUNTS.keysStored} keys.
@@ -82,9 +82,9 @@ export default function VariantSpecimen() {
               <div className="grid items-center gap-[1.4rem] border-t border-hair pt-[1.6rem] min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                 <div>
                   <BlockLabel>audit on by default</BlockLabel>
-                  <h3 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
+                  <h2 className="mt-[0.5rem] mb-0 font-mono text-[1.05rem] text-ink">
                     Every hop lands on your disk
-                  </h3>
+                  </h2>
                   <p className="mt-[0.6rem] mb-0 max-w-[42ch] text-[0.92rem] text-ink-soft">
                     Redacted by key name on the way in, appended, never rewritten.
                   </p>
@@ -128,7 +128,7 @@ export default function VariantSpecimen() {
 
           <Specimen label="close">
             <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-              The whole monorepo is MIT-licensed and public — take it and run it yourself.
+              The whole monorepo is MIT-licensed and public. Take it and run it yourself.
             </p>
             <div className="mt-[1.4rem] flex flex-wrap items-center gap-[0.8rem]">
               <CtaLink href="/docs">Read the docs</CtaLink>

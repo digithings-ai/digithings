@@ -29,13 +29,3 @@ export function DigiChatMark({ size = 18, title }: { size?: number; title?: stri
     </svg>
   );
 }
-
-export function DigiChatWordmark({ cursor = false }: { cursor?: boolean }) {
-  return (
-    <span className="dc-wordmark">
-      <span className="dc-wm-d">digi</span>
-      <span className="dc-wm-s">chat</span>
-      {cursor ? <span className="dt-cur" aria-hidden="true" /> : null}
-    </span>
-  );
-}

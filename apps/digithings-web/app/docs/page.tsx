@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description:
     "Self-host, digichat install, architecture overview, and per-module API reference for the " +
     "digithings stack. Copy any page as Markdown for AI agents. OpenAPI explorer at /docs/api.",
+  alternates: { canonical: "/docs" },
 };
 
 // /docs — product guides + API reference with a tier-grouped sidebar, a doc page

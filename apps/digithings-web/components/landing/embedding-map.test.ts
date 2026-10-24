@@ -45,6 +45,18 @@ describe("embedding map plan", () => {
   }
 });
 
+describe("print field", () => {
+  it("can drop the headline keep-out so the print field has no cutout", () => {
+    const plans = SEEDS.slice(0, 60).map((seed) => planMap(seed, 84 / 118, false, false));
+    const reachesCentre = plans.some((plan) =>
+      plan.clusters.some((c) =>
+        c.blobs.some((b) => blobClearance(b, 84 / 118, false) < HEADLINE_CORE),
+      ),
+    );
+    expect(reachesCentre).toBe(true);
+  });
+});
+
 describe("parseSeed", () => {
   it("uses digits as-is, hashes other text, ignores blanks", () => {
     expect(parseSeed("42")).toBe(42);

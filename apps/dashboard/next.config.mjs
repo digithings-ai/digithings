@@ -2,6 +2,7 @@
 const dashboardBasePath = '/dashboard';
 
 const nextConfig = {
+  experimental: { agentUpgrade: "security", externalDir: true },
   output: 'export',
   basePath: dashboardBasePath,
   images: { unoptimized: true },
@@ -15,7 +16,6 @@ const nextConfig = {
   // Next must compile them (same wiring as digithings-web / digiquant-web).
   transpilePackages: ['@digithings/ui', '@digithings/design', '@digithings/tui-frame'],
   // Sibling digichat page-context sanitizer (#3602) — one allowlist for sender + receiver.
-  experimental: { externalDir: true },
   // Dev preview is often opened at 127.0.0.1 while `next dev` advertises localhost.
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
 };

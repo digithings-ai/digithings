@@ -14,7 +14,6 @@ excluded/no-op episodes, mutable lessons, prose authority, persistence.
 
 from __future__ import annotations
 
-import json
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -30,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.portfolio.allocation_hashes import canonical_json, sha256_hex
 
 # Stable UUID5 namespaces — do not change; persisted IDs would diverge.
 _EPISODE_VERSION_ID_NS = UUID("d1a0e601-4b8d-5f2a-9c17-3d6e8f0a1b22")
@@ -141,10 +140,6 @@ def _require_utc(value: AwareDatetime, *, field_name: str) -> AwareDatetime:
     if value.utcoffset() != timedelta(0):
         raise ValueError(f"{field_name} must be timezone-aware UTC")
     return value
-
-
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _reject_self_supersession(*, self_id: UUID, supersedes_id: UUID | None, label: str) -> None:
@@ -565,7 +560,7 @@ def episode_version_id(
     supersedes_version_id: UUID | None,
 ) -> UUID:
     """Deterministic version ID from logical key and content."""
-    seed = _canonical_json(
+    seed = canonical_json(
         {
             "episode_key": episode_key,
             "content_hash": content_hash,
@@ -611,7 +606,7 @@ def lesson_version_id(
     supersedes_version_id: UUID | None,
 ) -> UUID:
     """Deterministic lesson version ID."""
-    seed = _canonical_json(
+    seed = canonical_json(
         {
             "compilation_policy_id": compilation_policy_id,
             "content_hash": content_hash,

@@ -217,6 +217,7 @@ def _skill_called_as_tool(
 
         known = {doc.name for doc in list_skill_documents()}
     except Exception:  # a broken library must not mask the unknown-tool path
+        log.debug("skill library unreadable; treating %r as an unknown tool", name, exc_info=True)
         return None
     if name not in known:
         return None

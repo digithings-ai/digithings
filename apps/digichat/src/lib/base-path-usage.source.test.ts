@@ -3,10 +3,10 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BASE_PATH as APP_BASE_PATH, p as appP } from "./base-path";
-// The shared package's own copy, by source path: the package is not
-// resolvable by name from here (the workspace link is not guaranteed to point
-// at this checkout), and this test is about the two copies agreeing.
-import { BASE_PATH as UI_BASE_PATH, p as uiP } from "../../../../packages/ui/src/lib/base-path";
+// The shared package's own copy, through its public export: importing
+// `packages/*/src` is restricted (DIG-3695), and this test is about the two
+// copies agreeing.
+import { BASE_PATH as UI_BASE_PATH, p as uiP } from "@digithings/ui/base-path";
 
 /**
  * Every client-side call into the app's own API goes through `p()`

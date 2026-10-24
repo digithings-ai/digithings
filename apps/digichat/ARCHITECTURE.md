@@ -217,7 +217,7 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 | File | Purpose |
 |---|---|
-| `src/app/(digichat)/page.tsx` | Server component: bare `/` renders the mode menu (no chat). `?mode=product` follows deployment `chrome.mode`, `auth`, and `persistence`: `chrome.mode: embed` (unless a layout skin owns the page) redirects to `/embed`; an anonymous app renders `HomeStockClient`; `ChatShell` only for a session, `persistence: server`, and a non-framed mode. `?mode=embed` renders `EmbedRouteShell`. `?mode=catalog` renders `BaselineClient` (production → `notFound`). `/baseline` is a separate route with the same client; it does not redirect |
+| `src/app/(digichat)/page.tsx` | Server component: bare `/` renders the product chat (`resolveRouteMode` defaults to `product`; the three-surface menu is `?mode=menu`). `?mode=product` follows deployment `chrome.mode`, `auth`, and `persistence`: `chrome.mode: embed` (unless a layout skin owns the page) redirects to `/embed`; an anonymous app renders `HomeStockClient`; `ChatShell` only for a session, `persistence: server`, and a non-framed mode. `?mode=embed` renders `EmbedRouteShell`. `?mode=catalog` renders `BaselineClient` (production → `notFound`). `/baseline` is a separate route with the same client; it does not redirect |
 | `src/app/(digichat)/layout.tsx` | Root layout with `Providers` (session, tooltips) |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
@@ -428,7 +428,7 @@ surfaces needs the handle; the path alone cannot do it.
 ```
 src/app/
   layout.tsx            # Root layout (Providers, Geist Mono)
-  page.tsx              # Menu at `/`; `?mode=product` follows chrome.mode, auth, persistence
+  page.tsx              # Product chat at `/`; `?mode=` selects the surface; follows chrome.mode, auth, persistence
   login/                # No standalone login route ships
   api/
     auth/[...nextauth]/ # Auth.js handlers
@@ -444,9 +444,14 @@ src/auth.ts             # Auth.js configuration
 src/instrumentation.ts  # Auto-migrate hook
 ```
 
-The root `page.tsx` is a **React Server Component**. Bare `/` renders the mode
-menu (brand + product/embed/catalog cards, zero JS) — no chat thread. `?mode=product`
-follows deployment `chrome.mode`, `auth`, and `persistence`. `chrome.mode: embed`
+The root `page.tsx` is a **React Server Component**. Bare `/` renders the product
+chat: `resolveRouteMode` (`route-mode.ts`) maps only the literal `?mode=embed`,
+`?mode=catalog` and `?mode=menu` onto other surfaces, and everything else — missing,
+empty, unknown, or repeated (`string[]`) — falls back to `product`, so a stray query
+parameter can never replace the chat with a picker. The menu (`?mode=menu`) is the
+brand + product/embed/catalog card picker, zero JS, and is a development tool rather
+than a landing page. The product surface follows deployment `chrome.mode`, `auth`, and
+`persistence`. `chrome.mode: embed`
 redirects to `/embed` unless a layout skin owns the page. An anonymous app renders
 `HomeStockClient`. A session with `persistence: server` and a non-framed mode renders
 `ChatShell`; any other session branch renders `HomeStockClient`. `DIGICHAT_REQUIRE_ROOT_AUTH`
@@ -495,7 +500,8 @@ BFF route handler
 
 ### Auth.js session flow
 
-1. User visits `/` and gets the mode menu (no chat thread). `?mode=product` follows
+1. User visits `/` and gets the product chat. `?mode=product` is the same surface and
+   follows
    deployment `chrome.mode`, `auth`, and `persistence`. `chrome.mode: embed` (unless a
    layout skin owns the page) redirects to `/embed`, where tenant `gateMode` applies —
    digithings dogfood uses `ungated`. `DIGICHAT_REQUIRE_ROOT_AUTH` does not gate this
@@ -1981,7 +1987,7 @@ completes mid-stream with its args + JSON Result pane (no per-tool UI;
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in digichat and `humanizeToolName(toolName)` in the gallery thread are identity functions by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in `@digithings/ui/chat/stock` is the one identity helper for both surfaces by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
 stream end as errors (`tool-output-error`, error text `Tool did not return a
 result before the stream ended.`) so ordinary retrieve / get_note / search_notes
 never sit on Allow/Deny *and* a call whose result never arrived is not reported

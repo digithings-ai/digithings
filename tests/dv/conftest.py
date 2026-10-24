@@ -9,7 +9,7 @@ import pytest
 from tests.digi_test_env import CLOUDFLARE_CREDENTIAL_ENV_VARS as _SHARED_CF_ENV_VARS
 
 #: Every name in the CLOUDFLARE_*/VECTORIZE_*/D1_* credential fallback chain
-#: (digivault.server._d1_credentials, via digivault.supabase_store._first_env),
+#: (digivault.server._d1_credentials, via digivault.store_helpers.first_env),
 #: plus digivault suite-specific maps. Cleared before every test so a real
 #: Cloudflare credential sitting in the host shell can never leak into a test
 #: that assumes D1 is unconfigured. Individual tests still opt in with their

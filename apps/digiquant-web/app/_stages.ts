@@ -4,5 +4,3 @@
 export const PIPELINE_STAGES = ["Inputs", "Research", "Synthesis", "Selection", "Decision", "Learning"] as const;
 
 export type StageName = (typeof PIPELINE_STAGES)[number];
-
-export const EXECUTION_STAGE = { name: "Execution", status: "in development" } as const;

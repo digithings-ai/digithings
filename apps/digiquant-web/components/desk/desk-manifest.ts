@@ -1,4 +1,5 @@
 import { PAGES } from "digiquant-tui/catalog";
+import { isRecord } from "@digithings/ui/lib/record";
 import { deskHref } from "./paths";
 import { isVisibleDesk } from "./public-surface";
 import { WEB_SLOTS } from "./web-slots";
@@ -62,10 +63,6 @@ export function lockTag(reason?: string): string {
 
 export function sectionOf(path: string): string {
   return `/${path.split("/").filter(Boolean)[0] ?? ""}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readAccess(value: unknown): Access | null {

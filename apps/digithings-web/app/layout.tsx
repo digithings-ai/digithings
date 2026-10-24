@@ -20,6 +20,10 @@ export const metadata: Metadata = {
     title: "digithings",
     statusBarStyle: "black-translucent",
   },
+  // `trailingSlash: true` (next.config.mjs) serves `/` and every route at one
+  // address only if the canonical says so too; `metadataBase` resolves this to
+  // the absolute URL. Per-route canonicals stay with each page's metadata.
+  alternates: { canonical: "/" },
   // Cache-busting paths ensure browsers leave the retired QR mark behind.
   // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
   // cursor artwork rather than a browser-generated initial.
@@ -51,6 +55,41 @@ export const metadata: Metadata = {
     ],
     type: "website",
   },
+  // X reads the same card as the Open Graph block; without it the link is bare.
+  twitter: {
+    card: "summary_large_image",
+    title: "digithings — AI infrastructure in a glass box",
+    description:
+      "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
+      + "stack you already run. Your own keys and providers, every step traceable.",
+    images: ["/og.png"],
+  },
+};
+
+/**
+ * Structured data for the entity that owns the site, plus the site itself:
+ * one graph, absolute URLs, the visible name, and the icon that already ships.
+ * Nothing here is a claim the page does not make — no address, rating, or
+ * sameAs list is invented to fill the block out.
+ */
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://digithings.ai/#org",
+      name: "digithings",
+      url: "https://digithings.ai",
+      logo: "https://digithings.ai/icons/digi-app-32.png",
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://digithings.ai/#site",
+      name: "digithings",
+      url: "https://digithings.ai",
+      publisher: { "@id": "https://digithings.ai/#org" },
+    },
+  ],
 };
 
 // /docs defaults to the ivory reading mode (canon §14: long-form surfaces go
@@ -96,6 +135,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
             Literal = tokens.css dark --bg (metas can't read CSS vars). */}
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
       </head>
       <body>
         {/* One pair for every route. Above page paint so a full-bleed

@@ -111,7 +111,7 @@ function walk(spec: Spec, aspect: number, rand: () => number): Blob[] {
   return blobs;
 }
 
-function draft(rand: () => number, aspect: number, small: boolean): Cluster[] {
+function draft(rand: () => number, aspect: number, small: boolean, keepOut: boolean): Cluster[] {
   // Narrow screens get fewer, smaller clusters; the keep-out covers most of the width there.
   const major = small ? 3 + Math.floor(3 * rand()) : 4 + Math.floor(5 * rand());
   const islands = small ? Math.floor(3 * rand()) : 1 + Math.floor(4 * rand());
@@ -125,7 +125,7 @@ function draft(rand: () => number, aspect: number, small: boolean): Cluster[] {
     let x = rand();
     if (rand() < edgeBias) x = x < 0.5 ? x * x * 2 * 0.5 : 1 - (1 - x) * (1 - x) * 2 * 0.5;
     const y = 0.04 + 0.92 * rand();
-    if (headlineDistance(x, y, small) < 0.8 + 1.2 * size) continue;
+    if (keepOut && headlineDistance(x, y, small) < 0.8 + 1.2 * size) continue;
     if (specs.some((s) => Math.hypot((s.x - x) * aspect, s.y - y) < (s.size + size) * 0.95)) continue;
     specs.push({
       x,
@@ -138,17 +138,17 @@ function draft(rand: () => number, aspect: number, small: boolean): Cluster[] {
   }
   return specs.map((spec) => ({
     // Drop any blob the random walk carried into the headline.
-    blobs: walk(spec, aspect, rand).filter((b) => blobClearance(b, aspect, small) >= HEADLINE_CORE),
+    blobs: walk(spec, aspect, rand).filter((b) => !keepOut || blobClearance(b, aspect, small) >= HEADLINE_CORE),
   })).filter((c) => c.blobs.length > 0);
 }
 
 /** Deterministic map plan for a seed and frame shape. Retries drafts until the guardrails hold. */
-export function planMap(seed: number, aspect: number, small: boolean): MapPlan {
+export function planMap(seed: number, aspect: number, small: boolean, keepOut = true): MapPlan {
   const rand = mulberry32(seed);
   let best: Cluster[] = [];
   let bestScore = Infinity;
   for (let attempt = 0; attempt < 16; attempt++) {
-    const clusters = draft(rand, aspect, small);
+    const clusters = draft(rand, aspect, small, keepOut);
     const share = leftShare(clusters, aspect);
     const score = Math.abs(share - 0.5) + (clusters.length < 3 ? 1 : 0);
     if (score < bestScore) {
@@ -210,11 +210,14 @@ function strandPairs(hubs: Point[], mode: MapPlan["strands"]): [number, number][
   return pairs;
 }
 
-export function createEmbeddingSubject(seed: number): (grid: Grid) => Subject {
+export function createEmbeddingSubject(
+  seed: number,
+  { keepOut = true }: { keepOut?: boolean } = {},
+): (grid: Grid) => Subject {
   return (grid) => {
     const count = grid.cols * grid.rows;
     const aspect = grid.width / grid.height;
-    const plan = planMap(seed, aspect, grid.small);
+    const plan = planMap(seed, aspect, grid.small, keepOut);
     const rand = mulberry32(seed ^ 0x9e3779b9);
 
     // Same centre clearing as the keep-out, so the headline stays readable.
@@ -224,7 +227,7 @@ export function createEmbeddingSubject(seed: number): (grid: Grid) => Subject {
     for (let i = 0; i < count; i++) {
       const p = cellPoint(grid, i);
       const d = headlineDistance(p.x / grid.width, p.y / grid.height, grid.small);
-      vignette[i] = 0.08 + 0.92 * smooth(0.7, 1.25, d);
+      vignette[i] = keepOut ? 0.08 + 0.92 * smooth(0.7, 1.25, d) : 1;
       ux[i] = p.x / grid.height;
       uy[i] = p.y / grid.height;
     }

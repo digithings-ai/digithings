@@ -1,3 +1,22 @@
+## [2.7.0](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.9...digichat-v2.7.0) (2026-10-24)
+
+The de-slop release: one canonical token set across the chat, the desk and the
+terminal; the product chat moves to `/chat` with the menu on `?mode=menu`; a
+scroll setting that can leave the stream alone; the gate budget as a cube bar;
+and the keyboard retracts on every way a turn starts.
+
+### Features
+
+* **digichat:** the product chat is served at `/chat`, the chooser stays on `?mode=menu` ([#6356](https://github.com/digithings-ai/digithings/pull/6356))
+* **digichat:** the gate's turn budget is a cube bar in the composer toolbar, sharing one fill scale with the context meter ([#6358](https://github.com/digithings-ai/digithings/pull/6358))
+* **digichat:** a scroll setting that follows the stream or leaves it alone ([#6365](https://github.com/digithings-ai/digithings/pull/6365))
+* **ui:** canonical surface/ink/hair/accent/danger roles replace the shadcn semantic utilities across the chat ([#6338](https://github.com/digithings-ai/digithings/pull/6338))
+
+### Bug Fixes
+
+* **digichat:** the keyboard retracts on every way a turn starts, and after send on a phone ([#6363](https://github.com/digithings-ai/digithings/pull/6363), [#6367](https://github.com/digithings-ai/digithings/pull/6367))
+* **digichat:** the work chain no longer pushes the loading row down at handoff ([#6361](https://github.com/digithings-ai/digithings/pull/6361))
+
 ## [2.6.9](https://github.com/digithings-ai/digithings/compare/digichat-v2.6.8...digichat-v2.6.9) (2026-10-23)
 
 One density token set across the thread, and raw backend ids everywhere: the

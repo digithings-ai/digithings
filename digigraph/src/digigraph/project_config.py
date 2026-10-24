@@ -28,9 +28,6 @@ _DEFAULT_LLM_KEY_ENV: dict[str, str] = {
     "litellm": "LITELLM_PROXY_API_KEY",
 }
 
-VALID_LLM_MODES: frozenset[str] = frozenset({"free", "test", "medium", "best"})
-VALID_LLM_PROVIDERS: frozenset[str] = frozenset(_DEFAULT_LLM_KEY_ENV)
-
 
 class AgentsLlmConfig(BaseModel):
     """Explicit LLM provider/model pin under ``agents.llm`` (wins over mode defaults)."""
@@ -176,7 +173,8 @@ def _discover_indexes_from_dir(project_root: Path, indexes_dir: str) -> list[dic
     for yaml_path in sorted(dir_path.glob("*.yaml")):
         try:
             data = yaml.safe_load(yaml_path.read_text()) or {}
-        except Exception:
+        except Exception as exc:
+            logger.warning("index definition %s unreadable; skipped (%s)", yaml_path, exc)
             continue
         name = (data.get("index_name") or yaml_path.stem or "").strip()
         if not name:
@@ -310,7 +308,8 @@ class DigiProjectConfig:
             return {}
         try:
             return yaml.safe_load(index_yaml.read_text()) or {}
-        except Exception:
+        except Exception as exc:
+            logger.warning("index config %s unreadable (%s)", index_yaml, exc)
             return {}
 
     def get_search_index_display_name(self) -> str:

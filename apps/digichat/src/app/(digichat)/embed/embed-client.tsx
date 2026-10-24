@@ -38,8 +38,10 @@ import {
   disabledCatalogIds,
   extraOffFromCatalog,
   persistDensity,
+  persistScroll,
   resetChromePrefsFromDeploy,
   useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
   isStockComposerMenuKind,
@@ -80,7 +82,6 @@ import {
 import { p } from "@/lib/base-path";
 import {
   decideEmbedSendGate,
-  shouldArmGateCharge,
 } from "@/lib/embed-send-gate";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 
@@ -91,10 +92,7 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import {
-  EMBED_TRIAL_TURN_LIMIT,
-  formatEmbedTurnCounter,
-} from "@/lib/embed-turn-limits";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
@@ -491,12 +489,14 @@ function EmbedChat({
         searchEngine: stockClient.gate.searchEngine,
         toolbar: stockClient.chrome.toolbar,
         scrollbars: stockClient.chrome.scrollbars,
+        scroll: stockClient.chrome.scroll?.mode,
       },
       null,
     ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const draftSink = useRef<(text: string) => void>(() => {});
@@ -704,6 +704,11 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    // The counter moves on every submitted turn, not only on the composer's
+    // own submit path — the hook is the one funnel every send passes through.
+    onTurnCharge: () => {
+      if (!ungated) armGateCharge();
+    },
     getResponseLanguage,
     getEnableWebSearch,
     getDisabledTools,
@@ -782,7 +787,6 @@ function EmbedChat({
           ...(forceTool ? { forceTool } : {}),
           pageContext: consumePageContext(),
         });
-        if (!ungated) armGateCharge();
         return;
       }
       chat.onRetry?.();
@@ -796,7 +800,6 @@ function EmbedChat({
         ...(forceTool ? { forceTool } : {}),
         pageContext: consumePageContext(),
       });
-      if (!ungated) armGateCharge();
     }
   }, [
     byokIsSet,
@@ -987,7 +990,6 @@ function EmbedChat({
       ...(forceTool ? { forceTool } : {}),
       pageContext: ctx,
     });
-    if (!ungated) armGateCharge();
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -1092,9 +1094,6 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
       },
       onAllowSend: () => {
-        if (shouldArmGateCharge(ungated)) {
-          armGateCharge();
-        }
         emit("embed_turn_submitted", {
           accent,
           turn: gate.turns + 1,
@@ -1161,6 +1160,10 @@ function EmbedChat({
         persistDensity(density);
         setChatPrefs((p) => ({ ...p, density }));
       },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
@@ -1173,6 +1176,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         }),
@@ -1187,6 +1191,10 @@ function EmbedChat({
       ),
       showModels,
       showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The gate's own budget takes the meter slot: a trial tenant gates on
+      // turns, so the turns are the number worth showing, and a Foundry
+      // agent reports no token usage for the context bar to size.
+      usage: isTrialForm ? { used: gate.turns, limit: gate.limit } : undefined,
       // The model the turn sends, including a bring-your-own-key binding.
       // Not the session model alone, and not written back into the session.
       meterModel: contextMeterModel({
@@ -1265,6 +1273,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });
@@ -1282,6 +1291,7 @@ function EmbedChat({
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });
@@ -1312,6 +1322,9 @@ function EmbedChat({
       showModels,
       tenantCfg.showContextMeter,
       tenantCfg.slug,
+      isTrialForm,
+      gate.turns,
+      gate.limit,
       catalog,
       catalogTools,
       gate.host,
@@ -1383,14 +1396,6 @@ function EmbedChat({
   const footerSlot = footerAttribution ? (
     <SkinCredit attribution={footerAttribution} />
   ) : null;
-  const turnCounterSlot = isTrialForm ? (
-    <p
-      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
-      data-testid="embed-turn-counter"
-    >
-      {formatEmbedTurnCounter(gate.turns, gate.limit)}
-    </p>
-  ) : null;
 
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
@@ -1422,7 +1427,6 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
-        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1470,7 +1474,6 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
-            {turnCounterSlot}
           </>
         }
       />

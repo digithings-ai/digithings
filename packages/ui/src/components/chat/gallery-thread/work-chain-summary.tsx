@@ -28,7 +28,7 @@ export function WorkChainSummary({
     <div
       data-slot="aui_work-chain-summary"
       className={cn(
-        "aui-work-chain-summary text-muted-foreground flex items-center gap-2 py-1.5 text-sm",
+        "aui-work-chain-summary text-ink-mute flex items-center gap-2 py-1.5 text-sm",
         className,
       )}
     >

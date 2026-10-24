@@ -159,19 +159,39 @@ With venv: `pytest -v` or `pytest -m unit -v`.
 
 ```
 digithings/
+├── apps/         # 15 apps. digithings-web (marketing + digibook),
+│                 # digiquant-web (the desk at /app), digichat, dashboard,
+│                 # reference (pattern gallery), plus the API, runner and
+│                 # worker apps: dashboard-api, digidata-api, corpus-index,
+│                 # digiquant-runner, twelvex-runner, digithings-cron,
+│                 # digichat-cloudflare, digithings-stack-cloudflare,
+│                 # digitrace-langfuse, and digiquant-app (parked).
+├── packages/     # 10 shared npm packages: ui, design, brand, catalog,
+│                 # contract, digichat-ui, hero-banner, surface-config,
+│                 # tui-frame, durable-object-reconnect.
+├── clients/      # 4 terminal clients: digichat-tui, digiquant-tui,
+│                 # digivoice-tui, digichat-devkit.
 ├── digigraph/    # LangGraph orchestration, agents, digistore
 ├── digiquant/    # Nautilus + Polars, backtest/optimize
 ├── digisearch/   # RAG, document search, ingestion
-├── digichat/     # Next.js BFF + chat UI
+├── digifetch/    # shared fetch/scrape engine
+├── digillm/      # OpenAI-compatible LLM client
+├── digiskills/   # compile a repo into an Agent Skill package
+├── digivault/    # markdown vault management
+├── digivoice/    # local speech tools (dictation, speech)
 ├── digikey/      # API keys + JWT
 ├── digitrace/    # Tracing helpers + status API
-├── digibot/     # Heartbeat, audit, MCP skill
+├── digibot/      # Heartbeat, audit, MCP skill
 ├── digibase/     # Shared HTTP/audit library
+├── digidev/      # Agentic coding workflow kit
+├── infra/        # Deployment infrastructure
+├── openspec/     # Change proposals and specs
+├── openwiki/     # Generated repo wiki
 ├── config/       # LiteLLM, model modes
-├── projects/     # Confidential pilots/engagements (gitignored)
+├── projects/     # confidential pilots (gitignored)
 ├── scripts/      # Makefile-driven helpers
 ├── tests/        # pytest (dg, dq, ds, dc, ...)
-├── docs/         # VISION, ADRs, scoring rubrics, workflow
+├── docs/         # VISION, ADRs, design language, workflow
 ├── docker-compose.yml
 ├── Makefile
 └── .env.example
