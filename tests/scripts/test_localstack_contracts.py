@@ -1535,12 +1535,14 @@ def test_a_contract_row_without_a_url_or_a_port_still_keeps_the_built_in_url(tmp
 
 @pytest.mark.parametrize("method", ["GET", "POST", "get", "post", "Get", "pOsT", " get "])
 def test_a_contract_row_may_probe_with_get_or_post(tmp_path, method):
-    _contract(tmp_path, f"services:\n  - name: digigraph\n    method: {method}\n")
+    _contract(tmp_path, f"services:\n  - name: digigraph\n    method: '{method}'\n")
     row = _digigraph_row(tmp_path)
     assert row.refusal is None
     # The verb that was checked is the verb that is probed: a padded " get "
     # read as "GET" here and probed as " GET " would be a different request.
-    assert row.method == "GET" if method.strip().upper() == "GET" else "POST"
+    # The scalar is quoted so YAML hands the row exactly what was written --
+    # unquoted, " get " never reaches the row and the padding is never tested.
+    assert row.method == ("GET" if method.strip().upper() == "GET" else "POST")
 
 
 def test_the_probe_verb_set_is_closed():
@@ -1623,6 +1625,10 @@ def test_a_refusal_never_echoes_the_userinfo_it_refused(tmp_path):
         # shapes whose userinfo is not in a parseable authority
         "operator:s3cret@127.0.0.1:9000/x",
         "http:/operator:s3cret@127.0.0.1:9000/x",
+        # the same typo with a doubled slash after it: the text before the
+        # first '//' is where the credential sits, so no prefix carrying an
+        # '@' may survive the fallback
+        "http:/operator:s3cret@127.0.0.1:9000//healthz",
         "http://operator:p/a@127.0.0.1:9000/x",
         "http://operator:s3cret@[::1",
     ],

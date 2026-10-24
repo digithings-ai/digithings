@@ -821,9 +821,12 @@ def redact_userinfo(url: str | None) -> str | None:
     # without ``//``, ``http:/user:secret@host``, ``http://user:p/a@host``, an
     # unbalanced IPv6 bracket). Do not guess where the address begins: drop
     # everything up to the last '@'. Losing the prefix of a malformed URL is
-    # cheaper than printing the credential in it.
+    # cheaper than printing the credential in it. The raw text before the first
+    # '//' is kept only when it carries no '@' -- on ``http:/op:secret@host//p``
+    # that text is where the credential sits, so whatever prefix survives is
+    # rebuilt from the parsed scheme alone, or dropped with it.
     head, sep, _rest = url.partition("//")
-    if sep:
+    if sep and "@" not in head:
         return f"{head}//***@{url[url.rfind('@') + 1 :]}"
     scheme = split.scheme if split is not None else ""
     prefix = f"{scheme}:" if scheme else ""
