@@ -19,7 +19,12 @@
  */
 import { useEffect, useRef, useState } from "react";
 
+import { createEmbeddingSubject } from "@/components/landing/embedding-map";
+import { mountField } from "@/components/landing/pixel-field-core";
 import { PAGED_CSS } from "@/lib/book/printCss";
+
+/** One seed, so every printing draws the same cover rather than a new map. */
+const COVER_SEED = 2410;
 
 export default function PagedBoot({ enabled }: { enabled: boolean }) {
   const [status, setStatus] = useState<"idle" | "paginating" | "done" | "failed">("idle");
@@ -62,6 +67,13 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         cleanups.current.push(() => chunker.destroy());
         stampPages();
         fillTocPageRefs();
+        mountCoverField();
+        // The field reveals column by column over about a second; a screenshot
+        // taken at the ready marker caught only the first few columns and
+        // printed a stripe down the left edge. Wait for the sweep to finish.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 2200)));
+        });
         // The print step waits on THIS attribute, not on `.pagedjs_page`:
         // pagedjs creates the page boxes before the numbers exist, so waiting
         // for boxes printed the table of contents with every reference still
@@ -151,6 +163,23 @@ function stampPages(): void {
       page.appendChild(imprint);
     }
   });
+}
+
+/**
+ * The cover carries the field the welcome page draws: an embedding map in
+ * pixels. It is mounted here, on the page box, and not in the source document:
+ * pagedjs copies the source into the boxes, and a canvas copied that way
+ * arrives without its bitmap, so a field mounted before pagination printed a
+ * blank cover.
+ */
+function mountCoverField(): void {
+  const cover = document.querySelector<HTMLElement>(".pagedjs_page .book-cover");
+  if (!cover || cover.querySelector(".book-cover__field")) return;
+  const canvas = document.createElement("canvas");
+  canvas.className = "book-cover__field";
+  canvas.setAttribute("aria-hidden", "true");
+  cover.prepend(canvas);
+  mountField(canvas, createEmbeddingSubject(COVER_SEED));
 }
 
 function fillTocPageRefs(): void {

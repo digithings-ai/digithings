@@ -484,6 +484,22 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
 
 
+/* The welcome page's field, behind the cover. It fades out before the
+   wordmark, so the mark and the edition keep a clean ground to sit on. */
+.book-cover__field {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  color: var(--ink) !important;
+  accent-color: var(--accent) !important;
+  opacity: 0.72 !important;
+  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 50%, transparent 76%) !important;
+  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 50%, transparent 76%) !important;
+}
+
 /* The edition and version, set opposite the folio on every page. */
 .pagedjs_page .book-page-imprint {
   position: absolute !important;
