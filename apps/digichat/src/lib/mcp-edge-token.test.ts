@@ -118,16 +118,16 @@ describe("withMcpEdgeIdentity", () => {
     const rows: McpUpstreamServer[] = [
       { id: "digisearch", url: "http://digisearch-mcp:8765/mcp", authScheme: "jwt" },
       {
-        id: "zammad",
-        url: "http://zammad-mcp:8770/mcp",
+        id: "desk",
+        url: "http://desk-mcp:8770/mcp",
         token: "Token abc",
         authHeader: "Authorization",
       },
     ];
     const out = await withMcpEdgeIdentity(rows, { identity: BFF_IDENTITY });
     expect(out[1]).toEqual({
-      id: "zammad",
-      url: "http://zammad-mcp:8770/mcp",
+      id: "desk",
+      url: "http://desk-mcp:8770/mcp",
       token: "Token abc",
       authHeader: "Authorization",
     });
@@ -241,7 +241,7 @@ describe("minting and caching", () => {
   it("isolates a thrown exchange to the jwt rows instead of the whole header", async () => {
     // Static rows and jwt rows share one upstream header. A network failure in
     // the mint must not propagate, or the route's catch drops the header and a
-    // zammad-only tenant loses its tools because digikey blinked.
+    // desk-only tenant loses its tools because digikey blinked.
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -251,12 +251,12 @@ describe("minting and caching", () => {
     const rows = await withMcpEdgeIdentity(
       [
         { id: "digisearch", url: "https://edge/mcp", authScheme: "jwt" },
-        { id: "zammad", url: "http://zammad-mcp:8770/mcp", token: "Token abc" },
+        { id: "desk", url: "http://desk-mcp:8770/mcp", token: "Token abc" },
       ],
       { identity: { ...BFF_IDENTITY, apiKey: "dgk_live_identity" } },
     );
     expect(rows[0]?.token).toBeUndefined();
-    expect(rows[1]).toEqual({ id: "zammad", url: "http://zammad-mcp:8770/mcp", token: "Token abc" });
+    expect(rows[1]).toEqual({ id: "desk", url: "http://desk-mcp:8770/mcp", token: "Token abc" });
   });
 
   it("prefers a dedicated API-key identity when one is configured", async () => {
