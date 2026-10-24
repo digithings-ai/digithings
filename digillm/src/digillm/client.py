@@ -426,7 +426,7 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 # screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
 # once, and digisearch -- which does hard-depend on digibase -- is where the
 # digibase-backed screen is normally supplied. Every consumer of digillm in the
-# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+# stack (digigraph, digisearch, digibot) already has digibase installed.
 #
 # When no screen can be resolved the call proceeds UNSCREENED and the record says
 # so. That is deliberate and is the one honest option: this is a second line of
@@ -780,20 +780,22 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+    # House chats run the 1017 checkpoint (Chris, 23 Oct 2026); this slug stays
+    # its own id so a picker selection is never silently rewritten. 1017 reasons
+    # only when asked — the digichat chain sends reasoning_effort for it — while
+    # the bare id reasons unprompted (live check 2026-10-22).
+    "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
     "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4.1-flash-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-release": "deepseek-v4.1-flash-1017",
     "deepseek/deepseek-v4-flash-0731-fast": "deepseek-v4-flash-0731-fast",
-    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro-0813",
     "deepseek/deepseek-v3.1": "deepseek-v3.1",
     "deepseek/deepseek-v3.2": "deepseek-v3.2",
     "deepseek/deepseek-r1-0528": "deepseek-r1-0528",
     "deepseek/deepseek-r1": "deepseek-r1",
-    "google/gemini-3.7-flash": "gemini-3.7-flash",
     "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
     "openai/gpt-5.6-luna": "gpt-5.6-luna",
     "openai/gpt-5.6-sol": "gpt-5.6-sol",
@@ -1591,9 +1593,14 @@ def _optional_nonnegative_int(value: Any) -> int | None:
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
+    # ``getattr``'s default covers a missing attribute only, so the except arm is a
+    # provider property that raised. Returning None keeps the call alive; the type
+    # is logged so a raising usage/cost field leaves a trace instead of vanishing.
+    # Only the exception type: a provider object may carry prompt text.
     try:
         return getattr(value, name, None)
-    except Exception:
+    except Exception as error:
+        logger.debug("optional attribute %r raised %s", name, type(error).__name__)
         return None
 
 

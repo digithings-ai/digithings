@@ -30,8 +30,17 @@ export function contextMeterEnabled(
 export function sessionModelSeed(input: {
   available: readonly string[];
   defaultModel?: string;
+  /**
+   * The model the Auto preset resolves to. When the curated default is that
+   * same model, the session starts on Auto instead of naming the id: the
+   * picker shows "auto" and the Auto row is selected, while the turn still
+   * runs on the deployment default (auto is that model).
+   */
+  autoModel?: string;
 }): string {
   const named = input.defaultModel?.trim() || "";
+  const auto = input.autoModel?.trim() || "";
+  if (named && auto && named === auto) return "";
   if (input.available.length > 0) {
     return named || input.available[0] || "";
   }

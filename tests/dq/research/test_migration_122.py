@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "122_archive_objects_rls.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "122_archive_objects_rls.sql"
 TABLE = "archive_objects"
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
@@ -32,16 +32,16 @@ def sql(raw: str) -> str:
 
 
 def test_migration_is_the_only_122() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("122_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("122_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_121() -> None:
-    assert (MIGRATIONS_DIR / "121_checkpoint_blobs_nullable.sql").is_file()
+    assert (MIGRATIONS_DIR / "engine" / "121_checkpoint_blobs_nullable.sql").is_file()
 
 
 def test_does_not_amend_119() -> None:
     """119 must stay as the create-only migration; lockdown is a follow-up file."""
-    create = (MIGRATIONS_DIR / "119_archive_objects.sql").read_text(encoding="utf-8")
+    create = (MIGRATIONS_DIR / "engine" / "119_archive_objects.sql").read_text(encoding="utf-8")
     assert "ENABLE ROW LEVEL SECURITY" not in create.upper()
     assert "REVOKE ALL" not in create.upper()
 

@@ -10,8 +10,6 @@ frozen, ``extra="forbid"``, UTC-only aware datetimes, deterministic hashes.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 from datetime import date, timedelta
 from enum import StrEnum
@@ -26,6 +24,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 _RISK_POLICY_ID_NAMESPACE = UUID("f3a4b5c6-d7e8-4901-a2b3-c4d5e6f70891")
 _COVARIANCE_SNAPSHOT_ID_NAMESPACE = UUID("a1b2c3d4-e5f6-4702-8c9d-0e1f2a3b4c5d")
@@ -237,13 +237,9 @@ class CovarianceSnapshot(RiskPolicyModel):
         return self
 
 
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def risk_policy_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of resolved policy identity fields."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def risk_policy_id(*, method_version: str, content_hash: str) -> UUID:
@@ -258,7 +254,7 @@ def risk_policy_id(*, method_version: str, content_hash: str) -> UUID:
 
 def covariance_snapshot_content_hash(*, payload: dict[str, object]) -> str:
     """SHA-256 over canonical JSON of snapshot economic identity."""
-    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return sha256_hex(payload)
 
 
 def covariance_snapshot_id(

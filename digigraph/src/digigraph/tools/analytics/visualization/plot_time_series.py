@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename
 
 
 def plot_time_series(
@@ -44,8 +44,8 @@ def plot_time_series(
     else:
         agg_df = df.group_by(date_col).agg(pl.len().alias("value"))
     agg_df = agg_df.sort(date_col)
-    out_dir = _artifacts_dir(dataset_path)
-    path = _next_filename(out_dir, "ts")
+    out_dir = artifacts_dir(dataset_path)
+    path = next_filename(out_dir, "ts")
     fig, ax = plt.subplots()
     ax.plot(agg_df[date_col].to_list(), agg_df["value"].to_list(), marker="o", markersize=3)
     ax.set_title(

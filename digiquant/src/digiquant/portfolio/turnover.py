@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint suppression: entry_date coercion
 
 from digiquant.portfolio.sizing_events import SizingAdjustment, SizingAdjustmentType
+from digiquant.scalars import is_cash
 
 # Cadence values read from config preferences (``preferences["rebalancing_cadence"]``),
 # sourced from portfolio.json ``constraints`` during preflight. Default "daily".
@@ -29,10 +30,6 @@ def _parse_entry_date(value: Any) -> date | None:
         return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError:
         return None
-
-
-def _is_cash(ticker: str) -> bool:
-    return ticker.strip().upper() == "CASH"
 
 
 def no_trade_band_pp(current_pct: float, preferences: dict[str, Any]) -> float:
@@ -60,7 +57,7 @@ def clamp_no_trade_band(
         return sized
     out = dict(sized)
     for ticker, current_pct in current_weights.items():
-        if _is_cash(ticker) or current_pct <= 0:
+        if is_cash(ticker) or current_pct <= 0:
             continue
         target_pct = out.get(ticker, 0.0)
         if target_pct <= 0:
@@ -86,7 +83,7 @@ def mark_to_market_weights(
         return dict(weights)
     drifted: dict[str, float] = {}
     for ticker, weight in weights.items():
-        if _is_cash(ticker):
+        if is_cash(ticker):
             drifted[ticker] = weight
         else:
             drifted[ticker] = weight * (1.0 + float(deltas.get(ticker, 0.0)))
@@ -154,7 +151,7 @@ def hold_drifted_book(
         return sized
     out: dict[str, float] = {}
     for ticker, target in sized.items():
-        if _is_cash(ticker):
+        if is_cash(ticker):
             continue
         current = float(current_weights.get(ticker, 0.0))
         if target <= 0:
@@ -255,7 +252,7 @@ def apply_turnover_to_sized_book(
 
     out = dict(sized)
     for ticker, current_pct in current_weights.items():
-        if _is_cash(ticker) or current_pct <= 0:
+        if is_cash(ticker) or current_pct <= 0:
             continue
         target_pct = out.get(ticker, 0.0)
         delta = abs(target_pct - current_pct)

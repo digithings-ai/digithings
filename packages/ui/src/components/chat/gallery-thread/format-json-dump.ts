@@ -52,11 +52,6 @@ export function formatToolDurationMs(ms: number): string {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 }
 
-export function humanizeToolName(toolName: string, _argsText?: string): string {
-  void _argsText;
-  return toolName.trim() || "tool";
-}
-
 /**
  * Close a truncated JSON prefix (streaming tool args) so it can be parsed:
  * closes an open string, drops a dangling key / trailing comma / colon, and

@@ -292,7 +292,7 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
         else:
             ws_clause = None
     except AzureWorkspaceFilterError:
-        logger.error(
+        logger.exception(
             "Azure workspace isolation unavailable; refusing unscoped query (index=%s)",
             index_name,
             extra={
@@ -434,7 +434,7 @@ def query_azure(query: Query, index_name: str | None = None) -> SearchResponse:
             backend=BACKEND_AZURE_AI_SEARCH,
         )
     except _AZURE_SDK_ERRORS + (OSError, ValueError, RuntimeError, TypeError) as exc:
-        logger.error(
+        logger.exception(
             "Azure AI Search query failed (index=%s): %s",
             index_name,
             exc,

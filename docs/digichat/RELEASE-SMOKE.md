@@ -16,7 +16,7 @@
 | Published image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` from `v2.6.4` on (private) — or build locally, or import to your own registry |
 | Changelog | `apps/digichat/CHANGELOG.md` |
 | Install unit | **a built image** — not npm (`private: true`) |
-| Current app version | `2.6.8` (`apps/digichat/package.json` on `develop`) |
+| Current app version | `2.7.0` (`apps/digichat/package.json` on `develop`) |
 
 Existing clients (DataTap and others) run digichat images already imported into
 their own Azure registry (`datatapchatregistry.azurecr.io`). Those copies are
@@ -56,3 +56,5 @@ Requires stack images on GHCR (`DIGI_IMAGE_TAG` after `publish-service-images.ym
 
 - Client install: [INSTALL.md](INSTALL.md)
 - Product model: [digichat-self-hosted-release.md](../architecture/digichat-self-hosted-release.md)
+
+Release candidate reviewed by the owner for the 2.7.0 cut.

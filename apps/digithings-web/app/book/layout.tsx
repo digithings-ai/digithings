@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description:
     "digibook: a short, philosophical book on why self-hosted AI infrastructure matters, how it " +
     "scales, and what it costs. Read on screen or print it.",
+  alternates: { canonical: "/book" },
 };
 
 /**

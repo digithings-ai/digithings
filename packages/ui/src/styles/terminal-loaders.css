@@ -28,7 +28,7 @@
 
 .tl-mark {
   color: var(--accent);
-  margin-inline-end: 0.5rem;
+  margin-inline-end: var(--space-2);
 }
 
 /* `pre` keeps a mid-word trailing space, so the caret never jumps back a cell
@@ -64,11 +64,19 @@
    left-aligned on the mono grid. */
 
 .tl-boot {
+  /* component tokens — boot surface geometry */
+  --tl-boot-pad: clamp(1.5rem, 6vw, 4rem);
+  --tl-boot-inner-w: 34rem;
+  --tl-boot-gap: 0.85rem;
+  --tl-boot-title-font: 1.25rem;
+  --tl-line-font: 0.92rem;
+  --tl-note-font: 0.68rem;
+
   display: grid;
   place-items: center;
   width: 100%;
   min-height: 100%;
-  padding: clamp(1.5rem, 6vw, 4rem);
+  padding: var(--tl-boot-pad);
   background: var(--bg);
 }
 
@@ -83,13 +91,13 @@
 .tl-boot-inner {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  width: min(34rem, 100%);
+  gap: var(--tl-boot-gap, 0.85rem);
+  width: min(var(--tl-boot-inner-w, 34rem), 100%);
 }
 
 .tl-boot-title {
   font-family: var(--font-mono);
-  font-size: 1.25rem;
+  font-size: var(--tl-boot-title-font, 1.25rem);
   line-height: 1.1;
   color: var(--ink);
 }
@@ -102,13 +110,13 @@
 }
 
 .tl-boot .tl-line {
-  font-size: 0.92rem;
+  font-size: var(--tl-line-font, 0.92rem);
   color: var(--ink-soft);
 }
 
 .tl-note {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--tl-note-font, 0.68rem);
   letter-spacing: 0.06em;
   color: var(--ink-mute);
 }

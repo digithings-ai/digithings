@@ -1,5 +1,5 @@
 {
-  "fallback_model": "gpt-4o-mini",
+  "fallback_model": "deepseek/deepseek-v4.1-flash-1017",
   "flagship_model_id_markers": [
     "gpt-5",
     "gpt-4o",

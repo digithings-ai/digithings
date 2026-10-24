@@ -38,7 +38,10 @@ import {
   disabledCatalogIds,
   extraOffFromCatalog,
   persistDensity,
+  persistScroll,
+  resetChromePrefsFromDeploy,
   useStoredDensityAfterMount,
+  useStoredScrollAfterMount,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
   isStockComposerMenuKind,
@@ -79,7 +82,6 @@ import {
 import { p } from "@/lib/base-path";
 import {
   decideEmbedSendGate,
-  shouldArmGateCharge,
 } from "@/lib/embed-send-gate";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 
@@ -90,10 +92,7 @@ import {
   PARENT_GATE_TIMEOUT_MS,
   resolveGateFallbackCard,
 } from "@/lib/embed-trial-messages";
-import {
-  EMBED_TRIAL_TURN_LIMIT,
-  formatEmbedTurnCounter,
-} from "@/lib/embed-turn-limits";
+import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
@@ -128,12 +127,14 @@ import {
   parseEmbedUserTheme,
   parseThemeMessage,
   readEmbedUserThemeRaw,
+  resolveEmbedPalette,
   resolveEmbedTheme,
   subscribeEmbedUserTheme,
   writeEmbedUserTheme,
   type EmbedTheme,
   type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
+import type { PaletteName } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -218,6 +219,9 @@ function EmbedPageInner({
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
+  // The parent's palette rides the same message; it never writes data-palette
+  // itself (that would fight the theme effect below).
+  const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
   // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
   const userThemeKey = embedUserThemeKey(tenantCfg.slug);
   const userThemeRaw = useSyncExternalStore(
@@ -239,7 +243,12 @@ function EmbedPageInner({
     url: urlTheme,
     tenant: tenantCfg.theme,
   });
-  const effectivePalette = userTheme?.palette ?? "default";
+  // /theme pick > parent postMessage > default look. One channel, one writer
+  // (the theme effect below), so a parent palette cannot be reverted mid-tick.
+  const effectivePalette = resolveEmbedPalette({
+    pick: userTheme,
+    parent: parentPalette,
+  });
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
   // postMessage; we exchange it at /api/plan-proof (server verifies claims) and
@@ -320,6 +329,9 @@ function EmbedPageInner({
       const parsed = parseThemeMessage(event, themeParentOrigins);
       if (!parsed) return;
       setParentTheme(parsed.theme);
+      // A message without a palette clears the parent channel, so the pick or
+      // the default look takes over again.
+      setParentPalette(parsed.palette ?? null);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -463,6 +475,8 @@ function EmbedChat({
     model: sessionModelSeed({
       available: stockClient.models.available,
       defaultModel: stockClient.models.default,
+      autoModel: stockClient.models.picker?.presets.find((preset) => preset.id === "auto")
+        ?.model,
     }),
     language: tenantLanguage,
     view: stockClient.features.view,
@@ -475,12 +489,14 @@ function EmbedChat({
         searchEngine: stockClient.gate.searchEngine,
         toolbar: stockClient.chrome.toolbar,
         scrollbars: stockClient.chrome.scrollbars,
+        scroll: stockClient.chrome.scroll?.mode,
       },
       null,
     ),
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const draftSink = useRef<(text: string) => void>(() => {});
@@ -688,6 +704,11 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    // The counter moves on every submitted turn, not only on the composer's
+    // own submit path — the hook is the one funnel every send passes through.
+    onTurnCharge: () => {
+      if (!ungated) armGateCharge();
+    },
     getResponseLanguage,
     getEnableWebSearch,
     getDisabledTools,
@@ -766,7 +787,6 @@ function EmbedChat({
           ...(forceTool ? { forceTool } : {}),
           pageContext: consumePageContext(),
         });
-        if (!ungated) armGateCharge();
         return;
       }
       chat.onRetry?.();
@@ -780,7 +800,6 @@ function EmbedChat({
         ...(forceTool ? { forceTool } : {}),
         pageContext: consumePageContext(),
       });
-      if (!ungated) armGateCharge();
     }
   }, [
     byokIsSet,
@@ -971,7 +990,6 @@ function EmbedChat({
       ...(forceTool ? { forceTool } : {}),
       pageContext: ctx,
     });
-    if (!ungated) armGateCharge();
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -1076,9 +1094,6 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
       },
       onAllowSend: () => {
-        if (shouldArmGateCharge(ungated)) {
-          armGateCharge();
-        }
         emit("embed_turn_submitted", {
           accent,
           turn: gate.turns + 1,
@@ -1145,18 +1160,23 @@ function EmbedChat({
         persistDensity(density);
         setChatPrefs((p) => ({ ...p, density }));
       },
+      setScroll: (mode) => {
+        persistScroll(mode);
+        setChatPrefs((p) => ({ ...p, scroll: mode }));
+      },
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         }),
@@ -1171,6 +1191,10 @@ function EmbedChat({
       ),
       showModels,
       showContextMeter: contextMeterEnabled(tenantCfg.showContextMeter, tenantCfg.slug),
+      // The gate's own budget takes the meter slot: a trial tenant gates on
+      // turns, so the turns are the number worth showing, and a Foundry
+      // agent reports no token usage for the context bar to size.
+      usage: isTrialForm ? { used: gate.turns, limit: gate.limit } : undefined,
       // The model the turn sends, including a bring-your-own-key binding.
       // Not the session model alone, and not written back into the session.
       meterModel: contextMeterModel({
@@ -1243,12 +1267,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });
@@ -1260,12 +1285,13 @@ function EmbedChat({
           language: tenantLanguage,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
-          ...chromePrefsFromDeploy({
+          ...resetChromePrefsFromDeploy({
             density: stockClient.features.density,
             effort: stockClient.features.effort,
             searchEngine: stockClient.gate.searchEngine,
             toolbar: stockClient.chrome.toolbar,
             scrollbars: stockClient.chrome.scrollbars,
+            scroll: stockClient.chrome.scroll?.mode,
           }),
           extra: extraOffFromCatalog(catalogTools),
         });
@@ -1296,6 +1322,9 @@ function EmbedChat({
       showModels,
       tenantCfg.showContextMeter,
       tenantCfg.slug,
+      isTrialForm,
+      gate.turns,
+      gate.limit,
       catalog,
       catalogTools,
       gate.host,
@@ -1367,14 +1396,6 @@ function EmbedChat({
   const footerSlot = footerAttribution ? (
     <SkinCredit attribution={footerAttribution} />
   ) : null;
-  const turnCounterSlot = isTrialForm ? (
-    <p
-      className="dc-turn-counter relative z-10 mx-auto w-full max-w-2xl select-none pb-1 pt-1.5 pr-3 text-right text-xs font-normal leading-none tabular-nums tracking-wide text-muted-foreground"
-      data-testid="embed-turn-counter"
-    >
-      {formatEmbedTurnCounter(gate.turns, gate.limit)}
-    </p>
-  ) : null;
 
   // turn_limited: only raise paywall when the visitor asks past the free
   // limit (gateRequest.requested). Showing it on gate.locked alone replaced
@@ -1406,7 +1427,6 @@ function EmbedChat({
       <div className="flex h-dvh flex-col" data-chrome-mode="embed" data-thread-skin={stockClient.chrome.skin}>
         {headerSlot}
         <div className="flex flex-1 items-center justify-center p-4">{gateForm}</div>
-        {turnCounterSlot}
         {footerSlot}
       </div>
     );
@@ -1454,7 +1474,6 @@ function EmbedChat({
                 {handshakeError}
               </div>
             ) : null}
-            {turnCounterSlot}
           </>
         }
       />

@@ -1,6 +1,7 @@
 # digiweb blend lock — utilitarian terminal
 
 **Status:** v0.1 **approved** for promotion · Round 1 locked 2026-08-30  
+**Superseded 2026-10-23.** The pixel-terminal generation replaced this proposal. Two rules here are now the opposite of what ships: the heroes are pixel wordmarks (so "do not synthwave / pixel wordmarks" is reversed), and there is no single white filled rect per viewport. Kept as the preference ledger for the round that produced it — [`docs/design/CURRENT_UI_LANGUAGE.md`](../../docs/design/CURRENT_UI_LANGUAGE.md) §6 rows 13, 14 and 17.
 **North star:** utilitarian terminal simplicity — mono voice, zero corners, sparse air, white loud CTA, diegetic install proof.
 
 Canon promotion: [`ROLLOUT.md`](ROLLOUT.md) · live check: design-reference `/iterate`

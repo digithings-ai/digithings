@@ -42,7 +42,7 @@ export default function VariantManifest() {
           </p>
           <p className="mt-[1.1rem] mb-0 text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
             It is not a platform you move into. Every module is a service you can run alone, read
-            the source of, and point at your own providers — and the whole thing is one{" "}
+            the source of, and point at your own providers, and the whole thing is one{" "}
             <Mono>docker-compose.yml</Mono> you can read in a minute.
           </p>
 
@@ -68,12 +68,12 @@ export default function VariantManifest() {
             One machine, or a private network. {COUNTS.compose} services in the compose file,{" "}
             {COUNTS.composeDefault} of them up by default and the rest behind named profiles. Every
             one binds loopback until you decide otherwise, and the only bill is the model provider
-            you choose — the stack itself stores {COUNTS.keysStored} keys.
+            you choose: the stack itself stores {COUNTS.keysStored} keys.
           </p>
 
           <Rule n="03">what it is not</Rule>
           <p className="mt-[1.1rem] mb-0 text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            It is not hosted, not managed, and not a live-trading system — the broker adapters raise{" "}
+            It is not hosted, not managed, and not a live-trading system: the broker adapters raise{" "}
             <Mono>NotImplementedError</Mono> and a human co-sign hook guards those paths. Two of the
             eleven modules are roadmap. Where a claim here can be counted, it is counted and dated:{" "}
             {COUNTS.countedAt}, on a clean checkout.

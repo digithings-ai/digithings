@@ -12,7 +12,6 @@ import { toDigichatClientConfig, toChromeClientConfig } from "./client-projectio
 import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
-import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -237,6 +236,7 @@ hosts:
         gateMode: "ungated",
         models: {
           catalog: true,
+          priceCapUsdPerMillion: 2,
           costPerWindow: { usd: 0.0125565, windowSeconds: 86400 },
         },
       },
@@ -403,24 +403,37 @@ deployment:
     ).toThrow(/DIGICHAT_CHROME_SKIN/);
   });
 
-  it("uses the unconfigured container default when no file and no tenants", () => {
+  it("loads house defaults when no file and no tenants", () => {
     const cfg = loadDigichatConfig({ fileContents: null, env: {} });
-    expect(cfg.deployment?.slug).toBe("local");
-    expect(cfg.deployment?.chrome.mode).toBe("embed");
+    expect(cfg.deployment?.slug).toBe("digithings-ai");
+    expect(cfg.hosts?.["digithings.ai"]?.slug).toBe("digithings-ai");
+    // The house tenant is the digithings.ai product surface: `app` keeps
+    // `/chat` on the product chat. `embed` here bounces `/chat` to
+    // `/chat/embed`, which is what #6356 replaced for the public surface.
+    expect(cfg.deployment?.chrome.mode).toBe("app");
     expect(cfg.deployment?.chrome.skin).toBe("digichat");
     expect(cfg.deployment?.chrome.theme).toBe("dark");
-    expect(cfg.deployment?.features.attachments).toBe(true);
-    expect(cfg.deployment?.tools?.catalog ?? []).toEqual([]);
+    expect(cfg.deployment?.features.attachments).toBe(false);
+    expect(cfg.deployment?.tools?.catalog.map((tool) => tool.id)).toEqual([
+      "digisearch",
+      "digivault",
+    ]);
     expect(cfg.deployment?.models.default).toBe("deepseek/deepseek-v4.1-flash-1017");
     expect(cfg.deployment?.models.available).toHaveLength(13);
     expect(cfg.deployment?.models.allowPicker).toBe(true);
-    expect(cfg.deployment?.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
-    // Least-privilege fallback: an unconfigured container must not expose BYOK,
-    // user MCP servers, or web search to anonymous visitors (regression #3852).
+    expect(cfg.deployment?.chrome.suggestions).toHaveLength(8);
     expect(cfg.deployment?.mcp?.allowUserServers).toBe(false);
     expect(cfg.deployment?.mcp?.allowAddForm).toBe(false);
-    expect(cfg.deployment?.gate.webSearch).toBe(false);
-    expect(cfg.deployment?.gate.showByok).toBe(false);
+    expect(cfg.deployment?.gate.webSearch).toBe(true);
+    expect(cfg.deployment?.gate.showByok).toBe(true);
+    expect(cfg.deployment?.gate.showContextMeter).toBe(true);
+    expect(cfg.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: true,
+      tokensPerMinute: { user: 80000 },
+    });
   });
 
   it("keeps BYOK, user MCP servers, and web search when a deployment explicitly enables them", () => {
@@ -800,7 +813,7 @@ describe("getAnonymousClientInstall", () => {
     resetDigichatConfigForTests();
   });
 
-  it("ignores the synthetic no-file default", () => {
+  it("does not treat the built-in house defaults as an anonymous embed", () => {
     setDigichatConfigForTests(loadDigichatConfig({ fileContents: null, env: {} }));
     expect(getAnonymousClientInstall({})).toBeNull();
   });

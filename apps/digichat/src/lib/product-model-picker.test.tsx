@@ -177,6 +177,14 @@ describe("product chats open with the model picker", () => {
     // Unrestricted: every catalog model the house lists, Premium included.
     const house = toolbarFor(live("digithings.ai")).client;
     expect(client.models.available).toEqual(house.models.available);
+    // One shared list and one shared set of modes; only usage limits differ.
+    expect(client.models.picker?.presets).toEqual(house.models.picker?.presets);
+    expect(client.models.picker?.presets.map((preset) => preset.label)).toEqual([
+      "Default",
+      "Reasoning",
+      "Fast",
+      "Light",
+    ]);
     const premium = premiumIdsFromGroups(client.models.picker?.groups);
     expect(premium.length).toBeGreaterThan(0);
     for (const id of premium) expect(client.models.available).toContain(id);
@@ -230,7 +238,12 @@ describe("product chats open with the model picker", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
-          models: { catalog: true, presets: ["auto"], costPerWindow: { usd: 0.01 } },
+          models: {
+            catalog: true,
+            presets: ["auto"],
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });
@@ -263,8 +276,17 @@ describe("product chats open with the model picker", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
-          guardrails: { maxToolCallsPerTurn: 8, tokensPerMinute: { user: 1000 } },
-          models: { catalog: true, costPerWindow: { usd: 0.01 } },
+          guardrails: {
+            maxToolCallsPerTurn: 8,
+            answerAt: 0.6,
+            pauseAt: 0.8,
+            tokensPerMinute: { user: 1000 },
+          },
+          models: {
+            catalog: true,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });
@@ -272,7 +294,48 @@ describe("product chats open with the model picker", () => {
     expect(dep.models.costPerWindow).toBeUndefined();
     expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
     expect(dep.guardrails?.maxToolCallsPerTurn).toBe(8);
+    expect(dep.guardrails?.answerAt).toBe(0.6);
+    expect(dep.guardrails?.pauseAt).toBe(0.8);
     expect(toolbarFor(dep).picker).toBe(true);
+  });
+
+  it("keeps the tool-call cap and answer guard on both product chats", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      hosts: {
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          guardrails: {
+            maxToolCallsPerTurn: 8,
+            answerAt: 0.6,
+            pauseAt: 0.8,
+            tokensPerMinute: { user: 1000 },
+          },
+        },
+        "occ.digithings.ai": {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: {
+            maxToolCallsPerTurn: 8,
+            answerAt: 0.6,
+            pauseAt: 0.8,
+            tokensPerMinute: { user: 1000 },
+          },
+        },
+      },
+    });
+    const house = cfg.hosts!["digithings.ai"]!;
+    const occ = cfg.hosts!["occ.digithings.ai"]!;
+    for (const dep of [house, occ]) {
+      expect(dep.guardrails?.maxToolCallsPerTurn).toBe(8);
+      expect(dep.guardrails?.answerAt).toBe(0.6);
+      expect(dep.guardrails?.pauseAt).toBe(0.8);
+    }
+    // Only the per-visitor token limiting differs.
+    expect(house.guardrails?.tokensPerMinute).toEqual({ user: 1000 });
+    expect(occ.guardrails?.tokensPerMinute).toBeUndefined();
+    expect(house.models.available).toEqual(occ.models.available);
   });
 
   it("grants nothing to a customer host that reuses a product slug", () => {
@@ -334,7 +397,11 @@ describe("product chats open with the model picker", () => {
           slug: "occ",
           backend: { type: "digigraph" },
           guardrails: { tokensPerMinute: { user: 1000 } },
-          models: { occPicker: false, costPerWindow: { usd: 0.01 } },
+          models: {
+            occPicker: false,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.01 },
+          },
         },
       },
     });

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
@@ -318,6 +319,25 @@ def test_missing_usage_and_cost_remain_unavailable() -> None:
     assert attempt.prompt_tokens is None
     assert attempt.completion_tokens is None
     assert attempt.cost_usd is None
+
+
+def test_a_raising_attribute_getter_keeps_the_call_alive_and_leaves_a_trace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Usage parsing must not abort on a provider property that raises — nor hide it."""
+
+    class RaisingUsage:
+        @property
+        def prompt_tokens(self) -> int:
+            raise RuntimeError("internal-provider-detail")
+
+    with caplog.at_level(logging.DEBUG, logger="digillm.client"):
+        usage = client_mod._response_usage(SimpleNamespace(usage=RaisingUsage()))
+
+    assert usage == (None, None, None)
+    assert any("optional attribute" in record.message for record in caplog.records)
+    # Only the exception type is logged: a provider object may carry prompt text.
+    assert "internal-provider-detail" not in caplog.text
 
 
 def test_artifact_reference_is_generic_and_immutable() -> None:

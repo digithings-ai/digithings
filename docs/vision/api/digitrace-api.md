@@ -79,7 +79,7 @@ auth: none
 LangSmith, OpenTelemetry, Prometheus, FastAPI
 
 ## Related
-digigraph, digiclaw, digibase
+digigraph, digibot, digibase
 
 ## Links
 - [Source](https://github.com/digithings-ai)

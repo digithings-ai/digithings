@@ -25,6 +25,7 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
+from digigraph.research_brief_models import strip_json_fence
 from digigraph.retrieval import (
     auto_load_notes,
     force_tool_messages,
@@ -43,6 +44,20 @@ logger = logging.getLogger(__name__)
 LOCKED_SESSION_TOOLS = frozenset(
     {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
 )
+
+
+def mcp_failure_note(failures: dict[str, str]) -> str:
+    """The turn note that tells the model an integration is unreachable.
+
+    The server ids only: the reason stays in the log, so a prompt can never
+    carry an internal URL or a token out of a failed call.
+    """
+    ids = ", ".join(sorted(failures))
+    return (
+        f"Unreachable integrations: {ids}. Their tools could not be loaded because the "
+        f"integration did not answer. Say the integration is unavailable. Do not report "
+        f"an absence of data."
+    )
 
 
 def _tool_def_name(tool: object) -> str:
@@ -136,14 +151,9 @@ def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
     return out or None
 
 
-def _strip_json_fence_llm(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
-
-
 def _parse_llm_json_object(content: str) -> dict[str, Any]:
     """Parse one JSON object from model output; allow fences, preamble, or trailing text."""
-    s = _strip_json_fence_llm(content)
+    s = strip_json_fence(content)
     decoder = json.JSONDecoder()
     try:
         obj, _ = decoder.raw_decode(s)
@@ -436,6 +446,7 @@ def _run_document_rag_path(
     from digigraph.orchestration.mcp_client import (
         expand_mcp_disabled_tokens,
         extra_tool_names_for_servers,
+        mcp_server_failures,
         resolve_mcp_force_id,
     )
 
@@ -456,6 +467,10 @@ def _run_document_rag_path(
             disabled_extra,
             enable_web_search=bool(state.get("enable_web_search")),
         )
+    # A server that could not be listed is not a server with no tools. The
+    # difference has to reach the model, or an outage is answered as an
+    # absence of data (DIG-5187).
+    mcp_failures = mcp_server_failures(mcp_servers) if mcp_servers else {}
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
@@ -551,6 +566,8 @@ def _run_document_rag_path(
         return result
 
     user_content = str(prompt)
+    if mcp_failures:
+        user_content = mcp_failure_note(mcp_failures) + "\n\n" + user_content
     if mcp_force:
         # MCP tool names are ``{server_id}_{tool}`` (mcp_client.prefixed_tool_name);
         # the trailing separator is the id boundary, not the retired ``__`` form.

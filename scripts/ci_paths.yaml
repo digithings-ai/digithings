@@ -23,31 +23,60 @@ digivault:
   - tests/dv/**
   - .github/workflows/test-digivault.yml
 
-digiclaw:
-  - digiclaw/**
+digibot:
+  - digibot/**
   - tests/dc/**
-  - .github/workflows/test-digiclaw.yml
+  - .github/workflows/test-digibot.yml
 
 digivoice:
   - digivoice/**
   - tests/dvo/**
   - .github/workflows/test-digivoice.yml
 
-# Bun suites (DIG-2940). Three packages declare `"test": "bun test"` and none
-# of them ran in CI — no workflow mentioned the bun tool at all, so a break in
-# any of these suites was found by a user, not by CI. One lane
-# (test-bun-suites.yml) covers all three, so this is a single key with three
-# directory globs rather than three keys. A change to the lane itself must fire
-# the lane.
+# Bun suites (DIG-2940, DIG-5203). Every package here declares
+# `"test": "bun test"`. The GitHub lanes that used to run them
+# (test-bun-suites.yml, test-clients-tui.yml) are retired with Actions
+# (DIG-3604 / DIG-4454), so `scripts/local-ci/local_ci.py` reads this block and
+# runs every suite when a PR touches one of these paths. That is the whole
+# point: the required `local-ci` check has to prove a `clients/**` or
+# `packages/**` change, and the receipt names the suites it ran (or says
+# `bun: none`) so a suite that did not run is visible instead of silent.
+#
+# One entry per suite directory, `<dir>/**`, because local_ci derives the suite
+# list from this block. A hit runs the whole list, not only the touched suite:
+# these packages import each other (digichat-tui reads surface-config's
+# endpoints, digiquant-tui's hero test reads the web lockup), so a change to one
+# is a change to every client that reads it — the same reason the retired lane
+# was a single matrix rather than per-path lanes.
+#
+# `digivoice/tui` is the pre-move TUI (#5548 moved the live client to
+# clients/digivoice-tui); it is kept because the retired lane ran it and
+# dropping it would shrink coverage without saying so.
 bun_suites:
   - digivoice/tui/**
   - clients/digichat-tui/**
+  - clients/digiquant-tui/**
+  - clients/digivoice-tui/**
+  - clients/digichat-devkit/**
   - packages/surface-config/**
-  - packages/hero-banner/**
+  # DIG-5212: the recorded-frame record and the fixture server both TUI clients
+  # and the dashboard import. Its suite is the only place the shared contract is
+  # tested, so it must fire on its own changes.
+  - packages/tui-frame/**
   # DIG-2864 (2026-10-11): the hero-banner engine's 39 parity tests are the
   # no-visual-regression proof for every banner ticket, so an unwatched
   # suite would be the DIG-2940 hole again under a new name.
+  - packages/hero-banner/**
+  # Trigger only, names no suite: any change under clients/** fires the gate,
+  # and the gate reads each client's package.json to decide whether it has a bun
+  # suite, so a new client is gated the moment it lands (DIG-5203). Without this
+  # entry a new client's first PR would touch only paths no suite entry lists.
+  - clients/**
+  # The retired lanes themselves: a change to a lane that lists the suites is a
+  # change to what runs them, so it fires the gate (it names no suite, so it
+  # runs the list without adding a package).
   - .github/workflows/test-bun-suites.yml
+  - .github/workflows/test-clients-tui.yml
 
 digiquant:
   - digiquant/**
@@ -130,6 +159,10 @@ dashboard:
   - packages/catalog/**
   - packages/ui/**
   - packages/design/**
+  # DIG-5212: lib/tui-preview.ts takes the recorded-frame type and its guard
+  # from @digithings/tui-frame, so a change there changes what the preview
+  # accepts and labels.
+  - packages/tui-frame/**
   - package.json
   - package-lock.json
   - .github/workflows/test-dashboard.yml
@@ -262,6 +295,9 @@ web:
 # changed", the matrix guard says "and it is covered".
 clients_tui:
   - clients/**
+  # DIG-5212: both clients import the shared recorded-frame package, so a change
+  # there changes what their tests exercise.
+  - packages/tui-frame/**
   - .github/workflows/test-clients-tui.yml
 
 e2e_contract:
@@ -320,7 +356,7 @@ research_graph:
 
 ruff_and_scripts:
   - digibase/**
-  - digiclaw/**
+  - digibot/**
   - digigraph/**
   - digiquant/**
   - digisearch/**

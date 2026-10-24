@@ -65,7 +65,11 @@ export function ChatPane() {
     <AssistantRuntimeProvider runtime={runtime}>
       <div className={`${styles.ground} ${DIGICHAT_TEXT}`}>
         {modelLine}
-        <DigichatThread welcome="What should we inspect?" placeholder="Ask digichat…" className="min-h-0 flex-1" />
+        <DigichatThread
+          welcome={chat.contextLabel === "FX Hub" ? "Ask about FX Hub." : "Ask about the baseline desk run."}
+          placeholder="Ask digichat…"
+          className="min-h-0 flex-1"
+        />
       </div>
     </AssistantRuntimeProvider>
   );
@@ -75,7 +79,7 @@ export function ChatPane() {
 export function DeskChat() {
   return (
     <ChatDesk>
-      <DeskFrame current="/tools/chat">
+      <DeskFrame current="/tools/digichat">
         <ChatPane />
       </DeskFrame>
     </ChatDesk>

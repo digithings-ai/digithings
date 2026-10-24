@@ -49,7 +49,7 @@ in the existing monorepo, backed by an npm workspace and a
 
 ```
 digithings-ai/digithings/
-├── digigraph/ digiquant/ digisearch/ digiclaw/ digismith/ digikey/ digibase/
+├── digigraph/ digiquant/ digisearch/ digibot/ digismith/ digikey/ digibase/
 ├── cloudflare/
 │   ├── design/             # @digithings/design workspace package
 │   ├── website/                   # digithings.ai

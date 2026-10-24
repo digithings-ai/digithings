@@ -19,6 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from digiquant.scalars import opt_float_strict
 from digiquant.stats.honesty import wilson
 
 # 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
@@ -378,20 +379,16 @@ def _stat_block(block: Mapping[str, object] | None) -> StatBlock:
         trades=n,
         net_profit=float(block.get("net_profit", 0.0) or 0.0),
         net_profit_pct=float(block.get("net_profit_pct", 0.0) or 0.0),
-        gross_profit=_opt_float(block.get("gross_profit")),
-        gross_loss=_opt_float(block.get("gross_loss")),
+        gross_profit=opt_float_strict(block.get("gross_profit")),
+        gross_loss=opt_float_strict(block.get("gross_loss")),
         percent_profitable=float(block.get("percent_profitable", 0.0) or 0.0),
-        profit_factor=_opt_float(block.get("profit_factor")),
+        profit_factor=opt_float_strict(block.get("profit_factor")),
         avg_trade=float(block.get("avg_trade", 0.0) or 0.0),
         wins=int(block.get("wins", 0) or 0),
         losses=int(block.get("losses", 0) or 0),
         win_rate_n=n if n > 0 else None,
         win_rate_ci95=ci95,
     )
-
-
-def _opt_float(v: object) -> float | None:
-    return None if v is None else float(v)  # type: ignore[arg-type]
 
 
 def _points(
@@ -528,8 +525,8 @@ def _build_tearsheet(
             pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
             equity_after=float(t.get("equity_after", 0.0) or 0.0),
             exit_reason=str(t.get("exit_reason", "")),
-            max_runup_pct=_opt_float(t.get("max_runup_pct")),
-            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+            max_runup_pct=opt_float_strict(t.get("max_runup_pct")),
+            max_drawdown_pct=opt_float_strict(t.get("max_drawdown_pct")),
         )
         for i, t in enumerate(trades, 1)
     ]
@@ -753,8 +750,8 @@ def from_nautilus(
             pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
             equity_after=float(t.get("equity_after", 0.0) or 0.0),
             exit_reason=str(t.get("exit_reason", "")),
-            max_runup_pct=_opt_float(t.get("max_runup_pct")),
-            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+            max_runup_pct=opt_float_strict(t.get("max_runup_pct")),
+            max_drawdown_pct=opt_float_strict(t.get("max_drawdown_pct")),
         )
         for i, t in enumerate(trades or [], 1)
     ]
@@ -780,7 +777,7 @@ def from_nautilus(
         net_profit=total_pnl,
         net_profit_pct=float(getattr(result, "total_return_pct", 0.0) or 0.0),
         max_drawdown_pct=float(max_dd) if max_dd is not None else 0.0,
-        sharpe_ratio=_opt_float(getattr(result, "sharpe_ratio", None)),
+        sharpe_ratio=opt_float_strict(getattr(result, "sharpe_ratio", None)),
         total_trades=int(getattr(result, "num_trades", 0) or 0),
         equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in eq],
         drawdown_curve=dd_curve,

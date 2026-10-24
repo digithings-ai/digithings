@@ -8,6 +8,7 @@ import {
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
   formatShellLoadDiagnostic,
+  readParentDocumentPalette,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -22,7 +23,7 @@ describe("ChatEmbedShell contracts", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 
-  it("posts digichat:theme with light|dark only", () => {
+  it("posts digichat:theme with light|dark and an optional palette", () => {
     expect(THEME).toBe("digichat:theme");
     expect(buildEmbedThemeMessage("light")).toEqual({
       type: "digichat:theme",
@@ -36,6 +37,23 @@ describe("ChatEmbedShell contracts", () => {
     });
   });
 
+  it("forwards only a known parent palette on the theme message", () => {
+    const attr = (v: string | null) => ({ getAttribute: () => v });
+    expect(readParentDocumentPalette(attr("dracula"))).toBe("dracula");
+    expect(readParentDocumentPalette(attr(" Nord "))).toBe("nord");
+    expect(readParentDocumentPalette(attr("default"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr("nope"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr(null))).toBeUndefined();
+    expect(buildEmbedThemeMessage("light", 1, "dracula")).toEqual({
+      type: THEME,
+      theme: "light",
+      ts: 1,
+      palette: "dracula",
+    });
+    expect(buildEmbedThemeMessage("dark", 1)).toEqual({ type: THEME, theme: "dark", ts: 1 });
+    expect("palette" in buildEmbedThemeMessage("dark", 1)).toBe(false);
+  });
+
   it("posts digichat:parent-error for in-chat handshake failures", () => {
     expect(PARENT_ERROR).toBe("digichat:parent-error");
     expect(buildEmbedParentErrorMessage("ready_timeout", 99)).toEqual({
@@ -43,9 +61,7 @@ describe("ChatEmbedShell contracts", () => {
       code: "ready_timeout",
       ts: 99,
     });
-    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe(
-      "embed_unloadable",
-    );
+    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe("embed_unloadable");
   });
 
   it("keeps the operator diagnostic for the dev console only", async () => {
@@ -161,7 +177,8 @@ describe("ChatEmbedShell contracts", () => {
     // pick up a stray ?token= and hand it to a tenant that never asked for one.
     expect(src).toContain("acceptsInviteToken");
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    // Formatting-agnostic: Prettier may keep the guard ternary on one line.
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(guardIndex).toBeLessThan(readIndex);
 
@@ -227,7 +244,7 @@ describe("ChatEmbedShell contracts", () => {
     // visit never touches history.
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
     const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(stripIndex).toBeGreaterThan(readIndex);
     expect(stripIndex).toBeGreaterThan(-1);

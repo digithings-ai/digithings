@@ -10,7 +10,10 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { load as loadYaml } from "js-yaml";
+import { expandExtendsDocument } from "./extends-merge";
 import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
@@ -21,15 +24,8 @@ import {
   type DigichatConfig,
   type DigichatDeployment,
 } from "./schema";
-import {
-  BASELINE_EMBED_PLACEHOLDER,
-  BASELINE_EMBED_SKIN,
-  BASELINE_EMBED_SUGGESTIONS,
-  BASELINE_EMBED_WELCOME,
-  BASELINE_EMBED_WELCOME_BODY,
-} from "@/lib/baseline-embed";
+import { BASELINE_EMBED_WELCOME } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
-import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
@@ -39,6 +35,59 @@ import {
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 
 export const DEFAULT_CONFIG_PATH = "/app/config/digichat.yaml";
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+
+/** Checked-in house document. A missing DIGICHAT_CONFIG_PATH loads this. */
+export function defaultsYamlCandidates(): string[] {
+  return [
+    resolve(MODULE_DIR, "../../../config/defaults.yaml"),
+    resolve(process.cwd(), "config", "defaults.yaml"),
+    resolve(process.cwd(), "apps", "digichat", "config", "defaults.yaml"),
+    "/app/config/defaults.yaml",
+  ];
+}
+
+function digichatConfigDir(): string {
+  const hit = defaultsYamlCandidates().find((path) => existsSync(path));
+  if (!hit) {
+    throw new Error(
+      `digichat defaults.yaml not found (looked in ${defaultsYamlCandidates().join(", ")})`,
+    );
+  }
+  return dirname(hit);
+}
+
+function readExtendsName(name: string): unknown {
+  const file = name.endsWith(".yaml") || name.endsWith(".yml") ? name : `${name}.yaml`;
+  const path = resolve(digichatConfigDir(), file);
+  if (!existsSync(path)) throw new Error(`extends: ${name} not found at ${path}`);
+  return parseYamlOrJson(readFileSync(path, "utf8"), path);
+}
+
+/** Expand `extends` before schema parse. No-op when the document does not extend. */
+export function expandDigichatDocument(input: unknown): unknown {
+  return expandExtendsDocument(input, readExtendsName);
+}
+
+export function materializeDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  return parseDigichatConfig(expandDigichatDocument(input), ctx, opts);
+}
+
+function loadDefaultsDocument(
+  ctx: string,
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  const path = defaultsYamlCandidates().find((candidate) => existsSync(candidate));
+  if (!path) {
+    throw new Error(`${ctx}: defaults.yaml not found`);
+  }
+  return materializeDigichatConfig(parseYamlOrJson(readFileSync(path, "utf8"), path), path, opts);
+}
 
 function resolveConfigPath(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
@@ -98,6 +147,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       toolbar: cfg.toolbar !== false,
       scrollbars: cfg.scrollbars ?? "always",
+      scroll: cfg.scroll ?? { mode: "follow" },
       transcript: { userAlign: "right" },
     },
     persistence: "none",
@@ -155,6 +205,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     cli: { enabled: false },
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
+    ...(cfg.limits ? { limits: cfg.limits } : {}),
     ...(catalog.length
       ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
       : {}),
@@ -190,6 +241,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     aliases: dep.aliases,
     backend: dep.backend,
     ...(dep.guardrails ? { guardrails: dep.guardrails } : {}),
+    ...(dep.limits ? { limits: dep.limits } : {}),
     gateMode: dep.gate.mode,
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
@@ -296,15 +348,29 @@ function applyEnvOverlay(
 
   // Resolve `mcp.servers[].tokenEnv` → `.token` (operator-static MCP auth, #3841).
   if (next.deployment) {
-    next.deployment = resolveMcpServerTokens(next.deployment, env);
+    next.deployment = resolveDeploymentTokenEnv(
+      resolveMcpServerTokens(next.deployment, env),
+      env,
+    );
   }
   if (next.hosts) {
     for (const [hostKey, dep] of Object.entries(next.hosts)) {
-      next.hosts[hostKey] = resolveMcpServerTokens(dep, env);
+      next.hosts[hostKey] = resolveDeploymentTokenEnv(resolveMcpServerTokens(dep, env), env);
     }
   }
 
   return next;
+}
+
+/** Fills `token` from `tokenEnv` when the slug env and `token` are both unset. */
+function resolveDeploymentTokenEnv(
+  dep: DigichatDeployment,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): DigichatDeployment {
+  if (dep.token || !dep.tokenEnv) return dep;
+  const value = env[dep.tokenEnv]?.trim();
+  if (!value) return dep;
+  return { ...dep, token: value };
 }
 
 /** Fills each `mcp.servers[].token` from its `tokenEnv` when `token` is unset (#3841). */
@@ -576,7 +642,7 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
         : null;
 
   if (contents != null && contents.trim()) {
-    const parsed = parseYamlOrJson(contents, path);
+    const parsed = expandDigichatDocument(parseYamlOrJson(contents, path));
     fromFile = parseDigichatConfig(parsed, path, {
       openRouterConfigured: openRouterConfigured(env),
     });
@@ -593,42 +659,10 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   } else if (fromFile) {
     merged = fromFile;
   } else {
-    // Dev default: single anonymous embed deployment (digigraph), no token.
-    merged = parseDigichatConfig(
-      {
-        version: 1,
-        deployment: {
-          slug: "local",
-          chrome: {
-            mode: "embed",
-            theme: "dark",
-            skin: BASELINE_EMBED_SKIN,
-            welcome: {
-              title: BASELINE_EMBED_WELCOME,
-              body: BASELINE_EMBED_WELCOME_BODY,
-            },
-            placeholder: BASELINE_EMBED_PLACEHOLDER,
-            suggestions: [...BASELINE_EMBED_SUGGESTIONS],
-          },
-          persistence: "none",
-          auth: "anonymous",
-          // Table lives in config/digichat-deploy-models.json (#5029).
-          models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
-          backend: { type: "digigraph" },
-          // Least-privilege fallback: the unconfigured container opts into
-          // nothing; BYOK / user MCP / web search require an explicit config.
-          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
-          gate: {
-            mode: "ungated",
-            activityDetail: "labels",
-            showByok: false,
-            webSearch: false,
-          },
-        },
-      },
-      "digichat config (dev default)",
-      { openRouterConfigured: openRouterConfigured(env) },
-    );
+    // No config file and no tenant overlay: house (defaults.yaml).
+    merged = loadDefaultsDocument("digichat config (defaults)", {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   }
 
   assertRenderedDeployment(merged, path);
@@ -675,14 +709,19 @@ export function setDigichatConfigForTests(cfg: DigichatConfig | null): void {
 
 /**
  * True when this process is a single-install client container (YAML `deployment`
- * or DIGICHAT_CHROME_SKIN overlay), not the synthetic no-file dev default.
- * Hosts-only multi-tenant configs stay on DIGICHAT_EMBED_TENANTS.
+ * on disk, or DIGICHAT_CHROME_SKIN). Hosts-only configs stay on
+ * DIGICHAT_EMBED_TENANTS. The built-in house document is the no-file fallback,
+ * not an anonymous install: an unknown parent must not inherit it. Session-auth
+ * deployments are not anonymous installs.
  */
 export function isExplicitClientInstall(
   config: DigichatConfig = getDigichatConfig(),
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): boolean {
   if (!config.deployment || config.deployment.auth === "session") return false;
+  // A host map is a registry. Unknown parents must not fall through to
+  // deployment, including when that deployment is house.
+  if (config.hosts && Object.keys(config.hosts).length > 0) return false;
   if (env.DIGICHAT_CHROME_SKIN?.trim()) return true;
   return existsSync(resolveConfigPath(env));
 }

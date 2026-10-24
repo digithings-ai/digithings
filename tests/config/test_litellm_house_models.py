@@ -297,8 +297,6 @@ def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
         "deepseek/deepseek-v4-flash-release",
         "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-flash-0731-release",
-        "deepseek/deepseek-v4-pro",
-        "google/gemini-3.7-flash",
         "google/gemini-3.1-flash-lite",
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
@@ -425,9 +423,17 @@ def test_digichat_public_picker_is_ci_cheap_only() -> None:
             encoding="utf-8"
         )
     )
-    product = embed["hosts"]["digithings.ai"]["models"]
+    # #6217 moved the house policy into the default document; the example only
+    # inherits it, so read the values from the document that declares them.
+    assert embed.get("extends") == "defaults"
+    defaults = yaml.safe_load(
+        (REPO_ROOT / "apps/digichat/config/defaults.yaml").read_text(encoding="utf-8")
+    )
+    product = defaults["deployment"]["models"]
     assert product["catalog"] is True
     assert product["allowPicker"] is True
+    # House runs the 1017 checkpoint on the CheaperInference API (Chris, 23 Oct
+    # 2026). The bare id stays in the catalog; it is not the deployment default.
     assert product["default"] == "deepseek/deepseek-v4.1-flash-1017"
     assert product["priceCapUsdPerMillion"] == 2
     assert "available" not in product

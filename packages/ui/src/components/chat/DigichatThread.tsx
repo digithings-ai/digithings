@@ -18,6 +18,7 @@ import {
   type ThreadMentionTrigger,
 } from "./gallery-thread/thread.aui";
 import type { WorkVisibility } from "./stock/skin-types";
+import type { ScrollMode } from "./gallery-thread/scroll-mode";
 
 export type DigichatThreadProps = {
   welcome?: string;
@@ -49,6 +50,8 @@ export type DigichatThreadProps = {
   scrollbars?: "always" | "auto";
   /** Worked-chain rhythm. `default` is the fixed spacing. */
   density?: "compact" | "default" | "airy";
+  /** `follow` chases the stream; `free` never moves the viewport. */
+  scrollMode?: ScrollMode;
 };
 
 export function DigichatThread({
@@ -69,6 +72,7 @@ export function DigichatThread({
   composerToolbar,
   scrollbars,
   density = "default",
+  scrollMode,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -89,6 +93,7 @@ export function DigichatThread({
       composerToolbar={composerToolbar}
       scrollbars={scrollbars}
       density={density}
+      scrollMode={scrollMode}
     />
   );
 }

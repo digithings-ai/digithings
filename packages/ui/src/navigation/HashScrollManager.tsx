@@ -48,8 +48,7 @@ function save(anchor: ScrollAnchor) {
 export function HashScrollManager() {
   useEffect(() => {
     const nav = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
+      PerformanceNavigationTiming | undefined;
     const returning = nav?.type === "reload" || nav?.type === "back_forward";
     const saved = returning ? readSaved() : null;
 
@@ -87,6 +86,10 @@ export function HashScrollManager() {
 
     const onScroll = () => {
       if (performance.now() < holdUntil) return;
+      /* A width change (zoom/rotation/resize) is in flight: the scroll event it
+         produces must not overwrite the anchor, otherwise the resize handler
+         would re-place to a lower section and cut off the hero. */
+      if (window.innerWidth !== width) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         anchor = readScrollAnchor();

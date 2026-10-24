@@ -6,22 +6,23 @@
  * dashboard renders them as text in Geist Mono. The frame is data: it is
  * rendered byte-for-byte, never interpreted.
  *
+ * The record itself is declared once, in `packages/tui-frame`, and shared with
+ * the digiquant client and the dashboard. This module adds only what is
+ * specific to the digichat client: its source label, the terminal size it
+ * records at and the crop that takes the chat thread out of a captured frame.
+ * It does not re-export the record — a second export surface is how the copies
+ * drifted before.
+ *
  * The client paints a left rail (the session list) and the chat thread to its
  * right (src/app.tsx:397,470,484). The rail is `min(28, max(18, floor(width *
  * 0.28)))` columns wide and its right border sits in the last rail column, so
- * the thread starts at column `rail`.
+ * the thread starts at column `rail`. The app paints that width through
+ * `railColumns()` below, so the crop and the paint cannot disagree.
  */
 
-export const TUI_SOURCE = "digichat-tui";
+import type { CroppedFrame } from "../../../packages/tui-frame/src/record.ts";
 
-export type RecordedFrame = {
-  source: string;
-  path: string;
-  capturedAt: string;
-  width: number;
-  height: number;
-  frame: string;
-};
+export const TUI_SOURCE = "digichat-tui";
 
 export const DEFAULT_FRAME_WIDTH = 100;
 export const DEFAULT_FRAME_HEIGHT = 40;
@@ -38,7 +39,7 @@ export function railColumns(width: number): number {
 export function cropMainPane(
   captured: string,
   options?: { railCols?: number },
-): { frame: string; width: number; height: number } {
+): CroppedFrame {
   const railCols = options?.railCols ?? 0;
   const kept = captured
     .split("\n")
@@ -51,26 +52,4 @@ export function cropMainPane(
     );
   }
   return { frame: kept.join("\n"), width, height: kept.length };
-}
-
-/** Build the record the dashboard reads (ADR D7: recorded frames only). */
-export function makeRecordedFrame(input: {
-  source?: string;
-  path: string;
-  capturedAt: string;
-  cropped: { frame: string; width: number; height: number };
-}): RecordedFrame {
-  return {
-    source: input.source ?? TUI_SOURCE,
-    path: input.path,
-    capturedAt: input.capturedAt,
-    width: input.cropped.width,
-    height: input.cropped.height,
-    frame: input.cropped.frame,
-  };
-}
-
-/** Serialize a record for the dashboard fixture (stable key order, newline). */
-export function serializeRecordedFrame(record: RecordedFrame): string {
-  return `${JSON.stringify(record, null, 2)}\n`;
 }

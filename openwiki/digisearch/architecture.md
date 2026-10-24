@@ -114,7 +114,7 @@ embedding batches raise rather than dropping vectors.
 Under digigraph's federated hub, the `digisearch`,
 `digisearch_fetch_all`, and `digisearch_research_delegate` tool schemas
 and dispatch live entirely in digisearch — digigraph only forwards.
-Direct consumers: digiflow via REST/MCP, CLI operators, digiclaw MCP
+Direct consumers: digiflow via REST/MCP, CLI operators, digibot MCP
 clients on `:8765/mcp`, and power users on `:8002`.
 
 ## web_search Subsystem
@@ -272,7 +272,7 @@ column, never in the watch body.
 
 `tick_due_watches` evaluates every enabled watch (cron or interval),
 runs the due ones, and isolates per-watch failures. Cron uses
-`digiclaw.cron` grammar; cron watches fire once per matching minute.
+`digibot.cron` grammar; cron watches fire once per matching minute.
 Interval watches fire when `last_run_at + interval <= now`. Datatap-
 scoped watches are skipped.
 

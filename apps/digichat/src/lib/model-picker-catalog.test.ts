@@ -49,17 +49,16 @@ describe("model picker catalog", () => {
       "google/gemini-3.8-flash",
       "z-ai/glm-5.3",
     ]);
-    const premium = resolved.picker.groups.find((group) => group.premium);
-    expect(premium?.provider).toBe("Premium");
-    expect(premium?.models.map((model) => model.id)).toEqual([
-      "google/gemini-3.8-flash",
-      "z-ai/glm-5.3",
-    ]);
+    const premiumGroups = resolved.picker.groups.filter((group) => group.premium);
+    expect(premiumGroups).toEqual([]);
+    const premiumIds = resolved.picker.groups.flatMap((group) =>
+      group.models.filter((model) => model.premium).map((model) => model.id),
+    );
+    expect(premiumIds).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     expect(resolved.picker.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",
     );
     for (const id of [
-      "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-flash",
       "deepseek/deepseek-v4-flash-0731",
       "deepseek/deepseek-v4-flash-0731-fast",
@@ -107,19 +106,24 @@ describe("model picker catalog", () => {
       { latestGenerationsPerFamily: 2, showFullList: true },
       { openRouterConfigured: false },
     );
-    expect(wide.available).toContain("deepseek/deepseek-v4-pro");
+    expect(wide.available).not.toContain("deepseek/deepseek-v4-pro");
+    expect(wide.available).toContain("deepseek/deepseek-v4-pro-0813");
     expect(wide.available).toContain("z-ai/glm-4.7-flash");
     expect(wide.available).toContain("openai/gpt-5.6-luna");
     expect(wide.available).not.toContain("deepseek/deepseek-v3.2");
     expect(wide.available).not.toContain("openai/gpt-5-mini");
+    expect(wide.available).not.toContain("google/gemini-3.7-flash");
     expect(wide.picker.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
-      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-pro-0813",
     );
   });
 
   it("drops a dated checkpoint past maxAgeDays and keeps an undated one", () => {
     expect(() =>
-      resolveModelCatalog({ maxAgeDays: 3 }, { openRouterConfigured: false }),
+      resolveModelCatalog(
+        { maxAgeDays: 3, default: "deepseek/deepseek-v4.1-flash-1017" },
+        { openRouterConfigured: false },
+      ),
     ).toThrow(/current generation/);
     const aged = resolveModelCatalog(
       { maxAgeDays: 3, default: "z-ai/glm-5.3-flash", priceCapUsdPerMillion: 20 },
@@ -131,25 +135,28 @@ describe("model picker catalog", () => {
     expect(aged.available).not.toContain("qwen/qwen3.8-max-0902");
   });
 
-  it("picks Auto, Reasoning, Fast, and Light from the newest capped set", () => {
+  it("picks Default, Reasoning, Fast, and Light from the newest capped set", () => {
     const resolved = policy();
     const byId = Object.fromEntries(resolved.picker.presets.map((preset) => [preset.id, preset]));
+    expect(byId.auto?.label).toBe("Default");
     expect(byId.auto?.model).toBe("deepseek/deepseek-v4.1-flash-1017");
-    expect(byId.auto?.description).toMatch(/DeepSeek V4.1 Flash 1017/);
+    expect(byId.reasoning?.label).toBe("Reasoning");
     expect(byId.reasoning?.model).toBe("z-ai/glm-5.3-flash");
-    expect(byId.reasoning?.description).toMatch(/Best reasoning/);
+    expect(byId.fast?.label).toBe("Fast");
     expect(byId.fast?.model).toBe("google/gemini-3.5-flash-lite");
-    expect(byId.fast?.description).toMatch(/Fastest/);
+    expect(byId.light?.label).toBe("Light");
     expect(byId.light?.model).toBe("openai/gpt-oss-120b");
-    expect(byId.light?.description).toMatch(/Lowest price/);
     expect(byId.router).toBeUndefined();
+    for (const preset of resolved.picker.presets) {
+      expect(Object.keys(preset).sort()).toEqual(["id", "label", "model"]);
+    }
   });
 
   it("adds the OpenRouter router only when that provider is configured", () => {
     const open = resolveModelCatalog({}, { openRouterConfigured: true });
     const router = open.picker.presets.find((preset) => preset.id === "router");
+    expect(router?.label).toBe("Router");
     expect(router?.model).toBe("openrouter/auto");
-    expect(router?.description).toMatch(/OpenRouter/);
     expect(open.available).toContain("openrouter/auto");
     expect(policy().available).not.toContain("openrouter/auto");
   });
@@ -157,20 +164,24 @@ describe("model picker catalog", () => {
   it("groups the full list by provider and can hide it", () => {
     const resolved = policy();
     expect(resolved.picker.groups.map((group) => group.provider)).toEqual([
-      "DeepSeek",
-      "OpenAI",
-      "Google",
-      "Z.ai",
-      "Alibaba",
-      "Xiaomi",
-      "MiniMax",
-      "Premium",
+      "deepseek",
+      "google",
+      "minimax",
+      "openai",
+      "qwen",
+      "xiaomi",
+      "z-ai",
     ]);
+    // Grouping never adds or drops an id: the tree is the same list.
+    const grouped = resolved.picker.groups.flatMap((group) => group.models.map((row) => row.id));
+    expect([...grouped].sort()).toEqual([...resolved.available].sort());
+    expect(grouped).toHaveLength(resolved.available.length);
     const deepseek = resolved.picker.groups[0]?.models ?? [];
-    const prices = deepseek.map(
-      (row) => models.find((model) => model.id === row.id)?.outputPerM ?? 0,
-    );
-    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+    // Catalog order, not default order: the 1017 checkpoint is listed second.
+    expect(deepseek.map((row) => row.id)).toEqual([
+      "deepseek/deepseek-v4.1-flash",
+      "deepseek/deepseek-v4.1-flash-1017",
+    ]);
     const hidden = resolveModelCatalog({ showFullList: false }, { openRouterConfigured: false });
     expect(hidden.picker.groups).toEqual([]);
     expect(hidden.available).toEqual([
@@ -192,9 +203,9 @@ describe("model picker catalog", () => {
     // Standard ids are at or under $2. Premium ids are above $2 and at or under $2.50. No router.
     expect(deployModels.sessionAllowlist).toEqual(deployModels.available);
     expect(deployModels.sessionAllowlist).not.toContain("openrouter/auto");
-    const premiumIds =
-      resolved.picker.groups.find((group) => group.premium)?.models.map((model) => model.id) ??
-      [];
+    const premiumIds = resolved.picker.groups.flatMap((group) =>
+      group.models.filter((model) => model.premium).map((model) => model.id),
+    );
     expect(premiumIds).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     const catalogRows = JSON.parse(JSON.stringify(catalogJson)).models as Array<{
       id: string;

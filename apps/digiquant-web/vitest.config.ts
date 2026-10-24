@@ -39,6 +39,10 @@ export default defineConfig({
         __dirname,
         "../../packages/ui/src/lib/stub-payload.ts",
       ),
+      "@digithings/ui/lib/record": path.resolve(
+        __dirname,
+        "../../packages/ui/src/lib/record.ts",
+      ),
       "@digithings/ui/pixel-wordmark": path.resolve(
         __dirname,
         "../../packages/ui/src/components/landing/PixelWordmark.tsx",

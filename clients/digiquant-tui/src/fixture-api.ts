@@ -14,26 +14,18 @@
  * taken.
  *
  * The client reads its API base at import time (`src/api.ts`), so the fixture
- * has to be the base before the app module is evaluated. Importing this module
- * first is what makes that true, and `assertFixtureBase` fails loudly if some
- * other module got there first.
+ * has to be the base before the app module is evaluated — `capture.tsx` sets
+ * `DQ_API_URL` from the URL this server reports, then imports the app. The
+ * server binds an ephemeral port (`packages/tui-frame/src/fixture-server.ts`),
+ * so two exporters can run at once.
  */
 
-import { createServer } from 'node:http';
+import {
+  startFixtureApi as startServer,
+  type FixtureApi,
+} from '../../../packages/tui-frame/src/fixture-server.ts';
 
-export const FIXTURE_API_PORT = 8791;
-export const FIXTURE_API_URL = `http://127.0.0.1:${FIXTURE_API_PORT}`;
-
-// The desk client reads the API base from the environment when its module is
-// evaluated, so this has to be set before `./app` is imported.
-process.env.DQ_API_URL = FIXTURE_API_URL;
-
-export type FixtureApi = {
-  /** The base the desk client reads. */
-  url: string;
-  /** Stop the server and release the port. */
-  close: () => Promise<void>;
-};
+export type { FixtureApi };
 
 type FixturePayload = {
   as_of: string;
@@ -142,36 +134,15 @@ function unpublishedRoute(route: string): { error: { code: string; message: stri
   return { error: { code: 'bad_request', message: `unknown route ${route}` } };
 }
 
-/** Start the fixture API on the loopback port the desk client reads. */
-export async function startFixtureApi(): Promise<FixtureApi> {
-  const server = createServer((req, res) => {
-    const route = new URL(req.url ?? '/', FIXTURE_API_URL).pathname;
-    const body = PAYLOADS[route];
-    res.writeHead(body ? 200 : 400, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(body ?? unpublishedRoute(route)));
+/** Start the fixture API on a free loopback port. */
+export function startFixtureApi(options?: { unref?: boolean }): Promise<FixtureApi> {
+  return startServer({
+    unref: options?.unref,
+    route: (pathname) => {
+      const body = PAYLOADS[pathname];
+      return body
+        ? { status: 200, body }
+        : { status: 400, body: unpublishedRoute(pathname) };
+    },
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(FIXTURE_API_PORT, '127.0.0.1', () => resolve());
-  });
-  return {
-    url: FIXTURE_API_URL,
-    close: () =>
-      new Promise<void>((resolve) => {
-        // The desk client keeps the connection alive, so the socket has to go
-        // before the server will close.
-        server.closeAllConnections?.();
-        server.close(() => resolve());
-      }),
-  };
-}
-
-/** Fail loudly when the desk client is pointed somewhere else. */
-export function assertFixtureBase(): void {
-  if (process.env.DQ_API_URL !== FIXTURE_API_URL) {
-    throw new Error(
-      `the desk client reads ${String(process.env.DQ_API_URL)}, not the fixture API ` +
-        `(${FIXTURE_API_URL}); import ./fixture-api before ./app`,
-    );
-  }
 }

@@ -50,7 +50,13 @@ function navSection(pathname: string | null): string | undefined {
   return best ?? pathname;
 }
 
-export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" | "pinned" }) {
+export function DtNav({
+  autoHide = "scroll",
+  startHidden = false,
+}: {
+  autoHide?: "scroll" | "hover" | "pinned";
+  startHidden?: boolean;
+}) {
   const pathname = usePathname();
   return (
     <NavShell
@@ -60,14 +66,11 @@ export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" |
       skipTo="#main"
       homeLabel="digithings home"
       autoHide={autoHide}
+      startHidden={startHidden}
       clipToFrame
       actions={
         <>
-          <IconLink
-            href="https://github.com/digithings-ai"
-            label="digithings on GitHub"
-            external
-          >
+          <IconLink href="https://github.com/digithings-ai" label="digithings on GitHub" external>
             <GitHubGlyph />
           </IconLink>
           <ChatTailIcon />

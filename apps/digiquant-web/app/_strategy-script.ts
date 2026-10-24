@@ -315,8 +315,6 @@ export function exampleById(id: string): ExampleThread {
   return BY_ID.get(id as ExampleId) ?? EXAMPLES[0];
 }
 
-export const PLAY_START: PlayCursor = { turn: 0, part: 0, chars: 0, holding: false };
-
 /** User line is already on screen. The assistant streams from here. */
 export function openCursor(): PlayCursor {
   return { turn: 1, part: 0, chars: 0, holding: false };

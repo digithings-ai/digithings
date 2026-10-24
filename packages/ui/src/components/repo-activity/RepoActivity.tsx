@@ -214,7 +214,10 @@ export function RepoActivity({
  * count — 53 at a desktop frame (~720px of grid), fewer as the column narrows,
  * and never below a quarter so the graph stays readable.
  */
-const HEAT_CELL = 10;
+/* The measured fit cell is 10.4px because the 7-row day rail and the cell's
+   1:1 aspect ratio set a 10.4px min-content width. Budget the real floor, not
+   10px, or the last column overhangs by a few pixels at some widths. */
+const HEAT_CELL = 10.4;
 const HEAT_CELL_GAP = 3;
 const HEAT_RAIL = 26.4 + 7.2;
 const MIN_HEAT_WEEKS = 12;
@@ -358,23 +361,23 @@ function Activity({
       {contributor ? (
         <div className="ra-activity-foot">
           <div className="ra-contributor">
-              <p className="ra-kicker">{"// maintainer"}</p>
-              <div className="ra-contributor-body">
-                <ContributorAvatar contributor={contributor} />
-                <div>
-                  {contributor.url ? (
-                    <a href={contributor.url} target="_blank" rel="noreferrer">
-                      {contributor.name}
-                    </a>
-                  ) : (
-                    <span>{contributor.name}</span>
-                  )}
-                  {contributor.role ? (
-                    <span className="ra-contributor-role">{contributor.role}</span>
-                  ) : null}
-                </div>
+            <p className="ra-kicker">{"// maintainer"}</p>
+            <div className="ra-contributor-body">
+              <ContributorAvatar contributor={contributor} />
+              <div>
+                {contributor.url ? (
+                  <a href={contributor.url} target="_blank" rel="noreferrer">
+                    {contributor.name}
+                  </a>
+                ) : (
+                  <span>{contributor.name}</span>
+                )}
+                {contributor.role ? (
+                  <span className="ra-contributor-role">{contributor.role}</span>
+                ) : null}
               </div>
             </div>
+          </div>
           <div className="ra-meta">
             <RepoLink href={repoUrl} />
           </div>
@@ -453,12 +456,7 @@ function Detailed({
         <p className="ra-kicker">{`// contributions — ${
           heatWeeks >= 50 ? "last year" : `last ${heatWeeks} weeks`
         }`}</p>
-        <RepoHeatmap
-          pulls={data.mergedPulls}
-          data={heatData}
-          weeks={heatWeeks}
-          build={heatBuild}
-        />
+        <RepoHeatmap pulls={data.mergedPulls} data={heatData} weeks={heatWeeks} build={heatBuild} />
       </div>
       <div className="ra-meta">
         <ReleaseLink release={data.latestRelease} />

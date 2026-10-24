@@ -14,7 +14,7 @@ const SHIPPED = [
   { id: "file:config/examples/local-app-memory.yaml", slug: "local-app", chromeMode: "app" },
   { id: "file:config/examples/local-cli.yaml", slug: "local-cli", chromeMode: "app" },
   { id: "file:config/examples/occ-embed.yaml#hosts/occ", slug: "occ", chromeMode: "embed" },
-  { id: "file:config/examples/digithings-ai-embed.yaml#hosts/digithings-ai", slug: "digithings-ai", chromeMode: "embed" },
+  { id: "file:config/examples/digithings-ai-embed.yaml#hosts/digithings-ai", slug: "digithings-ai", chromeMode: "app" },
   { id: "file:config/examples/dashboard-modal.yaml", slug: "digiquant-dashboard", chromeMode: "modal" },
   { id: "file:config/examples/datatap-mcp.yaml", slug: "datatap", chromeMode: "embed" },
   { id: "file:config/datatap-trial-foundry.yaml", slug: "datatap-trial-foundry", chromeMode: "embed" },

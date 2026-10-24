@@ -111,6 +111,46 @@ describe("parseSlashInput", () => {
   });
 });
 
+describe("parseSlashInput edge cases", () => {
+  it("treats empty and whitespace-only input as none", () => {
+    expect(parseSlashInput("")).toEqual({ kind: "none" });
+    expect(parseSlashInput("   ")).toEqual({ kind: "none" });
+    expect(parseSlashInput("\n\t ")).toEqual({ kind: "none" });
+  });
+
+  it("matches the command token case-insensitively but keeps the argument's case", () => {
+    expect(parseSlashInput("/LANGUAGE English")).toMatchObject({
+      kind: "command",
+      command: { id: "lang" },
+      arg: "English",
+    });
+    expect(parseSlashInput("/HeLp")).toMatchObject({ kind: "command", command: { id: "help" } });
+  });
+
+  it("matches an extra definition whatever the casing of its name", () => {
+    // paletteFrame() lowercases both sides; parseSlashInput must agree, or a
+    // host-supplied `/DigiSearch` is reachable from one surface and not the other.
+    const extra = [{ id: "digisearch", names: ["/DigiSearch"], needsArg: false, hint: "Search" }];
+    expect(parseSlashInput("/digisearch", extra)).toMatchObject({
+      kind: "command",
+      command: { id: "digisearch" },
+    });
+    expect(parseSlashInput("/DIGISEARCH now", extra)).toMatchObject({
+      kind: "command",
+      command: { id: "digisearch" },
+      arg: "now",
+    });
+  });
+
+  it("collapses runs of whitespace between command and argument", () => {
+    expect(parseSlashInput("  /export \t html  ")).toMatchObject({
+      kind: "command",
+      command: { id: "export" },
+      arg: "html",
+    });
+  });
+});
+
 describe("matchingSlashCommands", () => {
   it("lists public copy for a bare slash including tools and settings", () => {
     const matches = matchingSlashCommands("/", { webSearch: true, byok: true });
@@ -140,6 +180,18 @@ describe("matchingSlashCommands", () => {
     expect(matchingSlashCommands("/sett").map((c) => c.id)).toEqual(["settings"]);
     expect(matchingSlashCommands("/digis").map((c) => c.id)).toEqual([]);
     expect(matchingSlashCommands("/tools").map((c) => c.id)).toEqual(["tools"]);
+  });
+
+  it("does not keep the palette open on a longer unknown command", () => {
+    // `q.startsWith(name)` used to match a row the user had already typed past,
+    // so a typo such as /mcpx still showed /mcp as if it were a prefix.
+    expect(matchingSlashCommands("/mcpx").map((c) => c.id)).toEqual([]);
+    expect(matchingSlashCommands("/toolsx").map((c) => c.id)).toEqual([]);
+    expect(matchingSlashCommands("/settingsx").map((c) => c.id)).toEqual([]);
+  });
+
+  it("matches a mixed-case prefix", () => {
+    expect(matchingSlashCommands("/SETT").map((c) => c.id)).toEqual(["settings"]);
   });
 
   it("hides /theme when the embed pins the theme", () => {
@@ -173,6 +225,15 @@ describe("isLangCode", () => {
   it("accepts the featured list only", () => {
     expect(isLangCode("nl")).toBe(true);
     expect(isLangCode("de")).toBe(false);
+  });
+
+  it("normalises whitespace and case like the other code guards", () => {
+    // isEffortCode / isViewCode / isSearchEngine / isThinkingCode all trim and
+    // lowercase; a language code pasted from a settings export must not be the
+    // one guard that says no.
+    expect(isLangCode(" NL ")).toBe(true);
+    expect(isLangCode("Nl")).toBe(true);
+    expect(isLangCode(" DE ")).toBe(false);
   });
 });
 
