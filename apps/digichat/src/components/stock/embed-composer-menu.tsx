@@ -1098,7 +1098,7 @@ export function EmbedComposerMenu({
           : "mid";
       const subs = configured.flatMap((sub, i): MenuRow[] => {
         const subOn = agent || (on && api.extraToolOn(sub.id));
-        const subLabel = bareToolLabel(sub.label?.trim() || sub.id);
+        const subLabel = sub.id;
         const groupName = sub.group?.trim() ?? "";
         const opensGroup = groupName !== "" && groupName !== (configured[i - 1]?.group?.trim() ?? "");
         const heading: MenuRow[] = opensGroup
@@ -1136,10 +1136,10 @@ export function EmbedComposerMenu({
         : (t.builtinTools ?? []).map(
             (sub, i): MenuRow => ({
               id: `${t.id}::${sub.id}`,
-              label: bareToolLabel(sub.label),
+              label: sub.id,
               branch: branchAt(i),
               value: state,
-              token: bareToolLabel(sub.label),
+              token: sub.id,
               activate: () => {},
             }),
           );
@@ -1153,16 +1153,16 @@ export function EmbedComposerMenu({
     if (agent && mcpConfigs.length === 0) {
       return toolRows.map((t) => ({
         id: t.id,
-        label: bareToolLabel(t.label),
+        label: t.id,
         value: "On",
-        insert: optionDraft("/mcp", bareToolLabel(t.label)),
-        token: bareToolLabel(t.label),
+        insert: optionDraft("/mcp", t.id),
+        token: t.id,
         activate: () => {},
       }));
     }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
-      const label = bareToolLabel(serverRowLabel(s.id, s.label));
+      const label = s.id;
       return {
         id: s.id,
         label,

@@ -228,10 +228,11 @@ export const HOUSE_SERVER_IDS: ReadonlySet<string> = new Set(["digisearch", "dig
  * otherwise the deployment label with the id as fallback. Never a title-cased
  * or otherwise derived pretty name.
  */
-export function serverRowLabel(id: string, label?: string): string {
-  const clean = id.trim();
-  if (HOUSE_SERVER_IDS.has(clean)) return clean;
-  return label?.trim() || clean;
+export function serverRowLabel(id: string, _label?: string): string {
+  // Raw backend id, always. A deployment label is how an operator describes a
+  // server to themselves; the row must name what the backend calls it, so the
+  // chat and the tool trace never disagree.
+  return id.trim();
 }
 
 export function connectedTools(input: {  hasDigisearch: boolean;
@@ -244,11 +245,9 @@ export function connectedTools(input: {  hasDigisearch: boolean;
   const mcp = connectedMcpConfigs(input.mcpServers, input.mcpCustom);
   const mcpIds = new Set(mcp.map((s) => s.id));
   /**
-   * The built-in web search row keeps its deployment label ("Web search");
-   * server rows go through `serverRowLabel`, never through a label.
+   * Labels are raw backend ids everywhere: `serverRowLabel` returns the id,
+   * and the web search row uses the backend's own `web_search`.
    */
-  const labelOf = (id: string, fallback: string) =>
-    input.catalogTools.find((t) => t.id === id)?.label?.trim() || fallback;
   const subsOf = (id: string) => {
     const hit =
       input.catalogTools.find((t) => t.id === id)?.tools ??
@@ -281,7 +280,7 @@ export function connectedTools(input: {  hasDigisearch: boolean;
     rows.push({
       id: "websearch",
       slash: "websearch",
-      label: labelOf("web_search", "Web search"),
+      label: "web_search",
       kind: "catalog",
     });
   }
@@ -299,12 +298,18 @@ export function connectedTools(input: {  hasDigisearch: boolean;
     rows.push({
       id,
       slash: catalogSlashId(id),
-      label: t.label?.trim() || id,
+      label: id,
       kind: "catalog",
       ...subsOf(id),
     });
   }
+  // One row per backend id. A service row is pushed above when its capability
+  // is on, and the same id also arrives in `mcp.servers`; without this guard
+  // the menu lists digisearch and digivault twice.
+  const seen = new Set(rows.map((r) => r.id));
   for (const s of mcp) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
     rows.push({
       id: s.id,
       slash: s.id,
