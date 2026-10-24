@@ -4,7 +4,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { EmbedComposerMenu, cursorOnCurrentRow, type MenuRow } from "./embed-composer-menu";
+import {
+  EmbedComposerMenu,
+  cursorOnCurrentRow,
+  buildModelPathTree,
+  type MenuRow,
+} from "./embed-composer-menu";
 import { VIEW_MODES } from "@/lib/view-modes";
 import { VIEW_LABELS } from "@digithings/digichat-ui";
 import {
@@ -444,47 +449,204 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
-  it("puts presets above provider groups and selects a preset token", async () => {
+  it("puts modes above provider groups and selects a preset token", async () => {
     const onClose = vi.fn();
     const setModel = vi.fn();
     const picker = {
       showFullList: true,
       presets: [
-        {
-          id: "auto",
-          label: "Auto",
-          description: "DeepSeek V4.1 Flash 1017, our default.",
-          model: "alpha",
-        },
-        {
-          id: "reasoning",
-          label: "Reasoning",
-          description: "Best reasoning in this list.",
-          model: "beta",
-        },
+        { id: "auto", label: "Default", model: "alpha/flash" },
+        { id: "reasoning", label: "Reasoning", model: "beta/think" },
       ],
-      groups: [{ provider: "DeepSeek", models: [{ id: "alpha", label: "Flash" }] }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "beta", models: [{ id: "beta/think", label: "Beta Think" }] },
+      ],
     };
     const { unmount } = render(
       <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
-        <EmbedComposerMenu kind="models" picker={picker} models={["alpha"]} onClose={onClose} />
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={onClose} />
       </EmbedChatPrefsProvider>,
     );
     const radios = await screen.findAllByRole("menuitemradio");
     expect(radios.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Auto"),
+      expect.stringContaining("Default"),
       expect.stringContaining("Reasoning"),
-      expect.stringContaining("Flash"),
+      "└─flash",
     ]);
-    expect(screen.queryByRole("menuitem", { name: "DeepSeek" })).toBeNull();
-    expect(screen.getByText("DeepSeek")).not.toBeNull();
-    expect(screen.getByText("Best reasoning in this list.")).not.toBeNull();
+    expect(screen.queryByText(/our default/)).toBeNull();
+    expect(screen.queryByText(/Best reasoning/)).toBeNull();
+    // Header rows are ordinary selectable rows, not headings.
+    const header = screen.getByRole("menuitem", { name: "/beta" });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    // Only the provider holding the current model starts open.
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.queryByText("think")).toBeNull();
+    await userEvent.click(screen.getByRole("menuitem", { name: "/beta" }));
+    expect(screen.getByRole("menuitem", { name: "/beta" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.getByText("think")).not.toBeNull();
+    // The row reads `think` under /beta; the pick is still the full id.
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /think/ }));
+    expect(setModel).toHaveBeenLastCalledWith("beta/think");
+    await userEvent.click(screen.getByRole("menuitem", { name: "/alpha" }));
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.queryByText("flash")).toBeNull();
     await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
     expect(setModel).toHaveBeenCalledWith("preset:reasoning");
     unmount();
   });
 
-  it("renders the newest-generation catalog and omits superseded models", async () => {
+  it("builds the /models tree from id path segments, folders first, sorted at every level", () => {
+    const tree = buildModelPathTree([
+      "zeta/b-model",
+      "alpha/sub/deep-2",
+      "bare-model",
+      "alpha/flat",
+      "alpha/sub/deep-1",
+      "another-bare",
+      "zeta/a-model",
+      "alpha/flat",
+    ]);
+    const show = (nodes: ReturnType<typeof buildModelPathTree>): unknown[] =>
+      nodes.map((node) =>
+        node.kind === "folder" ? { [`/${node.name}`]: show(node.children) } : node.name,
+      );
+    expect(show(tree)).toEqual([
+      { "/alpha": [{ "/sub": ["deep-1", "deep-2"] }, "flat"] },
+      { "/zeta": ["a-model", "b-model"] },
+      // No slash: listed as-is at the top level, after the folders, no folder invented.
+      "another-bare",
+      "bare-model",
+    ]);
+    const deep = (tree[0] as { children: { children: { id: string }[] }[] }).children[0]!
+      .children[0]!;
+    expect(deep.id).toBe("alpha/sub/deep-1");
+  });
+
+  it("nests deeper ids, lists bare ids at the top, and picks the full id", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/sub/deep" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/sub/deep", label: "Deep" }, { id: "alpha/top", label: "Top" }] },
+        { provider: "bare", models: [{ id: "bare-model", label: "Bare" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/sub/deep"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // The folders holding the current model open by default, at every depth.
+    await screen.findByRole("menuitem", { name: "/alpha" });
+    const rows = [...document.querySelectorAll('[id^="dc-menu-"]')];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Default",
+      "/alpha",
+      "├─/sub",
+      "│  └─deep",
+      "└─top",
+      "bare-model",
+    ]);
+    expect(screen.getByRole("menuitem", { name: "/sub" }).getAttribute("aria-expanded")).toBe("true");
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /deep/ }));
+    expect(setModel).toHaveBeenLastCalledWith("alpha/sub/deep");
+    unmount();
+  });
+
+  it("opens the non-first provider holding the current model by default", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "zeta/thing" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "zeta", models: [{ id: "zeta/thing", label: "Zeta Thing" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["zeta/thing"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // The folder holding the current model (zeta) starts expanded even though
+    // alpha sorts first; alpha stays collapsed.
+    expect(screen.getByRole("menuitem", { name: "/zeta" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe("false");
+    unmount();
+  });
+
+  it("opens every folder holding a deeply nested current model by default", async () => {
+    const setModel = vi.fn();
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "a/b/c" }],
+      groups: [
+        { provider: "a", models: [{ id: "a/b/c", label: "Deep" }] },
+        { provider: "z", models: [{ id: "z/other", label: "Other" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["a/b/c"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: "/a" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "/b" }).getAttribute("aria-expanded")).toBe("true");
+    unmount();
+  });
+
+  it("exposes the full raw id as a model row's accessible name", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" } })}>
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const row = screen.getByRole("menuitemradio", { name: "alpha/flash" });
+    expect(row.getAttribute("aria-label")).toBe("alpha/flash");
+    unmount();
+  });
+
+  it("finds a model under a collapsed provider while a filter is typed", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "beta", models: [{ id: "beta/think", label: "Beta Think" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, paletteQuery: "thi" })}
+      >
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    // `/beta` starts collapsed, but the typed `thi` still finds `beta/think`
+    // by the part of the id after the provider.
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent?.trim())).toEqual([
+      "think",
+    ]);
+    unmount();
+  });
+
+  it("renders the modes first, then a /provider tree of raw ids", async () => {
     const onClose = vi.fn();
     const resolved = resolveModelCatalog(
       { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
@@ -500,20 +662,45 @@ describe("EmbedComposerMenu exclusive pickers", () => {
         />
       </EmbedChatPrefsProvider>,
     );
-    expect(await screen.findByRole("menuitemradio", { name: /Auto/ })).not.toBeNull();
-    expect(screen.getByText("GLM 5.3 Flash. Best reasoning in this list.")).not.toBeNull();
-    expect(screen.getByText("Gemini 3.5 Flash Lite. Fastest model in this list.")).not.toBeNull();
-    expect(screen.getByText("GPT-OSS 120B. Lowest price in this list.")).not.toBeNull();
-    expect(screen.getByText("Qwen 3.8 Flash")).not.toBeNull();
-    expect(screen.getByText("Premium")).not.toBeNull();
-    expect(screen.getByText("Manual selection")).not.toBeNull();
-    expect(screen.getByText("GLM 5.3")).not.toBeNull();
-    expect(screen.getByText("Gemini 3.8 Flash")).not.toBeNull();
-    expect(screen.getByText("Qwen 3.8 27B")).not.toBeNull();
-    expect(screen.queryByText("DeepSeek V4 Pro")).toBeNull();
-    expect(screen.queryByText("GLM 4.7 Flash")).toBeNull();
-    expect(screen.queryByText("GPT-5.6 Luna")).toBeNull();
-    expect(screen.queryByText("Gemini 3.1 Flash Lite")).toBeNull();
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Default"),
+      expect.stringContaining("Reasoning"),
+      expect.stringContaining("Fast"),
+      expect.stringContaining("Light"),
+      "├─deepseek-v4.1-flash",
+      "└─deepseek-v4.1-flash-1017",
+    ]);
+    // No descriptions or subtitles anywhere.
+    expect(screen.queryByText("Manual selection")).toBeNull();
+    expect(screen.queryByText("Premium")).toBeNull();
+    expect(screen.queryByText(/Best reasoning in this list/)).toBeNull();
+    // One header per provider, sorted by id, with the current one open.
+    const headers = await screen.findAllByRole("menuitem", { name: /^\// });
+    expect(headers.map((row) => row.textContent)).toEqual([
+      "/deepseek",
+      "/google",
+      "/minimax",
+      "/openai",
+      "/qwen",
+      "/xiaomi",
+      "/z-ai",
+    ]);
+    expect(headers[0]?.getAttribute("aria-expanded")).toBe("true");
+    expect(headers[1]?.getAttribute("aria-expanded")).toBe("false");
+    // Children are the raw ids under ├─ / └─, never the catalog label.
+    expect(screen.queryByText("GLM 5.3")).toBeNull();
+    expect(screen.queryByText("Gemini 3.8 Flash")).toBeNull();
+    expect(screen.queryByText("Qwen 3.8 27B")).toBeNull();
+    const branches = document.querySelectorAll('[data-slot="tools-tree-branch"]');
+    expect([...branches].map((node) => node.textContent)).toEqual(["├─", "└─"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "/google" }));
+    expect(screen.getByText("gemini-3.5-flash-lite")).not.toBeNull();
+    expect(screen.getByText("gemini-3.8-flash")).not.toBeNull();
+    expect(screen.queryByText("google/gemini-3.8-flash")).toBeNull();
+    expect(screen.queryByText("deepseek-v4-pro")).toBeNull();
+    expect(screen.queryByText("glm-4.7-flash")).toBeNull();
+    expect(screen.queryByText("gpt-5.6-luna")).toBeNull();
     unmount();
   });
 

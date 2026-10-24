@@ -19,7 +19,9 @@ const FIRST_PARTY_FRAME_ANCESTORS = [
   "'self'",
   "https://digithings.ai",
   "https://www.digithings.ai",
+  "https://occ.digithings.ai",
   "https://digiquant.io",
+  "https://www.digiquant.io",
 ] as const;
 
 /** Keep in sync with `DEV_LOOPBACK_EMBED_HOSTS` in embed-first-party.ts. */

@@ -16,7 +16,7 @@ You are the component router for the digithings monorepo. Your only job is to ma
 | `digiquant` | 8001 | NautilusTrader backtest/optimize, strategy registry |
 | `digisearch` | 8002 | RAG, document ingest, vector search |
 | `digitrace` | 8003 | LangSmith tracing helpers, status API |
-| `digiclaw` | — | Heartbeat, audit (JSONL), gateway |
+| `digibot` | — | Heartbeat, audit (JSONL), gateway |
 | `digibase` | — | Shared HTTP/audit **library** (`digibase` Python package) |
 | `digikey` | 8005 | JWT + scoped API key auth plane |
 | `digichat` | 3005 | Next.js BFF + React chat UI |

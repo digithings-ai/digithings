@@ -35,8 +35,9 @@ test("the baseline rail is the web sidebar, in order", () => {
     "/strategies/detail",
     "/strategies/deploy",
     "/tools/terminal",
-    "/tools/charts",
-    "/tools/chat",
+    "/tools/gloomberb",
+    "/tools/vela",
+    "/tools/digichat",
     "/settings",
     "/settings/paper",
   ]);
@@ -44,8 +45,8 @@ test("the baseline rail is the web sidebar, in order", () => {
   expect(railPaths("baseline")).not.toContain("/fx");
   const strategies = rows.find((row) => row.path === "/strategies");
   expect(strategies && railLine(strategies)).toBe("▾ /strategies [wip]");
-  const charts = rows.find((row) => row.path === "/tools/charts");
-  expect(charts && railLine(charts)).toBe("▸ /tools/charts [soon]");
+  const vela = rows.find((row) => row.path === "/tools/vela");
+  expect(vela && railLine(vela)).toBe("▸ /tools/vela [soon]");
   expect(railRows("baseline").some((row) => row.kind === "title" && row.text === "tools")).toBe(true);
 });
 

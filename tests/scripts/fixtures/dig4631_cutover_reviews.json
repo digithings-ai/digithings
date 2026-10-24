@@ -1,0 +1,239 @@
+{
+  "note": "Read-only snapshot of the review evidence on the seven PRs that carried the canned 'cutover slice' review on 20 Oct 2026, as the GitHub API served it. Test data for DIG-4631: it decides nothing and is never sent anywhere.",
+  "captured_at": "2026-10-20T13:35:00Z",
+  "repo": "digithings-ai/digithings",
+  "prs": [
+    {
+      "number": 5942,
+      "author": "chrizefan",
+      "head_sha": "c045b17e94",
+      "head_pushed_at": "2026-10-20T06:46:28Z",
+      "merged_at": "2026-10-20T13:06:45Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:05:43Z",
+          "commit": "c045b17e94",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        }
+      ],
+      "threads": []
+    },
+    {
+      "number": 5947,
+      "author": "chrizefan",
+      "head_sha": "1f0f9ee6b1",
+      "head_pushed_at": "2026-10-20T13:11:49Z",
+      "merged_at": "2026-10-20T13:13:09Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:06:49Z",
+          "commit": "181b357f05",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        }
+      ],
+      "threads": []
+    },
+    {
+      "number": 6013,
+      "author": "chrizefan",
+      "head_sha": "509228c713",
+      "head_pushed_at": "2026-10-20T13:13:14Z",
+      "merged_at": "2026-10-20T13:27:09Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:08:12Z",
+          "commit": "9105f81836",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        },
+        {
+          "at": "2026-10-20T13:20:31Z",
+          "commit": "509228c713",
+          "body": "Cutover slice review (sctl): scoped to the cutover module and its deploy lane; the added coverage matches the behaviour it asserts. Part of promo/slice-1."
+        },
+        {
+          "at": "2026-10-20T13:25:56Z",
+          "commit": "509228c713",
+          "body": "<!-- in-session-review -->\n\n**Cutover slice review** (sctl). Scoped to the cutover module and the deploy lane it needs; the added coverage matches the behaviour it asserts. Part of `promo/slice-1`."
+        }
+      ],
+      "threads": [
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        },
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": 5968,
+      "author": "chrizefan",
+      "head_sha": "a3b894ebb1",
+      "head_pushed_at": "2026-10-20T13:27:15Z",
+      "merged_at": "2026-10-20T13:28:12Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:09:27Z",
+          "commit": "c3cffebd5e",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        },
+        {
+          "at": "2026-10-20T13:21:50Z",
+          "commit": "152ad4e03b",
+          "body": "Cutover slice review (sctl): scoped to the cutover module and its deploy lane; the added coverage matches the behaviour it asserts. Part of promo/slice-1."
+        },
+        {
+          "at": "2026-10-20T13:27:20Z",
+          "commit": "a3b894ebb1",
+          "body": "<!-- in-session-review -->\n\n**Cutover slice review** (sctl). Scoped to the cutover module and the deploy lane it needs; the added coverage matches the behaviour it asserts. Part of `promo/slice-1`."
+        }
+      ],
+      "threads": [
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        },
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": 5948,
+      "author": "chrizefan",
+      "head_sha": "cf1b9d750f",
+      "head_pushed_at": "2026-10-20T11:51:13Z",
+      "merged_at": "2026-10-20T13:29:38Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:10:19Z",
+          "commit": "cf1b9d750f",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        },
+        {
+          "at": "2026-10-20T13:22:45Z",
+          "commit": "cf1b9d750f",
+          "body": "Cutover slice review (sctl): scoped to the cutover module and its deploy lane; the added coverage matches the behaviour it asserts. Part of promo/slice-1."
+        },
+        {
+          "at": "2026-10-20T13:28:21Z",
+          "commit": "cf1b9d750f",
+          "body": "<!-- in-session-review -->\n\n**Cutover slice review** (sctl). Scoped to the cutover module and the deploy lane it needs; the added coverage matches the behaviour it asserts. Part of `promo/slice-1`."
+        }
+      ],
+      "threads": [
+        {
+          "path": ".github/workflows/security-gitleaks.yml",
+          "is_resolved": true,
+          "is_outdated": true,
+          "resolved_by": "github-advanced-security[bot]",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "CodeQL finding."
+            }
+          ]
+        },
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        },
+        {
+          "path": "scripts/deploy-digithings-stack-cloudflare.yml",
+          "is_resolved": true,
+          "is_outdated": false,
+          "resolved_by": "chrizefan",
+          "comments": [
+            {
+              "author": "chrizefan",
+              "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": 6019,
+      "author": "chrizefan",
+      "head_sha": "d57dc5b8a7",
+      "head_pushed_at": "2026-10-20T13:02:00Z",
+      "merged_at": "2026-10-20T13:35:00Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:03:39Z",
+          "commit": "d57dc5b8a7",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        },
+        {
+          "at": "2026-10-20T13:29:47Z",
+          "commit": "d57dc5b8a7",
+          "body": "<!-- in-session-review -->\n\n**Cutover slice review** (sctl). Scoped to the cutover module and the deploy lane it needs; the added coverage matches the behaviour it asserts. Part of `promo/slice-1`."
+        }
+      ],
+      "threads": []
+    },
+    {
+      "number": 6015,
+      "author": "chrizefan",
+      "head_sha": "90b69c27f8",
+      "head_pushed_at": "2026-10-20T13:03:00Z",
+      "merged_at": "2026-10-20T13:36:00Z",
+      "reviews": [
+        {
+          "at": "2026-10-20T13:04:40Z",
+          "commit": "90b69c27f8",
+          "body": "**Cutover slice review** (local source-control loop, sctl). Scope: the twelve-x Cloudflare cutover and the deploy lane it needs. Checked: the change is limited to the named module, no unrelated edits, and the required checks are the ones this slice depends on. Tracked in the promotion slice `promo/slice-1`."
+        },
+        {
+          "at": "2026-10-20T13:24:36Z",
+          "commit": "90b69c27f8",
+          "body": "<!-- in-session-review -->\n\n**Cutover slice review** (sctl). Scoped to the cutover module and the deploy lane it needs; the added coverage matches the behaviour it asserts. Part of `promo/slice-1`."
+        }
+      ],
+      "threads": []
+    }
+  ]
+}

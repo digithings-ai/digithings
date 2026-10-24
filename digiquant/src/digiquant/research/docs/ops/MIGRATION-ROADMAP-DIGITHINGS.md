@@ -20,7 +20,7 @@ Execution is intentionally **three waves**. Do **not** start Wave 3 (user worksp
 
 | Wave | Priority | Outcome |
 |------|----------|---------|
-| **Wave 1 — digithings + digiquant** | **First** | research **lives inside the digithings monorepo** as a **digiquant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to digichat/digiclaw integration. |
+| **Wave 1 — digithings + digiquant** | **First** | research **lives inside the digithings monorepo** as a **digiquant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to digichat/digibot integration. |
 | **Wave 2 — digigraph operations** | **Second** | **Stop depending on Cowork UI schedules** for recurring work. Implement **daily** and **postmortem** (and related) runs as **digigraph** graphs (**LangGraph** in digithings — “line graph” in conversation = this stack). **Systematic execution**: your own schedule (cron / API / queue), **API connections**, MCP and tools already wired in digithings. Graph nodes call the **same canonical Python/scripts** (`publish_document`, `run_db_first`, `validate_db_first`, etc.) where possible. |
 | **Wave 3 — Users & tenancy** | **Final** | **User access** (OAuth), **user settings**, **user-level research**, **workspaces**, **BYOK**, **Stripe**, **RLS** — the productized multi-tenant plan (former **P2–P8** in this doc). |
 
@@ -151,7 +151,7 @@ Each phase has **deliverables**, **files/migrations**, and **acceptance criteria
 
 ### P1b — digigraph scheduled operations (Wave 2)
 
-**Goal:** **Delegate** recurring **daily** pipeline steps and **postmortem** (and similar review) runs from **Claude Cowork scheduled tasks** to **digigraph** (**LangGraph**) inside digithings: a **single systematic** system with **schedule** (cron, queue worker, or HTTP trigger), **provider APIs**, and **MCP / tool** access already centralized (digiclaw, digithings connectors).
+**Goal:** **Delegate** recurring **daily** pipeline steps and **postmortem** (and similar review) runs from **Claude Cowork scheduled tasks** to **digigraph** (**LangGraph**) inside digithings: a **single systematic** system with **schedule** (cron, queue worker, or HTTP trigger), **provider APIs**, and **MCP / tool** access already centralized (digibot, digithings connectors).
 
 **Implementation sketch:** [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) — replaces narrative-only planning with graph names, node boundaries, and acceptance cross-check for this section.
 

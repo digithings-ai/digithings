@@ -56,20 +56,19 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
-- `guardrails` (optional) is off unless a key is set. `maxToolCallsPerTurn`
-  follows the per-adapter matrix in `toolCallCapSupport`
+- `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 5`,
+  `answerAt: 0.7`, `pauseAt: 0.9`. The per-visitor house minute is cleared.
+  `tokensPerMinute.deployment` is the trial's one shared allowance.
+  TODO: it stays unset until the Azure TPM for gpt-5.6-terra in westeurope
+  is known. The request limiter stays on.
+  `maxToolCallsPerTurn` follows the per-adapter matrix in `toolCallCapSupport`
   (`src/lib/deploy-config/schema.ts`) and the Guardrails section of
   `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
   (openai-completions, openai-responses, anthropic, google-vertex) enforce
   it and stop the tool loop. langgraph and ag-ui stop forwarding the next
   call (notice/best-effort, no `tool_choice: none` follow-up). digigraph is
   notice only. a2a is refused at config load. `backend.maxToolCalls` remains
-  the Foundry alias and the shared key wins. `tokensPerMinute.deployment`
-  matches an upstream TPM and `tokensPerMinute.user` is a per-person limit.
-  The trial yaml leaves a proposed cap of `5` (alternative `4`) and the
-  deployment TPM commented out until the Azure number for gpt-5.6-terra in
-  westeurope is filled in. See the Guardrails section in
-  `apps/digichat/ARCHITECTURE.md`.
+  the Foundry alias and the shared key wins.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on
   `GET /indexes/<name>`, and the tool is refused with "Access denied. Check

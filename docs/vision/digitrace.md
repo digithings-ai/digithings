@@ -46,7 +46,7 @@ built (DIG-2656 to DIG-2663) and is not yet in production.
 
 **12-month roadmap:**
 - Roll the digibase `install_metrics` helper out to every service so each exposes a `/metrics` endpoint with consistent labels
-- X-Request-ID correlation ID propagation across all services (digigraph, digisearch, digiquant, digikey, digiclaw) — enables tracing a request through the full stack
+- X-Request-ID correlation ID propagation across all services (digigraph, digisearch, digiquant, digikey, digibot) — enables tracing a request through the full stack
 - PII redaction and a hash-and-length span payload before any data reaches the trace store
 - Structured logging throughout (digisearch currently has zero structured logging)
 - Grafana dashboard for operational visibility

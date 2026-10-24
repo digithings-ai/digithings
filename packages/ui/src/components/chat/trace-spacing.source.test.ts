@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * The Worked chain reads one spacing scale. Default values are the fixed
- * rhythm: room under the title, one gap between sibling groups, a tighter
- * gap inside a group, and a short step from a header into its body.
+ * The Worked chain reads one density set. `--trace-*` are aliases of the
+ * `--density-*` tokens, and the stack rhythm comes from a parent flex `gap` on
+ * the chain content and the assistant turn — never from sibling margins.
  */
 const stylesDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "styles");
 
@@ -28,13 +28,13 @@ describe("worked chain spacing tokens", () => {
     expect(body).toContain("--trace-space-5: 0.625rem");
     expect(body).toContain("--trace-space-6: 0.75rem");
     expect(body).toContain("--trace-space-7: 1rem");
-    expect(body).toContain("--trace-title-gap: var(--trace-space-5)");
-    expect(body).toContain("--trace-group-gap: var(--trace-space-4)");
-    expect(body).toContain("--trace-within-gap: var(--trace-space-2)");
-    expect(body).toContain("--trace-header-gap: var(--trace-space-2)");
-    expect(body).toContain("--trace-body-pad: var(--trace-space-1)");
-    expect(body).toContain("--trace-body-indent: var(--trace-space-6)");
-    expect(body).toContain("--trace-chain-gap: var(--trace-space-6)");
+    expect(body).toContain("--trace-space-8: 1.25rem");
+    // The semantic names survive as aliases, so existing rules keep working.
+    expect(body).toContain("--trace-title-gap: var(--density-gap-3)");
+    expect(body).toContain("--trace-group-gap: var(--density-gap-2)");
+    expect(body).toContain("--trace-within-gap: var(--density-gap-1)");
+    expect(body).toContain("--trace-body-pad: var(--density-pad)");
+    expect(body).toContain("--trace-chain-gap: var(--density-gap-4)");
   });
 
   it("puts the title gap and one sibling gap on the chain content", () => {
@@ -63,12 +63,13 @@ describe("worked chain spacing tokens", () => {
     }
   });
 
-  it("gives reasoning and tool groups the same sibling margin", () => {
+  it("zeroes the reasoning and tool-group margins once, in chat-aui.css", () => {
     expect(aui).toMatch(
       /\[data-slot="reasoning-root"\],[\s\S]*?\[data-slot="tool-group-root"\][\s\S]*?\{[^}]*margin: 0;/,
     );
-    expect(skin).toMatch(/\[data-slot="reasoning-root"\] \{\s*\/\*[\s\S]*?\*\/\s*margin: 0;\s*\}/);
-    expect(skin).toMatch(/\[data-slot="tool-group-root"\] \{\s*margin: 0;\s*\}/);
+    // The skin used to repeat the same two rules; the single source is aui.
+    expect(skin).not.toMatch(/\[data-slot="reasoning-root"\]\s*\{/);
+    expect(skin).not.toMatch(/\[data-slot="tool-group-root"\]\s*\{\s*margin: 0;/);
     expect(skin).not.toContain("margin-bottom: 1.25rem");
   });
 
@@ -76,11 +77,33 @@ describe("worked chain spacing tokens", () => {
     expect(skin).toContain("margin-top: var(--trace-header-gap, 0.25rem)");
     expect(skin).toContain("padding-block: var(--trace-body-pad, 0.125rem)");
     expect(skin).toContain("padding-inline: var(--trace-body-indent, 0.75rem) 0");
-    expect(skin).toContain("margin-top: var(--trace-within-gap, 0.25rem)");
-    expect(skin).toContain("gap: var(--trace-within-gap, 0.25rem)");
+    expect(skin).toContain("margin-top: var(--density-gap-1, 0.25rem)");
+    // The tool chain's item gap lives in aui, not twice in both sheets.
+    expect(aui).toContain("gap: var(--density-gap-1, 0.125rem)");
+    expect(skin).not.toContain("gap: var(--trace-within-gap, 0.25rem)");
     expect(skin).not.toContain("margin-top: 0.45rem");
     expect(skin).not.toContain("padding: 0.2rem 0 0.15rem 0.85rem");
     expect(skin).not.toContain("gap: 1rem");
+  });
+
+  it("spaces the assistant turn with one flex gap instead of sibling margins", () => {
+    const content = skin.match(/\.aui-assistant-message-content \{\n([\s\S]*?)\n\}/);
+    expect(content?.[1] ?? "").toContain("display: flex");
+    expect(content?.[1] ?? "").toContain("flex-direction: column");
+    expect(content?.[1] ?? "").toContain("gap: var(--density-gap-2, 0.5rem)");
+    // The old doubles: sibling tool margins, chain margins and chain bottom.
+    expect(aui).not.toContain('[data-slot="aui_tool-fallback"] + [data-slot="aui_tool-fallback"]');
+    expect(aui).not.toMatch(/\[data-slot="aui_tool-chain"\][\s\S]{0,120}?margin-bottom/);
+  });
+
+  it("leaves no utility spacing on the reasoning and message stacks", () => {
+    const components = join(stylesDir, "..", "components", "chat");
+    const thread = readFileSync(join(components, "gallery-thread", "thread.aui.tsx"), "utf8");
+    const reasoning = readFileSync(join(components, "gallery-thread", "reasoning.tsx"), "utf8");
+    // The parent flex gap owns these; a `gap-y-*` or `space-y-*` here doubles it.
+    expect(thread).not.toContain("mb-4 flex flex-col gap-y-6 empty:hidden");
+    expect(reasoning).not.toContain("aui-reasoning-root mb-4");
+    expect(reasoning).not.toContain("aui-reasoning-text-content space-y-4");
   });
 
   it("keeps the chain header's marker-to-label gap", () => {
@@ -88,5 +111,43 @@ describe("worked chain spacing tokens", () => {
       /\[data-slot="aui_assistant-message-indicator"\]\.aui-work-status,\n[\s\S]*?\[data-slot="aui_work-chain-trigger"\]\.aui-work-status \{\n([\s\S]*?)\n\}/,
     );
     expect(row?.[1]).toContain("gap: 0.45rem");
+  });
+
+  it("collapses an empty assistant footer so assistant -> user is the message gap", () => {
+    const rule = skin.match(
+      /\[data-slot="aui_assistant-message-footer"\]:not\(:has\(> \*\)\) \{([\s\S]*?)\}/,
+    );
+    expect(rule?.[1]).toContain("min-height: 0");
+    expect(rule?.[1]).toContain("padding-top: 0");
+    // The turn-to-turn gap is the density token, not a utility.
+    expect(skin).toMatch(
+      /\[data-slot="aui_message-group"\] \{\s*gap: var\(--density-gap-4/,
+    );
+  });
+
+  it("keeps the top-anchor spacer to one message gap, taken back in flow", () => {
+    const rule = aui.match(/\[data-aui-top-anchor-user\] \{([\s\S]*?)\}/);
+    expect(rule?.[1]).toContain("padding-top: var(--density-gap-4");
+    expect(rule?.[1]).toContain("margin-top: calc(-1 * var(--density-gap-4");
+    expect(rule?.[1]).not.toContain("1.5rem");
+  });
+
+  it("keeps the earlier turns' action bar in flow so it never paints over the next turn", () => {
+    // The bar is 24px tall; the message gap is 12/8/20px by density. A float
+    // would necessarily cover the next turn's first line, so the bar takes its
+    // footer row back in flow when it appears on hover.
+    expect(skin).not.toMatch(/\.aui-assistant-action-bar-root\[data-floating\]/);
+    expect(skin).not.toMatch(
+      /\[data-slot="aui_assistant-message-footer"\]:has\(> \[data-floating\]\)/,
+    );
+    const thread = readFileSync(
+      join(stylesDir, "..", "components", "chat", "gallery-thread", "thread.aui.tsx"),
+      "utf8",
+    );
+    expect(thread).not.toContain("autohideFloat");
+    // The un-hovered turn still collapses to the message gap.
+    expect(skin).toMatch(
+      /\[data-slot="aui_assistant-message-footer"\]:not\(:has\(> \*\)\) \{[^}]*min-height: 0/,
+    );
   });
 });

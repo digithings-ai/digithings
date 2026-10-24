@@ -1,5 +1,7 @@
 version: 1
-# First-party digichat Thread — unconfigured container default.
+# First-party digichat Thread skin template. Not house.
+# House is config/defaults.yaml. Copy this file when a client wants the
+# skin with empty tools and the generic "Ask a question" welcome.
 # Copy to DIGICHAT_CONFIG_PATH or set DIGICHAT_CHROME_SKIN=digichat.
 # Empty catalog: no Search / Vault / MCP until the operator adds them.
 # YAML that omits `skin` still parses as catalog `base`.

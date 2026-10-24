@@ -24,9 +24,9 @@ deployment:
     branchPicker: false
     modelPicker: false
   models:
-    default: gpt-4o-mini
+    default: deepseek/deepseek-v4.1-flash-1017
     available:
-      - gpt-4o-mini
+      - deepseek/deepseek-v4.1-flash-1017
     allowPicker: false
   cli:
     enabled: true

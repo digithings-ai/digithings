@@ -155,7 +155,7 @@ def test_every_nonnegative_patch_count_lands_in_exactly_one_tier():
         ("main", "main/develop"),
         ("develop", "main/develop"),
         ("module/digiquant", "module/**"),
-        ("module/digiclaw", "module/**"),
+        ("module/digibot", "module/**"),
         ("chore/sync-module-develop", "chore/sync-module-*"),
         ("release/v0.1.0", "release/v*"),
         # Not excluded -- the control that makes the five above mean something.

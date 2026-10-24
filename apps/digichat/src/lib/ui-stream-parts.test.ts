@@ -479,7 +479,7 @@ describe("writeStandardActivity", () => {
       const starts = chunks.filter((c) => c.type === "tool-input-start");
       expect(starts).toHaveLength(1);
       expect(starts[0]).toMatchObject({ toolName: tool });
-      expect(String(starts[0].title)).toMatch(/^DigiSearch /);
+      expect(String(starts[0].title)).toBe(tool);
       const outs = chunks.filter((c) => c.type === "tool-output-available");
       expect(outs).toHaveLength(1);
       expect(outs[0].toolCallId).toBe(starts[0].toolCallId);

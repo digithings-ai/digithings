@@ -68,7 +68,7 @@ RUN uv pip install --system -r /tmp/stack-requirements.txt \
       "digillm==0.1.0" \
       "digigraph[mcp]==0.1.0" \
       "digifetch==0.1.0" \
-      "digiclaw==0.1.0" \
+      "digibot==0.1.0" \
       "digivault[service]==0.1.0"
 COPY image-packages/stack/digisearch-seeds /app/digisearch/seeds
 # ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
