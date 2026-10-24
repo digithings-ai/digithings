@@ -1677,7 +1677,13 @@ def test_a_host_mismatch_refusal_names_no_credential(tmp_path):
         contracts.resolve(row, {})
     message = str(caught.value)
     assert "s3cret" not in message
-    assert "evil.com" in message
+    # The host must be named as the host: the printed URL is parsed and its
+    # authority compared, not substring-matched -- "evil.com" at an arbitrary
+    # position inside a URL is not the host (CodeQL: incomplete URL substring
+    # sanitization).
+    shown = next(seg for seg in message.split("'") if "://" in seg)
+    assert urlsplit(shown).hostname == "evil.com"
+    assert "***@" in urlsplit(shown).netloc
 
 
 @pytest.mark.parametrize(
