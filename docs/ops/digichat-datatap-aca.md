@@ -26,7 +26,7 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 |---|---|
 | prod image | `datatapchatregistry.azurecr.io/digichat:v2.3.2` (digest `sha256:c5708729fea2…`) |
 | prod revision | `digichat--0000007`, created 2026-09-21, still the only revision |
-| `develop` version | `2.6.9` |
+| `develop` version | `2.7.0` |
 | commits behind prod on `apps/digichat` | **67** |
 | last push to the ACR | **2026-09-21** — nothing since, not even a 2.4.0 image |
 
