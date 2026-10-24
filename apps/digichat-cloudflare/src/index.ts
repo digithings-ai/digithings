@@ -19,7 +19,7 @@ import {
 } from "./paths";
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
-import { resolveEmbedTenants } from "./tenants-kv";
+import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
@@ -87,6 +87,10 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
+    // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
+    // at boot and overwritten below; this var is the seam for `wrangler dev`
+    // and for a deploy that pins the document in `[vars]`.
+    DIGICHAT_CONFIG_YAML: workerVars.DIGICHAT_CONFIG_YAML ?? "",
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
@@ -100,15 +104,22 @@ export class DigiChatContainer extends Container {
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
 
-  private tenantsResolved = false;
+  /** One boot = one KV read of both the tenant registry and the config document. */
+  private bootConfigResolved = false;
 
   /**
    * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
    * tenant config (secret refs resolved from Worker secrets), falling back to
    * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   *
+   * Then read the deployment document itself from the same namespace's
+   * `config-yaml` key and forward it as DIGICHAT_CONFIG_YAML, so the container's
+   * config lives outside both the image and the Worker. Both reads happen once
+   * per boot; `onStop()` re-arms them, so a KV edit plus the container's idle
+   * sleep is all a config change needs — no redeploy.
    */
   override async fetch(request: Request): Promise<Response> {
-    if (!this.tenantsResolved) {
+    if (!this.bootConfigResolved) {
       try {
         const { json, source } = await resolveEmbedTenants(
           workerVars.DIGICHAT_TENANTS_KV,
@@ -124,7 +135,15 @@ export class DigiChatContainer extends Container {
         console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
         this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
       }
-      this.tenantsResolved = true;
+      // KV wins over the `[vars]` seam. `resolveConfigYaml` never throws: a
+      // missing key or failed read is logged there and leaves the container on
+      // its own file/defaults, which is the documented precedence.
+      const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
+      if (source === "kv") {
+        this.envVars = { ...this.envVars, DIGICHAT_CONFIG_YAML: yaml };
+      }
+      console.log(`[config-kv] digichat config source=${source}`);
+      this.bootConfigResolved = true;
     }
     try {
       return await super.fetch(request);
@@ -152,9 +171,9 @@ export class DigiChatContainer extends Container {
     }
   }
 
-  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  /** Re-read KV tenant + config on the next boot (the DO outlives container sleeps). */
   override onStop(): void {
-    this.tenantsResolved = false;
+    this.bootConfigResolved = false;
   }
 }
 
@@ -181,6 +200,12 @@ export interface Env {
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;
+  /**
+   * Deployment document (YAML or JSON text). Normally supplied at boot from
+   * KV `config-yaml` in the DIGICHAT_TENANTS_KV namespace; a `[vars]` value is
+   * the local-dev / pinned-document seam and loses to KV when both exist.
+   */
+  DIGICHAT_CONFIG_YAML?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;

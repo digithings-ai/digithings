@@ -160,6 +160,69 @@ function resolveAccent(raw: string | null | undefined): Accent {
 }
 
 /**
+ * Trial proof channel (DIG-4523).
+ *
+ * The embedding page hands over a server-signed, host-scoped trial proof over
+ * postMessage. The proof is a short-lived bearer: it is held in memory only —
+ * never in storage, never in a URL — and read at send time, so a proof that
+ * arrives after mount still reaches the outgoing request.
+ *
+ * The message type carries no client name: the channel is shared by every
+ * embedding page.
+ */
+export const TRIAL_PROOF_MESSAGE_TYPE = "trial:proof";
+
+/** Origin of the page that embeds us — the only origin allowed to post a proof. */
+export function embedParentOrigin(host: string | undefined): string | null {
+  const raw = host?.trim();
+  if (!raw) return null;
+  try {
+    return raw.includes("://") ? new URL(raw).origin : `https://${raw}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Host part of a host string, to compare the host a proof was signed for. */
+function hostKey(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a trial proof out of a postMessage.
+ *
+ * Returns the proof, or null when the message must be ignored: a foreign
+ * origin, a different message type, an empty value, or a proof that names a
+ * host other than the one we serve. The server re-verifies the proof against
+ * the host it serves — the client never papers over that.
+ */
+export function readTrialProofMessage(
+  event: { origin: string; data: unknown },
+  options: { parentOrigin: string; servingHost?: string },
+): string | null {
+  if (event.origin !== options.parentOrigin) return null;
+  const data = event.data as
+    | { type?: string; proof?: string; host?: string }
+    | null
+    | undefined;
+  if (!data || data.type !== TRIAL_PROOF_MESSAGE_TYPE) return null;
+  // The field name is fixed by the wire contract: the page posts
+  // `{ type: "trial:proof", proof }`. Any other spelling is not our proof.
+  const raw = data.proof;
+  if (typeof raw !== "string" || raw.trim().length === 0) return null;
+  const proof = raw.trim();
+  const named = data.host?.trim();
+  if (named && hostKey(named) !== hostKey(options.servingHost)) return null;
+  return proof;
+}
+
+/**
  * useSearchParams() (not the searchParams page prop) is required inside this
  * "use client" tree — the prop never delivered ?token=/?host= in production
  * (#1379), silently breaking per-tenant embeds. Suspense is mandatory.
@@ -542,6 +605,27 @@ function EmbedChat({
   planProofRef.current = planProof ?? null;
   const getPlanProof = useCallback(() => planProofRef.current, []);
 
+  // Host-scoped trial proof (DIG-4523): the embedding page hands over a
+  // server-signed proof over postMessage. It is a short-lived bearer, so it is
+  // held in memory only — never in storage, never in a URL — and read at send
+  // time so a proof that arrives after mount still reaches the header.
+  const servingHost = resolveEmbedHost(host);
+  const trialProofRef = useRef<string | null>(null);
+  const getTrialProof = useCallback(() => trialProofRef.current, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // A proof is bound to one host: drop an earlier one when the host changes.
+    trialProofRef.current = null;
+    const parentOrigin = embedParentOrigin(servingHost);
+    if (!parentOrigin) return;
+    const onMessage = (event: MessageEvent) => {
+      const proof = readTrialProofMessage(event, { parentOrigin, servingHost });
+      if (proof) trialProofRef.current = proof;
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [servingHost]);
+
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
   const tenantAllowsWeb = uiFlags.webSearch;
   const getEnableWebSearch = useCallback(
@@ -717,6 +801,7 @@ function EmbedChat({
     getEffort,
     getSearchEngine,
     getPlanProof,
+    getTrialProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.

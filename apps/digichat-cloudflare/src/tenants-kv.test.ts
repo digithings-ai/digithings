@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mergeTenants, resolveEmbedTenants, TENANTS_KV_KEY } from "./tenants-kv";
+import {
+  CONFIG_KV_KEY,
+  mergeTenants,
+  resolveConfigYaml,
+  resolveEmbedTenants,
+  TENANTS_KV_KEY,
+} from "./tenants-kv";
 
 const env = { OCC_INVITE_KEY: "invite-123", MCP_EDGE_KEY: "edge-456" };
 const kvCfg = {
@@ -83,5 +89,33 @@ describe("resolveEmbedTenants", () => {
     const kv = { get: async (k: string) => (k === TENANTS_KV_KEY ? JSON.stringify(kvCfg) : null) };
     expect((await resolveEmbedTenants(kv, "not json", env)).source).toBe("kv");
     expect((await resolveEmbedTenants(undefined, "not json", env)).source).toBe("none");
+  });
+});
+
+/**
+ * The deployment document lives in the same KV namespace under `config-yaml`,
+ * so it can be edited without redeploying either the Worker or the image.
+ */
+describe("resolveConfigYaml", () => {
+  it("reads the document from the config-yaml key", async () => {
+    const doc = "version: 1\ndeployment:\n  slug: occ\n";
+    const kv = { get: async (k: string) => (k === CONFIG_KV_KEY ? doc : null) };
+    await expect(resolveConfigYaml(kv)).resolves.toEqual({ yaml: doc, source: "kv" });
+    // Same namespace as the tenant registry, different key.
+    expect(CONFIG_KV_KEY).toBe("config-yaml");
+    expect(CONFIG_KV_KEY).not.toBe(TENANTS_KV_KEY);
+  });
+
+  it("treats a missing key, an empty value or a missing binding as none", async () => {
+    const missing = { get: async () => null };
+    const blank = { get: async () => "  \n" };
+    await expect(resolveConfigYaml(missing)).resolves.toEqual({ yaml: "", source: "none" });
+    await expect(resolveConfigYaml(blank)).resolves.toEqual({ yaml: "", source: "none" });
+    await expect(resolveConfigYaml(undefined)).resolves.toEqual({ yaml: "", source: "none" });
+  });
+
+  it("leaves the container on its file/defaults when the KV read fails", async () => {
+    const broken = { get: async () => { throw new Error("down"); } };
+    await expect(resolveConfigYaml(broken)).resolves.toEqual({ yaml: "", source: "none" });
   });
 });

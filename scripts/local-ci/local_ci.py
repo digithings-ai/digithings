@@ -251,6 +251,38 @@ def build_env(base=None):
 
 ENV = build_env()
 
+# A scanner has to finish before the tree is judged, and the budget for that is
+# the machine's, not the guard's. On 2026-10-22 the post-merge run on develop
+# 8cfd404816a6 turned three scanners red on a 600 s timeout while the tree was
+# clean (DIG-5318). The budget is overridable so a slow host can be given more
+# room without a code change.
+SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
+
+
+def no_fsmonitor_env(base):
+    """``base`` plus a git override that switches the fsmonitor daemon off.
+
+    The scanners read the tree through git, and git must not read it through
+    the fsmonitor daemon. The daemon is a per-clone cache of the working tree
+    and a busy machine can wedge it: in the post-merge worktree (4.3 GB,
+    node_modules + .venv) `git ls-files` spent 5.2 s of wall clock on 0.01 s of
+    CPU inside the daemon, and then failed outright with "could not read IPC
+    response" (DIG-5318). With the daemon off the same call takes 0.02 s, and
+    a tree scan never depends on a cache that can be stale, slow or broken.
+    """
+    env = dict(base)
+    try:
+        count = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
+    except ValueError:
+        count = 0
+    env["GIT_CONFIG_COUNT"] = str(count + 1)
+    env[f"GIT_CONFIG_KEY_{count}"] = "core.fsmonitor"
+    env[f"GIT_CONFIG_VALUE_{count}"] = "false"
+    return env
+
+
+SCAN_ENV = no_fsmonitor_env(ENV)
+
 def log(m):
     with open(f"{LOGD}/local-ci.log", "a") as f: f.write(time.strftime("%F %T ") + m + "\n")
 
@@ -1450,6 +1482,46 @@ def ruff_paths_fallback(wt):
     return paths or None
 
 
+def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, env=None,
+              stall_rcs=(124, 3)):
+    """Run one content scanner and record how it answered.
+
+    A scanner that times out did not find anything: it did not finish. Those
+    are different verdicts, and a report that cannot tell them apart blames the
+    tree for the machine (DIG-5318). So the step is retried once -- a wedged
+    daemon often recovers -- and a scanner that still does not answer is
+    recorded as a stall: red, because the guard has not cleared the tree, but
+    named as the stall it is.
+
+    ``fails`` collects the verdict: the step name for a finding or the guard's
+    own error, ``"<name>:stall"`` for a scanner that did not answer at all.
+    Returns True when the scanner answered and found nothing.
+    """
+    if out is None:
+        out = sys.stdout
+    if fails is None:
+        fails = []
+    for attempt in (1, 2):
+        out.write(f"\n===== {name}\n")
+        rc, _ = sh(cmd, cwd=cwd, timeout=timeout, out=out, name=name, env=env)
+        if rc == 0:
+            return True
+        if rc not in stall_rcs:
+            # rc 1 is a finding; anything else is the guard's own error.
+            fails.append(name)
+            return False
+        out.write(
+            f"{name}: did not answer (rc={rc}, {timeout}s budget, attempt "
+            f"{attempt}/2); retrying once\n"
+        )
+    fails.append(f"{name}:stall")
+    out.write(
+        f"{name}: STALL -- the guard did not answer in {timeout}s twice. The tree "
+        "was not judged: this is a slow or wedged host, not a finding.\n"
+    )
+    return False
+
+
 def run_checks(pr, out, summary=None):
     """Run every gate on the PR. Returns the list of failed gate names.
 
@@ -1461,8 +1533,13 @@ def run_checks(pr, out, summary=None):
     _guard()
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
-    def step(name, cmd, timeout=1800, cwd=None):
-        out.write(f"\n===== {name}\n"); rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=out, name=name)
+    def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=()):
+        if stall_rcs:
+            # A scanner that does not answer is a stall, not a finding.
+            return scan_step(name, cmd, timeout=timeout, out=out, fails=fails,
+                             cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
+        out.write(f"\n===== {name}\n")
+        rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=out, name=name, env=env)
         if rc != 0: fails.append(name)
         return rc == 0
     # PR title
@@ -1497,7 +1574,8 @@ def run_checks(pr, out, summary=None):
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
               "scripts/check_r0_no_client_literals.py"]:
-        if os.path.exists(f"{WT}/{s.split()[0]}"): step(s.split()[0], f"python3 {s}", 600)
+        if os.path.exists(f"{WT}/{s.split()[0]}"):
+            step(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, env=SCAN_ENV, stall_rcs=(124, 3))
     step("actionlint", ["actionlint"], 300)
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
     if "uv-sync" not in fails:

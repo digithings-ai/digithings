@@ -20,6 +20,23 @@
 
 export const TENANTS_KV_KEY = "embed-tenants";
 
+/**
+ * digichat deployment document from the same KV namespace, key `config-yaml`.
+ *
+ * This is the whole config document (YAML or JSON text, same shape as
+ * DIGICHAT_CONFIG_PATH / `config/defaults.yaml`): deployment, hosts, chrome.
+ * It lives outside the Container image and outside the Worker so an operator
+ * edit applies on the next Container boot with no redeploy. Non-secret by
+ * design — credentials stay named env refs (`tokenEnv`) resolved in the
+ * container's process environment, never inline tokens.
+ */
+export const CONFIG_KV_KEY = "config-yaml";
+
+export type ConfigYamlResult = {
+  yaml: string;
+  source: "kv" | "none";
+};
+
 type Json = Record<string, unknown>;
 export type TenantSecrets = Record<string, unknown>;
 
@@ -134,4 +151,25 @@ export async function resolveEmbedTenants(
     console.warn(`[tenants-kv] ${host}: unresolved secret refs ${names.join(",")}; kept legacy entry if any`);
   }
   return result;
+}
+
+/**
+ * Read the deployment document from KV. A missing binding, a missing key or a
+ * blank value all mean "none": the container then uses its own file/defaults,
+ * exactly as it did before this key existed. A read failure is logged rather
+ * than thrown — config plumbing must not take chat down — and the caller
+ * forwards the empty string so the loader's own precedence still applies.
+ */
+export async function resolveConfigYaml(kv: KvLike | undefined): Promise<ConfigYamlResult> {
+  if (!kv) return { yaml: "", source: "none" };
+  try {
+    const raw = await kv.get(CONFIG_KV_KEY);
+    if (typeof raw !== "string" || !raw.trim()) return { yaml: "", source: "none" };
+    return { yaml: raw, source: "kv" };
+  } catch (e) {
+    console.error(
+      `[config-kv] KV ${CONFIG_KV_KEY} read failed, using the container's file/defaults: ${(e as Error).message}`,
+    );
+    return { yaml: "", source: "none" };
+  }
 }

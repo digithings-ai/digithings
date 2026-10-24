@@ -368,7 +368,48 @@ same rule: `--vacuum` is plain, `--vacuum-full` is guarded by
   archived. The report counts the skipped runs so the backlog is visible
   instead of silent.
 
+## Scrubbing bearer values from result_json (DIG-5228)
+
+A run result carries the agent's own run token in the text of its `stdout`,
+and the token was stored as it was printed: `heartbeat_runs.result_json`
+held the value in the clear, in rows written before the server learned to
+redact it. The value is a credential, so it has to be taken out of the rows
+that already exist.
+
+The scrub lives in `scripts/paperclip_heartbeat_runs_redact_secrets.py`,
+in the style of `scripts/paperclip_heartbeat_runs_slim.py`:
+
+- One transaction per batch; a row with no bearer value is not written, so a
+  second run rewrites nothing.
+- A `--dry-run` that writes nothing.
+- The database password comes from an environment variable
+  (`PGPASSWORD` or `PAPERCLIP_DATABASE_URL`), never a command line argument.
+- No `VACUUM FULL`; a plain `VACUUM (ANALYZE)` is enough (`--vacuum`).
+
+The rule is not written in this repository. The Paperclip server owns it:
+`redactEventPayload` from `server/src/redaction.ts` in the
+`digithings-ai/paperclip` checkout (the helper the server already runs on
+the run event write path, and the one DIG-5227 puts on the run result write
+path). The script bundles that module out of the checkout with the
+checkout's own esbuild and runs it against the live rows, so the value it
+stores is the value the server itself would have stored. A pinned Python copy
+of the server's bearer detector (`looks_like_credential_jwt`) decides which
+rows hold a bearer value and whether the server's rule and the pinned copy
+agree; the two are compared before anything is written — once on a synthetic
+fixture, once on a sample of the live rows — and the script refuses to write
+when they disagree.
+
+The values are found by shape and never by matching a known one, and they
+are never printed: not on stdout, not in the report, not in an error message.
+The report carries counts only: rows scanned, rows rewritten, values found,
+how many were still inside their own TTL (read from the `exp` claim, never
+printed). `kit/bin/dt-secret-scan` runs clean on the files it touches.
+
+The scrub is idempotent: a second run reports zero rewritten rows and the
+post-scan finds no bearer-shaped value left in `result_json`.
+
 ## The report
+
 
 **No job writes this report: the operator records it.** At the end of the
 procedure, write down the numbers that decide whether the policy is working:
