@@ -177,9 +177,9 @@ not re-applied).
 |--------------------------------------|----------------------------|
 | `sync_playwright()` → `chromium.launch(headless=True)` → `new_context(user_agent=…)` → `new_page()` → `set_default_timeout(…)` → `browser.close()` (both scrapers) | `browser_session(BrowserConfig(...))` context manager |
 | TE: `for attempt in range(navigation_retries): … time.sleep(2.0*attempt)` | `with_retry(lambda: …navigate…, RetryPolicy(...))` |
-| TE: `time.sleep(show_more_pause_s)` between "show more" clicks; primemarket: implicit pacing of AJAX calls | `RateLimiter(min_interval=…).acquire()` |
-| primemarket: capture `context.cookies()` → `requests.post(AJAX_URL, data={…}, cookies=…, timeout=30).raise_for_status()` → S3 URL text | `cookies_from_playwright(ctx.cookies())` + `HttpFetcher.fetch(url, method="POST", data=…, cookies=…)` → `FetchResult.text` |
-| primemarket (downstream): download the PDF bytes from the S3 URL | `HttpFetcher.download(s3_url)` → `DownloadResult.content` |
+| TE: `time.sleep(show_more_pause_s)` between "show more" clicks; **site-specific: implicit pacing of AJAX calls** | `RateLimiter(min_interval=…).acquire()` |
+| **site-specific: capture `context.cookies()` → `requests.post(AJAX_URL, data={…}, cookies=…, timeout=30).raise_for_status()` → S3 URL text** | `cookies_from_playwright(ctx.cookies())` + `HttpFetcher.fetch(url, method="POST", data=…, cookies=…)` → `FetchResult.text` |
+| **site-specific (downstream): download the PDF bytes from the S3 URL** | `HttpFetcher.download(s3_url)` → `DownloadResult.content` |
 | TE: `page.content()` → `parse_calendar_html(html)` | engine yields the live `page`; caller calls `page.content()` and parses — **parsing stays site-specific** |
 
 ## Deliberately NOT extracted (stays site-specific in twelve-x)
@@ -196,14 +196,14 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
   (credential injection + a declarative selector/step model) is a candidate for
   the second consumer, not now.
 - **Selectors and URLs.** `PRIMEMARKET_*` selectors/URLs, `TE_CALENDAR_URL`,
-  the `#showMore` selector list — config in twelve-x.
+  the `#showMore` selector list — config in twelve-x. **Note:** `PRIMEMARKET_*` constants reference a vendor whose Terms of Use prohibit the access method documented here. See DIG-503 for the hold on publishing this integration.
 - **Pagination policy.** TE's "click show-more up to N times" loop is
   site-specific (selector list + stop condition). It *uses* `RateLimiter` for
   pacing but the click loop itself stays in twelve-x.
 - **HTML / DOM parsing.** `parse_calendar_html`, the table/regex parsers,
   `country_code`, `_category_from_mention`, row extraction (`tdFileName`, …) —
   all twelve-x.
-- **Domain models.** `CalendarEvent`, the primemarket `FileMeta` row shape, the
+- **Domain models.** `CalendarEvent`, the **site-specific** `FileMeta` row shape, the
   "today + yesterday" rolling window, `stable_external_id`.
 - **PDF text extraction.** `pdfplumber` parsing stays in twelve-x; digifetch
   hands back raw bytes and does **not** depend on pdfplumber.
@@ -246,8 +246,8 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
 timeouts, rate limits, and the SSRF `allowed_hosts` allowlist are passed in by
 the caller (config objects / function arguments). This keeps the engine
 deployment-agnostic and side-effect-free on import — site config
-(`PRIMEMARKET_*`, `TE_CALENDAR_URL`, credentials) lives in the consumer
-(twelve-x `config.py`). A consumer that wants an operator env var (e.g.
+(`PRIMEMARKET_*`**, `TE_CALENDAR_URL`, credentials) lives in the consumer
+(twelve-x `config.py`). **Note:** `PRIMEMARKET_*` constants reference a vendor whose Terms of Use prohibit the access method documented here. See DIG-503 for the hold on publishing this integration. A consumer that wants an operator env var (e.g.
 `digisearch`'s `DIGISEARCH_FETCH_ALLOWED_HOSTS`) reads it and passes
 `allowed_hosts=` in.
 

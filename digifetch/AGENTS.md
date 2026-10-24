@@ -22,6 +22,14 @@ stays in the **consumer** (today: twelve-x).
 > (#634). One consumer exists today (twelve-x); the interface is provisional and
 > will likely change at the second consumer. Wiring twelve-x onto digifetch is a
 > **separate, deferred** follow-up — do not do it from this package.
+>
+> ⚠️ **Vendor-content boundary:** The library ships no vendor access and no vendor
+> authorisation; you bring your own. Before code that touches a third party's
+> data, terms, endpoint or access method is merged into a public repository,
+> someone must check that vendor's terms and record the answer with the date and
+> source. The PrimeMarket integration (PRIMEMARKET_* selectors/URLs in the
+> private twelve-x consumer) is currently on hold pending DIG-503 — the vendor's
+> Terms of Use prohibit the access method described in `ARCHITECTURE.md`.
 
 ---
 
