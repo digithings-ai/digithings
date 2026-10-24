@@ -38,9 +38,9 @@ chat app.
 ```bash
 # local build (works without registry access)
 docker build -f apps/digichat/Dockerfile \
-  --build-arg DIGICHAT_VERSION=2.6.8 \
+  --build-arg DIGICHAT_VERSION=2.7.0 \
   --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
-  -t digichat:2.6.8 .
+  -t digichat:2.7.0 .
 ```
 
 | Artifact | Value |
@@ -48,7 +48,7 @@ docker build -f apps/digichat/Dockerfile \
 | Git tag | `digichat-vX.Y.Z` |
 | Published image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` from `v2.6.4` on (private; earlier `v2.4.x`–`v2.6.3` tags have none) — or build locally (see above) |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `2.6.8` (`develop`) |
+| Current app version | `2.7.0` (`develop`) |
 
 **Existing clients (DataTap and others) are pinned to a digichat image already
 imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
@@ -263,7 +263,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker run --rm -p 3005:3000 digichat:2.6.8   # local build, see § Install unit
+docker run --rm -p 3005:3000 digichat:2.7.0   # local build, see § Install unit
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

@@ -16,7 +16,7 @@
 | **Perf** findings (tagged in module tables) | 14 |
 | **Reuse** findings (tagged in module tables) | 12 |
 | Modules with highest slop density | **digiquant** (tearsheet + atlas scripts), **digigraph** (orchestration + graph), **digisearch** (server + agent pipeline) |
-| Modules with lowest slop density | **digibase**, **digismith**, **digikey**, **digiclaw** |
+| Modules with lowest slop density | **digibase**, **digismith**, **digikey**, **digibot** |
 
 **Wave recommendation:** Schedule as **Wave 7 — simplify/deslop** in a *new* epic/PR series **after** security/remediation Waves 1–4 from the June full audit complete (or after Wave 5 perf items land on `develop`). **Do not fold** into Wave 5 — Wave 5 is already scoped to REM-099…105 (caching, cron, deps). Merging simplify/deslop with security fixes creates merge hell on `digigraph/server.py`, `digisearch/server.py`, `digikey/`, and `apps/digichat/`.
 
@@ -56,7 +56,7 @@
 | SIMP-022 | digibase | `errors.py:62-74` | vulture flags handlers as unused — register via FastAPI app only (document, don’t delete) |
 | SIMP-023 | digismith | `trace.py:54-58` | Pin langsmith min version; drop TypeError fallback branch |
 | SIMP-024 | digikey | `jwt_verify.py:68-70` | Re-raise as `JwtVerificationError`; avoid log+re-raise duplicate |
-| SIMP-025 | digiclaw | `heartbeat_runner.py:58-93` | Split drift stub from heartbeat; explicit exit codes per failure |
+| SIMP-025 | digibot | `heartbeat_runner.py:58-93` | Split drift stub from heartbeat; explicit exit codes per failure |
 | SIMP-026 | digichat | `lib/embed-gate.ts` | Trim block comment header to 2–3 lines (behavior is clear from names) |
 | SIMP-027 | digichat | `app/api/chat/route.ts` | Extract tenant/upstream resolution helpers |
 | SIMP-028 | olympus | `components/portfolio/*` | Extract shared “fetch lifecycle” hook to cut eslint-disable set-state-in-effect |
@@ -97,8 +97,8 @@
 | DESLOP-016 | digisearch | `search/_stub.py` | Remove dead branches if stub-only in tests |
 | DESLOP-017 | digisearch | `ingestion/parsers/*.py` | Consistent parser error types vs `except Exception` |
 | DESLOP-018 | digibase | `connectors/notion.py` | Unused `upsert_database_row` — implement or delete |
-| DESLOP-019 | digiclaw | `heartbeat_runner.py:68-69` | Drift check silent return — audit_log skip reason |
-| DESLOP-020 | digiclaw | `heartbeat_runner.py:29-30` | Redundant `except Exception` after URLError |
+| DESLOP-019 | digibot | `heartbeat_runner.py:68-69` | Drift check silent return — audit_log skip reason |
+| DESLOP-020 | digibot | `heartbeat_runner.py:29-30` | Redundant `except Exception` after URLError |
 | DESLOP-021 | digichat | `embed-gate.ts:1-13` | Shrink banner comment block |
 | DESLOP-022 | digichat | `lib/embed-gate.ts:52-62` | Empty catch blocks — add debug hook behind flag |
 | DESLOP-023 | olympus | `theme-provider.tsx:58` | eslint-disable set-state-in-effect — hydrate pattern |
@@ -225,7 +225,7 @@ Heuristic density: **~45 files** `except Exception` (core + scripts); **`tearshe
 | `server.py:42` | Deslop | S | find_stale “unused” routes — false positive |
 | `blocklist.py:57` | Deslop | S | `reset_client_cache` test-only — mark `# test helper` |
 
-### digiclaw/ — effort **S**
+### digibot/ — effort **S**
 
 | Path:line | Cat | Sev | One-line fix |
 |-----------|-----|-----|--------------|
@@ -304,7 +304,7 @@ No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** 
 |----------------|-----------|
 | **New Wave 7 — simplify/deslop** | Orthogonal to security AUDIT items; touches same files but different hunks; lower conflict risk after Waves 1–4 merge |
 | **Do not fold into Wave 5** | Wave 5 = REM-099…105 (perf/docs/deps). This audit is code-quality debt, not P3 perf |
-| **Optional Wave 7 sub-waves** | 7a digigraph+digisearch, 7b digiquant scripts+tearsheet, 7c frontends, 7d digibase/digikey/digiclaw/digismith |
+| **Optional Wave 7 sub-waves** | 7a digigraph+digisearch, 7b digiquant scripts+tearsheet, 7c frontends, 7d digibase/digikey/digibot/digismith |
 | **Gate** | Run after `make score` security wave; each 7x PR must still pass `pytest -m unit` + `ruff` |
 | **Epic link** | New GitHub issue: “June 2026 simplify/deslop (SIMP/DESLOP)” referencing this doc |
 
@@ -332,7 +332,7 @@ No `any` / `as any` in TS; **~22** `catch (` sites; slop is **comment density** 
 | digibase | 2 | 0 | 1 |
 | digismith | 2 | 0 | 1 |
 | digikey | 4 | 0 | 1 |
-| digiclaw | 2 | 0 | 0 |
+| digibot | 2 | 0 | 0 |
 | apps/digichat | 0 (TS catch ~22 sites) | 0 | 2 |
 | cloudflare/olympus | 0 | 0 | 12+ eslint-disable |
 | scripts/*.py | 8 | — | 4 |

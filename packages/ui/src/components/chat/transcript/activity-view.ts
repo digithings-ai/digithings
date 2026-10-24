@@ -108,16 +108,6 @@ export function outcomeMeta(count: number): string {
   return `${count} note${count === 1 ? "" : "s"}`;
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  digisearch: "Search the knowledge base",
-  azure_ai_search: "Search the knowledge base",
-  rag_sources: "Search the knowledge base",
-  digivault: "Vault",
-  digivault_search_notes: "Vault",
-  digivault_get_note: "Load vault note",
-  web_search: "Web search (External)",
-};
-
 /** Wire ids whose in-flight fold should read "Searching…", not "Working…". */
 const LOCATE_TOOL_NAMES = new Set([
   "digisearch",
@@ -128,9 +118,9 @@ const LOCATE_TOOL_NAMES = new Set([
   "web_search",
 ]);
 
-/** Human labels for the head only — identity keys still use the wire tool id. */
+/** Raw backend tool id for the head — one-to-one with the backend. */
 export function toolDisplayName(name: string): string {
-  return TOOL_LABELS[name] ?? name;
+  return name;
 }
 
 /** In-flight body so the head stays a disclosure; locate tools keep Searching…. */

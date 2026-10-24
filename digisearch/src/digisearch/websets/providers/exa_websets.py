@@ -131,7 +131,6 @@ _ENRICHMENT_STATUS: dict[str, str] = {
 
 #: OSS enrichment types with no EXA enum member (sent as ``text``).
 _EXA_ENRICHMENT_FORMATS = frozenset({"text", "date", "number", "options", "email", "phone", "url"})
-_TEXT_FALLBACK_TYPES = frozenset({"company_profile"})
 
 
 class ExaWebsetsProRequiredError(ExaError):

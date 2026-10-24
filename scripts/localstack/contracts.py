@@ -31,9 +31,19 @@ A contract row is read as the text that was written. YAML 1.1 would read
 ``8_000`` as 8000, ``+8000`` as 8000 and ``017`` as 15, so the loader keeps
 plain scalars as text and the validator sees what the operator wrote. A
 malformed row is refused rather than guessed at -- a ``url:`` that is not a
-string, a ``requires:`` that is not a name, a port that is not a port -- and
-a refused row keeps its place in the catalogue carrying the reason, in every
-profile, so the gate fails the row instead of quietly probing something else.
+string, a ``requires:`` that is not a name, a port that is not a port, a
+``method:`` that is not a probe verb -- and a refused row keeps its place in
+the catalogue carrying the reason, in every profile, so the gate fails the row
+instead of quietly probing something else.
+
+A row's ``method:`` is ``GET`` or ``POST`` and nothing else: a health check
+reads, or writes a nonce it reads back, and a contract is the operator saying
+what the gate will do to their service. A verb outside that set is refused
+rather than coerced to ``GET`` -- a silently probed GET is a verdict on a
+request nobody wrote. ``redact_userinfo`` is the one place a URL is made safe
+to print: userinfo is refused in a probe URL, but the message that refuses it
+and a configured URL the URL table echoes would otherwise carry the
+credential into a terminal, a ticket or CI output.
 """
 
 from __future__ import annotations
@@ -82,6 +92,14 @@ LOOPBACK_HOST = "127.0.0.1"
 #: anchored with ``fullmatch`` (never ``$``, which also accepts a trailing
 #: newline).
 _PORT_RE = re.compile(r"[0-9]{1,5}")
+
+#: The verb a contract row may probe with. A health check reads, or writes a
+#: nonce it then reads back; it never deletes, replaces or patches anything.
+#: The set is closed on purpose: a ``method:`` in a contract is the operator
+#: saying what the gate will do to their service, so a row outside it is
+#: refused rather than coerced -- a silently probed GET would report a verdict
+#: on a request the operator never wrote (DIG-4991).
+PROBE_METHODS = frozenset({"GET", "POST"})
 
 #: The lowest port a probe may address.
 MIN_PORT = 1
@@ -152,7 +170,7 @@ class Check:
         return {
             "name": self.name,
             "kind": self.kind,
-            "url": self.url,
+            "url": redact_userinfo(self.url),
             "profiles": list(self.profiles),
             "source": self.source,
             "requires": self.requires,
@@ -535,6 +553,14 @@ def _row_refusal(row: dict[str, Any], label: str) -> str | None:
     path = row.get("health_path")
     if path is not None and not isinstance(path, str):
         return f"contract row {label!r} health_path must be a string"
+    if "method" in row:
+        method = row["method"]
+        if not isinstance(method, str) or method.strip().upper() not in PROBE_METHODS:
+            allowed = " or ".join(sorted(PROBE_METHODS))
+            return (
+                f"contract row {label!r} method {method!r} is not a probe verb: "
+                f"a check may only use {allowed}"
+            )
     if "port" in row:
         port = row["port"]
         if port is None:
@@ -615,7 +641,7 @@ def checks_from_contract(doc: Any) -> tuple[Check, ...]:
                 profiles=_normalise_profiles(row.get("profiles"), _ALL),
                 source=f"config contract row {label!r}",
                 requires=requires if isinstance(requires, str) else None,
-                method=str(row.get("method") or "GET").upper(),
+                method=str(row.get("method") or "GET").strip().upper(),
                 refusal=refusal,
             )
         )
@@ -754,6 +780,59 @@ def _contract_port_value(name: str, raw: str) -> int:
     return port
 
 
+def redact_userinfo(url: str | None) -> str | None:
+    """Return ``url`` with any userinfo replaced by ``***``.
+
+    A probe URL can carry a credential in its userinfo
+    (``//operator:secret@host``), and every path that prints one -- a refusal
+    message, the URL table of ``dt urls``, the gate JSON of ``dt status`` -- is
+    read by a human or pasted into a ticket. Redaction keeps the scheme, host
+    and port, which is what the operator needs to find the row, and drops what
+    must not be printed.
+
+    Userinfo is refused by :func:`_assert_loopback_url` (:class:`ContractRefusal`,
+    after #6207), so no probe carries one. The message that refuses it, and a
+    configured URL that is printed as it was given, are the two paths that
+    still would -- and that is what this exists for.
+
+    A URL that does not parse is redacted textually rather than dropped: the
+    operator still gets a message, and no credential is in it.
+    """
+    if url is None:
+        return None
+    if "@" not in url:
+        return url
+    split = None
+    try:
+        split = urllib.parse.urlsplit(url)
+        split.port  # a netloc whose port does not parse is not an authority
+    except ValueError:
+        split = None
+    if split is not None and "@" in split.netloc:
+        _userinfo, _at, hostport = split.netloc.rpartition("@")
+        return urllib.parse.urlunsplit(
+            (split.scheme, "***@" + hostport, split.path, split.query, split.fragment)
+        )
+    if split is not None and split.netloc and split.hostname is not None:
+        # A parseable authority with no userinfo: the '@' is somewhere in the
+        # path or the query (``?next=a@b``) and is not a credential.
+        return url
+    # The userinfo is not in a parseable authority (``operator:secret@host``
+    # without ``//``, ``http:/user:secret@host``, ``http://user:p/a@host``, an
+    # unbalanced IPv6 bracket). Do not guess where the address begins: drop
+    # everything up to the last '@'. Losing the prefix of a malformed URL is
+    # cheaper than printing the credential in it. The raw text before the first
+    # '//' is kept only when it carries no '@' -- on ``http:/op:secret@host//p``
+    # that text is where the credential sits, so whatever prefix survives is
+    # rebuilt from the parsed scheme alone, or dropped with it.
+    head, sep, _rest = url.partition("//")
+    if sep and "@" not in head:
+        return f"{head}//***@{url[url.rfind('@') + 1 :]}"
+    scheme = split.scheme if split is not None else ""
+    prefix = f"{scheme}:" if scheme else ""
+    return f"{prefix}***@{url[url.rfind('@') + 1 :]}"
+
+
 def _assert_loopback_url(url: str, name: str) -> None:
     """Refuse a URL that is not the loopback probe.
 
@@ -786,17 +865,17 @@ def _assert_loopback_url(url: str, name: str) -> None:
         userinfo = True
     if host != LOOPBACK_HOST:
         raise ContractRefusal(
-            f"{name} resolved to {url!r}: the probe must stay on {LOOPBACK_HOST}"
+            f"{name} resolved to {redact_userinfo(url)!r}: the probe must stay on {LOOPBACK_HOST}"
         )
     if userinfo:
         # ``user@127.0.0.1`` is still the loopback, but userinfo in a probe URL
         # is the shape of the ``8000@evil.com`` confusion, and no probe needs it.
         raise ContractRefusal(
-            f"{name} resolved to {url!r}: the probe URL must not carry userinfo"
+            f"{name} resolved to {redact_userinfo(url)!r}: the probe URL must not carry userinfo"
         )
     if scheme not in ("http", "https"):
         raise ContractRefusal(
-            f"{name} resolved to {url!r}: the probe must be an http or https URL"
+            f"{name} resolved to {redact_userinfo(url)!r}: the probe must be an http or https URL"
         )
     try:
         port = split.port
@@ -804,7 +883,7 @@ def _assert_loopback_url(url: str, name: str) -> None:
         port = None
     if port is None or not MIN_PORT <= port <= MAX_PORT:
         raise ContractRefusal(
-            f"{name} resolved to {url!r}: the probe must carry a port in "
+            f"{name} resolved to {redact_userinfo(url)!r}: the probe must carry a port in "
             f"{MIN_PORT}-{MAX_PORT}"
         )
 
@@ -837,7 +916,7 @@ def _assert_loopback_port(url: str, name: str, port: int) -> None:
     if host != LOOPBACK_HOST or userinfo or resolved_port != port:
         target = f"http://{LOOPBACK_HOST}:{port}"
         raise InvalidPort(
-            f"{name} resolved to {url!r}: the probe must stay on {target}"
+            f"{name} resolved to {redact_userinfo(url)!r}: the probe must stay on {target}"
         )
 
 
@@ -930,7 +1009,7 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
             # the host or userinfo is the shape that moves a probe off the
             # machine, so the template is refused before any value lands.
             raise InvalidPort(
-                f"{name} is templated outside the port slot of {url!r}: "
+                f"{name} is templated outside the port slot of {redact_userinfo(url)!r}: "
                 "only the port of a probe URL may be templated"
             )
         if _fills_the_port_slot(url, match.start()):

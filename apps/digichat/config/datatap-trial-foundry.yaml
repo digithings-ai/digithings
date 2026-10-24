@@ -4,22 +4,34 @@ version: 1
 # tenant's projectEndpoint + agentName. Foundry auth is the container's
 # managed identity (DefaultAzureCredential); no secret is baked here.
 # The agent itself carries the tenant search index + MCP tool.
+#
+# Overlay on house. The Foundry backend replaces the digigraph backend.
+# Catalog, premium meter, house prompt, per-visitor TPM, and the context
+# meter stay off. One shared allowance (tokensPerMinute.deployment) is this
+# trial's cap. The Azure TPM for gpt-5.6-terra in westeurope is not in this
+# repo.
+# TODO: leave that shared allowance unset until the Azure number is known.
+# The tool-call cap and the answer guard stay. The request limiter stays.
+extends: defaults
+embedHosts:
+  - datatapstream.com
+  - www.datatapstream.com
+  - dev.datatapstream.com
+  - datatap.stream
+  - www.datatap.stream
+  - dev.datatap.stream
+  - nice-glacier-0187d6403.7.azurestaticapps.net
+  - nice-glacier-0187d6403-10.westeurope.7.azurestaticapps.net
+  - nice-glacier-0187d6403-11.westeurope.7.azurestaticapps.net
+hosts: null
 deployment:
   slug: datatap-trial-foundry
+  aliases: null
   chrome:
     mode: embed
     theme: dark
     skin: digichat
     title: ask datatap
-    # Client-facing copy for the trial. The trial tenant holds a sample
-    # dataset (the public Enron email archive), not the visitor's own data,
-    # so the copy says what is actually there. The agent searches it with its
-    # own search tool and opens items with its MCP tool; the UI shows each tool
-    # call as a row, not a per-answer source list. The copy names no mechanism
-    # and promises only those rows.
-    # Attachments are not promised until a live run has opened one.
-    # Template note: the pipeline clones this file per trial, so a tenant on
-    # other data needs its own title, body and placeholder.
     welcome:
       title: Ask about the Enron email archive.
       body:
@@ -27,9 +39,6 @@ deployment:
           archive."
         - The agent searches and opens the emails, and shows each search it
           ran and each email it opened.
-    # Starters are tested live against the trial agent (Enron sample data):
-    # each must finish with no tool error on two runs and show a different
-    # tool path. Re-test them when the trial data or agent changes.
     suggestions:
       - How did email volume change through 2001 as Enron collapsed?
       - What did Enron's traders say about the California energy crisis?
@@ -37,6 +46,7 @@ deployment:
       - Who sends the most emails in this archive, and what do they write about?
       - Find an email about the Dabhol power plant and open it.
     placeholder: Ask about the Enron emails
+    launcher: null
   persistence: none
   auth: anonymous
   features:
@@ -49,44 +59,177 @@ deployment:
     sources: true
     branchPicker: true
     modelPicker: false
+  models:
+    catalog: false
+    allowPicker: false
+    default: null
+    priceCapUsdPerMillion: null
+    costPerWindow: null
+    presets: null
+    showFullList: null
   backend:
     type: foundry
     # Per-trial values — replaced by the pipeline (see
     # config/examples/datatap-trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
-    # Alias of guardrails.maxToolCallsPerTurn. Prefer the shared block below.
-    # maxToolCalls: 5
-    # maxToolCalls: 4
-  # Proposed guardrails for this trial. Commented, so nothing is applied.
-  # Uncomment the block and one maxToolCallsPerTurn line after confirming.
-  # tokensPerMinute.deployment is the Azure TPM for gpt-5.6-terra in
-  # westeurope. Fill that number in from Azure; do not guess it, and do not
-  # change the Azure deployment from here.
-  # guardrails:
-  #   maxToolCallsPerTurn: 5
-  #   # maxToolCallsPerTurn: 4
-  #   tokensPerMinute:
-  #     deployment: <Azure TPM for gpt-5.6-terra, westeurope>
+  # The house per-visitor minute is cleared. The shared allowance is
+  # tokensPerMinute.deployment.
+  # TODO: set tokensPerMinute.deployment when the Azure number is known.
+  # Do not guess it. Tool-call cap and answer guard are inherited.
+  # The request limiter stays on.
+  guardrails:
+    tokensPerMinute: null
+  prompt: null
+  tokenEnv: null
   tools:
-    # Declared for /tools. The Foundry agent owns these tools; the page does
-    # not fetch them and the visitor cannot toggle them.
+    # Declared for /tools: every tool the Foundry agent is bound to (the
+    # DataTap MCP tools plus its documentation search), in the agent's
+    # groups. The agent owns these tools, so /tools shows each one on and
+    # the visitor cannot toggle them. The page does not fetch this list;
+    # update it when the agent's tools change.
     allowUserToggle: false
     catalog:
-      - id: file_search
-        label: Search
-        default: true
       - id: datatap
         label: DataTap
         default: true
         tools:
           - id: datatap__list_connections
-            label: List connections
+            label: list_connections
+            group: Connections and discovery
+          - id: datatap__connect_source
+            label: connect_source
+            group: Connections and discovery
+          - id: datatap__connect_destination
+            label: connect_destination
+            group: Connections and discovery
+          - id: datatap__disconnect_connection
+            label: disconnect_connection
+            group: Connections and discovery
+          - id: datatap__discover_users
+            label: discover_users
+            group: Connections and discovery
+          - id: datatap__discover_groups
+            label: discover_groups
+            group: Connections and discovery
+          - id: datatap__browse_source_items
+            label: browse_source_items
+            group: Connections and discovery
+          - id: datatap__preview_item
+            label: preview_item
+            group: Connections and discovery
+          - id: datatap__list_collectors
+            label: list_collectors
+            group: Collector management
+          - id: datatap__get_collector
+            label: get_collector
+            group: Collector management
+          - id: datatap__create_email_collector
+            label: create_email_collector
+            group: Collector management
+          - id: datatap__create_sharepoint_site_collector
+            label: create_sharepoint_site_collector
+            group: Collector management
+          - id: datatap__create_files_collector
+            label: create_files_collector
+            group: Collector management
+          - id: datatap__create_teams_collector
+            label: create_teams_collector
+            group: Collector management
+          - id: datatap__run_collector
+            label: run_collector
+            group: Collector management
+          - id: datatap__stop_collector
+            label: stop_collector
+            group: Collector management
+          - id: datatap__get_collector_status
+            label: get_collector_status
+            group: Collector management
+          - id: datatap__update_collector
+            label: update_collector
+            group: Collector management
+          - id: datatap__delete_collector
+            label: delete_collector
+            group: Collector management
+          - id: datatap__collect_email
+            label: collect_email
+            group: Composite collection setup
+          - id: datatap__collect_sharepoint_site
+            label: collect_sharepoint_site
+            group: Composite collection setup
+          - id: datatap__collect_files
+            label: collect_files
+            group: Composite collection setup
+          - id: datatap__create_restore_job
+            label: create_restore_job
+            group: Restore
+          - id: datatap__list_running_collectors
+            label: list_running_collectors
+            group: Job reporting and collection statistics
+          - id: datatap__get_running_collector_accounts
+            label: get_running_collector_accounts
+            group: Job reporting and collection statistics
+          - id: datatap__list_collector_reports
+            label: list_collector_reports
+            group: Job reporting and collection statistics
+          - id: datatap__get_collector_report_accounts
+            label: get_collector_report_accounts
+            group: Job reporting and collection statistics
+          - id: datatap__list_datamanagement_reports
+            label: list_datamanagement_reports
+            group: Job reporting and collection statistics
+          - id: datatap__get_datamanagement_report_accounts
+            label: get_datamanagement_report_accounts
+            group: Job reporting and collection statistics
+          - id: datatap__get_collection_stats
+            label: get_collection_stats
+            group: Job reporting and collection statistics
+          - id: datatap__get_collection_summary
+            label: get_collection_summary
+            group: Job reporting and collection statistics
+          - id: datatap__search_content
+            label: search_content
+            group: Content search and retrieval
+          - id: datatap__count_content
+            label: count_content
+            group: Content search and retrieval
           - id: datatap__get_item
-            label: Open item
+            label: get_item
+            group: Content search and retrieval
+          - id: datatap__search_content_advanced
+            label: search_content_advanced
+            group: Content search and retrieval
+          - id: datatap__list_searchable_fields
+            label: list_searchable_fields
+            group: Content search and retrieval
+          - id: datatap__get_conversation_thread
+            label: get_conversation_thread
+            group: Content search and retrieval
+          - id: datatap__get_channel_thread
+            label: get_channel_thread
+            group: Content search and retrieval
+          - id: datatap__find_related_items
+            label: find_related_items
+            group: Content search and retrieval
+          - id: datatap__search_attachments
+            label: search_attachments
+            group: Content search and retrieval
+          - id: datatap__summarize_content
+            label: summarize_content
+            group: Content search and retrieval
+          - id: datatap__azure_ai_search
+            label: azure_ai_search
+            group: Azure AI Search
+  # House MCP servers are not this trial's. An omitted block would inherit them.
+  mcp:
+    servers: []
+    allowUserServers: false
+    allowAddForm: false
   gate:
     mode: ungated
     activityDetail: full
     llmAccess: operator
     showByok: false
     showLanguageSelector: true
+    showContextMeter: null
+    webSearch: false

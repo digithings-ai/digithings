@@ -72,3 +72,19 @@ def test_the_url_table_shows_a_refused_contract_row(tmp_path):
     assert "(invalid:" in table
     assert "8000@evil.com" in table
     assert "http://127.0.0.1:8000/healthz" not in table
+
+
+def test_the_url_table_never_prints_a_password_from_a_configured_url():
+    """`dt urls` prints a configured URL, and that URL may carry a credential.
+
+    A `requires` row is exempt from the loopback rule because it points at a
+    service elsewhere, so userinfo can reach this table. The operator needs
+    the address; the password never leaves the environment.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.requires == "DT_MCP_URL")
+    table = render.render_url_table(
+        (check,), {"DT_MCP_URL": "http://operator:s3cret@127.0.0.1:9000/mcp"}, "all"
+    )
+    assert "s3cret" not in table
+    assert "***@" in table
+    assert "127.0.0.1:9000" in table

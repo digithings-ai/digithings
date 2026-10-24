@@ -559,3 +559,27 @@ export {
   MockupFrame,
   Glow,
 } from "./components/page-geometry";
+
+// desk family (#6327) — the data-surface primitives lifted from the parked
+// digiquant app and the desk: one table (sort / filter / paginate / sticky),
+// the KPI grid and its sparkline, and the four states a payload can be in.
+export {
+  DataTable,
+  columnRoles,
+  type ColumnRole,
+  type DataTableColumn,
+  type DataTableProps,
+  type DataTableRowVariant,
+  type DataTableTone,
+  KpiGrid,
+  type KpiCell,
+  type KpiGridProps,
+  type KpiTone,
+  Sparkline,
+  type SparklineProps,
+  BlockBoundary,
+  StateBlock,
+  type BlockBoundaryProps,
+  type StateBlockProps,
+  type StateKind,
+} from "./components/desk";

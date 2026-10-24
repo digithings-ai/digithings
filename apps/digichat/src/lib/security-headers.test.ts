@@ -29,7 +29,9 @@ describe("security-headers", () => {
       "'self'",
       "https://digithings.ai",
       "https://www.digithings.ai",
+      "https://occ.digithings.ai",
       "https://digiquant.io",
+      "https://www.digiquant.io",
     ];
     for (const origin of firstPartyOrigins) {
       expect(csp).toContain(origin);
@@ -67,6 +69,8 @@ describe("registry-derived frame-ancestors", () => {
     expect(list).toContain("https://digithings.ai");
     expect(list).toContain("https://www.digithings.ai");
     expect(list).toContain("https://digiquant.io");
+    expect(list).toContain("https://www.digiquant.io");
+    expect(list).toContain("https://occ.digithings.ai");
   });
 
   it("includes www.digithings.ai in first-party frame-ancestors", () => {

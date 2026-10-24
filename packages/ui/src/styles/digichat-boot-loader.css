@@ -13,6 +13,31 @@
 
 .dboot {
   --dboot-head: var(--accent);
+  /* Loader metrics (component tokens). Pixel units on purpose: these values
+     are a parity mock of the settled embed's own row metrics, so they must not
+     drift with the root font size. */
+  --dboot-dock-gap: 0;            /* final value; the settled dock is flush */
+  --dboot-dock-max-w: 42rem;
+  --dboot-welcome-min-h: 32px;
+  --dboot-welcome-fs: 24px;
+  --dboot-welcome-lh: 32px;
+  --dboot-welcome-mb: 12px;
+  --dboot-body-fs: 14px;
+  --dboot-chips-gap: 1.6px;
+  --dboot-chips-mb: 16px;
+  --dboot-chip-gap-x: 0.55rem;
+  --dboot-chip-pad-y: 3.2px;
+  --dboot-chip-mark: 14px;
+  --dboot-chip-text-lh: 19.024px;
+  --dboot-chip-text-fs: 13.12px;
+  --dboot-composer-h: 38px;
+  --dboot-composer-gap: 6px;
+  --dboot-composer-pad: 4px 6px;
+  --dboot-placeholder-gutter: 22px;
+  --dboot-placeholder-gutter-off: 6px;  /* attachments off: glyph gutter collapses */
+  --dboot-send: 28px;
+  --dboot-glyph: 16px;
+  --dboot-plus-inset: 8px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -37,17 +62,17 @@
 .dboot-dock {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--dboot-dock-gap);
   width: 100%;
-  max-width: 42rem;
+  max-width: var(--dboot-dock-max-w);
   margin-inline: auto;
   padding: 0 16px 14px;
 }
 
 .dboot-welcome {
-  min-height: 32px;
-  font-size: 24px;
-  line-height: 32px;
+  min-height: var(--dboot-welcome-min-h);
+  font-size: var(--dboot-welcome-fs);
+  line-height: var(--dboot-welcome-lh);
   font-weight: 400;
   letter-spacing: -0.6px;
   color: var(--ink);
@@ -55,7 +80,7 @@
 
 .dboot-body {
   min-height: 1.5em;
-  font-size: 14px;
+  font-size: var(--dboot-body-fs);
   line-height: 1.5;
   color: var(--ink-mute);
 }
@@ -64,7 +89,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--dboot-chips-gap);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
@@ -76,14 +101,14 @@
 .dboot-chip {
   display: grid;
   grid-template-columns: 1.25rem minmax(0, 1fr);
-  column-gap: 0.55rem;
+  column-gap: var(--dboot-chip-gap-x);
   align-items: start;
   text-align: start;
 }
 
 .dboot-chip-mark {
-  width: 14px;
-  height: 14px;
+  width: var(--dboot-chip-mark);
+  height: var(--dboot-chip-mark);
   margin-top: 2.5px;
   color: var(--ink);
 }
@@ -96,14 +121,14 @@
 
 .dboot-chip-text {
   min-height: 19px;
-  font-size: 13.12px;
-  line-height: 19px;
+  font-size: var(--dboot-chip-text-fs);
+  line-height: var(--dboot-chip-text-lh);
   color: var(--ink-soft);
 }
 
 .dboot-composer-wrap {
   position: relative;
-  height: 44px;
+  height: var(--dboot-composer-h);
 }
 
 .dboot-composer {
@@ -112,9 +137,9 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--dboot-composer-gap);
   width: 100%;
-  padding: 4px 6px;
+  padding: var(--dboot-composer-pad);
   border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
@@ -131,8 +156,8 @@
 .dboot-placeholder {
   flex: 1;
   min-width: 0;
-  padding-inline-start: 22px;
-  font-size: 14px;
+  padding-inline-start: var(--dboot-placeholder-gutter);
+  font-size: var(--dboot-body-fs);
   line-height: 22px;
   white-space: nowrap;
   overflow: hidden;
@@ -144,15 +169,15 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--dboot-send);
+  height: var(--dboot-send);
   color: color-mix(in srgb, var(--ink-mute) 70%, transparent);
 }
 
 .dboot-send .dboot-glyph {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: var(--dboot-glyph);
+  height: var(--dboot-glyph);
 }
 
 .dboot-grid {
@@ -199,11 +224,11 @@
 
 .dboot-plus {
   position: absolute;
-  inset-inline-start: 8px;
+  inset-inline-start: var(--dboot-plus-inset);
   top: 50%;
   z-index: 2;
-  width: 14px;
-  height: 14px;
+  width: var(--dboot-chip-mark);
+  height: var(--dboot-chip-mark);
   transform: translateY(-50%);
   color: var(--ink-mute);
   opacity: 0;
@@ -274,28 +299,28 @@
 }
 
 .dboot-welcome {
-  margin-bottom: 12px;
+  margin-bottom: var(--dboot-welcome-mb);
 }
 
 .dboot-chips {
-  gap: 1.6px;
-  margin-bottom: 16px;
+  gap: var(--dboot-chips-gap);
+  margin-bottom: var(--dboot-chips-mb);
 }
 
 .dboot-chip {
-  padding: 3.2px 0;
+  padding: var(--dboot-chip-pad-y) 0;
 }
 
 .dboot-chip-text {
-  line-height: 19.024px;
+  line-height: var(--dboot-chip-text-lh);
 }
 
 .dboot-composer-wrap {
-  height: 38px;
+  height: var(--dboot-composer-h);
 }
 
 .dboot-placeholder {
-  padding-inline-start: var(--composer-gutter, 22px);
+  padding-inline-start: var(--composer-gutter, var(--dboot-placeholder-gutter));
 }
 
 .dboot[data-attach="0"] .dboot-plus {
@@ -303,7 +328,7 @@
 }
 
 .dboot[data-attach="0"] .dboot-placeholder {
-  padding-inline-start: 6px;
+  padding-inline-start: var(--dboot-placeholder-gutter-off);
 }
 
 /* Consumer overlay hook: position a boot loader above a surface until it
@@ -328,6 +353,9 @@
 
 /* Boot-lab alternates (local `?boot=` iteration; see web boot-lab.tsx). */
 .dboot-lab {
+  --dboot-lab-pad: 16px 20px;
+  --dboot-lab-fs: 0.75rem;
+  --dboot-lab-tools-max-w: 30rem;
   display: flex;
   height: 100%;
   width: 100%;
@@ -335,7 +363,7 @@
   justify-content: center;
   /* Gutters so the chain never touches the frame edge — the popup panel and
      narrow embeds crop flush against the panel border without them. */
-  padding: 16px 20px;
+  padding: var(--dboot-lab-pad);
   font-family: var(--font-mono);
   color: var(--ink);
 }
@@ -343,7 +371,7 @@
 .dboot-lab-line {
   display: inline-flex;
   align-items: center;
-  font-size: 0.75rem;
+  font-size: var(--dboot-lab-fs);
   line-height: 1;
   letter-spacing: 0.01em;
 }
@@ -402,7 +430,7 @@
 .dboot-lab-tools {
   display: flex;
   width: 100%;
-  max-width: 30rem;
+  max-width: var(--dboot-lab-tools-max-w);
   flex-direction: column;
   gap: 2px;
   text-align: left;
@@ -445,12 +473,14 @@
 
 /* Boot step line ("Waking up services…") under the loader dock. */
 .dboot-status {
+  --dboot-status-bottom: 7.5rem;
+  --dboot-status-fs: 0.75rem;
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dboot-status-bottom));
   text-align: center;
-  font-size: 0.75rem;
+  font-size: var(--dboot-status-fs);
   opacity: 0.7;
   pointer-events: none;
 }

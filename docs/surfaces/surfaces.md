@@ -11,7 +11,10 @@
 | digichat TUI / devkit | `clients/digichat-tui`, `clients/digichat-devkit` | — | `bun run` in those folders |
 
 The Brief desk is the one digiquant app (ADR D2). It is served at `/app`;
-`/app/brief` redirects there. `apps/digiquant-app` was deleted on 2026-10-11 and
-its keyboard map moved to the desk: see `digiquant-app-shortcuts.md`.
+`/app/brief` redirects there. `apps/digiquant-app` is parked, not deleted: the
+package is still in the tree (`apps/digiquant-app/package.json`) but nothing new
+is built on it, and it is one of the three inputs to the desk consolidation in
+`docs/plans/deslop-epic.md` (§ Scope decision, slice UC). Its keyboard map
+already lives on the desk: see `digiquant-app-shortcuts.md`.
 
 Start all local previews with `scripts/preview_surfaces.sh`.

@@ -41,6 +41,7 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._frames import empty_series_frame
 from digiquant.data.onchain._url_guard import is_allowed_base_url
 
 logger = logging.getLogger(__name__)
@@ -109,15 +110,6 @@ class CoinMetricsSeriesResult(BaseModel):
         return self.error is None and self.row_count > 0
 
 
-def _empty_frame() -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "date": pl.Series("date", [], dtype=pl.Date),
-            "value": pl.Series("value", [], dtype=pl.Float64),
-        }
-    )
-
-
 def asset_metrics_rows_to_frame(payload: object, *, metric: str) -> pl.DataFrame:
     """Pure parser: CoinMetrics ``asset-metrics`` JSON -> Polars ``date``/``value``.
 
@@ -134,10 +126,10 @@ def asset_metrics_rows_to_frame(payload: object, *, metric: str) -> pl.DataFrame
     dropped rather than raising. Unrecognized payloads return an empty frame.
     """
     if not isinstance(payload, dict):
-        return _empty_frame()
+        return empty_series_frame()
     rows = payload.get("data")
     if not isinstance(rows, list):
-        return _empty_frame()
+        return empty_series_frame()
     dates: list[date] = []
     values: list[float] = []
     for row in rows:
@@ -158,7 +150,7 @@ def asset_metrics_rows_to_frame(payload: object, *, metric: str) -> pl.DataFrame
         dates.append(parsed_date)
         values.append(value)
     if not dates:
-        return _empty_frame()
+        return empty_series_frame()
     return pl.DataFrame({"date": dates, "value": values}).sort("date")
 
 

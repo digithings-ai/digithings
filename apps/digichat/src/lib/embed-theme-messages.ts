@@ -9,6 +9,11 @@
  * Initial paint uses optional `?theme=light|dark` on the iframe URL (set by the
  * parent after reading `document.documentElement[data-theme]`). Live toggles
  * use postMessage so the iframe does not reload.
+ *
+ * A first-party parent also shares its `[data-palette]` on the same message.
+ * The palette never paints the document on its own: `resolveEmbedPalette`
+ * folds it into the one palette channel the embed already owns (visitor
+ * pick > parent > default), so `data-palette` keeps a single writer.
  */
 
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
@@ -22,6 +27,8 @@ export type ThemeMessage = {
   type: typeof THEME_MESSAGE_TYPE;
   theme: EmbedTheme;
   ts: number;
+  /** A known palette id. Absent means the parent has no palette to share. */
+  palette?: PaletteName;
 };
 
 /** Max age for a theme postMessage (ignore stale queued events). */
@@ -34,8 +41,14 @@ export function parseEmbedThemeParam(
   return null;
 }
 
-export function buildThemeMessage(theme: EmbedTheme, ts = Date.now()): ThemeMessage {
-  return { type: THEME_MESSAGE_TYPE, theme, ts };
+export function buildThemeMessage(
+  theme: EmbedTheme,
+  ts = Date.now(),
+  palette?: PaletteName,
+): ThemeMessage {
+  const message: ThemeMessage = { type: THEME_MESSAGE_TYPE, theme, ts };
+  if (palette && palette !== "default") message.palette = palette;
+  return message;
 }
 
 export function parseThemeMessage(
@@ -51,7 +64,17 @@ export function parseThemeMessage(
   if (!theme) return null;
   if (typeof data.ts !== "number") return null;
   if (Date.now() - data.ts > MAX_THEME_AGE_MS) return null;
-  return { type: THEME_MESSAGE_TYPE, theme, ts: data.ts };
+  const palette = parseEmbedPalette(data.palette);
+  // An unknown or default palette costs the palette only, never the theme.
+  return palette
+    ? { type: THEME_MESSAGE_TYPE, theme, ts: data.ts, palette }
+    : { type: THEME_MESSAGE_TYPE, theme, ts: data.ts };
+}
+
+function parseEmbedPalette(value: unknown): PaletteName | undefined {
+  if (typeof value !== "string") return undefined;
+  const palette = normalizePalette(value.trim().toLowerCase());
+  return palette === "default" ? undefined : palette;
 }
 
 /** Apply canon theme attributes used by tokens.css + Tailwind `dark:`. */
@@ -168,6 +191,18 @@ export function resolveEmbedTheme(sources: {
   return (
     sources.pick?.mode ?? sources.parent ?? sources.url ?? (sources.tenant === "light" ? "light" : "dark")
   );
+}
+
+/**
+ * The palette an embed paints: a visitor `/theme` pick > the parent's
+ * `digichat:theme` palette > the default look. The embed's existing theme
+ * effect is the only writer of `data-palette`.
+ */
+export function resolveEmbedPalette(sources: {
+  pick: EmbedUserTheme | null;
+  parent: PaletteName | null;
+}): PaletteName {
+  return sources.pick?.palette ?? sources.parent ?? "default";
 }
 
 /** The stored pick as written (a stable string, for useSyncExternalStore). */

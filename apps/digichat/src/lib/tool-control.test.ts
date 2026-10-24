@@ -3,12 +3,13 @@ import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { toDigichatClientConfig } from "./deploy-config/client-projection";
+import { expandDigichatDocument } from "./deploy-config/loader";
 import { parseDigichatConfig } from "./deploy-config/schema";
 import { toolControlFor } from "./tool-control";
 
 function clientFrom(rel: string, host?: string) {
   const raw = readFileSync(resolve(__dirname, "../../config", rel), "utf8");
-  const cfg = parseDigichatConfig(loadYaml(raw), rel);
+  const cfg = parseDigichatConfig(expandDigichatDocument(loadYaml(raw)), rel);
   const dep = host ? cfg.hosts?.[host] : cfg.deployment;
   if (!dep) throw new Error(`missing deployment in ${rel}`);
   return toDigichatClientConfig(dep);
@@ -32,12 +33,11 @@ describe("toolControlFor", () => {
     const client = foundryClient();
     expect(client.backendType).toBe("foundry");
     expect(client.tools.allowUserToggle).toBe(false);
-    expect(client.tools.catalog).toHaveLength(2);
-    expect(client.tools.catalog[0]?.id).toBe("file_search");
-    expect(client.tools.catalog[1]?.tools?.map((tool) => tool.label)).toEqual([
-      "List connections",
-      "Open item",
-    ]);
+    expect(client.tools.catalog).toHaveLength(1);
+    const tools = client.tools.catalog[0]?.tools ?? [];
+    expect(tools).toHaveLength(42);
+    expect(new Set(tools.map((tool) => tool.id)).size).toBe(42);
+    expect(tools.every((tool) => tool.group && tool.label)).toBe(true);
     expect(
       toolControlFor({
         backendType: client.backendType,

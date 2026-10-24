@@ -2,8 +2,7 @@
 title: digivoice, the voice loop on your machine
 order: 14
 summary: >-
-  Speak, transcribe, rewrite, hear back — entirely local. Why voice input
-  belongs on the machine, not in the cloud.
+  Speak, transcribe, rewrite and hear the result locally. Voice input stays on the machine.
 ---
 
 Typing is not always the way people work. Sometimes the thought arrives
@@ -15,7 +14,7 @@ loop runs on the operator's own machine, with no audio ever leaving it.
 ## What it is for
 
 The audience question is about place: where should voice be processed? The
-common answer — send the audio to a hosted service — trades away the most
+common answer, send the audio to a hosted service, trades away the most
 sensitive stream a person produces: their voice, with all its background.
 digivoice answers that the machine in front of you is already fast enough.
 Local transcription and synthesis keep the loop private by construction,
@@ -26,7 +25,7 @@ offline-capable, and free of per-minute metering.
 The loop has four stations. Capture records from the microphone to a local
 audio file. Transcription turns that file into text with a local speech
 model. An optional rewrite pass reshapes the raw transcript for where it is
-going — a message, a note, a command — using a small local model with a
+going, a message, a note, a command, using a small local model with a
 cleanup prompt that keeps the boundary between instruction and content.
 Synthesis speaks results back through a local voice. History stays on the
 machine as an append-only log the operator can search and revisit.
@@ -42,7 +41,7 @@ flowchart LR
   HIST --> SPK[speak back]
 ```
 
-Settings are scriptable — get and set from the command line — so the loop
+Settings are scriptable, get and set from the command line, so the loop
 can be driven by other tools, not only by fingers. A built-in checkup
 command reports what the host can and cannot do, because a local tool owes
 its operator an honest account of the host.
@@ -63,26 +62,10 @@ its text output travels further.
 ## Running it in each home
 
 digivoice has one home: the operator's machine. It is not a service and it
-does not deploy to Cloudflare or to shared servers — voice capture needs the
+does not deploy to the cloud or to shared servers, voice capture needs the
 microphone in front of the person speaking. That constraint is also its
 strength: there is no voice infrastructure to operate, scale or pay for. The
 self-hosting story for voice is simply that it was never hosted at all.
-
-## Trade-offs
-
-Local-first voice trades raw model size for privacy and latency. A hosted
-giant hears slightly better; the local loop hears well enough, answers
-faster, works on a plane, and never uploads a word. Model files live on disk
-and take space, and the operator picks them — curation effort in exchange for
-zero metering. For a tool that handles speech, that trade is usually worth
-making.
-
-## Roadmap
-
-The loop gets smarter hosts rather than bigger servers: better local models
-as they arrive, more destinations for reshaped text, and tighter bridges to
-the terminal surfaces. The local-only commitment does not move — it is the
-feature, not a limitation awaiting infrastructure.
 
 > **Why digithings.** Voice tooling normally means streaming your speech to
 > someone else's servers on someone else's meter. A local loop keeps the most

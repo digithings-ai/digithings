@@ -24,7 +24,15 @@ declare module "pagedjs" {
      * `content` is ONE node or its HTML, never an array: it goes straight to
      * `createTreeWalker`, which rejects anything that is not a Node. Both
      * shapes of that mistake were measured here rather than guessed.
+     *
+     * A string stylesheet is a URL to pagedjs, not CSS text. To hand it a
+     * string of CSS, pass a one-key object whose value is the CSS: pagedjs
+     * reads the value and uses the key only as a label.
      */
-    preview(content: HTMLElement | string, stylesheets: string[] | undefined, renderTo: HTMLElement): Promise<Chunker>;
+    preview(
+      content: HTMLElement | string,
+      stylesheets: Array<string | Record<string, string>> | undefined,
+      renderTo: HTMLElement,
+    ): Promise<Chunker>;
   }
 }

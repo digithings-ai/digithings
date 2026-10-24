@@ -18,13 +18,12 @@
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 
+import { makeRecordedFrame, type RecordedFrame } from "../../../packages/tui-frame/src/record.ts";
 import {
   cropMainPane,
-  makeRecordedFrame,
   railColumns,
   DEFAULT_FRAME_HEIGHT,
   DEFAULT_FRAME_WIDTH,
-  type RecordedFrame,
 } from "./frame";
 import { startFixtureApi, type FixtureApi } from "./fixture-api";
 import { PLACEHOLDER, UNREACHABLE } from "./read";

@@ -33,11 +33,6 @@ from digivoice.opentui import launch_opentui
 from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 from digivoice.settings import (
     HOTKEYS_DOCS,
-    PRESET_LABELS,
-    BannerDensity,
-    BannerPosition,
-    RewritePreset,
-    RewriteRunnerKind,
     VoiceSettings,
     cycle_rewrite_timeout,
     format_rewrite_timeout,
@@ -775,9 +770,3 @@ def run_interactive_setup(
         if note:
             stdout.write(note)
             stdout.flush()
-
-
-def _silence_unused() -> None:
-    # Keep literal-type imports referenced for type checkers after refactors.
-    _ = (RewritePreset, RewriteRunnerKind, BannerDensity, BannerPosition)
-    _ = PRESET_LABELS

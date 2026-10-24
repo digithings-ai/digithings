@@ -127,7 +127,11 @@ def test_a_refused_port_never_opens_a_connection(monkeypatch):
     def _no_network(*args, **kwargs):
         raise AssertionError("the gate opened a connection for a refused knob")
 
-    monkeypatch.setattr(health.urllib.request, "urlopen", _no_network)
+    # The seam is the probe opener, not ``urllib.request.urlopen``: the opener
+    # is what carries the empty proxy map and the redirect refusal (DIG-4991),
+    # so patching the module function would leave the real transport in place
+    # and this arm would prove nothing.
+    monkeypatch.setattr(health._OPENER, "open", _no_network)
 
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
     report = health.run_gate((check,), config={"DT_DIGIGRAPH_PORT": "8000@evil.com"})
@@ -150,7 +154,7 @@ def test_the_gate_still_probes_a_port_it_accepted(monkeypatch):
         seen.append(request.full_url)
         raise AssertionError("the fake transport is the only thing that answers")
 
-    monkeypatch.setattr(health.urllib.request, "urlopen", _record)
+    monkeypatch.setattr(health._OPENER, "open", _record)
 
     check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digigraph")
     health.run_gate((check,), config={"DT_DIGIGRAPH_PORT": "18000"})
@@ -525,3 +529,181 @@ def test_a_row_the_catalogue_cannot_read_fails_instead_of_crashing():
 
     assert not report.ok
     assert _names(report.failed) == ("broken",)
+
+
+# --- the transport is part of the probe (DIG-4991) ---------------------------
+#
+# A probe is only as trustworthy as where it goes. The gate validates the URL
+# it resolves, but the URL is not the whole journey: a redirect moves the
+# request after that check, and an environment proxy moves it before the
+# socket. Both are refused here rather than reported as a pass, because a
+# verdict about a service that was never reached is the failure mode this gate
+# exists to prevent.
+
+
+class _RedirectingHandler(BaseHTTPRequestHandler):
+    """``/start`` redirects to ``/healthz``; everything else answers 200."""
+
+    def log_message(self, *args):
+        return
+
+    def _respond(self):
+        self.server.hits.append(self.path)
+        if self.path == "/start":
+            self.send_response(302)
+            self.send_header("Location", "/healthz")
+            self.end_headers()
+            return
+        body = json.dumps({"ok": True}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_GET = _respond
+    do_POST = _respond
+
+
+def _serve_redirecting():
+    """A fake service that answers /start with a redirect to /healthz."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _RedirectingHandler)
+    server.hits = []
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def shutdown():
+        server.shutdown()
+        server.server_close()
+
+    return f"http://127.0.0.1:{server.server_address[1]}", shutdown, server.hits
+
+
+def test_a_redirect_is_a_failure_and_is_not_followed():
+    """A 3xx is FAILED: the URL the gate validated is the URL that answers.
+
+    A followed redirect would report a verdict about an address the catalogue
+    never named -- and, off loopback, one `_assert_loopback_url` never saw.
+    The second assertion is the load-bearing one: the target was not requested
+    at all, so the green page did not get a vote.
+    """
+    base, stop, hits = _serve_redirecting()
+    try:
+        status, detail = health.probe_http(base + "/start")
+    finally:
+        stop()
+    assert status == contracts.FAILED
+    assert "302" in detail
+    # The detail says it was refused, not that it was the wrong status: a
+    # followed redirect that returns a non-200 would read the same otherwise.
+    assert "redirect refused" in detail
+    assert hits == ["/start"]
+
+
+def test_a_redirect_on_a_post_probe_is_a_failure_too():
+    """The refusal lives in the transport, not in one probe's arm."""
+    base, stop, _hits = _serve_redirecting()
+    try:
+        status, detail = health.probe_jsonrpc(base + "/start")
+    finally:
+        stop()
+    assert status == contracts.FAILED
+    assert "302" in detail
+    assert "redirect refused" in detail
+
+
+@pytest.mark.parametrize("leg", ["write", "read-back"])
+def test_a_redirect_is_a_failure_on_both_roundtrip_legs(leg):
+    """The write and the read-back are separate requests; each refuses a 3xx.
+
+    Without these arms the leg still fails, but as ``write failed:
+    RedirectRefused: ...``: the probe's own words are what tell the operator
+    the transport refused the redirect.
+    """
+    base, stop, _hits = _serve_redirecting()
+    try:
+        if leg == "write":
+            status, detail = health.probe_roundtrip(base + "/start", "n0nce")
+        else:
+            status, detail = health.probe_roundtrip(
+                base + "/healthz", "n0nce", read_path="/start"
+            )
+    finally:
+        stop()
+    assert status == contracts.FAILED
+    assert "redirect refused" in detail
+    assert "RedirectRefused" not in detail
+
+
+def test_a_proxy_in_the_environment_does_not_reroute_a_probe(monkeypatch):
+    """The opener carries an empty proxy map, so ``http_proxy`` cannot move it.
+
+    The opener is rebuilt while the variable points at a closed port: a
+    default ``ProxyHandler`` reads that variable when it is built, so a probe
+    that still reaches the fake service proves the map was emptied.
+
+    CPython bypasses a proxy for a loopback host by itself, so that shortcut is
+    switched off here. Without it, the arm would pass whether or not the map
+    was emptied, and would prove nothing.
+    """
+    base, stop = _serve({"/healthz": (200, {"ok": True})})
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("all_proxy", "http://127.0.0.1:1")
+    monkeypatch.setattr(health.urllib.request, "proxy_bypass", lambda host: False)
+    monkeypatch.setattr(health, "_OPENER", health._build_opener())
+    try:
+        status, detail = health.probe_http(base + "/healthz")
+    finally:
+        stop()
+    assert status == contracts.PASSED, detail
+
+
+def test_a_gate_report_never_prints_a_password_from_a_configured_url():
+    """The gate's JSON carries the URL it probed, so it redacts it too.
+
+    `dt status --json` and the gate table are read by CI and pasted into
+    tickets; a configured URL with userinfo must not put a credential there.
+    """
+    check = contracts.Check(
+        name="remote",
+        kind="http",
+        url=None,
+        profiles=("all",),
+        source="test fixture",
+        requires="REMOTE_URL",
+    )
+
+    result = health.run_check(
+        check, config={"REMOTE_URL": "http://operator:s3cret@127.0.0.1:1/x"}, timeout=1.0
+    )
+
+    printed = json.dumps(result.to_dict())
+    assert "s3cret" not in printed
+    assert "***@" in printed
+
+
+def test_a_configured_url_that_does_not_parse_does_not_print_its_credential():
+    """The DETAIL column is a print path too.
+
+    ``http.client.InvalidURL`` quotes the netloc it refused, and on a
+    ``requires`` row -- exempt from the loopback rule -- the netloc is where
+    the userinfo sits. A space in the authority is the shape that reaches the
+    exception: the URL parses, so it is not refused earlier, and http.client
+    then refuses the netloc in a message that repeats it.
+    """
+    check = contracts.Check(
+        name="remote",
+        kind="http",
+        url=None,
+        profiles=("all",),
+        source="test fixture",
+        requires="REMOTE_URL",
+    )
+
+    result = health.run_check(
+        check, config={"REMOTE_URL": "http://operator:s3cret@127.0.0.1 :9000/x"}, timeout=1.0
+    )
+
+    assert result.status == contracts.FAILED
+    assert "s3cret" not in result.detail
+    assert "s3cret" not in json.dumps(result.to_dict())

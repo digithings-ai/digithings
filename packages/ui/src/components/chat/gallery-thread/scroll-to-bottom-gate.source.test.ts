@@ -25,14 +25,15 @@ describe("gallery-thread scroll-to-bottom gate", () => {
   it("keeps the top-anchored user message off the top edge", () => {
     const css = read(join("..", "..", "..", "styles", "chat-aui.css"));
     expect(css).toMatch(
-      /\.digichat-thread__viewport\s+\[data-aui-top-anchor-user\]\s*\{[^}]*padding-top:\s*1\.5rem/,
+      /\.digichat-thread__viewport\s+\[data-aui-top-anchor-user\]\s*\{[^}]*padding-top:\s*var\(--density-gap-4/,
     );
   });
 
   it("raises the top-anchor clamp by the padding so pinned messages do not clip", () => {
     const source = read("thread.aui.tsx");
-    // The clamp scores the anchor's offsetHeight, which includes the 1.5rem
-    // padding-top, so tallerThan must be raised by the same amount (10em + 1.5rem).
+    // The clamp scores the anchor's offsetHeight, which includes the padding-top
+    // (now the message-gap token, at most 1.25rem), so tallerThan stays raised
+    // by the original 1.5rem allowance (10em + 1.5rem).
     expect(source).toMatch(
       /topAnchorMessageClamp=\{\{\s*tallerThan:\s*"11\.5em",\s*visibleHeight:\s*"6em"\s*\}\}/,
     );

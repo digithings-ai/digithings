@@ -43,7 +43,7 @@ are applied.
   (Task 1: `digisearch.web.retrieve`, the ONLY place that imports
   `digisearch.web_search.*`) so a Phase A shape change touches exactly
   one file. Direct import within `digisearch`; HTTP only at
-  process/component boundaries (digigraph, digichat, digiclaw call
+  process/component boundaries (digigraph, digichat, digibot call
   `POST /v1/research_turn` / `POST /v1/orchestrator_invoke` with service JWT).
 - **Envelope split (R1):** `digisearch.web_exa.WebSearchData`
   (`{results, output, search_type, cost_dollars}`) remains the turn /

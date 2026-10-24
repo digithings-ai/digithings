@@ -8,6 +8,7 @@ import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { ChatNoticeContent, chatNoticeRootProps } from "@digithings/ui/chat/notice";
 import { Button } from "@digithings/ui/ui";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { isPaletteId } from "@digithings/ui/theme";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { readInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
 
@@ -97,15 +98,8 @@ export async function waitForServices(
  * rather than moved away: this module's importers (the /chat routes, the
  * contract test) keep the surface they already had.
  */
-export {
-  DEFAULT_CHAT_EMBED_HOST,
-  EMBED_SHELL_COPY,
-  OCC_CHAT_EMBED_HOST,
-} from "@/lib/embedCopy";
-import {
-  DEFAULT_CHAT_EMBED_HOST,
-  EMBED_SHELL_COPY,
-} from "@/lib/embedCopy";
+export { DEFAULT_CHAT_EMBED_HOST, EMBED_SHELL_COPY, OCC_CHAT_EMBED_HOST } from "@/lib/embedCopy";
+import { DEFAULT_CHAT_EMBED_HOST, EMBED_SHELL_COPY } from "@/lib/embedCopy";
 
 export type EmbedShellTheme = "light" | "dark";
 
@@ -118,11 +112,22 @@ export function readParentDocumentTheme(
   return el.getAttribute("data-theme") === "light" ? "light" : "dark";
 }
 
+/** Parent `[data-palette]`. Absent means the default look. */
+export function readParentDocumentPalette(
+  el: { getAttribute(name: string): string | null } = document.documentElement,
+): string | undefined {
+  const value = el.getAttribute("data-palette")?.trim().toLowerCase();
+  // Only a known id crosses the frame; anything else is the default look.
+  if (!value || !isPaletteId(value)) return undefined;
+  return value;
+}
+
 export function buildEmbedThemeMessage(
   theme: EmbedShellTheme,
   ts = Date.now(),
-): { type: typeof THEME; theme: EmbedShellTheme; ts: number } {
-  return { type: THEME, theme, ts };
+  palette?: string,
+): { type: typeof THEME; theme: EmbedShellTheme; ts: number; palette?: string } {
+  return palette ? { type: THEME, theme, ts, palette } : { type: THEME, theme, ts };
 }
 
 /** Parent → embed: surface handshake/load failures inside CliThread. */
@@ -288,6 +293,16 @@ export type ChatEmbedShellProps = {
    */
   acceptsInviteToken?: boolean;
   /**
+   * Resolved site theme from the surrounding `ThemeProvider`
+   * (`useTheme().theme`), when the caller has one. The provider paints that
+   * same value onto `<html data-theme>`, so this is not a second source of
+   * truth — it lets the shell's own mirror (`data-theme` / `colorScheme` on the
+   * wrapper) track the context directly instead of waiting for the observer
+   * below. Routes without a provider omit it and the document stays the only
+   * source, exactly as before.
+   */
+  theme?: EmbedShellTheme;
+  /**
    * What the cold-start cover paints. `"toolchain"` is the shared
    * BootLabOverlay tool-chain (the landing pop-up's LiveAsk keeps it);
    * `"banner"` is the digichat hero banner alone, for the full-page /chat and
@@ -326,11 +341,13 @@ export function ChatEmbedShell({
   embedHost = DEFAULT_CHAT_EMBED_HOST,
   acceptsInviteToken = false,
   warmupLoader = "toolchain",
+  theme: themeProp,
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeLoadedRef = useRef(false);
   const embedReadyRef = useRef(false);
   const themeRef = useRef<EmbedShellTheme>("dark");
+  const paletteRef = useRef<string | undefined>(undefined);
   /** The embed never became the chat (error page, no frame, no ready). */
   const [loadFailed, setLoadFailed] = useState(false);
   /** Bumped by Retry: remounts the frame and restarts the ready wait. */
@@ -358,9 +375,7 @@ export function ChatEmbedShell({
     // React's first client render matches the DOM; a mismatch here means
     // React never patches src again, which froze the embed on the old theme.
     if (typeof document !== "undefined") {
-      const frames = [
-        ...document.querySelectorAll<HTMLIFrameElement>("#dc-digichat-frame"),
-      ];
+      const frames = [...document.querySelectorAll<HTMLIFrameElement>("#dc-digichat-frame")];
       const liveEl = frames.find((el) => el.closest("[hidden]") === null) ?? frames[0];
       const live = liveEl?.getAttribute("src");
       if (live) return live;
@@ -368,6 +383,10 @@ export function ChatEmbedShell({
     return parseOrigin(embedOrigin) ? embedSrc(embedOrigin, embedHost, "light") : "";
   });
   const [shellTheme, setShellTheme] = useState<EmbedShellTheme>("light");
+  // What the wrapper paints. With a provider in scope the context already
+  // holds the site's resolved theme, so use it directly; without one, the
+  // document mirror below is the only source.
+  const shell = themeProp ?? shellTheme;
   const targetOrigin = useMemo(() => parseOrigin(embedOrigin), [embedOrigin]);
   const configError = !targetOrigin;
   useEffect(() => {
@@ -378,15 +397,14 @@ export function ChatEmbedShell({
     if (!targetOrigin) return;
     const theme = readParentDocumentTheme();
     themeRef.current = theme;
+    paletteRef.current = readParentDocumentPalette();
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
       setShellTheme(theme);
       // Invite key, read from the live URL (DIG-1210). Resolved here rather
       // than during render: the SSR pass cannot see the query, and the exported
       // HTML must not carry one visitor's key to the next.
-      const token = acceptsInviteToken
-        ? readInviteToken(window.location.search)
-        : undefined;
+      const token = acceptsInviteToken ? readInviteToken(window.location.search) : undefined;
       // The key has been read and now lives only in this effect's local state
       // for the session, so it has no further reason to sit in the address bar
       // (DIG-1437). Never a store, a cookie or sessionStorage.
@@ -408,8 +426,10 @@ export function ChatEmbedShell({
 
     const onThemeAttr = () => {
       const next = readParentDocumentTheme();
-      if (next === themeRef.current) return;
+      const palette = readParentDocumentPalette();
+      if (next === themeRef.current && palette === paletteRef.current) return;
       themeRef.current = next;
+      paletteRef.current = palette;
       setShellTheme(next);
       // Live toggles post digichat:theme. Rebuilding `src` reloads the iframe
       // and drops the session. The ready handler posts themeRef if the frame
@@ -417,12 +437,12 @@ export function ChatEmbedShell({
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
-      win.postMessage(buildEmbedThemeMessage(next), targetOrigin);
+      win.postMessage(buildEmbedThemeMessage(next, Date.now(), palette), targetOrigin);
     };
     const observer = new MutationObserver(onThemeAttr);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme"],
+      attributeFilter: ["data-theme", "data-palette"],
     });
     return () => observer.disconnect();
   }, [acceptsInviteToken, embedOrigin, embedHost, targetOrigin]);
@@ -450,7 +470,10 @@ export function ChatEmbedShell({
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       // Always sync theme on ready (covers cold load + late handshake).
-      win.postMessage(buildEmbedThemeMessage(themeRef.current), targetOrigin);
+      win.postMessage(
+        buildEmbedThemeMessage(themeRef.current, Date.now(), readParentDocumentPalette()),
+        targetOrigin,
+      );
       const handoff = readAndClearHandoff();
       if (!handoff || (!handoff.messages.length && !handoff.pending)) return;
       win.postMessage(
@@ -539,6 +562,21 @@ export function ChatEmbedShell({
     setLoadFailed(false);
     setForceReveal(false);
     setEmbedReady(false);
+    // The frame restarts from `src`, which was built for the theme at first
+    // mount. Carry the theme that is live now — and every other param already
+    // in the URL, the invite key in particular, which left the address bar when
+    // it was read — so a retry does not paint the old mode before the embed
+    // says ready. Live toggles never come through here: they postMessage, so
+    // the conversation survives.
+    const live = iframeRef.current?.getAttribute("src") || src;
+    const liveTheme = themeProp ?? themeRef.current;
+    if (live) {
+      const url = new URL(live, window.location.href);
+      if (url.searchParams.get("theme") !== liveTheme) {
+        url.searchParams.set("theme", liveTheme);
+        setSrc(url.toString());
+      }
+    }
     setAttempt((n) => n + 1);
   };
 
@@ -546,7 +584,7 @@ export function ChatEmbedShell({
     // A build with no embed origin cannot recover in place; reload the page.
     return (
       <div
-        data-theme={shellTheme}
+        data-theme={shell}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -554,7 +592,7 @@ export function ChatEmbedShell({
           height: "100%",
           minHeight: "100%",
           width: "100%",
-          colorScheme: shellTheme,
+          colorScheme: shell,
         }}
       >
         <EmbedLoadErrorCard onRetry={() => window.location.reload()} />
@@ -570,7 +608,7 @@ export function ChatEmbedShell({
       // already pads for the fixed nav, so stacking .dc-page's own nav-clearing
       // padding on top doubled it. Nothing else in the codebase reads .dc-page —
       // it was never actually shared, just misapplied here.
-      data-theme={shellTheme}
+      data-theme={shell}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -593,7 +631,7 @@ export function ChatEmbedShell({
         // The white-flash guard lives on the frame itself (`.dc-chat-frame`
         // paints --chat-frame-canvas pre-paint) and inside the iframe's own boot.
         background: "transparent",
-        colorScheme: shellTheme,
+        colorScheme: shell,
       }}
     >
       {loadFailed ? <EmbedLoadErrorCard onRetry={retryEmbed} /> : null}

@@ -89,7 +89,7 @@ GENERIC_PLACEHOLDER_VALUES = (
 # weak real credential, not a placeholder, so it is never exempt.
 PRODUCT_NAME_VALUES = (
     'digichat', 'digigraph', 'digiquant', 'digisearch', 'digikey',
-    'digivault', 'digiclaw', 'digibase', 'digitrace', 'digillm',
+    'digivault', 'digibot', 'digibase', 'digitrace', 'digillm',
     'digifetch', 'digiskills', 'digiweb', 'digivoice', 'digidev',
     'digismith', 'digithings',
 )

@@ -94,7 +94,7 @@ export type EmbedTenantClientConfig = {
       id: string;
       default?: boolean;
       label?: string;
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
   /** Operator MCP ids/labels only (+ per-tool ids from the allowlist) */
@@ -113,7 +113,7 @@ export type EmbedTenantClientConfig = {
     available?: string[];
     allowPicker?: boolean;
     picker?: {
-      presets: Array<{ id: string; label: string; description: string; model: string }>;
+      presets: Array<{ id: string; label: string; model: string }>;
       groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
       showFullList: boolean;
     };

@@ -168,7 +168,7 @@ class SupabaseConnector:
             self._audit(table, "upsert", total, on_conflict)
             return SupabaseWriteResult(success=True, table=table, rows=total)
         except Exception as exc:  # surface any client/transport error
-            logger.error("supabase: upsert failed for %s: %s", table, exc)
+            logger.exception("supabase: upsert failed for %s: %s", table, exc)
             return SupabaseWriteResult(success=False, table=table, error=str(exc))
 
     def select(
@@ -231,7 +231,7 @@ class SupabaseConnector:
             total = getattr(response, "count", None)
             return SupabaseReadResult(success=True, rows=data, count=total)
         except Exception as exc:  # surface any client/transport error
-            logger.error("supabase: select failed for %s: %s", table, exc)
+            logger.exception("supabase: select failed for %s: %s", table, exc)
             return SupabaseReadResult(success=False, error=str(exc))
 
     def delete(
@@ -266,7 +266,7 @@ class SupabaseConnector:
             )
             return SupabaseWriteResult(success=True, table=table, rows=len(deleted_rows))
         except Exception as exc:
-            logger.error("supabase: delete failed for %s: %s", table, exc)
+            logger.exception("supabase: delete failed for %s: %s", table, exc)
             return SupabaseWriteResult(success=False, table=table, error=str(exc))
 
     # ── Private helpers ───────────────────────────────────────────────────────

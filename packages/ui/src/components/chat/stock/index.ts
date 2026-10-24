@@ -59,8 +59,11 @@ export {
   DEFAULT_EMBED_CHAT_PREFS,
   createDefaultEmbedChatPrefs,
   chromePrefsFromDeploy,
+  resetChromePrefsFromDeploy,
   persistDensity,
   useStoredDensityAfterMount,
+  persistScroll,
+  useStoredScrollAfterMount,
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,
@@ -100,3 +103,13 @@ export {
   type ToolFallbackRootProps,
 } from "./tool-fallback.aui";
 export { toolRowTitle } from "./tool-display";
+
+export {
+  DEFAULT_SCROLL_MODE,
+  SCROLL_MODES,
+  normalizeScrollMode,
+  resolveScrollMode,
+  scrollModeProps,
+  type ScrollMode,
+  type ScrollViewportProps,
+} from "../gallery-thread/scroll-mode";

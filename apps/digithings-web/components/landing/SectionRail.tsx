@@ -16,28 +16,26 @@ export function SectionRail() {
   const [active, setActive] = useState(-1);
 
   useEffect(() => {
-    let frame = 0;
-    const read = () => {
-      const mid = window.innerHeight / 2;
-      let next = -1;
-      SECTIONS.forEach((section, index) => {
-        const el = document.getElementById(section.id);
-        if (el && el.getBoundingClientRect().top <= mid) next = index;
-      });
-      setActive(next);
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(read);
-    };
-    read();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
+    /* One observer, a zero-height band on the viewport's middle line: the band
+       whose top crossed that line is the one under the reader. Reading every
+       section's rect on each scroll frame forced a layout per frame for seven
+       1px ticks. An entry leaving the line is ignored rather than resetting the
+       label, so the last band stays named after the page bottom scrolls past. */
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const index = SECTIONS.findIndex((section) => section.id === entry.target.id);
+          if (index >= 0) setActive(index);
+        }
+      },
+      { rootMargin: "-50% 0px -50% 0px" },
+    );
+    for (const section of SECTIONS) {
+      const el = document.getElementById(section.id);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
   }, []);
 
   const current = active >= 0 ? SECTIONS[active] : null;
@@ -58,7 +56,7 @@ export function SectionRail() {
               className="group flex h-[0.8rem] w-[1.4rem] items-center justify-center"
             >
               <span
-                className={`block h-px transition-[width,background-color] duration-300 ${
+                className={`block h-px transition-colors duration-200 ease-brand ${
                   index === active
                     ? "w-[1.1rem] bg-ink"
                     : "w-[0.5rem] bg-ink-mute group-hover:w-[0.8rem] group-hover:bg-ink-soft"

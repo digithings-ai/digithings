@@ -27,6 +27,7 @@ import httpx
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.data.onchain._frames import empty_series_frame
 from digiquant.data.onchain._url_guard import is_allowed_base_url
 from digiquant.paths import resolve_under_data_root
 
@@ -102,15 +103,6 @@ def day1_index_to_date(index: int) -> date:
     return DAY1_EPOCH + timedelta(days=index)
 
 
-def _empty_frame() -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "date": pl.Series("date", [], dtype=pl.Date),
-            "value": pl.Series("value", [], dtype=pl.Float64),
-        }
-    )
-
-
 def series_data_to_frame(payload: object, *, series_id: str = "") -> pl.DataFrame:
     """Pure parser: Bitview ``SeriesData`` JSON → ``date``/``value`` Polars.
 
@@ -125,18 +117,18 @@ def series_data_to_frame(payload: object, *, series_id: str = "") -> pl.DataFram
     """
     del series_id  # reserved for diagnostics; shape is index/data only
     if not isinstance(payload, dict):
-        return _empty_frame()
+        return empty_series_frame()
     data = payload.get("data")
     if not isinstance(data, list):
-        return _empty_frame()
+        return empty_series_frame()
     try:
         start = int(payload.get("start", 0))
     except (TypeError, ValueError):
-        return _empty_frame()
+        return empty_series_frame()
     index_name = payload.get("index")
     if index_name not in (None, DEFAULT_INDEX, "day1"):
         logger.warning("Bitview series index %r is not day1; refusing", index_name)
-        return _empty_frame()
+        return empty_series_frame()
     dates: list[date] = []
     values: list[float | None] = []
     for offset, raw in enumerate(data):
@@ -149,7 +141,7 @@ def series_data_to_frame(payload: object, *, series_id: str = "") -> pl.DataFram
         except (TypeError, ValueError):
             values.append(None)
     if not dates:
-        return _empty_frame()
+        return empty_series_frame()
     return pl.DataFrame({"date": dates, "value": values}).sort("date")
 
 

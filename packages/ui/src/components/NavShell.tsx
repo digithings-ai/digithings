@@ -76,6 +76,11 @@ export interface NavShellProps {
    *  focusable target yet. */
   skipTo?: string;
   /**
+   * Start hidden: the bar is tucked away on first paint and only returns on
+   * the scroll-up grammar. Use on a page whose hero already carries the brand
+   * so the two banners are never on screen together at the top. */
+  startHidden?: boolean;
+  /**
    * Show/hide grammar for the bar. Default "scroll" — settle after 8px,
    * yield past 180px on scroll-down, return on scroll-up (the canon
    * behavior, everywhere). "hover" is for a surface that doesn't scroll at
@@ -407,11 +412,7 @@ function NavShellStrip({
             currentPath={currentPath}
           />
         ) : (
-          <NavShellLink
-            key={key}
-            link={item}
-            current={hrefIsCurrent(item.href, currentPath)}
-          />
+          <NavShellLink key={key} link={item} current={hrefIsCurrent(item.href, currentPath)} />
         );
       })}
     </nav>
@@ -494,6 +495,7 @@ export function NavShell({
   currentPath,
   skipTo,
   autoHide = "scroll",
+  startHidden = false,
   scrollRevealDelta = 0,
   hoverRevealZone,
   clipToFrame = false,
@@ -723,7 +725,8 @@ export function NavShell({
           collide — and it lets CSS pin the bar in place while a menu is open. */}
       <header
         ref={navRef}
-        className={`nav-shell${menuOpen ? " is-menu-open" : ""}${clipToFrame ? " is-clipped" : ""}`}
+        className={`nav-shell${menuOpen ? " is-menu-open" : ""}${clipToFrame ? " is-clipped" : ""}${startHidden ? " is-hidden" : ""}`}
+        data-autohide={autoHide}
         data-group-open={openGroup !== null}
       >
         <div className="nav-shell-row relative z-[56] mx-auto flex w-full max-w-[var(--wrap,1180px)] items-center justify-between gap-[1.5rem] px-[var(--gutter,1.5rem)] max-[880px]:gap-[1rem]">

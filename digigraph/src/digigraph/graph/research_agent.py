@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
@@ -37,6 +36,7 @@ from digigraph.compaction import (
 )
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from digigraph.research_brief_models import strip_json_fence
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +67,6 @@ Grounding with tools (when available):
 - If a tool returns an error/no data, or no `web_grounding` is present, say so in the
   relevant field and lower conviction; never invent values.
 """
-
-
-def _strip_json_fence(raw: str) -> str:
-    s = re.sub(r"^```(?:json)?\s*", "", (raw or "").strip()).strip()
-    return re.sub(r"\s*```$", "", s).strip()
 
 
 # JSON-Schema keywords OpenAI/OpenRouter STRICT structured-output mode does not allow. Pydantic
@@ -432,7 +427,7 @@ def run_research_agent(
                     # as raw="" here. Let it fail with a clear ValueError so the retry/fail-soft path
                     # can diagnose and handle it — a bare json.loads("") raises JSONDecodeError with a
                     # generic message that buries the real cause in the logs (#814).
-                    stripped = _strip_json_fence(raw or "")
+                    stripped = strip_json_fence(raw or "")
                     if not stripped:
                         raise ValueError(
                             f"empty LLM response from {effective_model!r} "

@@ -47,6 +47,7 @@ if (serverBasePath !== clientBasePath) {
 }
 
 const nextConfig: NextConfig = {
+  experimental: { agentUpgrade: "security" },
   output: "standalone",
   // Separate `next dev` lock when previewing a second config (e.g. a baked skin YAML)
   // without stopping the dogfood server on :3005.

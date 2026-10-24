@@ -52,7 +52,7 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-type Rule = { selector: string; body: string };
+type Rule = { selector: string; body: string; atRules: string[] };
 
 /**
  * Leaf rules, with at-rule blocks unwrapped.
@@ -62,9 +62,11 @@ type Rule = { selector: string; body: string };
  * a group styles the other half too. Rules inside an at-rule are audited as
  * well — the at-rule condition is not modelled, so the inner rule is read as
  * if it always applies, which is the stricter reading. CSS nesting is refused
- * loudly rather than silently mis-parsed.
+ * loudly rather than silently mis-parsed. `atRules` carries the enclosing
+ * at-rules, outermost first, so a check can tell a top-level rule from a
+ * keyframe step or from a rule that only applies inside one media query.
  */
-function rules(source: string): Rule[] {
+function rules(source: string, atRules: string[] = []): Rule[] {
   const found: Rule[] = [];
   let index = 0;
   while (index < source.length) {
@@ -81,18 +83,23 @@ function rules(source: string): Rule[] {
     }
     const body = source.slice(open + 1, cursor - 1);
     if (prelude.startsWith("@")) {
-      found.push(...rules(body));
+      found.push(...rules(body, [...atRules, normalise(prelude)]));
     } else {
       if (body.includes("{")) {
         throw new Error(
           `the sheet nests rules near "${prelude.slice(0, 60)}": the contract parser has to handle it`,
         );
       }
-      found.push({ selector: prelude, body });
+      found.push({ selector: prelude, body, atRules });
     }
     index = cursor;
   }
   return found;
+}
+
+/** Collapse runs of whitespace, so two layouts of one value read the same. */
+function normalise(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 const sheet = rules(stripComments(css));
@@ -432,6 +439,80 @@ describe("data-scrollbars contract", () => {
         if (!selector.includes("data-scrollbars")) continue;
         expect(selector).toContain(CARRIER);
       }
+    }
+  });
+});
+
+describe("chat-digichat sheet hygiene", () => {
+  /**
+   * The declarations of a rule as a comparable set: property names folded to
+   * lower case, the value trimmed, declarations sorted. A copy pasted with
+   * other spacing, another declaration order or a capitalised property is the
+   * same rule, and the guard has to see it. Only the outside of a value is
+   * normalised, so `content: "a  b"` stays a different value from
+   * `content: "a b"`.
+   */
+  function declarationSet(rule: Rule): string {
+    return rule.body
+      .split(";")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const colon = entry.indexOf(":");
+        if (colon === -1) return normalise(entry).toLowerCase();
+        const property = normalise(entry.slice(0, colon)).toLowerCase();
+        return `${property}: ${entry.slice(colon + 1).trim()}`;
+      })
+      .sort()
+      .join("; ");
+  }
+
+  /** Which at-rule the rule lives in, as one comparable string. */
+  function context(rule: Rule): string {
+    return rule.atRules.join(" / ");
+  }
+
+  it("carries each rule block once", () => {
+    // Two blocks with the same selector and the same declarations in the same
+    // at-rule context are one rule written twice: the later copy wins the
+    // cascade and the earlier one is dead code, so a fix applied to only one
+    // copy leaves the other stale. `.aui-overlay-scroll`, `.aui-overlay-thumb`
+    // and `.aui-overlay-thumb:hover` shipped twice that way (DIG-4957), and
+    // the DIG-4600 pointer fix had to patch both copies to take effect.
+    // Keyframe steps are exempt: `from`, `to` and `50%` are named again in
+    // every animation, and two keyframes are not one rule.
+    const seen = new Set<string>();
+    const duplicated: string[] = [];
+    for (const rule of sheet) {
+      if (rule.atRules.some((atRule) => /^@(?:-[a-z]+-)?keyframes\b/i.test(atRule))) {
+        continue;
+      }
+      const key = `${context(rule)} { ${normalise(rule.selector)} { ${declarationSet(rule)} } }`;
+      if (seen.has(key)) duplicated.push(key);
+      seen.add(key);
+    }
+
+    expect(duplicated, "the sheet repeats these rule blocks").toEqual([]);
+  });
+
+  it("writes each overlay scrollbar rule once", () => {
+    // The generic guard above needs both copies to still match. This is the
+    // other half of the DIG-4957 hazard: two copies where a fix reached only
+    // one of them, so the later copy keeps the stale value and the sheet has
+    // two answers for one selector. These three rules are the pair DIG-4600
+    // cares about, and they have no conditional variant to sit beside.
+    for (const selector of [
+      ".aui-overlay-scroll",
+      ".aui-overlay-thumb",
+      ".aui-overlay-thumb:hover",
+    ]) {
+      const copies = sheet.filter(
+        (rule) =>
+          rule.atRules.length === 0 &&
+          selectorsOf(rule).length === 1 &&
+          normalise(rule.selector) === selector,
+      );
+      expect(copies, `${selector} is written more than once`).toHaveLength(1);
     }
   });
 });

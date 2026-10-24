@@ -351,7 +351,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     """Two repos in this org report different names, so one global list cannot serve both.
 
     `digithings` runs every test suite through reusable workflows, so GitHub reports
-    each as `<caller> / test` — `digibase / test`, `digiclaw / test`, and eleven more —
+    each as `<caller> / test` — `digibase / test`, `digibot / test`, and eleven more —
     and names nothing `test`. `twelve-x` runs one job and does report a bare `test`.
     A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
     which: 28 PRs blocked, every one of them on `required check 'test' has not
@@ -514,8 +514,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
-    near = mq._near_misses(("test",), ("digibase / test", "digiclaw / test", "path-filter"))
-    assert near[:2] == ["digibase / test", "digiclaw / test"]
+    near = mq._near_misses(("test",), ("digibase / test", "digibot / test", "path-filter"))
+    assert near[:2] == ["digibase / test", "digibot / test"]
     assert "path-filter" not in near, "no shared word; listing it would be noise"
     # Word-based, so an unrelated check that merely contains the letters is excluded.
     assert mq._near_misses(("mypy",), ("mypy — digibase + digikey", "npm-audit")) == [
@@ -3404,6 +3404,58 @@ def test_an_unknown_mode_is_treated_as_enforce(monkeypatch: pytest.MonkeyPatch) 
     closed, because the switch decides whether the queue trusts a status.
     """
     monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, "shadoww")
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
+def test_the_rollback_flag_puts_the_gate_back_into_shadow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`host` switches the broker off, and the gate it depends on goes with it.
+
+    The receipt this gate trusts is written by the broker. With the broker
+    off there is nothing to enforce against, so the gate measures and merges
+    instead of refusing.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("host\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_the_rollback_flag_never_raises_a_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The flag lowers a gate. It never raises one."""
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
+def test_the_rollback_flag_never_raises_a_shadowed_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`app` does not switch the shadow gate to enforce.
+
+    The flag only ever lowers a gate. A gate that is already measuring (the
+    mode the queue ships in) stays measuring when the flag says `app`, so the
+    flag can never be used to switch a gate on.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_an_unreadable_rollback_flag_leaves_the_gate_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flag that cannot be read is not a flag that says `host`."""
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", tmp_path / "not-there")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
     assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
 
 

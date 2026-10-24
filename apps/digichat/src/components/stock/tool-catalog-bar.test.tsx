@@ -76,9 +76,15 @@ describe("ToolCatalogBar", () => {
     expect(document.querySelector("[data-tool-catalog]")).toBeNull();
   });
 
-  it("renders no web toggle for a tenant whose gate is off", () => {
+  // The web-toggle assertions that used to live here are gone with the toggle:
+  // #6211 moved tool toggles into /tools, and the first test in this file
+  // already pins the rule that the bar renders no chips at all. The /tools
+  // behaviour is covered by embed-composer-menu.*.test.tsx.
+  it("renders no web toggle for deny tenants (gate off, no web_search entry)", () => {
+    // datatap shape: gate.webSearch false and no web_search catalog entry —
+    // the tenant AND-gate denies, so no toggle renders and nothing sends.
     stubMapStorage();
-    // datatap shape: gate.webSearch false and no web_search catalog entry.
+    // Trial shape: gate.webSearch false and no web_search catalog entry.
     const denyConfig = {
       ...catalogConfig,
       slug: "datatap",
