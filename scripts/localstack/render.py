@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 
-from .contracts import Check, ContractRefusal, resolve
+from .contracts import Check, ContractRefusal, redact_userinfo, resolve
 from .health import GateReport
 from .orchestrate import StepReport, step_rows
 from .preflight import PreflightReport
@@ -100,7 +100,11 @@ def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile
             (
                 check.name,
                 "http" if check.kind == "http" else check.kind,
-                url or f"(not configured: {reason})",
+                # A configured URL is printed as it was given, and it may
+                # carry userinfo: `dt urls` output is read at a terminal and
+                # pasted into tickets, so the credential is redacted here.
+                # The reason is redacted where it is built, in contracts.
+                redact_userinfo(url) or f"(not configured: {reason})",
                 check.source,
             )
         )
