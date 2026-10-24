@@ -435,6 +435,112 @@ def read_text(rel: str) -> str | None:
         return None
 
 
+def _remote_for(base_ref: str) -> str:
+    """The remote whose objects back ``base_ref``.
+
+    ``origin/main`` belongs to ``origin``; a local branch or a raw sha has no
+    remote, and ``origin`` is the one local-ci fetches (``prepare_wt``), so it
+    is the only sensible default.
+    """
+    head, sep, _ = base_ref.partition("/")
+    return head if sep and head else "origin"
+
+
+def missing_objects(rev: str) -> list[str]:
+    """Object OIDs reachable from ``rev`` that this clone does not have locally.
+
+    A partial clone (``--filter=blob:none``) has every commit and tree but no
+    blobs. ``git grep`` treats each of those as a promisor fetch, so one scan
+    becomes tens of thousands of round-trips - the 600 s gate timeout this
+    leaf exists to fix (DIG-5344). ``--missing=print`` lists them without
+    touching the network or the working tree.
+    """
+    proc = subprocess.run(
+        [GIT, "rev-list", "--objects", "--missing=print", rev],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"cannot list objects of {rev[:12]} ({proc.returncode}): {proc.stderr.strip()}"
+        )
+    return [line[1:] for line in proc.stdout.splitlines() if line.startswith("?")]
+
+
+def _backfill_remotes(base_ref: str) -> list[str]:
+    """Remotes to ask for the missing objects, most likely first.
+
+    Git's own lazy fetch goes to a promisor remote, so that is the one place
+    the object ids are certainly acceptable. A full clone never needs this,
+    and the base ref's remote plus ``origin`` are the fallbacks.
+    """
+    preferred = _remote_for(base_ref)
+    proc = subprocess.run(
+        [GIT, "config", "--get-regexp", r"^remote\..*\.promisor$"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    promisors = [
+        line.split(".")[1]
+        for line in (proc.stdout or "").splitlines()
+        if line.partition(" ")[2].strip().lower() == "true"
+    ]
+    ordered = ([preferred] if preferred in promisors else []) + promisors
+    ordered += [preferred, "origin"]
+    seen: list[str] = []
+    for name in ordered:
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+def prefetch_base(base: str, base_ref: str) -> None:
+    """Backfill the base commit's missing blobs in one request.
+
+    Fetching the commit by name does not help: ``git merge-base`` already put
+    it here, so git finds the want reachable, exits 0 and transfers nothing.
+    The missing *object ids* are what has to be asked for, in one
+    ``--stdin`` request with the filter off. ``git grep`` then reads local
+    storage and the baseline pass is bounded by disk, not by the network.
+
+    A full clone has nothing missing and skips this. If the backfill cannot
+    make the set empty the scan fails closed instead of starting a promisor
+    fetch per blob under the gate's timeout.
+    """
+    remaining = missing_objects(base)
+    if not remaining:
+        return
+    total = len(remaining)
+    errors: list[str] = []
+    for remote in _backfill_remotes(base_ref):
+        proc = subprocess.run(
+            [GIT, "fetch", "--no-filter", "-q", "--stdin", remote],
+            cwd=REPO,
+            input="".join(f"{oid}\n" for oid in remaining),
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=900,
+        )
+        if proc.returncode != 0:
+            errors.append(f"{remote} ({proc.returncode}): {proc.stderr.strip()}")
+            continue
+        remaining = missing_objects(base)
+        if not remaining:
+            return
+    raise RuntimeError(
+        f"{len(remaining)} of {total} baseline objects are still missing after "
+        f"fetching from {', '.join(_backfill_remotes(base_ref))}"
+        + (f"; last errors: {'; '.join(errors)}" if errors else "")
+        + "; refusing to scan with a promisor fetch per blob (re-clone without "
+        "--filter=blob:none, or allow object wants)"
+    )
+
+
 def resolve_base(base_ref: str) -> str:
     """Merge-base of HEAD and base_ref, so the baseline is the fork point."""
     proc = subprocess.run(
@@ -451,18 +557,7 @@ def resolve_base(base_ref: str) -> str:
             "fetch enough history (actions/checkout fetch-depth: 0)."
         )
     base = proc.stdout.strip()
-    # Partial clones (blob:none filter) fetch commit/tree objects eagerly but
-    # leave blobs to be fetched on demand. `git grep` below then triggers one
-    # promisor fetch per blob, which times out on CI (DIG-5344). Pull the base
-    # commit's blobs in a single batched request first; ignore failures so an
-    # offline/full clone still works (the objects are already local there).
-    try:
-        subprocess.run(
-            [GIT, "fetch", "--no-filter", "origin", base],
-            cwd=REPO, capture_output=True, text=True, timeout=300,
-        )
-    except Exception:
-        pass
+    prefetch_base(base, base_ref)
     return base
 
 
