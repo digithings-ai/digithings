@@ -151,6 +151,13 @@ function trialClient() {
   throw new Error("no foundry deployment");
 }
 
+/**
+ * The backend prefixes each MCP tool id with its server id; the row must show
+ * that id, never the deployment's short tool label.
+ */
+const TOOL_ID_PREFIX = "datatap__";
+const rawToolId = (name: string) => `${TOOL_ID_PREFIX}${name}`;
+
 /** The expected page: the service, then each group heading and its tree. */
 function expectedPage(service: string, groups: readonly string[]): string {
   const lines = [`${`/${service}`.padEnd(40)} On`];
@@ -158,7 +165,7 @@ function expectedPage(service: string, groups: readonly string[]): string {
     lines.push(`  # ${groups[g]}`);
     names.forEach((name, i) => {
       const glyph = i === names.length - 1 ? "└─" : "├─";
-      lines.push(`${`  ${glyph} ${name}`.padEnd(40)} On`);
+      lines.push(`${`  ${glyph} ${rawToolId(name)}`.padEnd(40)} On`);
     });
   });
   return lines.join("\n");
@@ -214,6 +221,8 @@ describe("Foundry trial /tools", () => {
     const groups = [...new Set(tools.map((tool) => tool.group ?? ""))];
     expect(groups).toHaveLength(AGENT_TOOLS.length);
     expect(tools.map((tool) => tool.label)).toEqual(AGENT_TOOLS.flat());
+    // The rendered row is the backend id, not the deployment's short label.
+    expect(tools.map((tool) => tool.id)).toEqual(AGENT_TOOLS.flat().map(rawToolId));
     expect(toolsPage()).toBe(expectedPage(service.id, groups));
 
     const rows = screen.getAllByRole("menuitemcheckbox");
@@ -224,11 +233,13 @@ describe("Foundry trial /tools", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("menuitemcheckbox", { name: new RegExp(`^/${service.id}`) }));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /^delete_collector/ }));
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: new RegExp(`^${rawToolId("delete_collector")}`) }),
+    );
     expect(api.setExtraTool).not.toHaveBeenCalled();
     expect(
       screen
-        .getByRole("menuitemcheckbox", { name: /^delete_collector/ })
+        .getByRole("menuitemcheckbox", { name: new RegExp(`^${rawToolId("delete_collector")}`) })
         .getAttribute("aria-checked"),
     ).toBe("true");
   });
