@@ -193,7 +193,6 @@
   margin: 0;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: var(--dc-code-pad);
   overflow-x: auto;
 }
@@ -211,7 +210,6 @@
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: 0.12rem var(--dc-space-xs);
   cursor: pointer;
   opacity: 0;
@@ -251,7 +249,6 @@
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 0;
   padding: 0.45rem var(--dc-space-sm);
   box-sizing: border-box;
 }
@@ -364,7 +361,6 @@
 }
 .dc-send {
   font-size: var(--dc-type-input);
-  border-radius: 0;
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
@@ -545,7 +541,6 @@
   margin: var(--dc-space-3xs) 0 0 var(--dc-body-indent);
   padding: 0.45rem 0.65rem;
   border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--hair));
-  border-radius: 0;
   background: color-mix(in srgb, var(--warn) 8%, transparent);
   font-size: var(--dc-type-xs);
   color: var(--ink-soft);
@@ -570,11 +565,6 @@
   margin: 0;
   padding: 0;
   max-width: var(--dc-gate-max-w);
-  outline: none;
-}
-.dc-byok-option-list:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: 2px;
 }
 .dc-byok-option {
   display: flex;
@@ -611,7 +601,6 @@
   color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: var(--text-sm);
-  outline: none;
 }
 .dc-byok-input:focus {
   border-color: var(--accent);
