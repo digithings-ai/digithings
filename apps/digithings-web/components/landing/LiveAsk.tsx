@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "@digithings/ui";
 import { Button } from "@digithings/ui/ui";
 import { ChatEmbedShell } from "@/components/ChatEmbedShell";
 
@@ -31,6 +32,12 @@ const STAGE_STYLE = {
 } as const;
 
 export function LiveAsk({ embedOrigin, className }: { embedOrigin: string; className?: string }) {
+  // The site theme, read from the provider rather than a second store. The
+  // shell still owns the wire protocol (`?theme=` + `digichat:theme`); this
+  // just hands it the resolved value so the frame slot's own `data-theme` /
+  // `colorScheme` mirror tracks the context.
+  const { theme } = useTheme();
+
   function expand() {
     window.location.href = "/chat";
   }
@@ -39,7 +46,7 @@ export function LiveAsk({ embedOrigin, className }: { embedOrigin: string; class
     <div className={className}>
       <div className="flex flex-col gap-[0.7rem]">
         <div className="aui-theme-stage" style={STAGE_STYLE}>
-          <ChatEmbedShell embedOrigin={embedOrigin} />
+          <ChatEmbedShell embedOrigin={embedOrigin} theme={theme} />
           <span
             aria-hidden="false"
             className="pointer-events-none absolute inset-0 z-10 flex items-start justify-end p-[0.5rem]"

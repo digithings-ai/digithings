@@ -16,10 +16,13 @@
    opaque card covering this one. */
 @layer components {
   .deck-card {
+    /* component tokens — deck card surface */
+    --deck-card-pad: 1rem;
+
     background: var(--surface);
     border: 1px solid var(--hair);
     border-radius: 0;
-    padding: 1rem;
+    padding: var(--deck-card-pad);
   }
 }
 
@@ -29,6 +32,8 @@
    every card pinned until the whole deck ends; the gap is the scroll
    runway between pins. */
 .deck-slots {
+  --deck-gap-narrow: 0.9rem;
+
   display: grid;
   gap: var(--deck-gap, 55svh);
 }
@@ -67,32 +72,38 @@
   margin-bottom: var(--deck-tail, 65svh);
 }
 .deck-rail-pin {
+  --deck-rail-top: 38vh;
+  --deck-rail-font: 0.7rem;
+  --deck-rail-gap: 0.7rem;
+  --deck-rail-pad: 0.8rem;
+  --deck-dot: 7px;
+
   position: sticky;
-  top: 38vh;
+  top: var(--deck-rail-top);
 }
 
 .deck-rail {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 0.8rem;
+  padding: 0 0 0 var(--deck-rail-pad, 0.8rem);
   border-inline-start: 1px solid var(--hair);
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: var(--deck-rail-gap, 0.7rem);
 }
 
 .deck-rail li {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--deck-rail-font, 0.7rem);
 }
 
 .deck-rail .dot {
-  width: 7px;
-  height: 7px;
+  width: var(--deck-dot, 7px);
+  height: var(--deck-dot, 7px);
   border-radius: 0;
   background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
   flex-shrink: 0;
@@ -110,7 +121,7 @@
    (DeckStack) gates its scale transform off below 901px too. */
 @media (max-width: 900px) {
   .deck-slots {
-    gap: 0.9rem;
+    gap: var(--deck-gap-narrow, 0.9rem);
   }
 
   /* no sticky = no runway needed; drop the tail track so it can't leave dead

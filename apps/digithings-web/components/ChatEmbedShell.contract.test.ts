@@ -61,9 +61,7 @@ describe("ChatEmbedShell contracts", () => {
       code: "ready_timeout",
       ts: 99,
     });
-    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe(
-      "embed_unloadable",
-    );
+    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe("embed_unloadable");
   });
 
   it("keeps the operator diagnostic for the dev console only", async () => {
@@ -179,7 +177,8 @@ describe("ChatEmbedShell contracts", () => {
     // pick up a stray ?token= and hand it to a tenant that never asked for one.
     expect(src).toContain("acceptsInviteToken");
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    // Formatting-agnostic: Prettier may keep the guard ternary on one line.
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(guardIndex).toBeLessThan(readIndex);
 
@@ -245,7 +244,7 @@ describe("ChatEmbedShell contracts", () => {
     // visit never touches history.
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
     const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(stripIndex).toBeGreaterThan(readIndex);
     expect(stripIndex).toBeGreaterThan(-1);
