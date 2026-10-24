@@ -82,7 +82,6 @@ import {
 import { p } from "@/lib/base-path";
 import {
   decideEmbedSendGate,
-  shouldArmGateCharge,
 } from "@/lib/embed-send-gate";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 
@@ -705,6 +704,11 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    // The counter moves on every submitted turn, not only on the composer's
+    // own submit path — the hook is the one funnel every send passes through.
+    onTurnCharge: () => {
+      if (!ungated) armGateCharge();
+    },
     getResponseLanguage,
     getEnableWebSearch,
     getDisabledTools,
@@ -783,7 +787,6 @@ function EmbedChat({
           ...(forceTool ? { forceTool } : {}),
           pageContext: consumePageContext(),
         });
-        if (!ungated) armGateCharge();
         return;
       }
       chat.onRetry?.();
@@ -797,7 +800,6 @@ function EmbedChat({
         ...(forceTool ? { forceTool } : {}),
         pageContext: consumePageContext(),
       });
-      if (!ungated) armGateCharge();
     }
   }, [
     byokIsSet,
@@ -988,7 +990,6 @@ function EmbedChat({
       ...(forceTool ? { forceTool } : {}),
       pageContext: ctx,
     });
-    if (!ungated) armGateCharge();
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -1093,9 +1094,6 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
       },
       onAllowSend: () => {
-        if (shouldArmGateCharge(ungated)) {
-          armGateCharge();
-        }
         emit("embed_turn_submitted", {
           accent,
           turn: gate.turns + 1,
