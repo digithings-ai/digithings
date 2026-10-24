@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isTypingTarget, pageDelta, stepPage, type ReaderPage } from "./reader";
+import { ownsArrowKeys, pageDelta, scopedId, stepPage, type ReaderPage } from "./reader";
 
 const pages: ReaderPage[] = [
   { id: "cover", number: "", title: "the digithings book" },
@@ -51,16 +51,45 @@ describe("pageDelta", () => {
   });
 });
 
-describe("isTypingTarget", () => {
+describe("ownsArrowKeys", () => {
   it("treats anything without closest() as not typing", () => {
-    expect(isTypingTarget(null)).toBe(false);
-    expect(isTypingTarget({} as EventTarget)).toBe(false);
+    expect(ownsArrowKeys(null)).toBe(false);
+    expect(ownsArrowKeys({} as EventTarget)).toBe(false);
+  });
+
+  it("leaves arrows to fields, widgets and focusable scroll containers", () => {
+    const seen: string[] = [];
+    const probe = {
+      closest: (selector: string) => (seen.push(selector), null),
+    } as unknown as EventTarget;
+    ownsArrowKeys(probe);
+    const selector = seen[0] ?? "";
+    for (const part of [
+      "input",
+      "textarea",
+      "[role='slider']",
+      "[role='tab']",
+      "video",
+      "[tabindex]:not([tabindex='-1'])",
+    ]) {
+      expect(selector).toContain(part);
+    }
   });
 
   it("asks the element whether it sits in a field", () => {
     const inField = { closest: () => ({}) } as unknown as EventTarget;
     const outside = { closest: () => null } as unknown as EventTarget;
-    expect(isTypingTarget(inField)).toBe(true);
-    expect(isTypingTarget(outside)).toBe(false);
+    expect(ownsArrowKeys(inField)).toBe(true);
+    expect(ownsArrowKeys(outside)).toBe(false);
+  });
+});
+
+describe("scopedId", () => {
+  it("prefixes heading ids with the chapter so repeated headings stay unique", () => {
+    expect(scopedId("10-digigraph", "how-it-works")).toBe("10-digigraph--how-it-works");
+    expect(scopedId("11-digillm", "how-it-works")).not.toBe(
+      scopedId("10-digigraph", "how-it-works"),
+    );
+    expect(scopedId("10-digigraph", undefined)).toBeUndefined();
   });
 });

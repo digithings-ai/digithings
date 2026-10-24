@@ -1,14 +1,30 @@
+import type { ComponentPropsWithoutRef, ComponentType } from "react";
+import type { MDXComponents } from "mdx/types";
 import Link from "next/link";
 
 import BookDownloadButton from "@/components/book/BookDownloadButton";
 import BookReader from "@/components/book/BookReader";
 import { briefChapters } from "@/lib/book/brief";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
-import type { ReaderPage } from "@/lib/book/reader";
+import { scopedId, type ReaderPage } from "@/lib/book/reader";
 import { WORDMARK } from "@/lib/book/wordmark";
+import { useMDXComponents as houseComponents } from "@/mdx-components";
 
 const SHEET =
   "book-chapter mb-10 scroll-mt-[calc(var(--dq-nav-h)+1.5rem)] border border-hair px-[clamp(1.25rem,4vw,3rem)] py-[clamp(1.5rem,4vw,3rem)]";
+
+type HeadingProps = ComponentPropsWithoutRef<"h2">;
+
+/** The house headings with ids prefixed by chapter, so every anchor on the page is unique. */
+function scopedHeadings(scope: string): MDXComponents {
+  const house = houseComponents({});
+  const scoped: MDXComponents = {};
+  for (const tag of ["h2", "h3", "h4"] as const) {
+    const Heading = house[tag] as ComponentType<HeadingProps>;
+    scoped[tag] = (props: HeadingProps) => <Heading {...props} id={scopedId(scope, props.id)} />;
+  }
+  return scoped;
+}
 
 /**
  * The book on screen reads like the PDF (lib/book/brief.ts): the same cover,
@@ -31,7 +47,7 @@ export default async function BookIndexPage() {
       chapter,
       Opener: (
         (await import(`../../content/book/${chapter.slug}/index.mdx`)) as {
-          default: () => React.JSX.Element;
+          default: (props: { components?: MDXComponents }) => React.JSX.Element;
         }
       ).default,
     })),
@@ -120,7 +136,7 @@ export default async function BookIndexPage() {
               {chapter.title}
             </h2>
           </div>
-          <Opener />
+          <Opener components={scopedHeadings(chapter.slug)} />
           {chapter.sections.length > 0 ? (
             <p className="mt-8 mb-0 border-hair border-t pt-4 font-mono text-[0.8rem]">
               <Link href={chapter.href} className="text-accent hover:text-ink">

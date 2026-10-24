@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { isTypingTarget, pageDelta, stepPage, type ReaderPage } from "@/lib/book/reader";
+import { ownsArrowKeys, pageDelta, stepPage, type ReaderPage } from "@/lib/book/reader";
 
 /**
  * The web edition's reading frame: the PDF's page sequence as a scroll of
@@ -21,10 +21,17 @@ export default function BookReader({
   children: ReactNode;
 }) {
   const [current, setCurrent] = useState(pages[0]?.id ?? "");
+  // While a page turn is scrolling, the sheets it passes are not the page
+  // being read; the observer stays quiet until the turn lands.
+  const turning = useRef<number | null>(null);
 
   const go = useCallback((id: string) => {
     const sheet = document.getElementById(id);
     if (!sheet) return;
+    if (turning.current !== null) window.clearTimeout(turning.current);
+    turning.current = window.setTimeout(() => {
+      turning.current = null;
+    }, 1000);
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     sheet.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
     sheet.focus({ preventScroll: true });
@@ -32,13 +39,15 @@ export default function BookReader({
     window.history.replaceState(null, "", `#${id}`);
   }, []);
 
-  // The sheet crossing the middle of the viewport is the page being read.
+  // The sheet crossing the middle of the viewport is the page being read. The
+  // first callback reports the sheet a deep link (`/book/#11-digillm`) landed on.
   useEffect(() => {
     const sheets = pages
       .map((page) => document.getElementById(page.id))
       .filter((sheet): sheet is HTMLElement => sheet !== null);
     const observer = new IntersectionObserver(
       (entries) => {
+        if (turning.current !== null) return;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           setCurrent(entry.target.id);
@@ -53,7 +62,7 @@ export default function BookReader({
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      if (event.defaultPrevented || ownsArrowKeys(event.target)) return;
       const delta = pageDelta(event);
       if (delta === 0) return;
       const target = stepPage(pages, current, delta);
@@ -132,7 +141,7 @@ export default function BookReader({
             >
               ← previous
             </button>
-            <span className="text-ink-soft" aria-live="polite">
+            <span className="text-ink-soft">
               {index + 1} / {pages.length}
             </span>
             <button

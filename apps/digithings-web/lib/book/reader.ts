@@ -41,12 +41,44 @@ export function pageDelta(event: {
   return 0;
 }
 
-/** Keys typed into a field, a select or an editable region are not page turns. */
-export function isTypingTarget(target: EventTarget | null): boolean {
+/**
+ * Elements that use the arrow keys themselves: fields, editable regions, media
+ * controls, ARIA widgets and focusable scroll containers (a wide code block or
+ * table). An arrow pressed there belongs to them, not to the page turn.
+ */
+const OWNS_ARROWS = [
+  "input",
+  "textarea",
+  "select",
+  "video",
+  "audio",
+  "[contenteditable='']",
+  "[contenteditable='true']",
+  "[role='slider']",
+  "[role='spinbutton']",
+  "[role='tab']",
+  "[role='tablist']",
+  "[role='listbox']",
+  "[role='radiogroup']",
+  "[role='radio']",
+  "[role='menu']",
+  "[role='menubar']",
+  "[role='menuitem']",
+  "[role='tree']",
+  "[role='grid']",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+export function ownsArrowKeys(target: EventTarget | null): boolean {
   if (!target || typeof (target as Element).closest !== "function") return false;
-  return Boolean(
-    (target as Element).closest(
-      "input, textarea, select, [contenteditable=''], [contenteditable='true']",
-    ),
-  );
+  return Boolean((target as Element).closest(OWNS_ARROWS));
+}
+
+/**
+ * Heading ids are unique within one MDX file, but `/book` renders every
+ * chapter opener on one page, where "how-it-works" would repeat. Prefixing the
+ * chapter slug keeps every anchor on the page unique.
+ */
+export function scopedId(scope: string, id: string | undefined): string | undefined {
+  return id ? `${scope}--${id}` : undefined;
 }
