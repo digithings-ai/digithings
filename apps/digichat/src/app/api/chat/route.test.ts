@@ -182,6 +182,103 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(res.status).toBe(401);
   });
 
+  describe("anonymous turn on a host-matched deployment", () => {
+    function chatRequest(headers: Record<string, string>): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+      });
+    }
+
+    function configFor(
+      host: string,
+      auth: "anonymous" | "session",
+      mode: "ungated" | "turn_limited",
+    ) {
+      return parseDigichatConfig({
+        version: 1,
+        hosts: {
+          [host]: {
+            slug: "digithings-ai",
+            backend: { type: "digigraph" },
+            auth,
+            gate: { mode },
+          },
+        },
+      });
+    }
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(mockAuthCtx);
+    });
+
+    it("answers without a session when the requested host declares auth: anonymous", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "ungated"));
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(resolveChatTenantContext).mockClear();
+
+      const res = await POST(chatRequest({ origin: "https://digithings.ai" }));
+
+      expect(res.status).toBe(200);
+      expect(vi.mocked(streamText)).toHaveBeenCalled();
+      // The session branch must not be reached for an anonymous turn.
+      expect(vi.mocked(resolveChatTenantContext)).not.toHaveBeenCalled();
+    });
+
+    it("keeps the request limiter on the anonymous turn", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "turn_limited"));
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+
+      const res = await POST(chatRequest({ origin: "https://digithings.ai" }));
+
+      expect(res.status).toBe(429);
+      expect(checkBffRateLimit).toHaveBeenCalled();
+    });
+
+    it("returns 401 for a host-matched deployment that declares auth: session", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "session", "ungated"));
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(unauthorizedResponse);
+
+      const res = await POST(chatRequest({ origin: "https://digithings.ai" }));
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 401 for a host that matches no deployment", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "ungated"));
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(unauthorizedResponse);
+
+      const res = await POST(chatRequest({ origin: "https://unknown.example" }));
+
+      expect(res.status).toBe(401);
+    });
+
+    it("leaves the embed branch on the embed gate even when the host is anonymous", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "ungated"));
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+
+      const res = await POST(chatRequest({ "x-embed-host": "https://digithings.ai" }));
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: "embed_disabled" });
+    });
+
+    it("leaves the authenticated branch on the session tenant", async () => {
+      setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "ungated"));
+      vi.mocked(resolveChatTenantContext).mockClear();
+
+      const res = await POST(chatRequest({ origin: "https://digithings.ai" }));
+
+      expect(res.status).toBe(200);
+      expect(vi.mocked(resolveChatTenantContext)).toHaveBeenCalled();
+    });
+  });
+
   it("returns 503 license_revoked before auth when the license latch is revoked", async () => {
     const { applyHeartbeatResult, resetLicenseStateForTests } = await import(
       "@/lib/license/state"
