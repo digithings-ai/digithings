@@ -298,6 +298,224 @@ class WorkerBuildTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class BunSuiteGateTest(unittest.TestCase):
+    """The bun suites run in local-ci, and the receipt says which ones (DIG-5203).
+
+    Before this gate the required `local-ci` check ran no bun test at all: the
+    suites only ever ran in the GitHub lanes retired with Actions, so a
+    clients/** PR carried a green receipt that proved nothing (#6271, where
+    digichat-tui's 71 tests only ran by hand). The receipt must name the suites
+    that ran, and say `bun: none` when none did, so a skipped suite is visible.
+    """
+
+    def _suite(self, root, rel, deps=False, lock=True, test_script="bun test"):
+        d = os.path.join(root, rel)
+        os.makedirs(d, exist_ok=True)
+        pkg = {"name": rel.replace("/", "-"), "scripts": {"test": test_script}}
+        if deps:
+            pkg["devDependencies"] = {"@opentui/react": "0.5.14"}
+        with open(os.path.join(d, "package.json"), "w") as f:
+            json.dump(pkg, f)
+        if lock:
+            with open(os.path.join(d, "bun.lock"), "w") as f:
+                f.write("# lock\n")
+        return d
+
+    def _wt(self, suites):
+        root = tempfile.mkdtemp(prefix="wt-bun-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, "scripts"))
+        globs = "".join(f"  - {s}/**\n" for s in suites)
+        with open(os.path.join(root, "scripts", "ci_paths.yaml"), "w") as f:
+            f.write(f"bun_suites:\n{globs}\nworkers:\n  - apps/x/**\n")
+        # `packages/*` are workspaces of the root package.json; the clients are
+        # standalone bun packages with their own lockfile (the repo's own split).
+        with open(os.path.join(root, "package.json"), "w") as f:
+            json.dump({"workspaces": ["apps/*", "packages/*"]}, f)
+        for s in suites:
+            workspace = s.startswith("packages/")
+            self._suite(root, s, deps=not workspace, lock=not workspace)
+        return root
+
+    def _step(self, calls, fails, fail_on=()):
+        def step(name, cmd, timeout=1800, cwd=None):
+            calls.append((name, cmd, timeout, cwd))
+            if name in fail_on:
+                fails.append(name)
+                return False
+            return True
+        return step
+
+    def _real_ci_paths(self):
+        return open(os.path.join(_SCRIPTS, "..", "ci_paths.yaml")).read()
+
+    def test_real_ci_paths_names_every_suite(self):
+        dirs = _mod.bun_suite_dirs(_mod.parse_ci_paths_block(self._real_ci_paths(), "bun_suites"))
+        for suite in ("clients/digichat-tui", "clients/digiquant-tui", "clients/digivoice-tui",
+                      "clients/digichat-devkit", "packages/surface-config",
+                      "packages/hero-banner"):
+            self.assertIn(suite, dirs)
+
+    def test_non_suite_entries_fire_the_gate_but_name_no_suite(self):
+        pats = ["clients/a/**", ".github/workflows/test-bun-suites.yml", "packages/*/b"]
+        self.assertEqual(_mod.bun_suite_dirs(pats), ["clients/a"])
+
+    def test_suite_patterns_fall_back_when_the_block_is_absent(self):
+        root = tempfile.mkdtemp(prefix="wt-nocipaths-")
+        self.addCleanup(shutil.rmtree, root, True)
+        self.assertEqual(_mod.bun_suite_patterns(root),
+                         [f"{d}/**" for d in _mod.BUN_SUITE_DIRS])
+
+    def test_gate_hits_a_client_path_only(self):
+        root = self._wt(["clients/digichat-tui", "packages/surface-config"])
+        pats = _mod.bun_suite_patterns(root)
+        self.assertEqual(
+            _mod.path_gate_hit(["clients/digichat-tui/src/read.ts"], pats),
+            ("clients/digichat-tui/**", "clients/digichat-tui/src/read.ts"))
+        self.assertIsNone(_mod.path_gate_hit(["apps/digichat/src/a.ts"], pats))
+
+    def test_gate_fails_closed_when_the_file_list_cannot_be_read(self):
+        saved = _mod.gh
+        try:
+            _mod.gh = lambda *a: None
+            self.assertEqual(_mod.bun_gate({"number": 7}, "/nonexistent-wt"), (None, None))
+        finally:
+            _mod.gh = saved
+
+    def test_standalone_suites_install_and_workspace_packages_do_not(self):
+        root = self._wt(["clients/digichat-tui", "packages/hero-banner"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "hero-banner"])
+        self.assertEqual(fails, [])
+        names = [c[0] for c in calls]
+        # `packages/*` is a workspace of the root package.json: `bun install`
+        # there walks up and installs the whole monorepo (the retired lane
+        # exempted it for that reason), so only the client is installed.
+        self.assertEqual(names, ["bun-install:digichat-tui", "bun:digichat-tui",
+                                 "bun:hero-banner"])
+        test = calls[1]
+        self.assertEqual(test[1][1:], ["run", "test"])
+        self.assertEqual(test[2], _mod.BUN_TEST_TIMEOUT)
+        self.assertEqual(test[3], os.path.join(root, "clients", "digichat-tui"))
+
+    def test_one_red_suite_does_not_hide_the_others(self):
+        root = self._wt(["clients/digichat-tui", "clients/digiquant-tui"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails, fail_on=("bun:digichat-tui",)),
+                                  io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "digiquant-tui"])
+        self.assertEqual(fails, ["bun:digichat-tui"])
+        self.assertIn("bun:digiquant-tui", [c[0] for c in calls])
+
+    def test_a_standalone_suite_without_a_lockfile_fails_before_it_runs(self):
+        root = self._wt(["clients/digichat-tui"])
+        os.remove(os.path.join(root, "clients", "digichat-tui", "bun.lock"))
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, ["bun-install:digichat-tui (no bun.lock)"])
+        self.assertEqual(calls, [])
+
+    def test_only_root_workspace_globs_are_exempt_from_install(self):
+        globs = ["apps/*", "packages/*"]
+        self.assertTrue(_mod.is_root_workspace("packages/hero-banner", globs))
+        self.assertTrue(_mod.is_root_workspace("apps/corpus-index", globs))
+        self.assertFalse(_mod.is_root_workspace("clients/digichat-tui", globs))
+        self.assertFalse(_mod.is_root_workspace("packages", globs))
+        self.assertEqual(_mod.root_workspace_globs("/nonexistent-wt"), [])
+
+    def test_a_new_client_with_a_bun_suite_is_gated_without_a_list_edit(self):
+        """The list is not the only source: a client that lands with a bun suite
+        runs on its first PR, so nobody has to remember to add it (DIG-5203)."""
+        root = self._wt(["clients/digichat-tui"])
+        self._suite(root, "clients/new-tui", deps=True)
+        self.assertIn("clients/new-tui", _mod.bun_suites_to_run(root))
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui", "new-tui"])
+        self.assertEqual(fails, [])
+
+    def test_a_client_with_a_vitest_suite_is_not_a_bun_suite(self):
+        """`apps/*` and any client on vitest belong to the web lane, not here."""
+        root = self._wt(["clients/digichat-tui"])
+        self._suite(root, "clients/web-tui", deps=True, test_script="vitest run")
+        self.assertEqual(_mod.bun_test_packages(root), ["clients/digichat-tui"])
+        calls, fails = [], []
+        ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        self.assertEqual(ran, ["digichat-tui"])
+
+    def test_clients_glob_fires_the_gate_but_names_no_suite(self):
+        root = tempfile.mkdtemp(prefix="wt-bun-clients-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, "scripts"))
+        with open(os.path.join(root, "scripts", "ci_paths.yaml"), "w") as f:
+            f.write("bun_suites:\n  - clients/**\n  - packages/hero-banner/**\n")
+        with open(os.path.join(root, "package.json"), "w") as f:
+            json.dump({"workspaces": ["apps/*", "packages/*"]}, f)
+        pats = _mod.bun_suite_patterns(root)
+        self.assertEqual(_mod.bun_suite_dirs(pats), ["packages/hero-banner"])
+        self.assertEqual(
+            _mod.path_gate_hit(["clients/brand-new-tui/src/a.ts"], pats),
+            ("clients/**", "clients/brand-new-tui/src/a.ts"))
+
+    def test_discovery_does_not_duplicate_or_reorder_listed_suites(self):
+        root = self._wt(["clients/digichat-tui", "packages/hero-banner"])
+        self.assertEqual(_mod.bun_suites_to_run(root),
+                         ["clients/digichat-tui", "packages/hero-banner"])
+
+    def test_no_bun_on_the_host_names_the_gate_not_the_suites(self):
+        root = self._wt(["clients/digichat-tui"])
+        saved = _mod.bun_bin
+        _mod.bun_bin = lambda: None
+        try:
+            calls, fails = [], []
+            ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        finally:
+            _mod.bun_bin = saved
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, ["bun-suites: bun not found"])
+        self.assertEqual(calls, [])
+
+    def test_a_bun_that_is_not_the_pinned_version_runs_no_suite(self):
+        """#1701/#1705/#1711: an unpinned tool changing under a green build."""
+        root = self._wt(["clients/digichat-tui"])
+        saved = (_mod.bun_bin, _mod.sh)
+        _mod.bun_bin = lambda: "/fake/bun"
+        _mod.sh = lambda *a, **k: (0, "1.9.9\n")
+        try:
+            calls, fails = [], []
+            ran = _mod.run_bun_suites(root, self._step(calls, fails), io.StringIO(), fails)
+        finally:
+            _mod.bun_bin, _mod.sh = saved
+        self.assertEqual(ran, [])
+        self.assertEqual(fails, [f"bun-version 1.9.9 != {_mod.BUN_PIN}"])
+        self.assertEqual(calls, [])
+
+    def test_receipt_names_every_suite_that_ran(self):
+        ran = ["digichat-tui", "digiquant-tui", "digivoice-tui"]
+        desc = _mod.success_desc(8, {"ran": ran})
+        for name in ran:
+            self.assertIn(name, desc)
+        self.assertLessEqual(len(desc), 139)
+
+    def test_receipt_says_none_when_no_suite_path_changed(self):
+        desc = _mod.success_desc(3, {"hit": None, "ran": []})
+        self.assertIn("bun: none", desc)
+        self.assertIn(_mod.GATED_NOTE, desc)
+
+    def test_receipt_drops_names_rather_than_cutting_them_in_half(self):
+        ran = [f"suite-{i}" * 4 for i in range(12)]
+        desc = _mod.success_desc(9, {"ran": ran})
+        self.assertLessEqual(len(desc), 139)
+        self.assertIn("suites in the log", desc)
+
+    def test_run_checks_wires_the_gate_and_the_summary(self):
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("run_bun_suites(WT, step, out, fails)", src)
+        self.assertIn('summary["bun"]', src)
+
+
 class StaticGateWiringTest(unittest.TestCase):
     """The R0 client-literal scan runs in the local-ci static gates (DIG-4043)."""
 
@@ -351,15 +569,27 @@ class PrepareWorktreeTest(unittest.TestCase):
         import io
         calls = []
         seq = list(heads)
-        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
         tmp = tempfile.mkdtemp()
         wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        def make_wt():
+            os.makedirs(wt, exist_ok=True)
+            # a linked worktree of MAIN names a gitdir under MAIN's worktrees dir
+            owner = common if own else os.path.join(tmp, "other")
+            os.makedirs(os.path.join(owner, "worktrees"), exist_ok=True)
+            with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                fh.write(f"gitdir: {os.path.join(owner, 'worktrees', 'wt')}\n")
         if wt_exists:
-            os.mkdir(wt)
-            if own:  # a worktree this runner created carries its sentinel
-                open(os.path.join(wt, ".local-ci-worktree"), "w").write(self.SHA)
+            make_wt()
         def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
             calls.append(cmd)
+            if cmd[:3] == ["git", "worktree", "add"]:
+                make_wt()  # git creates the worktree
+            elif cmd[:3] == ["git", "worktree", "remove"]:
+                shutil.rmtree(wt, ignore_errors=True)
+            elif cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
             return 0, ""
         _mod.sh = fake_sh
         _mod.wt_head = lambda: seq.pop(0) if seq else None
@@ -374,7 +604,9 @@ class PrepareWorktreeTest(unittest.TestCase):
         return res, calls, buf.getvalue()
 
     def test_head_matches_ok(self):
-        (ok, why), calls, _ = self._run([self.SHA, self.SHA])
+        # three reads of HEAD: the worktree-is-it-readable read, the read after
+        # the checkout, and the final one before the gates (DIG-5285)
+        (ok, why), calls, _ = self._run([self.SHA, self.SHA, self.SHA])
         self.assertTrue(ok)
         self.assertEqual(why, "")
         fetch = calls[0]
@@ -389,10 +621,10 @@ class PrepareWorktreeTest(unittest.TestCase):
         self.assertIn("no gate ran", text)
 
     def test_unreadable_worktree_is_rebuilt(self):
-        (ok, _), calls, text = self._run([None, self.SHA])
+        (ok, _), calls, text = self._run([None, self.SHA, self.SHA])
         self.assertTrue(ok)
         self.assertIn("rebuilding", text)
-        self.assertTrue(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_a_directory_we_did_not_create_is_never_deleted(self):
@@ -400,18 +632,366 @@ class PrepareWorktreeTest(unittest.TestCase):
         (ok, why), calls, _ = self._run([None, self.SHA], own=False)
         self.assertFalse(ok)
         self.assertIn("not a worktree this runner created", why)
-        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in calls))
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
         self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_missing_worktree_added(self):
-        (ok, _), calls, _ = self._run([self.SHA], wt_exists=False)
+        (ok, _), calls, _ = self._run([self.SHA, self.SHA], wt_exists=False)
         self.assertTrue(ok)
         self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in calls))
 
     def test_process_does_not_run_gates_on_bad_checkout(self):
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
-        self.assertIn("run_checks(pr, out) if ok_wt else", src)
+        self.assertIn("run_checks(pr, out, summary) if ok_wt else", src)
         self.assertIn("run_review_coverage(pr, out) if ok_wt else", src)
+
+
+class WorktreeSelfHealTest(unittest.TestCase):
+    """DIG-5285: a stalled checkout must not fail the whole check.
+
+    The post-merge run on develop tip 9581532dc712 spent 900 s inside
+    `git checkout` and then failed the check, on a worktree that checks out in
+    under a second, and the check named one opaque step. A checkout that does
+    not land is retried, the reason carries the rc and both HEADs, and a work
+    the runner does not own is never destroyed.
+    """
+
+    SHA = "a" * 40
+    STALE = "b" * 40
+
+    def _run(self, checkouts, own=True, add_rc=0, remove_rc=0):
+        """checkouts: what each `git checkout` does - "land", "stall", "wrong" or "err"."""
+        calls = []
+        state = {"head": self.STALE, "outs": list(checkouts)}
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        def make_wt():
+            os.makedirs(wt, exist_ok=True)
+            owner = common if own else os.path.join(tmp, "other")
+            os.makedirs(os.path.join(owner, "worktrees"), exist_ok=True)
+            with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                fh.write(f"gitdir: {os.path.join(owner, 'worktrees', 'wt')}\n")
+        make_wt()
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append((cmd, timeout))
+            if cmd[:2] == ["git", "checkout"]:
+                outcome = state["outs"].pop(0) if state["outs"] else "land"
+                if outcome == "land":
+                    state["head"] = self.SHA
+                    return 0, ""
+                if outcome == "stall":
+                    return 124, ""
+                if outcome == "wrong":
+                    return 0, ""  # rc 0 but the HEAD did not move
+                return 1, ""
+            if cmd[:3] == ["git", "worktree", "add"]:
+                if add_rc != 0:
+                    return add_rc, ""
+                make_wt()  # git creates the worktree and checks the commit out
+                state["head"] = self.SHA
+                return 0, ""
+            if cmd[:3] == ["git", "worktree", "remove"]:
+                if remove_rc != 0:
+                    return remove_rc, ""
+                shutil.rmtree(wt, ignore_errors=True)
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            res = _mod.prepare_wt(7, self.SHA, "develop", buf)
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+        return res, calls, buf.getvalue()
+
+    def _cmds(self, calls):
+        return [c for c, _ in calls]
+
+    def _checkouts(self, calls):
+        return [c for c, _ in calls if c[:2] == ["git", "checkout"]]
+
+    def test_a_stalled_checkout_is_retried_in_place(self):
+        """A stall is git fetching a blob over a slow network. A rebuild fetches
+        it all again, so the second attempt stays where it is."""
+        (ok, why), calls, text = self._run(["stall", "land"])
+        self.assertTrue(ok, why)
+        self.assertEqual(why, "")
+        self.assertEqual(len(self._checkouts(calls)), 2)
+        self.assertIn("retrying in place", text)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+
+    def test_a_stall_that_does_not_clear_is_reported_as_a_stall(self):
+        (ok, why), calls, text = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertIn("stalled", why)
+        self.assertIn("no gate ran", text)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)),
+                         "a stall must not throw the worktree away")
+
+    def test_a_broken_worktree_is_rebuilt_and_the_checkout_is_not_repeated(self):
+        """`git worktree add --detach -f` checks the commit out itself."""
+        (ok, why), calls, _ = self._run(["wrong"])
+        self.assertTrue(ok, why)
+        self.assertEqual(len(self._checkouts(calls)), 1, "the rebuild already lands the commit")
+        self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_a_failed_checkout_is_rebuilt(self):
+        (ok, why), calls, _ = self._run(["err"])
+        self.assertTrue(ok, why)
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_a_failed_rebuild_is_reported(self):
+        (ok, why), _, text = self._run(["err"], add_rc=1)
+        self.assertFalse(ok)
+        self.assertIn("the worktree add failed", why)
+        self.assertIn("no gate ran", text)
+
+    def test_the_retry_is_bounded(self):
+        (ok, why), calls, _ = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertEqual(len(self._checkouts(calls)), 2, "a wedged git must not loop")
+
+    def test_the_failure_carries_the_evidence(self):
+        (ok, why), _, text = self._run(["stall", "stall"])
+        self.assertFalse(ok)
+        self.assertIn("rc=124", why)
+        self.assertIn(self.SHA[:12], why)
+        self.assertIn("no gate ran", text)
+
+    def test_the_lock_is_released_before_the_remove(self):
+        """git does not remove a locked worktree: the lock has to go first."""
+        _, calls, _ = self._run(["err"])
+        cmds = self._cmds(calls)
+        unlock = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "unlock"])
+        remove = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "worktree", "remove"])
+        self.assertLess(unlock, remove, "the unlock has to come before the remove")
+
+    def test_the_remove_is_scoped_to_this_worktree(self):
+        """`git worktree prune` is repository-wide: it would take the admin entry
+        of an operator's worktree on an unmounted volume with it."""
+        _, calls, _ = self._run(["err"])
+        self.assertFalse(any(c[:3] == ["git", "worktree", "prune"] for c in self._cmds(calls)))
+        self.assertTrue(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+
+    def test_a_worktree_we_did_not_create_is_never_rebuilt(self):
+        (ok, why), calls, _ = self._run(["err"], own=False)
+        self.assertFalse(ok)
+        self.assertIn("not a worktree this runner created", why)
+        self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in self._cmds(calls)))
+        self.assertFalse(any(c[:3] == ["git", "worktree", "add"] for c in self._cmds(calls)))
+
+    def test_the_budgets_are_pinned(self):
+        self.assertEqual(_mod.WT_CHECKOUT_TIMEOUT, 300)
+        self.assertEqual(_mod.WT_REBUILD_TIMEOUT, 600)
+        self.assertEqual(_mod.WT_META_TIMEOUT, 60)
+
+    def test_every_step_of_the_rebuild_has_its_own_budget(self):
+        """The defaults are 1800 s: the rebuild path must not inherit them."""
+        _, calls, _ = self._run(["err"])
+        for cmd, timeout in calls:
+            if cmd[:3] in (["git", "worktree", "remove"], ["git", "worktree", "unlock"],
+                           ["git", "worktree", "add"]) or cmd[:2] == ["git", "checkout"]:
+                self.assertLessEqual(timeout, _mod.WT_REBUILD_TIMEOUT, f"{cmd} has no budget")
+
+    def test_the_caches_survive_a_rebuild(self):
+        """A rebuild that drops node_modules and .venv costs a full npm ci and
+        uv sync, which turns a stall into an hour-long check."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        os.makedirs(wt, exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        for name in ("node_modules", ".venv"):
+            os.makedirs(os.path.join(wt, name), exist_ok=True)
+            with open(os.path.join(wt, name, "marker"), "w", encoding="utf-8") as fh:
+                fh.write(name)
+        state = {"head": self.STALE}
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            if cmd[:2] == ["git", "checkout"]:
+                return 1, ""
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)
+                with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                    fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+                state["head"] = self.SHA
+                return 0, ""
+            if cmd[:3] == ["git", "worktree", "remove"]:
+                shutil.rmtree(wt, ignore_errors=True)
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertTrue(ok, why)
+            for name in ("node_modules", ".venv"):
+                self.assertTrue(os.path.isfile(os.path.join(wt, name, "marker")),
+                                f"{name} did not survive the rebuild")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_worktree_keeps_the_mark_that_makes_it_ours(self):
+        """With LOCAL_CI_WT set the marker is the only thing that says the
+        directory belongs to the runner; without it a later stall cannot heal."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        os.makedirs(wt, exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        state = {"head": self.SHA}
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)
+                with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+                    fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+                return 0, ""
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: state["head"]
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertTrue(ok, why)
+            self.assertTrue(os.path.isfile(os.path.join(wt, ".local-ci-worktree")))
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_real_directory_that_is_not_a_worktree_is_never_rebuilt(self):
+        """The sentinel file alone must not authorise a rebuild: the runner
+        writes it into whatever directory LOCAL_CI_WT names (DIG-5285)."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(wt, exist_ok=True)
+        os.makedirs(common, exist_ok=True)
+        with open(os.path.join(wt, ".local-ci-worktree"), "w", encoding="utf-8") as fh:
+            fh.write(self.SHA)
+        calls = []
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append(cmd)
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: self.STALE
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertFalse(ok)
+            self.assertIn("not a worktree this runner created", why)
+            self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
+            self.assertTrue(os.path.isdir(wt), "the directory has to survive")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_worktree_with_uncommitted_changes_is_not_removed(self):
+        """That is somebody's work, not checkout material (DIG-4490)."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        common = os.path.join(tmp, "common")
+        os.makedirs(wt, exist_ok=True)
+        os.makedirs(os.path.join(common, "worktrees"), exist_ok=True)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(common, 'worktrees', 'wt')}\n")
+        calls = []
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            calls.append(cmd)
+            if cmd[:2] == ["git", "checkout"]:
+                return 1, ""  # the checkout failed, so the rebuild is considered
+            if cmd[:2] == ["git", "status"]:
+                return 0, " M file.py\n"
+            if cmd[:2] == ["git", "rev-parse"] and len(cmd) > 2 and cmd[2] == "--git-common-dir":
+                return 0, common
+            return 0, ""
+        saved = (_mod.sh, _mod.wt_head, _mod.WT, _mod.log)
+        _mod.sh = fake_sh
+        _mod.wt_head = lambda: self.STALE
+        _mod.WT = wt
+        _mod.log = lambda m: None
+        try:
+            buf = io.StringIO()
+            ok, why = _mod.prepare_wt(7, self.SHA, "develop", buf)
+            self.assertFalse(ok)
+            self.assertIn("uncommitted changes", why)
+            self.assertFalse(any(c[:3] == ["git", "worktree", "remove"] for c in calls))
+            self.assertTrue(os.path.isdir(wt), "the directory has to survive")
+        finally:
+            _mod.sh, _mod.wt_head, _mod.WT, _mod.log = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_gates_do_not_run_when_the_worktree_fails(self):
+        """The reason is in the status description, so a failed check says why."""
+        ran = []
+        tmp = tempfile.mkdtemp()
+        saved = (_mod.prepare_wt, _mod.run_checks, _mod.log, _mod.ci_status, _mod.LOGD)
+        _mod.prepare_wt = lambda n, sha, base, out: (False, "git stalled in the worktree checkout")
+        _mod.run_checks = lambda pr, out: ran.append(1) or []
+        _mod.log = lambda m: None
+        _mod.ci_status = lambda sha: ("pending", "")
+        _mod.LOGD = tmp
+        try:
+            st = _mod.process({"number": 999999, "headRefOid": "a" * 40,
+                               "baseRefName": "develop"}, True)
+        finally:
+            (_mod.prepare_wt, _mod.run_checks, _mod.log, _mod.ci_status, _mod.LOGD) = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(ran, [], "run_checks must not be called when the worktree failed")
+        self.assertEqual(st, "failure")
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("fails = run_checks(pr, out) if ok_wt else", src)
+        self.assertIn('f"worktree checkout ({why})"', src)
+
+    def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
+        """With LOCAL_CI_WT set the sentinel is the only thing that says the
+        directory is the runner's: without it a later stall can never heal."""
+        tmp = tempfile.mkdtemp()
+        wt = os.path.join(tmp, "wt")
+        os.mkdir(wt)
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, **kw):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(wt, exist_ok=True)  # git creates the worktree
+            return 0, ""
+        saved = (_mod.sh, _mod.WT)
+        _mod.sh = fake_sh
+        _mod.WT = wt
+        try:
+            self.assertTrue(_mod._wt_rebuild(self.SHA, io.StringIO()))
+            sentinel = os.path.join(wt, ".local-ci-worktree")
+            self.assertTrue(os.path.exists(sentinel))
+            self.assertEqual(open(sentinel).read().strip(), self.SHA)
+        finally:
+            _mod.sh, _mod.WT = saved
+            shutil.rmtree(tmp, ignore_errors=True)
 
 class ReviewCoverageShallowTest(unittest.TestCase):
     """DIG-4389: a shallow clone must never yield a false-green promotion gate.
@@ -743,8 +1323,11 @@ class WatchdogTest(unittest.TestCase):
         self._state = _mod.CHILD_STATE
         self._lock = _mod.LOCK
         self._grace = _mod.WATCHDOG_GRACE_SECS
+        self._logd = _mod.LOGD
         _mod.CHILD_STATE = os.path.join(self.tmp, "child.json")
         _mod.LOCK = os.path.join(self.tmp, "lock")
+        _mod.LOGD = os.path.join(self.tmp, "logs")
+        os.makedirs(_mod.LOGD, exist_ok=True)
         _mod.WATCHDOG_GRACE_SECS = 0
         self.marker = os.path.join(self.tmp, "child.pid")
         self.holder = subprocess.Popen(["/bin/sh", "-c", f"sleep 45 & echo $! > {self.marker}; wait"])
@@ -767,6 +1350,7 @@ class WatchdogTest(unittest.TestCase):
                 pass
         _mod.CHILD_STATE = self._state
         _mod.LOCK = self._lock
+        _mod.LOGD = self._logd
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _alive(self, pid):
@@ -821,6 +1405,144 @@ class WatchdogTest(unittest.TestCase):
         self.assertIsNone(_mod.read_child_state())
         self.assertTrue(self._alive(self.child))
 
+    def _production_ticks(self):
+        """How many "watchdog: tick" records the production log holds.
+
+        The production log is derived from the module's HOME, never from LOGD:
+        LOGD is the variable this fix redirects, so counting through it would
+        count the test's own record (DIG-5255, review round 2). A missing log
+        counts as zero.
+        """
+        path = os.path.join(_mod.HOME, ".config", "digithings", "logs", "local-ci",
+                            "local-ci.log")
+        try:
+            with open(path) as f:
+                return sum(1 for line in f if "watchdog: tick" in line)
+        except OSError:
+            return 0
+
+    def test_the_decision_is_recorded_in_the_test_log(self):
+        """The watchdog's line must land in the test's own log, never in production.
+
+        The logger resolves LOGD at call time, and this class patches the child
+        state, the lock and the grace but not the log directory: every pytest
+        run wrote a synthetic "watchdog: tick ... over budget 0s" record into
+        the production log ~/.config/digithings/logs/local-ci/local-ci.log (446
+        such records measured 2026-10-22 09:03, one per test run). That log is
+        the forensic trail the receipt producer is attributed from, so a test
+        record there is a false lead about who produced a receipt.
+
+        The assertion has to be able to fail (DIG-5255, review round 2): the
+        record is read from the path the test owns, and the production log is
+        counted from the module's HOME - never from LOGD, which is the variable
+        this fix redirects, so reading it back would assert the fix against
+        itself. The production log is counted around the watchdog call itself,
+        so a concurrent run on another branch cannot make this flaky.
+        """
+        self.assertTrue(os.path.abspath(_mod.LOGD).startswith(os.path.abspath(self.tmp)),
+                        "the log directory must be redirected into the test's own directory")
+        self.assertTrue(self._wait_child_age(1))
+        self._state_file(budget=0)
+
+        ticks_before = self._production_ticks()
+        self.assertTrue(_mod.watchdog())
+        ticks_after = self._production_ticks()
+
+        with open(os.path.join(self.tmp, "logs", "local-ci.log")) as f:
+            record = f.read()
+        self.assertIn("watchdog: tick", record)
+        self.assertIn("worker-build:digithings-cron", record)
+        self.assertEqual(ticks_before, ticks_after,
+                         "the watchdog record must not reach the production log")
+
+
+class RuffPathResolverTest(unittest.TestCase):
+    """DIG-4602: the ruff path list must come from the tree under test.
+
+    A module rename (digiclaw -> digibot) moved a path out from under the
+    hardcoded list, and ruff 0.16 fails on a missing path (E902), so a stale
+    list turns every other PR red.
+    """
+
+    CI = (
+        "jobs:\n"
+        "  lint:\n"
+        "    steps:\n"
+        "      - name: Ruff (all src + tests)\n"
+        "        run: |\n"
+        "          uv run --frozen --no-sync ruff check \\\n"
+        "            digibase/src %s digigraph/src \\\n"
+        "            digisearch/src digitrace/src tests\n"
+    )
+
+    def _tree(self, body):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, ".github", "workflows"))
+        with open(os.path.join(d, ".github", "workflows", "ci.yml"), "w") as f:
+            f.write(body)
+        return d
+
+    def test_list_comes_from_the_tree_own_ci_yml(self):
+        tree = self._tree(self.CI % "digiclaw/src")
+        paths, note = _mod.ruff_paths_for_tree(tree)
+        self.assertEqual(paths, ["digibase/src", "digiclaw/src", "digigraph/src",
+                                 "digisearch/src", "digitrace/src", "tests"])
+        self.assertIn("ci.yml", note)
+
+    def test_a_renamed_module_resolves_to_its_new_name(self):
+        tree = self._tree(self.CI % "digibot/src")
+        paths, _ = _mod.ruff_paths_for_tree(tree)
+        self.assertIn("digibot/src", paths)
+        self.assertNotIn("digiclaw/src", paths)
+
+    def test_missing_ci_yml_falls_back_loudly(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        paths, note = _mod.ruff_paths_for_tree(d)
+        self.assertIsNone(paths)
+        self.assertIn("ci.yml", note)
+
+    def test_two_different_lists_are_refused(self):
+        body = self.CI % "digibot/src" + "          uv run --frozen --no-sync ruff check tests\n"
+        tree = self._tree(body)
+        paths, note = _mod.ruff_paths_for_tree(tree)
+        self.assertIsNone(paths)
+        self.assertIn("single", note)
+
+    def test_a_path_outside_the_tree_is_refused(self):
+        tree = self._tree(self.CI % "/etc")
+        paths, _ = _mod.ruff_paths_for_tree(tree)
+        self.assertIsNone(paths)
+
+    def test_the_fallback_keeps_only_paths_that_exist_in_the_tree(self):
+        """The fallback drops a path the tree does not have.
+
+        ruff 0.16 fails on a missing path (E902), so a fallback that named a
+        retired module directory would turn every other PR red. Linting fewer
+        paths only under-lints, and this branch only runs when the tree's
+        ci.yml cannot be read.
+        """
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        os.makedirs(os.path.join(d, "digibot", "src"))
+        os.makedirs(os.path.join(d, "tests"))
+        paths = _mod.ruff_paths_fallback(d)
+        self.assertEqual(sorted(paths), ["digibot/src", "tests"])
+
+    def test_the_fallback_names_no_retired_module(self):
+        self.assertNotIn("digiclaw", " ".join(_mod.RUFF_PATHS_CANDIDATES))
+
+    def test_the_fallback_is_empty_when_the_tree_has_no_candidate(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.assertIsNone(_mod.ruff_paths_fallback(d))
+
+    def test_the_gate_no_longer_hardcodes_a_module_name(self):
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertIn("ruff_paths_for_tree(WT)", src)
+        self.assertNotIn("digiclaw/src", src)
 
 class NoRealNetwork:
     """No test in this file may reach the network or the real token file.
@@ -1821,7 +2543,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
 
         _mod.status = fake_status
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out: []
+        _mod.run_checks = lambda pr, out, summary=None: []
         _mod.process(pr, False)
         return seen
 
@@ -2034,7 +2756,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         _mod.app_status = lambda sha, fields: False
         self.addCleanup(setattr, _mod, "app_status", self._app_status)
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out: []
+        _mod.run_checks = lambda pr, out, summary=None: []
         _mod.process(pr, False)
         self.assertFalse(os.path.exists(os.path.join(_mod.CLAIMS, pr["headRefOid"])),
                          "a refused app row must not keep a head in the queue for ever")

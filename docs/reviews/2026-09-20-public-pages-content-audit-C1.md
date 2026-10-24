@@ -26,7 +26,7 @@ any reading, per the slice brief.
 - compose services → **23**, default (no `profiles:`) → **10** (parsed `docker-compose.yml` with PyYAML)
 - modules registry → **11** total, **9** shipping (4 core + 5 support), **2** roadmap
 - digikey top-level `*.py` → **18** ("eighteen Python modules" keeps)
-- uv workspace members → **11**; pip-audit matrix lists the 7 Python components named on /security (digibase, digigraph, digiquant, digisearch, digismith, digikey, digiclaw) — keeps
+- uv workspace members → **11**; pip-audit matrix lists the 7 Python components named on /security (digibase, digigraph, digiquant, digisearch, digismith, digikey, digibot) — keeps
 - portfolio graph appends in `build_portfolio_phases_thesis()` → **10** (H1–H9 + coverage director); research daily list (preflight, triage, phase1–7, publish) → **10**; pipeline total **20**; `LIVE_ORDERS` **0** — all keep, portfolio side pinned by `pipeline-data.test.ts`
 - research A0–A4 (preflight → triage → segments → consolidate → digest) per `research/docs/agentic/ARCHITECTURE.md` — subsystem fine print keeps
 - rate limit 10/min burst 20 (`digikey/ratelimit.py` defaults), timeout envelope connect-5/read-30/write-10/pool-5 (`digibase/http_client.py`), JWKS cache 300s (`digikey/jwt_verify.py`), disclosure 72h/7d (`SECURITY.md:189`) — all keep

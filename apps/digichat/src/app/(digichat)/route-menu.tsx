@@ -1,7 +1,8 @@
 /**
  * Root menu (single-route plan, menu-root fork).
  *
- * Bare `/` renders no chat — just this menu linking the three modes.
+ * Dev-only surface picker: it renders only for `?mode=menu`, never for bare `/`
+ * (that is the product chat since DIG-5395).
  * Command-palette-style pick list, DigiWeb-aligned kit tokens.
  * Plain server links, zero client JS.
  */

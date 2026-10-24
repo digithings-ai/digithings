@@ -14,7 +14,7 @@
   --accent-digichat:   #e2708a;
   --accent-digikey:    #d97a5a;
   --accent-digitrace:  #6fa3a3;
-  --accent-digiclaw:   #b87840;
+  --accent-digibot:   #b87840;
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
@@ -59,7 +59,7 @@
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
 .accent-digitrace  { --accent: var(--accent-digitrace);  --on-accent: #06110f; }
-.accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
+.accent-digibot   { --accent: var(--accent-digibot);   --on-accent: #06110f; }
 .accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
 .accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
 .accent-digilink   { --accent: var(--accent-digilink);   --on-accent: #06110f; }
@@ -100,6 +100,16 @@
   --heat-ink-strong: #000000;
 
   --danger: #E94959;
+
+  /* Semantic action/status roles. Deliberately not aliases of --accent or of
+     the money pair: a badge row (OPEN / ADD / TRIM / EXIT / CLOSED) has to
+     stay distinguishable, and --accent is already taken by live/selected.
+     Literal values come from the existing chart family — no new palette. */
+  --status-open:   #5AD4F0;
+  --status-add:    #1EC98A;
+  --status-trim:   #E0B341;
+  --status-exit:   #E5533E;
+  --status-closed: #9AA0A6;
 
   --term-bg:   #08090B;
   --term-ink:  #E7EAEC;
@@ -142,6 +152,12 @@
   --chart-supertrend-down: #3369D8;
 
   --danger: #C32232;
+
+  --status-open:   #1B798E;
+  --status-add:    #187E58;
+  --status-trim:   #8F6220;
+  --status-exit:   #B2452E;
+  --status-closed: #5C636A;
 
   --heat-ink: var(--ink);
   --heat-ink-strong: var(--ink);
@@ -237,6 +253,11 @@
   --dur-fast: 120ms;
   --dur: 240ms;
   --dur-slow: 600ms;
+  /* Additive scales alongside the legacy --dur-* trio (which stays pinned to
+     motion.json). --dur-tap is the interaction-feedback budget (≤200ms);
+     --dur-arrive is the settled-state entrance, matching --duration-reveal. */
+  --dur-tap: 120ms;
+  --dur-arrive: 600ms;
 }
 
 @supports (transition-timing-function: linear(0, 1)) {

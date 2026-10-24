@@ -7,8 +7,10 @@
 
 /* Sidebar width floor: the inline sidebarWidth style stays source of truth. */
 .devkit-side {
-  min-width: 16rem;
-  max-width: 32rem;
+  --devkit-side-min-w: 16rem;
+  --devkit-side-max-w: 32rem;
+  min-width: var(--devkit-side-min-w);
+  max-width: var(--devkit-side-max-w);
 }
 
 /* Raw-YAML disclosure marker (docs mobile-disclosure grammar, canon §17). */
@@ -19,13 +21,14 @@
 
 /* Swatch preset grid: 5 columns x 2 rows of 2rem cells. */
 .devkit-swatches {
+  --devkit-swatch-size: 2rem;
   display: grid;
-  grid-template-columns: repeat(5, 2rem);
-  gap: 0.5rem;
+  grid-template-columns: repeat(5, var(--devkit-swatch-size));
+  gap: var(--space-2);
 }
 .devkit-swatch {
-  width: 2rem;
-  height: 2rem;
+  width: var(--devkit-swatch-size);
+  height: var(--devkit-swatch-size);
   border: 1px solid var(--hair);
 }
 .devkit-swatch[aria-pressed="true"] {
@@ -35,5 +38,5 @@
 
 /* Density: halve editor row gaps inside compact groups. */
 .devkit-compact {
-  gap: 0.5rem;
+  gap: var(--space-2);
 }

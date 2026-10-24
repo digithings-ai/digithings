@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import Counter
+from math import log
 
 from digisearch.core.models import Chunk, Query, Result
 
@@ -64,8 +65,6 @@ class TFIDFSearcher:
     """TF-IDF scoring. Simple implementation."""
 
     def __init__(self, corpus: list[str]) -> None:
-        from math import log
-
         docs = [doc.lower().split() for doc in corpus]
         n = len(docs)
         df: Counter[str] = Counter()
@@ -77,8 +76,6 @@ class TFIDFSearcher:
         self._corpus = corpus
 
     def search(self, query: Query, top_k: int | None = None) -> list[Result]:
-        from math import log
-
         start = time.perf_counter()
         k = top_k or query.top_k
         q_tokens = query.text.lower().split()

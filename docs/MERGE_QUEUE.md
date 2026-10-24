@@ -95,7 +95,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. An in-session review counts only when the reviewer-independence gate accepts its marker as another seat's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
 | Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
-| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **whatever it is scoped to**. A block belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and a new commit, a rebase or a merge from `develop` does not spend a block (DIG-4878). A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Three of these are deliberate choices worth stating plainly.
@@ -113,16 +113,26 @@ marker it cannot parse, one level up: *a missing signal, not a clearance.* `#590
 its row arrived without comments — the coverage gate authorised the merge, and the queue's
 own audit comment names that gate.
 
-**A verdict is not spent by the branch moving.** The verdict gate reads the verdict
-on the PR and asks whether it clears the head the PR stands at. It does not ask
-whether the commit the verdict named is still on the branch. That was the rule until
-2026-10-21, and it was the hole: the block was retired the moment a new commit, a rebase or
-a merge from `develop` rewrote the branch's commit list, and the coverage gate then carried
-the PR to a merge on a `reviewed:agent` label. Six `digithings` PRs merged that way between
-2026-10-20 and 2026-10-21 (`#6115`, `#6074`, `#6071`, `#6019`, `#5968`, `#5761`). A
-blocking verdict now stands until a later approve names the head it covers, and a `reviewed:agent`
-label cannot carry a PR past it. The full ordering rule is [The verdict rule](#the-verdict-rule)
-below — one place, so no two seats read it differently.
+**A verdict is scoped to the head it was made against.** A review verdict is a
+statement about one commit. A block naming a commit the PR has left says nothing
+about the head it stands at: it does not hold the PR, and it does not ask the
+seat that posted it to review a head it never read. `#6263` was approved at 01:01
+on `177278b680f4` and handed back at 01:05 because a `changes_requested` against
+`a87fc55760e9` still stood — 13 PRs were stuck that way, each waiting for the
+same seat to re-approve code it had not seen. A block on the current head still
+blocks exactly as before, and an approve on an old head still clears nothing: the
+scope cuts both ways, so it cannot be used to let an old verdict vouch for new
+code.
+
+This replaces the DIG-4878 rule ("a verdict is not spent by the branch moving"),
+which counted a block on any ancestor of the head. The finding that produced it —
+six `digithings` PRs merged between 2026-10-20 and 2026-10-21 with a
+`changes_requested` still on the branch (`#6115`, `#6074`, `#6071`, `#6019`,
+`#5968`, `#5761`) — is now answered by the coverage gate instead: review evidence
+must still exist on the head. What a stale block did not buy was a second review
+of the current head; it bought an indefinite hold cleared only by the seat that
+posted it. The full ordering rule is [The verdict rule](#the-verdict-rule) below
+— one place, so no two seats read it differently.
 
 **`NEUTRAL` and `SKIPPED` fail a required check.** A required check that reports nothing
 is indistinguishable from a check that was never asked to run — which is exactly the hole
@@ -150,20 +160,30 @@ reset.
 ### The verdict rule
 
 The verdict gate asks one question: **does any verdict on this PR block the head the PR
-stands at?** The rule is two clauses, in this order. It is written here and nowhere else,
-so no two seats read it differently (DIG-4878, DIG-4911).
+stands at?** The rule is one scoping step and two clauses, in this order. It is written
+here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG-4911).
 
-1. **A seat's own block stands until that seat clears it.** A blocking verdict belongs
-   to the seat that posted it. That seat's later approve clears it, and only when the
-   approve names the head the PR stands at. An approve naming another head clears
-   nothing, and **another seat's approve clears nothing either**. `#6170` (DIG-4911)
-   merged into `develop` on 2026-10-21 with the security desk's `changes requested`
-   still on the branch: the code reviewer's later approve on the head was the newest
-   readable verdict, and nothing had ever asked the queue to wait for the second
-   sign-off.
-2. **Everything else is judged by the newest readable verdict.** A blocking verdict
-   blocks, whatever it is scoped to; an approve clears only when it names the head the
-   PR stands at; a verdict the queue cannot read is skipped, not read as a clearance.
+0. **Every verdict is scoped to the head it names.** This is the question both clauses
+   ask, settled first: a verdict naming another commit is a statement about code the PR
+   has left. It does not block the current head and it clears nothing on it. A verdict
+   that names no head at all — no `scope=`, no provenance `head=`, no sha in the prose —
+   is not stale, because there is nothing to be stale against, so it blocks as it always
+   did; reading it as a clearance would soften the gate, which this rule does not do.
+1. **A seat's own block stands until that seat clears it.** A blocking verdict on the
+   current head belongs to the seat that posted it. That seat's later approve clears it,
+   and only when the approve names the head the PR stands at. An approve naming another
+   head clears nothing, and **another seat's approve clears nothing either**. `#6170`
+   (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's `changes
+   requested` still on the branch: the code reviewer's later approve on the head was the
+   newest readable verdict, and nothing had ever asked the queue to wait for the second
+   sign-off. (The block in that timeline named `fb309e6458`, a commit the merged head had
+   left, so under the rule above it no longer holds a later head — the seat rule is
+   unchanged for a block that names the head.)
+2. **Everything else is judged by the newest readable verdict.** The newest readable
+   verdict is the one that counts: a blocking verdict blocks when it names the head the PR
+   stands at (or names no head at all, which cannot be stale); an approve clears only when
+   it names the head the PR stands at; a verdict the queue cannot read is skipped, not
+   read as a clearance.
 
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
@@ -407,7 +427,7 @@ Three more limits, stated so nobody reads more into the gate than it is:
 **Required check names are per repo, and a name that matches nothing is called out
 separately.** The two repos in this org report different names for the same idea:
 `twelve-x` runs one job called `test`, while `digithings` drives every suite through
-reusable workflows, so GitHub reports `digibase / test`, `digiclaw / test` and ten
+reusable workflows, so GitHub reports `digibase / test`, `digibot / test` and ten
 more, and names nothing `test` at all. A single global list can therefore only be
 right for one of them — and when it is wrong it is *silently* wrong, because an
 unmatched required name produces `required check 'test' has not reported`, which is

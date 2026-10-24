@@ -61,8 +61,8 @@ export function SectionRail() {
               className="group flex h-[0.8rem] w-[1.4rem] items-center justify-center"
             >
               <span
-                className={`block h-px transition-[width,background-color] duration-300 ${
-                  index === active ? "w-[1.1rem] bg-ink" : "w-[0.5rem] bg-ink-mute group-hover:w-[0.8rem] group-hover:bg-ink-soft"
+                className={`block h-px w-[1.1rem] origin-center transition-[transform,background-color] duration-300 ${
+                  index === active ? "scale-x-100 bg-ink" : "scale-x-[0.45] bg-ink-mute group-hover:scale-x-[0.73] group-hover:bg-ink-soft"
                 }`}
               />
             </a>

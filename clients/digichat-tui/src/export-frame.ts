@@ -12,11 +12,10 @@
  * `--captured-at` pins the one field that would otherwise move between two
  * captures, so a committed fixture reproduces byte for byte.
  */
-import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { parseFlags, positiveInt, zonedIso } from "../../../packages/tui-frame/src/flags.ts";
-import { serializeRecordedFrame } from "./frame";
+import { writeRecordedFrame } from "../../../packages/tui-frame/src/write.ts";
 
 const HERE = import.meta.dir;
 
@@ -74,8 +73,7 @@ async function main(): Promise<void> {
     height: args.height,
     capturedAt: args.capturedAt,
   });
-  await mkdir(dirname(args.out), { recursive: true });
-  await Bun.write(args.out, serializeRecordedFrame(record));
+  await writeRecordedFrame(args.out, record);
   console.log(`wrote ${args.out} (${record.width}x${record.height})`);
 }
 

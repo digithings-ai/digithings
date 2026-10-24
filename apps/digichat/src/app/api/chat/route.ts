@@ -34,8 +34,10 @@ import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { createTurnGuard, guardrailPrepareStep } from "@/lib/guardrails/turn";
+import { admitChatTurn, projectedGuardrails } from "@/lib/limits/admit";
+import { loadCatalogPrices } from "@/lib/limits/prices";
 import { resolveLanguageCode } from "@/lib/languages";
-import { premiumModelsHeader } from "@/lib/deploy-config/schema";
+import { deploymentRateLimitEnabled, premiumModelsHeader } from "@/lib/deploy-config/schema";
 import { catalogModelRate, premiumIdsFromGroups } from "@/lib/model-picker-catalog";
 import {
   applyPremiumBudget,
@@ -66,6 +68,7 @@ import {
   embedConfigOf,
   isEmbedChatRequest,
   resolveAnonymousInstallChat,
+  resolveAnonymousDeploymentChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { isPlanTierSatisfied } from "@/lib/embed-tenants";
@@ -120,17 +123,56 @@ export async function POST(req: Request) {
     authResult instanceof Response && isEmbedChatRequest(req)
       ? resolveEmbedChatTenant(req)
       : authResult instanceof Response
-        ? (resolveAnonymousInstallChat() ?? authResult)
+        ? (resolveAnonymousInstallChat() ??
+          resolveAnonymousDeploymentChat(req) ??
+          authResult)
         : await resolveChatTenantContext(req, authResult);
   if (tenantCtx instanceof Response) {
     return tenantCtx;
   }
   const { tenantSlug, ownerUserSub } = tenantCtx;
+  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
+  const embedConfig = embedConfigOf(tenantCtx);
+
+  // Resolve the deployment before the request limiter. The limiter is
+  // per deployment (`guardrails.rateLimit`), and an own key skips it.
+  let dep: DigichatDeployment | null = null;
+  // A config read error must keep failing closed for an explicit model, so
+  // track it separately from "no deployment matched this host".
+  let configFailed = false;
+  try {
+    const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
+      await import("@/lib/deploy-config/loader");
+    try {
+      const config = getDigichatConfig();
+      // Host selection is never authorization. On the embed surface the host
+      // has already been verified (token / first-party origin) before we get
+      // here, so X-Embed-Host is safe to consult. On the authenticated session
+      // path it is just a client-supplied header — use the config's own
+      // deployment block instead of letting a caller name another host.
+      dep = embedConfig
+        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
+        : (config.deployment ?? null);
+    } catch {
+      configFailed = true;
+      dep = null;
+    }
+    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
+  } catch {
+    // Unreadable loader must never 500 a request that used to work.
+    configFailed = true;
+    dep = null;
+  }
+
+  const spendGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
+  // Own key: not our inference budget. OCC sets rateLimit false for everyone.
+  const skipOurRequestLimit =
+    byokKey.length > 0 || !deploymentRateLimitEnabled(spendGuardrails);
 
   // Anonymous embed requests all share one bucket below (tenantSlug=embed,
   // ownerUserSub=embed:anonymous) — gate per-IP first so one visitor can't
   // exhaust it for everyone (#1251).
-  if (ownerUserSub === "embed:anonymous") {
+  if (!skipOurRequestLimit && ownerUserSub === "embed:anonymous") {
     const ipRate = checkEmbedIpRateLimit(req);
     if (!ipRate.allowed) {
       return rateLimitResponse(
@@ -140,10 +182,12 @@ export async function POST(req: Request) {
     }
   }
 
-  const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
-  const rate = checkBffRateLimit(rateKey);
-  if (!rate.allowed) {
-    return rateLimitResponse("Too many chat requests. Try again shortly.", rate.retryAfterSec);
+  if (!skipOurRequestLimit) {
+    const rateKey = `chat:${tenantSlug}:${ownerUserSub}`;
+    const rate = checkBffRateLimit(rateKey);
+    if (!rate.allowed) {
+      return rateLimitResponse("Too many chat requests. Try again shortly.", rate.retryAfterSec);
+    }
   }
 
   let body: { messages?: UIMessage[] };
@@ -164,7 +208,6 @@ export async function POST(req: Request) {
     });
   }
 
-  const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const byokProvider = (req.headers.get("x-byok-provider")?.trim() ?? "").toLowerCase();
   const byokModel = normalizeOpenRouterModel(
     req.headers.get("x-byok-model")?.trim() ?? ""
@@ -202,53 +245,17 @@ export async function POST(req: Request) {
     "X-Request-Id": rid,
   };
 
-  const embedConfig = embedConfigOf(tenantCtx);
-
-  // Resolve the deployment once for the whole handler. `embedConfig` only
-  // exists on the embed surface, so every gate below (plan tier, activity
-  // detail, backend type, corpus index) used to apply only there — an
-  // authenticated session ignored its own deployment config entirely.
-  // Fall back to the embed tenant, and never let a config read throw 500 a
-  // request that used to work.
-  let dep: DigichatDeployment | null = null;
-  // A config read error must keep failing closed for an explicit model, so
-  // track it separately from "no deployment matched this host".
-  let configFailed = false;
-  try {
-    const { resolveDeploymentForHost, getDigichatConfig, embedTenantToDeployment } =
-      await import("@/lib/deploy-config/loader");
-    try {
-      const config = getDigichatConfig();
-      // Host selection is never authorization. On the embed surface the host
-      // has already been verified (token / first-party origin) before we get
-      // here, so X-Embed-Host is safe to consult. On the authenticated session
-      // path it is just a client-supplied header — use the config's own
-      // deployment block instead of letting a caller name another host.
-      dep = embedConfig
-        ? resolveDeploymentForHost(req.headers.get("x-embed-host"), config)
-        : (config.deployment ?? null);
-    } catch {
-      configFailed = true;
-      dep = null;
-    }
-    if (!dep && embedConfig) dep = embedTenantToDeployment(embedConfig);
-  } catch {
-    // Unreadable loader must never 500 a request that used to work.
-    configFailed = true;
-    dep = null;
-  }
   // Embed wins wherever both exist so the embed surface stays byte-identical;
   // the change is the session surface gaining the deployment config.
   const backend = embedConfig?.backend ?? dep?.backend;
   const foundryAlias = backend && isFoundryConfig(backend) ? backend.maxToolCalls : undefined;
   // Embed wins, same as the backend. Off unless a key or the Foundry alias is set.
-  const guard = createTurnGuard({
-    slug: embedConfig?.slug ?? dep?.slug ?? tenantSlug,
-    guardrails: embedConfig?.guardrails ?? dep?.guardrails,
-    foundryMaxToolCalls: foundryAlias,
-    userId: ownerUserSub,
-    ip: clientIpForRateLimit(req),
-  });
+  // The turn guard itself is created after the admission decision below, where
+  // the deployment limits are projected; creating a second one here would shadow
+  // it and leave the one that does the work unreachable.
+  const limitSlug = embedConfig?.slug ?? dep?.slug ?? tenantSlug;
+  const limitGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
+  const limitConfig = embedConfig?.limits ?? dep?.limits;
   // The registry describes the backend once (#4522): the streaming path is
   // chosen from `adapter.protocol`, never from a `backend.type` comparison.
   const adapter = backendAdapterFor(backend?.type);
@@ -568,6 +575,48 @@ export async function POST(req: Request) {
   const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
+  // models.costPerWindow stays on the premium budget above. The limits block
+  // is the other gates (tokens, turns, sessions, tool calls, model tiers).
+  const clientIp = clientIpForRateLimit(req);
+  const admission = admitChatTurn({
+    limits: limitConfig,
+    guardrails: limitGuardrails,
+    slug: limitSlug,
+    userId: ownerUserSub,
+    sessionId,
+    ip: clientIp,
+    conversationId: externalConversation,
+    modelId,
+    explicitModel: Boolean(requestedModel),
+    autoModel: tenantDefaultModel || dep?.models?.default,
+    outputCapUsdPerMillion: dep?.models?.priceCapUsdPerMillion,
+    prices: loadCatalogPrices(),
+  });
+  if (admission.decision.action === "block") {
+    runLock.release();
+    return jsonError(429, "limit_exceeded", admission.decision.message, responseHeaders);
+  }
+  if (admission.model && !premiumNotice) {
+    modelId = admission.model;
+    houseSessionModel = undefined;
+  }
+  const guard = createTurnGuard({
+    slug: limitSlug,
+    guardrails: projectedGuardrails(limitConfig, limitGuardrails),
+    foundryMaxToolCalls: foundryAlias,
+    userId: ownerUserSub,
+    ip: clientIp,
+    // A visitor's own key is not our spend, so a BYOK turn keeps the user TPM
+    // out of the guard. The deployment TPM, tool cap and answer guard stay.
+    omitUserTpm: byokKey.length > 0,
+    ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
+  });
+  const recordLimitUsage = guard.recordUsage.bind(guard);
+  guard.recordUsage = (usage) => {
+    recordLimitUsage(usage);
+    admission.record(usage, modelId);
+  };
 
   if (adapter.protocol === "foundry-responses" && isFoundryConfig(backend)) {
     const foundryBackend = backend;

@@ -196,9 +196,12 @@ export function ProductStockShell({
   // the chain before the skip lands. Lab knobs show it immediately.
   const [bootVisible, setBootVisible] = useState(false);
   const [serviceNames, setServiceNames] = useState<string[]>(["auth", "assistant"]);
-  // The tool-chain boot is the baseline now; `?boot=` still overrides it.
+  // The hero-banner cover is the standard boot now (the same animation the
+  // digithings.ai shell shows on /chat/occ). `?boot=` / the `bootLabVariant`
+  // prop still wins, then the deployment's `chrome.loading`; `classic` opts
+  // back into the pre-banner welcome loader.
   const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
-    resolveBootLabVariant(bootLabVariant ?? null) ?? "tooltask",
+    resolveBootLabVariant(bootLabVariant ?? cfg.chrome.loading ?? null),
   );
 
   // Transition lab switch: `?handoff=` picks how the boot hands off to the
@@ -382,7 +385,7 @@ export function ProductStockShell({
     welcome?.trim() ||
     cfg.chrome.welcome?.trim() ||
     cfg.chrome.title?.trim() ||
-    "How can I help you today?";
+    "Ask the stack.";
   const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";

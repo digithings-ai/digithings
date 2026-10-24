@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
 
 
@@ -68,8 +68,8 @@ def simple_regression(
     except ImportError:
         pass  # matplotlib optional; regression stats still returned
     else:
-        out_dir = _artifacts_dir(dataset_path)
-        path = _next_filename(out_dir, "regress")
+        out_dir = artifacts_dir(dataset_path)
+        path = next_filename(out_dir, "regress")
         fig, ax = plt.subplots()
         ax.scatter(x.to_list(), y.to_list(), alpha=0.6, label="data")
         x_min, x_max = x.min(), x.max()

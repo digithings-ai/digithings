@@ -1,5 +1,6 @@
 import raw from "@/app/_latest-run.json";
 import { PIPELINE_STAGES, type StageName } from "@/app/_stages";
+import { isRecord } from "@digithings/ui/lib/record";
 
 export type { StageName };
 export type StageStatus = "recorded" | "not-recorded";
@@ -26,10 +27,6 @@ export interface LatestRunFile {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function parseStage(v: unknown, expected: StageName): StageSnapshot {
   if (!isRecord(v) || v.name !== expected) throw new Error(`_latest-run.json: stage ${expected} missing or out of order`);
@@ -70,14 +67,6 @@ export function parseLatestRun(input: unknown): LatestRunFile {
   return { ...base, snapshot: { runDate: s.runDate, runType: s.runType as string | null, stages } };
 }
 
-const latest: LatestRunFile = parseLatestRun(raw);
-
-/** The recorded run, or null when no real run was reachable at capture time. */
-export function getSnapshot(): RunSnapshot | null {
-  return latest.snapshot;
-}
-
-/** Full file including capturedAt, source and, for the empty state, the reason. */
-export function getLatestRun(): LatestRunFile {
-  return latest;
-}
+// Parsed at module load so a malformed capture fails loudly at build time
+// instead of on the block that reads it.
+parseLatestRun(raw);

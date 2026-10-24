@@ -19,11 +19,17 @@ import {
 } from "./paths";
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
-import { resolveEmbedTenants } from "./tenants-kv";
+import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
 import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
-import { fetchContainerWithRetry } from "./container-retry";
+import {
+  CONTAINER_UNAVAILABLE_BODY,
+  describeValue,
+  fetchContainerWithRetry,
+  NO_INSTANCE_STATUS,
+  RETRY_AFTER_SECONDS,
+} from "./container-retry";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -39,6 +45,21 @@ const workerVars = env as unknown as Env;
  * every cold start on its own).
  */
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
+
+/**
+ * True when a thrown value is an Error, asked in a way that cannot throw.
+ *
+ * `instanceof` walks the prototype chain, and a value that cannot be
+ * inspected throws there. A guard that throws would turn a caught failure back
+ * into an uncaught one, which is the failure this Worker exists to stop.
+ */
+function isRealError(value: unknown): boolean {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
@@ -66,6 +87,10 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
+    // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
+    // at boot and overwritten below; this var is the seam for `wrangler dev`
+    // and for a deploy that pins the document in `[vars]`.
+    DIGICHAT_CONFIG_YAML: workerVars.DIGICHAT_CONFIG_YAML ?? "",
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
@@ -79,15 +104,22 @@ export class DigiChatContainer extends Container {
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
   };
 
-  private tenantsResolved = false;
+  /** One boot = one KV read of both the tenant registry and the config document. */
+  private bootConfigResolved = false;
 
   /**
    * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
    * tenant config (secret refs resolved from Worker secrets), falling back to
    * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   *
+   * Then read the deployment document itself from the same namespace's
+   * `config-yaml` key and forward it as DIGICHAT_CONFIG_YAML, so the container's
+   * config lives outside both the image and the Worker. Both reads happen once
+   * per boot; `onStop()` re-arms them, so a KV edit plus the container's idle
+   * sleep is all a config change needs — no redeploy.
    */
   override async fetch(request: Request): Promise<Response> {
-    if (!this.tenantsResolved) {
+    if (!this.bootConfigResolved) {
       try {
         const { json, source } = await resolveEmbedTenants(
           workerVars.DIGICHAT_TENANTS_KV,
@@ -103,14 +135,45 @@ export class DigiChatContainer extends Container {
         console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
         this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
       }
-      this.tenantsResolved = true;
+      // KV wins over the `[vars]` seam. `resolveConfigYaml` never throws: a
+      // missing key or failed read is logged there and leaves the container on
+      // its own file/defaults, which is the documented precedence.
+      const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
+      if (source === "kv") {
+        this.envVars = { ...this.envVars, DIGICHAT_CONFIG_YAML: yaml };
+      }
+      console.log(`[config-kv] digichat config source=${source}`);
+      this.bootConfigResolved = true;
     }
-    return super.fetch(request);
+    try {
+      return await super.fetch(request);
+    } catch (cause) {
+      // The hop to the container rejected with a value that is not an Error.
+      // The @cloudflare/containers package rethrows such a value verbatim, so
+      // it would leave this Durable Object as an uncaught exception and the
+      // Worker's own guard would never see it (run-watch DIG-4928). The client
+      // is told to come back instead.
+      //
+      // A real error is rethrown unchanged: it carries a message, a stack and
+      // a type, and the caller has to see it. A non-Error carries none of
+      // them, so it is described in the log — the platform renders such a
+      // value as it stands, so a thrown Date would leave nothing but a bare
+      // date — and the answer says what happened instead.
+      if (isRealError(cause)) throw cause;
+      console.error(
+        "digichat: container could not be reached: the container hop rejected with a value that is not an Error:",
+        describeValue(cause),
+      );
+      return new Response(CONTAINER_UNAVAILABLE_BODY, {
+        status: NO_INSTANCE_STATUS,
+        headers: { "Retry-After": String(RETRY_AFTER_SECONDS) },
+      });
+    }
   }
 
-  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  /** Re-read KV tenant + config on the next boot (the DO outlives container sleeps). */
   override onStop(): void {
-    this.tenantsResolved = false;
+    this.bootConfigResolved = false;
   }
 }
 
@@ -137,6 +200,12 @@ export interface Env {
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;
+  /**
+   * Deployment document (YAML or JSON text). Normally supplied at boot from
+   * KV `config-yaml` in the DIGICHAT_TENANTS_KV namespace; a `[vars]` value is
+   * the local-dev / pinned-document seam and loses to KV when both exist.
+   */
+  DIGICHAT_CONFIG_YAML?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DURABLE_OBJECT_UNAVAILABLE } from "@digithings/durable-object-reconnect";
 import worker from "./index";
 import { dataPlaneEnv, type Env, type HouseLedger } from "./env";
 import {
@@ -446,6 +447,101 @@ describe("accept seeds ledger from container (#4761 Kick2)", () => {
   });
 });
 
+describe("the container hop rejects with a value that is not an Error (DIG-4928)", () => {
+  it("answers 503 with Retry-After instead of a 500 with a bare date", async () => {
+    // The @cloudflare/containers package rethrows a non-Error rejection
+    // verbatim, so a thrown Date used to be described with String(err) and
+    // answered as a 500 whose body was the bare date (run-watch DIG-4928). The
+    // instance could not serve the job, so the client is told to come back —
+    // the same contract the Worker gives when the instance itself is gone.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { session } = harness({
+      startRun: async () => {
+        throw new Date("2026-10-21T11:51:44.000Z");
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
+
+  it("keeps the 500 for a real error", async () => {
+    const { session } = harness({
+      startRun: async () => {
+        throw new Error("container /run HTTP 500");
+      },
+    });
+    const res = await session.fetch(post(job()));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "container /run HTTP 500" });
+  });
+
+  it("answers 503 for a value that cannot be described", async () => {
+    // The description of the cause runs INSIDE the catch, so a description
+    // that throws would turn a caught failure back into an uncaught one: the
+    // request would end with no answer at all. The package's errorMessage is
+    // total, so the log line says what happened and the client gets the
+    // retryable 503.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hostile = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    const { session } = harness({
+      startRun: async () => {
+        throw hostile;
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
+
+  it("answers 503 for a value that cannot be inspected", async () => {
+    // `instanceof` walks the prototype chain, and a revoked proxy throws
+    // there. The guard that asks the question is asked in a way that cannot
+    // throw, and so is the description of the cause.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const { session } = harness({
+      startRun: async () => {
+        throw revoked.proxy;
+      },
+    });
+    let res: Response;
+    try {
+      res = await session.fetch(post(job()));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: DURABLE_OBJECT_UNAVAILABLE,
+      detail: "the runner's Durable Object instance was not available; retry later",
+    });
+  });
+});
+
 describe("watchdog and poll resilience", () => {
   it("marks timed_out with exit 124 when unreachable past timeout + grace", async () => {
     const timeoutSeconds = 10;
@@ -699,6 +795,44 @@ describe("watchdog and poll resilience", () => {
       expect([...archive.data.keys()].filter((k) => k.includes("success.json"))).toEqual([]);
       const shadow = bodies.find((body) => body.command === "allocation-shadow");
       expect(shadow?.args.source_branch).toBe("main");
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  // The ledger write can fail with a value that is not an Error, and one of
+  // the shapes measured in production is the request line of the request that
+  // failed, with the token in its query string (run-watch DIG-4928). The
+  // trace of that failure goes into the log, so the query string must not
+  // ride along with it.
+  it("keeps the query string of a URL out of the ledger failure trace", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const archive = memoryArchive();
+      archive.put = async () => {
+        throw "PUT https://archive.internal/ledger?token=xy7 HTTP/1.1";
+      };
+      const { session, starts, statuses } = harness({ archive });
+      await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-09:token",
+          args: { refresh_scope: "none", run_date: "2026-09-30" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      const line = traced.find((entry) => entry.startsWith("house_ledger_write_failed"));
+      expect(line).toBeTruthy();
+      expect(line).not.toContain("token=xy7");
+      expect(line).toContain("https://archive.internal/ledger?[redacted]");
     } finally {
       errors.mockRestore();
     }

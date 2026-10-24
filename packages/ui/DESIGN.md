@@ -96,6 +96,8 @@ components:
 
 # Design System: digiweb
 
+> **Historical, 2026-10-23.** This file records the Instrument Panel / utilitarian-terminal language as it was written. Several claims no longer match the shipping code: the ink-mute values, the display clamp, the focus mechanism, the spacing scale, the diff tokens, "one sans island", and the glyph count. [`docs/design/CURRENT_UI_LANGUAGE.md`](../../docs/design/CURRENT_UI_LANGUAGE.md) is the current description, and its §6 lists each outdated claim with the file that proves it. Where the two disagree, `packages/design/tokens.css` wins.
+
 ## Overview
 
 **Creative North Star: "The Instrument Panel"**

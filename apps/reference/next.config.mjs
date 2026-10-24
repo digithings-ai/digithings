@@ -19,6 +19,7 @@ async function redirects() {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: { agentUpgrade: "security" },
   output: "export",
   images: { unoptimized: true },
   // Two root layouts ((gallery) + the isolated (chatbot) shell) means an

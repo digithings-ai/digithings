@@ -53,7 +53,7 @@ req/min: `/run_backtest`, `/run_optimize`, `/run_pipeline`, `/v1/workflow`,
 ## Drift (ADDM)
 
 `GET /check_drift` accepts `strategy_id`, `baseline_run_id`, and
-`current_sharpe`; digiclaw's heartbeat polls it and triggers
+`current_sharpe`; digibot's heartbeat polls it and triggers
 re-optimization on `drift_detected`. Drift fires once Sharpe history
 holds enough observations. History is an in-process deque today — not
 durable across restarts.

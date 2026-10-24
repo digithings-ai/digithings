@@ -200,3 +200,33 @@ export function asOfStatus(
   const age = ageText(sessions);
   return { label: `${dates} · ${age}${state === "fresh" ? "" : ` · ${state}`}`, age, state };
 }
+
+/**
+ * The state a pane is in while it paints. `loading` is the absence of a read;
+ * `stub` is a read the API withheld on purpose, not a failure.
+ */
+export type PaneState = "ok" | "empty" | "stub" | "error" | "loading";
+
+/**
+ * The ink a pane state paints. Values are ink, absent data is mute, a withheld
+ * (stub) read is the amber caution the web already uses for stale and withheld
+ * blocks, and only a real failure is danger. Loading reads as absent data.
+ */
+export function stateTone(state: PaneState): "ink" | "mute" | "warn" | "danger" {
+  if (state === "ok") return "ink";
+  if (state === "stub") return "warn";
+  if (state === "error") return "danger";
+  return "mute";
+}
+
+/**
+ * The pane body for a state. A failure carries the same `!` marker the other
+ * terminal clients paint (digichat `! note`, digivoice `! error`), and an
+ * error read that came back with no line still says something instead of
+ * drawing an empty pane with a danger border around it.
+ */
+export function stateLines(state: PaneState, lines: readonly string[]): string[] {
+  if (state !== "error") return [...lines];
+  if (lines.length === 0) return ["! the read failed"];
+  return [`! ${lines[0]}`, ...lines.slice(1)];
+}

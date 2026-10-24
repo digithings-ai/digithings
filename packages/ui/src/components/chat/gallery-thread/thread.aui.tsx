@@ -7,6 +7,12 @@ import {
   UserMessageAttachments,
   useHiddenAttachmentNames,
 } from "./attachment.aui";
+import {
+  composerHasText,
+  dismissComposerKeyboard,
+  dismissKeyboardIfCoarse,
+  isCoarsePointer,
+} from "./composer-keyboard";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
@@ -19,6 +25,12 @@ import {
   ReasoningTrigger,
 } from "../stock/reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
+import {
+  DEFAULT_SCROLL_MODE,
+  scrollModeProps,
+  useFollowStream,
+  type ScrollMode,
+} from "./scroll-mode";
 import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
 import {
@@ -196,6 +208,11 @@ export type ThreadProps = {
   scrollbars?: "always" | "auto";
   /** Worked-chain rhythm. `default` is the fixed spacing. */
   density?: "compact" | "default" | "airy";
+  /**
+   * `follow` anchors the sent question at the top and chases the stream;
+   * `free` never moves the viewport. See `scroll-mode.ts`.
+   */
+  scrollMode?: ScrollMode;
 };
 
 /** `{ adapter, action }` from `unstable_useSlashCommandAdapter`. */
@@ -417,13 +434,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-2/5 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton variant="block" className="ms-auto h-9 w-1/3 rounded-none motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton variant="line" className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton variant="line" className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -453,6 +470,7 @@ export const Thread: FC<ThreadProps> = ({
   composerToolbar,
   scrollbars = "always",
   density = "default",
+  scrollMode = DEFAULT_SCROLL_MODE,
 }) => {
   const resolvedActions: Required<ThreadActions> = {
     undo: actions?.undo !== false,
@@ -487,6 +505,7 @@ export const Thread: FC<ThreadProps> = ({
                   composerToolbar={composerToolbar}
                   scrollbars={scrollbars}
                   density={density}
+                  scrollMode={scrollMode}
                 />
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
@@ -507,6 +526,20 @@ export const Thread: FC<ThreadProps> = ({
  */
 const ThreadFooter: FC = () => <SkinCredit />;
 
+/**
+ * Keeps the viewport on the stream while following. A component rather than a
+ * hook call in `ThreadRoot` because the message count lives in the thread
+ * store, which only exists inside `ThreadPrimitive.Root`.
+ */
+const ScrollFollower: FC<{ viewport: HTMLElement | null; enabled: boolean }> = ({
+  viewport,
+  enabled,
+}) => {
+  const messageCount = useAuiState((s) => s.thread.messages.length);
+  useFollowStream(viewport, enabled, messageCount);
+  return null;
+};
+
 const ThreadRoot: FC<{
   autoFocus: boolean;
   placeholder?: string | undefined;
@@ -514,7 +547,8 @@ const ThreadRoot: FC<{
   composerToolbar?: ReactNode;
   scrollbars: "always" | "auto";
   density: "compact" | "default" | "airy";
-}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density }) => {
+  scrollMode: ScrollMode;
+}> = ({ autoFocus, placeholder, composerLayout, composerToolbar, scrollbars, density, scrollMode }) => {
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
@@ -525,10 +559,12 @@ const ThreadRoot: FC<{
     setViewportEl(node);
   }, []);
 
+  const viewportProps = scrollModeProps(scrollMode);
+
   return (
     <ThreadPrimitive.Root
       className={cn(
-        "aui-root aui-thread-root digichat-thread bg-background @container flex h-full flex-col",
+        "aui-root aui-thread-root digichat-thread bg-surface @container flex h-full flex-col",
         className,
       )}
       data-user-align="left"
@@ -548,7 +584,8 @@ const ThreadRoot: FC<{
         // resolves there and ignores `.digichat-thread`'s own `--card`.
         ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "0",
-        ["--composer-padding" as string]: "8px",
+        // `--composer-padding` is a density token (chat-aui.css), so it is not
+        // pinned inline here — an inline value would win over the mode.
       }}
     >
       {/* The footer (composer + credit) sits outside the scroll viewport so
@@ -559,8 +596,8 @@ const ThreadRoot: FC<{
       <div className="relative flex min-h-0 flex-1 flex-col">
       <ThreadPrimitive.Viewport
         ref={attachViewport}
-        turnAnchor="top"
-        // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
+        {...viewportProps}
+        // The top-anchored message carries `padding-top: var(--density-gap-4)` (chat-aui.css, taken back as margin)
         // so it does not sit flush against the viewport top. `tallerThan` scores
         // the anchor's offsetHeight, which includes that padding, so it is
         // raised by the same 1.5rem to keep the set of fully-pinned messages
@@ -569,6 +606,7 @@ const ThreadRoot: FC<{
         data-slot="aui_thread-viewport"
         className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
+        <ScrollFollower viewport={viewportEl} enabled={scrollMode === "follow"} />
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
@@ -576,7 +614,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-4 flex flex-col gap-y-6 empty:hidden"
+            className="flex flex-col empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -587,7 +625,7 @@ const ThreadRoot: FC<{
       <OverlayScrollbar targetRef={viewportRef} width={10} />
       </div>
         <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
-          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-surface relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -709,7 +747,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom border-hair bg-surface hover:bg-surface-2 absolute -top-12 z-10 self-center rounded-none p-4 disabled:invisible"
       >
         <DotMatrix state="scroll" decorative className="size-3.5" />
       </TooltipIconButton>
@@ -724,7 +762,7 @@ const ThreadWelcome: FC = () => {
       data-slot="aui_thread-welcome"
       className="aui-thread-welcome-root flex flex-col items-start text-start"
     >
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-(--duration-hover)">
         {welcome}
       </h1>
       <TypedWelcomeCopy lines={welcomeBody} />
@@ -738,7 +776,7 @@ const ThreadWelcome: FC = () => {
  * they came from the runtime or from `chrome.suggestions`.
  */
 const SUGGESTION_BUTTON_CLASS =
-  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-200";
+  "aui-thread-welcome-suggestion fade-in slide-in-from-bottom-1 animate-in fill-mode-both grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-[0.55rem] rounded-none border-0 bg-transparent px-0 py-0.5 text-start text-sm font-normal duration-(--duration-hover)";
 
 const ThreadSuggestions: FC = () => {
   const { suggestions } = useContext(ThreadChromeContext);
@@ -765,6 +803,9 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
       type="button"
       onClick={() => {
         if (aui.thread.getState().isRunning) return;
+        // A tapped example is a send: on iOS a button does not take focus, so
+        // the composer would keep the keyboard up over the answer.
+        dismissKeyboardIfCoarse();
         aui.thread.append({
           content: [{ type: "text", text: prompt }],
           runConfig: aui.composer.getState().runConfig,
@@ -789,7 +830,11 @@ const StaticSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 const ThreadSuggestionItem: FC = () => {
   return (
     <SuggestionPrimitive.Trigger send asChild>
-      <button type="button" className={SUGGESTION_BUTTON_CLASS}>
+      <button
+        type="button"
+        className={SUGGESTION_BUTTON_CLASS}
+        onClick={() => dismissKeyboardIfCoarse()}
+      >
         <span className="aui-msg-marker" aria-hidden="true">
           <DotMatrix
             state="example"
@@ -819,14 +864,31 @@ const Composer: FC<{
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRootRef = useRef<HTMLFormElement | null>(null);
   const isEditingMessage = edit.editing !== null;
+  // Read after mount, not during render: the server has no matchMedia, and a
+  // phone reporting "coarse" on its first render would hydrate a different
+  // tree than the one that was sent.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(isCoarsePointer());
+  }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     if (edit.editing) {
       event.preventDefault();
       edit.commit(aui.composer().getState().text);
+      // An edit is a send: the corrected text goes off and the answer starts
+      // streaming. Leaving the keyboard up would hide it, so the same
+      // dismissal runs here as on a normal submit.
+      dismissKeyboardIfCoarse();
       return;
     }
+    // Captured before the send clears the textarea — see composerHasText.
+    const sent = composerHasText(composerRootRef.current);
     onComposerSubmit?.(event);
+    // On a phone the keyboard would otherwise stay up over the streaming
+    // answer; blurring retracts it and leaves the thread in full view. A
+    // no-op on a fine pointer, so a desktop keeps its caret for the next turn.
+    if (sent) dismissComposerKeyboard(composerRootRef.current);
   };
 
   // Click outside the composer cancels an in-progress edit. The edit button
@@ -916,7 +978,7 @@ const Composer: FC<{
           data-slot="aui_composer-shell"
           data-layout={layout}
           onMouseDown={handleShellMouseDown}
-          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="border-hair data-[dragging=true]:border-accent flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding,0.5rem) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_50%,var(--bg))]"
         >
           <ComposerAttachments />
           {/* One row: attach, input, send. The toolbar used to sit on a second
@@ -930,7 +992,7 @@ const Composer: FC<{
               <ComposerPrimitive.Input
                 placeholder={placeholder}
                 className={cn(
-                  "aui-composer-input placeholder:text-muted-foreground/60 w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
+                  "aui-composer-input placeholder:text-ink-mute w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
                   compact
                     ? "min-h-7 max-h-[8.75rem] px-1.5 py-0 text-sm leading-7"
                     : "min-h-[1.375rem] max-h-[7.75rem] px-2.5 py-0.5 text-base leading-6",
@@ -940,6 +1002,12 @@ const Composer: FC<{
                 autoFocus={autoFocus}
                 submitMode="enter"
                 enterKeyHint="send"
+                // assistant-ui refocuses the composer when a run starts and
+                // when the viewport scrolls back to the bottom. On a phone
+                // that reopens the keyboard over the answer we just revealed,
+                // so both are off there; on a desktop the caret is welcome.
+                unstable_focusOnRunStart={!coarsePointer}
+                unstable_focusOnScrollToBottom={!coarsePointer}
                 aria-label="Message"
               />
               <ComposerBlockCaret containerRef={inputWrapRef} />
@@ -1018,7 +1086,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-dictate text-muted-foreground hover:text-foreground size-7 rounded-full"
+              className="aui-composer-dictate text-ink-mute hover:text-ink size-7 rounded-none"
               aria-label="Start voice input"
             >
               <DotMatrix
@@ -1037,7 +1105,7 @@ const ComposerSendControls: FC = () => {
               type="button"
               variant="ghost"
               size="icon"
-              className="aui-composer-stop-dictation text-destructive size-7 rounded-full"
+              className="aui-composer-stop-dictation text-danger size-7 rounded-none"
               aria-label="Stop voice input"
             >
               <DotMatrix
@@ -1057,7 +1125,7 @@ const ComposerSendControls: FC = () => {
           type="submit"
           variant="ghost"
           size="icon"
-          className="aui-composer-send size-7 rounded-full"
+          className="aui-composer-send size-7 rounded-none"
           aria-label="Send message"
           disabled={sendDisabled}
           onClick={submitComposer}
@@ -1075,7 +1143,7 @@ const ComposerSendControls: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className="aui-composer-cancel size-7 rounded-full"
+            className="aui-composer-cancel size-7 rounded-none"
             aria-label="Stop generating"
           >
             <DotMatrix
@@ -1164,11 +1232,11 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-(--dur-fast)"
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="aui-assistant-message-content text-foreground min-w-0 leading-relaxed wrap-break-word"
+        className="aui-assistant-message-content text-ink min-w-0 leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
           groupBy={chainGroupBy}
@@ -1366,7 +1434,12 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
+      // Earlier turns: the bar is unmounted until the turn is hovered, then it
+      // takes its footer row back in flow. It cannot float in the message gap —
+      // the bar is 24px tall and the gap is 12/8/20px by density, so a float
+      // paints over the next turn's first line. The empty-footer collapse in
+      // chat-digichat.css keeps the un-hovered turns at one message gap.
+      className="aui-assistant-action-bar-root text-ink-mute animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-(--duration-hover)"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -1487,7 +1560,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-(--dur-fast)"
       data-role="user"
     >
       <span className="aui-msg-marker" aria-hidden="true">
@@ -1495,7 +1568,7 @@ const UserMessage: FC = () => {
       </span>
       <div className="aui-user-message-content-wrapper relative min-w-0">
         <UserMessageAttachments />
-        <div className="aui-user-message-content text-foreground wrap-break-word empty:hidden">
+        <div className="aui-user-message-content text-ink wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />
@@ -1548,7 +1621,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
       className={cn(
-        "aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs",
+        "aui-branch-picker-root text-ink-mute -ms-2 me-2 inline-flex items-center text-xs",
         className,
       )}
       {...rest}

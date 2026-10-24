@@ -14,6 +14,7 @@ import { join, relative, resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import type { z } from "zod";
+import { expandDigichatDocument } from "./deploy-config/loader";
 import {
   DigichatConfigSchema,
   type DigichatConfig,
@@ -151,7 +152,7 @@ export type DevkitDraftValidation = {
 export function validateDevkitDraftText(text: string, scope: string[]): DevkitDraftValidation {
   let parsed: unknown;
   try {
-    parsed = loadYaml(text);
+    parsed = expandDigichatDocument(loadYaml(text));
   } catch (e) {
     return { ok: false, issues: [`(yaml): invalid YAML: ${(e as Error).message}`], deployment: null };
   }
@@ -182,7 +183,7 @@ function fileEntriesForConfig(
 ): DevkitEntry[] {
   let parsed: unknown;
   try {
-    parsed = loadYaml(raw);
+    parsed = expandDigichatDocument(loadYaml(raw));
   } catch (e) {
     const issues = [`(yaml): invalid YAML: ${(e as Error).message}`];
     return [

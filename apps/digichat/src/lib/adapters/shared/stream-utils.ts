@@ -7,6 +7,7 @@
  * already do by hand. Hand-rolling keeps three dependency trees (rxjs, uuid,
  * fast-json-patch, …) out of the image for a fraction of their surface.
  */
+import { isRecord } from "@digithings/ui/lib/record";
 import {
   applyActivityDetail,
   sanitizeActivitySpan,
@@ -86,9 +87,7 @@ export function parseSseJson(data: string): Record<string, unknown> | null {
   return isRecord(parsed) ? parsed : null;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+export { isRecord };
 
 export function stringField(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];

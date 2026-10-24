@@ -91,6 +91,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args
 
+from digisearch.core.timeutil import utc_iso
 from digisearch.websets.models import (
     EnrichmentDef,
     EventKind,
@@ -330,8 +331,8 @@ class WebsetStore:
                     _base_document(created),
                     created.status,
                     created.workspace_id,
-                    _utc_iso(now),
-                    _utc_iso(now),
+                    utc_iso(now),
+                    utc_iso(now),
                 ),
             )
         for enrichment in webset.enrichments:
@@ -448,7 +449,7 @@ class WebsetStore:
                     created.id,
                     created.webset_id,
                     created.status,
-                    _utc_iso(_now()),
+                    utc_iso(_now()),
                     created.model_dump_json(),
                 ),
             )
@@ -480,7 +481,7 @@ class WebsetStore:
                 "INSERT OR IGNORE INTO bridge_handoffs "
                 "(watch_id, run_id, webset_id, search_id, created_at) "
                 "VALUES (?, ?, ?, NULL, ?)",
-                (watch_id, run_id, webset_id, _utc_iso(now)),
+                (watch_id, run_id, webset_id, utc_iso(now)),
             )
             if cursor.rowcount == 0:
                 row = self._conn.execute(
@@ -509,7 +510,7 @@ class WebsetStore:
                         created.id,
                         created.webset_id,
                         created.status,
-                        _utc_iso(now),
+                        utc_iso(now),
                         created.model_dump_json(),
                     ),
                 )
@@ -588,7 +589,7 @@ class WebsetStore:
                     stored.id,
                     stored.webset_id,
                     stored.verification,
-                    _utc_iso(created_at),
+                    utc_iso(created_at),
                     stored.model_dump_json(),
                 ),
             )
@@ -687,7 +688,7 @@ class WebsetStore:
                     webset_id,
                     created.name,
                     created.status,
-                    _utc_iso(_now()),
+                    utc_iso(_now()),
                     created.model_dump_json(),
                 ),
             )
@@ -753,7 +754,7 @@ class WebsetStore:
                 (
                     created.id,
                     webset_id,
-                    _utc_iso(created.created_at or _now()),
+                    utc_iso(created.created_at or _now()),
                     created.model_dump_json(),
                 ),
             )
@@ -842,7 +843,7 @@ class WebsetStore:
                 (
                     created.webhook_id,
                     webset_id,
-                    _utc_iso(created.created_at or _now()),
+                    utc_iso(created.created_at or _now()),
                     created.model_dump_json(),
                 ),
             )
@@ -919,7 +920,7 @@ class WebsetStore:
                 "INSERT OR IGNORE INTO webhook_deliveries "
                 "(webhook_id, event_id, ok, status_code, error, recorded_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (webhook_id, event_id, int(ok), status_code, error, _utc_iso(_now())),
+                (webhook_id, event_id, int(ok), status_code, error, utc_iso(_now())),
             )
         return cursor.rowcount == 1
 
@@ -952,7 +953,7 @@ class WebsetStore:
                     status_code,
                     error,
                     attempts,
-                    _utc_iso(next_attempt_at) if next_attempt_at is not None else None,
+                    utc_iso(next_attempt_at) if next_attempt_at is not None else None,
                     webhook_id,
                     event_id,
                 ),
@@ -1013,7 +1014,7 @@ class WebsetStore:
             "(next_attempt_at IS NULL OR next_attempt_at <= ?) "
             "ORDER BY next_attempt_at ASC NULLS FIRST, recorded_at ASC, "
             "webhook_id ASC, event_id ASC LIMIT ?",
-            (_MAX_DELIVERY_ATTEMPTS, _utc_iso(now), limit),
+            (_MAX_DELIVERY_ATTEMPTS, utc_iso(now), limit),
         ).fetchall()
         return [_delivery_from_row(row) for row in rows]
 
@@ -1043,7 +1044,7 @@ class WebsetStore:
                     stored.webset_id,
                     stored.type,
                     dedup_key,
-                    _utc_iso(created_at),
+                    utc_iso(created_at),
                     stored.model_dump_json(),
                 ),
             )
@@ -1124,7 +1125,7 @@ class WebsetStore:
                 _base_document(webset),
                 webset.status,
                 webset.workspace_id,
-                _utc_iso(webset.updated_at or _now()),
+                utc_iso(webset.updated_at or _now()),
                 webset.id,
             ),
         )
@@ -1239,12 +1240,6 @@ def _clamp_limit(limit: int) -> int:
 
 def _now() -> datetime:
     return datetime.now(UTC)
-
-
-def _utc_iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def _parse_utc(value: str) -> datetime:

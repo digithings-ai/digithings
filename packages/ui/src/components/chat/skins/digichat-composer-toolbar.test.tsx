@@ -41,6 +41,7 @@ function prefsApi(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setToolbar: noop,
     setScrollbars: noop,
     setDensity: noop,
+    setScroll: noop,
     setView: noop,
     setThinking: noop,
     setModel: noop,
@@ -198,5 +199,52 @@ describe("DigichatComposerToolbar provider chip (#4597)", () => {
     expect(screen.getByLabelText("Open provider menu").textContent).toBe(
       "openrouter",
     );
+  });
+});
+
+describe("DigichatComposerToolbar usage meter", () => {
+  it("draws the gate's turn budget in place of the context meter", () => {
+    const { container } = render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+          usage: { used: 1, limit: 3 },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("embed-usage-meter")).toBeTruthy();
+    // One meter in the slot, never two.
+    expect(screen.queryByRole("img", { name: /^Context / })).toBeNull();
+    expect(container.querySelectorAll(".aui-usage-meter")).toHaveLength(1);
+  });
+
+  it("keeps the context meter when the tenant has no gate", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("embed-usage-meter")).toBeNull();
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
+  });
+
+  it("falls back to the context meter when a gate reports no budget", () => {
+    // A limit of 0 is not a meter; blanking the slot would hide the context
+    // bar for a reading that means "no gate".
+    render(
+      <DigichatComposerToolbar
+        prefs={prefsApi({
+          showContextMeter: true,
+          meterModel: "deepseek/deepseek-v4.1-flash-1017",
+          usage: { used: 0, limit: 0 },
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("embed-usage-meter")).toBeNull();
+    expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
 });

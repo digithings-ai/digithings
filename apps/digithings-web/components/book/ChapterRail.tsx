@@ -23,7 +23,10 @@ function Branch({ nodes }: { nodes: ReturnType<typeof nestToc> }) {
     <ol className="m-0 list-none p-0">
       {nodes.map((node) => (
         <li key={node.id} style={{ paddingLeft: `${(node.level - 2) * 0.75}rem` }} className="py-1">
-          <a href={`#${node.id}`} className="text-ink-soft">
+          <a
+            href={`#${node.id}`}
+            className="inline-block py-0.5 text-ink-soft hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink"
+          >
             {node.text}
           </a>
           {node.children.length > 0 ? <Branch nodes={node.children} /> : null}

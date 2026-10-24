@@ -219,12 +219,20 @@ describe("app key handling", () => {
     const setup = await renderApp(true);
     await setup.renderOnce();
     try {
-      for (let i = 0; i < 14; i++) {
+      // Walk the rail. The hop count is the page list, which grows when a tool
+      // page is added, so stop on /settings instead of a fixed count.
+      let reachedSettings = false;
+      for (let i = 0; i < 24; i++) {
+        if ((await frame(setup)).includes("desk: Baseline ▾ /settings")) {
+          reachedSettings = true;
+          break;
+        }
         act(() => {
           setup.mockInput.pressArrow("down");
         });
         await setup.renderOnce();
       }
+      expect(reachedSettings).toBe(true);
       expect(await frame(setup)).toContain("desk: Baseline ▾ /settings");
       const railAccent = accentTexts(setup.captureSpans()).join("");
       // Control: the walker fires (rail highlight), but no block title does.
@@ -310,10 +318,10 @@ describe("app view switching", () => {
     }
   }, 30000);
 
-  test("the chat view mounts for /tools/chat", async () => {
-    const { setup, frame: initial } = await goTo("tools/chat");
+  test("the chat view mounts for /tools/digichat", async () => {
+    const { setup, frame: initial } = await goTo("tools/digichat");
     try {
-      expect(initial).toContain("desk: Baseline ▾ /tools/chat");
+      expect(initial).toContain("desk: Baseline ▾ /tools/digichat");
       expect(initial).toContain("loading…");
       expect(initial).not.toContain("This page is not drawn on the terminal.");
     } finally {

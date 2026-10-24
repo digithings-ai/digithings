@@ -40,7 +40,7 @@ const readTokenUsage = (value: unknown): ThreadTokenUsage | undefined => {
 
 const TimingRow: FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="flex items-center justify-between gap-4">
-    <span className="text-muted-foreground">{label}</span>
+    <span className="text-ink-mute">{label}</span>
     <span className="font-mono tabular-nums">{value}</span>
   </div>
 );
@@ -66,7 +66,7 @@ export const MessageTiming: FC<{
               data-slot="message-timing-trigger"
               aria-label="Message timing"
               className={cn(
-                "text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center rounded-md p-1 font-mono text-xs tabular-nums transition-colors",
+                "text-ink-mute hover:bg-accent hover:text-accent-foreground flex items-center rounded-none p-1 font-mono text-xs tabular-nums transition-colors",
                 className,
               )}
             />
@@ -77,7 +77,7 @@ export const MessageTiming: FC<{
         <TooltipContent
           side={side}
           sideOffset={8}
-          className="bg-popover text-popover-foreground border px-3 py-2"
+          className="bg-surface-2 text-ink border px-3 py-2"
         >
           <div
             data-slot="message-timing-popover"

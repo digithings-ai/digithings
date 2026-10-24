@@ -1,8 +1,19 @@
 /**
- * Load digichat deployment config: file + env secret overlay + DIGICHAT_EMBED_TENANTS compat.
+ * Load digichat deployment config: env document + file + env secret overlay +
+ * DIGICHAT_EMBED_TENANTS compat.
  *
- * Canonical path: DIGICHAT_CONFIG_PATH → /app/config/digichat.yaml
- * Fail closed on invalid file / invalid tenants JSON.
+ * Document precedence: `DIGICHAT_CONFIG_YAML` > `DIGICHAT_CONFIG_PATH` file
+ * (default `/app/config/digichat.yaml`) > house `defaults.yaml`.
+ *
+ * `DIGICHAT_CONFIG_YAML` is the deployment document itself, forwarded by the
+ * Cloudflare Worker from the `config-yaml` key of `DIGICHAT_TENANTS_KV` so
+ * config lives outside both the image and the Worker and can be edited without
+ * a redeploy. It holds no secret values: credentials stay named env refs
+ * (`tokenEnv`) resolved from the process environment. A set but blank value
+ * counts as absent, so the file is still read. `DIGICHAT_EMBED_TENANTS` is
+ * merged over whichever document won, exactly as before.
+ *
+ * Fail closed on invalid document / invalid tenants JSON.
  *
  * Server-only — never import from client components (use `@/lib/deploy-config`
  * for schema / client projection / force-tool helpers). Not re-exported from
@@ -10,7 +21,10 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { load as loadYaml } from "js-yaml";
+import { expandExtendsDocument } from "./extends-merge";
 import { DEFAULT_PREMIUM_WINDOW_SECONDS } from "@/lib/premium-budget/budget";
 // js-yaml v4 — default safe schema via load() with no schema override.
 import {
@@ -21,15 +35,8 @@ import {
   type DigichatConfig,
   type DigichatDeployment,
 } from "./schema";
-import {
-  BASELINE_EMBED_PLACEHOLDER,
-  BASELINE_EMBED_SKIN,
-  BASELINE_EMBED_SUGGESTIONS,
-  BASELINE_EMBED_WELCOME,
-  BASELINE_EMBED_WELCOME_BODY,
-} from "@/lib/baseline-embed";
+import { BASELINE_EMBED_WELCOME } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
-import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
@@ -39,6 +46,76 @@ import {
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 
 export const DEFAULT_CONFIG_PATH = "/app/config/digichat.yaml";
+
+/**
+ * Env var carrying the deployment document itself (YAML or JSON text),
+ * forwarded from the Worker's KV `config-yaml` key. Non-secret by design.
+ */
+export const CONFIG_YAML_ENV = "DIGICHAT_CONFIG_YAML";
+
+/**
+ * How long a loaded document is reused before it is re-read.
+ *
+ * Deployment config is changed in KV without a redeploy: the Worker re-reads
+ * KV on every Container boot (its Durable Object re-arms on `onStop`), and
+ * this bound stops a long-lived process from serving a document forever. A
+ * few seconds is the staleness ceiling; re-parsing one small document that
+ * often is cheap, so this is a freshness choice rather than a CPU trade-off.
+ */
+export const CONFIG_CACHE_TTL_MS = 5_000;
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+
+/** Checked-in house document. A missing DIGICHAT_CONFIG_PATH loads this. */
+export function defaultsYamlCandidates(): string[] {
+  return [
+    resolve(MODULE_DIR, "../../../config/defaults.yaml"),
+    resolve(process.cwd(), "config", "defaults.yaml"),
+    resolve(process.cwd(), "apps", "digichat", "config", "defaults.yaml"),
+    "/app/config/defaults.yaml",
+  ];
+}
+
+function digichatConfigDir(): string {
+  const hit = defaultsYamlCandidates().find((path) => existsSync(path));
+  if (!hit) {
+    throw new Error(
+      `digichat defaults.yaml not found (looked in ${defaultsYamlCandidates().join(", ")})`,
+    );
+  }
+  return dirname(hit);
+}
+
+function readExtendsName(name: string): unknown {
+  const file = name.endsWith(".yaml") || name.endsWith(".yml") ? name : `${name}.yaml`;
+  const path = resolve(digichatConfigDir(), file);
+  if (!existsSync(path)) throw new Error(`extends: ${name} not found at ${path}`);
+  return parseYamlOrJson(readFileSync(path, "utf8"), path);
+}
+
+/** Expand `extends` before schema parse. No-op when the document does not extend. */
+export function expandDigichatDocument(input: unknown): unknown {
+  return expandExtendsDocument(input, readExtendsName);
+}
+
+export function materializeDigichatConfig(
+  input: unknown,
+  ctx = "digichat config",
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  return parseDigichatConfig(expandDigichatDocument(input), ctx, opts);
+}
+
+function loadDefaultsDocument(
+  ctx: string,
+  opts?: { openRouterConfigured?: boolean },
+): DigichatConfig {
+  const path = defaultsYamlCandidates().find((candidate) => existsSync(candidate));
+  if (!path) {
+    throw new Error(`${ctx}: defaults.yaml not found`);
+  }
+  return materializeDigichatConfig(parseYamlOrJson(readFileSync(path, "utf8"), path), path, opts);
+}
 
 function resolveConfigPath(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
@@ -98,6 +175,8 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       toolbar: cfg.toolbar !== false,
       scrollbars: cfg.scrollbars ?? "always",
+      loading: "banner",
+      scroll: cfg.scroll ?? { mode: "follow" },
       transcript: { userAlign: "right" },
     },
     persistence: "none",
@@ -155,6 +234,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     cli: { enabled: false },
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
+    ...(cfg.limits ? { limits: cfg.limits } : {}),
     ...(catalog.length
       ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
       : {}),
@@ -190,6 +270,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     aliases: dep.aliases,
     backend: dep.backend,
     ...(dep.guardrails ? { guardrails: dep.guardrails } : {}),
+    ...(dep.limits ? { limits: dep.limits } : {}),
     gateMode: dep.gate.mode,
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
@@ -296,15 +377,29 @@ function applyEnvOverlay(
 
   // Resolve `mcp.servers[].tokenEnv` → `.token` (operator-static MCP auth, #3841).
   if (next.deployment) {
-    next.deployment = resolveMcpServerTokens(next.deployment, env);
+    next.deployment = resolveDeploymentTokenEnv(
+      resolveMcpServerTokens(next.deployment, env),
+      env,
+    );
   }
   if (next.hosts) {
     for (const [hostKey, dep] of Object.entries(next.hosts)) {
-      next.hosts[hostKey] = resolveMcpServerTokens(dep, env);
+      next.hosts[hostKey] = resolveDeploymentTokenEnv(resolveMcpServerTokens(dep, env), env);
     }
   }
 
   return next;
+}
+
+/** Fills `token` from `tokenEnv` when the slug env and `token` are both unset. */
+function resolveDeploymentTokenEnv(
+  dep: DigichatDeployment,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): DigichatDeployment {
+  if (dep.token || !dep.tokenEnv) return dep;
+  const value = env[dep.tokenEnv]?.trim();
+  if (!value) return dep;
+  return { ...dep, token: value };
 }
 
 /** Fills each `mcp.servers[].token` from its `tokenEnv` when `token` is unset (#3841). */
@@ -564,24 +659,32 @@ export function configUsesDigigraph(cfg: DigichatConfig): boolean {
 
 export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): DigichatConfig {
   const env = opts.env ?? process.env;
+  // Precedence: DIGICHAT_CONFIG_YAML > DIGICHAT_CONFIG_PATH file > defaults.
+  // A blank env value is absent, so the file is read exactly as before.
+  // `opts.fileContents` is the test seam that stands in for the file.
+  const envYaml = env[CONFIG_YAML_ENV] ?? "";
+  const hasEnvYaml = typeof envYaml === "string" && envYaml.trim().length > 0;
   const path = resolveConfigPath(env);
+  const source = hasEnvYaml ? CONFIG_YAML_ENV : path;
   const allowMissing = opts.allowMissingFile !== false;
 
-  let fromFile: DigichatConfig | null = null;
+  let fromDocument: DigichatConfig | null = null;
   const contents =
     opts.fileContents !== undefined
       ? opts.fileContents
-      : existsSync(path)
-        ? readFileSync(path, "utf8")
-        : null;
+      : hasEnvYaml
+        ? envYaml
+        : existsSync(path)
+          ? readFileSync(path, "utf8")
+          : null;
 
   if (contents != null && contents.trim()) {
-    const parsed = parseYamlOrJson(contents, path);
-    fromFile = parseDigichatConfig(parsed, path, {
+    const parsed = expandDigichatDocument(parseYamlOrJson(contents, source));
+    fromDocument = parseDigichatConfig(parsed, source, {
       openRouterConfigured: openRouterConfigured(env),
     });
   } else if (contents != null && !contents.trim()) {
-    throw new Error(`${path}: empty file`);
+    throw new Error(`${source}: empty document`);
   } else if (!allowMissing && opts.fileContents === undefined && !existsSync(path)) {
     throw new Error(`${path}: file not found`);
   }
@@ -589,67 +692,45 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
   const tenantsRaw = env.DIGICHAT_EMBED_TENANTS;
   let merged: DigichatConfig;
   if (tenantsRaw?.trim()) {
-    merged = mergeEmbedTenantsOverlay(fromFile, tenantsRaw, openRouterConfigured(env));
-  } else if (fromFile) {
-    merged = fromFile;
+    // The registry overlay wins over the document, whichever it came from.
+    merged = mergeEmbedTenantsOverlay(fromDocument, tenantsRaw, openRouterConfigured(env));
+  } else if (fromDocument) {
+    merged = fromDocument;
   } else {
-    // Dev default: single anonymous embed deployment (digigraph), no token.
-    merged = parseDigichatConfig(
-      {
-        version: 1,
-        deployment: {
-          slug: "local",
-          chrome: {
-            mode: "embed",
-            theme: "dark",
-            skin: BASELINE_EMBED_SKIN,
-            welcome: {
-              title: BASELINE_EMBED_WELCOME,
-              body: BASELINE_EMBED_WELCOME_BODY,
-            },
-            placeholder: BASELINE_EMBED_PLACEHOLDER,
-            suggestions: [...BASELINE_EMBED_SUGGESTIONS],
-          },
-          persistence: "none",
-          auth: "anonymous",
-          // Table lives in config/digichat-deploy-models.json (#5029).
-          models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
-          backend: { type: "digigraph" },
-          // Least-privilege fallback: the unconfigured container opts into
-          // nothing; BYOK / user MCP / web search require an explicit config.
-          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
-          gate: {
-            mode: "ungated",
-            activityDetail: "labels",
-            showByok: false,
-            webSearch: false,
-          },
-        },
-      },
-      "digichat config (dev default)",
-      { openRouterConfigured: openRouterConfigured(env) },
-    );
+    // No document and no tenant overlay: house (defaults.yaml).
+    merged = loadDefaultsDocument("digichat config (defaults)", {
+      openRouterConfigured: openRouterConfigured(env),
+    });
   }
 
-  assertRenderedDeployment(merged, path);
+  assertRenderedDeployment(merged, source);
   return applyEnvOverlay(merged, env);
 }
 
 let cached: DigichatConfig | null = null;
+let cachedAt = 0;
 let loadError: Error | null = null;
 
-/** Process-wide singleton. Fail closed: first load error sticks until reset. */
+/**
+ * Process-wide memo, re-read every CONFIG_CACHE_TTL_MS so an edited
+ * `DIGICHAT_CONFIG_YAML` (or file) is picked up by a later request without a
+ * restart. Fail closed: the first load error sticks until reset.
+ */
 export function getDigichatConfig(): DigichatConfig {
   if (loadError) throw loadError;
-  if (!cached) {
-    try {
-      cached = loadDigichatConfig();
-    } catch (e) {
-      loadError = e instanceof Error ? e : new Error(String(e));
-      throw loadError;
-    }
+  const memo = cached;
+  if (memo !== null && Date.now() - cachedAt < CONFIG_CACHE_TTL_MS) return memo;
+  try {
+    const next = loadDigichatConfig();
+    cached = next;
+    cachedAt = Date.now();
+    return next;
+  } catch (e) {
+    cached = null;
+    cachedAt = 0;
+    loadError = e instanceof Error ? e : new Error(String(e));
+    throw loadError;
   }
-  return cached;
 }
 
 /** Eager validate at startup; logs and rethrows so Next.js fails closed. */
@@ -664,26 +745,36 @@ export function initDigichatConfigAtStartup(): DigichatConfig {
 
 export function resetDigichatConfigForTests(): void {
   cached = null;
+  cachedAt = 0;
   loadError = null;
 }
 
 /** Test hook — inject a parsed config without touching disk. */
 export function setDigichatConfigForTests(cfg: DigichatConfig | null): void {
   cached = cfg;
+  cachedAt = cfg ? Date.now() : 0;
   loadError = null;
 }
 
 /**
  * True when this process is a single-install client container (YAML `deployment`
- * or DIGICHAT_CHROME_SKIN overlay), not the synthetic no-file dev default.
- * Hosts-only multi-tenant configs stay on DIGICHAT_EMBED_TENANTS.
+ * on disk, or DIGICHAT_CHROME_SKIN). Hosts-only configs stay on
+ * DIGICHAT_EMBED_TENANTS. The built-in house document is the no-file fallback,
+ * not an anonymous install: an unknown parent must not inherit it. Session-auth
+ * deployments are not anonymous installs.
  */
 export function isExplicitClientInstall(
   config: DigichatConfig = getDigichatConfig(),
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): boolean {
   if (!config.deployment || config.deployment.auth === "session") return false;
+  // A host map is a registry. Unknown parents must not fall through to
+  // deployment, including when that deployment is house.
+  if (config.hosts && Object.keys(config.hosts).length > 0) return false;
   if (env.DIGICHAT_CHROME_SKIN?.trim()) return true;
+  // A document supplied through DIGICHAT_CONFIG_YAML is an explicit install
+  // even though there is no file on disk to find.
+  if ((env[CONFIG_YAML_ENV] ?? "").trim()) return true;
   return existsSync(resolveConfigPath(env));
 }
 

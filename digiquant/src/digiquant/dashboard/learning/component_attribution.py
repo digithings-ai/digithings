@@ -8,7 +8,6 @@ deltas or substitutes zero for missing data.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -27,7 +26,7 @@ from digiquant.dashboard.learning.outcome_models import (
 )
 from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 from digiquant.dashboard.temporal import require_utc_datetime
-from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.portfolio.allocation_hashes import canonical_json, sha256_hex
 
 _BPS_SCALE = Decimal("10000")
 _REPORT_ID_NS = UUID("f3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d")
@@ -129,10 +128,6 @@ class TimingDiagnosticsReader(Protocol):
     ) -> TimingDiagnosticsSlice | None: ...
 
 
-def _canonical_json(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def attribution_report_content_hash(
     *,
     episode_version_id: UUID,
@@ -150,7 +145,7 @@ def attribution_report_id(
     episode_version_id: UUID,
     content_hash: str,
 ) -> UUID:
-    seed = _canonical_json(
+    seed = canonical_json(
         {"episode_version_id": str(episode_version_id), "content_hash": content_hash}
     )
     return uuid5(_REPORT_ID_NS, seed)

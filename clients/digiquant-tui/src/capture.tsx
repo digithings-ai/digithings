@@ -24,13 +24,12 @@
 import { act } from 'react';
 import { testRender } from '@opentui/react/test-utils';
 import { startFixtureApi, type FixtureApi } from './fixture-api';
+import { makeRecordedFrame, type RecordedFrame } from '../../../packages/tui-frame/src/record.ts';
 import {
   cropMainDeskPane,
   DEFAULT_FRAME_HEIGHT,
   DEFAULT_FRAME_WIDTH,
-  makeRecordedFrame,
   TUI_SOURCE,
-  type RecordedFrame,
 } from './frame';
 
 /** The path the desk opens on. */

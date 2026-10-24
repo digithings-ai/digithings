@@ -12,6 +12,36 @@ import {
 } from "./client-projection";
 import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
 
+/**
+ * An embed that omits `showContextMeter` does not inherit the house meter.
+ * House sets the flag; every other host leaves the seed rule to the slug.
+ */
+function embedGate(
+  base: DigichatClientConfig,
+  embed: EmbedTenantClientConfig,
+  webSearch: boolean,
+): DigichatClientConfig["gate"] {
+  const gate: DigichatClientConfig["gate"] = {
+    ...base.gate,
+    mode: embed.gateMode,
+    llmAccess: embed.llmAccess,
+    lockedContact: embed.lockedContact,
+    showByok: embed.showByok,
+    showLanguageSelector: embed.showLanguageSelector,
+    webSearch,
+    ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
+  };
+  if (typeof embed.showContextMeter === "boolean") {
+    gate.showContextMeter = embed.showContextMeter;
+  } else {
+    delete gate.showContextMeter;
+  }
+  if (embed.lockSessionControls === true || base.gate.lockSessionControls === true) {
+    gate.lockSessionControls = true;
+  }
+  return gate;
+}
+
 /** Merge legacy embed client fields into a DigichatClientConfig for ProductStockShell. */
 export function clientConfigFromEmbedTenant(
   embed: EmbedTenantClientConfig,
@@ -29,6 +59,16 @@ export function clientConfigFromEmbedTenant(
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
     catalog.push({ id: "web_search", default: true, label: "Web search" });
   }
+
+  // One decision for the model chip. The list and the toolbar must agree: when
+  // this is false the toolbar drew no button, and the row still resolved
+  // `allowPicker: false` on its own — but `features.modelPicker` was copied
+  // from the house base, so a locked row still rendered an open-models list.
+  const foundry = (embed.backendType ?? base.backendType) === "foundry";
+  const allowPicker = foundry
+    ? false
+    : embed.models?.allowPicker === true ||
+      (embed.models?.allowPicker !== false && base.features.modelPicker);
 
   return {
     ...base,
@@ -67,21 +107,20 @@ export function clientConfigFromEmbedTenant(
       speech: embed.speech ?? base.features.speech,
       sources: embed.sources ?? base.features.sources,
       branchPicker: embed.branchPicker ?? base.features.branchPicker,
+      modelPicker: allowPicker,
     },
     // A Foundry tenant is answered by its own agent: the model is the
     // agent's, not ours, and it cannot be enumerated. The house catalog must
     // not be inherited into it — that is what made the footer claim "auto"
     // and "cheaperinference" on a tenant served by Azure AI Foundry.
-    models: (embed.backendType ?? base.backendType) === "foundry"
+    models: foundry
       ? { available: [], allowPicker: false }
       : {
           ...(embed.models?.default
             ? { default: embed.models.default }
             : base.models),
           available: embed.models?.available ?? base.models.available,
-          allowPicker:
-            embed.models?.allowPicker === true ||
-            (embed.models?.allowPicker !== false && base.features.modelPicker),
+          allowPicker,
           // A Foundry tenant is blanked above. A catalog picker travels only
           // with the tenant that resolved it, not from the house fallback,
           // so a hand-listed tenant does not inherit another tenant's groups.
@@ -104,22 +143,7 @@ export function clientConfigFromEmbedTenant(
       allowUserServers: embed.mcp?.allowUserServers === true,
       allowAddForm: embed.mcp?.allowUserServers === true && embed.mcp?.allowAddForm === true,
     },
-    gate: {
-      ...base.gate,
-      mode: embed.gateMode,
-      llmAccess: embed.llmAccess,
-      lockedContact: embed.lockedContact,
-      showByok: embed.showByok,
-      showLanguageSelector: embed.showLanguageSelector,
-      ...(typeof embed.showContextMeter === "boolean"
-        ? { showContextMeter: embed.showContextMeter }
-        : {}),
-      webSearch,
-      ...(embed.searchEngine ? { searchEngine: embed.searchEngine } : {}),
-      ...(embed.lockSessionControls === true || base.gate.lockSessionControls === true
-        ? { lockSessionControls: true }
-        : {}),
-    },
+    gate: embedGate(base, embed, webSearch),
     backendType: embed.backendType ?? base.backendType,
   };
 }

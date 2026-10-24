@@ -20,12 +20,11 @@
  * fixture reproduces byte for byte.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFlags, zonedIso } from '../../../packages/tui-frame/src/flags.ts';
+import { writeRecordedFrame } from '../../../packages/tui-frame/src/write.ts';
 import { captureDeskPane, DEFAULT_DESK_PATH } from './capture';
-import { serializeRecordedFrame } from './frame';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../..');
@@ -66,8 +65,7 @@ if (import.meta.main) {
     try {
       const { path, out, capturedAt } = parseArgs(process.argv.slice(2));
       const record = await captureDeskPane({ path, capturedAt });
-      await mkdir(dirname(out), { recursive: true });
-      await writeFile(out, serializeRecordedFrame(record), 'utf8');
+      await writeRecordedFrame(out, record);
       console.log(
         `wrote ${out}\n  source ${record.source} · ${record.path} · ${record.width}x${record.height} · ${record.capturedAt}`,
       );

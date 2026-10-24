@@ -871,7 +871,7 @@ export function morphSpec(
         return { label: dHosting.id === "own" ? "your GPUs" : hostBox(HOST_GPU, dHosting.id) };
       case "launcher":
         if (!swapped.has("launcher")) return null;
-        return { label: dHosting.id === "own" ? "digiclaw runner" : hostBox(HOST_RUNNER, dHosting.id) };
+        return { label: dHosting.id === "own" ? "digibot runner" : hostBox(HOST_RUNNER, dHosting.id) };
       case "telemetry":
         return swapped.has("telemetry")
           ? { label: TELEMETRY_BOX[dTelemetry.id] ?? dTelemetry.label }
@@ -972,7 +972,7 @@ export function digiSpec(
       { id: "memory", label: `digisearch · ${DIGI_VECTOR_BOX[vector.id]} · ${DIGI_EMBED_SHORT[embed.id]}`, icon: "database", group: "digithings", col: 3, row: 1 },
       { id: "vault", label: "digivault · notes vault", icon: "database", group: "digithings", col: 0, row: 2 },
       { id: "traces", label: TELEMETRY_BOX[telemetry.id] ?? telemetry.label, icon: "server", group: "digithings", col: 1, row: 2 },
-      { id: "claw", label: "digiclaw · scheduler", icon: "server", group: "digithings", col: 2, row: 2 },
+      { id: "claw", label: "digibot · scheduler", icon: "server", group: "digithings", col: 2, row: 2 },
       { id: "keys", label: "digikey · your keys", icon: "disk", group: "digithings", col: 3, row: 2 },
     ],
     edges: [

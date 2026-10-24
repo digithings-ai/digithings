@@ -20,7 +20,7 @@ cd "$REPO_ROOT"
 # NOTE (#4929 Phase 0): the service is renamed to digitrace, but the remote
 # module branch is still `module/digismith` (renaming it needs a push + PR).
 # Keep this entry until the branch itself is renamed.
-MODULES=(digigraph digiquant digisearch digichat digikey digismith digiclaw digibase)
+MODULES=(digigraph digiquant digisearch digichat digikey digismith digibot digibase)
 
 die()    { echo "ERROR: $*" >&2; exit 1; }
 header() { echo ""; echo "── $* ──"; }

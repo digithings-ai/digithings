@@ -110,6 +110,23 @@ describe("runIsolated", () => {
       "plain string failure",
     );
   });
+
+  it("keeps the query string of a URL out of the body and out of the status", async () => {
+    // The value of a rejected hop can be a request URL whose query string
+    // carries an embed token (run-watch DIG-4928). The message of a failed
+    // module reaches a client-visible body and the status surface, so the
+    // query string must be in neither.
+    const res = await runIsolated("container-routes", async () => {
+      throw new Error("failed to GET https://digithings.ai/embed?token=xy7");
+    }, async () => ok());
+    expect(res.status).toBe(503);
+    const body = await res.text();
+    expect(body).not.toContain("xy7");
+    expect(body).toContain("https://digithings.ai/embed");
+    const lastError = getStackStatus().modules["container-routes"].lastError ?? "";
+    expect(lastError).not.toContain("xy7");
+    expect(lastError).toContain("https://digithings.ai/embed");
+  });
 });
 
 describe("dashboard-api isolation (#4687)", () => {

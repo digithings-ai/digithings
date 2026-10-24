@@ -17,15 +17,6 @@ import type { CroppedFrame } from '../../../packages/tui-frame/src/record.ts';
 import { MARK_ROWS } from './mark';
 import { RAIL_COLS_DEFAULT } from './rail';
 
-export {
-  makeRecordedFrame,
-  serializeRecordedFrame,
-  type RecordedFrame,
-} from '../../../packages/tui-frame/src/record.ts';
-
-/** The rail width the crop assumes, re-exported so the crop and its test read one number. */
-export { RAIL_COLS_DEFAULT };
-
 /** Which TUI a recorded frame came from. */
 export const TUI_SOURCE = 'digiquant-tui';
 

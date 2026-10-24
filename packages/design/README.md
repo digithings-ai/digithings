@@ -4,7 +4,7 @@ The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
 utilitarian, dark-first aesthetic with per-module accent colors.
 
-This document is the authoritative reference. The canonical implementation
+This document describes the token package. `docs/design/CURRENT_UI_LANGUAGE.md` is the current description of the shipped language; where the two disagree, `tokens.css` wins. The canonical implementation
 lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
@@ -179,7 +179,7 @@ value; component rules always reference `var(--accent)`.
 | digichat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/e2708a?style=round)                                     | `#e2708a` |
 | digikey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
 | digitrace   | `--accent-digitrace`    | ![](https://readme-swatches.vercel.app/6fa3a3?style=round)                                     | `#6fa3a3` |
-| digiclaw    | `--accent-digiclaw`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
+| digibot    | `--accent-digibot`     | ![](https://readme-swatches.vercel.app/b87840?style=round)                                     | `#b87840` |
 | digibase    | `--accent-digibase`     | ![](https://readme-swatches.vercel.app/9ea0a5?style=round)                                     | `#9ea0a5` |
 | digistore   | `--accent-digistore`    | ![](https://readme-swatches.vercel.app/7b7fc7?style=round)                                     | `#7b7fc7` |
 | digilink    | `--accent-digilink`     | ![](https://readme-swatches.vercel.app/4fa39b?style=round)                                     | `#4fa39b` |
@@ -255,7 +255,7 @@ initTicker({
 | `.qn-ticker`          | Ribbon container (JS-driven `translateX`, pause on hover). |
 | `.qn-metric`          | `font-feature-settings: "tnum"`, mono, right-aligned.      |
 | `.qn-chart-frame`     | Hairline border + `--bg-primary` fill; wraps an SVG chart. |
-| `.qn-up` / `.qn-down` | Muted emerald (digiquant accent) / muted copper (digiclaw accent). |
+| `.qn-up` / `.qn-down` | Muted emerald (digiquant accent) / muted copper (digibot accent). |
 
 Directional color is intentionally muted — never Bloomberg-bright red/green.
 
