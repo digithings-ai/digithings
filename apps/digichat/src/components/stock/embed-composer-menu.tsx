@@ -43,6 +43,7 @@ import {
   mcpStatus,
   mcpStatusLabel,
   parseMcpSeed,
+  serverRowLabel,
   toolsMenuSummary,
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
@@ -1161,7 +1162,7 @@ export function EmbedComposerMenu({
     }
     const rows: MenuRow[] = mcpConfigs.map((s) => {
       const status = mcpStatus(s, api.extraToolOn(s.id));
-      const label = bareToolLabel(s.label || s.id);
+      const label = bareToolLabel(serverRowLabel(s.id, s.label));
       return {
         id: s.id,
         label,

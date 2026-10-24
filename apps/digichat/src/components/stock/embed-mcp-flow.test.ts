@@ -141,6 +141,68 @@ describe("connectedTools", () => {
     });
     expect(rows.map((r) => r.slash)).toEqual(["websearch"]);
   });
+
+  it("names a house server by its backend id, not a title-cased label", () => {
+    // OCC's live tenant config and the backend both use the server id. A
+    // deployment that still carries "Search"/"Vault" must not leak that
+    // vocabulary into /tools, /mcp or the menu summary.
+    const rows = connectedTools({
+      hasDigisearch: true,
+      hasVault: true,
+      tenantAllowsWeb: false,
+      catalogTools: [
+        { id: "digisearch", label: "Search" },
+        { id: "digivault", label: "Vault" },
+      ],
+      mcpServers: [],
+      mcpCustom: [],
+    });
+    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault"]);
+  });
+
+  it("names an operator house server by its id in the mcp rows too", () => {
+    const rows = connectedTools({
+      hasDigisearch: false,
+      hasVault: false,
+      tenantAllowsWeb: false,
+      catalogTools: [],
+      mcpServers: [
+        { id: "digisearch", label: "Search" },
+        { id: "digivault", label: "Vault" },
+        { id: "datatap", label: "DataTap" },
+      ],
+      mcpCustom: [],
+    });
+    expect(rows.map((r) => [r.id, r.label])).toEqual([
+      ["digisearch", "digisearch"],
+      ["digivault", "digivault"],
+      ["datatap", "DataTap"],
+    ]);
+  });
+
+  it("falls back to the id when a server carries no label", () => {
+    const rows = connectedTools({
+      hasDigisearch: true,
+      hasVault: true,
+      tenantAllowsWeb: false,
+      catalogTools: [{ id: "digisearch" }, { id: "digivault" }],
+      mcpServers: [],
+      mcpCustom: [],
+    });
+    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault"]);
+  });
+
+  it("keeps an unlabelled catalog or MCP server's id", () => {
+    const rows = connectedTools({
+      hasDigisearch: false,
+      hasVault: false,
+      tenantAllowsWeb: false,
+      catalogTools: [{ id: "datatap" }],
+      mcpServers: [{ id: "unlabelled-server" }],
+      mcpCustom: [],
+    });
+    expect(rows.map((r) => r.label)).toEqual(["datatap", "unlabelled-server"]);
+  });
 });
 
 describe("summaries", () => {
@@ -155,7 +217,7 @@ describe("summaries", () => {
     });
     expect(toolsMenuSummary(rows, () => false)).toBe("Off");
     expect(toolsMenuSummary(rows, () => true)).toBe("All on");
-    expect(toolsMenuSummary(rows, (id) => id === "digisearch")).toBe("Search");
+    expect(toolsMenuSummary(rows, (id) => id === "digisearch")).toBe("digisearch");
   });
 
   it("summarizes MCP configs", () => {

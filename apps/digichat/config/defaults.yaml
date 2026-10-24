@@ -106,24 +106,36 @@ deployment: &house
     catalog:
       - id: digisearch
         default: true
-        label: Search
+        label: digisearch
       - id: digivault
         default: true
-        label: Vault
+        label: digivault
   mcp:
     allowUserServers: false
     allowAddForm: false
     servers:
       - id: digisearch
-        url: http://digisearch-mcp:8765/mcp
-        label: Search
+        # Edge route on the digithings-stack Worker, not the compose hostname:
+        # `digisearch-mcp:8765` only resolves inside the compose network, so the
+        # Cloudflare deployment answers "unavailable". The Worker maps
+        # /_stack/mcp/<id>/* to the in-container port and gates it with
+        # `x-digi-mcp-key` (its MCP_EDGE_KEY secret), which the container
+        # receives as DIGICHAT_MCP_EDGE_KEY.
+        url: https://search.digithings.ai/_stack/mcp/digisearch/mcp
+        label: digisearch
         default: true
+        # The stack gate reads the key from this header; tokenEnv names the
+        # container secret, the value is never in this document (#3841).
+        tokenEnv: DIGICHAT_MCP_EDGE_KEY
+        authHeader: x-digi-mcp-key
         setup:
           index_name: digithings_docs
       - id: digivault
-        url: http://digivault-mcp:8769/mcp
-        label: Vault
+        url: https://graph.digithings.ai/_stack/mcp/digivault/mcp
+        label: digivault
         default: true
+        tokenEnv: DIGICHAT_MCP_EDGE_KEY
+        authHeader: x-digi-mcp-key
         setup:
           path_prefix: clients/digithings
   gate:
