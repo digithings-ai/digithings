@@ -498,16 +498,22 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 /* Cover: the hero banner, a hairline, and the title set at footer scale —
    the same composition as the colophon, at the front instead of the back. */.book-cover {
   text-align: left !important;
-  padding-top: 28mm !important;
   min-height: 232mm !important;
   position: relative !important;
 }
 .book-cover__mark {
+  position: absolute !important;
+  left: 0 !important;
+  bottom: 34mm !important;
   width: 142mm !important;
   max-width: 100% !important;
-  margin: 0 0 10mm !important;
+  margin: 0 !important;
 }
 .book-cover__foot {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 14mm !important;
   padding-top: 4mm !important;
   border-top: 0.4pt solid var(--hair) !important;
 }

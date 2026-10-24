@@ -112,18 +112,6 @@ export default async function BookPrintPage() {
             </section>
           );
         })}
-
-        <section className="book-colophon">
-          <div
-            className="book-colophon__mark"
-            aria-hidden
-            dangerouslySetInnerHTML={{ __html: WORDMARK }}
-          />
-          <div className="book-colophon__foot">
-            <p className="book-colophon__kicker">the digithings book</p>
-            <p className="book-colophon__title">edition 2026 · version 1.0</p>
-          </div>
-        </section>
       </div>
     </>
   );

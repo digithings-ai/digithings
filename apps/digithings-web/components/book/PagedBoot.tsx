@@ -142,8 +142,9 @@ function stampPages(): void {
     page.dataset.bookPage = String(index + 1);
     // The folio is drawn by the pagination engine on the outer edge; this
     // imprints the edition and version on the other side, so a reader holding
-    // one page can tell which printing it came from.
-    if (!page.querySelector(".book-page-imprint")) {
+    // one page can tell which printing it came from. The title page states it
+    // already, so it is left alone.
+    if (index > 0 && !page.querySelector(".book-page-imprint")) {
       const imprint = document.createElement("span");
       imprint.className = "book-page-imprint";
       imprint.textContent = "E26 · V1";
