@@ -48,3 +48,15 @@ describe("the stylesheets are well-formed template literals", () => {
     expect(PRINT_CSS).toContain(".book-toc__ref");
   });
 });
+
+describe("diagrams print once", () => {
+  it("hides the other theme's render with a selector that outranks the viewport img rule", () => {
+    // '.book-figure__viewport img' sets display: block !important; a bare
+    // '.book-figure__dark' loses to it and the dark render printed under the
+    // light one on every diagram page.
+    expect(PAGED_CSS).toContain(".book-figure__viewport img.book-figure__dark { display: none !important; }");
+    expect(PAGED_CSS).toContain(
+      ':root[data-theme="dark"] .book-figure__viewport img.book-figure__light { display: none !important; }',
+    );
+  });
+});

@@ -5,69 +5,50 @@ summary: >-
   Speak, transcribe, rewrite and hear the result locally. Voice input stays on the machine.
 ---
 
-Typing is not always the way people work. Sometimes the thought arrives
-spoken, half-formed, while walking or while the hands are busy. digivoice is
-the loop that catches it: capture speech, transcribe it locally, optionally
-reshape the transcript for its destination, and speak results back. The whole
-loop runs on the operator's own machine, with no audio ever leaving it.
+Typing is not always how people think. A thought often arrives spoken and
+half-formed, while walking or with the hands busy. digivoice catches it:
+capture speech, transcribe it, reshape the transcript for where it is going
+and speak results back. The whole loop runs on your own machine, and the
+audio never leaves it.
 
-## What it is for
-
-The audience question is about place: where should voice be processed? The
-common answer, send the audio to a hosted service, trades away the most
-sensitive stream a person produces: their voice, with all its background.
-digivoice answers that the machine in front of you is already fast enough.
-Local transcription and synthesis keep the loop private by construction,
-offline-capable, and free of per-minute metering.
+The common alternative is to send audio to a hosted service, which trades
+away the most personal stream a person produces: their voice and everything
+in the room behind it. digivoice starts from the observation that the machine
+in front of you is already fast enough. Running locally makes the loop
+private because there is nowhere else for the audio to go, and it keeps
+working offline.
 
 ## How it works
 
 The loop has four stations. Capture records from the microphone to a local
-audio file. Transcription turns that file into text with a local speech
-model. An optional rewrite pass reshapes the raw transcript for where it is
-going, a message, a note, a command, using a small local model with a
-cleanup prompt that keeps the boundary between instruction and content.
-Synthesis speaks results back through a local voice. History stays on the
-machine as an append-only log the operator can search and revisit.
+audio file. A local speech model turns it into text. An optional rewrite pass
+reshapes the transcript for its destination, a message, a note or a command,
+using a small local model. Synthesis reads results back in a local voice.
 
-```mermaid
+```mermaid the loop completes on the machine; only the finished text travels further
 flowchart LR
-  MIC[voice] --> CAP[capture locally]
-  CAP --> TRN[transcribe locally]
-  TRN --> REW{reshape?}
-  REW -->|yes| RW[rewrite for the destination]
-  REW -->|no| HIST[history on the machine]
-  RW --> HIST
-  HIST --> SPK[speak back]
+  MIC[speak] --> TRN[transcribe]
+  TRN --> REW[rewrite]
+  REW --> OUT[speak back]
 ```
 
-Settings are scriptable, get and set from the command line, so the loop
-can be driven by other tools, not only by fingers. A built-in checkup
-command reports what the host can and cannot do, because a local tool owes
-its operator an honest account of the host.
+The recording stays on disk as audio and every take lands in the history, so
+a rewrite can be thrown away without losing what was said, and a failed
+rewrite falls back to the raw transcript. History is an append-only log on
+the machine that you can search and revisit. Settings can be read and
+changed from the command line, so other tools can drive the loop, and a
+built-in checkup reports plainly what the host can and cannot do.
 
-## Where it meets the rest
+## Where it fits
 
-digivoice touches the rest of the system lightly, by design. It shares the
-design language with the terminal surfaces, reads local model files in the
-same way the rest of the stack reads models, and can hand a finished
-transcript to the chat or the research pipeline as ordinary text. It never
-calls the hub mid-loop: the voice loop completes on the machine, and only
-its text output travels further.
+digivoice barely touches the rest of the stack. It never calls
+the hub in the middle of a loop. When it is done, it pastes ordinary text into whatever is in focus: the chat, a research
+brief, a note.
+
+It has one home, the machine with the microphone. There is no voice service
+to deploy, scale or pay for, because the voice was never hosted in the first
+place.
 
 <Reference kind="architecture" href="repo:digivoice/ARCHITECTURE.md" title="digivoice architecture">
   The loop stations, the settings surface and the local-first rules.
 </Reference>
-
-## Running it in each home
-
-digivoice has one home: the operator's machine. It is not a service and it
-does not deploy to the cloud or to shared servers, voice capture needs the
-microphone in front of the person speaking. That constraint is also its
-strength: there is no voice infrastructure to operate, scale or pay for. The
-self-hosting story for voice is simply that it was never hosted at all.
-
-> **Why digithings.** Voice tooling normally means streaming your speech to
-> someone else's servers on someone else's meter. A local loop keeps the most
-> personal input stream entirely on hardware you own, with no account, no
-> metering and no network needed. Privacy as architecture, not as policy.

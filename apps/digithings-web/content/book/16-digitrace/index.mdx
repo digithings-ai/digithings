@@ -6,79 +6,48 @@ summary: >-
 ---
 
 A system that cannot explain itself cannot be operated. When an answer looks
-wrong, someone must be able to ask: which tools ran, in what order, what did
-each see, and how long did it take? digitrace is how digithings answers.
-It records the trail of every request as a first-class output, not as log
-scrapings assembled after the fact.
+wrong, someone has to be able to ask which tools ran, in what order, what each
+one saw and how long it took. digitrace is how digithings answers. Once switched on, it records the trail of every request as it happens, so nobody has to piece
+it together from log lines afterwards.
 
-## What it is for
-
-The audience question is accountability: what happened inside that answer?
-For operators debugging a bad result, for reviewers auditing a research
-number, for anyone who needs to trust the system — the trace shows the
-steps. Tracing that is always on is also how the project learns: slow tools,
-surprising routes and failing calls all surface in the same trail.
+The trail serves several readers. An operator uses it to debug a bad answer.
+A reviewer uses it to audit a research number. Anyone deciding whether to
+trust the system can see the steps behind a result. And once tracing is switched on, the trail shows where to improve: a tool that takes four seconds, or a call
+that fails one time in ten, stands out at once.
 
 ## How it works
 
-digitrace has two faces. As a library, it wraps the tracing calls inside
-each service with a thin helper that records when tracing is configured and
-vanishes — costing nothing — when it is not. Services adopt it without
-depending on any tracing vendor. As a small service, it reports whether
-tracing is active and healthy, so orchestrators and dashboards can show
-tracing status without ever touching sensitive configuration.
+digitrace has two faces. As a library, it gives every service a thin helper
+that records when tracing is configured and costs nothing when it is not.
+Services adopt it without depending on any tracing vendor. As a small
+service, it reports whether tracing is active and healthy, so the hub and the
+dashboards can show its status without touching sensitive configuration.
 
-```mermaid
+```mermaid one request, one story: the trail follows it across every service it touches
 flowchart LR
-  REQ[a request] --> HUB[hub records its steps]
-  HUB --> VERT[a vertical records its steps]
-  VERT --> TRACE[trail assembled per request]
-  TRACE --> OP[operator replays what happened]
+  REQ[request] --> HUB[hub steps]
+  HUB --> VERT[vertical steps]
+  VERT --> TRAIL[one trail]
+  TRAIL --> OP[operator]
 ```
 
-The trail follows the request across service boundaries, so a hub step and
-the vertical step it triggered appear in one story. Self-hosted tracing
-backends keep the trail on infrastructure the operator controls; the library
-never assumes which backend that is.
+The trail follows a request across service boundaries, so a step in the hub
+and the step it triggered in a vertical appear in one story rather than in
+two logs that have to be matched by timestamp.
 
-## Where it meets the rest
+## Where it fits
 
-Everything that acts traces: the hub records routing and tool calls, the
+Everything that acts is traced. The hub records routing and tool calls, the
 verticals record their pipeline stages, and the model layer records usage
-through its hooks. The chat surface and dashboards read trail status to show
-operators what ran. Because the library is vendor-neutral, adopting a new
-tracing backend changes configuration, not service code.
+through its hooks. Because the library is vendor-neutral, switching to a
+different tracing backend changes configuration, not service code.
+
+The trail goes wherever you point it: a backend on your own machine, one
+beside your cloud workers, or one on your own servers with the retention you
+choose. Tracing every request costs some storage and a little time per request.
+That costs far less than debugging a multi-service answer from scattered
+logs, and you never pay another vendor to watch your own system.
 
 <Reference kind="architecture" href="repo:digitrace/ARCHITECTURE.md" title="digitrace architecture">
   The library, the status service and the backend options.
 </Reference>
-
-## Running it in each home
-
-Tracing follows the deployment without special effort. Locally the trail
-goes to whatever backend the operator configured on the machine. On
-Cloudflare the trail flows to the hosted tracing setup beside the workers.
-Self-hosted, the operator picks the backend and the retention, and the
-services comply without code changes. The only invariant across homes: the
-trail is always recorded, never sampled away silently.
-
-## Trade-offs
-
-Always-on tracing costs storage and a little latency on every request. The
-system pays it because the alternative — debugging a multi-service answer
-from scattered logs — costs far more the first time it matters. Retention
-is the operator's dial: keep recent trails in full, age the rest out. What
-the system will not do is trace silently into infrastructure the operator
-did not choose.
-
-## Roadmap
-
-Tracing deepens toward analysis rather than collection: slower steps
-flagged automatically, surprising routes highlighted, trails feeding back
-into routing decisions. Collection itself is finished — it just needs to
-keep working everywhere the system runs.
-
-> **Why digithings.** Hosted platforms observe your system for you and bill
-> you for the privilege of seeing your own behaviour. Here the trail is
-> recorded with open protocols onto infrastructure you choose, so watching
-> your system work never becomes a second vendor relationship.

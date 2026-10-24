@@ -35,6 +35,11 @@ export const PRINT_CSS = `
 .book-figure:fullscreen .book-figure__viewport { flex: 1; }
 .book-figure__viewport[data-active] { outline: 1px solid var(--ink-soft); }
 
+/* Web reader sheets take focus when a page is turned, so screen readers land
+   on the new page; the sidebar already marks it, and a ring round the whole
+   sheet reads as a selection. */
+[data-book-sheet]:focus-visible { outline: none; }
+
 /* Reference cards: the MDX paragraph inside keeps the card's own rhythm. */
 .book-reference__body p { margin: 0; max-width: none; font-size: inherit; }
 
@@ -235,12 +240,13 @@ body {
 .book-toc__leader {
   flex: 1 1 auto;
   min-width: 8mm;
-  margin: 0 2.5mm;
-  border-bottom: 0.4pt dotted var(--ink-mute);
+  margin: 0 1.5mm;
+  border-bottom: 0.6pt dotted var(--ink-soft);
   transform: translateY(-0.5mm);
 }
 .book-toc__ref {
-  flex: 0 0 8mm;
+  flex: 0 0 auto;
+  min-width: 5mm;
   text-align: right;
   font-family: var(--font-sans), monospace;
   font-size: 9pt;
@@ -341,7 +347,8 @@ thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
 
-/* Folios sit in the bottom outer margin, alternating by parity. */
+/* Folios sit bottom right: the PDF is read one page at a time on screen, so
+   there is no spread and no outer margin to alternate into. */
 .pagedjs_page::after {
   content: attr(data-book-page);
   position: absolute;
@@ -350,8 +357,8 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   font-size: 8pt;
   color: var(--ink-soft);
 }
-.pagedjs_page:nth-child(odd)::after { left: 18mm; }
-.pagedjs_page:nth-child(even)::after { right: 18mm; }
+.pagedjs_page::after { right: 18mm; }
+.pagedjs_page:last-child::after { content: none; }
 
 /* Paged.js paints its margin boxes (the slots that would hold a running
    header) with the page background. Over the injected field those slots read
@@ -381,7 +388,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   color: var(--ink) !important;
   text-align: left !important;
 }
-.pagedjs_page p { margin: 0 0 2.4mm !important; orphans: 4; widows: 4; }
+.pagedjs_page p { margin: 0 0 2.4mm !important; orphans: 4; widows: 4; text-wrap: pretty; }
 .pagedjs_page p:last-child { margin-bottom: 0 !important; }
 .pagedjs_page ul,
 .pagedjs_page ol { margin: 0 0 3mm 5mm !important; padding: 0 !important; }
@@ -402,8 +409,9 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   font-size: 20pt !important;
   line-height: 1.08 !important;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
-.pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; }
+.pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; color: var(--accent) !important; }
 .pagedjs_page .book-chapter__head > p:nth-of-type(2) {
   margin: 0 0 4mm !important;
   font-size: 10pt !important;
@@ -426,6 +434,8 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 }
 .pagedjs_page table { margin: 0 0 3mm !important; font-size: 8.5pt !important; }
 .pagedjs_page th, .pagedjs_page td { padding: 1.6mm 2mm !important; }
+/* Tables are reference matter beside the prose: one step down from body. */
+.pagedjs_page td { font-size: 9pt !important; line-height: 1.4 !important; }
 .pagedjs_page th { font-size: 7.5pt !important; }
 .pagedjs_page figure { margin: 0 0 4mm !important; width: 100% !important; }
 .book-figure {
@@ -449,10 +459,16 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   width: auto !important;
   height: auto !important;
   max-width: 100% !important;
-  max-height: 78mm !important;
+  max-height: 52mm !important;
   margin: 0 auto !important;
   display: block !important;
 }
+/* The rule above outranks '.book-figure__dark' on specificity, which printed
+   every diagram twice: the light render and, under it, a faint dark one. The
+   theme switch has to be at least as specific as the rule it overrides. */
+.book-figure__viewport img.book-figure__dark { display: none !important; }
+:root[data-theme="dark"] .book-figure__viewport img.book-figure__light { display: none !important; }
+:root[data-theme="dark"] .book-figure__viewport img.book-figure__dark { display: block !important; }
 .pagedjs_page figcaption { margin-top: 2mm !important; font-size: 8pt !important; }
 
 /* "Go deeper" is a web affordance. On paper the links cannot be followed, so
@@ -480,6 +496,8 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   text-transform: none !important;
   color: var(--ink-soft) !important;
 }
+/* '.pagedjs_page p' sets body text left-aligned in ink; the cover line is not body text. */
+.pagedjs_page .book-cover p.book-cover__kicker { text-align: center !important; font-size: 8pt !important; color: var(--ink-soft) !important; }
 .book-cover__mark { width: 150mm !important; max-width: 100% !important; margin: 0 auto 12mm !important; }
 .book-cover__title {
   margin: 0 auto !important;
@@ -498,6 +516,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-colophon__kicker { font-size: 8pt !important; margin: 0 0 4mm !important; }
 .pagedjs_page .book-colophon__title { font-size: 17pt !important; line-height: 1.25 !important; margin: 0 0 6mm !important; }
 .book-colophon {
+  border-top: 0 !important;
   position: relative !important;
   display: block !important;
   min-height: 232mm !important;
@@ -506,7 +525,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 18mm !important;
+  bottom: 26mm !important;
   width: 142mm !important;
   max-width: 100% !important;
   margin: 0 auto !important;

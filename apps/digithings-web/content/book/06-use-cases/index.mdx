@@ -6,41 +6,81 @@ summary: >-
 ---
 
 The same modules make different applications. A use case is a choice of
-modules, not a separate platform.
+modules, not a separate product, and every one of the four below starts on a
+single machine.
 
-### Financial research
+## Financial research
 
-A quant workflow needs market data, a research graph, backtesting and a
-readable result. digiquant supplies the vertical and its provenance rules;
-digigraph routes the work; digisearch finds the documents around it; digichat
-is where the analyst asks and reads. Run it on a laptop for one analyst, then
-add capacity when the research team grows.
+A research desk needs market data, a way to test ideas against history, and
+results it can defend. Most tooling for this is either a spreadsheet that
+cannot be audited or a closed platform whose methodology you take on trust.
 
-### Voice
+digiquant gives the work an ordered pipeline: data, strategy validation, backtest, optimisation and export, each stage reading only what the stage before it
+wrote. digigraph routes questions to it, digisearch brings in the filings and
+notes around a position, and digichat is where the analyst asks and reads.
+Every result carries its provenance, so an analyst can defend a number to
+someone who doubts it.
 
-Voice belongs on the machine that hears it. digivoice handles speech,
-transcription and rewriting locally, while digichat provides the conversation
-surface. The audio does not need to leave the building to become useful.
+On one machine this is a private research environment for a single analyst.
+For a team, the pipeline moves to a shared server, backtests run on a timetable, and identity decides who can see which research.
 
-### Retrieval and RAG
+## Voice
 
-A private corpus needs ingestion, indexing and answers that cite their source.
-digisearch owns retrieval, digivault holds the documents and digillm connects
-the model. The same stack runs against a folder on a laptop or a shared index
-for a department.
+Speech is the input people are least willing to share, and the usual way to
+process it is to stream it to someone else's servers. digivoice keeps the
+whole loop local: capture, transcription, an optional rewrite for where the
+text is going, and speech back. Nothing leaves the machine.
 
-### Agents and exploration
+Because the output is ordinary text, voice becomes a way into the rest of the
+stack. A finished transcript pastes into whatever is in focus: a question in the
+chat, a research brief, made out loud while the hands are busy.
+Voice grows differently from the other three: each person runs a loop on their own
+machine, and there is nothing central to size.
 
-An agent needs tools, a loop and a record of what happened. digigraph runs the
-loop, MCP describes the tools, and digitrace keeps the trail. Add your own
-service as another tool and it joins the environment without changing the hub.
+## Retrieval over your own documents
 
-### From one person to an organisation
+Most of what a team needs answered sits in its own files: contracts, notes,
+past research. Retrieval brings it to the model:
+your documents are split into passages, indexed by meaning, and the passages
+that matter are handed to the model with the question. The answer cites what
+it stands on, so a reader can check it.
 
-These are not starter demos with an enterprise edition behind them. The same
-contracts hold at every size. Identity, tracing and data become more important
-as the team grows, but the application does not become a different application.
+digisearch owns the two halves, ingestion and answering, and keeps them
+apart. digivault holds documents as linked markdown, and digillm connects
+whichever model you choose. A workspace filter can travel with each query, so one index can hold
+several teams' documents. The same pipeline runs against a
+folder on a laptop and against a department's archive on managed storage.
 
-> **Why digithings.** You can prove the whole application on your own machine,
-> then place it where it needs to run. The modules stay the same. That is what
-> makes the stack useful to a solo builder and to an enterprise at once.
+## Agents and exploration
+
+An agent needs tools, a loop that decides what to do next, a way to ask a
+person before doing anything risky, and a record of what it did. digigraph
+runs the loop, MCP describes the tools, a per-server gate decides what may run unattended, and digitrace keeps the trail.
+
+Agents gain most from sharing one environment. The first agent is usually a handful of scripts a team already has, each
+given a name, an input schema and a description. Outside agents and editors connect to the same tools through
+the same protocol, with the same permissions. Exploring a new idea means
+adding a tool, not building a new agent framework around it.
+
+## At a glance
+
+| Use case | Modules it runs | Starts on | Grows into |
+| --- | --- | --- | --- |
+| Financial research | digiquant, digigraph, digisearch, digichat | One analyst's machine | A shared research server with scheduled runs and access by role |
+| Voice | digivoice, digichat | The machine with the microphone | Every machine where someone wants it, with no service to run |
+| Retrieval | digisearch, digivault, digillm, digichat | A folder on a laptop | A department's archive on managed storage, with access rules per query |
+| Agents | digigraph, MCP tools, digitrace | Your own tools, described over MCP | Many tool servers under one approval gate, shared with outside agents |
+
+## One question, four modules
+
+The use cases are not separate lanes. An analyst dictates a question about a
+holding, and digivoice turns it into text without the audio leaving the
+machine. In the chat, the hub asks the verticals what they offer: digisearch
+returns the filing passages behind the position, and digiquant reruns the
+backtest under the stated parameters. The answer cites both, and with tracing
+on, the trail shows every step that produced it.
+
+Nothing in that chain was written for it. Each module did its one job, and the
+application is the set of parts that were switched on. The same chain runs
+unchanged when the research moves to a shared server, and that is how an idea
+proved on one machine grows without starting again.

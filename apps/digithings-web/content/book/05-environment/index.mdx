@@ -6,21 +6,30 @@ summary: >-
 ---
 
 An AI application is more than a model call. It needs a way to reach models,
-route work between them, retrieve context, remember what happened, identify
-who is asking, expose tools, show an interface and explain the result. Most
-projects spend their first months rebuilding that surrounding environment.
+route work between them, find the right context, call tools, identify who is
+asking, show an interface and explain afterwards what happened. Most projects
+spend their first months rebuilding that scaffolding before they get to the
+part that is actually theirs.
 
-digithings is that environment. It is built from small modules with one job
-each, tied together by open protocols. Model access, orchestration, retrieval,
-memory, identity, chat, data, tracing and tool discovery are separate pieces,
-so you can run one, a few, or all of them.
+digithings is that scaffolding, built once. Each module has one job and a
+published contract, so you can run one of them, a few, or all of them.
 
-The stack is open source and open core. You can read the code, replace a module
-and keep the parts that work. Nothing at the boundary is proprietary, and no
-module requires the others to be bought as a bundle.
+| Module | Its one job |
+| --- | --- |
+| digigraph | The hub. Routes each request to the right tools and streams the answer. |
+| digillm | The model layer. One way for every service to call any model. |
+| MCP | The tool protocol. Every capability is a tool any client can discover. |
+| digisearch | Retrieval. Indexes your documents and finds the passages that matter. |
+| digivault | Documents. A linked markdown vault, readable by people and tools. |
+| digiquant | Research. Data, strategies, backtests and optimisation, in order. |
+| digivoice | Voice. Dictation, rewriting and speech, all on your machine. |
+| digichat | The interface. Where people ask, read answers and see artifacts. |
+| digikey | Identity. Short-lived credentials every service checks itself. |
+| digitrace | Tracing. A record of what every request did. |
+| digibase | The shared base. Error shapes, request ids, service sign-in. |
 
-Capability and cost move together. A single person can run the core on a
-laptop. A research team can add retrieval and a vertical service. An
-organisation can add identity, tracing, data and more hardware without
-changing the contracts underneath. The same environment scales from a
-workstation to a fleet, and the bill follows the parts you actually run.
+## How the parts fit
+
+Requests come in through the interface or an outside caller and go to the
+hub. The hub asks the verticals what tools they offer, runs the ones the
+request needs and reaches models through the model layer. Identity can be checked at every boundary and every step traced. None of it is fixed: any part can be replaced by one of your own that keeps the same contract. After the use cases, the chapters take the main parts one at a time.

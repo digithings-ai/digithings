@@ -102,7 +102,9 @@ export async function buildBookPdf(
     let runningChapter = "";
     for (const page of pages) {
       if (page.querySelector(".book-cover, .book-contents, .book-colophon, .book-end")) continue;
-      const title = page.querySelector(".book-chapter__head h2")?.textContent?.trim() ?? "";
+      // The last opener on the page names whatever runs onto the next one.
+      const heads = page.querySelectorAll(".book-chapter__head h2");
+      const title = heads[heads.length - 1]?.textContent?.trim() ?? "";
       if (title) {
         runningChapter = title;
         continue;
@@ -137,8 +139,8 @@ export async function buildBookPdf(
       if (!page) continue;
       onProgress?.({ done: index, total: pages.length });
       const dataUrl = await domToJpeg(page, {
-        quality: 0.82,
-        scale: 1.25,
+        quality: 0.85,
+        scale: 2.5,
         backgroundColor: background,
       });
       const jpeg = await (await fetch(dataUrl)).arrayBuffer();
