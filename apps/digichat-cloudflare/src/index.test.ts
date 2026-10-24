@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTAINER_UNAVAILABLE_BODY, RETRY_AFTER_SECONDS } from "./container-retry";
 import worker, { DigiChatContainer, type Env } from "./index";
+import { env as stubEnv } from "../test/cloudflare-workers-stub";
 
 /**
  * The Container base class is not constructible outside the Workers runtime
@@ -139,5 +140,74 @@ describe("the digichat Worker", () => {
     // The hop was tried once: the Durable Object answered instead of
     // throwing, so nothing was replayed.
     expect(hooks.containerFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The deployment document is deployment data: it lives in the bound KV
+ * namespace under `config-yaml` and is forwarded to the container at boot, so
+ * an operator edit applies on the next boot with no redeploy of either half.
+ * The `cloudflare:workers` stub's `env` is the object `index.ts` aliases as
+ * `workerVars`, so writing a binding into it is the test's Worker binding.
+ */
+describe("KV config document forwarded to the container", () => {
+  const OCC_TENANTS = JSON.stringify({
+    "occ.digithings.ai": { slug: "occ", token: "invite-123", gateMode: "invited" },
+  });
+  const CONFIG_DOC = "version: 1\ndeployment:\n  slug: digithings-ai-config\n";
+
+  afterEach(() => {
+    delete stubEnv.DIGICHAT_TENANTS_KV;
+  });
+
+  /** One KV namespace answering both keys, or undefined for a given key. */
+  function tenantsKv(values: Record<string, string>) {
+    return {
+      get: async (key: string) => values[key] ?? null,
+    };
+  }
+
+  it("forwards DIGICHAT_CONFIG_YAML from KV alongside the tenant registry", async () => {
+    stubEnv.DIGICHAT_TENANTS_KV = tenantsKv({
+      "embed-tenants": OCC_TENANTS,
+      "config-yaml": CONFIG_DOC,
+    });
+    const container = newContainer();
+    hooks.containerFetch.mockResolvedValue(new Response("ok"));
+
+    await container.fetch(chatRequest());
+
+    expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe(CONFIG_DOC);
+    // OCC must not regress: its KV tenant entry still reaches the container.
+    expect(JSON.parse(container.envVars.DIGICHAT_EMBED_TENANTS)).toEqual({
+      "occ.digithings.ai": { slug: "occ", token: "invite-123", gateMode: "invited" },
+    });
+  });
+
+  it("forwards an empty document when the key is absent, leaving file/defaults in charge", async () => {
+    stubEnv.DIGICHAT_TENANTS_KV = tenantsKv({ "embed-tenants": OCC_TENANTS });
+    const container = newContainer();
+    hooks.containerFetch.mockResolvedValue(new Response("ok"));
+
+    await container.fetch(chatRequest());
+
+    expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe("");
+  });
+
+  it("keeps serving when the KV read fails", async () => {
+    stubEnv.DIGICHAT_TENANTS_KV = {
+      get: async () => {
+        throw new Error("kv down");
+      },
+    };
+    const container = newContainer();
+    hooks.containerFetch.mockResolvedValue(new Response("ok"));
+
+    const res = await container.fetch(chatRequest());
+
+    expect(res.status).toBe(200);
+    expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe("");
+    expect(container.envVars.DIGICHAT_EMBED_TENANTS).toBe("");
+    expect(logged.some((line) => line.includes("config-kv"))).toBe(true);
   });
 });

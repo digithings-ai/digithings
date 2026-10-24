@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
+  CONFIG_CACHE_TTL_MS,
+  getDigichatConfig,
   loadDigichatConfig,
   resetDigichatConfigForTests,
   embedTenantToDeployment,
@@ -13,8 +15,9 @@ import { filterForceToolHeader } from "./force-tool";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
 import { toEmbedClientConfig } from "@/lib/embed-client-config";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 beforeEach(() => {
   resetDigichatConfigForTests();
@@ -1112,5 +1115,155 @@ describe("tenants merge: one source for the session lock and the model allowlist
     expect(host).toBeDefined();
     expect(host!.models?.available).toEqual(["tenant-model"]);
     expect(matchHostDeployment(OCC_HOST, config)).toBe(host);
+  });
+});
+
+/**
+ * DIGICHAT_CONFIG_YAML is the deployment document itself, forwarded by the
+ * Worker from KV `config-yaml` so config lives outside the image. Precedence:
+ * env document > file > defaults, with DIGICHAT_EMBED_TENANTS merged on top.
+ */
+describe("DIGICHAT_CONFIG_YAML: the document comes from the environment", () => {
+  const FILE_DOC = [
+    "version: 1",
+    "deployment:",
+    "  slug: from-file",
+    "  backend:",
+    "    type: digigraph",
+    "  gate:",
+    "    mode: ungated",
+    "",
+  ].join("\n");
+  const ENV_DOC = [
+    "version: 1",
+    "deployment:",
+    "  slug: from-kv",
+    "  backend:",
+    "    type: digigraph",
+    "  gate:",
+    "    mode: ungated",
+    "",
+  ].join("\n");
+
+  let dir = "";
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = "";
+  });
+
+  /** A real file on disk, because "the file is ignored" has to be provable. */
+  function writeConfigFile(contents: string): string {
+    dir = mkdtempSync(join(tmpdir(), "digichat-config-"));
+    const path = join(dir, "digichat.yaml");
+    writeFileSync(path, contents, "utf8");
+    return path;
+  }
+
+  it("uses the env document in preference to an existing file", () => {
+    const path = writeConfigFile(FILE_DOC);
+    const cfg = loadDigichatConfig({
+      env: { DIGICHAT_CONFIG_YAML: ENV_DOC, DIGICHAT_CONFIG_PATH: path },
+    });
+    expect(cfg.deployment?.slug).toBe("from-kv");
+  });
+
+  it("does not require the configured file to exist when the env document is set", () => {
+    const cfg = loadDigichatConfig({
+      allowMissingFile: false,
+      env: {
+        DIGICHAT_CONFIG_YAML: ENV_DOC,
+        DIGICHAT_CONFIG_PATH: "/nonexistent/digichat.yaml",
+      },
+    });
+    expect(cfg.deployment?.slug).toBe("from-kv");
+  });
+
+  it("treats an empty or whitespace value as absent, so the file is read", () => {
+    const path = writeConfigFile(FILE_DOC);
+    for (const blank of ["", "   \n\t "]) {
+      const cfg = loadDigichatConfig({
+        env: { DIGICHAT_CONFIG_YAML: blank, DIGICHAT_CONFIG_PATH: path },
+      });
+      expect(cfg.deployment?.slug).toBe("from-file");
+    }
+  });
+
+  it("fails closed with the source named on invalid YAML", () => {
+    expect(() =>
+      loadDigichatConfig({ env: { DIGICHAT_CONFIG_YAML: "deployment: [unclosed\n" } }),
+    ).toThrow(/DIGICHAT_CONFIG_YAML: invalid YAML/);
+  });
+
+  it("fails closed with the source named on a schema-invalid document", () => {
+    expect(() =>
+      loadDigichatConfig({
+        env: {
+          DIGICHAT_CONFIG_YAML: "version: 1\ndeployment:\n  slug: BAD_SLUG\n",
+        },
+      }),
+    ).toThrow(/DIGICHAT_CONFIG_YAML/);
+  });
+
+  it("still merges DIGICHAT_EMBED_TENANTS over the env document", () => {
+    const cfg = loadDigichatConfig({
+      env: {
+        DIGICHAT_CONFIG_YAML: [
+          "version: 1",
+          "hosts:",
+          "  occ.digithings.ai:",
+          "    slug: occ",
+          "    backend:",
+          "      type: digigraph",
+          "    gate:",
+          "      mode: ungated",
+          "      lockSessionControls: false",
+          "    models:",
+          "      available:",
+          "        - deployment-model",
+          "  digiquant.io:",
+          "    slug: digiquant",
+          "    backend:",
+          "      type: digigraph",
+          "",
+        ].join("\n"),
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "occ.digithings.ai": {
+            slug: "occ",
+            token: "tok_occ",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+            lockSessionControls: true,
+            models: { available: ["tenant-model"] },
+          },
+        }),
+      },
+    });
+    // A registry-only host still hydrates.
+    expect(cfg.hosts?.["digiquant.io"]?.slug).toBe("digiquant");
+    // The registry is the more specific statement, so it wins over the document:
+    // its model list and its session lock both survive the merge.
+    expect(cfg.hosts?.["occ.digithings.ai"]?.models?.available).toEqual(["tenant-model"]);
+    expect(cfg.hosts?.["occ.digithings.ai"]?.gate.lockSessionControls).toBe(true);
+  });
+});
+
+describe("getDigichatConfig memo", () => {
+  it("re-reads after the TTL so a config edit lands without a restart", () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+      vi.stubEnv("DIGICHAT_CONFIG_YAML", "version: 1\ndeployment:\n  slug: first-doc\n  backend:\n    type: digigraph\n");
+      expect(getDigichatConfig().deployment?.slug).toBe("first-doc");
+
+      vi.stubEnv("DIGICHAT_CONFIG_YAML", "version: 1\ndeployment:\n  slug: second-doc\n  backend:\n    type: digigraph\n");
+      // Inside the TTL the memo still answers with the document it loaded.
+      expect(getDigichatConfig().deployment?.slug).toBe("first-doc");
+
+      vi.advanceTimersByTime(CONFIG_CACHE_TTL_MS + 1);
+      expect(getDigichatConfig().deployment?.slug).toBe("second-doc");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
   });
 });
