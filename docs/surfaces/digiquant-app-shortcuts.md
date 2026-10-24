@@ -2,7 +2,9 @@
 
 The digiquant app is the Brief desk, served at **`/app`** on digiquant.io
 (`/app/brief` redirects to `/app`). The old terminal app (`apps/digiquant-app`)
-is retired; only its keyboard map was carried over (owner decision 2026-10-11).
+is parked, not deleted: its keyboard map was carried over to the desk (owner
+decision 2026-10-11), and the package stays in the tree as one of the inputs to
+the desk consolidation (`docs/plans/deslop-epic.md`, slice UC).
 
 Source of truth: `apps/digiquant-web/components/desk/shortcuts.ts`. Press `?`
 anywhere in the app to see this list. Keys match the digiquant TUI

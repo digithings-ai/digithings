@@ -81,6 +81,7 @@ from digiquant.portfolio.writers.ledger_io import (
     ledger_enabled,
 )
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import opt_decimal
 
 if TYPE_CHECKING:
     from digiquant.execution.market_hours import CalendarDayStatus, MarketSessionContext
@@ -247,7 +248,7 @@ def _pending_quantity(raw: Any) -> Decimal:
     ``InvalidOperation`` on Infinity, which would crash the public executor before the
     gate can decline (#2497). Finite values are still share-quantized.
     """
-    value = _decimal(raw) or Decimal(0)
+    value = opt_decimal(raw) or Decimal(0)
     if not value.is_finite():
         return value
     return _shares(value)
@@ -261,20 +262,10 @@ def _intent_quantity(pending_row: dict[str, Any]) -> Decimal:
     Stamp one share; ``rejection_reason`` and the absence of a fill are authoritative
     (#2497).
     """
-    value = _decimal(pending_row.get("quantity")) or Decimal(0)
+    value = opt_decimal(pending_row.get("quantity")) or Decimal(0)
     if value.is_finite() and value > 0:
         return _shares(value)
     return Decimal("1")
-
-
-def _decimal(raw: Any) -> Decimal | None:
-    """Supabase returns numerics as str/int/float. Never float(); never a bare Decimal(float)."""
-    if raw is None:
-        return None
-    try:
-        return Decimal(str(raw))
-    except (ArithmeticError, ValueError):
-        return None
 
 
 def ledger_is_authoritative(*, client: SupabaseClient, run_date: date) -> bool:
@@ -428,7 +419,7 @@ def _lineages(rows: list[dict[str, Any]]) -> dict[str, list[_Lineage]]:
     closed: dict[str, Decimal] = {}
     for row in rows:
         key = str(row.get("opened_by_execution_id") or "")
-        quantity = _decimal(row.get("quantity")) or Decimal(0)
+        quantity = opt_decimal(row.get("quantity")) or Decimal(0)
         if not key:
             continue
         if str(row.get("status") or "") == HoldingLotStatus.CLOSED:
@@ -438,7 +429,7 @@ def _lineages(rows: list[dict[str, Any]]) -> dict[str, list[_Lineage]]:
 
     by_symbol: dict[str, list[_Lineage]] = {}
     for key, open_row in opens.items():
-        opened = _decimal(open_row.get("quantity")) or Decimal(0)
+        opened = opt_decimal(open_row.get("quantity")) or Decimal(0)
         live = opened - closed.get(key, Decimal(0))
         if live < 0:
             logger.error(
@@ -525,8 +516,8 @@ def _recovered_lot_rows(
         )
         return []
 
-    quantity = _shares(_decimal(execution_row.get("quantity")) or Decimal(0))
-    price = _decimal(execution_row.get("price"))
+    quantity = _shares(opt_decimal(execution_row.get("quantity")) or Decimal(0))
+    price = opt_decimal(execution_row.get("price"))
     order_intent_id = str(execution_row.get("order_intent_id") or "")
     if quantity <= 0 or price is None or price <= 0 or not order_intent_id:
         logger.error(
@@ -545,8 +536,8 @@ def _recovered_lot_rows(
             execution_id=UUID(execution_id),
             quantity=quantity,
             price=price,
-            fee=_decimal(execution_row.get("fee")) or Decimal(0),
-            slippage=_decimal(execution_row.get("slippage")) or Decimal(0),
+            fee=opt_decimal(execution_row.get("fee")) or Decimal(0),
+            slippage=opt_decimal(execution_row.get("slippage")) or Decimal(0),
         ),
         run_date=run_date,
         lineages=lineages,
@@ -606,7 +597,7 @@ def approved_weights(*, client: SupabaseClient, run_date: date) -> dict[str, Dec
     weights: dict[str, Decimal] = {}
     for row in _heads(rows):
         symbol = _symbol(row.get("symbol"))
-        weight = _decimal(row.get("approved_weight"))
+        weight = opt_decimal(row.get("approved_weight"))
         if symbol and weight is not None:
             weights[symbol] = weight
     return weights
@@ -686,7 +677,7 @@ def execute_pending_orders(
     )
     lineages = _lineages(prior_lot_rows)
     lot_execution_ids = _execution_ids_with_lots(prior_lot_rows)
-    normalized_marks = {_symbol(k): _decimal(v) for k, v in marks.items()}
+    normalized_marks = {_symbol(k): opt_decimal(v) for k, v in marks.items()}
 
     execution_rows: list[dict[str, Any]] = []
     lot_rows: list[dict[str, Any]] = []
@@ -994,7 +985,7 @@ def _lot_rows_for_fill(
         if take <= 0:
             consumed += 1
             continue
-        open_price = _decimal(lineage.open_row.get("open_price"))
+        open_price = opt_decimal(lineage.open_row.get("open_price"))
         opened_at = _parse_ts(lineage.open_row.get("opened_at")) or now
         lot_run_date = _parse_date(lineage.open_row.get("run_date")) or run_date
         if open_price is None or open_price <= 0:

@@ -1,3 +1,20 @@
+/* Zero radius is the rule for the chrome, not a per-rule decision. Every
+   control inherits it from this one declaration; a rounded corner is a
+   geometry decision and would have to name its own value. */
+.dc-code-inline,
+.dc-code-block pre,
+.dc-code-copy,
+.dc-msg-copy,
+.dc-textarea,
+.dc-edit-textarea,
+.dc-send,
+.dc-stop,
+.dc-quota-banner,
+.dc-byok-option,
+.dc-byok-input {
+  border-radius: 0;
+}
+
 .dc-page {
   /* Page gutter: one ramp each for the inline pad and the bottom air. */
   --dc-page-pad-inline: clamp(0.7rem, 3vw, 1.4rem);
@@ -166,7 +183,6 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 0;
   padding: 0.05rem 0.3rem;
 }
 .dc-code-block {
@@ -199,7 +215,7 @@
   padding: 0.12rem var(--dc-space-xs);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s var(--ease, ease);
+  transition: opacity var(--dur-fast) var(--ease);
 }
 .dc-code-copy {
   position: absolute;
@@ -328,18 +344,23 @@
 .dc-textarea::placeholder {
   color: var(--ink-soft);
 }
-.dc-textarea:focus {
-  outline: none;
+/* The canon focus state for the controls this sheet owns: 2px accent outline.
+   These rules used to switch the indicator off — or paint a 1px 50% one —
+   which left the composer with no visible focus at all. */
+.dc-textarea:focus-visible,
+.dc-byok-input:focus-visible,
+.dc-byok-option-list:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .dc-send,
 .dc-stop {
   font: inherit;
   align-self: stretch;
   border: 1px solid var(--hair);
-  border-radius: 0;
   cursor: pointer;
   padding: 0.3rem 0.65rem;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dc-send {
   font-size: var(--dc-type-input);
@@ -493,8 +514,6 @@
 .dc-act-brief-q-heading {
   margin: 0 0 var(--dc-space-3xs);
   font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--ink-mute);
 }
 .dc-act-brief-questions ol {
@@ -525,9 +544,9 @@
 .dc-quota-banner {
   margin: var(--dc-space-3xs) 0 0 var(--dc-body-indent);
   padding: 0.45rem 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--hair));
   border-radius: 0;
-  background: color-mix(in srgb, var(--down) 8%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
   font-size: var(--dc-type-xs);
   color: var(--ink-soft);
 }
@@ -543,7 +562,7 @@
 .dc-byok-prompt {
   margin: 0 0 var(--dc-space-xs);
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--type-meta);
   color: var(--ink-soft);
 }
 .dc-byok-option-list {
@@ -570,7 +589,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -580,7 +598,7 @@
   display: inline-block;
   width: 1ch;
   color: var(--accent);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-mono);
 }
 .dc-byok-input {
   display: block;
@@ -589,8 +607,7 @@
   margin-top: var(--space-1);
   padding: var(--dc-space-xs) var(--dc-space-sm);
   border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--bg-term, transparent);
+  background: var(--term-bg);
   color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: var(--text-sm);
@@ -620,7 +637,8 @@
   color: var(--ink);
 }
 .dc-byok-action-danger {
-  color: var(--down, #e0654b);
+  /* State red; `--down` is the market direction. */
+  color: var(--danger);
 }
 
 .dc-session-main {

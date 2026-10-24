@@ -396,7 +396,9 @@ export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): Parse
   const [name, ...rest] = text.split(/\s+/);
   const arg = rest.join(" ").trim();
   const needle = name.toLowerCase();
-  const command = allDefs(extra).find((c) => c.names.some((n) => n === needle));
+  const command = allDefs(extra).find((c) =>
+    c.names.some((n) => n.toLowerCase() === needle),
+  );
   if (!command) return { kind: "unknown", name };
   if (command.needsArg && !arg) {
     return { kind: "incomplete", command, prefix: `${command.names[0]} ` };
@@ -428,7 +430,10 @@ export function matchingSlashCommands(
   return allDefs(extra).filter(
     (c) =>
       isVisible(c, visibility) &&
-      c.names.some((n) => n.startsWith(q) || q.startsWith(n)),
+      // A name must start with what was typed. The reverse (typed text starts
+      // with a name) would keep a row on screen after the user typed past it,
+      // so `/mcpx` still offered `/mcp`.
+      c.names.some((n) => n.toLowerCase().startsWith(q)),
   );
 }
 
@@ -443,7 +448,7 @@ export function slashHelpText(
 }
 
 export function isLangCode(value: string): value is LangCode {
-  return (LANG_CODES as readonly string[]).includes(value);
+  return (LANG_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
 /** Wrap palette highlight for Up/Down navigation. */

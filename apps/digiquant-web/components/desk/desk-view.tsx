@@ -1,9 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { BLOCKS, PAGES, layoutFor } from "digiquant-tui/catalog";
 import type { ReadResult } from "digiquant-tui/read";
 import { DeskFrame } from "./desk-frame";
 import { PanelView } from "./panel-view";
+import { FxPaneBlock, isFxBlock } from "./blocks/fx-panes";
+import { LiveMarksBlock } from "./blocks/live-marks";
 import { PANE_GRID } from "./pages/pane";
 import { asOfStatus } from "digiquant-tui/format";
 import { staleBanner } from "./app-settings";
@@ -19,6 +22,13 @@ const tone: Record<ReadResult["status"] | "loading", string> = {
 
 function pageFor(path: string) {
   return PAGES.find((item) => item.path === path) ?? PAGES[0];
+}
+
+/** Panes that paint a composed block instead of the read's text lines. */
+function richPane(id: string, read: ReadResult | undefined, data: unknown): ReactNode {
+  if (id === "live") return <LiveMarksBlock read={read} data={data} />;
+  if (isFxBlock(id)) return <FxPaneBlock id={id} read={read} data={data} />;
+  return null;
 }
 
 /** Catalog blocks for one page. The web desk and the terminal frame both paint this grid. */
@@ -44,6 +54,11 @@ export function DeskReadout({
         const lines = read?.lines ?? ["loading…"];
         const age = asOfStatus(def.route, read?.asOf, read?.dataAsOf, undefined, settings.staleSessions);
         const banner = staleBanner(age.state, settings.notify);
+        const payload = data[placement.id];
+        const panel = status === "ok" && payload !== undefined;
+        // A pane with a block paints the block; the table/chart toggle still
+        // wins when that payload has a panel shape.
+        const rich = richPane(placement.id, read, payload);
         return (
           <section
             key={placement.id}
@@ -52,14 +67,29 @@ export function DeskReadout({
             className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface"
           >
             <h2 className="m-0 flex h-7 shrink-0 items-center border-b border-hair px-2.5 font-mono text-[0.6875rem] font-normal tracking-[0.04em] text-ink-mute">{def.title}</h2>
-            {status === "ok" && data[placement.id] !== undefined ? (
+            {rich ? (
               <div
                 role="region"
                 aria-label={`${def.title} body`}
                 tabIndex={0}
                 className={`desk-pane-body flex min-h-0 flex-1 flex-col overflow-auto px-2.5 py-1.5 font-mono text-[0.75rem] leading-[1.45] tabular-nums ${tone[status]}`}
               >
-                <PanelView id={placement.id} title={def.title} data={data[placement.id]}>
+                {panel ? (
+                  <PanelView id={placement.id} title={def.title} data={payload}>
+                    {rich}
+                  </PanelView>
+                ) : (
+                  rich
+                )}
+              </div>
+            ) : status === "ok" && payload !== undefined ? (
+              <div
+                role="region"
+                aria-label={`${def.title} body`}
+                tabIndex={0}
+                className={`desk-pane-body flex min-h-0 flex-1 flex-col overflow-auto px-2.5 py-1.5 font-mono text-[0.75rem] leading-[1.45] tabular-nums ${tone[status]}`}
+              >
+                <PanelView id={placement.id} title={def.title} data={payload}>
                   <p className="m-0 whitespace-pre-wrap">{lines.slice(0, 14).join("\n")}</p>
                 </PanelView>
               </div>

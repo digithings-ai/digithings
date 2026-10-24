@@ -101,11 +101,11 @@ export function FloatNav() {
 export function MonoNav() {
   const pathname = usePathname();
   const linkClass = (href: string) =>
-    `font-mono text-[0.8rem] no-underline hover:text-ink ${pathname === href ? "text-ink" : "text-ink-soft"}`;
+    `font-mono text-[0.8rem] no-underline hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-ink ${pathname === href ? "text-ink" : "text-ink-soft"}`;
   return (
     <header className="sticky top-0 z-40 w-full border-b border-hair bg-bg">
       <div className="flex h-[var(--nav-shell-h)] items-center gap-[1.6rem] px-[var(--page-pad)]">
-        <Link href="/" aria-label="digithings home" className="flex items-center text-ink no-underline">
+        <Link href="/" aria-label="digithings home" className="flex items-center text-ink no-underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[3px] focus-visible:outline-ink">
           <Brand />
         </Link>
         <nav aria-label="Main" className="hidden items-center gap-[1.3rem] max-[880px]:hidden min-[880px]:flex">

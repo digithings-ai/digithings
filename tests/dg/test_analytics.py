@@ -44,3 +44,23 @@ def test_plot_distribution(sample_dataset_path: str) -> None:
     assert out["summary"].get("count") == 2
     if out.get("image_path"):
         assert Path(out["image_path"]).exists()
+
+
+@pytest.mark.unit
+def test_artifacts_dir_creates_sibling_of_dataset(sample_dataset_path: str) -> None:
+    from digigraph.tools.analytics._artifacts import artifacts_dir
+
+    out = artifacts_dir(sample_dataset_path)
+    assert out == Path(sample_dataset_path).resolve().parent / "artifacts"
+    assert out.is_dir()
+
+
+@pytest.mark.unit
+def test_next_filename_skips_existing(tmp_path: Path) -> None:
+    from digigraph.tools.analytics._artifacts import next_filename
+
+    first = next_filename(tmp_path, "plot")
+    assert first == tmp_path / "plot_0.png"
+    first.write_text("x", encoding="utf-8")
+    assert next_filename(tmp_path, "plot") == tmp_path / "plot_1.png"
+    assert next_filename(tmp_path, "chart", "svg") == tmp_path / "chart_0.svg"

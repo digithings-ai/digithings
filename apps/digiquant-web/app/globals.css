@@ -114,8 +114,16 @@ body {
 }
 
 /* The desk header scrolls inside .desk-head. That track is wider than a phone,
-   and overflow on the track still widens the document unless the page clips it. */
+   and overflow on the track still widens the document unless the page clips it.
+   Hallmark 34 wants the clip on both document boxes: this keeps the html rule
+   the desk test pins, and the body rule below overrides the kit's
+   `body { overflow-x: hidden }` (site.css, layer(components)) so a stray wide
+   child is clipped rather than scrolled flat. */
 html {
+  overflow-x: clip;
+}
+
+body {
   overflow-x: clip;
 }
 
@@ -173,6 +181,19 @@ html {
    canvas fills the page with no bottom gap; copy is padded below --nav-shell-h. */
 .dq-hero {
   cursor: crosshair;
+}
+
+/* Hero veil (home only): the copy sits over the live chart, so a black radial
+   dims the field behind the wordmark and the type. Canvas black at the page
+   ground tone, fading out — atmosphere over the --bg canvas, not a palette
+   entry, and the values are the ones TopBand painted inline before. */
+.dq-hero-veil::before {
+  background-image: radial-gradient(
+    ellipse at center,
+    rgb(0 0 0 / 0.82),
+    rgb(0 0 0 / 0.28) 46%,
+    transparent 74%
+  );
 }
 
 /* Finished Vela chart. Opacity only — the axis is Vela's. */

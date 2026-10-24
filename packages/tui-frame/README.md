@@ -19,6 +19,12 @@ Shared here:
 
 - `RecordedFrame`, `makeRecordedFrame`, `serializeRecordedFrame` and
   `isRecordedFrame` — the record and its guard.
+- `writeRecordedFrame` (`src/write.ts`) — the one export path: validate the
+  record, create the parent directory, write the serialized bytes. Both
+  exporters had a copy of that before, one through `Bun.write` and one through
+  `node:fs`, and neither refused a record the dashboard would drop. It is
+  deliberately **not** re-exported from `index.ts`: the dashboard imports this
+  package in the browser, so a `node:fs` specifier must stay out of that entry.
 - `startFixtureApi` — the deterministic fixture server each exporter reads
   through. It binds an ephemeral port by default, so two exporters can run at
   once; the URL it returns is the base the client points itself at.
@@ -26,7 +32,9 @@ Shared here:
 
 Deliberately per client: the crop geometry and the render harness. Each client
 renders a different app and crops a different pane, so those cannot be one
-function without inventing an abstraction for two call sites.
+function without inventing an abstraction for two call sites. The clients do not
+re-export the record either: a second export surface is how the copies drifted
+in the first place.
 
 ## Reproducible fixtures
 

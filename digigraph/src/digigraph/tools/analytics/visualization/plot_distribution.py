@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename
 
 
 def plot_distribution(
@@ -34,8 +34,8 @@ def plot_distribution(
             "image_path": None,
             "summary": {"count": len(s)},
         }
-    out_dir = _artifacts_dir(dataset_path)
-    path = _next_filename(out_dir, "dist")
+    out_dir = artifacts_dir(dataset_path)
+    path = next_filename(out_dir, "dist")
     fig, ax = plt.subplots()
     kind = (kind or "histogram").strip().lower()
     if kind == "histogram":

@@ -18,14 +18,14 @@ Do not reintroduce a second transcript renderer here.
 |---|---|
 | `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. Bare `/export` and `/export md` are markdown; `/export html` is the rendered page. Any other format shows an unsupported-format error. The digichat host shows both `/export md` and `/export html` in the palette. |
 | `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
-| `src/components/DigiChatMark.tsx` | Brand mark / wordmark (digithings-web nav). |
+| `src/components/DigiChatMark.tsx` | Brand mark (digithings-web nav). The wordmark is not re-implemented here: `Wordmark` / `TerminalWordmark` in `@digithings/ui` own that grammar. |
 | `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
 | `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). Legacy blocks stay as a CSS contract. |
 | `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`. |
 
 ## Public API contract
 
-- **Exports** (`src/index.ts`): `DigiChatMark`/`DigiChatWordmark`,
+- **Exports** (`src/index.ts`): `DigiChatMark`,
   activity-view helpers, transcript markdown helpers, slash-commands helpers,
   optional `DocumentPane`/`MiniMarkdown`, and the types above.
 - **The view-level wording lives here.** `VIEW_LABELS` in `src/slash-commands.ts`

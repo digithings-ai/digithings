@@ -48,7 +48,7 @@ export default function VariantReceipt() {
                   <CopyCommand samples={INSTALL} ariaLabel="Install command" />
                 </div>
               </div>
-              <Figure n={1} caption={`Counted ${COUNTS.countedAt} — file counts, not coverage.`}>
+              <Figure n={1} caption={`Counted ${COUNTS.countedAt}: file counts, not coverage.`}>
                 <OdometerStrip stats={METRICS} />
               </Figure>
             </div>
@@ -104,7 +104,7 @@ export default function VariantReceipt() {
           <BlockLabel>fig 2 · the receipts</BlockLabel>
           <p className="mt-[0.7rem] mb-0 max-w-[62ch] text-[0.95rem] text-ink-soft">
             The committed repository snapshot. Every figure above can be reproduced from a clean
-            checkout — the snapshot is dated so a stale one reads as dated.
+            checkout: the snapshot is dated so a stale one reads as dated.
           </p>
           <div className="mt-[1.4rem]">
             <RepoActivity

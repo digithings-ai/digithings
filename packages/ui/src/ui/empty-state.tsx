@@ -151,7 +151,7 @@ export function EmptyState({
       {note != null ? (
         <p
           className={cn(
-            "m-0 max-w-[24ch] text-[0.75rem] leading-[1.3333] italic text-ink-mute/60",
+            "m-0 max-w-[24ch] text-[0.75rem] leading-[1.3333] text-ink-mute",
             glass && "mt-1 max-w-md",
           )}
         >

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 
@@ -18,6 +19,8 @@ from digigraph.graph.research_subgraph import build_research_subgraph
 from digigraph.graph.state import WorkflowState
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tracing import trace_node
+
+logger = logging.getLogger(__name__)
 
 # Shared checkpointer so thread_id persists across HTTP requests (see LANGGRAPH_REVIEW.md).
 _checkpointer_lock = threading.Lock()
@@ -307,6 +310,7 @@ def resolve_workflow_profile() -> str:
     try:
         p = DigiProjectConfig.load().get_workflow_profile()
     except Exception:
+        logger.debug("workflow profile unreadable; defaulting to full_stack", exc_info=True)
         return "full_stack"
     return p if p in WORKFLOW_PROFILES else "full_stack"
 
@@ -344,6 +348,7 @@ def _route_after_research(state: WorkflowState):
         if "backtest" not in DigiProjectConfig.load().get_enabled_agents():
             return END
     except Exception:
+        logger.debug("enabled agents unreadable; skipping backtest", exc_info=True)
         return END
     return "validate_strategy"
 
@@ -364,6 +369,7 @@ def _optimize_after_backtest_enabled() -> bool:
     try:
         return "optimize" in DigiProjectConfig.load().get_enabled_agents()
     except Exception:
+        logger.debug("enabled agents unreadable; optimize stays off", exc_info=True)
         return False
 
 

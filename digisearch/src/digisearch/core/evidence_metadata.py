@@ -9,6 +9,7 @@ joined with commas for storage and comparison uses the same serialized form.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from digisearch.core.models import Chunk, Document
@@ -18,15 +19,6 @@ EVIDENCE_TIER_PEER_REVIEWED = "peer_reviewed"
 EVIDENCE_TIER_WORKING_PAPER = "working_paper"
 EVIDENCE_TIER_INDUSTRY = "industry"
 EVIDENCE_TIER_WEB = "web"
-
-EVIDENCE_TIER_VALUES: frozenset[str] = frozenset(
-    {
-        EVIDENCE_TIER_PEER_REVIEWED,
-        EVIDENCE_TIER_WORKING_PAPER,
-        EVIDENCE_TIER_INDUSTRY,
-        EVIDENCE_TIER_WEB,
-    }
-)
 
 # Keys callers SHOULD use (document and chunk metadata).
 NORMATIVE_METADATA_KEYS: frozenset[str] = frozenset(
@@ -51,7 +43,7 @@ def _serialize_value_for_chroma(key: str, value: Any) -> str | int | float | boo
         return None
     if isinstance(value, bool):
         return value
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
         return value
@@ -69,8 +61,6 @@ def normalize_metadata_for_chroma(
         return {}
     out: dict[str, str | int | float | bool] = {}
     for key, raw in metadata.items():
-        if key is None:
-            continue
         sk = str(key)
         sv = _serialize_value_for_chroma(sk, raw)
         if sv is not None:
@@ -80,8 +70,6 @@ def normalize_metadata_for_chroma(
 
 def _title_from_source(source: str) -> str | None:
     """Best-effort title from a filesystem path or URL basename."""
-    from pathlib import Path
-
     raw = (source or "").strip()
     if not raw or raw.startswith("<"):
         return None
@@ -103,9 +91,9 @@ def provenance_metadata_from_document(doc: Document) -> dict[str, Any]:
     out: dict[str, Any] = {}
     src = (doc.source or "").strip()
     if src and not src.startswith("<"):
-        out.setdefault("source", src)
-        out.setdefault("path", src)
-        out.setdefault("source_url", src)
+        out["source"] = src
+        out["path"] = src
+        out["source_url"] = src
     title = (doc.metadata or {}).get("title")
     if not title:
         derived = _title_from_source(src)
@@ -128,8 +116,6 @@ def merge_document_metadata_into_chunks(doc: Document, chunks: list[Chunk]) -> N
 
 def load_sidecar_yaml(sidecar_path: Any) -> dict[str, Any]:
     """Load optional sidecar YAML (path-like). Returns {} if missing or empty."""
-    from pathlib import Path
-
     import yaml
 
     p = Path(sidecar_path)

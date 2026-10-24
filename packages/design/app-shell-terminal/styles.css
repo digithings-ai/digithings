@@ -22,11 +22,11 @@
 
   display: grid;
   grid-template-columns: minmax(var(--app-sidebar-min), var(--app-sidebar-max)) minmax(0, 1fr);
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-family);
-  transition: grid-template-columns 0.25s var(--ease);
+  transition: grid-template-columns var(--dur) var(--ease);
 }
 .app-shell.app-shell-sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
@@ -74,7 +74,7 @@
 .app-shell-main-col {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
 }
 
@@ -85,7 +85,10 @@
   justify-content: space-between;
   padding: var(--app-bar-pad-block) var(--app-bar-pad-inline);
   border-bottom: 1px solid var(--hair);
-  background: rgba(10, 10, 10, 0.7);
+  /* The terminal ground, not a raw near-black: the literal was invisible-ink
+     in the light theme, where a fixed dark scrim under `--ink-soft` measured
+     1.28:1. */
+  background: var(--term-bg);
   font-family: var(--font-family-mono);
   font-size: 0.75rem;
   color: var(--ink-soft);
@@ -132,6 +135,12 @@
 .app-input-field:focus {
   border-color: var(--accent, var(--hair));
 }
+/* `outline: none` above needs a keyboard equivalent: a 1px border tint is not
+   a focus indicator at a glance, and it is the same weight as the idle border. */
+.app-input-field:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: 2px;
+}
 .slash-hint {
   font-size: var(--text-xs);
   color: var(--ink-soft);
@@ -142,8 +151,8 @@
   font-size: var(--text-xs);
   padding: 0.125rem 0.375rem;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--term-fill);
+  border: 1px solid var(--hair);
   color: var(--ink);
 }
 
@@ -179,6 +188,12 @@
   font-size: 0.875rem;
   outline: none;
 }
+/* The palette input cleared its outline and declared no focus style at all, so
+   a keyboard user could not see where focus was inside the dialog. */
+.app-shell-palette-input:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: -2px;
+}
 .app-shell-palette-list {
   list-style: none;
   margin: 0;
@@ -202,6 +217,12 @@
 .app-shell-palette-item:hover,
 .app-shell-palette-item:focus-visible {
   background: color-mix(in srgb, var(--accent, var(--ink)) 14%, transparent);
+}
+/* The tint above is a fill shift under the row; a focused row also carries a
+   ring, so keyboard focus is not signalled by a low-contrast fill alone. */
+.app-shell-palette-item:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: -2px;
 }
 .app-shell-palette-desc {
   color: var(--ink-soft);

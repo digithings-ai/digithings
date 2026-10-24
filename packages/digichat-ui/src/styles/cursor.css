@@ -25,12 +25,12 @@
   font: inherit;
   font-size: var(--dtc-chip-size);
   color: var(--ink-soft);
-  background: var(--accent-weak, color-mix(in srgb, var(--accent) 13%, transparent));
+  background: var(--accent-weak);
   border: 1px solid var(--hair);
   border-radius: 0;
   padding: var(--dtc-chip-pad);
   cursor: pointer;
-  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
+  transition: background var(--duration-hover) var(--ease), color var(--duration-hover) var(--ease);
 }
 .dtc-chip:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -46,7 +46,7 @@
 
   margin: var(--dtc-error-gap) 0 0;
   font-size: var(--dtc-error-size);
-  color: color-mix(in srgb, var(--down) 80%, var(--ink));
+  color: color-mix(in srgb, var(--danger) 80%, var(--ink));
 }
 .dtc-error .dc-inline-link {
   color: var(--accent-digichat, var(--accent));
@@ -56,16 +56,4 @@
   .dtc-chip {
     transition: none;
   }
-}
-
-.dc-wordmark {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.dc-wordmark .dc-wm-d {
-  color: var(--ink);
-}
-.dc-wordmark .dc-wm-s {
-  color: var(--accent-digichat, var(--accent));
 }

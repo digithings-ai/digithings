@@ -104,12 +104,9 @@ export function PipelineBand() {
         rail={WORKFLOWS.map((workflow) => workflow.name)}
         railAriaLabel="Workflows"
       >
-        {WORKFLOWS.map((workflow, index) => (
+        {WORKFLOWS.map((workflow) => (
           <DeckCard key={workflow.name} className="flex flex-col gap-4 px-6 py-6 md:px-8 md:py-7">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="font-mono text-[0.72rem] tracking-[0.08em] text-ink-mute">
-                {String(index + 1).padStart(2, "0")}
-              </span>
               <h3 className="m-0 font-display text-[1.65rem] font-medium leading-tight tracking-[-0.02em] text-ink">
                 {workflow.name}
               </h3>
