@@ -68,6 +68,7 @@ import {
   embedConfigOf,
   isEmbedChatRequest,
   resolveAnonymousInstallChat,
+  resolveAnonymousDeploymentChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { isPlanTierSatisfied } from "@/lib/embed-tenants";
@@ -122,7 +123,9 @@ export async function POST(req: Request) {
     authResult instanceof Response && isEmbedChatRequest(req)
       ? resolveEmbedChatTenant(req)
       : authResult instanceof Response
-        ? (resolveAnonymousInstallChat() ?? authResult)
+        ? (resolveAnonymousInstallChat() ??
+          resolveAnonymousDeploymentChat(req) ??
+          authResult)
         : await resolveChatTenantContext(req, authResult);
   if (tenantCtx instanceof Response) {
     return tenantCtx;

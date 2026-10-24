@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { DIGICHAT } from "@digithings/hero-banner/definitions";
+import { HeroBanner } from "@digithings/hero-banner/web";
 import { DisclosureChevron } from "./disclosure-chevron";
 import { DotMatrix } from "./DotMatrix";
 import {
@@ -26,8 +28,14 @@ import {
  * `connect to digichat` row keeps ticking until the app's real ready signal
  * lands, which keeps 30-60s cold starts honest; `?bootdelay=<seconds>`
  * emulates a slow container locally.
+ *
+ * `banner` is the standard boot for every digichat deployment: the digichat
+ * hero banner's LOADING pass, the same cover the digithings.ai site shell
+ * (ChatEmbedShell) has always shown — no copy, no spinner. `classic` opts
+ * back into the pre-banner welcome loader (`DigichatBootLoader`).
  */
 export type BootLabVariant =
+  | "banner"
   | "terminal"
   | "waking"
   | "booting"
@@ -42,6 +50,7 @@ export type BootLabVariant =
   | "toolfull";
 
 const VARIANTS: readonly BootLabVariant[] = [
+  "banner",
   "terminal",
   "waking",
   "booting",
@@ -58,6 +67,7 @@ const VARIANTS: readonly BootLabVariant[] = [
 
 /** Copy per variant; null = the variant draws its own rows. */
 const LABELS: Record<BootLabVariant, string | null> = {
+  banner: null,
   terminal: "loading",
   waking: "waking up…",
   booting: "booting up…",
@@ -198,8 +208,21 @@ const STANDALONE_CAP_MS = 3_000;
 const BOOT_FAILED_EVENT = "digichat:boot-failed";
 
 /**
- * Resolve the lab variant: an explicit value (threaded from the embed server)
- * wins; otherwise fall back to `?boot=` on the URL; otherwise null (classic).
+ * The standard boot animation for every digichat deployment: the digichat
+ * hero banner's LOADING pass.
+ */
+export const DEFAULT_BOOT_LAB_VARIANT: BootLabVariant = "banner";
+
+/** `?boot=classic` opts back into the pre-banner welcome loader. */
+const CLASSIC_BOOT = "classic";
+
+/**
+ * Resolve the lab variant: an explicit value (the `bootLabVariant` prop,
+ * threaded from a deployment's `chrome.loading` or the embed's `?boot=`)
+ * wins; otherwise fall back to `?boot=` on the URL; otherwise the standard
+ * banner. A deployment that names nothing gets the banner, never the old
+ * tool-chain lab default. `null` means the classic loader on purpose
+ * (`?boot=classic`).
  */
 export function resolveBootLabVariant(
   explicit?: string | null,
@@ -210,9 +233,11 @@ export function resolveBootLabVariant(
       : typeof window === "undefined"
         ? null
         : new URL(window.location.href).searchParams.get("boot");
-  return value != null && (VARIANTS as readonly string[]).includes(value)
+  if (value == null) return DEFAULT_BOOT_LAB_VARIANT;
+  if (value === CLASSIC_BOOT) return null;
+  return (VARIANTS as readonly string[]).includes(value)
     ? (value as BootLabVariant)
-    : null;
+    : DEFAULT_BOOT_LAB_VARIANT;
 }
 
 /** `?bootdelay=<seconds>`: emulate a slow container locally (lab only). */
@@ -631,6 +656,33 @@ function ToolChain({
   );
 }
 
+/**
+ * The standard boot cover: the digichat hero banner alone, centered both
+ * ways, exactly as the site shell draws it (ChatEmbedShell) — no copy and no
+ * spinner. The wrapper is what gives the canvas a width; HeroBanner sizes
+ * itself to its container. `replayLoading` plays the definition's LOADING
+ * pass on mount; under reduced motion it stays off and HeroBanner paints the
+ * settled mark without starting a timer.
+ */
+function BootBanner({ replayLoading }: { replayLoading: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "100%",
+        height: "100%",
+      }}
+    >
+      <div style={{ width: "min(560px, 72vw)" }}>
+        <HeroBanner def={DIGICHAT} replayLoading={replayLoading} />
+      </div>
+      <span className="sr-only">Loading chat…</span>
+    </div>
+  );
+}
+
 export function BootLabOverlay({
   variant,
   ready,
@@ -679,6 +731,7 @@ export function BootLabOverlay({
       role="status"
       style={accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined}
     >
+      {variant === "banner" ? <BootBanner replayLoading={!reduced} /> : null}
       {variant === "spinner" ? <SpinnerLine label={label} /> : null}
       {variant === "spinneronly" ? <SpinnerLine /> : null}
       {variant === "dots" ? <DotsLine /> : null}

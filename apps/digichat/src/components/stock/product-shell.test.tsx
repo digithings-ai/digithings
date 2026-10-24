@@ -12,7 +12,7 @@ vi.mock("@/lib/warmup-gate", () => ({
   },
   getWarmupServiceNames: () => ["auth", "assistant"],
 }));
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { AssistantRuntime } from "@assistant-ui/react";
 import { ProductStockShell } from "./product-shell";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
@@ -274,5 +274,28 @@ describe("ProductStockShell", () => {
     expect(
       screen.getByTestId("stock-thread").getAttribute("data-composer-layout"),
     ).toBe("compact");
+  });
+
+  it("boots with the hero-banner cover when the deployment names no variant", () => {
+    // The cover is the standard boot: same animation the digithings.ai shell
+    // shows on /chat/occ, now also for the product chat, the embed and the
+    // self-hosted container. `?boot=` still overrides it.
+    vi.useFakeTimers();
+    try {
+      render(
+        <ProductStockShell
+          runtime={{} as AssistantRuntime}
+          clientConfig={DEFAULT_CLIENT_CONFIG}
+        />,
+      );
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(
+        document.querySelector('[data-variant="banner"]'),
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

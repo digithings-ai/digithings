@@ -5,6 +5,7 @@
 
 import type {
   AuthMode,
+  BootLoading,
   ChromeMode,
   DigichatDeployment,
   PageContextMode,
@@ -78,6 +79,8 @@ export type DigichatClientChrome = {
   palette?: string;
   toolbar: boolean;
   scrollbars: "always" | "auto";
+  /** Boot animation. `banner` is the standard digichat cover. */
+  loading?: BootLoading;
   /** `follow` chases the stream after anchoring the question; `free` is inert. */
   scroll: { mode: "follow" | "free" };
   skin: ThreadSkin;
@@ -182,6 +185,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     toolbar: true,
     scroll: { mode: "follow" },
     scrollbars: "always",
+    loading: "banner",
     title: "ask digichat",
     welcome: HOUSE_WELCOME,
     welcomeBody: [HOUSE_WELCOME_BODY],
@@ -282,6 +286,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       ...(dep.chrome.palette ? { palette: dep.chrome.palette } : {}),
       toolbar: dep.chrome.toolbar !== false,
       scrollbars: dep.chrome.scrollbars ?? "always",
+      loading: dep.chrome.loading ?? "banner",
       scroll: { mode: dep.chrome.scroll?.mode ?? "follow" },
       skin: dep.chrome.skin ?? DEFAULT_THREAD_SKIN,
       title: dep.chrome.title,
