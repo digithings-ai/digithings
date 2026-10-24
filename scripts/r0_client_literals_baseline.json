@@ -169,10 +169,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    "apps/digichat/src/components/stock/embed-mcp-flow.test.ts": {
-      "count": 15,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/src/components/stock/session-prefs-tools.test.ts": {
       "count": 2,
       "ticket": "DIG-3689"
