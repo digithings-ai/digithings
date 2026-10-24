@@ -1,0 +1,692 @@
+<title>SDCA Strategy Book</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#FBFBF9; --surface:#FFFFFF; --surface-2:#F4F4F1;
+    --hair:rgba(20,24,27,.10); --ink:#14181B; --ink-soft:#52585C; --ink-mute:#83898D;
+    --accent:#0C7C71; --accent-weak:rgba(12,124,113,.12);
+    --up:#0C7C71; --down:#C9533B; --warn:#B5832A;
+    --font-mono:'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A0E0C; --surface:#121417; --surface-2:#171A1E;
+      --hair:rgba(255,255,255,.09); --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#7D8389;
+      --accent:#3DD6C4; --accent-weak:rgba(61,214,196,.14);
+      --up:#3DD6C4; --down:#E5533E; --warn:#E0B341;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A0E0C; --surface:#121417; --surface-2:#171A1E;
+    --hair:rgba(255,255,255,.09); --ink:#ECEEF0; --ink-soft:#9AA0A6; --ink-mute:#7D8389;
+    --accent:#3DD6C4; --accent-weak:rgba(61,214,196,.14);
+    --up:#3DD6C4; --down:#E5533E; --warn:#E0B341;
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--ink); font-family:var(--font-mono); font-size:13px; line-height:1.5;}
+  a{color:inherit;}
+  table{border-collapse:collapse;}
+  .num{font-variant-numeric:tabular-nums;}
+
+  .sb-shell{max-width:1180px; margin:0 auto; padding:28px 24px 80px;}
+
+  .sb-topbar{display:flex; flex-direction:column; gap:6px; padding-bottom:20px; border-bottom:1px solid var(--hair); margin-bottom:24px;}
+  .sb-kicker{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+  .sb-h1{font-size:22px; font-weight:700; letter-spacing:-.01em; margin:0;}
+  .sb-sub{color:var(--ink-soft); font-size:12.5px; max-width:64ch;}
+
+  .sb-toolbar{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:18px;}
+  .sb-toolbar__group{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+  .sb-toolbar__label{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute);}
+  .seg{display:inline-flex; border:1px solid var(--hair); background:var(--surface);}
+  .seg-btn{appearance:none; border:0; background:transparent; color:var(--ink-soft); font-family:var(--font-mono);
+    font-size:11px; letter-spacing:.03em; padding:6px 11px; cursor:pointer; border-right:1px solid var(--hair);}
+  .seg-btn:last-child{border-right:0;}
+  .seg-btn:hover{color:var(--ink);}
+  .seg-btn.active{background:var(--accent-weak); color:var(--accent); font-weight:600;}
+  .sb-count{color:var(--ink-mute); font-size:11.5px;}
+
+  .sb-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(270px, 1fr)); gap:14px;}
+
+  .sb-card{display:block; text-decoration:none; background:var(--surface); border:1px solid var(--hair);
+    border-top:3px solid var(--card-accent, var(--ink-mute)); padding:14px 15px 15px; cursor:pointer; transition:border-color .12s ease;}
+  .sb-card:hover{border-color:var(--accent);}
+  .sb-card__top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:9px;}
+  .sb-badge{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; padding:3px 6px;
+    color:var(--badge-color); background:var(--badge-bg); white-space:nowrap;}
+  .sb-stage{font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-mute);}
+  .sb-card__name{font-size:13.5px; font-weight:600; margin:0 0 4px; letter-spacing:-.005em;}
+  .sb-card__date{font-size:10.5px; color:var(--ink-mute); margin-bottom:10px;}
+  .sb-card__headline{font-size:11.5px; color:var(--ink-soft); line-height:1.45; margin-bottom:10px; min-height:32px;}
+  .sb-card__foot{display:flex; align-items:center; justify-content:space-between; padding-top:9px; border-top:1px solid var(--hair);}
+  .sb-chart-flag{font-size:10px; color:var(--ink-mute);}
+  .sb-chart-flag.has{color:var(--accent);}
+
+  .sb-empty{padding:60px 0; text-align:center; color:var(--ink-mute); font-size:12.5px;}
+
+  .sb-back{display:inline-flex; align-items:center; gap:6px; color:var(--ink-soft); text-decoration:none;
+    font-size:11.5px; margin-bottom:18px; cursor:pointer;}
+  .sb-back:hover{color:var(--accent);}
+
+  .sb-detail__head{border-bottom:1px solid var(--hair); padding-bottom:16px; margin-bottom:18px;}
+  .sb-detail__top{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:8px;}
+  .sb-detail__name{font-size:19px; font-weight:700; margin:0; letter-spacing:-.01em;}
+  .sb-detail__sub{color:var(--ink-mute); font-size:11.5px; display:flex; flex-wrap:wrap; gap:14px;}
+  .sb-headline{font-size:13.5px; color:var(--ink); background:var(--surface-2); border-left:3px solid var(--card-accent, var(--accent));
+    padding:10px 13px; margin-top:12px;}
+
+  .sb-section{margin-bottom:26px;}
+  .sb-section__title{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute);
+    font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+  .sb-section__note{font-size:11px; color:var(--ink-mute); font-weight:400; text-transform:none; letter-spacing:0;}
+
+  .sb-kpi-strip{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:1px; background:var(--hair);
+    border:1px solid var(--hair);}
+  .sb-kpi{background:var(--surface); padding:11px 13px;}
+  .sb-kpi__label{font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-mute); margin-bottom:5px;}
+  .sb-kpi__value{font-size:16px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .sb-kpi__value.up{color:var(--up);} .sb-kpi__value.down{color:var(--down);}
+
+  .sb-weights{display:flex; flex-direction:column; gap:7px;}
+  .sb-weight-row{display:grid; grid-template-columns:170px 1fr 64px; align-items:center; gap:10px; font-size:11.5px;}
+  .sb-weight-name{color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .sb-weight-track{height:8px; background:var(--surface-2); border:1px solid var(--hair); position:relative;}
+  .sb-weight-fill{position:absolute; top:0; left:0; bottom:0; background:var(--accent);}
+  .sb-weight-val{text-align:right; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .sb-weight-flat{color:var(--ink-mute); font-style:italic; font-size:11px; grid-column:1 / -1;}
+
+  .sb-table{width:100%; font-size:11.5px; border:1px solid var(--hair);}
+  .sb-table th, .sb-table td{padding:7px 10px; border-bottom:1px solid var(--hair); text-align:left; font-variant-numeric:tabular-nums;}
+  .sb-table th{background:var(--surface-2); font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-mute); font-weight:600;}
+  .sb-table tr:last-child td{border-bottom:0;}
+  .sb-table td.up{color:var(--up);} .sb-table td.down{color:var(--down);}
+  .sb-table-wrap{overflow-x:auto;}
+
+  .sb-chart-toggle{display:flex; gap:8px; margin-bottom:10px;}
+  .sb-chart-wrap{background:var(--surface); border:1px solid var(--hair); padding:14px 14px 8px;}
+  .sb-legend{display:flex; flex-wrap:wrap; gap:16px; margin-top:8px; padding-top:8px; border-top:1px solid var(--hair);}
+  .sb-legend__item{display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-soft);}
+  .sb-legend__swatch{width:14px; height:2px;}
+
+  .sb-verdict{font-size:12px; color:var(--ink-soft); line-height:1.65; background:var(--surface); border:1px solid var(--hair); padding:14px 15px;}
+  .sb-source{font-size:10.5px; color:var(--ink-mute); margin-top:8px;}
+
+  .sb-curveparams{display:grid; grid-template-columns:repeat(auto-fit, minmax(130px,1fr)); gap:1px; background:var(--hair); border:1px solid var(--hair);}
+  .sb-curveparam{background:var(--surface); padding:9px 12px;}
+  .sb-curveparam__k{font-size:9.5px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:.05em;}
+  .sb-curveparam__v{font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums;}
+
+  .sb-footer{margin-top:40px; padding-top:16px; border-top:1px solid var(--hair); color:var(--ink-mute); font-size:10.5px;}
+  .sb-loading, .sb-error{padding:80px 0; text-align:center; color:var(--ink-mute); font-size:12.5px;}
+</style>
+
+<div class="sb-shell" id="app">
+  <div class="sb-loading">Loading strategy book&hellip;</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STATUS_META = {
+    "validated":            {label:"VALIDATED",        color:"var(--up)",   bg:"var(--accent-weak)", order:0, desc:"Cleared the OOS walk-forward gate"},
+    "open-candidate":       {label:"OPEN CANDIDATE",    color:"var(--warn)", bg:"rgba(224,179,65,.14)", order:1, desc:"Promising, not yet OOS-validated"},
+    "unvalidated-in-sample":{label:"IN-SAMPLE ONLY",    color:"var(--warn)", bg:"rgba(224,179,65,.14)", order:2, desc:"Real backtest curve, never walk-forward tested"},
+    "diagnostic-index":     {label:"DIAGNOSTIC",        color:"var(--ink-mute)", bg:"var(--surface-2)", order:3, desc:"Index-search score only, no dollar backtest"},
+    "rejected":             {label:"REJECTED",          color:"var(--down)", bg:"rgba(201,83,59,.14)", order:4, desc:"Failed validation"}
+  };
+  var FILTERS = [
+    {key:"all", label:"All"},
+    {key:"validated", label:"Validated"},
+    {key:"open-candidate", label:"Open candidate"},
+    {key:"unvalidated-in-sample", label:"In-sample only"},
+    {key:"diagnostic-index", label:"Diagnostic"},
+    {key:"rejected", label:"Rejected"}
+  ];
+  var SORTS = [
+    {key:"date", label:"Newest first"},
+    {key:"status", label:"Status"},
+    {key:"name", label:"Name"}
+  ];
+
+  // Viability = does this trial beat BOTH lump-sum buy-and-hold AND flat DCA, out of sample?
+  // (Chris's explicit bar, applied 2026-09-11 — see the Lessons Learned page.) Computed once
+  // against the 25 trials on record and stored per-candidate as viability_status/_reason.
+  var VIABILITY_META = {
+    "clears-bar":  {label:"CLEARS THE BAR",  color:"var(--up)",   bg:"var(--accent-weak)",   order:0, short:"Beats both, OOS"},
+    "fails-bar":   {label:"FAILS THE BAR",   color:"var(--down)", bg:"rgba(201,83,59,.14)",  order:1, short:"Tested, loses"},
+    "unvalidated": {label:"UNVALIDATED",     color:"var(--warn)", bg:"rgba(224,179,65,.14)", order:2, short:"In-sample only, untested OOS"},
+    "no-backtest": {label:"NO BACKTEST YET", color:"var(--ink-mute)", bg:"var(--surface-2)",  order:3, short:"Index score only"}
+  };
+  var VIABILITY_FILTERS = [
+    {key:"all", label:"All"},
+    {key:"clears-bar", label:"Clears the bar"},
+    {key:"fails-bar", label:"Fails the bar"},
+    {key:"unvalidated", label:"Unvalidated"},
+    {key:"no-backtest", label:"No backtest yet"}
+  ];
+
+  var state = {candidates:null, filter:"all", viability:"all", sort:"date", dbAvailable:null};
+
+  var LESSONS_HTML =
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">Where the 25 trials actually landed</div>' +
+      '<div class="sb-kpi-strip">' +
+        '<div class="sb-kpi"><div class="sb-kpi__label">Clears the bar</div><div class="sb-kpi__value up">1</div></div>' +
+        '<div class="sb-kpi"><div class="sb-kpi__label">Fails the bar (tested)</div><div class="sb-kpi__value down">3</div></div>' +
+        '<div class="sb-kpi"><div class="sb-kpi__label">Unvalidated (in-sample only)</div><div class="sb-kpi__value">9</div></div>' +
+        '<div class="sb-kpi"><div class="sb-kpi__label">No backtest yet</div><div class="sb-kpi__value">12</div></div>' +
+      '</div>' +
+      '<div class="sb-verdict" style="margin-top:12px;">' +
+        'Exactly one trial &mdash; <b>power_law/m2/dxy</b> &mdash; passed a real walk-forward OOS test against flat DCA ' +
+        '(+84.9%, cross-checked at +84.78% by a second backtest engine). It does not yet have a confirmed OOS-vs-lump-sum ' +
+        'number in this library &mdash; that comparison is the single most valuable thing to compute next, not a re-run of ' +
+        'anything already done. Three trials were actually tested against real out-of-sample data and lost outright, including ' +
+        '<b>the config currently live in production</b> (-16.2% to -51.3% vs flat DCA, tested twice). The other 21 trials produced ' +
+        'no OOS evidence either way: 9 have an in-sample curve fit that was never walk-forward tested, and 12 never got a dollar ' +
+        'backtest at all. Chris is right that "none of these beat plain DCA" &mdash; but more precisely, almost none of them were ' +
+        'ever asked the question. The project spent most of its compute on in-sample curve fits and index-search scores, and ' +
+        'comparatively little on the one step that actually answers "is this real."' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">1. Testing and optimizing more efficiently</div>' +
+      '<div class="sb-verdict">' +
+        'The index-then-curve staged pipeline already in place is the right shape and it worked as a cheap filter: 12 of 25 ' +
+        'trials were killed at the index-search stage before any expensive backtest ran &mdash; keep doing that.<br><br>' +
+        'The gap is downstream, not upstream. 9 trials paid for a full curve-search backtest (hundreds to thousands of trial ' +
+        'evaluations each) and then stopped, with no walk-forward step. That is the expensive stage with no payoff. Going ' +
+        'forward: a curve fit only earns a "candidate" label if a walk-forward OOS run is queued in the same session, not ' +
+        'deferred indefinitely &mdash; otherwise you get exactly what happened here, a pile of high-in-sample-return trials ' +
+        'that tell you nothing.<br><br>' +
+        'Seven of the 25 trials were recovered from .scratch/tearsheets/ and were never written into RESEARCH_STATE.md&rsquo;s ' +
+        'narrative log &mdash; they only survived because this book&rsquo;s "never lose track" policy pulled them back off disk. ' +
+        'Good safety net, but a symptom: trials are getting run ad hoc outside the tracked protocol. Worth making "index &rarr; ' +
+        'curve &rarr; OOS &rarr; record" a single script invocation (the pending run_full_recalibration.py driver) so a trial ' +
+        'can&rsquo;t exist without its result being logged.' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">2. Parallelizing the work</div>' +
+      '<div class="sb-verdict">' +
+        'Stage 1 (per-indicator period search) is embarrassingly parallel &mdash; each indicator is scored independently ' +
+        'against the same objective, but currently runs indicator-by-indicator in one process. Fan it out one process per ' +
+        'indicator.<br><br>' +
+        'The highest-leverage parallel batch available <i>right now</i>: the 9 unvalidated in-sample curve fits sitting idle ' +
+        'in this book are independent of each other and could all be walk-forward tested in parallel today (same call, ' +
+        'different frozen weights/curve params each). That converts 9 "unknown" verdicts into "pass" or "fail" immediately ' +
+        '&mdash; more valuable than generating new candidates.<br><br>' +
+        'Stage 2&rsquo;s coarse-then-refine grid search is good in shape, but both passes are single exhaustive sweeps ' +
+        '(~177K evaluations for the coarse pass alone). Every grid point is independent and could be chunked/distributed ' +
+        'rather than run as one long loop.' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">3. Designing a good optimization function</div>' +
+      '<div class="sb-verdict">' +
+        'The standing curve objective (risk_adjusted_return = total_return_pct / max(drawdown_pct, 0.5)) is a reasonable ' +
+        'per-trial shape metric, but every one of the 9 "unvalidated" candidates optimized it purely in-sample &mdash; nothing ' +
+        'in the objective penalizes fitting the one historical path we have. An objective computed only in-sample will always ' +
+        'reward more parameters and tighter curves; that is exactly the failure mode a good objective should structurally resist.<br><br>' +
+        'The fix already exists in this codebase and has been used successfully once: gate acceptance on the walk-forward mean ' +
+        'OOS-vs-flat-DCA figure itself, not the in-sample shape score. The two trials that actually got a full-bar test ' +
+        '(power_law/m2/dxy and the Phase A 11-indicator mix) both used exactly this OOS metric as the accept/reject criterion ' +
+        '&mdash; it just needs to be reached before a candidate is called a "candidate," not applied after the fact.<br><br>' +
+        'Cheap early-warning signal worth building into the search itself: several winning index-search configs landed at the ' +
+        'literal edge of their search grid &mdash; monthly_rsi length=2 (RSI&rsquo;s mathematical minimum) and length=3 sitting ' +
+        'at the short edge of its grid &mdash; rather than an interior optimum. A boundary-hugging winner is close to a ' +
+        'certainty of overfitting to noise in that dimension; flag (or penalize) any winning parameter that lands on a grid ' +
+        'edge instead of accepting it silently.' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">4. Avoiding overfitting</div>' +
+      '<div class="sb-verdict">' +
+        'The clearest evidence in this book is the in-sample-vs-OOS gap on the only two candidates that got a real walk-forward ' +
+        'test: the Phase A 11-indicator floor-diversified mix scored risk_adjusted_return=46.79 in-sample (beating the published ' +
+        'baseline&rsquo;s 41.20) and then came back at -12.39% OOS vs flat DCA. <b>In-sample rank order did not predict OOS ' +
+        'outcome.</b> That is the single most important finding to carry forward &mdash; never trust an in-sample score as a ' +
+        'proxy for "good" in this project again.<br><br>' +
+        'The indicator family responsible is identifiable: the derived weekly_monthly_rsi/weekly_monthly_macd confluence ' +
+        'indicators looked strong in-sample everywhere they appeared (this book&rsquo;s precursor trial and the Phase A run ' +
+        'that inherited it) and are specifically named in Phase A&rsquo;s own notes as the standing pattern behind OOS failure. ' +
+        'More derived/composite indicators bought in-sample score without OOS robustness &mdash; a concrete, falsifiable warning ' +
+        'for any future re-add of that family.<br><br>' +
+        'Floor-diversification (min_weight_floor, guaranteeing every enabled indicator sits in [floor, max] rather than ' +
+        'collapsing to 0) is a legitimate regularizer against one specific overfit mode &mdash; a single dominant indicator ' +
+        'swallowing the composite &mdash; and should stay standard practice. But it is not sufficient alone: Phase A used ' +
+        'floor=0.1 and still failed OOS. It guards against weight overfitting, not curve or indicator-family overfitting.<br><br>' +
+        '<b>Practical rule going forward:</b> no in-sample number, however large, gets written into RESEARCH_STATE.md&rsquo;s ' +
+        'narrative or gets a "candidate" label without a walk-forward OOS run attached.' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sb-section">' +
+      '<div class="sb-section__title">What happened to the 25 candidates</div>' +
+      '<div class="sb-verdict">' +
+        'The 24 that didn&rsquo;t clear the bar have been deleted from this book, on Chris&rsquo;s explicit call ' +
+        '(2026-09-11): a strategy that gets tested and optimized and still doesn&rsquo;t beat both lump-sum buy-and-hold and ' +
+        'flat DCA out of sample is noise, not a candidate, and isn&rsquo;t worth carrying forward. Only ' +
+        '<b>power_law/m2/dxy</b> remains. The breakdown above is kept as the record of what those 24 showed and why they were ' +
+        'cut &mdash; the lessons stand even though the trials themselves are gone.<br><br>' +
+        '<b>Standing rule going forward:</b> the same bar applies to every future trial. Once a calibration is actually tested ' +
+        'and optimized against real OOS data and it doesn&rsquo;t beat both benchmarks, it gets dropped from the book rather ' +
+        'than kept around as a "candidate." Work still in the index-search/curve-fit pipeline &mdash; not yet OOS tested &mdash; ' +
+        'isn&rsquo;t a failure yet and stays until it is actually run.' +
+      '</div>' +
+    '</div>';
+
+  function el(html){ var d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstElementChild; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  function dateSortKey(dateStr){
+    var m = /(\d{4})-(\d{2})-(\d{2})/.exec(dateStr||"");
+    return m ? m[0] : "0000-00-00";
+  }
+
+  function humanizeKey(k){
+    return k.replace(/_pct$/,"").replace(/_/g," ").replace(/\boos\b/gi,"OOS").replace(/\bis\b/gi,"IS")
+      .replace(/\bdca\b/gi,"DCA").replace(/\b\w/g, function(c){return c.toUpperCase();});
+  }
+
+  function fmtMetricValue(key, v){
+    if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
+    if (typeof v !== "number") return esc(v);
+    var isPct = /pct$/.test(key);
+    var digits = Math.abs(v) >= 100 ? 1 : 2;
+    var s = v.toLocaleString(undefined, {minimumFractionDigits:digits, maximumFractionDigits:digits});
+    return isPct ? s + "%" : s;
+  }
+
+  function metricColorClass(key, v){
+    if (typeof v === "boolean") return v ? "up" : "down";
+    if (typeof v !== "number") return "";
+    var returnLike = /vs_flat_dca|vs_lump|^oos_pct$|^is_pct$|^gap_pct$|holdout_vs_flat_dca/.test(key);
+    if (!returnLike) return "";
+    return v >= 0 ? "up" : "down";
+  }
+
+  function renderKpiStrip(metrics){
+    if (!metrics) return "";
+    var tiles = Object.keys(metrics).map(function(k){
+      var v = metrics[k];
+      var cls = metricColorClass(k, v);
+      return '<div class="sb-kpi"><div class="sb-kpi__label">'+esc(humanizeKey(k))+'</div>' +
+        '<div class="sb-kpi__value '+cls+'">'+fmtMetricValue(k, v)+'</div></div>';
+    }).join("");
+    return '<div class="sb-kpi-strip">'+tiles+'</div>';
+  }
+
+  function renderWeights(weights){
+    if (!weights) return '<div class="sb-weight-flat">No weight configuration recorded.</div>';
+    var rows = Object.keys(weights).map(function(k){
+      var v = weights[k];
+      if (k === "note") return '<div class="sb-weight-flat">'+esc(v)+'</div>';
+      if (typeof v === "number"){
+        var pct = Math.max(0, Math.min(1, v)) * 100;
+        return '<div class="sb-weight-row">' +
+          '<div class="sb-weight-name">'+esc(humanizeKey(k))+'</div>' +
+          '<div class="sb-weight-track"><div class="sb-weight-fill" style="width:'+pct.toFixed(1)+'%"></div></div>' +
+          '<div class="sb-weight-val">'+v.toFixed(2)+'</div>' +
+          '</div>';
+      }
+      return '<div class="sb-weight-row">' +
+        '<div class="sb-weight-name">'+esc(humanizeKey(k))+'</div>' +
+        '<div class="sb-weight-flat" style="grid-column:2 / -1;">'+esc(v)+'</div>' +
+        '</div>';
+    }).join("");
+    return '<div class="sb-weights">'+rows+'</div>';
+  }
+
+  function renderCurveParams(cp){
+    if (!cp) return "";
+    var tiles = Object.keys(cp).map(function(k){
+      return '<div class="sb-curveparam"><div class="sb-curveparam__k">'+esc(humanizeKey(k))+'</div>' +
+        '<div class="sb-curveparam__v">'+esc(cp[k])+'</div></div>';
+    }).join("");
+    return '<div class="sb-curveparams">'+tiles+'</div>';
+  }
+
+  function renderFoldTable(folds){
+    if (!folds || !folds.length) return "";
+    var cols = Object.keys(folds[0]);
+    var head = cols.map(function(c){ return "<th>"+esc(humanizeKey(c))+"</th>"; }).join("");
+    var rows = folds.map(function(f){
+      return "<tr>" + cols.map(function(c){
+        var v = f[c];
+        var cls = metricColorClass(c, v);
+        var out = typeof v === "boolean" ? (v ? "TRUE" : "FALSE") : (typeof v === "number" ? fmtMetricValue(c, v) : esc(v));
+        return '<td class="'+cls+'">'+out+'</td>';
+      }).join("") + "</tr>";
+    }).join("");
+    return '<div class="sb-table-wrap"><table class="sb-table"><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
+
+  // --- chart engine ---------------------------------------------------
+
+  function buildChart(series, opts){
+    opts = opts || {};
+    var W = opts.width || 900, H = opts.height || 260;
+    var padL = 60, padR = 14, padT = 14, padB = 26;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var log = !!opts.log;
+
+    var allPts = [];
+    series.forEach(function(s){ allPts = allPts.concat(s.points); });
+    if (!allPts.length) return "";
+
+    var xs = allPts.map(function(p){ return new Date(p.t).getTime(); });
+    var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
+
+    var rawVals = allPts.map(function(p){ return p.v; });
+    var vals = log ? rawVals.filter(function(v){ return v > 0; }) : rawVals;
+    var yMin = Math.min.apply(null, vals), yMax = Math.max.apply(null, vals);
+    if (log){ yMin = Math.log10(Math.max(yMin, 0.01)); yMax = Math.log10(Math.max(yMax, 0.01)); }
+    if (yMin === yMax){ yMin -= 1; yMax += 1; }
+    var pad = (yMax - yMin) * 0.10;
+    yMin -= pad; yMax += pad;
+
+    function xScale(t){
+      var x = new Date(t).getTime();
+      return padL + ((x - xMin) / (xMax - xMin || 1)) * plotW;
+    }
+    function yScale(v){
+      var vv = log ? Math.log10(Math.max(v, 0.01)) : v;
+      return padT + plotH - ((vv - yMin) / (yMax - yMin || 1)) * plotH;
+    }
+
+    var gridN = 4, gridLines = "", gridLabels = "";
+    for (var i=0;i<=gridN;i++){
+      var yy = padT + (plotH * i / gridN);
+      gridLines += '<line x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(padL+plotW)+'" y2="'+yy.toFixed(1)+'" stroke="var(--hair)" stroke-width="1"/>';
+      var frac = 1 - (i / gridN);
+      var val = yMin + (yMax - yMin) * frac;
+      var labelVal = log ? Math.pow(10, val) : val;
+      var labelText = opts.yFormat ? opts.yFormat(labelVal) : labelVal.toFixed(0);
+      gridLabels += '<text x="'+(padL-8)+'" y="'+(yy+3.5).toFixed(1)+'" text-anchor="end" font-size="9.5" fill="var(--ink-mute)">'+esc(labelText)+'</text>';
+    }
+
+    var xLabels = "";
+    var firstPt = allPts[0], lastPt = allPts[allPts.length-1];
+    [0, 0.5, 1].forEach(function(frac){
+      var tval = xMin + (xMax - xMin) * frac;
+      var xx = padL + plotW * frac;
+      var d = new Date(tval);
+      var label = d.toLocaleDateString(undefined, {year:"2-digit", month:"short"});
+      var anchor = frac === 0 ? "start" : (frac === 1 ? "end" : "middle");
+      xLabels += '<text x="'+xx.toFixed(1)+'" y="'+(H-8)+'" text-anchor="'+anchor+'" font-size="9.5" fill="var(--ink-mute)">'+esc(label)+'</text>';
+    });
+
+    var lines = series.map(function(s){
+      if (!s.points.length) return "";
+      var pts = s.points.filter(function(p){ return !log || p.v > 0; }).map(function(p){
+        return xScale(p.t).toFixed(1) + "," + yScale(p.v).toFixed(1);
+      }).join(" ");
+      var dash = s.dashed ? ' stroke-dasharray="4 3"' : "";
+      return '<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="1.6"'+dash+' vector-effect="non-scaling-stroke"/>';
+    }).join("");
+
+    var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block; overflow:visible;">' +
+      gridLines + gridLabels + xLabels + lines + '</svg>';
+    return svg;
+  }
+
+  function pctFmt(v){ return v.toFixed(0) + "%"; }
+  function dollarFmt(v){ return "$" + Math.round(v).toLocaleString(); }
+
+  function renderCurveSection(candidate, chartState){
+    var c = candidate.curve;
+    if (!c) return "";
+    var beats = c.beats_flat_dca_oos;
+    var beatsTag = (typeof beats === "boolean")
+      ? '<span class="sb-badge" style="--badge-color:'+(beats?'var(--up)':'var(--down)')+'; --badge-bg:'+(beats?'var(--accent-weak)':'rgba(201,83,59,.14)')+';">'+
+        'beats_flat_dca_oos = '+(beats?'TRUE':'FALSE')+'</span>'
+      : "";
+
+    var logOn = chartState.log;
+    var equitySeries = [
+      {points:c.equity_curve, color:"var(--accent)", label:"Strategy"},
+      {points:c.lump_equity_curve, color:"var(--ink-mute)", dashed:true, label:"Lump-sum buy & hold"},
+      {points:c.flat_dca_equity_curve, color:"var(--warn)", dashed:true, label:"Flat DCA"}
+    ].filter(function(s){ return s.points && s.points.length; });
+
+    var equityChart = buildChart(equitySeries, {log: logOn, yFormat: dollarFmt});
+    var ddSeries = [{points:c.drawdown_curve, color:"var(--down)", label:"Drawdown"}].filter(function(s){ return s.points && s.points.length; });
+    var ddChart = buildChart(ddSeries, {log:false, height:150, yFormat: pctFmt});
+
+    var legend = function(items){
+      return '<div class="sb-legend">' + items.map(function(s){
+        return '<div class="sb-legend__item"><span class="sb-legend__swatch" style="background:'+s.color+'"></span>'+esc(s.label)+'</div>';
+      }).join("") + '</div>';
+    };
+
+    return '' +
+      '<div class="sb-section">' +
+        '<div class="sb-section__title">In-sample full-history backtest ' +
+          '<span class="sb-section__note">'+esc(c.period_start)+' &rarr; '+esc(c.period_end)+', '+c.bars+' bars &mdash; not the OOS walk-forward split</span>' +
+        '</div>' +
+        (beatsTag ? '<div style="margin-bottom:10px;">'+beatsTag+'</div>' : '') +
+        (c.note ? '<div class="sb-verdict" style="margin-bottom:14px;">'+esc(c.note)+'</div>' : '') +
+        '<div class="sb-chart-toggle">' +
+          '<div class="seg">' +
+            '<button class="seg-btn'+(logOn?" active":"")+'" data-chart-scale="log">Log</button>' +
+            '<button class="seg-btn'+(!logOn?" active":"")+'" data-chart-scale="linear">Linear</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="sb-chart-wrap">' + equityChart + legend(equitySeries) + '</div>' +
+        (ddChart ? '<div class="sb-chart-wrap" style="margin-top:12px;">' + ddChart + legend(ddSeries) + '</div>' : '') +
+      '</div>';
+  }
+
+  // --- routing / rendering --------------------------------------------
+
+  function statusMeta(status){ return STATUS_META[status] || {label:status||"UNKNOWN", color:"var(--ink-mute)", bg:"var(--surface-2)"}; }
+  function viabilityMeta(v){ return VIABILITY_META[v] || null; }
+
+  function renderLibrary(){
+    var meta;
+    var list = state.candidates.slice();
+
+    if (state.filter !== "all") list = list.filter(function(c){ return c.status === state.filter; });
+    if (state.viability !== "all") list = list.filter(function(c){ return c.viability_status === state.viability; });
+
+    list.sort(function(a,b){
+      if (state.sort === "date") return dateSortKey(b.date).localeCompare(dateSortKey(a.date));
+      if (state.sort === "status") return (statusMeta(a.status).order||9) - (statusMeta(b.status).order||9);
+      if (state.sort === "name") return (a.name||"").localeCompare(b.name||"");
+      return 0;
+    });
+
+    var filterPills = FILTERS.map(function(f){
+      return '<button class="seg-btn'+(state.filter===f.key?" active":"")+'" data-filter="'+f.key+'">'+esc(f.label)+'</button>';
+    }).join("");
+    var viabilityPills = VIABILITY_FILTERS.map(function(f){
+      return '<button class="seg-btn'+(state.viability===f.key?" active":"")+'" data-viability="'+f.key+'">'+esc(f.label)+'</button>';
+    }).join("");
+    var sortPills = SORTS.map(function(s){
+      return '<button class="seg-btn'+(state.sort===s.key?" active":"")+'" data-sort="'+s.key+'">'+esc(s.label)+'</button>';
+    }).join("");
+
+    var cards = list.map(function(c){
+      meta = statusMeta(c.status);
+      var vmeta = viabilityMeta(c.viability_status);
+      var hasCurve = !!c.curve;
+      return '<a class="sb-card" href="#/candidate/'+encodeURIComponent(c.id)+'" style="--card-accent:'+meta.color+'">' +
+        '<div class="sb-card__top">' +
+          '<span class="sb-badge" style="--badge-color:'+meta.color+'; --badge-bg:'+meta.bg+'">'+esc(meta.label)+'</span>' +
+          '<span class="sb-stage">'+esc((c.stage||"").replace(/-/g," "))+'</span>' +
+        '</div>' +
+        '<div class="sb-card__name">'+esc(c.name)+'</div>' +
+        '<div class="sb-card__date">'+esc(c.date)+'</div>' +
+        '<div class="sb-card__headline">'+esc(c.headline||"")+'</div>' +
+        '<div class="sb-card__foot">' +
+          '<span class="sb-chart-flag'+(hasCurve?" has":"")+'">'+(hasCurve ? "✓ real curve data" : "summary only, no curve")+'</span>' +
+          (vmeta ? '<span class="sb-badge" style="--badge-color:'+vmeta.color+'; --badge-bg:'+vmeta.bg+'" title="'+esc(c.viability_reason||"")+'">'+esc(vmeta.short)+'</span>' : "") +
+        '</div>' +
+      '</a>';
+    }).join("");
+
+    var app = document.getElementById("app");
+    app.innerHTML =
+      '<div class="sb-topbar">' +
+        '<div class="sb-kicker">DIGIQUANT &middot; SDCA RESEARCH</div>' +
+        '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
+          '<h1 class="sb-h1">Strategy Book</h1>' +
+          '<a href="#/lessons" class="sb-back" style="margin:2px 0 0;">Lessons learned &rarr;</a>' +
+        '</div>' +
+        '<div class="sb-sub">SDCA weight/curve calibrations that have earned a place here by beating both lump-sum buy-and-hold and flat DCA, out of sample &mdash; Chris&rsquo;s bar, applied 2026-09-11. A trial that gets tested and optimized and still doesn&rsquo;t clear it is dropped, not archived; 24 prior trials were removed on that basis. See <a href="#/lessons" style="color:inherit; text-decoration:underline;">Lessons learned</a> for what they showed before they were cut.</div>' +
+      '</div>' +
+      '<div class="sb-toolbar">' +
+        '<div class="sb-toolbar__group"><span class="sb-toolbar__label">Status</span><div class="seg">'+filterPills+'</div></div>' +
+        '<div class="sb-toolbar__group"><span class="sb-toolbar__label">Beats buy&amp;hold + DCA?</span><div class="seg">'+viabilityPills+'</div></div>' +
+        '<div class="sb-toolbar__group"><span class="sb-toolbar__label">Sort</span><div class="seg">'+sortPills+'</div></div>' +
+      '</div>' +
+      '<div class="sb-count">'+list.length+' of '+state.candidates.length+' candidates</div>' +
+      '<div style="height:14px;"></div>' +
+      (list.length ? '<div class="sb-grid">'+cards+'</div>' : '<div class="sb-empty">No candidates match this filter.</div>') +
+      '<div class="sb-footer">SDCA Strategy Book &middot; sourced from RESEARCH_STATE.md and .scratch/tearsheets/ trial runs &middot; digiquant internal research tool</div>';
+
+    app.querySelectorAll("[data-filter]").forEach(function(btn){
+      btn.addEventListener("click", function(){ state.filter = btn.getAttribute("data-filter"); renderLibrary(); });
+    });
+    app.querySelectorAll("[data-viability]").forEach(function(btn){
+      btn.addEventListener("click", function(){ state.viability = btn.getAttribute("data-viability"); renderLibrary(); });
+    });
+    app.querySelectorAll("[data-sort]").forEach(function(btn){
+      btn.addEventListener("click", function(){ state.sort = btn.getAttribute("data-sort"); renderLibrary(); });
+    });
+  }
+
+  function renderDetail(id){
+    var c = state.candidates.filter(function(x){ return x.id === id; })[0];
+    var app = document.getElementById("app");
+    if (!c){
+      app.innerHTML = '<a class="sb-back" href="#/">&larr; Back to library</a><div class="sb-empty">Candidate not found.</div>';
+      return;
+    }
+    var meta = statusMeta(c.status);
+    var chartState = {log: true};
+
+    function paint(){
+      app.innerHTML =
+        '<a class="sb-back" href="#/">&larr; Back to library</a>' +
+        '<div class="sb-detail__head">' +
+          '<div class="sb-detail__top">' +
+            '<h2 class="sb-detail__name">'+esc(c.name)+'</h2>' +
+            '<span class="sb-badge" style="--badge-color:'+meta.color+'; --badge-bg:'+meta.bg+'">'+esc(meta.label)+'</span>' +
+          '</div>' +
+          '<div class="sb-detail__sub">' +
+            '<span>'+esc(c.date)+'</span>' +
+            '<span>Stage: '+esc((c.stage||"").replace(/-/g," "))+'</span>' +
+            '<span>'+esc(meta.desc)+'</span>' +
+          '</div>' +
+          (c.headline ? '<div class="sb-headline" style="--card-accent:'+meta.color+'">'+esc(c.headline)+'</div>' : '') +
+        '</div>' +
+
+        (function(){
+          var vmeta = viabilityMeta(c.viability_status);
+          if (!vmeta) return "";
+          return '<div class="sb-section"><div class="sb-section__title">Beats buy-and-hold + flat DCA, out of sample?</div>' +
+            '<div class="sb-verdict" style="border-left:3px solid '+vmeta.color+'; padding-left:12px;">' +
+              '<span class="sb-badge" style="--badge-color:'+vmeta.color+'; --badge-bg:'+vmeta.bg+'; margin-right:8px;">'+esc(vmeta.label)+'</span>' +
+              esc(c.viability_reason||"") +
+            '</div></div>';
+        })() +
+
+        (c.metrics && Object.keys(c.metrics).length ? '<div class="sb-section"><div class="sb-section__title">Metrics</div>'+renderKpiStrip(c.metrics)+'</div>' : '') +
+
+        '<div class="sb-section"><div class="sb-section__title">Indicator weights</div>'+renderWeights(c.weights)+'</div>' +
+
+        (c.curve_params ? '<div class="sb-section"><div class="sb-section__title">Buy/sell curve parameters</div>'+renderCurveParams(c.curve_params)+'</div>' : '') +
+
+        (c.fold_table ? '<div class="sb-section"><div class="sb-section__title">Walk-forward fold table <span class="sb-section__note">out-of-sample, per fold</span></div>'+renderFoldTable(c.fold_table)+'</div>' : '') +
+
+        renderCurveSection(c, chartState) +
+
+        (c.verdict_notes ? '<div class="sb-section"><div class="sb-section__title">Notes</div><div class="sb-verdict">'+esc(c.verdict_notes)+'</div></div>' : "") +
+
+        '<div class="sb-source">Source: '+esc(c.source||"")+'</div>' +
+        '<div class="sb-footer">SDCA Strategy Book &middot; digiquant internal research tool</div>';
+
+      var scaleBtns = app.querySelectorAll("[data-chart-scale]");
+      scaleBtns.forEach(function(btn){
+        btn.addEventListener("click", function(){
+          chartState.log = btn.getAttribute("data-chart-scale") === "log";
+          paint();
+        });
+      });
+    }
+    paint();
+  }
+
+  function renderLessons(){
+    var app = document.getElementById("app");
+    app.innerHTML =
+      '<a class="sb-back" href="#/">&larr; Back to library</a>' +
+      '<div class="sb-topbar">' +
+        '<div class="sb-kicker">DIGIQUANT &middot; SDCA RESEARCH</div>' +
+        '<h1 class="sb-h1">Lessons Learned</h1>' +
+        '<div class="sb-sub">Written 2026-09-11 against all 25 trials on record, after applying Chris’s bar: a candidate only counts as viable if it beats BOTH lump-sum buy-and-hold AND flat DCA, out of sample.</div>' +
+      '</div>' +
+      LESSONS_HTML +
+      '<div class="sb-footer">SDCA Strategy Book &middot; digiquant internal research tool</div>';
+  }
+
+  function route(){
+    var hash = location.hash || "#/";
+    var m = /^#\/candidate\/([^\/]+)$/.exec(hash);
+    if (m) renderDetail(decodeURIComponent(m[1]));
+    else if (hash === "#/lessons") renderLessons();
+    else renderLibrary();
+  }
+
+  function showError(msg){
+    document.getElementById("app").innerHTML = '<div class="sb-error">'+esc(msg)+'</div>';
+  }
+
+  async function boot(){
+    var timedOut = false;
+    var timer = setTimeout(function(){
+      if (!state.candidates){
+        timedOut = true;
+        showError("The candidate library is taking too long to load. Try reopening the artifact from claude.ai.");
+      }
+    }, 15000);
+
+    var db;
+    try { db = await claude.use("db"); } catch (e) { db = null; }
+    if (!db){
+      clearTimeout(timer);
+      if (!timedOut){
+        showError("The strategy book’s live database isn’t available in this view. Reopen the artifact from claude.ai to load the full candidate library.");
+      }
+      return;
+    }
+    var col = db.collection("candidates");
+    col.onSnapshot(function(snap){
+      clearTimeout(timer);
+      if (timedOut) return;
+      try {
+        state.candidates = snap.docs.map(function(d){
+          var data = d.data() || {};
+          return Object.assign({}, data, {id: d.id});
+        });
+        route();
+      } catch (e) {
+        showError("Something went wrong rendering the candidate library ("+esc(e && e.message || String(e))+"). Try reopening the page.");
+      }
+    }, function(err){
+      clearTimeout(timer);
+      if (!timedOut && !state.candidates) showError("Couldn’t load the candidate library ("+esc(err.code)+"). Try reopening the page.");
+    });
+  }
+
+  window.addEventListener("hashchange", route);
+  boot();
+})();
+</script>

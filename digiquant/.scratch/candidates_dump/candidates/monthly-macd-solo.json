@@ -1,0 +1,21 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=137.05 solo — slightly better than widened weekly_macd",
+  "id": "monthly-macd-solo",
+  "metrics": {
+    "combined": 137.05,
+    "long": 40.54,
+    "medium": 15.44
+  },
+  "name": "monthly_macd solo",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "open-candidate",
+  "verdict_notes": "New monthly_macd_confluence_z kernel (not in EXTRA_INDICATOR_NAMES at the time). Not promoted, but not flagged as a suspect grid-edge result the way monthly_rsi=3 was.",
+  "weights": {
+    "monthly_macd": 1
+  }
+}

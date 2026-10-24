@@ -1,0 +1,67 @@
+{
+  "curve": null,
+  "curve_params": {
+    "buy_curvature": 1.4554,
+    "buy_knee_risk": 24.5007,
+    "buy_max_rate": 29.7376,
+    "sell_curvature": 1.7266,
+    "sell_knee_risk": 79.008,
+    "sell_max_rate": 5.4762
+  },
+  "date": "2026-09-11",
+  "fold_table": [
+    {
+      "feasible": true,
+      "fold": 0,
+      "is_pct": -65.01,
+      "oos_capital_deployed_pct": 97.32,
+      "oos_drawdown_pct": 16.83,
+      "oos_pct": 2.38
+    },
+    {
+      "feasible": false,
+      "fold": 1,
+      "is_pct": -82,
+      "oos_capital_deployed_pct": 0,
+      "oos_drawdown_pct": 0,
+      "oos_pct": -77.29
+    },
+    {
+      "feasible": false,
+      "fold": 2,
+      "is_pct": -83.4,
+      "oos_capital_deployed_pct": -64.65,
+      "oos_drawdown_pct": 34.37,
+      "oos_pct": 37.74
+    }
+  ],
+  "headline": "beats_flat_dca_oos=False — mean OOS vs flat DCA -12.39%, 2 of 3 folds infeasible, despite a strong in-sample curve fit",
+  "id": "phase-a-11indicator-floor-diversified",
+  "metrics": {
+    "gap_pct": -64.41,
+    "holdout_vs_flat_dca_pct": 4.74,
+    "is_pct": -76.8,
+    "oos_pct": -12.39,
+    "stage3_max_drawdown_pct": 57.7,
+    "stage3_risk_adjusted_return": 46.785,
+    "stage3_total_return_pct": 2699.37
+  },
+  "name": "Full 11-indicator floor-diversified (Phase A)",
+  "source": "digiquant/scripts/run_full_recalibration.py, commit 57af1ade6",
+  "stage": "walk-forward",
+  "status": "rejected",
+  "verdict_notes": "The full-scope end-to-end recalibration run using ALL 11 currently-wired indicators (per the approved plan), floor=0.1/max=1.0 aggregate reweight, curve search on the reweighted index, and OOS walk-forward validation. Stage 1: all 11 indicators survived period search. Stage 2: coarse+refine+ratio-sensitivity reweight was fully stable, flooring power_law itself at 0.1 while maxing the two derived weekly_monthly confluence indicators at 1.0. Stage 3 found a strong in-sample curve fit (risk_adjusted_return=46.79 vs the published baseline's 41.20 on this same index). Stage 4 failed the OOS gate: another instance of the standing pattern where a diversified/derived-indicator-heavy mix looks excellent in-sample but degrades OOS. settings.json and RESEARCH_STATE.md were left untouched. No day-by-day equity curve exists on disk yet for this trial — the driver script (run_full_recalibration.py) only prints summary stats; a real chart could be generated on request by re-running backtest.run_backtest() with these exact frozen weights/curve params.",
+  "weights": {
+    "dxy": 0.1,
+    "m2": 0.1,
+    "monthly_macd": 0.1,
+    "monthly_rsi": 0.1,
+    "power_law": 0.1,
+    "rs_eth": 0.1,
+    "sma_band": 0.1,
+    "weekly_macd": 0.1,
+    "weekly_monthly_macd": 1,
+    "weekly_monthly_rsi": 1,
+    "weekly_rsi": 0.1
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=155.96 (3:1) — confirmed reproduction of the first-pass mix",
+  "id": "floor-diversified-7-second-pass",
+  "metrics": {
+    "combined_2to1": 112.26,
+    "combined_3to1": 155.96,
+    "combined_5to1": 243.34,
+    "long": 43.69,
+    "medium": 24.88
+  },
+  "name": "Floor-diversified surviving-7 (reproduction, floor=0.25)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "diagnostic-index",
+  "verdict_notes": "Widened weekly grids and monthly exploration did not change which mix wins. monthly_rsi/monthly_macd correctly excluded (weight=0.0) from downstream stages at this point.",
+  "weights": {
+    "dxy": 0.25,
+    "m2": 0.25,
+    "power_law": 1,
+    "rs_eth": 0.25,
+    "sma_band": 1,
+    "weekly_macd": 0.25,
+    "weekly_rsi": 0.25
+  }
+}

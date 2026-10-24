@@ -1,0 +1,27 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=90.12 (cycle-overlap objective, 3:1) — coarse-grid baseline comparison point",
+  "id": "dual-timeframe-equal-weight-7",
+  "metrics": {
+    "combined": 90.12,
+    "long": 25.76,
+    "medium": 12.83
+  },
+  "name": "Dual-timeframe equal-weight (7 indicators)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "diagnostic-index",
+  "verdict_notes": "Diagnostic-only from run_dual_timeframe_composite_search.py; index-search stage, no curve/threshold search yet, not a trading candidate. Superseded by the floor-diversified reweight below.",
+  "weights": {
+    "dxy": "1/7",
+    "m2": "1/7",
+    "power_law": "1/7",
+    "rs_eth": "1/7",
+    "sma_band": "1/7",
+    "weekly_macd": "1/7",
+    "weekly_rsi": "1/7"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=114.23 (3:1) — beats the surviving-7 equal-weight baseline (97.15) on every axis",
+  "id": "equal-weight-all9",
+  "metrics": {
+    "combined": 114.23,
+    "long": 33.25,
+    "medium": 14.49
+  },
+  "name": "Equal-weight all-9 composite",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "open-candidate",
+  "verdict_notes": "First promotion of the monthly indicators into a real weighted composite. Gain concentrated in the long-term score (+20%), consistent with both monthly indicators being long-cycle-biased. Pending Chris's visual review at the time.",
+  "weights": {
+    "dxy": "1/9",
+    "m2": "1/9",
+    "monthly_macd": "1/9",
+    "monthly_rsi": "1/9 (len=2)",
+    "power_law": "1/9",
+    "rs_eth": "1/9",
+    "sma_band": "1/9",
+    "weekly_macd": "1/9",
+    "weekly_rsi": "1/9"
+  }
+}

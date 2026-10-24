@@ -1,0 +1,21 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=205.52 solo — rejected as a promotion candidate (overfit signature reinforced)",
+  "id": "monthly-rsi-solo-len2",
+  "metrics": {
+    "combined": 205.52,
+    "long": 58.89,
+    "medium": 28.84
+  },
+  "name": "monthly_rsi solo (length=2, expanded grid)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "rejected",
+  "verdict_notes": "Winner tracked the new grid floor (monthly_length=2, RSI's mathematical minimum) rather than settling on an interior value — reinforces the overfit read. Kept diagnostic-only, excluded from downstream stages.",
+  "weights": {
+    "monthly_rsi": 1
+  }
+}

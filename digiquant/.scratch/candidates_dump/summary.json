@@ -1,0 +1,797 @@
+[
+  {
+    "id": "all9-ratio-sensitivity-sweep",
+    "name": "All-9 floor-diversified, ratio-sensitivity sweep",
+    "status": "diagnostic-index",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "Same winning mix at 2:1, 3:1, and 5:1 long:medium ratios \u2014 confirmed robust",
+    "has_curve": false,
+    "metrics": {
+      "combined_2to1": 117.51,
+      "combined_3to1": 164.47,
+      "combined_5to1": 258.39,
+      "long": 46.96,
+      "medium": 23.58
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": 0.25,
+      "m2": 0.25,
+      "monthly_macd": 0.25,
+      "monthly_rsi": 1,
+      "power_law": 1,
+      "rs_eth": 0.25,
+      "sma_band": 1,
+      "weekly_macd": 0.25,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Identical winning mix across all three ratios, computed in one pass via optimize_stage_a_weights_combined_multi_ratio(). Still a diagnostic index \u2014 no curve fit at this point.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "buy30-sell70-live5weight",
+    "name": "Live 5-weight composite \u2014 30/70 knee curve",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+237.73% in-sample vs flat DCA",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 75.67,
+      "net_profit_pct": 1518.11,
+      "vs_flat_dca_pct": 237.73
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 237.72859772134586,
+    "curve_vs_lump_pct": -11.655611790628894,
+    "curve_net_profit_pct": 1518.1135139561381,
+    "curve_max_dd_pct": -75.66612383736717,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1,
+      "weekly_macd": 0.5,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": {
+      "buy_knee_risk": 30,
+      "preset": "custom",
+      "sell_knee_risk": 70
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Another 30/70-knee variant against the live (rejected-OOS) 5-weight composite \u2014 worst drawdown of any recovered trial (75.67%). Undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/buy30_sell70.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "continuous-crossing-curve-item7",
+    "name": "Continuous crossing-risk curve (all-9 index, backlog item 7)",
+    "status": "unvalidated-in-sample",
+    "stage": "curve-search",
+    "date": "run after 2026-09-05",
+    "headline": "risk_adjusted_return=56.60 in-sample (total_return 2865.58%, max_dd 50.63%) \u2014 never OOS walk-forward tested",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 50.63,
+      "risk_adjusted_return": 56.6,
+      "total_return_pct": 2865.58
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 582.7920896608424,
+    "curve_vs_lump_pct": 288.6250170079134,
+    "curve_net_profit_pct": 3171.3697180424765,
+    "curve_max_dd_pct": -50.70012526745885,
+    "weights": {
+      "note": "same all-9 floor-diversified composite as the ratio-sensitivity sweep"
+    },
+    "curve_params": {
+      "buy_curvature": 1.5,
+      "buy_knee_risk": 39.75,
+      "buy_max_rate": 35,
+      "sell_curvature": 3.5,
+      "sell_knee_risk": 40.25,
+      "sell_max_rate": 8
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Stage A/B fit with n_random=400, seed=42, signal_delay_days=3, full 2018-01-01..2026-08-30 cache. Crossing risk ~40 (effectively continuous, no dead zone). 'Reported to Chris, not yet accepted', pending his pick of a practical dead-zone width off the Stage B frontier (0.5->56.60/3102 trade_days ... 10.0->45.32/2500 ... 30.0->5.64/1173; widths >=40 infeasible). The published btc_optimized curve only scores risk_adjusted_return=4.55 on this same index \u2014 expected, since it was tuned against a different index.",
+    "source": "RESEARCH_STATE.md backlog item 7"
+  },
+  {
+    "id": "dual-timeframe-equal-weight-7",
+    "name": "Dual-timeframe equal-weight (7 indicators)",
+    "status": "diagnostic-index",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=90.12 (cycle-overlap objective, 3:1) \u2014 coarse-grid baseline comparison point",
+    "has_curve": false,
+    "metrics": {
+      "combined": 90.12,
+      "long": 25.76,
+      "medium": 12.83
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": "1/7",
+      "m2": "1/7",
+      "power_law": "1/7",
+      "rs_eth": "1/7",
+      "sma_band": "1/7",
+      "weekly_macd": "1/7",
+      "weekly_rsi": "1/7"
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Diagnostic-only from run_dual_timeframe_composite_search.py; index-search stage, no curve/threshold search yet, not a trading candidate. Superseded by the floor-diversified reweight below.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "equal-weight-all9",
+    "name": "Equal-weight all-9 composite",
+    "status": "open-candidate",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=114.23 (3:1) \u2014 beats the surviving-7 equal-weight baseline (97.15) on every axis",
+    "has_curve": false,
+    "metrics": {
+      "combined": 114.23,
+      "long": 33.25,
+      "medium": 14.49
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": "1/9",
+      "m2": "1/9",
+      "monthly_macd": "1/9",
+      "monthly_rsi": "1/9 (len=2)",
+      "power_law": "1/9",
+      "rs_eth": "1/9",
+      "sma_band": "1/9",
+      "weekly_macd": "1/9",
+      "weekly_rsi": "1/9"
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "First promotion of the monthly indicators into a real weighted composite. Gain concentrated in the long-term score (+20%), consistent with both monthly indicators being long-cycle-biased. Pending Chris's visual review at the time.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "fixed-knee-30-70-curve-winner",
+    "name": "Live 5-weight composite \u2014 fixed 30/70 knee curve",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+718.67% in-sample vs flat DCA",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 58.93,
+      "net_profit_pct": 3822.39,
+      "vs_flat_dca_pct": 718.67
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 718.6713452353049,
+    "curve_vs_lump_pct": 114.15130263570394,
+    "curve_net_profit_pct": 3822.389682578459,
+    "curve_max_dd_pct": -58.92600553332965,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1,
+      "weekly_macd": 0.5,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": {
+      "buy_knee_risk": 30,
+      "preset": "custom",
+      "sell_knee_risk": 70
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Curve search against the live (rejected-OOS) 5-weight composite using a fixed 30/70 knee preset. Undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/fixed_knee_30_70_curve_winner.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "floor-diversified-7-first-pass",
+    "name": "Floor-diversified surviving-7 (first pass, floor=0.25)",
+    "status": "diagnostic-index",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=152.89 (3:1) \u2014 beats equal-weight baseline on every axis",
+    "has_curve": false,
+    "metrics": {
+      "combined_2to1": 109.93,
+      "combined_3to1": 152.89,
+      "combined_5to1": 238.82,
+      "long": 42.97,
+      "medium": 24
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": 0.25,
+      "m2": 0.25,
+      "power_law": 1,
+      "rs_eth": 0.25,
+      "sma_band": 1,
+      "weekly_macd": 0.25,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Open-candidate index \u2014 beats the equal-weight baseline on every axis at all three ratio sensitivities, but no curve/threshold fit yet. Confirmed reproduced with a near-identical mix in the second pass.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "floor-diversified-7-second-pass",
+    "name": "Floor-diversified surviving-7 (reproduction, floor=0.25)",
+    "status": "diagnostic-index",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=155.96 (3:1) \u2014 confirmed reproduction of the first-pass mix",
+    "has_curve": false,
+    "metrics": {
+      "combined_2to1": 112.26,
+      "combined_3to1": 155.96,
+      "combined_5to1": 243.34,
+      "long": 43.69,
+      "medium": 24.88
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": 0.25,
+      "m2": 0.25,
+      "power_law": 1,
+      "rs_eth": 0.25,
+      "sma_band": 1,
+      "weekly_macd": 0.25,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Widened weekly grids and monthly exploration did not change which mix wins. monthly_rsi/monthly_macd correctly excluded (weight=0.0) from downstream stages at this point.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "floor-diversified-all9-optimized",
+    "name": "Floor-diversified all-9, optimized weights (floor=0.25)",
+    "status": "open-candidate",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=164.47 (3:1) \u2014 best composite index found at the time; brute-force 4^8=262,144-combo search",
+    "has_curve": false,
+    "metrics": {
+      "combined": 164.47,
+      "long": 46.96,
+      "medium": 23.58
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": 0.25,
+      "m2": 0.25,
+      "monthly_macd": 0.25,
+      "monthly_rsi": 1,
+      "power_law": 1,
+      "rs_eth": 0.25,
+      "sma_band": 1,
+      "weekly_macd": 0.25,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "monthly_rsi earning a ceiling weight alongside power_law and sma_band matched Chris's visual read of it as a strong long-term bottom/top marker. Not yet curve/threshold-tested, not in production config.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "live-settings-5weight",
+    "name": "Live settings.json (power_law/m2/dxy + weekly_rsi/weekly_macd)",
+    "status": "rejected",
+    "stage": "walk-forward",
+    "date": "commit 82cd1ddcc (prior 'Cursor Agent' commit); re-validated 2026-09",
+    "headline": "-16.21% to -51.28% OOS vs flat DCA \u2014 loses to flat DCA in every validation run",
+    "has_curve": true,
+    "metrics": {
+      "oos_vs_flat_dca_pct_range_high": -16.21,
+      "oos_vs_flat_dca_pct_range_low": -51.28
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 18.425278608670403,
+    "curve_vs_lump_pct": -71.37784571915826,
+    "curve_net_profit_pct": 467.3950770044571,
+    "curve_max_dd_pct": -67.28500112832766,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1,
+      "weekly_macd": 0.5,
+      "weekly_rsi": 0.25
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "This is what is ACTUALLY live in production settings.json right now, despite being rejected. The commit that set it already documented beats_flat_dca_oos=false. Re-validated twice this project: -16.21% mean OOS (curve re-fit to this index) and -46.23% to -51.28% OOS (fresh 7-indicator Stage-A search, varies with composite_rolling_window). Open question on record: whether the 'Cursor Agent' process is still actively changing this file.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "monthly-macd-solo",
+    "name": "monthly_macd solo",
+    "status": "open-candidate",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=137.05 solo \u2014 slightly better than widened weekly_macd",
+    "has_curve": false,
+    "metrics": {
+      "combined": 137.05,
+      "long": 40.54,
+      "medium": 15.44
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "monthly_macd": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "New monthly_macd_confluence_z kernel (not in EXTRA_INDICATOR_NAMES at the time). Not promoted, but not flagged as a suspect grid-edge result the way monthly_rsi=3 was.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "monthly-rsi-len14",
+    "name": "monthly_rsi solo (length=14, classic period)",
+    "status": "rejected",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=57.46 solo \u2014 far below power_law (225.24) and monthly_rsi=2 (205.52)",
+    "has_curve": false,
+    "metrics": {
+      "combined": 57.46,
+      "long": 16.34,
+      "medium": 8.43
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "monthly_rsi": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Tested at Chris's request expecting power_law-like behavior \u2014 visually similar shape but scores poorly under the cycle-overlap objective (doesn't spike hard enough at pin dates).",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "monthly-rsi-solo-len2",
+    "name": "monthly_rsi solo (length=2, expanded grid)",
+    "status": "rejected",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=205.52 solo \u2014 rejected as a promotion candidate (overfit signature reinforced)",
+    "has_curve": false,
+    "metrics": {
+      "combined": 205.52,
+      "long": 58.89,
+      "medium": 28.84
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "monthly_rsi": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Winner tracked the new grid floor (monthly_length=2, RSI's mathematical minimum) rather than settling on an interior value \u2014 reinforces the overfit read. Kept diagnostic-only, excluded from downstream stages.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "monthly-rsi-solo-len3",
+    "name": "monthly_rsi solo (length=3)",
+    "status": "open-candidate",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=170.71 solo \u2014 notably higher than widened weekly_rsi, but flagged as suspect overfit",
+    "has_curve": false,
+    "metrics": {
+      "combined": 170.71,
+      "long": 50.87,
+      "medium": 18.1
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "monthly_rsi": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "New monthly_rsi_confluence_z kernel (not in EXTRA_INDICATOR_NAMES at the time). monthly_length=3 sits at the short edge of its grid \u2014 flagged as unreliable pending a wider grid; superseded by the length=2 expanded-grid pass.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "phase-a-11indicator-floor-diversified",
+    "name": "Full 11-indicator floor-diversified (Phase A)",
+    "status": "rejected",
+    "stage": "walk-forward",
+    "date": "2026-09-11",
+    "headline": "beats_flat_dca_oos=False \u2014 mean OOS vs flat DCA -12.39%, 2 of 3 folds infeasible, despite a strong in-sample curve fit",
+    "has_curve": false,
+    "metrics": {
+      "gap_pct": -64.41,
+      "holdout_vs_flat_dca_pct": 4.74,
+      "is_pct": -76.8,
+      "oos_pct": -12.39,
+      "stage3_max_drawdown_pct": 57.7,
+      "stage3_risk_adjusted_return": 46.785,
+      "stage3_total_return_pct": 2699.37
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "dxy": 0.1,
+      "m2": 0.1,
+      "monthly_macd": 0.1,
+      "monthly_rsi": 0.1,
+      "power_law": 0.1,
+      "rs_eth": 0.1,
+      "sma_band": 0.1,
+      "weekly_macd": 0.1,
+      "weekly_monthly_macd": 1,
+      "weekly_monthly_rsi": 1,
+      "weekly_rsi": 0.1
+    },
+    "curve_params": {
+      "buy_curvature": 1.4554,
+      "buy_knee_risk": 24.5007,
+      "buy_max_rate": 29.7376,
+      "sell_curvature": 1.7266,
+      "sell_knee_risk": 79.008,
+      "sell_max_rate": 5.4762
+    },
+    "fold_table_len": 3,
+    "verdict_notes": "The full-scope end-to-end recalibration run using ALL 11 currently-wired indicators (per the approved plan), floor=0.1/max=1.0 aggregate reweight, curve search on the reweighted index, and OOS walk-forward validation. Stage 1: all 11 indicators survived period search. Stage 2: coarse+refine+ratio-sensitivity reweight was fully stable, flooring power_law itself at 0.1 while maxing the two derived weekly_monthly confluence indicators at 1.0. Stage 3 found a strong in-sample curve fit (risk_adjusted_return=46.79 vs the published baseline's 41.20 on this same index). Stage 4 failed the OOS gate: another instance of the standing pattern where a diversified/derived-indicator-heavy mix looks excellent in-sample but degrades OOS. settings.json and RESEARCH_STATE.md were left untouched. No day-by-day equity curve exists on disk yet for this trial \u2014 the driver script (run_full_recalibration.py) only prints summary stats; a real chart could be generated on request by re-running backtest.run_backtest() with these exact frozen weights/curve params.",
+    "source": "digiquant/scripts/run_full_recalibration.py, commit 57af1ade6"
+  },
+  {
+    "id": "risk-adj-search-v1",
+    "name": "Baseline weights \u2014 tight-knee (45/50) risk-adjusted search",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+1077.81% in-sample vs flat DCA \u2014 highest headline in-sample return on record, from an aggressive tight-dead-zone curve",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 31.16,
+      "net_profit_pct": 5576.44,
+      "vs_flat_dca_pct": 1077.81
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 1077.8079227785838,
+    "curve_vs_lump_pct": 247.56626954950346,
+    "curve_net_profit_pct": 5576.440419123376,
+    "curve_max_dd_pct": -31.160679789961392,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 45,
+      "preset": "custom",
+      "sell_knee_risk": 50
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "A tight 45/50 knee dead-zone against the baseline composite. Lowest drawdown of any recovered trial (31.16%) alongside the highest in-sample return \u2014 worth flagging for a future OOS check given how unusual that combination is. Undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/risk_adj_search_v1.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "rolling-3yr-baseline",
+    "name": "power_law/m2/dxy baseline \u2014 rolling-window curve check",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+588.06% in-sample vs flat DCA \u2014 full-history check on a rolling-window variant, not narrated in RESEARCH_STATE.md",
+    "has_curve": true,
+    "metrics": {
+      "vs_flat_dca_pct": 588.06
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 588.0594055067924,
+    "curve_vs_lump_pct": 79.98531258923715,
+    "curve_net_profit_pct": 3196.606298569303,
+    "curve_max_dd_pct": -58.02487493100775,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 24.1,
+      "preset": "btc_optimized",
+      "sell_knee_risk": 71.9
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Recovered from an on-disk trial tearsheet not individually named in RESEARCH_STATE.md's candidate log \u2014 kept here per the 'never lose track' library policy rather than discarded. Same baseline weights and published curve as the validated candidate; appears to be a rolling-composite-normalization context check.",
+    "source": ".scratch/tearsheets/rolling_3yr_baseline.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "rolling-3yr-sellA-curv2",
+    "name": "Baseline weights \u2014 sell curvature 2.0 variant",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+721.73% in-sample vs flat DCA",
+    "has_curve": true,
+    "metrics": {
+      "vs_flat_dca_pct": 721.73
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 721.7274179895671,
+    "curve_vs_lump_pct": 114.95072228692749,
+    "curve_net_profit_pct": 3837.0318320933925,
+    "curve_max_dd_pct": -58.02487493100775,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 24.1,
+      "preset": "custom (sell_curvature\u22482.0)",
+      "sell_knee_risk": 71.9
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Curve-shape sweep variant around the baseline composite; undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/rolling_3yr_sellA_curv2.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "rolling-3yr-sellB-curv1p5",
+    "name": "Baseline weights \u2014 sell curvature 1.5 variant",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+727.20% in-sample vs flat DCA",
+    "has_curve": true,
+    "metrics": {
+      "vs_flat_dca_pct": 727.2
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 727.1984798185706,
+    "curve_vs_lump_pct": 116.38186437379852,
+    "curve_net_profit_pct": 3863.244593289601,
+    "curve_max_dd_pct": -58.02487493100775,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 24.1,
+      "preset": "custom (sell_curvature\u22481.5)",
+      "sell_knee_risk": 71.9
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Curve-shape sweep variant around the baseline composite; undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/rolling_3yr_sellB_curv1p5.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "rolling-3yr-sellC-knee60",
+    "name": "Baseline weights \u2014 sell knee 60 variant",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated (recovered from .scratch/tearsheets/)",
+    "headline": "+717.47% in-sample vs flat DCA",
+    "has_curve": true,
+    "metrics": {
+      "vs_flat_dca_pct": 717.47
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 717.4691272571414,
+    "curve_vs_lump_pct": 113.8368216811986,
+    "curve_net_profit_pct": 3816.629657604819,
+    "curve_max_dd_pct": -58.010730720435255,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 24.1,
+      "preset": "custom",
+      "sell_knee_risk": 60
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Curve-shape sweep variant (earlier sell knee at risk=60 instead of 71.9) around the baseline composite; undocumented in RESEARCH_STATE.md prose, recovered from disk.",
+    "source": ".scratch/tearsheets/rolling_3yr_sellC_knee60.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "validated-baseline-plm2dxy",
+    "name": "power_law / m2 / dxy",
+    "status": "validated",
+    "stage": "walk-forward",
+    "date": "2026-09-03",
+    "headline": "+84.90% OOS vs flat DCA (curve_simulator); +84.78% OOS (Nautilus) \u2014 the only OOS-robust composite found across the project",
+    "has_curve": true,
+    "metrics": {
+      "oos_vs_flat_dca_pct": 84.9,
+      "oos_vs_flat_dca_pct_nautilus": 84.78
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 189.23510904016663,
+    "curve_vs_lump_pct": -30.876798015018046,
+    "curve_net_profit_pct": 1293.9674133893611,
+    "curve_max_dd_pct": -70.48074004143427,
+    "weights": {
+      "dxy": 0.5,
+      "m2": 0.5,
+      "power_law": 1,
+      "rs_eth": 0,
+      "sma_band": 0,
+      "weekly_macd": 0,
+      "weekly_rsi": 0
+    },
+    "curve_params": {
+      "buy_knee_risk": 24.1,
+      "preset": "btc_optimized",
+      "sell_knee_risk": 71.9
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "The current officially-accepted 'best validated candidate' in RESEARCH_STATE.md \u2014 the only composite that has cleared the OOS walk-forward gate under two independent evaluators (curve_simulator and Nautilus), agreeing within 0.1pp. NOT what is currently live in settings.json (see 'live settings.json 5-weight config'). The chart on this card is a full-history 2018-2026 in-sample check run (baseline_check.json, confirmed reproduced in baseline_sanity_check.json) \u2014 the headline OOS figure above comes from the separate walk-forward split documented in RESEARCH_STATE.md, not from this in-sample curve.",
+    "source": "RESEARCH_STATE.md \u2014 current best validated candidate"
+  },
+  {
+    "id": "weekly-macd-solo-widened",
+    "name": "weekly_macd solo (widened grid)",
+    "status": "rejected",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=134.88 solo \u2014 trails sma_band and power_law",
+    "has_curve": false,
+    "metrics": {
+      "combined": 134.88,
+      "long": 39.61,
+      "medium": 16.06
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "weekly_macd": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Widened 21-combo grid found weekly_fast=16/weekly_slow=35/daily_fast=12/daily_slow=26, differing from the coarse pass's 12/26/12/26 default.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "weekly-monthly-confluence-v1",
+    "name": "weekly_monthly confluence composite (v1)",
+    "status": "diagnostic-index",
+    "stage": "curve-search",
+    "date": "undated, after commit 96756b665 (recovered from .scratch/tearsheets/)",
+    "headline": "+680.97% in-sample vs flat DCA \u2014 early precursor to the derived weekly_monthly indicators used in today's Phase A run",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 59.36,
+      "net_profit_pct": 3641.75,
+      "vs_flat_dca_pct": 680.97
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 680.9680198454643,
+    "curve_vs_lump_pct": 136.12525942650996,
+    "curve_net_profit_pct": 3641.746820984832,
+    "curve_max_dd_pct": -59.3550129387836,
+    "weights": {
+      "dxy": 0.25,
+      "m2": 0.25,
+      "power_law": 1,
+      "rs_eth": 0.25,
+      "sma_band": 0.25,
+      "weekly_monthly_macd": 1,
+      "weekly_monthly_rsi": 1
+    },
+    "curve_params": {
+      "buy_knee_risk": 26.3481,
+      "preset": "custom",
+      "sell_knee_risk": 70.2778
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "First composite to weight the derived weekly_monthly_rsi/weekly_monthly_macd confluence indicators at ceiling (1.0). Undocumented in RESEARCH_STATE.md's candidate log, recovered from disk. Same indicator family that later drove the Phase A floor-diversified mix to its OOS failure.",
+    "source": ".scratch/tearsheets/weekly_monthly_confluence_v1.json (undocumented in RESEARCH_STATE.md)"
+  },
+  {
+    "id": "weekly-rsi-solo-widened",
+    "name": "weekly_rsi solo (widened grid)",
+    "status": "rejected",
+    "stage": "index-search",
+    "date": "2026-09-05",
+    "headline": "combined=85.93 solo \u2014 trails sma_band (196.83) and power_law (225.24) by a wide margin",
+    "has_curve": false,
+    "metrics": {
+      "combined": 85.93,
+      "long": 21.84,
+      "medium": 20.41
+    },
+    "curve_beats_flat_dca_oos": null,
+    "curve_vs_flat_dca_pct": null,
+    "curve_vs_lump_pct": null,
+    "curve_net_profit_pct": null,
+    "curve_max_dd_pct": null,
+    "weights": {
+      "weekly_rsi": 1
+    },
+    "curve_params": null,
+    "fold_table_len": 0,
+    "verdict_notes": "Widened 50-combo grid found weekly_length=5/daily_length=5, differing from the coarse pass's 8/7 optimum, but still scores well below the strongest solo indicators.",
+    "source": "RESEARCH_STATE.md"
+  },
+  {
+    "id": "wide-knee-curve-item8",
+    "name": "Wide-knee curve, independent buy/sell dead zone (all-9 index, backlog item 8)",
+    "status": "unvalidated-in-sample",
+    "stage": "curve-search",
+    "date": "2026-09-05 direction",
+    "headline": "+3406.7% in-sample net profit, beats_flat_dca_oos=False \u2014 this is the memory-flagged 'excellent in-sample, never walk-forward tested' candidate",
+    "has_curve": true,
+    "metrics": {
+      "max_drawdown_pct": 54.54,
+      "risk_adjusted_return": 57.82,
+      "tearsheet_net_profit_pct": 3406.71,
+      "tearsheet_vs_flat_dca_pct": 631.91,
+      "total_return_pct": 3153.35
+    },
+    "curve_beats_flat_dca_oos": false,
+    "curve_vs_flat_dca_pct": 631.9113365815457,
+    "curve_vs_lump_pct": 316.58223628304603,
+    "curve_net_profit_pct": 3406.7081459221213,
+    "curve_max_dd_pct": -53.007907006891564,
+    "weights": {
+      "note": "same all-9 floor-diversified composite as backlog item 7"
+    },
+    "curve_params": {
+      "buy_curvature": 1.5,
+      "buy_knee_risk": 40,
+      "buy_max_rate": 35,
+      "sell_curvature": 1.5,
+      "sell_knee_risk": 70,
+      "sell_max_rate": 30
+    },
+    "fold_table_len": 0,
+    "verdict_notes": "Winner of 6097 evaluated / 5401 feasible trials (n_random=4000, seed=42). Better than backlog item 7's continuous curve on every headline in-sample metric while trading 82% less often (trade_days 572/3164, 18.1%, vs item 7's 98.0%). Diagnostic only \u2014 not a validated trading candidate; explicitly not OOS-tested. Unresolved flag on record: cash depletion during the 2025 top-forming period only reaches 64.9% despite sell_max_rate tripling.",
+    "source": "RESEARCH_STATE.md backlog item 8"
+  }
+]

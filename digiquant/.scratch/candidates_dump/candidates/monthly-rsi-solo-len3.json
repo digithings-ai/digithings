@@ -1,0 +1,21 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=170.71 solo — notably higher than widened weekly_rsi, but flagged as suspect overfit",
+  "id": "monthly-rsi-solo-len3",
+  "metrics": {
+    "combined": 170.71,
+    "long": 50.87,
+    "medium": 18.1
+  },
+  "name": "monthly_rsi solo (length=3)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "open-candidate",
+  "verdict_notes": "New monthly_rsi_confluence_z kernel (not in EXTRA_INDICATOR_NAMES at the time). monthly_length=3 sits at the short edge of its grid — flagged as unreliable pending a wider grid; superseded by the length=2 expanded-grid pass.",
+  "weights": {
+    "monthly_rsi": 1
+  }
+}

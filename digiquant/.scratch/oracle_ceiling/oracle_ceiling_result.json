@@ -1,0 +1,168 @@
+{
+  "label": "SDCA oracle ceiling \u2014 non-causal, non-deployable north star",
+  "generated_for": "Chris, 2026-09-11 request",
+  "window": {
+    "start": "2018-01-01",
+    "end": "2026-09-02"
+  },
+  "initial_cash": 1000.0,
+  "benchmarks": {
+    "lump_sum_final": 17340.088160808475,
+    "lump_sum_return_pct": 1634.0088160808473,
+    "flat_dca_final": 4791.165228155238,
+    "flat_dca_return_pct": 379.1165228155238
+  },
+  "oracle_optimal": {
+    "final_value": 148330.12051659563,
+    "total_return_pct": 14733.012051659563,
+    "vs_lump_pct": 755.4173377955872,
+    "vs_flat_dca_pct": 2995.909104635659,
+    "max_drawdown_pct": 61.81067222800954,
+    "risk_adjusted_return": 238.3570914309405,
+    "feasible": true,
+    "reject_reasons": [],
+    "curve_shape": {
+      "buy_max_rate": 39.2249,
+      "buy_knee_risk": 21.8119,
+      "sell_knee_risk": 79.3058,
+      "sell_max_rate": 35.4768,
+      "buy_curvature": 3.9748,
+      "sell_curvature": 5.9533
+    }
+  },
+  "index_construction": {
+    "method": "piecewise log-price min-max normalization between actual local price extrema inside each documented cycle window (cycle_windows.SdcaCycleWindows); non-causal by design",
+    "long_term_anchors": [
+      {
+        "date": "2018-01-06",
+        "price": 17527.0,
+        "kind": "peak"
+      },
+      {
+        "date": "2018-12-15",
+        "price": 3236.76171875,
+        "kind": "trough"
+      },
+      {
+        "date": "2021-11-08",
+        "price": 67566.828125,
+        "kind": "peak"
+      },
+      {
+        "date": "2022-11-21",
+        "price": 15787.2841796875,
+        "kind": "trough"
+      },
+      {
+        "date": "2025-10-06",
+        "price": 124752.53125,
+        "kind": "peak"
+      }
+    ],
+    "medium_term_anchor_count": 75,
+    "blend_ratio_used": "3:1 (long:medium)",
+    "blend_fallback": "days outside one timeframe's anchor range use the other timeframe alone rather than blending in a flat-extrapolated stale value",
+    "medium_only_days": 325,
+    "long_only_days": 0,
+    "cycle_overlap_sensitivity": {
+      "2:1": {
+        "long": {
+          "spread": 62.39765317559166,
+          "trough_in_accumulate_frac": 0.8241758241758241,
+          "peak_in_distribute_frac": 0.6384976525821596,
+          "mean_trough_risk": 19.680621669269566,
+          "mean_peak_risk": 82.07827484486123,
+          "objective": 98.96449009454125,
+          "trough_days": 182,
+          "peak_days": 213
+        },
+        "medium": {
+          "spread": 27.83899119870933,
+          "trough_in_accumulate_frac": 0.4795244385733157,
+          "peak_in_distribute_frac": 0.3315508021390374,
+          "mean_trough_risk": 39.364845214248966,
+          "mean_peak_risk": 67.2038364129583,
+          "objective": 48.115872216518156,
+          "trough_days": 757,
+          "peak_days": 748
+        },
+        "long_weight": 2.0,
+        "medium_weight": 1.0,
+        "objective": 246.04485240560064
+      },
+      "3:1": {
+        "long": {
+          "spread": 65.93706342576687,
+          "trough_in_accumulate_frac": 0.8681318681318682,
+          "peak_in_distribute_frac": 0.647887323943662,
+          "mean_trough_risk": 17.408777381313264,
+          "mean_peak_risk": 83.34584080708012,
+          "objective": 103.83754322765512,
+          "trough_days": 182,
+          "peak_days": 213
+        },
+        "medium": {
+          "spread": 25.320760578452045,
+          "trough_in_accumulate_frac": 0.4610303830911493,
+          "peak_in_distribute_frac": 0.32219251336898397,
+          "mean_trough_risk": 40.6727461113911,
+          "mean_peak_risk": 65.99350668984314,
+          "objective": 44.90133298995538,
+          "trough_days": 757,
+          "peak_days": 748
+        },
+        "long_weight": 3.0,
+        "medium_weight": 1.0,
+        "objective": 356.4139626729207
+      },
+      "5:1": {
+        "long": {
+          "spread": 69.47647367594206,
+          "trough_in_accumulate_frac": 0.8956043956043956,
+          "peak_in_distribute_frac": 0.6666666666666666,
+          "mean_trough_risk": 15.136933093356962,
+          "mean_peak_risk": 84.61340676929902,
+          "objective": 108.53325023271861,
+          "trough_days": 182,
+          "peak_days": 213
+        },
+        "medium": {
+          "spread": 22.802529958194768,
+          "trough_in_accumulate_frac": 0.4438573315719947,
+          "peak_in_distribute_frac": 0.3181818181818182,
+          "mean_trough_risk": 41.980647008533225,
+          "mean_peak_risk": 64.78317696672799,
+          "objective": 41.85350870204009,
+          "trough_days": 757,
+          "peak_days": 748
+        },
+        "long_weight": 5.0,
+        "medium_weight": 1.0,
+        "objective": 584.5197598656332
+      }
+    }
+  },
+  "frozen_weights_placeholder": {
+    "note": "search_wide_knee_curve requires a SdcaCompositeWeights value for its audit-trail notes only; the oracle index above is NOT derived from this or any indicator blend",
+    "value": {
+      "power_law": 1.0,
+      "m2": 0.0,
+      "rs_eth": 0.0,
+      "dxy": 0.0,
+      "weekly_rsi": 0.0,
+      "weekly_macd": 0.0,
+      "sma_band": 0.0,
+      "monthly_rsi": 0.0,
+      "monthly_macd": 0.0,
+      "weekly_monthly_rsi": 0.0,
+      "weekly_monthly_macd": 0.0
+    }
+  },
+  "num_curve_evaluations": 5112,
+  "num_curve_feasible": 5112,
+  "caveats": [
+    "Non-causal: uses realized future price at every day, which no live indicator can ever have. This is a ceiling, not a strategy.",
+    "Never push to the Strategy Book artifact db or settings.json.",
+    "Curve search uses the same production bounds/grid as a real trial (WIDE_KNEE_SEARCH_BOUNDS/WIDE_KNEE_COARSE_GRID) -- only the index is idealized, not the curve-fitting methodology."
+  ]
+}

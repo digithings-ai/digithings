@@ -1,0 +1,29 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=152.89 (3:1) — beats equal-weight baseline on every axis",
+  "id": "floor-diversified-7-first-pass",
+  "metrics": {
+    "combined_2to1": 109.93,
+    "combined_3to1": 152.89,
+    "combined_5to1": 238.82,
+    "long": 42.97,
+    "medium": 24
+  },
+  "name": "Floor-diversified surviving-7 (first pass, floor=0.25)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "diagnostic-index",
+  "verdict_notes": "Open-candidate index — beats the equal-weight baseline on every axis at all three ratio sensitivities, but no curve/threshold fit yet. Confirmed reproduced with a near-identical mix in the second pass.",
+  "weights": {
+    "dxy": 0.25,
+    "m2": 0.25,
+    "power_law": 1,
+    "rs_eth": 0.25,
+    "sma_band": 1,
+    "weekly_macd": 0.25,
+    "weekly_rsi": 0.25
+  }
+}

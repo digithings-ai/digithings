@@ -1,0 +1,21 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=57.46 solo — far below power_law (225.24) and monthly_rsi=2 (205.52)",
+  "id": "monthly-rsi-len14",
+  "metrics": {
+    "combined": 57.46,
+    "long": 16.34,
+    "medium": 8.43
+  },
+  "name": "monthly_rsi solo (length=14, classic period)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "rejected",
+  "verdict_notes": "Tested at Chris's request expecting power_law-like behavior — visually similar shape but scores poorly under the cycle-overlap objective (doesn't spike hard enough at pin dates).",
+  "weights": {
+    "monthly_rsi": 1
+  }
+}

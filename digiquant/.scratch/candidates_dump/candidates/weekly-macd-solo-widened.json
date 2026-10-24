@@ -1,0 +1,21 @@
+{
+  "curve": null,
+  "curve_params": null,
+  "date": "2026-09-05",
+  "fold_table": null,
+  "headline": "combined=134.88 solo — trails sma_band and power_law",
+  "id": "weekly-macd-solo-widened",
+  "metrics": {
+    "combined": 134.88,
+    "long": 39.61,
+    "medium": 16.06
+  },
+  "name": "weekly_macd solo (widened grid)",
+  "source": "RESEARCH_STATE.md",
+  "stage": "index-search",
+  "status": "rejected",
+  "verdict_notes": "Widened 21-combo grid found weekly_fast=16/weekly_slow=35/daily_fast=12/daily_slow=26, differing from the coarse pass's 12/26/12/26 default.",
+  "weights": {
+    "weekly_macd": 1
+  }
+}
