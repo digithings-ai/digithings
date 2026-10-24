@@ -220,8 +220,8 @@ export function ThemeProvider({
  * light, then 32 palettes), so a sun/moon pair only ever described two stops of
  * a longer cycle and read as a mode switch that it is not. The contrast mark —
  * a ring with half of it filled — is the general "appearance" signifier, and it
- * stays put as the cycle advances. `aria-label` carries the state the glyph no
- * longer distinguishes ("Theme: Dark"), and `title` names the next stop.
+ * stays put as the cycle advances. `aria-label` is the stable action name the
+ * kit test pins; `title` names the next stop.
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, preference, palette, toggle } = useTheme();
@@ -230,7 +230,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <IconButton
       type="button"
       onClick={toggle}
-      aria-label={`Theme: ${theme === "dark" ? "Dark" : "Light"}`}
+      aria-label="Toggle colour theme"
       title={step.label}
       className={className ?? "theme-toggle"}
     >
