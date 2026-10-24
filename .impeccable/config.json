@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "packages/ui/src/components/repo-activity/RepoActivity.tsx"
+        ],
+        "createdAt": "2026-10-13T19:38:21.108Z",
+        "reason": "Pre-existing maintainer avatar: src is contributor.avatarUrl, alt is empty because the name sits beside the image. Not a placeholder."
+      }
+    ]
+  }
+}
