@@ -51,7 +51,12 @@ const _upstreamCache = new BoundedTTLMap<string, CacheEntry>(
 );
 const EXPIRY_SKEW_MS = 60_000;
 
-function jwtExpiresAtMs(token: string): number | null {
+/**
+ * `exp` of a JWT in epoch ms, or null when the token has no readable `exp`.
+ * Shared with the MCP-edge minting cache (`mcp-edge-token.ts`): one parser, so
+ * "reuse until near expiry" cannot drift between the two caches.
+ */
+export function jwtExpiresAtMs(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;
   try {

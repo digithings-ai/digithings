@@ -854,7 +854,24 @@ export async function POST(req: Request) {
       overlay,
       allowSessionUrls: dep?.mcp?.allowUserServers === true,
     });
-    const mcpHeader = mcpUpstreamHeaderValue(merged) ?? mcpServersHeaderValue(dep);
+    // The chat's own MCP identity: rows marked `authScheme: jwt` get a digikey
+    // JWT scoped to `mcp:<id>` minted here, server-side, and reused until near
+    // expiry (lib/mcp-edge-token.ts). The token never reaches the browser — it
+    // only ever exists on this server-to-server header to digigraph.
+    const { withMcpEdgeIdentity, readMcpEdgeIdentityFromEnv } = await import(
+      "@/lib/mcp-edge-token"
+    );
+    const authedRows = await withMcpEdgeIdentity(merged, {
+      identity: readMcpEdgeIdentityFromEnv(tenantSlug, ownerUserSub),
+    });
+    let mcpHeader = mcpUpstreamHeaderValue(authedRows);
+    // Over-budget JSON drops the header. The static fallback is only safe when
+    // no row carries a minted identity: falling back would put a static key on
+    // a row the operator scoped to a JWT, which is the widening this change
+    // exists to remove.
+    if (!mcpHeader && !authedRows.some((row) => row.authScheme === "jwt")) {
+      mcpHeader = mcpServersHeaderValue(dep);
+    }
     if (mcpHeader) {
       upstreamHeaders["X-Digi-Mcp-Servers"] = mcpHeader;
     }
