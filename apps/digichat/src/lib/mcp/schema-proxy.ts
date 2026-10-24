@@ -49,6 +49,7 @@ const STRIPPED_REQUEST_HEADERS = new Set([
   "upgrade",
   "accept-encoding",
   "cookie",
+  "x-digi-mcp-key",
   "forwarded",
   "x-forwarded-for",
   "x-forwarded-host",
@@ -80,6 +81,17 @@ type JsonRpcMessage = {
 const originalSchemas = new Map<string, Map<string, unknown>>();
 
 /**
+ * When each label's schema map was last rebuilt, epoch ms.
+ *
+ * Without this the map lived for the life of the process: an upstream that
+ * deployed a new tool schema would keep being coerced against the schema we
+ * cached at first sight, silently mangling arguments until the container
+ * restarted. Five minutes bounds that staleness without probing on every call.
+ */
+const schemaBuiltAt = new Map<string, number>();
+const SCHEMA_TTL_MS = 5 * 60_000;
+
+/**
  * Names we looked for and did not find, with the time (epoch ms) after which a
  * probe may try again. Without this, a batch of `tools/call` messages naming a
  * tool the upstream does not publish would probe once per message.
@@ -89,6 +101,7 @@ const PROBE_MISS_TTL_MS = 60_000;
 
 export function resetSchemaProxyCacheForTests(): void {
   originalSchemas.clear();
+  schemaBuiltAt.clear();
   probeMisses.clear();
 }
 
@@ -254,10 +267,12 @@ function upstreamAbort(clientSignal: AbortSignal | null | undefined, timeoutMs: 
 }
 
 function cacheFor(label: string): Map<string, unknown> {
+  const builtAt = schemaBuiltAt.get(label);
   let m = originalSchemas.get(label);
-  if (!m) {
+  if (!m || builtAt === undefined || Date.now() - builtAt >= SCHEMA_TTL_MS) {
     m = new Map();
     originalSchemas.set(label, m);
+    schemaBuiltAt.set(label, Date.now());
   }
   return m;
 }
@@ -270,6 +285,7 @@ function remember(label: string, result: unknown): void {
       cache.set(tool.name, tool.inputSchema);
     }
   }
+  schemaBuiltAt.set(label, Date.now());
 }
 
 /** Parse every JSON-RPC message out of an SSE body (`data:` lines, blank-line framed). */

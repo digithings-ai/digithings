@@ -92,10 +92,17 @@ touching the server:
 
 1. Set on the Container App (server-only env, not a secret — no credential in it):
    `DIGICHAT_MCP_SCHEMA_PROXY={"datatap":{"url":"https://datatap-dev-mcp.azurewebsites.net/","toolErrorsAsResults":true}}`
-2. Point the agent's MCP tool `server_url` at
-   `https://<this-app-fqdn>/api/mcp-proxy/datatap`. The custom-keys connection
-   (`X-API-Key`) is unchanged: the proxy forwards the caller's header and adds
-   nothing.
+2. Set the proxy's own caller secret, also server-only:
+   `DIGICHAT_MCP_PROXY_KEY=<random string>`. Without it the proxy answers **503**
+   and forwards nothing — a configured proxy is a relay to a URL only the server
+   picks, so it is never left open. With the env set but the header missing or
+   wrong the answer is **401**.
+3. Point the agent's MCP tool `server_url` at
+   `https://<this-app-fqdn>/api/mcp-proxy/datatap`, and have the caller send
+   `x-digi-mcp-key: <that same string>`. The header is consumed at the route and
+   stripped before the hop upstream, so it never reaches the MCP server. The
+   custom-keys connection (`X-API-Key`) is unchanged: the proxy forwards the
+   caller's header and adds nothing.
 
 Every `tools/list` reply is normalized (`integer|null`, mismatched defaults
 dropped), every `tools/call` is coerced back onto the server's original schema

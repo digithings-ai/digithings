@@ -292,3 +292,34 @@ describe("toolErrorsAsResults", () => {
     expect(hard).toContain('"isError":true');
   });
 });
+
+describe("schema cache lifetime", () => {
+  it("re-probes after the TTL, so a schema change upstream cannot be ignored forever", async () => {
+    // Only Date is faked: the proxy arms real timeouts, and faking them too
+    // would make the header timer and the abort path lie about each other.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const t0 = Date.now();
+      const { calls, impl } = fakeFetch((b) => listReply(b.id));
+      const list = () => rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+      const call = () =>
+        rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_reports", arguments: { pageSize: 1 } } });
+
+      await proxySchemaNormalizedMcp(list(), "tools", { fetchImpl: impl, env });
+      const warmed = calls.length;
+
+      // Inside the window the cached schema is used: the call alone, no probe.
+      await proxySchemaNormalizedMcp(call(), "tools", { fetchImpl: impl, env });
+      expect(calls.length - warmed).toBe(1);
+
+      vi.setSystemTime(t0 + 5 * 60_000 + 1);
+
+      // Past the window the schema is gone, so the call is preceded by a probe.
+      const beforeStale = calls.length;
+      await proxySchemaNormalizedMcp(call(), "tools", { fetchImpl: impl, env });
+      expect(calls.length - beforeStale).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
