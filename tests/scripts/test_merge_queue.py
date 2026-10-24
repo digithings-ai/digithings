@@ -7087,6 +7087,7 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
 #
 # The comments below are the real ones, as they were posted.
 
+HEAD_6210 = "9f8be55ea6dbe370270d1950ceb9da3c449ef369"
 HEAD_6197 = "6aab1cea5e87f10b915db1ba7d51350502e09611"
 HEAD_6197_EARLY = "e9fdab5160e2fa4513d26349acec4ec2d2bd09a3"
 HEAD_6197_MID = "cf9a6e3b492452252244015c777ab350e9b74ece"
@@ -7438,3 +7439,77 @@ def test_a_seat_that_is_not_the_author_clears_the_block() -> None:
         pr, mq.load_policy(), acting_role="em", base="develop", prov=prov
     )
     assert verdict.eligible, verdict.reasons
+
+
+def _head_only_provenance_comment(
+    *,
+    head_sha: str,
+    created: str = "2026-10-21T18:57:16Z",
+    comment_id: str = "IC_kwDORaGBGM8AAAABePFOnA",
+) -> dict[str, Any]:
+    """A review comment whose provenance marker names only the head.
+
+    This is the marker the fleet posted before the seat fields were filled in.
+    `#6210` merged on two prose approves written this way: the marker binds the
+    head the review covered and names nobody. It is an honest record of what
+    was looked at, so the head binding stays — and it names no seat, so it can
+    never clear a block (DIG-4990).
+    """
+    body = (
+        f"<!-- digithings-review head={head_sha} -->\n"
+        "<!-- in-session-review -->\n"
+        "Review verdict: approve\n\n"
+        "Delta review since the earlier approve: the tree is unchanged.\n"
+    )
+    return {
+        "id": comment_id,
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
+    }
+
+
+def test_a_head_only_provenance_marker_still_binds_the_head() -> None:
+    """The head a review covered is kept even when the marker names no seat.
+
+    `#6210` merged on two prose approves whose provenance marker carried the
+    head and nothing else. Dropping that head binding would refuse reviews
+    that were honest and reviewed the head they say they reviewed, so the
+    binding stays (DIG-4990).
+    """
+    pr = _pr(
+        6210,
+        head_sha=HEAD_6210,
+        approved=True,
+        comments=[_head_only_provenance_comment(head_sha=HEAD_6210)],
+        commits=[{"oid": HEAD_6210}],
+    )
+    assert mq._verdict_value_reason(pr) == []
+
+
+def test_a_head_only_provenance_marker_cannot_clear_a_block() -> None:
+    """It binds the head, but it names nobody, so it clears nothing.
+
+    The control for the rule above: the same comment, after a block it does
+    not belong to. A clearance has to name a seat, and this marker names none
+    (DIG-4990).
+    """
+    pr = _pr(
+        6210,
+        head_sha=HEAD_6210,
+        approved=True,
+        comments=[
+            _review_comment(
+                verdict="changes_requested",
+                head_sha=HEAD_6210,
+                created="2026-10-21T18:39:35Z",
+                number=6210,
+            ),
+            _head_only_provenance_comment(head_sha=HEAD_6210),
+        ],
+        commits=[{"oid": HEAD_6210}],
+    )
+    reasons = mq._verdict_value_reason(pr)
+    assert reasons
+    assert "carries no `digithings-review` provenance naming a seat and a run" in reasons[0]

@@ -3486,25 +3486,34 @@ def _provenance_fields(body: str) -> dict[str, str]:
 
 
 def _provenance_claim(body: str) -> dict[str, str]:
-    """The provenance marker's fields, when it is a claim.
+    """The provenance marker's fields, when it is a claim the queue can read.
 
-    A claim names a seat and a run, and both have to be uuids. A marker whose
-    `agent=` or `run=` is a placeholder — `<your-seat-uuid>`, `…`, a typo —
-    names no seat and no run, so the queue reads nothing from it.
+    Three kinds of marker, and they are not the same claim (DIG-4990):
 
-    That is the template the review rule ships with, and #6197 merged on it:
-    the author's reply asked the desk to post a verdict and wrote the marker
-    down with `agent=<your-seat-uuid>` in it, and the queue read the template
-    as the newest approve on the head (DIG-4990).
+    * a marker that names a seat and a run — both of them uuids — is a claim
+      in full: it says who reviewed, in which run, and it binds the head.
+    * a marker that names neither is a head-only marker: it binds the head and
+      names nobody, so it can never clear a block. It is still a record of
+      what the reviewer looked at, and dropping its `head=` would refuse
+      honest reviews that never posted a seat — #6210 merged on one.
+    * a marker that names a seat or a run and gets it wrong — a placeholder
+      (`agent=<your-seat-uuid>`), a name, a typo — is ignored as a whole. It
+      is a template, and #6197 merged on one: the author's reply asked the
+      desk to post a verdict and wrote the marker down with
+      `agent=<your-seat-uuid>` in it, and the queue read the template as the
+      newest approve on the head.
 
     The coverage gate still reads every marker as it stands and refuses the
-    bad ones by name (`_marker_problems`); this reader is the one the verdict
-    gate asks, and it answers "who cleared this?" — so it accepts a marker only
-    when both ids are uuids.
+    broken ones by name (`_marker_problems`); this reader is the one the
+    verdict gate asks, and it answers "who cleared this?".
     """
     fields = _provenance_fields(body)
     agent = str(fields.get("agent") or "").strip()
     run = str(fields.get("run") or "").strip()
+    if not agent and not run:
+        # A head-only marker binds the head and names nobody.
+        head = str(fields.get("head") or "").strip()
+        return {"head": head} if head else {}
     if not (_UUID_SHAPE_RE.match(agent) and _UUID_SHAPE_RE.match(run)):
         return {}
     return fields
