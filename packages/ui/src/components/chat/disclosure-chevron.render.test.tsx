@@ -162,6 +162,31 @@ describe("trace disclosure chevrons", () => {
     expectClosed(host, "tool-fallback-trigger", 2);
     await openAll(host, "tool-fallback-trigger");
 
+    // Every open caret sits at one angle: the same rotate and origin on each
+    // row's cube svg (chain, reasoning, group, and each tool row), and nothing
+    // between that svg and the thread adds a turn of its own.
+    const open = [...host.querySelectorAll<HTMLElement>('[aria-expanded="true"]')]
+      .map((trigger) =>
+        trigger.querySelector<HTMLElement>(':scope > [data-slot="disclosure-chevron"]'),
+      )
+      .filter((node): node is HTMLElement => node !== null);
+    expect(open.length).toBe(5);
+    const grids = open.map((node) =>
+      node.querySelector<SVGElement>('[data-slot="dot-matrix-grid"]')!,
+    );
+    expect(new Set(grids.map((g) => getComputedStyle(g).transform))).toEqual(
+      new Set(["rotate(90deg)"]),
+    );
+    expect(new Set(grids.map((g) => getComputedStyle(g).transformOrigin))).toEqual(
+      new Set(["50% 50%"]),
+    );
+    for (const grid of grids) {
+      for (let el = grid.parentElement; el && el !== host; el = el.parentElement) {
+        const t = getComputedStyle(el).transform;
+        expect(t === "" || t === "none", el.getAttribute("data-slot") ?? el.tagName).toBe(true);
+      }
+    }
+
     // No caret name leaks into the visible text or the accessibility tree.
     expect(host.querySelector('[data-slot="disclosure-chevron"] [aria-label]')).toBeNull();
     const tools = host.querySelector(

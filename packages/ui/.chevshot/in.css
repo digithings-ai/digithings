@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../src/styles/digichat-app-theme.css";
+@import "../src/styles/chat-core.css";
+@import "../src/styles/chat-widgets.css";
+@import "../src/styles/chat-aui.css";
+@import "../src/styles/chat-digichat.css";
+@source "../src/components/chat";
