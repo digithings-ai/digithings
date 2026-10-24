@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1255" viewBox="0 0 1680 1255" font-family="Helvetica, Arial, sans-serif">
+<title>Gold indicator fits against BOTH approved gold pin sets — Set A (gold_v1, 6 pins) vs the algorithmic 20 (gold_v2, 15%)</title>
+<desc>IN-SAMPLE — a scoring target only, NOT a performance claim. Every separation is the MAXIMUM over a frozen grid, scored against cycle windows derived from the SAME price history the z-series are built from, so capture counts and depths are a partly-selected UPPER BOUND. No return / Sharpe / trade count is claimed on this figure.</desc>
+<rect x="0" y="0" width="1680" height="1255" fill="white"/>
+<defs><pattern id="hatch-inverted" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c62828" stroke-width="2.2" stroke-opacity="0.85"/></pattern></defs>
+<text x="840.0" y="26.0" font-size="15" fill="#1c1c1c" text-anchor="middle" font-weight="bold">Gold indicator fits against BOTH approved gold pin sets — Set A (gold_v1, 6 pins) vs the algorithmic 20 (gold_v2, 15%)</text>
+<text x="840.0" y="44.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">GLD-USD · 2004-11-18..2026-09-29 (5499 daily bars) · capture bar 0.5 z-units on |separation| · dead zone ±0.06 · ±45d windows (all frozen; nothing tuned after seeing output)</text>
+<text x="214.0" y="76.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">HORIZONTAL BARS — one pair per indicator: gold_v1 on TOP, gold_v2 BELOW</text>
+<text x="214.0" y="96.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">Length = |separation|. RIGHT of zero = expected polarity (+1), LEFT and hatched = inverted (-1);</text>
+<text x="214.0" y="110.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">both bars of a pair are ONE indicator against the two approved pin sets. The grids, the 0.5 capture</text>
+<text x="214.0" y="124.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">bar, the 0.06 dead zone, the separation formula and the ±45d half-window are IDENTICAL between the</text>
+<text x="214.0" y="138.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">runs — only the window set differs.</text>
+<text x="214.0" y="160.0" font-size="11" fill="#1565c0" text-anchor="start" font-weight="bold">VERDICT: gold_v1 fits BETTER — capture depth 21.5674 vs 11.4357 (margin -10.1317) on identical</text>
+<text x="214.0" y="174.0" font-size="11" fill="#1565c0" text-anchor="start" font-weight="bold">headcount (10 vs 10). Depth, not headcount, is the ranking key.</text>
+<text x="214.0" y="196.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">VERDICT FLIPS between the pin sets: nfci (direction: +1.3157 → -0.6793), walcl (direction: -2.2117 →</text>
+<text x="214.0" y="210.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">+0.5042) — a flip is a change of capture or of fitted direction; a separation that merely moved is</text>
+<text x="214.0" y="224.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">not a flip.</text>
+<text x="214.0" y="246.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">GREEDY EQUAL-WEIGHT KEEP LIST: gold_v1 EMPTY (anchor-only) · gold_v2 EMPTY (anchor-only) — every</text>
+<text x="214.0" y="260.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">candidate made the anchor's own aggregate separation worse, so the frozen rule keeps none of them on</text>
+<text x="214.0" y="274.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">either pin set.</text>
+<text x="214.0" y="296.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">degenerate legs (excluded from every keep list): gvz, weekly_rsi, weekly_macd — a pass resting on a</text>
+<text x="214.0" y="310.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">dead side is not a pass, however deep it reads.</text>
+<text x="214.0" y="332.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">A filled diamond at a bar tip marks a CAPTURING leg; a hollow tip marks one that does not clear the</text>
+<text x="214.0" y="346.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">capture bar or rests on a dead side. The dashed vertical rules are the bar, drawn on both sides</text>
+<text x="214.0" y="360.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">because it is read on |separation|.</text>
+<rect x="812" y="74.0" width="618" height="144" fill="#fbfbfb" stroke="#dcdcdc"/>
+<text x="826.0" y="96.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">PIN-SET INSET — windows asked about, what survived</text>
+<text x="826.0" y="118.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">gold_v1 (SdcaCycleWindows) — 6 pins (3 peak / 3 trough) ·</text>
+<text x="826.0" y="131.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">window-day share 0.0684 = 376 days, 0 overlapping</text>
+<text x="826.0" y="146.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">captures 10 · depth 21.5674 · greedy keep EMPTY</text>
+<text x="826.0" y="159.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">(anchor-only) · anchor +5.0447 → +5.0447</text>
+<text x="826.0" y="182.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">gold_v2 (SdcaCycleWindows) — 20 pins (10 peak / 10 trough) ·</text>
+<text x="826.0" y="195.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">window-day share 0.2235 = 1229 days, 24 overlapping</text>
+<text x="826.0" y="210.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">captures 10 · depth 11.4357 · greedy keep EMPTY</text>
+<text x="826.0" y="223.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">(anchor-only) · anchor +4.3100 → +4.3100</text>
+<line x1="214.0" y1="416.0" x2="214.0" y2="892.0" stroke="#ececec"/>
+<text x="214.0" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-4.0</text>
+<line x1="315.3" y1="416.0" x2="315.3" y2="892.0" stroke="#ececec"/>
+<text x="315.3" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-3.4</text>
+<line x1="416.7" y1="416.0" x2="416.7" y2="892.0" stroke="#ececec"/>
+<text x="416.7" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-2.7</text>
+<line x1="518.0" y1="416.0" x2="518.0" y2="892.0" stroke="#ececec"/>
+<text x="518.0" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-2.0</text>
+<line x1="619.3" y1="416.0" x2="619.3" y2="892.0" stroke="#ececec"/>
+<text x="619.3" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-1.3</text>
+<line x1="720.7" y1="416.0" x2="720.7" y2="892.0" stroke="#ececec"/>
+<text x="720.7" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">-0.7</text>
+<line x1="923.3" y1="416.0" x2="923.3" y2="892.0" stroke="#ececec"/>
+<text x="923.3" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+0.7</text>
+<line x1="1024.7" y1="416.0" x2="1024.7" y2="892.0" stroke="#ececec"/>
+<text x="1024.7" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+1.3</text>
+<line x1="1126.0" y1="416.0" x2="1126.0" y2="892.0" stroke="#ececec"/>
+<text x="1126.0" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+2.0</text>
+<line x1="1227.3" y1="416.0" x2="1227.3" y2="892.0" stroke="#ececec"/>
+<text x="1227.3" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+2.7</text>
+<line x1="1328.7" y1="416.0" x2="1328.7" y2="892.0" stroke="#ececec"/>
+<text x="1328.7" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+3.4</text>
+<line x1="1430.0" y1="416.0" x2="1430.0" y2="892.0" stroke="#ececec"/>
+<text x="1430.0" y="408.0" font-size="9" fill="#5f5f5f" text-anchor="middle" font-weight="normal">+4.0</text>
+<line x1="897.2" y1="416.0" x2="897.2" y2="892.0" stroke="#6a1b9a" stroke-width="1.5" stroke-dasharray="7 4"/>
+<rect x="893.2" y="900.0" width="88.6" height="13" fill="white" fill-opacity="0.88"/><text x="897.2" y="908.0" font-size="9" fill="#6a1b9a" text-anchor="middle" font-weight="normal">capture bar ±0.5</text>
+<line x1="746.8" y1="416.0" x2="746.8" y2="892.0" stroke="#6a1b9a" stroke-width="1.5" stroke-dasharray="7 4"/>
+<rect x="742.8" y="900.0" width="88.6" height="13" fill="white" fill-opacity="0.88"/><text x="746.8" y="908.0" font-size="9" fill="#6a1b9a" text-anchor="middle" font-weight="normal">capture bar ±0.5</text>
+<text x="822.0" y="392.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">separation (z), signed — the sign IS the direction</text>
+<text x="218.0" y="392.0" font-size="9" fill="#c62828" text-anchor="start" font-weight="normal">inverted (−1) ←</text>
+<text x="1426.0" y="392.0" font-size="9" fill="#2e7d32" text-anchor="end" font-weight="normal">→ expected (+1)</text>
+<rect x="214" y="416.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="437.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">uup</text>
+<rect x="457.5" y="419.0" width="364.5" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="457.5,425.0 452.5,421.0 452.5,429.0" fill="#6a1b9a"/>
+<text x="448.5" y="429.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-2.4225 w270 CAP</text>
+<rect x="586.9" y="434.0" width="235.1" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="586.9,440.0 581.9,436.0 581.9,444.0" fill="#6a1b9a"/>
+<text x="577.9" y="444.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-1.5625 w180 CAP</text>
+<text x="200.0" y="471.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">real_rate</text>
+<rect x="822.0" y="453.0" width="563.0" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1385.0,459.0 1390.0,455.0 1390.0,463.0" fill="#6a1b9a"/>
+<rect x="1291.3" y="455.0" width="88.6" height="13" fill="white" fill-opacity="0.88"/><text x="1376.0" y="463.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">+3.7414 w504 CAP</text>
+<rect x="822.0" y="468.0" width="235.0" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1057.0,474.0 1062.0,470.0 1062.0,478.0" fill="#6a1b9a"/>
+<text x="1066.0" y="478.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+1.5617 w180 CAP</text>
+<rect x="214" y="484.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="505.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">gvz</text>
+<rect x="603.6" y="487.0" width="218.4" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<circle cx="603.6" cy="493.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="594.6" y="497.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">-1.4515 w270 no</text>
+<rect x="758.0" y="502.0" width="64.0" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<circle cx="758.0" cy="508.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="749.0" y="512.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">-0.4252 w90 no</text>
+<text x="200.0" y="539.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">hy_oas</text>
+<rect x="717.6" y="521.0" width="104.4" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="717.6,527.0 712.6,523.0 712.6,531.0" fill="#6a1b9a"/>
+<text x="708.6" y="531.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-0.6941 w180 CAP</text>
+<rect x="717.6" y="536.0" width="104.4" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="717.6,542.0 712.6,538.0 712.6,546.0" fill="#6a1b9a"/>
+<text x="708.6" y="546.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-0.6941 w180 CAP</text>
+<rect x="214" y="552.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="573.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">ig_oas</text>
+<rect x="794.2" y="555.0" width="27.8" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<circle cx="794.2" cy="561.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="785.2" y="565.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">-0.1846 w180 no</text>
+<rect x="794.2" y="570.0" width="27.8" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<circle cx="794.2" cy="576.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="785.2" y="580.0" font-size="9" fill="#5f5f5f" text-anchor="end" font-weight="normal">-0.1846 w180 no</text>
+<text x="200.0" y="607.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">breakeven_5y</text>
+<rect x="660.0" y="589.0" width="162.0" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="660.0,595.0 655.0,591.0 655.0,599.0" fill="#6a1b9a"/>
+<text x="651.0" y="599.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-1.0769 w378 CAP</text>
+<rect x="667.4" y="604.0" width="154.6" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="667.4,610.0 662.4,606.0 662.4,614.0" fill="#6a1b9a"/>
+<text x="658.4" y="614.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-1.0277 w180 CAP</text>
+<rect x="214" y="620.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="641.0" font-size="10" fill="#1565c0" text-anchor="end" font-weight="bold">nfci  FLIP</text>
+<rect x="822.0" y="623.0" width="198.0" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1020.0,629.0 1025.0,625.0 1025.0,633.0" fill="#6a1b9a"/>
+<text x="1029.0" y="633.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+1.3157 w756 CAP</text>
+<rect x="719.8" y="638.0" width="102.2" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="719.8,644.0 714.8,640.0 714.8,648.0" fill="#6a1b9a"/>
+<text x="710.8" y="648.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-0.6793 w90 CAP</text>
+<text x="200.0" y="675.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">gdx_gld</text>
+<rect x="493.8" y="657.0" width="328.2" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="493.8,663.0 488.8,659.0 488.8,667.0" fill="#6a1b9a"/>
+<text x="484.8" y="667.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-2.1812 w756 CAP</text>
+<rect x="636.2" y="672.0" width="185.8" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="636.2,678.0 631.2,674.0 631.2,682.0" fill="#6a1b9a"/>
+<text x="627.2" y="682.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-1.2349 w180 CAP</text>
+<rect x="214" y="688.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="709.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">gld_slv</text>
+<rect x="822.0" y="691.0" width="316.3" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1138.3,697.0 1143.3,693.0 1143.3,701.0" fill="#6a1b9a"/>
+<text x="1147.3" y="701.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+2.1024 w504 CAP</text>
+<rect x="822.0" y="706.0" width="149.8" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="971.8,712.0 976.8,708.0 976.8,716.0" fill="#6a1b9a"/>
+<text x="980.8" y="716.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+0.9958 w90 CAP</text>
+<text x="200.0" y="743.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">m2</text>
+<rect x="449.4" y="725.0" width="372.6" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="449.4,731.0 444.4,727.0 444.4,735.0" fill="#6a1b9a"/>
+<text x="440.4" y="735.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-2.4764 w378 CAP</text>
+<rect x="710.1" y="740.0" width="111.9" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="710.1,746.0 705.1,742.0 705.1,750.0" fill="#6a1b9a"/>
+<text x="701.1" y="750.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-0.7438 w378 CAP</text>
+<rect x="214" y="756.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="777.0" font-size="10" fill="#1565c0" text-anchor="end" font-weight="bold">walcl  FLIP</text>
+<rect x="489.2" y="759.0" width="332.8" height="12" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.2"/>
+<polygon points="489.2,765.0 484.2,761.0 484.2,769.0" fill="#6a1b9a"/>
+<text x="480.2" y="769.0" font-size="9" fill="#6a1b9a" text-anchor="end" font-weight="normal">-2.2117 w378 CAP</text>
+<rect x="822.0" y="774.0" width="75.9" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="897.9,780.0 902.9,776.0 902.9,784.0" fill="#6a1b9a"/>
+<text x="906.9" y="784.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+0.5042 w378 CAP</text>
+<text x="200.0" y="811.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">weekly_rsi</text>
+<rect x="822.0" y="793.0" width="108.1" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="930.1" cy="799.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="939.1" y="803.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">+0.7183 w105 no</text>
+<rect x="822.0" y="808.0" width="71.3" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="893.3" cy="814.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="902.3" y="818.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">+0.4739 w105 no</text>
+<rect x="214" y="824.0" width="1216" height="34.0" fill="#fbfbfb"/>
+<text x="200.0" y="845.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">weekly_macd</text>
+<rect x="822.0" y="827.0" width="113.7" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="935.7" cy="833.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="944.7" y="837.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">+0.7557 w90 no</text>
+<rect x="822.0" y="842.0" width="63.8" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="885.8" cy="848.0" r="2.4" fill="white" stroke="#5f5f5f" stroke-width="1.1"/>
+<text x="894.8" y="852.0" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">+0.4239 w90 no</text>
+<text x="200.0" y="879.0" font-size="10" fill="#1c1c1c" text-anchor="end" font-weight="normal">sma_band</text>
+<rect x="822.0" y="861.0" width="503.3" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1325.3,867.0 1330.3,863.0 1330.3,871.0" fill="#6a1b9a"/>
+<text x="1334.3" y="871.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+3.3450 w200 CAP</text>
+<rect x="822.0" y="876.0" width="365.9" height="12" fill="#2e7d32" fill-opacity="0.85"/>
+<polygon points="1187.9,882.0 1192.9,878.0 1192.9,886.0" fill="#6a1b9a"/>
+<text x="1196.9" y="886.0" font-size="9" fill="#6a1b9a" text-anchor="start" font-weight="normal">+2.4316 w200 CAP</text>
+<line x1="822.0" y1="416.0" x2="822.0" y2="892.0" stroke="#1c1c1c" stroke-width="1.3"/>
+<rect x="214" y="416.0" width="1216" height="476.0" fill="none" stroke="#dcdcdc"/>
+<rect x="214" y="896.0" width="1216" height="359.0" fill="#fbfbfb" stroke="#dcdcdc"/>
+<text x="226.0" y="942.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">HOW TO READ THIS</text>
+<text x="1418.0" y="942.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">source: SdcaCycleWindows.gold_v1() and SdcaCycleWindows.gold_v2() / GLD-USD close column / 2004-11-18..2026-09-29 (5499 daily bars)</text>
+<circle cx="232.0" cy="958.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="962.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">Both bars of a pair are ONE indicator scored against the two approved gold pin sets. The frozen grids, the 0.5 capture bar,</text>
+<text x="244.0" y="976.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">the 0.06 dead zone, the separation formula and the ±45d half-window are IDENTICAL between the runs; only the window set</text>
+<text x="244.0" y="990.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">differs.</text>
+<circle cx="232.0" cy="1004.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1008.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">The bar that speaks for an indicator is the grid row with the largest |separation| (ties to the shorter window), so the</text>
+<text x="244.0" y="1022.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">DIRECTION shown is FITTED from that row's sign, never imposed — and that same |separation| is what the capture bar is read on.</text>
+<circle cx="232.0" cy="1036.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1040.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">A leg CAPTURES iff |separation| &gt;= 0.5 AND neither window side's mean is inside the +/-0.06 dead zone. Capturing legs carry a</text>
+<text x="244.0" y="1054.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">filled diamond; degenerate legs cannot capture however deep they read.</text>
+<circle cx="232.0" cy="1068.0" r="2.4" fill="#1c1c1c"/>
+<text x="244.0" y="1072.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">WHICH SET FITS BETTER is decided by summed capture DEPTH, not headcount, with ties to the coarser (fewer-pin) set. Both greedy</text>
+<text x="244.0" y="1086.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">equal-weight keep lists are EMPTY: every candidate made the anchor's own aggregate separation worse, so the frozen rule keeps</text>
+<text x="244.0" y="1100.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">none of them.</text>
+<text x="244.0" y="1122.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">gold_v1 ⊂ gold_v2 (same turns, same kinds): gold_v2 REFINES the same target by interpolating the turns between Set A's picks,</text>
+<text x="244.0" y="1136.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">so a separation that moves between the two is the granularity speaking, not a contradiction. A window is a scoring target, not</text>
+<text x="244.0" y="1150.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">an execution period — no exposure floor, no perfect-strategy oracle.</text>
+<rect x="232" y="1176.0" width="1180" height="63" fill="#ffffff" stroke="#c62828" stroke-width="1.4"/>
+<text x="244.0" y="1197.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">IN-SAMPLE — a scoring target only, NOT a performance claim. Every separation is the MAXIMUM over a frozen grid, scored against cycle windows derived</text>
+<text x="244.0" y="1212.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">from the SAME price history the z-series are built from, so capture counts and depths are a partly-selected UPPER BOUND. No return / Sharpe / trade</text>
+<text x="244.0" y="1227.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">count is claimed on this figure.</text>
+</svg>

@@ -23,8 +23,8 @@
     "trend_rails": "none (no time trend)",
     "weight": 1.0,
     "built_by": "resolve_sdca_risk_model('rolling_z', dates=, price=, rolling_window=90, rolling_z=1.0) + build_risk_index(..., extra_indicators=None, valuation_weight=1.0)['valuation_z'] \u2014 shipped code, zero production edits",
-    "aggregate_separation": 3.811273371557444,
-    "scored_days": 410
+    "aggregate_separation": 5.044715450143613,
+    "scored_days": 376
   },
   "aggregate": {
     "function": "digiquant.strategies.sdca.composite_risk.compute_composite_risk",
@@ -45,17 +45,17 @@
         "window": 504
       },
       "window_days": 504,
-      "individual_separation": 3.395077579057188
+      "individual_separation": 3.741401595515696
     },
     {
       "order": 2,
       "name": "sma_band",
       "params": {
-        "sma_band_window": 378,
+        "sma_band_window": 200,
         "sma_band_min_samples": 30
       },
-      "window_days": 378,
-      "individual_separation": 3.116774679490648
+      "window_days": 200,
+      "individual_separation": 3.345021716982406
     },
     {
       "order": 3,
@@ -64,7 +64,7 @@
         "window": 504
       },
       "window_days": 504,
-      "individual_separation": 2.3856563559907604
+      "individual_separation": 2.102433512368002
     },
     {
       "order": 4,
@@ -73,17 +73,16 @@
         "window": 756
       },
       "window_days": 756,
-      "individual_separation": 1.5969178066583383
+      "individual_separation": 1.315741994001843
     },
     {
       "order": 5,
-      "name": "walcl",
+      "name": "ig_oas",
       "params": {
-        "roc_days": 90,
-        "window": 180
+        "window": 504
       },
-      "window_days": 180,
-      "individual_separation": 1.0244588107612942
+      "window_days": 504,
+      "individual_separation": 0.17924446398534377
     }
   ],
   "kept": [],
@@ -93,57 +92,57 @@
     "sma_band",
     "gld_slv",
     "nfci",
-    "walcl"
+    "ig_oas"
   ],
   "dropped_deltas": {
     "real_rate": {
-      "individual_separation": 3.395077579057188,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.603175475307316,
-      "delta": -0.20809789625012787,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 3.741401595515696,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 4.393058522829655,
+      "delta": -0.6516569273139581,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "kept": false
     },
     "sma_band": {
-      "individual_separation": 3.116774679490648,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.464024025524046,
-      "delta": -0.34724934603339763,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 3.345021716982406,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 4.19486858356301,
+      "delta": -0.8498468665806032,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "kept": false
     },
     "gld_slv": {
-      "individual_separation": 2.3856563559907604,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.098464863774102,
-      "delta": -0.7128085077833419,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 2.102433512368002,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 3.573574481255808,
+      "delta": -1.4711409688878052,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "kept": false
     },
     "nfci": {
-      "individual_separation": 1.5969178066583383,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 2.7040955891078906,
-      "delta": -1.1071777824495532,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 1.315741994001843,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 3.1802287220727283,
+      "delta": -1.8644867280708848,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "kept": false
     },
-    "walcl": {
-      "individual_separation": 1.0244588107612942,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 2.417866091159369,
-      "delta": -1.3934072803980748,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
-      "days_delta": 0,
+    "ig_oas": {
+      "individual_separation": 0.17924446398534377,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 2.519614141557661,
+      "delta": -2.525101308585952,
+      "scored_days_before": 376,
+      "scored_days_after": 124,
+      "days_delta": -252,
       "kept": false
     }
   },
@@ -155,12 +154,12 @@
         "window": 504
       },
       "window_days": 504,
-      "individual_separation": 3.395077579057188,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.603175475307316,
-      "delta": -0.20809789625012787,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 3.741401595515696,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 4.393058522829655,
+      "delta": -0.6516569273139581,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "coverage_before": 1.0,
       "coverage_after": 1.0,
@@ -170,16 +169,16 @@
       "step": 2,
       "name": "sma_band",
       "params": {
-        "sma_band_window": 378,
+        "sma_band_window": 200,
         "sma_band_min_samples": 30
       },
-      "window_days": 378,
-      "individual_separation": 3.116774679490648,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.464024025524046,
-      "delta": -0.34724934603339763,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "window_days": 200,
+      "individual_separation": 3.345021716982406,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 4.19486858356301,
+      "delta": -0.8498468665806032,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "coverage_before": 1.0,
       "coverage_after": 1.0,
@@ -192,12 +191,12 @@
         "window": 504
       },
       "window_days": 504,
-      "individual_separation": 2.3856563559907604,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 3.098464863774102,
-      "delta": -0.7128085077833419,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 2.102433512368002,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 3.573574481255808,
+      "delta": -1.4711409688878052,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "coverage_before": 1.0,
       "coverage_after": 1.0,
@@ -210,12 +209,12 @@
         "window": 756
       },
       "window_days": 756,
-      "individual_separation": 1.5969178066583383,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 2.7040955891078906,
-      "delta": -1.1071777824495532,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
+      "individual_separation": 1.315741994001843,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 3.1802287220727283,
+      "delta": -1.8644867280708848,
+      "scored_days_before": 376,
+      "scored_days_after": 376,
       "days_delta": 0,
       "coverage_before": 1.0,
       "coverage_after": 1.0,
@@ -223,21 +222,20 @@
     },
     {
       "step": 5,
-      "name": "walcl",
+      "name": "ig_oas",
       "params": {
-        "roc_days": 90,
-        "window": 180
+        "window": 504
       },
-      "window_days": 180,
-      "individual_separation": 1.0244588107612942,
-      "aggregate_before": 3.811273371557444,
-      "aggregate_after": 2.417866091159369,
-      "delta": -1.3934072803980748,
-      "scored_days_before": 410,
-      "scored_days_after": 410,
-      "days_delta": 0,
+      "window_days": 504,
+      "individual_separation": 0.17924446398534377,
+      "aggregate_before": 5.044715450143613,
+      "aggregate_after": 2.519614141557661,
+      "delta": -2.525101308585952,
+      "scored_days_before": 376,
+      "scored_days_after": 124,
+      "days_delta": -252,
       "coverage_before": 1.0,
-      "coverage_after": 1.0,
+      "coverage_after": 0.32978723404255317,
       "kept": false
     }
   ],
@@ -249,8 +247,8 @@
       "members": [
         "valuation"
       ],
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation": 5.044715450143613,
+      "scored_days": 376
     },
     {
       "step": 1,
@@ -259,9 +257,9 @@
       "members": [
         "valuation"
       ],
-      "separation_if_kept": 3.603175475307316,
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation_if_kept": 4.393058522829655,
+      "separation": 5.044715450143613,
+      "scored_days": 376
     },
     {
       "step": 2,
@@ -270,9 +268,9 @@
       "members": [
         "valuation"
       ],
-      "separation_if_kept": 3.464024025524046,
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation_if_kept": 4.19486858356301,
+      "separation": 5.044715450143613,
+      "scored_days": 376
     },
     {
       "step": 3,
@@ -281,9 +279,9 @@
       "members": [
         "valuation"
       ],
-      "separation_if_kept": 3.098464863774102,
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation_if_kept": 3.573574481255808,
+      "separation": 5.044715450143613,
+      "scored_days": 376
     },
     {
       "step": 4,
@@ -292,27 +290,27 @@
       "members": [
         "valuation"
       ],
-      "separation_if_kept": 2.7040955891078906,
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation_if_kept": 3.1802287220727283,
+      "separation": 5.044715450143613,
+      "scored_days": 376
     },
     {
       "step": 5,
-      "added": "walcl",
+      "added": "ig_oas",
       "kept": false,
       "members": [
         "valuation"
       ],
-      "separation_if_kept": 2.417866091159369,
-      "separation": 3.811273371557444,
-      "scored_days": 410
+      "separation_if_kept": 2.519614141557661,
+      "separation": 5.044715450143613,
+      "scored_days": 376
     }
   ],
   "final": {
     "members": [
       "valuation"
     ],
-    "separation": 3.811273371557444
+    "separation": 5.044715450143613
   },
   "cross_check": {
     "label": "cross-check: equal weight over the anchor + EVERY non-degenerate passer at once (no greedy pruning). Reported only \u2014 it never feeds a keep/drop decision.",
@@ -322,13 +320,13 @@
       "sma_band",
       "gld_slv",
       "nfci",
-      "walcl"
+      "ig_oas"
     ],
-    "separation": 2.5550264339192785,
-    "mean_peak_z": -1.0475492374956539,
-    "mean_trough_z": 1.5074771964236247,
-    "scored_days": 410,
-    "coverage": 1.0,
+    "separation": 2.0406718740448504,
+    "mean_peak_z": -1.7593103059067108,
+    "mean_trough_z": 0.2813615681381394,
+    "scored_days": 124,
+    "coverage": 0.32978723404255317,
     "used_for_selection": false
   },
   "degenerate_owner_review": [
@@ -338,7 +336,7 @@
         "rsi_length": 14
       },
       "window_days": 105,
-      "separation": 0.44201974082299134,
+      "separation": 0.7182954873408246,
       "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
     },
     {
@@ -349,7 +347,7 @@
         "macd_z_window": 90
       },
       "window_days": 90,
-      "separation": 0.3476715149947736,
+      "separation": 0.7556718642651518,
       "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
     }
   ],
@@ -357,34 +355,33 @@
     "drop": [
       {
         "name": "uup",
-        "separation": -1.8827082130090245
+        "separation": -1.6720885475089622
       },
       {
         "name": "gvz",
-        "separation": -0.16102058668693703
+        "separation": -0.9385464827584928
+      },
+      {
+        "name": "hy_oas",
+        "separation": -0.22494106907414146
       },
       {
         "name": "breakeven_5y",
-        "separation": -0.9026245202216832
+        "separation": -0.3101594024767048
       },
       {
         "name": "gdx_gld",
-        "separation": -0.5150401804873594
+        "separation": -0.7433559511335104
       },
       {
         "name": "m2",
-        "separation": -1.0788983750022396
-      }
-    ],
-    "unscoreable": [
-      {
-        "name": "hy_oas",
-        "reason": "no valid z in any pinned trough window (peak days 31, trough days 0) \u2014 separation needs both sides; trough side unscoreable"
+        "separation": -0.3858563331087576
       },
       {
-        "name": "ig_oas",
-        "reason": "no valid z in any pinned trough window (peak days 31, trough days 0) \u2014 separation needs both sides; trough side unscoreable"
+        "name": "walcl",
+        "separation": -0.0241176841800525
       }
-    ]
+    ],
+    "unscoreable": []
   }
 }

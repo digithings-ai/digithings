@@ -1,0 +1,171 @@
+{
+  "band_convention": {
+    "buy": "z > 1.5 (risk < 25)",
+    "neutral": "-1.5 <= z <= 1.5 (risk 25..75)",
+    "sell": "z < -1.5 (risk > 75)",
+    "secondary_curve_edges": [
+      45.0,
+      65.0
+    ],
+    "frozen": true
+  },
+  "window_pins": {
+    "peaks": [
+      "2008-03-17",
+      "2011-09-06",
+      "2020-08-07"
+    ],
+    "troughs": [
+      "2008-10-24",
+      "2015-12-17",
+      "2022-10-21"
+    ]
+  },
+  "indicators": [
+    {
+      "name": "valuation anchor",
+      "params": "rolling90/z1.0",
+      "counts": {
+        "buy": 1516,
+        "sell": 2736,
+        "flat": 1246,
+        "gap": 1
+      },
+      "transitions": 587
+    },
+    {
+      "name": "breakeven_5y",
+      "params": "window=1260",
+      "counts": {
+        "buy": 464,
+        "sell": 713,
+        "flat": 4303,
+        "gap": 19
+      },
+      "transitions": 92
+    },
+    {
+      "name": "gdx_gld",
+      "params": "window=90",
+      "counts": {
+        "buy": 662,
+        "sell": 848,
+        "flat": 3592,
+        "gap": 397
+      },
+      "transitions": 544
+    },
+    {
+      "name": "gld_slv",
+      "params": "window=504",
+      "counts": {
+        "buy": 924,
+        "sell": 496,
+        "flat": 3698,
+        "gap": 381
+      },
+      "transitions": 234
+    },
+    {
+      "name": "gvz",
+      "params": "window=90",
+      "counts": {
+        "buy": 527,
+        "sell": 463,
+        "flat": 3601,
+        "gap": 908
+      },
+      "transitions": 496
+    },
+    {
+      "name": "m2",
+      "params": "roc_days=730,window=1260",
+      "counts": {
+        "buy": 933,
+        "sell": 721,
+        "flat": 3088,
+        "gap": 757
+      },
+      "transitions": 44
+    },
+    {
+      "name": "nfci",
+      "params": "window=756",
+      "counts": {
+        "buy": 877,
+        "sell": 260,
+        "flat": 4342,
+        "gap": 20
+      },
+      "transitions": 39
+    },
+    {
+      "name": "real_rate",
+      "params": "window=504",
+      "counts": {
+        "buy": 968,
+        "sell": 922,
+        "flat": 3590,
+        "gap": 19
+      },
+      "transitions": 237
+    },
+    {
+      "name": "sma_band",
+      "params": "sma_band_min_samples=30,sma_band_window=378",
+      "counts": {
+        "buy": 430,
+        "sell": 1796,
+        "flat": 3244,
+        "gap": 29
+      },
+      "transitions": 272
+    },
+    {
+      "name": "uup",
+      "params": "window=90",
+      "counts": {
+        "buy": 609,
+        "sell": 1038,
+        "flat": 3261,
+        "gap": 591
+      },
+      "transitions": 509
+    },
+    {
+      "name": "walcl",
+      "params": "roc_days=90,window=180",
+      "counts": {
+        "buy": 887,
+        "sell": 892,
+        "flat": 3607,
+        "gap": 113
+      },
+      "transitions": 269
+    },
+    {
+      "name": "weekly_macd",
+      "params": "macd_fast=8,macd_slow=34,macd_z_window=90",
+      "counts": {
+        "buy": 0,
+        "sell": 39,
+        "flat": 5301,
+        "gap": 159
+      },
+      "transitions": 2
+    },
+    {
+      "name": "weekly_rsi",
+      "params": "rsi_length=14",
+      "counts": {
+        "buy": 0,
+        "sell": 34,
+        "flat": 5402,
+        "gap": 63
+      },
+      "transitions": 8
+    }
+  ],
+  "in_sample": true,
+  "note": "Periods are z-threshold definitions on fitted indicators; in-sample against the same pinned windows used for fitting. Holdout untouched."
+}

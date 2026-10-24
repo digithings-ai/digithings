@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1196" viewBox="0 0 1680 1196" font-family="Helvetica, Arial, sans-serif">
+<title>Gold sensitivity consolidation (Plan 22 Engine 2) — capture DEPTH decides, direction is fitted</title>
+<desc>IN-SAMPLE — scoring target only, NOT a performance claim. Every separation is fit against the same detected turns it is measured on, at every bar with a valid z. This calibrates indicator windows to detected history; it is NOT out-of-sample predictive skill, the holdout stays spent, and no return / Sharpe / trade count is claimed anywhere here.</desc>
+<rect x="0" y="0" width="1680" height="1196" fill="white"/>
+<defs><pattern id="hatch-inverted" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c62828" stroke-width="2.2" stroke-opacity="0.85"/></pattern></defs>
+<text x="840.0" y="24.0" font-size="15" fill="#1c1c1c" text-anchor="middle" font-weight="bold">Gold sensitivity consolidation (Plan 22 Engine 2) — capture DEPTH decides, direction is fitted</text>
+<text x="840.0" y="42.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">GLD-USD · crank [15.0, 10.0, 5.0] · min_separation_days [45] · windows ±45d · bar 0.5 z · dead zone ±0.06 (all frozen, nothing tuned after seeing output)</text>
+<line x1="132" y1="484.0" x2="1548" y2="484.0" stroke="#e8e8e8"/>
+<text x="124.0" y="487.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">-4.83</text>
+<line x1="132" y1="395.0" x2="1548" y2="395.0" stroke="#e8e8e8"/>
+<text x="124.0" y="398.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">-2.41</text>
+<line x1="132" y1="306.0" x2="1548" y2="306.0" stroke="#e8e8e8"/>
+<text x="124.0" y="309.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">0</text>
+<line x1="132" y1="217.0" x2="1548" y2="217.0" stroke="#e8e8e8"/>
+<text x="124.0" y="220.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">+2.41</text>
+<line x1="132" y1="128.0" x2="1548" y2="128.0" stroke="#e8e8e8"/>
+<text x="124.0" y="131.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">+4.83</text>
+<text x="124.0" y="120.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">separation (z), signed</text>
+<line x1="132" y1="287.6" x2="1548" y2="287.6" stroke="#1565c0" stroke-width="1.6" stroke-dasharray="7 4"/>
+<line x1="132" y1="324.4" x2="1548" y2="324.4" stroke="#1565c0" stroke-width="1.6" stroke-dasharray="7 4"/>
+<text x="1556.0" y="290.6" font-size="10" fill="#1565c0" text-anchor="start" font-weight="normal">capture bar</text>
+<text x="1556.0" y="302.6" font-size="10" fill="#1565c0" text-anchor="start" font-weight="normal">0.5 z-units</text>
+<text x="1556.0" y="314.6" font-size="9" fill="#5f5f5f" text-anchor="start" font-weight="normal">(on |separation|)</text>
+<text x="1556.0" y="321.0" font-size="9" fill="#2e7d32" text-anchor="start" font-weight="normal">expected (+1)</text>
+<text x="1556.0" y="333.0" font-size="9" fill="#c62828" text-anchor="start" font-weight="normal">inverted (-1)</text>
+<rect x="152.5" y="306.0" width="20.4" height="57.6" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="162.7" cy="372.6" r="2.6" fill="#1565c0"/>
+<rect x="180.8" y="306.0" width="20.4" height="52.0" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="191.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">uup</text>
+<rect x="270.5" y="248.4" width="20.4" height="57.6" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="280.7" cy="239.4" r="2.6" fill="#1565c0"/>
+<rect x="298.8" y="263.7" width="20.4" height="42.3" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="327.1" y="280.9" width="20.4" height="25.1" fill="#2e7d32" fill-opacity="0.85"/>
+<text x="309.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">real_rate</text>
+<rect x="388.5" y="306.0" width="20.4" height="25.6" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="398.7" cy="340.6" r="2.6" fill="#1565c0"/>
+<rect x="416.8" y="306.0" width="20.4" height="25.9" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="427.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">hy_oas</text>
+<rect x="563.1" y="278.5" width="20.4" height="27.5" fill="#2e7d32" fill-opacity="0.85"/>
+<text x="545.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">ig_oas</text>
+<rect x="624.5" y="306.0" width="20.4" height="37.9" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="634.7" cy="352.9" r="2.6" fill="#1565c0"/>
+<rect x="652.8" y="306.0" width="20.4" height="25.2" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="663.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">breakeven_5y</text>
+<rect x="742.5" y="306.0" width="20.4" height="25.0" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="752.7" cy="340.0" r="2.6" fill="#1565c0"/>
+<text x="781.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">nfci</text>
+<rect x="860.5" y="306.0" width="20.4" height="45.5" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="870.7" cy="360.5" r="2.6" fill="#1565c0"/>
+<rect x="917.1" y="306.0" width="20.4" height="32.0" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="899.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">gdx_gld</text>
+<rect x="978.5" y="269.3" width="20.4" height="36.7" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="988.7" cy="260.3" r="2.6" fill="#1565c0"/>
+<rect x="1006.8" y="271.0" width="20.4" height="35.0" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="1035.1" y="274.0" width="20.4" height="32.0" fill="#2e7d32" fill-opacity="0.85"/>
+<text x="1017.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">gld_slv</text>
+<rect x="1096.5" y="306.0" width="20.4" height="27.4" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<circle cx="1106.7" cy="342.4" r="2.6" fill="#1565c0"/>
+<text x="1135.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">m2</text>
+<rect x="1214.5" y="287.4" width="20.4" height="18.6" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="1224.7" cy="278.4" r="2.6" fill="#1565c0"/>
+<text x="1253.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">walcl</text>
+<rect x="1332.5" y="216.3" width="20.4" height="89.7" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="1342.7" cy="207.3" r="2.6" fill="#1565c0"/>
+<rect x="1360.8" y="230.1" width="20.4" height="75.9" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="1389.1" y="256.9" width="20.4" height="49.1" fill="#2e7d32" fill-opacity="0.85"/>
+<text x="1371.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">sma_band</text>
+<rect x="1450.5" y="147.1" width="20.4" height="158.9" fill="#2e7d32" fill-opacity="0.85"/>
+<circle cx="1460.7" cy="138.1" r="2.6" fill="#1565c0"/>
+<rect x="1478.8" y="168.6" width="20.4" height="137.4" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="1507.1" y="207.9" width="20.4" height="98.1" fill="#2e7d32" fill-opacity="0.85"/>
+<text x="1489.0" y="500.0" font-size="9" fill="#1c1c1c" text-anchor="middle" font-weight="normal">valuation</text>
+<line x1="132" y1="306.0" x2="1548" y2="306.0" stroke="#1c1c1c" stroke-width="1.2"/>
+<rect x="132" y="128" width="1416" height="356" fill="none" stroke="#dcdcdc"/>
+<text x="132.0" y="98.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">GROUPED BARS — one group per capturing indicator</text>
+<text x="840.0" y="116.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">each bar is that indicator's selected frozen-grid row at that level: height = |separation|, ABOVE the axis = expected polarity (+1), BELOW and hatched = inverted (-1)</text>
+<text x="1548.0" y="98.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">window-day share  @15% 0.2234 | @10% 0.3554 | @5% 0.5990</text>
+<text x="132.0" y="518.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">only indicators capturing at SOME level are drawn · the circle marks the chosen level's bar · a leg vetoed for a direction flip is labelled [UNSTABLE]</text>
+<text x="132.0" y="592.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">CAPTURE DEPTH per level — the ranking key</text>
+<text x="132.0" y="610.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">summed |separation| of that level's captures. Depth, not headcount, is what the choice is made on; a knife-edge leg cannot hand the decision to a different granularity.</text>
+<line x1="132" y1="790.0" x2="1548" y2="790.0" stroke="#e8e8e8"/>
+<text x="124.0" y="793.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">0.00</text>
+<line x1="132" y1="706.0" x2="1548" y2="706.0" stroke="#e8e8e8"/>
+<text x="124.0" y="709.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">11.81</text>
+<line x1="132" y1="622.0" x2="1548" y2="622.0" stroke="#e8e8e8"/>
+<text x="124.0" y="625.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">23.62</text>
+<text x="124.0" y="610.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">capture depth</text>
+<rect x="264.2" y="678.0" width="207.7" height="50.9" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="264.2" y="728.9" width="207.7" height="61.1" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<rect x="255.2" y="622.0" width="225.7" height="168.0" fill="none" stroke="#1565c0" stroke-width="2.2"/>
+<text x="368.0" y="644.0" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">depth 15.7457</text>
+<text x="368.0" y="658.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">11 capturing</text>
+<text x="368.0" y="671.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">sign mix 5+ / 6-</text>
+<text x="368.0" y="806.0" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">@15%</text>
+<text x="368.0" y="820.0" font-size="10" fill="#1565c0" text-anchor="middle" font-weight="bold">20 turns · share 0.2234 · CHOSEN</text>
+<rect x="736.2" y="714.0" width="207.7" height="43.4" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="736.2" y="757.4" width="207.7" height="32.6" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="840.0" y="680.0" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">depth 10.6792</text>
+<text x="840.0" y="694.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">7 capturing</text>
+<text x="840.0" y="707.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">sign mix 4+ / 3-</text>
+<text x="840.0" y="806.0" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">@10%</text>
+<text x="840.0" y="820.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">34 turns · share 0.3554 · loses</text>
+<rect x="1208.2" y="739.1" width="207.7" height="42.4" fill="#2e7d32" fill-opacity="0.85"/>
+<rect x="1208.2" y="781.5" width="207.7" height="8.5" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1.3"/>
+<text x="1312.0" y="705.1" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">depth 7.1547</text>
+<text x="1312.0" y="719.1" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">6 capturing</text>
+<text x="1312.0" y="732.1" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">sign mix 5+ / 1-</text>
+<text x="1312.0" y="806.0" font-size="11" fill="#1c1c1c" text-anchor="middle" font-weight="bold">@5%</text>
+<text x="1312.0" y="820.0" font-size="10" fill="#5f5f5f" text-anchor="middle" font-weight="normal">63 turns · share 0.5990 · loses</text>
+<rect x="132.0" y="833.0" width="11" height="11" fill="#2e7d32" stroke="#2e7d32" stroke-width="1"/>
+<text x="148.0" y="842.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">expected polarity (+1), trough-high / peak-low</text>
+<rect x="449.6" y="833.0" width="11" height="11" fill="url(#hatch-inverted)" stroke="#c62828" stroke-width="1"/>
+<text x="465.6" y="842.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">inverted (-1), rich at the bottoms</text>
+<text x="132.0" y="862.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">chosen: min_move_pct=15 — the most sensitive granularity the indicators can still capture: finer pin sets are harder scoring targets, so sensitivity</text>
+<text x="132.0" y="876.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">is taken as far as the indicator evidence carries it and no further. Among the levels the indicators do carry, the one they carry DEEPLY wins,</text>
+<text x="132.0" y="890.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="normal">because headcount cannot tell a vote held from conviction from one held by 0.0042</text>
+<text x="132.0" y="908.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">direction_unstable: none — every fitting leg reads the same way at every level it clears the bar at (a flip would be vetoed)</text>
+<rect x="132" y="918.0" width="1416" height="252" fill="#fbfbfb" stroke="#dcdcdc"/>
+<text x="144.0" y="940.0" font-size="12" fill="#1c1c1c" text-anchor="start" font-weight="bold">HOW TO READ THIS</text>
+<circle cx="150.0" cy="956.0" r="2.4" fill="#1c1c1c"/>
+<text x="162.0" y="960.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">Grid-row selection maximises |separation| (ties to the shorter window), so an indicator's direction is FITTED from the sign of its</text>
+<text x="162.0" y="974.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">winning row, never imposed.</text>
+<circle cx="150.0" cy="988.0" r="2.4" fill="#1c1c1c"/>
+<text x="162.0" y="992.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">A row CAPTURES a level iff |separation| &gt;= the bar AND neither window side's mean is inside the +/-0.06 dead zone. abs() is applied</text>
+<text x="162.0" y="1006.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">to the bar — a mirrored leg is recorded, not refused.</text>
+<circle cx="150.0" cy="1020.0" r="2.4" fill="#1c1c1c"/>
+<text x="162.0" y="1024.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">DIRECTION STABILITY (veto): a leg capturing at more than one level must carry the same fitted direction at each; a flip is flagged</text>
+<text x="162.0" y="1038.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">direction_unstable, captures nowhere, and is recorded as evidence. A single-level capture carries no such obligation.</text>
+<circle cx="150.0" cy="1052.0" r="2.4" fill="#1c1c1c"/>
+<text x="162.0" y="1056.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">A level QUALIFIES iff its capture count loses nothing against EVERY coarser level; among qualifiers the largest capture DEPTH wins,</text>
+<text x="162.0" y="1070.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal">ties to the coarser rung.</text>
+<text x="144.0" y="1096.0" font-size="10" fill="#5f5f5f" text-anchor="start" font-weight="normal">Detector turns -&gt; ±45d cycle windows. A SCORING TARGET only: no exposure floor, no execution period, no perfect-strategy oracle.</text>
+<rect x="144" y="1118" width="1392" height="42" fill="#ffffff" stroke="#c62828" stroke-width="1.4"/>
+<text x="154.0" y="1134.0" font-size="11" fill="#1c1c1c" text-anchor="start" font-weight="bold">IN-SAMPLE — scoring target only, NOT a performance claim. Every separation is fit against the same detected turns it is measured on, at every bar with</text>
+<text x="154.0" y="1149.0" font-size="10" fill="#1c1c1c" text-anchor="start" font-weight="normal"> a valid z. This calibrates indicator windows to detected history; it is NOT out-of-sample predictive skill, the holdout stays spent, and no return / Sharpe / trade count is claimed anywhere here.</text>
+<text x="1536.0" y="940.0" font-size="10" fill="#5f5f5f" text-anchor="end" font-weight="normal">source: /Users/chrisstefan/Code/digithings/.worktrees/task/4804-sdca-strategy-for-gold--gld/digiquant/data/price-history/GLD-USD.csv close column / 5499 rows / 2004-11-18 -&gt; 2026-09-29</text>
+</svg>
