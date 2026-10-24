@@ -372,15 +372,18 @@ describe("index.ts isolation wiring", () => {
     expect(source).not.toContain("import { handleMarketData }");
   });
 
-  it("keeps the MCP edge path fail-closed and synchronous (401 before isolation)", () => {
+  it("keeps the MCP edge path fail-closed and ahead of isolation (401/403 before isolation)", () => {
     const mcpStart = source.indexOf("MCP_EDGE_PREFIX}/`)");
     expect(mcpStart).toBeGreaterThan(-1);
-    const authCheck = source.indexOf(
-      "if (!expected || !provided || provided !== expected)",
-    );
+    // The credential decision is delegated to ./mcp-edge-auth since the
+    // digikey JWT identity landed; it still runs before the lazy route group,
+    // so a refusal costs no import and no container hop.
+    const authCheck = source.indexOf("await authorizeMcpEdge({");
+    const refusal = source.indexOf("if (!decision.ok) {");
     const isolated = source.indexOf('runIsolated("mcp-edge"');
     expect(authCheck).toBeGreaterThan(mcpStart);
-    expect(isolated).toBeGreaterThan(authCheck);
+    expect(refusal).toBeGreaterThan(authCheck);
+    expect(isolated).toBeGreaterThan(refusal);
   });
 
   it("mounts the folded dashboard-api under /dashboard-api without shadowing MCP paths", () => {

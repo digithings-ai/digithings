@@ -274,6 +274,13 @@ id = "361b710bee56466097053275404535ba"
 SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
 DIGIKEY_ISSUER = "https://key.digithings.ai"
 DIGIKEY_AUDIENCE = "digi-ecosystem"
+# Where the Worker verifies `Authorization: Bearer` digikey JWTs at the MCP edge
+# (src/mcp-edge-auth.ts). The Worker cannot reach the Container's loopback, so
+# this is the public digikey host — the same service, not a new dependency. The
+# Container's own DIGIKEY_JWKS_URL stays http://127.0.0.1:8005/… (src/index.ts
+# envVars); both point at the same digikey. Unset ⇒ the JWT path refuses and
+# only the static x-digi-mcp-key still works.
+DIGIKEY_JWKS_URL = "https://key.digithings.ai/.well-known/jwks.json"
 DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
 DIGIKEY_ALLOW_DEV_GLOBAL = "0"
 DIGIVAULT_URL = "http://127.0.0.1:8004"
