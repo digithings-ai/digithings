@@ -21,7 +21,10 @@ deployment: &house
   aliases:
     - www.digithings.ai
   chrome:
-    mode: embed
+    # The house tenant is the digithings.ai product surface, not an embeddable
+    # widget: `mode: app` keeps `/chat` on the product chat instead of
+    # redirecting it to `/embed` (the thread templates keep `embed`).
+    mode: app
     theme: dark
     skin: digichat
     title: ask digichat
