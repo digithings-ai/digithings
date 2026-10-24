@@ -90,8 +90,12 @@ def _pin_local_env(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
     defaults straight into ``os.environ``. Left alone, the two defaults would
     stay in the session after the test - and the generate-cwd one would point
     at a temporary directory pytest deletes at the end of the run. Setting
-    them here means ``apply_defaults`` finds them already in place and
-    monkeypatch undoes them at teardown.
+    them here keeps each one at the value the test expects before
+    ``apply_defaults`` runs: the generate-cwd default is left in place because
+    ``setdefault`` finds it, and the port is carried over its unconditional
+    assignment (``env[PORT_ENV] = str(api_port(env))``), so the assignment
+    lands on the same port this line chose. monkeypatch undoes all three at
+    teardown.
     """
     monkeypatch.setenv(localenv.PORT_ENV, "55321")
     monkeypatch.setenv(localenv.KEYCHAIN_PREFIX_ENV, localenv.DEFAULT_KEYCHAIN_PREFIX)
@@ -160,6 +164,24 @@ def test_the_contract_error_is_json_when_asked(
 ) -> None:
     """`--json` reports the same refusal as machine-readable output."""
     assert dt_at_broken_contract.main(["status", "--json"]) == 1  # type: ignore[attr-defined]
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert "services.yaml" in payload["error"]
+
+
+def test_the_json_form_of_dt_urls_carries_the_refusal_in_its_payload(
+    dt_at_broken_contract: object, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`dt urls --json` reports the same refusal as machine-readable output.
+
+    The catch in ``cmd_urls`` passes ``args.json`` into ``_contract_error``.
+    Handing it a constant ``False`` instead leaves every other arm green --
+    the message still goes to stderr, the exit code is still 1 -- and the
+    machine-readable caller gets an empty stdout to parse. This arm is the
+    only thing that sees the difference.
+    """
+    assert dt_at_broken_contract.main(["urls", "--json"]) == 1  # type: ignore[attr-defined]
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["ok"] is False
