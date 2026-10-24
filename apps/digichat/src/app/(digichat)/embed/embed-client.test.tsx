@@ -312,3 +312,20 @@ describe("a default house turn sends no X-Digi-Model", () => {
     }
   });
 });
+
+describe("the free-turn counter charges per outgoing request", () => {
+  const code = codeOnly(embedClientSrc);
+
+  it("hands the charge to the hook, which prepares every request", () => {
+    expect(code).toContain("onTurnCharge:");
+  });
+
+  it("charges in exactly one place, so a turn is never counted twice", () => {
+    const calls = code.match(/armGateCharge\(\)/g) ?? [];
+    expect(calls).toHaveLength(1);
+  });
+
+  it("no longer charges from the composer gate, which only one path reaches", () => {
+    expect(code).toMatch(/onAllowSend: \(\) => \{\s*emit\(/);
+  });
+});
