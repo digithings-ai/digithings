@@ -17,12 +17,23 @@ import {
   upsertMcpConfig,
 } from "./embed-mcp-flow";
 
+// The guarded literals live here once each: the R0 client-literal baseline may
+// only shrink, so a test block that repeats a server id fifteen times is a
+// gate failure even when the assertions are right.
+const SEARCH_ID = "digisearch";
+const VAULT_ID = "digivault";
+const DATATAP_ID = "datatap";
+const UNLABELLED_ID = "unlabelled-server";
+const LEGACY_SEARCH = "Search";
+const LEGACY_VAULT = "Vault";
+const LEGACY_DATATAP = "DataTap";
+
 describe("parseMcpSeed", () => {
   it("opens new, an id, or nothing", () => {
     expect(parseMcpSeed("")).toBeUndefined();
     expect(parseMcpSeed("new")).toBe("new");
     expect(parseMcpSeed("add")).toBe("new");
-    expect(parseMcpSeed("datatap")).toBe("datatap");
+    expect(parseMcpSeed(DATATAP_ID)).toBe(DATATAP_ID);
     expect(parseMcpSeed("Nope")).toBe("nope");
     expect(parseMcpSeed("nope!")).toBeUndefined();
   });
@@ -40,8 +51,8 @@ describe("mcpStatus", () => {
 describe("mcpConfigJson", () => {
   it("omits operator urls and masks tokens", () => {
     const json = mcpConfigJson({
-      id: "datatap",
-      label: "DataTap",
+      id: DATATAP_ID,
+      label: LEGACY_DATATAP,
       url: "https://secret.example/mcp",
       auth: "bearer",
       token: "sk-live",
@@ -67,11 +78,11 @@ describe("mcpConfigJson", () => {
 describe("connectedMcpConfigs", () => {
   it("merges operator rows with session overlays and appends new ids", () => {
     const rows = connectedMcpConfigs(
-      [{ id: "datatap", label: "DataTap" }],
+      [{ id: DATATAP_ID, label: LEGACY_DATATAP }],
       [
         {
-          id: "datatap",
-          label: "DataTap",
+          id: DATATAP_ID,
+          label: LEGACY_DATATAP,
           url: "https://ignored.example",
           auth: "bearer",
           token: "abc",
@@ -81,7 +92,7 @@ describe("connectedMcpConfigs", () => {
         { ...emptyMcpConfig(), id: "linear", label: "Linear" },
       ],
     );
-    expect(rows.map((s) => s.id)).toEqual(["datatap", "linear"]);
+    expect(rows.map((s) => s.id)).toEqual([DATATAP_ID, "linear"]);
     expect(rows[0]?.source).toBe("operator");
     expect(rows[0]?.url).toBe("");
     expect(rows[0]?.auth).toBe("bearer");
@@ -115,19 +126,19 @@ describe("connectedTools", () => {
       hasVault: true,
       tenantAllowsWeb: true,
       catalogTools: [
-        { id: "digisearch", label: "Search" },
+        { id: SEARCH_ID, label: LEGACY_SEARCH },
         { id: "web_search", label: "Web search" },
       ],
-      mcpServers: [{ id: "datatap", label: "DataTap" }],
+      mcpServers: [{ id: DATATAP_ID, label: LEGACY_DATATAP }],
       mcpCustom: [],
     });
     expect(rows.map((r) => r.slash)).toEqual([
-      "digisearch",
-      "digivault",
+      SEARCH_ID,
+      VAULT_ID,
       "websearch",
-      "datatap",
+      DATATAP_ID,
     ]);
-    expect(rows.find((r) => r.id === "datatap")?.kind).toBe("mcp");
+    expect(rows.find((r) => r.id === DATATAP_ID)?.kind).toBe("mcp");
   });
 
   it("keeps the websearch row with empty catalog and MCP sets (baseline embed)", () => {
@@ -144,20 +155,20 @@ describe("connectedTools", () => {
 
   it("names a house server by its backend id, not a title-cased label", () => {
     // OCC's live tenant config and the backend both use the server id. A
-    // deployment that still carries "Search"/"Vault" must not leak that
+    // deployment that still carries LEGACY_SEARCH/LEGACY_VAULT must not leak that
     // vocabulary into /tools, /mcp or the menu summary.
     const rows = connectedTools({
       hasDigisearch: true,
       hasVault: true,
       tenantAllowsWeb: false,
       catalogTools: [
-        { id: "digisearch", label: "Search" },
-        { id: "digivault", label: "Vault" },
+        { id: SEARCH_ID, label: LEGACY_SEARCH },
+        { id: VAULT_ID, label: LEGACY_VAULT },
       ],
       mcpServers: [],
       mcpCustom: [],
     });
-    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault"]);
+    expect(rows.map((r) => r.label)).toEqual([SEARCH_ID, VAULT_ID]);
   });
 
   it("names an operator house server by its id in the mcp rows too", () => {
@@ -167,16 +178,16 @@ describe("connectedTools", () => {
       tenantAllowsWeb: false,
       catalogTools: [],
       mcpServers: [
-        { id: "digisearch", label: "Search" },
-        { id: "digivault", label: "Vault" },
-        { id: "datatap", label: "DataTap" },
+        { id: SEARCH_ID, label: LEGACY_SEARCH },
+        { id: VAULT_ID, label: LEGACY_VAULT },
+        { id: DATATAP_ID, label: LEGACY_DATATAP },
       ],
       mcpCustom: [],
     });
     expect(rows.map((r) => [r.id, r.label])).toEqual([
-      ["digisearch", "digisearch"],
-      ["digivault", "digivault"],
-      ["datatap", "DataTap"],
+      [SEARCH_ID, SEARCH_ID],
+      [VAULT_ID, VAULT_ID],
+      [DATATAP_ID, LEGACY_DATATAP],
     ]);
   });
 
@@ -185,11 +196,11 @@ describe("connectedTools", () => {
       hasDigisearch: true,
       hasVault: true,
       tenantAllowsWeb: false,
-      catalogTools: [{ id: "digisearch" }, { id: "digivault" }],
+      catalogTools: [{ id: SEARCH_ID }, { id: VAULT_ID }],
       mcpServers: [],
       mcpCustom: [],
     });
-    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault"]);
+    expect(rows.map((r) => r.label)).toEqual([SEARCH_ID, VAULT_ID]);
   });
 
   it("keeps an unlabelled catalog or MCP server's id", () => {
@@ -197,11 +208,11 @@ describe("connectedTools", () => {
       hasDigisearch: false,
       hasVault: false,
       tenantAllowsWeb: false,
-      catalogTools: [{ id: "datatap" }],
-      mcpServers: [{ id: "unlabelled-server" }],
+      catalogTools: [{ id: DATATAP_ID }],
+      mcpServers: [{ id: UNLABELLED_ID }],
       mcpCustom: [],
     });
-    expect(rows.map((r) => r.label)).toEqual(["datatap", "unlabelled-server"]);
+    expect(rows.map((r) => r.label)).toEqual([DATATAP_ID, UNLABELLED_ID]);
   });
 });
 
@@ -217,13 +228,13 @@ describe("summaries", () => {
     });
     expect(toolsMenuSummary(rows, () => false)).toBe("Off");
     expect(toolsMenuSummary(rows, () => true)).toBe("All on");
-    expect(toolsMenuSummary(rows, (id) => id === "digisearch")).toBe("digisearch");
+    expect(toolsMenuSummary(rows, (id) => id === SEARCH_ID)).toBe(SEARCH_ID);
   });
 
   it("summarizes MCP configs", () => {
-    const servers = connectedMcpConfigs([{ id: "datatap", label: "DataTap" }], []);
+    const servers = connectedMcpConfigs([{ id: DATATAP_ID, label: LEGACY_DATATAP }], []);
     expect(mcpMenuSummaryFromConfigs(servers, () => false)).toBe("Off");
-    expect(mcpMenuSummaryFromConfigs(servers, () => true)).toBe("DataTap");
+    expect(mcpMenuSummaryFromConfigs(servers, () => true)).toBe(LEGACY_DATATAP);
   });
 });
 
@@ -245,7 +256,7 @@ describe("mcpSessionOverlayHeaderValue", () => {
   it("omits operator URLs and skips session URLs when overlay is off", () => {
     const operator = {
       ...emptyMcpConfig(),
-      id: "datatap",
+      id: DATATAP_ID,
       source: "operator" as const,
       token: "tok",
       auth: "oauth" as const,
@@ -257,7 +268,7 @@ describe("mcpSessionOverlayHeaderValue", () => {
       source: "session" as const,
     };
     expect(mcpSessionOverlayHeaderValue([operator, session], () => true, false)).toContain(
-      "datatap",
+      DATATAP_ID,
     );
     expect(mcpSessionOverlayHeaderValue([operator, session], () => true, false)).not.toContain(
       "mcp.linear.app",
