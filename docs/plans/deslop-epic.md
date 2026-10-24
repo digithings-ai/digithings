@@ -547,3 +547,10 @@ Cross-ownership follow-ups:
 2. `apps/digiquant-web/app/globals.css` has no Hallmark stamp/critique/waiver
    header. Epic-level decision, not a per-page fix.
 3. `components/tearsheet/asset-logo.tsx` has a pre-existing `<img>` lint warning.
+
+### Release refresh — 2026-10-24
+
+`develop` was merged through `cf2d54c117` (Next 16.4.2) and the chat surfaces
+were swept onto the canonical token roles after the digichat stream landed.
+The branch is the release candidate for the web, chat and container cutover;
+the DataTap trial/dev chat stays held until the public surfaces validate.
