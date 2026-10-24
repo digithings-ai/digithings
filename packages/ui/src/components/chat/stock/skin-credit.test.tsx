@@ -14,6 +14,8 @@ describe("SkinCredit", () => {
     render(<SkinCredit />);
     const el = screen.getByTestId("skin-credit");
     expect(el.textContent).toBe(SKIN_CREDIT_TEXT);
+    // Boot carve-out hook: product-chrome lifts this above the overlay.
+    expect(el.getAttribute("data-slot")).toBe("aui_credit");
     expect(SKIN_CREDIT_TEXT).toBe(
       "powered by digichat — a digithings product.",
     );
