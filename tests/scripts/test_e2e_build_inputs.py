@@ -52,6 +52,10 @@ _COMPOSE_UP = re.compile(r"\bdocker(?:\s+compose|-compose)\b")
 _BUILD = re.compile(r"\bdocker\s+build\b")
 _DOCKERFILE_FLAG = re.compile(r"(?:^|\s)(?:-f|--file)[=\s]+(\S+)")
 _SHELL_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+#: A trailing backslash continues the command onto the next line; the shell reads one
+#: command, so the readers below must too. Left joined, the backslash becomes a token
+#: and the real service names land in a segment nothing matches.
+_CONTINUATION = re.compile(r"\\[ \t]*\n[ \t]*")
 
 
 def _run_blocks() -> list[str]:
@@ -62,7 +66,7 @@ def _run_blocks() -> list[str]:
         for step in job.get("steps") or []:
             script = step.get("run")
             if script:
-                blocks.append(str(script))
+                blocks.append(_CONTINUATION.sub(" ", str(script)))
     assert blocks, f"{WORKFLOW.name} has no runnable steps — did the workflow move?"
     return blocks
 
