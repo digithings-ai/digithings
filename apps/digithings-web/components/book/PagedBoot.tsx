@@ -67,7 +67,7 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         cleanups.current.push(() => chunker.destroy());
         stampPages();
         fillTocPageRefs();
-        mountCoverField();
+        mountPageFields();
         // The field reveals column by column over about a second; a screenshot
         // taken at the ready marker caught only the first few columns and
         // printed a stripe down the left edge. Wait for the sweep to finish.
@@ -166,20 +166,28 @@ function stampPages(): void {
 }
 
 /**
- * The cover carries the field the welcome page draws: an embedding map in
- * pixels. It is mounted here, on the page box, and not in the source document:
- * pagedjs copies the source into the boxes, and a canvas copied that way
- * arrives without its bitmap, so a field mounted before pagination printed a
- * blank cover.
+ * The cover and the contents carry the field the welcome page draws: an
+ * embedding map in pixels. It is mounted here, on the page box, and not in the
+ * source document: pagedjs copies the source into the boxes, and a canvas
+ * copied that way arrives without its bitmap, so a field mounted before
+ * pagination printed a blank page.
+ *
+ * It goes on the page box rather than inside the section so it can run edge to
+ * edge — the section sits inside the page margins. The contents page gets the
+ * same field at a lower strength and from a different seed, so the two facing
+ * pages do not read as the same wallpaper.
  */
-function mountCoverField(): void {
-  const cover = document.querySelector<HTMLElement>(".pagedjs_page .book-cover");
-  if (!cover || cover.querySelector(".book-cover__field")) return;
-  const canvas = document.createElement("canvas");
-  canvas.className = "book-cover__field";
-  canvas.setAttribute("aria-hidden", "true");
-  cover.prepend(canvas);
-  mountField(canvas, createEmbeddingSubject(COVER_SEED));
+function mountPageFields(): void {
+  document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page) => {
+    const cover = page.querySelector(".book-cover");
+    const contents = page.querySelector(".book-contents");
+    if ((!cover && !contents) || page.querySelector(".book-cover__field")) return;
+    const canvas = document.createElement("canvas");
+    canvas.className = cover ? "book-cover__field" : "book-cover__field book-cover__field--quiet";
+    canvas.setAttribute("aria-hidden", "true");
+    page.prepend(canvas);
+    mountField(canvas, createEmbeddingSubject(cover ? COVER_SEED : COVER_SEED + 7));
+  });
 }
 
 function fillTocPageRefs(): void {

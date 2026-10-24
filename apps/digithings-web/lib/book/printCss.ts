@@ -496,8 +496,15 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   color: var(--ink) !important;
   accent-color: var(--accent) !important;
   opacity: 0.72 !important;
-  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 50%, transparent 76%) !important;
-  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 50%, transparent 76%) !important;
+  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 62%, transparent 84%) !important;
+  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 62%, transparent 84%) !important;
+}
+
+/* The contents page: the same field, quiet enough to read a list over. */
+.book-cover__field--quiet {
+  opacity: 0.45 !important;
+  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 55%, transparent 92%) !important;
+  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 55%, transparent 92%) !important;
 }
 
 /* The edition and version, set opposite the folio on every page. */
