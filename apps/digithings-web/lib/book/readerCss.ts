@@ -39,7 +39,7 @@ export const BOOK_READER_CSS = `
   font-size: 0.72rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--color-accent, #b55e2a);
+  color: var(--accent);
 }
 .book-nav ol { margin: 0; padding: 0; list-style: none; }
 .book-nav li { border-bottom: 1px solid var(--color-hair, #e5e0d8); }
@@ -55,14 +55,14 @@ export const BOOK_READER_CSS = `
 .book-nav a[aria-current="true"] .book-nav__num {
   background: color-mix(in srgb, var(--color-hair, #e5e0d8) 45%, transparent);
 }
-.book-nav__num { flex: none; width: 1.5rem; color: var(--color-accent, #b55e2a); }
+.book-nav__num { flex: none; width: 1.5rem; color: var(--accent); }
 .book-nav__page { margin-left: auto; color: var(--color-ink-soft, #6b6560); }
 .book-nav__download {
   display: inline-flex;
   margin-top: 1rem;
   min-height: 2.75rem;
   align-items: center;
-  color: var(--color-accent, #b55e2a);
+  color: var(--accent);
   text-decoration: none;
 }
 .book-nav__download:hover { color: var(--color-ink, #1a1815); }
@@ -124,7 +124,7 @@ export const BOOK_READER_CSS = `
     min-height: 2.75rem;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.78rem;
-    color: var(--color-accent, #b55e2a);
+    color: var(--accent);
     cursor: pointer;
   }
   .book-nav ol,

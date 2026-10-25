@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { createEmbeddingSubject } from "@/components/landing/embedding-map";
 import { mountField } from "@/components/landing/pixel-field-core";
+import { applyDiagramTheme } from "@/lib/book/diagram-theme";
 import { PAGED_CSS } from "@/lib/book/printCss";
 
 /**
@@ -93,6 +94,10 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         stampPages();
         fillTocPageRefs();
         mountPageFields();
+        // Diagrams are drawn with a palette baked into the file. Recolour them
+        // now, on the page boxes pagedjs cloned, and finish before the ready
+        // marker so a screenshot cannot catch the drawing half-recoloured.
+        await applyDiagramTheme(document);
         // The field reveals column by column over about a second; a screenshot
         // taken at the ready marker caught only the first few columns and
         // printed a stripe down the left edge. Wait for the sweep to finish.

@@ -364,6 +364,11 @@ thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
 thead th { border-bottom-color: var(--accent) !important; }
+/* A section heading inside a chapter is a signpost, not a title: it takes the
+   theme's accent so the eye finds it, while the chapter title stays ink. On the
+   default theme the accent is the ink itself, so nothing changes there. */
+.book-chapter h2, .book-chapter h3, .book-chapter h4,
+.pagedjs_page h2, .pagedjs_page h3, .pagedjs_page h4 { color: var(--accent); }
 
 /* Folios sit bottom right: the PDF is read one page at a time on screen, so
    there is no spread and no outer margin to alternate into. */
