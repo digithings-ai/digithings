@@ -147,18 +147,20 @@ Surface (`digikey/src/digikey/server.py`): `GET /health`, `GET /healthz`,
 - **Secrets.** Worker secrets go in through `wrangler secret put` only; nothing is
   echoed to a run log or comment.
 
-## 8. Open decision (blocking)
+## 8. Decision taken, and the open work
 
 The stated outcome ("removes the Profile A container") is not reachable by this
 issue alone, because nine non-targeted programs share the image and digigraph cannot
-run on Workers without a product change. Pick one:
+run on Workers without a product change.
 
-- **A (recommended).** Re-scope DIG-2914 to Step 0 + Step 1 (digikey) and the Step 2
-  gate spike. Open the spike as a child issue. Hold digisearch and digigraph until
-  the gate answers. Cost: ~1 week. Benefit: one program off the image, and a
-  decision that either unlocks the deletion or kills it before 56k LOC are spent.
-- **B.** Keep the full title scope, including digigraph, accepting that chart,
-  dataframe and long-run tools are cut or proxied. Largest effort, changes the
-  digigraph product, needs owner sign-off on the feature loss.
-- **C.** Stop. Send this back to the PM to re-plan the container's fate (all twelve
-  programs) before any port starts.
+The scope question could not be raised as an interactive card (the run is
+non-interactive), so **option A is assumed** and the board reflects it:
+
+- **DIG-5548** — digikey onto a Worker (Step 1). Safe under every option.
+- **DIG-5549** — the gate spike (Step 2): can the remaining six programs leave the
+  image? Safe under every option, and it decides whether Steps 3-4 are funded.
+- **DIG-2914** stays open as the tracker and is held at `todo` until DIG-5549
+  answers.
+
+If the owner prefers B or C, say so on DIG-2914: B adds digigraph scope with a
+feature-cut sign-off, C cancels the two children before code starts.
