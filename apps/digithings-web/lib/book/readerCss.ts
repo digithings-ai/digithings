@@ -74,9 +74,21 @@ export const BOOK_READER_CSS = `
   display: block;
   width: 100%;
   height: auto;
-  background: #fff;
+  background: var(--surface, #fff);
   border: 1px solid var(--color-hair, #e5e0d8);
-  box-shadow: 0 1px 1px rgba(26, 24, 21, 0.04), 0 10px 30px rgba(26, 24, 21, 0.07);
+  box-shadow: 0 1px 1px var(--hair), 0 10px 30px var(--hair);
+}
+
+/* In the dark theme the pages follow the theme. A sheet of white paper on a
+   black page is the one thing on this site that would ignore the reader's
+   choice, so the page inverts to dark paper and light ink. The book is set in
+   one ink on one paper with line diagrams, which is what makes this work:
+   there is no photograph whose colour could invert wrongly. Printing resets it,
+   because paper is paper. */
+[data-theme="dark"] .book-frames__page {
+  filter: invert(1) hue-rotate(180deg);
+  border-color: var(--hair, rgba(255, 255, 255, 0.09));
+  box-shadow: none;
 }
 
 @media (max-width: 1023px) {
@@ -87,7 +99,7 @@ export const BOOK_READER_CSS = `
     z-index: 2;
     max-height: none;
     overflow: visible;
-    background: var(--color-paper, #faf7f2);
+    background: var(--bg, #fbfbf9);
     border-bottom: 1px solid var(--color-hair, #e5e0d8);
     padding-bottom: 0.5rem;
   }
@@ -106,5 +118,32 @@ export const BOOK_READER_CSS = `
   .book-nav[data-open="true"] .book-nav__download { display: inline-flex; }
   .book-nav__title { display: none; }
   .book-frames__sheet { max-width: 100%; }
+}
+
+/* Printing this page gives the book, not the site around it. The contents, the
+   header and the download link are screen furniture; the sheets already are the
+   printed pages, so each one becomes a sheet of paper at A4 with no margin —
+   the margin is inside the page image, where the book set it. */
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: var(--bg, #fff); }
+  header, footer, .dt-nav, .dt-footer, .book-nav { display: none !important; }
+  /* The kit's skip link is parked off-screen with a translate; paper has no
+     transforms, so it prints as a black chip on the first sheet. There is
+     nothing to skip to on paper. */
+  a[href="#main"] { display: none !important; }
+  .book-root { padding: 0 !important; }
+  .book-root > div { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  .book-shell { display: block; max-width: none; margin: 0; padding: 0; }
+  .book-frames { display: block; gap: 0; }
+  .book-frames__sheet {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    break-after: page;
+    break-inside: avoid;
+  }
+  .book-frames__sheet:last-of-type { break-after: auto; }
+  .book-frames__page { border: 0; box-shadow: none; filter: none !important; }
 }
 `;

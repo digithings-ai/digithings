@@ -52,6 +52,21 @@ export default function BookPages({
     return () => window.removeEventListener("scroll", onScroll);
   }, [chapters]);
 
+  // A page printed from here is the book, so every page has to be in the
+  // document before the print dialog takes its snapshot: images below the fold
+  // are lazy, and a lazy image prints as an empty sheet.
+  useEffect(() => {
+    const loadAll = () => {
+      document
+        .querySelectorAll<HTMLImageElement>(".book-frames__page")
+        .forEach((image) => {
+          image.loading = "eager";
+        });
+    };
+    window.addEventListener("beforeprint", loadAll);
+    return () => window.removeEventListener("beforeprint", loadAll);
+  }, []);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: BOOK_READER_CSS }} />
