@@ -15,21 +15,22 @@ surface is assembled from the same tokens, livery, motion laws, and components.
 
 | Part | Location | Package | Role |
 | ---- | -------- | ------- | ---- |
-| **reference app** | [`reference/`](reference/) | `@digithings/reference` | The live, browsable showcase — every reusable pattern rendered as working code at `http://127.0.0.1:4013`. Start here. |
+| **digiweb** | [`apps/digiweb/`](../../apps/digiweb/) | `@digithings/digiweb` | The live design reference — tokens, the kit index, the RTL proof and the brand studio at `http://127.0.0.1:4013`. Start here. |
 | **design tokens** | [`design/`](design/) | `@digithings/design` | Colours, type, spacing, motion easings — `tokens.css`. The single palette every surface builds from. |
 | **shared components** | [`web/`](web/) | `@digithings/ui` | The React component layer (Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) consumed across all frontends. |
 
-> All three live under `packages/ui/`. The token and component packages are
-> consumed **by package name** (`@digithings/design`, `@digithings/ui`)
-> everywhere, so the other frontends resolve them regardless of on-disk location
-> (see [ARCHITECTURE.md](ARCHITECTURE.md) for the deploy-path references the move updated).
+> The token and component packages are consumed **by package name**
+> (`@digithings/design`, `@digithings/ui`) everywhere, so the other frontends
+> resolve them regardless of on-disk location (see
+> [ARCHITECTURE.md](ARCHITECTURE.md) for the deploy-path references the move updated).
+> digiweb consumes them from `apps/digiweb/`.
 
 ## Agent access
 
 digiweb is built to be read by coding agents, not just people:
 
 - **[`MANIFEST.json`](MANIFEST.json)** — a machine-readable index of every
-  reference component, plus the `ui` kit sourced from `web/src/ui`: name, path,
+  digiweb component, plus the `ui` kit sourced from `web/src/ui`: name, path,
   family, and a one-line purpose.
   Regenerate it with `node scripts/build-manifest.mjs` after adding a component.
 - **[`ASSISTANT_UI_ELEMENTS.md`](ASSISTANT_UI_ELEMENTS.md)** — full assistant-ui
@@ -44,12 +45,12 @@ digiweb is built to be read by coding agents, not just people:
 ## Run the reference
 
 ```bash
-npm run dev --workspace @digithings/reference     # http://127.0.0.1:4013
-# or the repo's preview tooling: launch config "@digithings/reference"
+npm run dev --workspace @digithings/digiweb     # http://127.0.0.1:4013
+# or the repo's preview tooling: launch config "@digithings/digiweb"
 ```
 
-Chat gallery (official assistant-ui `Thread`, CSS-variable theme):
-[`CHAT_THEME.md`](CHAT_THEME.md), design-reference `/chatbot`.
+Chat skin (official assistant-ui `Thread`, CSS-variable theme):
+[`CHAT_THEME.md`](CHAT_THEME.md) — the live surface is digichat at `/chatbot`.
 
 ## Conventions
 

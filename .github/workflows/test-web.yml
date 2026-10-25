@@ -155,8 +155,8 @@ jobs:
       # typecheck. It belongs in this lane rather than one of its own because the root
       # `npm ci` above already wires the @digithings/design and @digithings/ui symlinks
       # it declares.
-      - name: Lint @digithings/reference
-        run: npm run lint --workspace @digithings/reference
+      - name: Lint @digithings/digiweb
+        run: npm run lint --workspace @digithings/digiweb
 
       # Type-checked as well as linted, because eslint-config-next does not type-check:
       # a bad prop type or a broken import in the reference passes `eslint .` clean.
@@ -181,23 +181,21 @@ jobs:
       # is not a one-fix change). Do not "tighten" it without regenerating or excluding
       # next-env.d.ts, and note Next rewrites that line itself on upgrade
       # (`next dev` writes .next/dev/types, `next build` writes .next/types).
-      # Same pair apps/reference/README.md documents as the local gate.
-      - name: Typecheck @digithings/reference
-        run: npm run typecheck --workspace @digithings/reference
+      # Same pair apps/digiweb/README.md documents as the local gate.
+      - name: Typecheck @digithings/digiweb
+        run: npm run typecheck --workspace @digithings/digiweb
 
-      # The reference is the component source of truth for the whole rebuild, and its
-      # test suite is the guard on that canon — the route smoke test, the specimen
-      # contract, the layering check, the nav and chrome contracts. It ran in NO lane
-      # (#4444), which is how a kit primitive (`kbd`, promoted by the Q1 slice) shipped
-      # with a rendered specimen but no registry entry: `specimens.test.ts` caught it the
-      # moment anyone ran the suite, and nobody was.
+      # The reference is the live surface the whole rebuild is checked against, and its
+      # test suite is the guard on the IA — the route inventory, the nav inventory, the
+      # kit-index parser behind /components, and the escape helper. It ran in NO lane
+      # (#4444), which is how a route could move with nobody noticing.
       #
       # Needs no `next build`: every assertion reads source files from disk (`existsSync`
       # against tracked paths), not build output — verified by running the suite with
       # `out/` and `.next/` removed. So this step stays cheap, and sits here rather than
       # behind a build that this workspace deliberately does not run in CI.
-      - name: Test @digithings/reference
-        run: npm run test --workspace @digithings/reference
+      - name: Test @digithings/digiweb
+        run: npm run test --workspace @digithings/digiweb
 
       # digithings-stack-cloudflare is in this lane's path filter (ci.yml's `web`)
       # but had no step here, so a var added to the hand-kept `Env` interface and

@@ -11,10 +11,10 @@ need a file that lives elsewhere, take it from the path given.
 ## Start here: the brand studio
 
 Compose and export the logo + hero wordmark at **`/brand/studio`** in the
-reference app:
+digiweb app:
 
 ```bash
-npm run dev --workspace @digithings/reference -- --port 4013
+npm run dev --workspace @digithings/digiweb -- --port 4013
 # http://127.0.0.1:4013/brand/studio/
 ```
 
@@ -41,8 +41,8 @@ icons and favicons. One or the other, never both in the same view.
 | vector / print / resize | `avatar/digithings-avatar-{dark,light}.svg` | the source both PNGs are rendered from |
 | **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
 
-The same bytes are previewed on the local design-reference at `/brand`
-(`npm run dev --workspace @digithings/reference` → http://127.0.0.1:4013/brand/).
+The same bytes are previewed on the local digiweb app at `/brand`
+(`npm run dev --workspace @digithings/digiweb` → http://127.0.0.1:4013/brand/).
 That page is a `--check` mirror and the upload kit; the **composer and exporter**
 is `/brand/studio` on the same app. Neither is shipped on digithings.ai.
 
@@ -80,8 +80,8 @@ build-studio.py                 syncs studio assets to the reference public mirr
 `studio/` holds the generated sources the composer renders: the 60×60-pixel-grid
 `logo-animated.svg` (100×100 viewBox), the 4×4 `wordmark-animated.svg`, the
 thumbnail masks, the six field patterns, and the preset/palette JSON. The
-reference app serves a byte-identical copy from
-`apps/reference/public/brand/studio/`; the canonical copy is this folder.
+digiweb app serves a byte-identical copy from
+`apps/digiweb/public/brand/studio/`; the canonical copy is this folder.
 
 ```bash
 python3 packages/brand/build-studio.py           # write the served mirror
@@ -120,7 +120,6 @@ radius in the PNG shows as a seam inside its frame.
 | **Open Graph cards** | `apps/digithings-web/public/og.png`, `apps/digiquant-web/public/og.png` | 1200×630, generated — see below |
 | **digithings.ai favicons** | `apps/digithings-web/public/favicon-dg{,-light}.svg` | one per theme polarity; a tile bakes its own background so it cannot inherit ink |
 | **digiquant.io favicons** | `apps/digiquant-web/public/favicon-dg{,-light}.svg` | byte-identical to digithings' — the mark is monochrome, nothing site-specific differs |
-| **favicon specimens** | `apps/reference/public/{,digiquant-}favicon-dg{,-light}.svg` | copies for the design-reference specimen page only; not served to users |
 | **the marks in code** | `packages/ui/src/components/symbols/terminal-marks.tsx` | `TerminalMark`, `TerminalWordmark`, `HairlineWordmark` — inline SVG in `currentColor`, which is why the nav follows `[data-theme]` |
 | **module wordmark banners** | `packages/hero-banner/src/definitions/index.ts` | 15 `BANNERS` definitions (digithings + 14 modules). Rendered live in the brand studio gallery; no copied banner files |
 | **module emblems** | `packages/ui/src/components/emblems.tsx` | one geometric idea per module, on a 32-grid |
@@ -128,7 +127,7 @@ radius in the PNG shows as a seam inside its frame.
 There is no build step syncing the three `public/` directories. If you change a
 favicon tile, change all copies, then re-run `build-avatar.py`. The brand studio
 mirror is the exception: `build-studio.py` keeps
-`apps/reference/public/brand/studio/` in sync with `studio/`.
+`apps/digiweb/public/brand/studio/` in sync with `studio/`.
 
 ### The Open Graph cards
 
@@ -176,8 +175,8 @@ python3 packages/brand/build-header.py --check   # verify, write nothing
 ```
 
 `--check` also verifies the served mirrors under
-`apps/reference/public/brand/` (and the live `public/og.png` unfurl
-cards) so the design-reference kit cannot drift from this folder. Re-run the
+`apps/digiweb/public/brand/` (and the live `public/og.png` unfurl
+cards) so the digiweb kit cannot drift from this folder. Re-run the
 header builder after an avatar or OG rebuild so those copies refresh. The
 marketing sites do not serve `/brand`.
 

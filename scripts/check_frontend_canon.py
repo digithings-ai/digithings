@@ -62,8 +62,8 @@ ALLOWLIST = {
     "apps/digithings-web/components/landing/HeroGraph.tsx",
     # Reference-app livery chooser: a deliberate concrete swatch table
     # mirroring tokens.css module accents.
-    "apps/reference/components/livery-store.ts",
-    "apps/reference/components/livery-switcher.tsx",
+    "apps/digiweb/components/livery-store.ts",
+    "apps/digiweb/components/livery-switcher.tsx",
     # Generated colour table. The source of the hex is tokens.css.
     "packages/design/tokens.ts",
     # Generated from digivoice/hammerspoon/theme_registry.json.
@@ -84,10 +84,6 @@ CANON_SKIP_PREFIXES = (
     # Same skins after the WS4 move into the shared package (old path above
     # is now empty). Vendor livery travels with the files, not the directory.
     "packages/ui/src/components/chat/skins/",
-    # assistant-ui reference chatbot copies (Phase 1–2 stock gallery).
-    "apps/reference/components/assistant-ui/",
-    "apps/reference/components/chatbot/",
-    "apps/reference/app/(chatbot)/",
 )
 
 
@@ -130,7 +126,7 @@ CURSOR_UTILITY = re.compile(
 # The reference gallery is the canon's proof surface — it renders specimens
 # (including disabled and raw-native comparisons) and so may set cursor
 # utilities where the kit part is not the thing being demonstrated.
-CURSOR_EXEMPT_PREFIXES = ("apps/reference/",)
+CURSOR_EXEMPT_PREFIXES = ("apps/digiweb/",)
 
 
 def is_cursor_exempt(rel: str) -> bool:
@@ -277,7 +273,7 @@ def main() -> int:
             "\na `canon-allow: <reason>` comment / ALLOWLIST entry for sanctioned"
             "\nliterals. Pointer cursors are kit-level: set `cursor-*` on the"
             "\n`packages/ui` part that owns the affordance (app-local cursor"
-            "\nutilities are refused, `apps/reference` excepted), or `canon-allow`"
+            "\nutilities are refused, `apps/digiweb` excepted), or `canon-allow`"
             "\nan app-specific surface. Playbook: packages/ui/MIGRATION.md"
         )
         return 0 if warn_only else 1

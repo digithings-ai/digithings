@@ -35,7 +35,7 @@ BRAND = Path(__file__).resolve().parent
 REPO_ROOT = BRAND.parents[1]
 OUT_DIR = BRAND / "headers"
 EMAIL_DIR = BRAND / "email"
-PUBLIC_BRAND = REPO_ROOT / "apps" / "reference" / "public" / "brand"
+PUBLIC_BRAND = REPO_ROOT / "apps" / "digiweb" / "public" / "brand"
 PUBLIC_OG_PNG = REPO_ROOT / "apps" / "digithings-web" / "public" / "og.png"
 PUBLIC_DQ_OG_PNG = REPO_ROOT / "apps" / "digiquant-web" / "public" / "og.png"
 
@@ -297,7 +297,7 @@ def signoff_html(copy: dict[str, str]) -> str:
 
 
 def kit_copies() -> list[tuple[Path, Path]]:
-    """Canonical kit file → design-reference public/brand (plus live og.png)."""
+    """Canonical kit file → digiweb public/brand (plus live og.png)."""
     pairs: list[tuple[Path, Path]] = []
     for spec in FORMATS:
         for ext in (".svg", ".png"):

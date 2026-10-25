@@ -1,6 +1,6 @@
 # brand studio assets
 
-Source assets for the **brand studio** at `/brand/studio` in `apps/reference`.
+Source assets for the **brand studio** at `/brand/studio` in `apps/digiweb`.
 
 The studio composes the digithings 60×60 logo with the 4×4 hero wordmark over
 the embedding field, previews every upload format, and exports PNG/SVG. The
@@ -22,8 +22,8 @@ stored here, so a definition change reaches the gallery automatically.
 
 ## Mirror
 
-The reference app can only serve files from its own `public/` directory, so the
-same bytes are copied to `apps/reference/public/brand/studio/`. The canonical
+The digiweb app can only serve files from its own `public/` directory, so the
+same bytes are copied to `apps/digiweb/public/brand/studio/`. The canonical
 copy is this folder. After changing a source asset:
 
 ```bash

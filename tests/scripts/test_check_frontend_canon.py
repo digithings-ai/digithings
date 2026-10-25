@@ -267,9 +267,6 @@ def test_canon_skips_vendor_template_copies(mod) -> None:
     assert mod.is_canon_skipped(
         "packages/ui/src/components/chat/skins/chatgpt.tsx"
     )
-    assert mod.is_canon_skipped(
-        "apps/reference/components/chatbot/chatbot-theme.tsx"
-    )
     assert not mod.is_canon_skipped(
         "apps/digichat/src/app/(digichat)/embed/embed-client.tsx"
     )

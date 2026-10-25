@@ -2,7 +2,7 @@
 """Sync the brand-studio assets to the reference app's public mirror.
 
 The canonical files live in ``packages/brand/studio/``. The reference app
-serves them from ``apps/reference/public/brand/studio/`` so the studio page
+serves them from ``apps/digiweb/public/brand/studio/`` so the studio page
 can fetch the logo, wordmark, fields and preset data as ordinary static files.
 
 Usage::
@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "packages" / "brand" / "studio"
-DEST = ROOT / "apps" / "reference" / "public" / "brand" / "studio"
+DEST = ROOT / "apps" / "digiweb" / "public" / "brand" / "studio"
 ASSET_SUFFIXES = {".svg", ".json"}
 
 

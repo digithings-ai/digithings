@@ -11,10 +11,10 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BRAND = REPO_ROOT / "packages" / "brand"
-PUBLIC_BRAND = REPO_ROOT / "apps" / "reference" / "public" / "brand"
+PUBLIC_BRAND = REPO_ROOT / "apps" / "digiweb" / "public" / "brand"
 MARKETING_PUBLIC_BRAND = REPO_ROOT / "apps" / "digithings-web" / "public" / "brand"
 MARKETING_BRAND_PAGE = REPO_ROOT / "apps" / "digithings-web" / "app" / "brand"
-KIT_TS = REPO_ROOT / "apps" / "reference" / "lib" / "brandKit.ts"
+KIT_TS = REPO_ROOT / "apps" / "digiweb" / "lib" / "brandKit.ts"
 
 pytestmark = pytest.mark.unit
 
@@ -177,17 +177,15 @@ def test_design_reference_ships_the_kit_page() -> None:
     page = (
         REPO_ROOT
         / "apps"
-        / "reference"
+        / "digiweb"
         / "app"
-        / "(gallery)"
-        / "(lab)"
         / "brand"
         / "page.tsx"
     ).read_text(encoding="utf-8")
     assert "{BRAND_TAGLINE}" in page
-    assert "design-reference" in page
-    # The canon IA consolidation (#4306) moved the nav entries into one source
-    # of truth read by both the top bar and the home-page contents map; the
-    # reference-only /brand entry lives in LAB_NAV there.
-    nav_source = (REPO_ROOT / "apps" / "reference" / "lib" / "nav.ts").read_text(encoding="utf-8")
+    assert "digiweb" in page
+    # The nav entries live in one source of truth read by both the top bar and
+    # the home-page contents map; the reference-only /brand entry lives in
+    # LAB_NAV there.
+    nav_source = (REPO_ROOT / "apps" / "digiweb" / "lib" / "nav.ts").read_text(encoding="utf-8")
     assert 'href: "/brand"' in nav_source

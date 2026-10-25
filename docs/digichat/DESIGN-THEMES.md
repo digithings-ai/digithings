@@ -8,7 +8,7 @@ a second message tree.
 
 Contract: [`packages/ui/CHAT_THEME.md`](../../packages/ui/CHAT_THEME.md).
 
-Live: design-reference `/chatbot` (port 4013). Source of look: copied
+Live: the digichat product app at `/chatbot` (port 3005). Source of look: copied
 `thread.aui.tsx` + shadcn token aliases onto `--bg` / `--ink` / `--accent`.
 
 ## Product skin: `digichat`

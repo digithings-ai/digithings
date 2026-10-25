@@ -11,13 +11,6 @@ const tokens = readFileSync(
 const webTheme = readFileSync(path.resolve(here, "web-theme.css"), "utf8");
 const finance = readFileSync(path.resolve(here, "finance-tearsheet.css"), "utf8");
 const stages = readFileSync(path.resolve(here, "stages.css"), "utf8");
-const terminal = readFileSync(
-  path.resolve(
-    here,
-    "../../../../apps/reference/app/(gallery)/(chat)/terminal/terminal.css",
-  ),
-  "utf8",
-);
 
 /** Slice out one `:root[data-theme="X"] { … }` block (top-level braces). */
 function themeBlock(theme: "dark" | "light"): string {
@@ -288,47 +281,6 @@ describe("canon contrast contract (#4306, canon-audit S2)", () => {
       );
       expect(matrix).toContain(`>= ${STRONG_FROM}`);
       expect(finance).toContain(".ts-matrix-cell.is-strong");
-    });
-  });
-
-  describe("reference diff palette (light theme)", () => {
-    // terminal.css defines the dark pastels on .rv-frame and deepens them for
-    // [data-theme="light"]; the +/− counts read the raw value, the code lines
-    // read a 70%-toward-ink mix over the 13% wash.
-    const lightFrame = terminal.match(
-      /:root\[data-theme="light"\]\s*\.rv-frame\s*\{[^}]*\}/,
-    )?.[0];
-    expect(lightFrame, "terminal.css light .rv-frame override").toBeDefined();
-    const addHex = lightFrame!.match(/--rv-add:\s*(#[0-9a-fA-F]{6})/)?.[1];
-    const delHex = lightFrame!.match(/--rv-del:\s*(#[0-9a-fA-F]{6})/)?.[1];
-    expect(addHex).toBeDefined();
-    expect(delHex).toBeDefined();
-
-    const lightInk = hexToken(light, "ink");
-    const paper = hexToken(light, "surface");
-
-    it("the +/− counts clear AA on paper", () => {
-      expect(contrast(addHex!, paper)).toBeGreaterThanOrEqual(AA_TEXT);
-      expect(contrast(delHex!, paper)).toBeGreaterThanOrEqual(AA_TEXT);
-    });
-
-    it("the added/removed code lines clear AA on their washes", () => {
-      for (const hue of [addHex!, delHex!]) {
-        const wash = over(hue, 0.13, paper);
-        const code = mix(hue, 0.7, lightInk);
-        expect(contrast(code, wash)).toBeGreaterThanOrEqual(AA_TEXT);
-      }
-    });
-
-    it("the light palette is not the dark pastel pair", () => {
-      expect(addHex!.toLowerCase()).not.toBe("#86c98f");
-      expect(delHex!.toLowerCase()).not.toBe("#e2929e");
-    });
-
-    it(".rv-ln mixes toward ink so line numbers clear AA on the washes", () => {
-      expect(terminal).toContain(
-        "color-mix(in srgb, var(--ink-mute) 55%, var(--ink))",
-      );
     });
   });
 });

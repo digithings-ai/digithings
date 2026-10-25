@@ -21,7 +21,7 @@ package. Do not make a new wordmark component for one surface.
 ## Live gallery
 
 The reference app's **brand studio** at `/brand/studio` renders every registered
-definition in `BANNERS` (`apps/reference/components/brand/studio/module-banners.tsx`).
+definition in `BANNERS` (`apps/digiweb/components/brand/studio/module-banners.tsx`).
 Use it as the visual check for a definition: it reads the registry directly, so a
 new or changed banner appears there without a copied asset.
 

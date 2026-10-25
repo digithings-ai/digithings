@@ -24,6 +24,7 @@ consumers), no rendered inspection. Anything that needed a browser is listed und
 | digichat TUI | `clients/digichat-tui` | — | OpenTUI terminal client |
 | digiquant TUI | `clients/digiquant-tui` | — | OpenTUI terminal client |
 | hero-banner | `packages/hero-banner` | — | pixel wordmark definitions + renderers |
+| digiweb | `apps/digiweb` | 4013 | the live design reference + brand studio (local only) |
 
 Ports: `.claude/launch.json:44-107`. All six are npm workspaces
 (`package.json:11-14`, `apps/*` + `packages/*`).
@@ -42,12 +43,12 @@ densities.
 
 ### Historical — do not treat as canon
 
-- **`apps/reference`** — the old design-reference corpus. It is still an npm workspace
-  and still has a launch target on port 4013 (`.claude/launch.json:72-81`), but the
-  corpus was retired (`c2b133273e chore(design): retire the old design-reference corpus
-  (#5677)`) and no live surface imports it. It is a gallery of specimens, not a consumer
-  of the current language. `packages/design/README.md:124-125` itself calls it
-  "out of scope for this system".
+- **`apps/reference`** — the retired 2026-08 blend gallery. It was replaced in October 2026
+  by **`apps/digiweb`**, which is now the live design reference (port 4013, local only). The
+  old corpus's fifteen specimen families were deleted with it; the current app carries only
+  the language pages and the brand work. `c2b133273e chore(design): retire the old
+  design-reference corpus (#5677)` is the earlier retirement of its competitor-scan corpus.
+  Nothing imports either app.
 - **`packages/ui/DESIGN.md`, `packages/ui/PRODUCT.md`** — describe the 2026-08-30
   "utilitarian terminal" v0.1 blend. Correct in spirit, wrong in specific values (§6).
 - **`packages/design/{README,BLEND,EVOLUTION,ROLLOUT}.md`** — the blend ledger and its
@@ -114,10 +115,9 @@ What is actually on screen today is **neither** of those at the top: hero `h1` i
 hardcoded `1.5rem` → `1.7rem` at `sm`, weight 600, tracking `-0.02em`
 (`apps/digithings-web/components/landing/LandingPage.tsx:55`;
 `apps/digiquant-web/app/_bands/top.tsx:37`); band `h2` uses `--type-section-stand` at
-weight 500 with `-0.025em` (`.../landing/SectionHead.tsx:23`). `--type-display` is used
-only inside `apps/reference` `app/(gallery)/(lab)/iterate/iterate.css:276`, and
-`--type-hero` only by `app/variants/**`. The large display clamp is a reference-only
-value in practice.
+weight 500 with `-0.025em` (`.../landing/SectionHead.tsx:23`). `--type-display` is
+exercised on digiweb's `/foundations` type ladder, and `--type-hero` only by
+`app/variants/**`. The large display clamp is a reference-only value in practice.
 
 Prose: `--measure-prose: 72ch`, `--leading-prose: 1.8`, `--leading-prose-narrow: 1.75`
 (`tokens.css:217-219`).
@@ -271,7 +271,7 @@ Not in `BANNERS`, deliberately: `DIGIVOICE_BASELINE` (parity reference, `:119-13
 `:82-91`).
 
 The live visual index is the **brand studio** at `/brand/studio` (in
-`apps/reference`). It renders every registered definition from `BANNERS`, so the
+`apps/digiweb`). It renders every registered definition from `BANNERS`, so the
 gallery cannot drift from the source.
 
 ### Where it appears
@@ -458,16 +458,16 @@ Claims in the old docs that the live code no longer supports. Both sides cited.
 |---|---|---|---|
 | 1 | `packages/ui/DESIGN.md:12` — `ink-mute: "#6B7177"` | `tokens.css:81` — `--ink-mute: #7D8389` | wrong value |
 | 2 | `DESIGN.md:163` — light ink-mute `#8A9097` | `tokens.css:126` — `#666C73` | wrong value |
-| 3 | `DESIGN.md:33,184` — display `clamp(2rem, 5vw, 3.4rem)` | `tokens.css:207` — `--type-display: clamp(2.75rem, 6vw, 5rem)`; and no live app consumes it (only `apps/reference/.../iterate.css:276`) | wrong value, and describing a dead token |
+| 3 | `DESIGN.md:33,184` — display `clamp(2rem, 5vw, 3.4rem)` | `tokens.css:207` — `--type-display: clamp(2.75rem, 6vw, 5rem)`; no live app consumes it, only digiweb's `/foundations` ladder | wrong value, and describing a dead token |
 | 4 | `DESIGN.md:36` — display tracking `-0.04em` | `LandingPage.tsx:55`, `top.tsx:37` — `-0.02em`; band heads `-0.025em` (`SectionHead.tsx:23`) | wrong value |
 | 5 | `DESIGN.md:327` — focus is `outline: none` + a 2–4px accent **box-shadow** ring | `dt globals:1051-1053` and `dq globals:595-599` — `outline: 1px solid var(--ink)`; global `outline: 2px solid var(--accent)` (`site.css:37`) | wrong mechanism |
 | 6 | `DESIGN.md:54-57` — spacing `control 0.6 / card 1.2 / generous 1.6rem` | `tokens.css:37-45` — `--space-1..9` = .25/.5/1/1.5/2/3/4/6/8rem; the landing uses arbitrary rem (`LandingPage.tsx:61-88`) | scale does not exist |
-| 7 | `DESIGN.md:28-29` — declares `diff-add` / `diff-del` | no `--rv-add` / `--rv-del` anywhere in `packages/design`; only a test reads them (`packages/ui/src/styles/contrast.contract.test.ts:302`) | token family absent |
+| 7 | `DESIGN.md:28-29` — declares `diff-add` / `diff-del` | no `--rv-add` / `--rv-del` anywhere in `packages/design` or `packages/ui` | token family absent |
 | 8 | `DESIGN.md:220` — `--type-hero` "reserved for a landing hero" | hero h1 is hardcoded 1.5/1.7rem (`LandingPage.tsx:55`); `--type-hero` is used only by `app/variants/**` | rule not followed |
 | 9 | `DESIGN.md:312` — "one sans-serif island … the composer's live textarea" | `tokens.css:181` makes `--font-sans` the mono stack; the composer rules are `var(--font-mono)` (`chat-digichat.css:49,115`) | cannot exist |
 | 10 | `DESIGN.md:306` — the wordmark's suffix "is always the accent-colored emphasis" | marks are single-tone ink; accent is the transient glint (`dt globals:909-911`; `definitions/index.ts:38` maps accent to `--glint`) | wrong |
 | 11 | `PRODUCT.md:40` — "one motion moment per surface" | landing runs hero-rise stagger + continuous pixel field + per-cell build/glint + scroll `Reveal` + a scroll-driven FAQ morph (`dt globals:1032-1041`; `LandingPage.tsx:51,119,122,207`) | wrong |
-| 12 | `PRODUCT.md:29`, `ROLLOUT.md:12` — `apps/reference` is "the live, browsable canon … first place to check", Phase 0 | corpus retired (`c2b133273e`); no live surface imports it; `packages/design/README.md:124-125` calls it out of scope | stale status |
+| 12 | `PRODUCT.md:29`, `ROLLOUT.md:12` — digiweb is "the live, browsable canon … first place to check", Phase 0 | resolved in October 2026: the old corpus was replaced by `apps/digiweb`, which is the live reference again | superseded |
 | 13 | `BLEND.md:85` — "Do not synthwave / **pixel wordmarks**" | the hero *is* a pixel wordmark: `font.ts:68`, `LandingPage.tsx:53`, `definitions/index.ts:32-42`, `.pixel-word` (`dt globals:904-924`) | outright reversed |
 | 14 | `BLEND.md:66`, `ROLLOUT.md:20` — one white (paper) **filled** rect per viewport | both heroes ship two ghost CTAs and a clone box, no filled rect (`LandingPage.tsx:70-84`; `top.tsx:47-52`) | rule not followed |
 | 15 | `COPY_GUIDE.md:60` — "Keep `// section` mono eyebrows on marketing" | `SectionHead` renders title + lede only, no kicker (`SectionHead.tsx:20-32`); `DESIGN.md:211` explicitly says "no eyebrow kickers" — the docs also contradict each other | double contradiction |
@@ -602,16 +602,17 @@ Two more, from code comments rather than docs, worth fixing when touched:
 
 Recorded rather than guessed, so the next slice does not inherit an invented rule.
 
-- **Whether `apps/reference` is still served anywhere.** It is an npm workspace and has a
-  launch target on 4013, but the corpus was retired and nothing imports it. I did not run
-  a dev server, so I cannot say whether it builds or what it renders.
+- **Whether every digiweb route survives a full `next build`.** I ran the dev server and the
+  route/nav tests, not `next build`. The old app's static export was blocked by a pre-existing
+  `/effects` function-prop error; that route was deleted with the corpus, so the new app should
+  export cleanly, but that is unverified here.
 - **Anything that needs a rendered page**: actual contrast ratios, optical alignment,
   whether the composer really looks mono in the browser (the CSS says mono and
   `--font-sans` resolves to mono, but a UI-lib default could still apply a sans face),
   and whether the grain overlay is visible in the digichat embed.
 - **Whether `--type-display`, `--grain-*`, `--bar-app`, `--bar-site`, `--product-frame-w`
   are intended to be revived or are dead.** No ADR or consumer found for the display clamp
-  or the grain outside `apps/reference`.
+  or the grain outside digiweb's `/foundations` ladder.
 - **Dashboard structure beyond the page loader.** I read `app/page.tsx:27-31` and its
   `globals.css`; I did not open `BriefDesk`'s panes, so the "command band then ledger"
   shape in `DESIGN.md:201` is unverified for the current panes.

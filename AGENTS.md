@@ -92,7 +92,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digibot** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digibot** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`), **digiweb** (`apps/digiweb`, the local design reference + brand studio at `/brand/studio`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -101,7 +101,7 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 Start at the **brand studio**. Run the reference app and open `/brand/studio`:
 
 ```bash
-npm run dev --workspace @digithings/reference -- --port 4013
+npm run dev --workspace @digithings/digiweb -- --port 4013
 # http://127.0.0.1:4013/brand/studio/
 ```
 
@@ -127,7 +127,7 @@ new logo or wordmark — change the studio or the preset.
   `projects/` outside `projects/README.md` and the engagement bound to this run. A denial is not a
   bug to work around — read the refusal, and if the engagement is genuinely yours, bind it with
   `DIGI_ENGAGEMENT`. Details in [SECURITY.md](SECURITY.md#client-data-under-projects).
-- **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
+- **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/digiweb` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
 - **`az` is guarded — see [Azure: the az guard](#azure-the-az-guard) below.** Any `az` command that exits **78** with `az guard: REFUSED` is an enforced refusal, not a bug. Do not retry it, do not look for a bypass, do not re-argue the rule.
 
