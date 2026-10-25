@@ -57,15 +57,67 @@ export const BOOK_READER_CSS = `
 }
 .book-nav__num { flex: none; width: 1.5rem; color: var(--accent); }
 .book-nav__page { margin-left: auto; color: var(--color-ink-soft, #6b6560); }
-.book-nav__download {
-  display: inline-flex;
-  margin-top: 1rem;
-  min-height: 2.75rem;
-  align-items: center;
-  color: var(--accent);
-  text-decoration: none;
+
+/* Export: one boxed cell per format, under the contents. The cells are drawn
+   only with hairlines and ink, so they read as part of the contents list
+   rather than as site chrome — and they repaint with the theme like the book
+   beside them. */
+.book-export {
+  margin-top: 1.25rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
 }
-.book-nav__download:hover { color: var(--color-ink, #1a1815); }
+.book-export__title {
+  margin: 0 0 0.6rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.book-export__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.book-export__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 3.5rem;
+  padding: 0.55rem 0.2rem;
+  border: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
+  background: transparent;
+  color: var(--color-ink-soft, #6b6560);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+.book-export__btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--ink, #1a1815);
+}
+.book-export__btn:active { transform: translateY(1px); }
+.book-export__btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.book-export__btn[data-state="done"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.book-export__btn[data-state="error"] { border-style: dashed; }
+.book-export__btn[disabled] { opacity: 0.55; cursor: progress; }
+.book-export__mark svg { display: block; width: 1.15rem; height: 1.15rem; }
+.book-export__label { line-height: 1; }
+.book-export__status {
+  margin: 0.6rem 0 0;
+  min-height: 1rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-soft, #6b6560);
+}
 .book-nav__toggle { display: none; }
 
 /* The document is laid out at A4 (794px), then scaled to the column. The
@@ -128,9 +180,9 @@ export const BOOK_READER_CSS = `
     cursor: pointer;
   }
   .book-nav ol,
-  .book-nav .book-nav__download { display: none; }
+  .book-nav .book-export { display: none; }
   .book-nav[data-open="true"] ol { display: block; }
-  .book-nav[data-open="true"] .book-nav__download { display: inline-flex; }
+  .book-nav[data-open="true"] .book-export { display: block; }
   .book-nav__title { display: none; }
 }
 

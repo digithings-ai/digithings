@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import BookDownloadButton from "@/components/book/BookDownloadButton";
+import BookExportBar from "@/components/book/BookExportBar";
 import { BOOK_READER_CSS } from "@/lib/book/readerCss";
 
 /** A4 at 96dpi — the width the page boxes are laid out at. */
@@ -191,7 +191,7 @@ export default function BookLive({
           </ol>
           {/* Built in the reader's own theme and palette, because one static
               file cannot be every theme's PDF. */}
-          <BookDownloadButton className="book-nav__download" />
+          <BookExportBar />
         </nav>
 
         <div
