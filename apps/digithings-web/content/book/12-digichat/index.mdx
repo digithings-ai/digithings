@@ -16,9 +16,9 @@ documents and visuals render beside the chat rather than inside a wall of
 text. The same interface can be embedded in another site, so a host can offer
 the experience to its own visitors with the same backend behind it.
 
-Dictation and read-aloud are two more ways into the same conversation. They
-use the browser's own speech support, are off by default, and are not a
-digithings model.
+Dictation and read-aloud are two more ways into the same conversation: the
+browser's own speech support, off by default, not a digithings model. Chrome
+sends that audio to Google, so keep dictation off for anything confidential.
 
 ## How it works
 
@@ -48,10 +48,9 @@ digichat sits.
 
 ## Where it runs
 
-On a laptop the interface runs beside the stack it talks to, which keeps
-development to a single checkout. In the cloud it runs as a container in front of the hub and verticals. On
-your own servers it runs
-wherever you already serve web traffic.
+On a laptop it runs beside the stack it talks to, so development stays a
+single checkout. In the cloud it is a container in front of the hub and
+verticals; on your own servers, wherever you already serve web traffic.
 
 In every home it stays stateless. Stop it, move it or run ten copies, and
 conversations survive, because the server never held them.
