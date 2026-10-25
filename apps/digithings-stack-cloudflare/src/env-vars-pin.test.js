@@ -120,6 +120,12 @@ const WORKER_SCOPED_VARS = new Set([
   // folded digichat Container name (sharedDigichatContainerId, re-exported from
   // the standalone worker's own paths.ts), so the container process never sees it.
   "DIGICHAT_CONTAINER_REV",
+  // The split corpus map's second half (2026-10-25): the Worker reads it to
+  // compose the container's `DIGI_TENANT_CORPUS_MAP` via composeCorpusMap, and
+  // the container process only ever reads the composed name -- forwarding the
+  // raw half would put a 4.6 kB duplicate in the container env that nothing
+  // consumes. Worker-scoped, not retired: it is live config, just not forwarded.
+  "DIGI_TENANT_CORPUS_MAP_EXTRA",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented

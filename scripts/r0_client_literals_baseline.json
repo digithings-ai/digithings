@@ -846,7 +846,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_occ_ticket_payload_retired.py": {
-      "count": 25,
+      "count": 23,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_skill_library.py": {

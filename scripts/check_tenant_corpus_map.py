@@ -1,14 +1,26 @@
-"""Drift gate: tenant corpus map must agree across its three blobs (refs #3854).
+"""Drift gate: the tenant corpus map must agree across its blobs (refs #3854).
 
 Compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix`` values across:
+
 (a) ``infra/digichat-release/compose.profile-a-bundle.override.yml``
 ``DIGICHAT_EMBED_TENANTS`` JSON (only entries carrying a ``backend`` with
 ``digisearchIndex`` — the ``digithings.ai`` + ``occ.digithings.ai`` hosts),
-(b) ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``,
-(c) ``apps/digithings-stack-cloudflare/src/index.ts`` fallback literal
-(``DIGI_TENANT_CORPUS_MAP: env... ?? '<json>'``).
+(b) ``apps/digithings-stack-cloudflare/wrangler.toml``, as a PAIR of vars:
+``DIGI_TENANT_CORPUS_MAP`` + ``DIGI_TENANT_CORPUS_MAP_EXTRA``, joined with the
+same precedence ``composeCorpusMap`` uses in ``src/index.ts`` — primary wins a
+slug collision, so a stale extra half can never shadow the house entry.
 
-Exit 0 when all three agree, 1 with a unified diff on drift. This deliberately
+It also pins the third blob's ABSENCE. ``src/index.ts`` used to carry the whole
+map as its ``??`` fallback literal, and that literal is why the deploy broke:
+one Cloudflare text binding may not exceed 5.1 kB and the single value reached
+5285 bytes, so ``wrangler deploy`` failed with code 10054 (2026-10-25). The
+literal and ``_FALLBACK_RE``, the regex that read it, are retired together; what
+replaces them is a check that neither a literal nor a dropped half has come
+back. Prompt-level parity between the compose copy and the composed pair is
+asserted instead in ``apps/digithings-stack-cloudflare/src/corpus-map-compose.test.js``,
+which compares the two blobs as whole objects.
+
+Exit 0 when the blobs agree, 1 with a unified diff on drift. This deliberately
 does NOT unify the blobs — it only refuses silent drift between them.
 """
 
@@ -31,52 +43,20 @@ _WRANGLER_REL = Path("apps/digithings-stack-cloudflare/wrangler.toml")
 _INDEX_TS_REL = Path("apps/digithings-stack-cloudflare/src/index.ts")
 
 _ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
-_FALLBACK_RE = re.compile(
-    r"DIGI_TENANT_CORPUS_MAP:\s*env\.DIGI_TENANT_CORPUS_MAP\s*\?\?\s*'((?:[^'\\]|\\.)*)'",
+_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA"
+
+#: The wiring ``src/index.ts`` must keep: both halves read, composed by name.
+_WIRING_RE = re.compile(
+    r"DIGI_TENANT_CORPUS_MAP:\s*composeCorpusMap\(\s*"
+    r"env\.DIGI_TENANT_CORPUS_MAP,\s*"
+    r"env\.DIGI_TENANT_CORPUS_MAP_EXTRA,?\s*\)"
 )
+
+#: A corpus map carried inline again would have to hold one of these.
+_LITERAL_MARKERS = ("researchSystemPrompt", "digisearchIndex")
 
 #: The only corpus keys compared — sibling keys (research prompts, tokens) are out of scope.
 _FIELDS = ("digisearchIndex", "vaultPathPrefix")
-
-#: Single-char TS string escapes (``\\`` + key), applied in one regex pass.
-_TS_SINGLES = {
-    "\\": "\\",
-    "'": "'",
-    '"': '"',
-    "n": "\n",
-    "r": "\r",
-    "t": "\t",
-    "b": "\b",
-    "f": "\f",
-    "v": "\v",
-}
-
-
-_FALLBACK_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)", re.DOTALL)
-
-
-def decode_ts_string_literal(inner: str) -> str:
-    """Decode a single-quoted TS string literal's inner text (one pass).
-
-    The ``index.ts`` ``??`` fallback is TS-evaluated by the Workers runtime
-    BEFORE the container JSON-parses it, so its backslashes are doubled in
-    source (``\\\\n`` evaluates to ``\\n``, which JSON then decodes to a
-    newline). A raw ``json.loads`` of the source text is NOT the runtime value
-    (and no longer even parses once the fallback carries escapes) — decode the
-    TS escapes first, then parse the result as JSON.
-    """
-
-    def _one(match: re.Match[str]) -> str:
-        seq = match.group(1)
-        if seq in _TS_SINGLES:
-            return _TS_SINGLES[seq]
-        if seq.startswith("u") and len(seq) == 5:
-            return chr(int(seq[1:], 16))
-        if seq.startswith("x") and len(seq) == 3:
-            return chr(int(seq[1:], 16))
-        raise ValueError(f"unsupported TS escape in fallback literal: \\{seq}")
-
-    return _FALLBACK_ESCAPE_RE.sub(_one, inner)
 
 
 def default_compose_file() -> Path:
@@ -119,6 +99,26 @@ def _reduce_corpus_map(data: Any) -> dict[str, dict[str, str]]:
     }
 
 
+def compose_corpus_vars(primary: str | None, extra: str | None) -> dict[str, Any]:
+    """Join the split ``[vars]`` pair the way ``composeCorpusMap`` does in TS.
+
+    Primary wins on a slug collision; an absent half contributes nothing. A half
+    that is present but unparseable RAISES rather than degrading: ``composeCorpusMap``
+    warns and ships the other half at runtime, but a drift gate that silently
+    ignored half the map would report agreement it never checked.
+    """
+    merged: dict[str, Any] = {}
+    for raw in (primary, extra):
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"a {_ENV_VAR} half is not a JSON object keyed by tenant slug")
+        for slug, entry in parsed.items():
+            merged.setdefault(slug, entry)
+    return merged
+
+
 def load_embed_map(compose_path: Path) -> dict[str, dict[str, str]]:
     doc = yaml.safe_load(Path(compose_path).read_text(encoding="utf-8"))
     raw = doc["services"]["digichat"]["environment"]["DIGICHAT_EMBED_TENANTS"]
@@ -128,23 +128,45 @@ def load_embed_map(compose_path: Path) -> dict[str, dict[str, str]]:
     return extract_embed_corpus(tenants)
 
 
-def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]]:
+def load_wrangler_vars(wrangler_path: Path) -> tuple[str | None, str | None]:
+    """``(primary, extra)`` raw values from wrangler ``[vars]``."""
     with open(wrangler_path, "rb") as fh:
         doc = tomllib.load(fh)
-    raw: Any = doc.get(_ENV_VAR, doc.get("vars", {}).get(_ENV_VAR))
-    if not isinstance(raw, str) or not raw.strip():
+    variables = doc.get("vars", {})
+    primary = variables.get(_ENV_VAR, doc.get(_ENV_VAR))
+    extra = variables.get(_EXTRA_ENV_VAR, doc.get(_EXTRA_ENV_VAR))
+    if not isinstance(primary, str) or not primary.strip():
         raise ValueError(f"{_ENV_VAR} missing from {wrangler_path}")
-    return _reduce_corpus_map(json.loads(raw))
+    return primary, extra if isinstance(extra, str) else None
 
 
-def load_index_ts_map(index_ts_path: Path) -> dict[str, dict[str, str]]:
+def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]]:
+    primary, extra = load_wrangler_vars(wrangler_path)
+    return _reduce_corpus_map(compose_corpus_vars(primary, extra))
+
+
+def check_index_ts_wiring(index_ts_path: Path) -> list[str]:
+    """Problems with ``src/index.ts``'s side of the split, as human-readable strings.
+
+    Two failure modes, both silent at runtime: a re-introduced corpus literal
+    (which puts the binding back over the cap and re-forks the answers) and a
+    wiring that stopped reading one half (which strips those tenants off the
+    container without failing anything).
+    """
     src = Path(index_ts_path).read_text(encoding="utf-8")
-    match = _FALLBACK_RE.search(src)
-    if not match:
-        raise ValueError(f"{_ENV_VAR} fallback literal not found in {index_ts_path}")
-    # TS-evaluated by the Workers runtime before the container parses it —
-    # decode the literal first (see decode_ts_string_literal).
-    return _reduce_corpus_map(json.loads(decode_ts_string_literal(match.group(1))))
+    problems: list[str] = []
+    if not _WIRING_RE.search(src):
+        problems.append(
+            f"index.ts does not compose the [vars] pair: expected "
+            f"`{_ENV_VAR}: composeCorpusMap(env.{_ENV_VAR}, env.{_EXTRA_ENV_VAR})`"
+        )
+    for marker in _LITERAL_MARKERS:
+        if marker in src:
+            problems.append(
+                f"index.ts carries an inline corpus map (`{marker}`); the map belongs in "
+                f"wrangler [vars], which is capped at 5.1 kB per binding"
+            )
+    return problems
 
 
 def _canonical(source_map: dict[str, dict[str, str]]) -> list[str]:
@@ -197,16 +219,20 @@ def main(argv: list[str] | None = None) -> int:
     named = [
         ("embed", load_embed_map(args.compose_file)),
         ("wrangler", load_wrangler_map(args.wrangler_file)),
-        ("index.ts", load_index_ts_map(args.index_ts_file)),
     ]
     report = compare_maps(named)
-    if report["ok"]:
-        print(f"corpus map ok: {len(named[0][1])} tenant(s) agree across 3 blobs")
+    problems = list(report["problems"]) + check_index_ts_wiring(args.index_ts_file)
+    if not problems:
+        print(
+            f"corpus map ok: {len(named[0][1])} tenant(s) agree across compose and the "
+            f"wrangler [vars] pair, and index.ts composes it"
+        )
         return 0
     print("corpus map DRIFT:")
-    for problem in report["problems"]:
+    for problem in problems:
         print(f"  {problem}")
-    print(report["diff"])
+    if report["diff"]:
+        print(report["diff"])
     return 1
 
 
