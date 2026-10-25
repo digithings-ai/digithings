@@ -49,8 +49,8 @@ start; the Cloudflare docs say so directly — "we can't set the secret store
 binding … as defaults here, as getting their values is asynchronous"
 ([containers env-vars example](https://developers.cloudflare.com/containers/examples/env-vars-and-secrets/)).
 digichat autostarts via `container.fetch(request)`
-(`apps/digichat-cloudflare/src/index.ts:91`, the Container's own fetch; the `container.fetch` call is at
-`:228`) and the stack's
+(`apps/digichat-cloudflare/src/index.ts:126`, the Container's own fetch; the `container.fetch` call is at
+`:340`) and the stack's
 `startAndWaitForPorts` calls pass no `startOptions.envVars`
 (`apps/digithings-stack-cloudflare/src/index.ts:158`), so both rely on the
 static field. Secrets Store *can* reach a container only through the async

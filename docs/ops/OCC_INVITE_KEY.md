@@ -36,12 +36,12 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
 - **Lives in three production copies, and two of them are gates** (the Keychain custody copy and
   the local host secret store hold it too — see [Custody](#custody)):
   1. the `token` field of the `occ.digithings.ai` entry inside the digichat Worker secret
-     `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:139`) — the registry copy the
+     `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:207`) — the registry copy the
      Container reads;
-  2. the digichat Worker secret `OCC_INVITE_KEY` (`apps/digichat-cloudflare/src/index.ts:120`,
+  2. the digichat Worker secret `OCC_INVITE_KEY` (`apps/digichat-cloudflare/src/index.ts:188`,
      documented in `apps/digichat-cloudflare/wrangler.toml:125` as "Worker-only /chat/occ gate;
      never forwarded to the container"), which the route gate compares at
-     `apps/digichat-cloudflare/src/index.ts:165`. Since 2.6.8 the same copy also gates
+     `apps/digichat-cloudflare/src/index.ts:245`. Since 2.6.8 the same copy also gates
      `/embed?host=occ.digithings.ai` (`occEmbedGate`): a request without the key gets the site
      404 at the Worker. The gate keys on the embed **surface**, not on one path spelling, so it
      covers every route that renders the embed shell: `/embed`, `/chat/embed` (the base-path
