@@ -57,6 +57,8 @@ export async function buildBookPdf(
     // iframe may hydrate before the reader's palette is painted. Set both
     // attributes explicitly so the captured pages match what is on screen.
     frame.documentElement.setAttribute("data-theme", theme);
+  const palette = document.documentElement.getAttribute("data-palette");
+  if (palette) frame.documentElement.setAttribute("data-palette", palette);
     if (palette) frame.documentElement.setAttribute("data-palette", palette);
     else frame.documentElement.removeAttribute("data-palette");
     await win.document.fonts.ready;

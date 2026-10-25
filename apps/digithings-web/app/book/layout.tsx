@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 
-import { PRINT_CSS } from "@/lib/book/printCss";
 
 export const metadata: Metadata = {
   title: "digibook — a book about self-hosted AI infrastructure",
@@ -26,7 +25,6 @@ export default function BookLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <DtNav />
-      <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
       <main id="main" tabIndex={-1} className="book-root pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <div className="mx-auto w-full max-w-[var(--wrap)] px-[var(--gutter)]">{children}</div>
       </main>

@@ -1,11 +1,13 @@
 /**
  * Screen styles for `/book`, the paginated book (DIG-2821 follow-up).
  *
- * The page shows the pages of the printed PDF, at reading width, with the
- * contents beside them. The images are the artefact: a live re-pagination in
- * the browser reflowed with the window (19 pages at 1280px, 20 at 1440), so
- * the sidebar's page numbers stopped matching the paper. Rendering the PDF's
- * own pages is the only version that cannot disagree with the download.
+ * The page shows the book's own paginated document — the same one the PDF is
+ * printed from — scaled to the column. It is not a set of images: the site's
+ * tokens live on `<html>` and pagedjs copies them into every page box, so the
+ * book follows the reader's theme and palette, all of them, and repaints when
+ * the theme changes.
+ *
+ * Nothing here sets a colour. Paper, ink, accent and rules come from the theme.
  */
 export const BOOK_READER_CSS = `
 .book-shell {
@@ -18,18 +20,22 @@ export const BOOK_READER_CSS = `
   padding-block: 1.5rem 4rem;
   align-items: start;
 }
+
+/* The print sheet hides every nav element on the route so printed paper carries no
+   site chrome; the contents here is a nav too. Same importance, higher
+   specificity, so the reader keeps its contents and paper still loses it. */
+.book-shell .book-nav { display: block !important; }
 .book-nav {
   position: sticky;
   top: calc(var(--dq-nav-h) + 1.5rem);
   align-self: start;
   max-height: calc(100dvh - var(--dq-nav-h) - 3rem);
-  overflow-y: auto;
+  overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.78rem;
-  line-height: 1.5;
 }
 .book-nav__title {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.75rem;
   font-size: 0.72rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -40,52 +46,57 @@ export const BOOK_READER_CSS = `
 .book-nav a {
   display: flex;
   gap: 0.6rem;
-  padding: 0.4rem;
+  align-items: baseline;
+  padding: 0.45rem 0;
   color: var(--color-ink-soft, #6b6560);
   text-decoration: none;
 }
-.book-nav a:hover,
 .book-nav a[aria-current="true"] { color: var(--color-ink, #1a1815); }
-.book-nav a[aria-current="true"] {
+.book-nav a[aria-current="true"] .book-nav__num {
   background: color-mix(in srgb, var(--color-hair, #e5e0d8) 45%, transparent);
 }
 .book-nav__num { flex: none; width: 1.5rem; color: var(--color-accent, #b55e2a); }
 .book-nav__page { margin-left: auto; color: var(--color-ink-soft, #6b6560); }
 .book-nav__download {
-  margin-top: 1rem;
   display: inline-flex;
-  align-items: center;
+  margin-top: 1rem;
   min-height: 2.75rem;
+  align-items: center;
   color: var(--color-accent, #b55e2a);
   text-decoration: none;
 }
 .book-nav__download:hover { color: var(--color-ink, #1a1815); }
 .book-nav__toggle { display: none; }
 
-.book-frames {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-}
-.book-frames__sheet { margin: 0; width: 100%; max-width: 46rem; scroll-margin-top: calc(var(--dq-nav-h) + 1rem); }
-.book-frames__page {
-  display: block;
+/* The document is laid out at A4 (794px), then scaled to the column. The
+   wrapper carries the scaled height so the page scrolls to the right length;
+   the stage keeps its real width so the pagination never depends on the
+   window. */
+.book-live {
+  position: relative;
   width: 100%;
-  height: auto;
-  background: var(--surface, #fff);
-  border: 1px solid var(--color-hair, #e5e0d8);
-  box-shadow: 0 1px 1px var(--hair), 0 10px 30px var(--hair);
+  overflow: hidden;
 }
-
-/* Each page exists twice, printed once per theme, so nothing here colours it:
-   the reader swaps the source and the sheet is already the theme's own paper
-   and ink. */
-[data-theme="dark"] .book-frames__page {
-  border-color: var(--hair, rgba(255, 255, 255, 0.09));
+.book-live__stage {
+  transform-origin: top left;
+}
+.book-live__source {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  /* The same width the PDF is paginated at. pagedjs reflows into A4 page
+     boxes, but figures are measured against their container before that
+     happens; a narrower source fitted the use-cases chapter onto one page
+     where the printed book gives it two. */
+  width: 1280px;
+}
+.book-live .pagedjs_pages { margin: 0; }
+.book-live .pagedjs_page {
+  margin: 0 0 1.5rem;
   box-shadow: none;
 }
+.book-live .pagedjs_page:last-child { margin-bottom: 0; }
+
 @media (max-width: 1023px) {
   .book-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .book-nav {
@@ -112,17 +123,16 @@ export const BOOK_READER_CSS = `
   .book-nav[data-open="true"] ol { display: block; }
   .book-nav[data-open="true"] .book-nav__download { display: inline-flex; }
   .book-nav__title { display: none; }
-  .book-frames__sheet { max-width: 100%; }
 }
 
-/* Printing this page gives the book, not the site around it. The contents, the
-   header and the download link are screen furniture; the sheets already are the
-   printed pages, so each one becomes a sheet of paper at A4 with no margin —
-   the margin is inside the page image, where the book set it. */
+/* Printing this page gives the book, not the site around it. The pages are
+   already A4 and already the printed artefact, so they print at their own size
+   and break once per sheet — the margins are inside the page, where the book
+   set them. */
 @media print {
   @page { size: A4; margin: 0; }
   html, body { background: var(--bg, #fff); }
-  header, footer, .dt-nav, .dt-footer, .book-nav { display: none !important; }
+  header, footer, .dt-nav, .dt-footer, .book-shell .book-nav { display: none !important; }
   /* The kit's skip link is parked off-screen with a translate; paper has no
      transforms, so it prints as a black chip on the first sheet. There is
      nothing to skip to on paper. */
@@ -130,15 +140,9 @@ export const BOOK_READER_CSS = `
   .book-root { padding: 0 !important; }
   .book-root > div { max-width: none !important; margin: 0 !important; padding: 0 !important; }
   .book-shell { display: block; max-width: none; margin: 0; padding: 0; }
-  .book-frames { display: block; gap: 0; }
-  .book-frames__sheet {
-    max-width: none;
-    width: 100%;
-    margin: 0;
-    break-after: page;
-    break-inside: avoid;
-  }
-  .book-frames__sheet:last-of-type { break-after: auto; }
-  .book-frames__page { border: 0; box-shadow: none; filter: none !important; }
+  .book-live { height: auto !important; overflow: visible; }
+  .book-live__stage { transform: none !important; width: auto !important; }
+  .book-live .pagedjs_page { margin: 0 !important; break-after: page; break-inside: avoid; }
+  .book-live .pagedjs_page:last-child { break-after: auto; }
 }
 `;

@@ -136,9 +136,16 @@ export const PAGED_CSS = `
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
-   block — is what decides what a page box contains. */
-.site-rails, header, footer, nav, .book-screen-only, .book-print-only, .running-element,
-.book-paged-status, [role="status"], .skip-link, a[href="#main"] { display: none !important; }
+   block — is what decides what a page box contains.
+
+   Scoped to the page boxes on purpose: pagedjs injects this sheet into the live
+   document, so an unscoped header or nav rule also hides the site's own
+   header and the reader's contents on /book. */
+.pagedjs_page .site-rails, .pagedjs_page header, .pagedjs_page footer,
+.pagedjs_page nav, .pagedjs_page .book-screen-only, .pagedjs_page .book-print-only,
+.pagedjs_page .running-element, .pagedjs_page .book-paged-status,
+.pagedjs_page [role="status"], .pagedjs_page .skip-link,
+.pagedjs_page a[href="#main"] { display: none !important; }
 
 html, body, .pagedjs_pages { margin: 0; padding: 0; }
 body {

@@ -70,23 +70,26 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
 
-        // The site sets --accent to ink, and the stylesheets load in an order
-        // that lets that win over the book's own sheet. The page boxes are
-        // appended to <html>, so the accent has to sit there too — an inline
-        // style on the root is the one declaration nothing downstream outranks.
-        // Values mirror packages/design/tokens.css; the diagram renderer bakes
-        // in the same two, so the figures and the page agree.
-        const accent =
-          document.documentElement.getAttribute("data-theme") === "dark"
-            ? "#3dd6c4" // canon-allow: the theme accent, mirrored from tokens.css
-            : "#0c7c71"; // canon-allow: the theme accent, mirrored from tokens.css
-        document.documentElement.style.setProperty("--accent", accent);
-        // The MDX carries the site's utility classes, and `text-accent` reads
-        // Tailwind's --color-accent, not --accent. Setting only one of them
-        // leaves the chapter number in ink while the folio beside it is
-        // coloured.
-        document.documentElement.style.setProperty("--color-accent", accent);
+        // The accent is whatever the reader's theme and palette resolve to —
+        // every palette sets its own, and the default sets none (ink is the
+        // accent). Read it, never write a colour: the page boxes are appended
+        // to <html>, so the value has to be set there, inline, where nothing
+        // downstream can outrank it. `text-accent` reads Tailwind's
+        // --color-accent, so both properties are set or half the book follows.
+        const accent = getComputedStyle(document.documentElement)
+          .getPropertyValue("--accent")
+          .trim();
+        if (accent) {
+          document.documentElement.style.setProperty("--accent", accent);
+          document.documentElement.style.setProperty("--color-accent", accent);
+        }
 
+        // Paginate only once the fonts are the ones the book is set in. pagedjs
+        // measures line lengths as it flows, and the fallback face is narrower:
+        // paginating before the swap fitted the use-cases chapter onto one page
+        // where the printed book gives it two, so the screen had one page fewer
+        // than the PDF and every number after chapter six was wrong.
+        await document.fonts.ready;
         const chunker = await previewer.preview(
           content,
           [{ "book-print.css": PAGED_CSS }],

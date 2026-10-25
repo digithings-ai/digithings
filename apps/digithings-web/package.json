@@ -22,8 +22,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "write-csp-headers": "node ./lib/write-csp-headers.mjs",
-    "sync-openapi": "node ./lib/sync-openapi.mjs",
-    "book:pages": "node ./scripts/book/page-images.mjs"
+    "sync-openapi": "node ./lib/sync-openapi.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.18",

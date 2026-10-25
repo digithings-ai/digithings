@@ -74,10 +74,7 @@ const { server, base } = await serve(OUT);
 const { chromium } = await import("playwright");
 const browser = await chromium.launch();
 
-const EDITIONS = [
-  { theme: "light", file: "the-digithings-book.pdf" },
-  { theme: "dark", file: "the-digithings-book-dark.pdf" },
-];
+const EDITIONS = [{ theme: "light", file: "the-digithings-book.pdf" }];
 
 /**
  * One edition: paginate the print route in the given theme and screenshot every
@@ -168,14 +165,6 @@ try {
   // the same twice.
   const seed = Math.floor(Math.random() * 100_000);
   const light = await printEdition({ ...EDITIONS[0], seed });
-  const dark = await printEdition({ ...EDITIONS[1], seed });
-
-  if (dark.pages !== light.pages) {
-    throw new Error(`editions disagree on length: light ${light.pages}, dark ${dark.pages}`);
-  }
-  if (JSON.stringify(dark.map) !== JSON.stringify(light.map)) {
-    throw new Error("editions disagree on which page a chapter starts on");
-  }
 
   mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
   writeFileSync(
@@ -190,9 +179,7 @@ try {
     mkdirSync(dirname(exported), { recursive: true });
     copyFileSync(join(APP_ROOT, "public", "book", edition.file), exported);
   }
-  console.log(
-    `book: wrote ${light.pages} page(s) in two editions (light, dark), seed ${seed}`,
-  );
+  console.log(`book: wrote ${light.pages} page(s), seed ${seed}`);
 } finally {
   await browser.close();
   server.close();
