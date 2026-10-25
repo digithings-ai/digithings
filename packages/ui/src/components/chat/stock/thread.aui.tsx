@@ -8,6 +8,7 @@ import {
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
+import { useSuggestionGroup } from "../suggestion-cycle";
 import { MarkdownText } from "./markdown-text";
 import {
   Reasoning,
@@ -272,8 +273,15 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+  // Keyed by the cycle's group offset so a new group remounts and re-runs the
+  // chips' entrance fade; hover/focus handlers hold the cycle while it is read.
+  const { groupKey, handlers } = useSuggestionGroup();
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
+    <div
+      key={groupKey}
+      className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4"
+      {...handlers}
+    >
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
