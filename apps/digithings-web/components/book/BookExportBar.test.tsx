@@ -9,7 +9,10 @@ const mocked = vi.hoisted(() => ({
   saved: vi.fn(),
 }));
 
-vi.mock("@/lib/book/download-pdf", () => ({ buildBookPdf: mocked.pdf }));
+vi.mock("@/lib/book/download-pdf", () => ({
+  buildBookPdf: mocked.pdf,
+  prefetchPrintedEdition: () => {},
+}));
 vi.mock("@/lib/book/export-html", () => ({ buildBookHtml: mocked.html }));
 vi.mock("@/lib/book/export-docx", () => ({ buildBookDocx: mocked.docx }));
 vi.mock("@/lib/book/export-file", () => ({

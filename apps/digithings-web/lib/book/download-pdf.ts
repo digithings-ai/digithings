@@ -58,6 +58,18 @@ async function fetchPrintedEdition(edition: PrintedEdition): Promise<{
   };
 }
 
+/**
+ * Warm the HTTP cache for the edition the reader would get, so the click is a
+ * disk read rather than a four-megabyte download. Called when the pointer or
+ * focus lands on the PDF cell — a hint, not a promise: a palette without a
+ * printed edition simply has nothing to warm.
+ */
+export function prefetchPrintedEdition(): void {
+  const edition = printedEdition();
+  if (!edition) return;
+  void fetch(`/book/${edition.file}`, { cache: "force-cache" }).catch(() => {});
+}
+
 export async function buildBookPdf(
   onProgress?: (progress: BuildProgress) => void,
 ): Promise<{ blob: Blob; filename: string; pages: number }> {

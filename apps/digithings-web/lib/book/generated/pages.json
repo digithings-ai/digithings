@@ -18,38 +18,57 @@
     "/book/19-local-stack/": 18,
     "/book/23-self-hosting/": 19
   },
-  "seed": 15074,
-  "theme": "dark",
+  "seed": 97888,
   "editions": [
     {
       "palette": "",
       "theme": "dark",
-      "file": "the-digithings-book.pdf"
+      "file": "the-digithings-book-dark.pdf"
     },
     {
       "palette": "monokai",
       "theme": "dark",
-      "file": "the-digithings-book-monokai.pdf"
+      "file": "the-digithings-book-dark-monokai.pdf"
     },
     {
       "palette": "matrix",
       "theme": "dark",
-      "file": "the-digithings-book-matrix.pdf"
+      "file": "the-digithings-book-dark-matrix.pdf"
     },
     {
       "palette": "solarized",
       "theme": "dark",
-      "file": "the-digithings-book-solarized.pdf"
+      "file": "the-digithings-book-dark-solarized.pdf"
     },
     {
       "palette": "nord",
       "theme": "dark",
-      "file": "the-digithings-book-nord.pdf"
+      "file": "the-digithings-book-dark-nord.pdf"
     },
     {
       "palette": "",
       "theme": "light",
       "file": "the-digithings-book-light.pdf"
+    },
+    {
+      "palette": "monokai",
+      "theme": "light",
+      "file": "the-digithings-book-light-monokai.pdf"
+    },
+    {
+      "palette": "matrix",
+      "theme": "light",
+      "file": "the-digithings-book-light-matrix.pdf"
+    },
+    {
+      "palette": "solarized",
+      "theme": "light",
+      "file": "the-digithings-book-light-solarized.pdf"
+    },
+    {
+      "palette": "nord",
+      "theme": "light",
+      "file": "the-digithings-book-light-nord.pdf"
     }
   ]
 }

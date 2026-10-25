@@ -22,7 +22,7 @@
  */
 import { useEffect, useState } from "react";
 
-import { buildBookPdf } from "@/lib/book/download-pdf";
+import { buildBookPdf, prefetchPrintedEdition } from "@/lib/book/download-pdf";
 import { buildBookDocx } from "@/lib/book/export-docx";
 import { bookFilename, saveBlob } from "@/lib/book/export-file";
 import { buildBookHtml } from "@/lib/book/export-html";
@@ -162,6 +162,8 @@ export default function BookExportBar() {
               aria-label={`download the book as ${format.label} — ${names[format.id]}`}
               aria-busy={working}
               disabled={working}
+              onPointerEnter={format.id === "pdf" ? prefetchPrintedEdition : undefined}
+              onFocus={format.id === "pdf" ? prefetchPrintedEdition : undefined}
               onClick={() => void run(format.id)}
             >
               <span className="book-export__mark" aria-hidden>

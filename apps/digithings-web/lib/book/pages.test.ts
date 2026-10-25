@@ -12,8 +12,14 @@ import pages from "./generated/pages.json";
  * pages that exist, and a printed edition on disk.
  */
 describe("the paginated book", () => {
-  it("has a printed edition on disk", () => {
-    expect(existsSync(join(process.cwd(), "public", "book", "the-digithings-book.pdf"))).toBe(true);
+  it("has every printed edition on disk", () => {
+    const editions = (pages as { editions?: { file: string }[] }).editions ?? [];
+    expect(editions.length).toBeGreaterThan(0);
+    for (const edition of editions) {
+      expect(existsSync(join(process.cwd(), "public", "book", edition.file)), edition.file).toBe(
+        true,
+      );
+    }
   });
 
   it("puts every chapter on a page that exists", () => {

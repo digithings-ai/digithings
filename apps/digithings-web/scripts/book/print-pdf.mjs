@@ -81,19 +81,24 @@ const browser = await chromium.launch();
  * build time and one file; a palette that is not here still works, it is just
  * built in the browser.
  */
-const PRINTED = [
-  // Dark is the site's own theme, so every palette here is instant in the
-  // reader's default mode. Light is covered for the default palette; a light
-  // reader on monokai still renders in the browser (~20s) rather than shipping
-  // sixteen more editions of a nine-megabyte book.
-  { theme: "dark", palette: "", file: "the-digithings-book.pdf" },
-  { theme: "dark", palette: "monokai", file: "the-digithings-book-monokai.pdf" },
-  { theme: "dark", palette: "matrix", file: "the-digithings-book-matrix.pdf" },
-  { theme: "dark", palette: "solarized", file: "the-digithings-book-solarized.pdf" },
-  { theme: "dark", palette: "nord", file: "the-digithings-book-nord.pdf" },
-  { theme: "light", palette: "", file: "the-digithings-book-light.pdf" },
-];
-const THEME = "dark";
+/**
+ * The palettes that get a printed edition, in both themes. A download for one
+ * of these is a file fetch (tens of milliseconds); anything else is rendered in
+ * the browser (~20s) and says so while it works.
+ *
+ * Ten files at 2.4MB each: the point is that the common themes never wait, and
+ * the list is cheap to extend — add a palette and one line appears in each
+ * theme.
+ */
+const PALETTES = ["", "monokai", "matrix", "solarized", "nord"];
+const THEMES = ["dark", "light"];
+const PRINTED = THEMES.flatMap((theme) =>
+  PALETTES.map((palette) => ({
+    theme,
+    palette,
+    file: `the-digithings-book-${theme}${palette ? `-${palette}` : ""}.pdf`,
+  })),
+);
 
 /**
  * One edition: paginate the print route in the given theme and screenshot every
@@ -106,7 +111,7 @@ const THEME = "dark";
  * only in colour.
  */
 async function openBook(seed, theme) {
-  const page = await browser.newPage({ deviceScaleFactor: 2 });
+  const page = await browser.newPage({ deviceScaleFactor: 1.75 });
   await page.addInitScript((value) => {
     try {
       localStorage.setItem("dt-theme", value);
@@ -185,7 +190,7 @@ async function captureEdition(page, pages, entry) {
   pdf.setCreator("digithings.ai/book");
   for (let i = 0; i < pages; i += 1) {
     const shot = await page.locator(".pagedjs_page").nth(i).screenshot();
-    const jpeg = await sharp(shot).jpeg({ quality: 72 }).toBuffer();
+    const jpeg = await sharp(shot).jpeg({ quality: 66 }).toBuffer();
     const image = await pdf.embedJpg(jpeg);
     const sheet = pdf.addPage([A4.width, A4.height]);
     // Full bleed: the page box already carries the theme's background and its
@@ -224,7 +229,6 @@ try {
         pages,
         map,
         seed,
-        theme: THEME,
         editions: PRINTED.map((entry) => ({
           palette: entry.palette,
           theme: entry.theme,
