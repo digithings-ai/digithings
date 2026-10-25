@@ -24,13 +24,13 @@
 # two ever disagree, which makes this file the single place a context is added.
 # See docs/BRANCH_PROTECTION.md, "Ownership of develop's required contexts".
 #
-# The `--live` read above is a human runbook step, and it is still only that.
-# Nothing re-reads the gate on a clock: the workflow that would carry such a
-# job is disabled on GitHub by the 2026-10-14 cost lock, its digithings-cron
-# row is `enabled: false`, and the credential it would need is a fine-grained
-# PAT that only Chris can create (docs/ops/policy-check-credential.md). Until
-# that changes, a hand edit of branch protection that nobody followed with the
-# `--live` read stays invisible — so the runbook above is the whole story.
+# The `--live` read also runs from .github/workflows/policy-gate-live.yml, but
+# only on workflow_dispatch — it has no clock and is not on the PR path, because
+# the read needs a fine-grained PAT that only Chris can create
+# (docs/ops/policy-check-credential.md). That credential is not provisioned yet,
+# so the dispatch currently prints SKIPPED and exits 0; a skip is not a green.
+# Until the PAT lands, a hand edit of branch protection that nobody followed
+# with the `--live` read stays invisible — so the runbook above is the story.
 # See docs/BRANCH_PROTECTION.md § Keeping the snapshot true.
 
 Required checks passed

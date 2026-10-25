@@ -3,9 +3,11 @@
 > **Rule** (from [`credential-ownership.md`](credential-ownership.md)): *Any credential we hold by hand needs one owner, one refresh path, and a check that fails loudly when it is stale.*
 
 This document registers the one credential that can read `develop`'s branch
-protection. It exists for a single call: the planned drift guard
-`scripts/check_required_policy_checks.py --live` (DIG-2098 decision D, not yet
-written), which compares the committed inventory against the **real**
+protection. It exists for a single call: the drift guard
+`scripts/check_required_policy_checks.py --live`, run by
+`scripts/policy_gate_live.py` from the dispatch-only
+`.github/workflows/policy-gate-live.yml` (DIG-2098 decision D, wired by
+DIG-5536). It compares the committed inventory against the **real**
 required-set. It is not a general CI token and must never become one.
 
 The credential is a **fine-grained personal access token** with one repository
@@ -115,8 +117,10 @@ So: the job's name is not in
 `GET /repos/digithings-ai/digithings/branches/develop/protection/required_status_checks`,
 which today returns exactly three contexts — `Required checks passed`,
 `doc-links + agents-init`, `mypy — digibase + digikey` — **and adding it there is
-the specific change that would break this rule.** It reports by filing a tracker
-issue on failure, the shape `token-canary.yml` already uses.
+the specific change that would break this rule.** A failure is the red
+`workflow_dispatch` run itself: the read is never on a clock, so every run has a
+requester who sees it. That is why the workflow does not file a tracker issue —
+there is no silent run whose failure could go unnoticed.
 
 ### 2. It must never sit on a deploy path
 
@@ -153,51 +157,39 @@ new decision — not a permission edit on the token.
 
 ---
 
-## Placement — and the correction to the premise
+## Placement — its own dispatch-only workflow
 
-**The job block belongs inside
-[`.github/workflows/ci-pr-hygiene.yml`](../../.github/workflows/ci-pr-hygiene.yml),
-and the reason is stronger than the one given on the issue.**
+**The job lives in
+[`.github/workflows/policy-gate-live.yml`](../../.github/workflows/policy-gate-live.yml),
+not inside `ci-pr-hygiene.yml`.** The earlier draft of this document proposed
+riding that file's 06:21 dispatch. DIG-4364 ended that: the 2026-10-14 GitHub
+cost lock set `ci-pr-hygiene.yml` to `disabled_manually`, its Worker row is
+`enabled: false`, and the `[triggers].crons` line is gone. A job on a lane that
+is deliberately silent reports nothing, so the read got its own file.
 
-The issue states that file "already has `schedule`". It does not. On `develop`
-its only triggers are `pull_request` and `workflow_dispatch`, and the header says
-so: *"Production clock: Cloudflare Worker digithings-cron. Schedule removed
-#3579."* Re-adding one is not available:
+The shape follows from the repository's rules, not from preference:
 
-- [`tests/scripts/test_no_gha_schedules.py`](../../tests/scripts/test_no_gha_schedules.py)
-  asserts **no** workflow under `.github/workflows/` carries `on.schedule`, so a
-  new `schedule:` fails CI outright.
-- A schedule on `develop` would **double-fire** with the Worker, whose default
-  branch is also `develop`.
+- **`workflow_dispatch` only.** No `pull_request` (the credential must never sit
+  in front of a merge), no `push`, and no `on.schedule` —
+  [`tests/scripts/test_no_gha_schedules.py`](../../tests/scripts/test_no_gha_schedules.py)
+  fails CI on any workflow carrying a schedule, because every production clock
+  belongs to the Cloudflare Worker. A dispatch spends Actions minutes only when
+  a person asks for one, which keeps the cost lock intact.
+- **`environment: cron`.** The secret is environment-scoped, so the job must
+  declare the environment or the name resolves to empty and the failure reads as
+  "no key" rather than "permission denied".
+- **`scripts/policy_gate_live.py` is the entry point.** It hands the PAT to the
+  guard through `GH_TOKEN`, drops `GITHUB_TOKEN` so the call has one identity,
+  prints a citable timestamp/host/run line, and never records a skip as
+  agreement.
+- **No tracker issue on failure.** Every run is dispatched by a person, so the
+  red run is seen by its requester; there is no silent clock whose failure needs
+  an issue to surface it.
 
-**The clock already exists.** [`apps/digithings-cron/src/jobs.ts`](../../apps/digithings-cron/src/jobs.ts)
-registers:
-
-```
-wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml")
-```
-
-a daily 06:21 UTC `workflow_dispatch` against `develop`. So the new job block
-**rides an existing dispatch: no new clock, no new `jobs.ts` row, no new
-workflow file.** `workflow_dispatch`, `start_key` and `concurrency` are all
-already in that file, which is what the issue noticed — it read the shape right
-and the reason wrong.
-
-> **2026-10-19 update (DIG-4364):** that `ci-pr-hygiene` clock no longer fires.
-> The 2026-10-14 GitHub cost lock set `ci-pr-hygiene.yml` to `disabled_manually`,
-> so the Worker's row now carries `enabled: false` and its `[triggers].crons`
-> line is gone. Any new job block that assumed it could ride the 06:21 dispatch
-> must first confirm the workflow is re-enabled on GitHub (or add its own clock
-> row); otherwise it is dispatched by a lane that is deliberately silent.
-
-Two wiring details that follow from the existing file, not from the issue:
-
-- The new job must be **dispatch-only**. `path-filter` is guarded
-  `if: github.event_name == 'pull_request'`, so it skips on a dispatch and the
-  new job must not `needs: path-filter` or it will be skipped into a
-  permanently-skipped state.
-- It should dedupe on the existing `start_key` input, and the `concurrency` group
-  already serialises the workflow.
+There is no `digithings-cron` row and no local launchd job. A host job would need
+the PAT value on a machine, which § *Storage* rules out, and a Worker clock
+would need a credential the Worker should not hold. Dispatch is the shape that
+keeps the credential in its one home.
 
 ---
 
@@ -389,9 +381,12 @@ argued away.
 
 ## Two things this issue is not
 
-**Wiring the job is not in scope here.** The job block, the canary extension and
-any `jobs.ts` change belong to **decision D of the DIG-2098 design note**, which
-is not yet approved. This document fixes the credential those decisions consume.
+**The wiring was not in scope of the credential issue, and is now done elsewhere.**
+The job block and the wrapper landed in **DIG-5536** as
+`.github/workflows/policy-gate-live.yml` and `scripts/policy_gate_live.py`. This
+document still owns the credential: what it is, where it lives, and how it is
+reissued. The canary extension remains a separate change, and no `jobs.ts` row
+was added — the workflow has no clock.
 
 **`security-scc.yml` does not exist.** The issue asks whether it and the two
 `deploy-*-cloudflare.yml` workflows should be declared `advisory` or ignored.

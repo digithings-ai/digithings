@@ -713,8 +713,8 @@ def test_a_gated_by_that_is_not_in_the_live_gate_is_a_finding() -> None:
     assert "actionlint" in _subjects(findings, "policy.bad-gated-by")
 
 
-# The live gate is read by a human, not by a job. Nothing may quietly put the
-# rejected credential design back.
+# The live gate may only be read by the one dispatch-only workflow, and the
+# rejected credential design may never come back.
 
 
 def test_the_rejected_app_credential_design_stays_deleted() -> None:
@@ -741,19 +741,52 @@ def test_the_rejected_app_credential_design_stays_deleted() -> None:
     assert not (REPO_ROOT / "scripts" / "mint_policy_check_token.py").exists()
 
 
-def test_no_workflow_claims_to_re_read_the_live_gate() -> None:
-    """The gap is real and is named in prose, not papered over with a job that
-    cannot run: the workflow that would carry it is disabled on GitHub by the
-    2026-10-14 cost lock and its digithings-cron row is `enabled: false`. A
-    check that rides a deliberately silent lane reports nothing, and the
-    `secrets_audit.py` red it caused is a canary that is red for the wrong
-    reason.
+#: The one file allowed to reach the live gate. It must stay dispatch-only:
+#: the read needs a human-only credential, so it may not ride the PR path, and
+#: it may not carry a schedule (tests/scripts/test_no_gha_schedules.py enforces
+#: that globally, this test enforces the rest of the shape).
+LIVE_WORKFLOW = "policy-gate-live.yml"
+
+
+def test_only_the_dispatch_only_workflow_reads_the_live_gate() -> None:
+    """DIG-5536 replaced the blocked state with one deliberate dispatch lane.
+
+    Before this leaf nothing re-read the gate, and the gap was named in prose.
+    Now exactly one workflow may run the read, and only on `workflow_dispatch`:
+    it declares `environment: cron` so the PAT resolves, and it does not appear
+    on `pull_request`, `push` or `schedule`. A second workflow reaching for the
+    read — or the same one gaining a trigger — is how the credential gets in
+    front of every merge, so that is a failure here rather than a review note.
     """
+    readers: list[str] = []
     for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
         text = path.read_text(encoding="utf-8")
-        assert "check_required_policy_checks.py --live" not in text, (
-            f"{path.name} runs the live gate; nothing re-reads it on a clock today"
-        )
+        # Either spelling reaches the read: the guard directly, or the wrapper
+        # that owns the skip contract. Both count.
+        if "check_required_policy_checks.py --live" in text or "policy_gate_live.py" in text:
+            readers.append(path.name)
+            doc = yaml.safe_load(text) or {}
+            on = doc.get("on") if "on" in doc else doc.get(True)
+            assert isinstance(on, dict), f"{path.name} has no readable `on:` block"
+            assert set(on) == {"workflow_dispatch"}, (
+                f"{path.name} must be dispatch-only; it declares {sorted(on)}. The live "
+                "read carries a human-only credential and cannot sit on the merge path "
+                "or on a clock"
+            )
+            jobs = doc.get("jobs") or {}
+            gated = [
+                name
+                for name, job in jobs.items()
+                if isinstance(job, dict) and job.get("environment") == "cron"
+            ]
+            assert gated, (
+                f"{path.name} reads the PAT but declares no `environment: cron`; the "
+                "secret is environment-scoped and would resolve to empty"
+            )
+    assert readers == [LIVE_WORKFLOW], (
+        f"expected exactly {LIVE_WORKFLOW} to read the live gate, found {readers}"
+    )
+
     cron = (REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts").read_text(encoding="utf-8")
     assert 'wd("ci-pr-hygiene"' in cron, "the dispatch row itself must still be there"
     assert "ci-pr-hygiene" in cron and "enabled: false" in cron, (
@@ -872,6 +905,9 @@ def test_script_exits_zero_on_this_repository() -> None:
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "policy gate agrees" in proc.stdout
+    # The machine-readable verdict is the contract `policy_gate_live.py` needs
+    # to tell a real drift (exit 1) from a crashed guard (also exit 1).
+    assert f"{guard.VERDICT_PREFIX} agree" in proc.stdout
 
 
 def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> None:
