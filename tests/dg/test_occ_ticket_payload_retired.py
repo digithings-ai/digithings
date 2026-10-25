@@ -9,10 +9,16 @@ every cold boot. This module is the executable statement of the containment:
 * no tenant corpus map still routes to the retired index;
 * no deployed prompt still advertises that index or the PII it carried.
 
-The three corpus-map blobs are deliberately asserted together rather than one at
-a time: ``scripts/check_tenant_corpus_map.py`` fails the moment they disagree,
+The corpus-map blobs are deliberately asserted together rather than one at a
+time: ``scripts/check_tenant_corpus_map.py`` fails the moment they disagree,
 so a partial trim is not a passing state. ``226ecc0ac`` (fan-out leg isolation)
 stays in place; with it, dropping a leg cannot deny the surviving leg.
+
+The map is two wrangler ``[vars]`` since 2026-10-25 (one Cloudflare text binding
+may not exceed 5.1 kB; the single value was 5285 bytes and failed the deploy with
+code 10054), and ``index.ts`` no longer carries a copy at all -- it composes the
+pair. So the deployed OCC prompt is read from the joined pair, and the index.ts
+leg asserts the ABSENCE of a map rather than a copy of one.
 """
 
 from __future__ import annotations
@@ -105,43 +111,39 @@ def _compose_embed_backend() -> dict:
     return json.loads(_compose_env()["DIGICHAT_EMBED_TENANTS"])["occ.digithings.ai"]["backend"]
 
 
-def _occ_map_from_wrangler() -> dict | None:
-    """The wrangler leg was retired on 2026-10-14 (82ed363fa): with the OCC
-    prompt the value exceeds Cloudflare's 5.1 kB text-binding limit, so the map
-    ships in ``src/index.ts`` as the fallback default instead. ``None`` when the
-    var is absent, which is the current committed state."""
-    raw = tomllib.loads(_text(WRANGLER_BLOB)).get("vars", {}).get("DIGI_TENANT_CORPUS_MAP")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    return json.loads(raw)["occ"]
+def _wrangler_vars() -> dict[str, str]:
+    return tomllib.loads(_text(WRANGLER_BLOB)).get("vars", {})
 
 
-def _index_ts_corpus_map() -> dict:
-    """The hardcoded fallback literal. Whitespace between ``??`` and the quote
-    has moved around between commits, so anchor on the variable name and take the
-    first following line that carries a quoted string."""
-    source = _text(INDEX_TS_BLOB)
-    after = source[source.index("DIGI_TENANT_CORPUS_MAP") :].splitlines()
-    line = next(ln for ln in after if "'" in ln)
-    literal = line[line.index("'") + 1 : line.rindex("'")]
-    return json.loads(_unjs(literal))["occ"]
+def _occ_map_from_wrangler() -> dict:
+    """The deployed OCC entry, read from the joined ``[vars]`` pair.
 
-
-def _unjs(literal: str) -> str:
-    """Resolve the escapes of a single-quoted JS string literal into raw JSON."""
-    for src, dst in (("\\\\", "\x00"), ("\\'", "'"), ('\\"', '"'), ("\\n", "\n"), ("\\t", "\t")):
-        literal = literal.replace(src, dst)
-    return literal.replace("\x00", "\\")
+    Since 2026-10-25 the map is split in two because one Cloudflare text binding
+    may not exceed 5.1 kB: ``DIGI_TENANT_CORPUS_MAP`` holds the house entry and
+    ``DIGI_TENANT_CORPUS_MAP_EXTRA`` holds every other tenant, OCC included. The
+    primary half wins a slug collision, mirroring ``composeCorpusMap``.
+    """
+    variables = _wrangler_vars()
+    merged: dict = {}
+    for name in ("DIGI_TENANT_CORPUS_MAP", "DIGI_TENANT_CORPUS_MAP_EXTRA"):
+        raw = variables.get(name)
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        for slug, entry in json.loads(raw).items():
+            merged.setdefault(slug, entry)
+    assert "occ" in merged, (
+        "the OCC tenant is in neither wrangler [vars] half; the deployed container "
+        "would lose the tenant entirely rather than fall back"
+    )
+    return merged["occ"]
 
 
 def _prompts() -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = [
         ("compose-override", _compose_corpus_map()["researchSystemPrompt"]),
     ]
-    wrangler_map = _occ_map_from_wrangler()
-    if wrangler_map is not None:
-        out.append(("wrangler-toml", wrangler_map["researchSystemPrompt"]))
-    out.append(("index-ts-fallback", _index_ts_corpus_map()["researchSystemPrompt"]))
+    # index.ts has no prompt of its own since the split: it composes the pair.
+    out.append(("wrangler-toml", _occ_map_from_wrangler()["researchSystemPrompt"]))
     return out
 
 
@@ -193,15 +195,19 @@ def test_compose_corpus_map_index_is_occ_help_only() -> None:
 
 
 def test_wrangler_occ_index_is_occ_help_only() -> None:
-    """Vacuously true while the wrangler copy is retired (2026-10-14, 82ed363fa)."""
-    wrangler_map = _occ_map_from_wrangler()
-    if wrangler_map is None:
-        return
-    assert wrangler_map["digisearchIndex"] == "occ_help"
+    assert _occ_map_from_wrangler()["digisearchIndex"] == "occ_help"
 
 
-def test_index_ts_fallback_occ_index_is_occ_help_only() -> None:
-    assert _index_ts_corpus_map()["digisearchIndex"] == "occ_help"
+def test_index_ts_carries_no_corpus_literal() -> None:
+    """The 5.1 kB regression: index.ts composes the pair, it does not hold a map.
+
+    A literal here is how the single binding reached 5285 bytes and failed the
+    deploy (code 10054), and it is also a second copy of the OCC prompt that this
+    module's prompt assertions used to have to chase.
+    """
+    source = _text(INDEX_TS_BLOB)
+    assert "researchSystemPrompt" not in source
+    assert "digisearchIndex" not in source
 
 
 def test_occ_tenant_keeps_its_vault_prefix() -> None:
@@ -209,10 +215,7 @@ def test_occ_tenant_keeps_its_vault_prefix() -> None:
     prefix = "clients/online-compliance-center"
     assert _compose_embed_backend()["vaultPathPrefix"] == prefix
     assert _compose_corpus_map()["vaultPathPrefix"] == prefix
-    wrangler_map = _occ_map_from_wrangler()
-    if wrangler_map is not None:
-        assert wrangler_map["vaultPathPrefix"] == prefix
-    assert _index_ts_corpus_map()["vaultPathPrefix"] == prefix
+    assert _occ_map_from_wrangler()["vaultPathPrefix"] == prefix
 
 
 def test_corpus_map_drift_gate_passes() -> None:
