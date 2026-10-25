@@ -18,6 +18,13 @@ reintroduce — it is what `npm install --package-lock-only` produces when `node
 present. Without this test that regression is silent until an Alpine image fails to build
 on `main`, or Cloudflare Pages ships a stylesheet built by a fallback path.
 
+THE ANALYSIS LIVES IN ONE PLACE. The binding logic is `scripts/check_deploy_lane_contract.py`'s
+`platform_bindings`, `binding_defects` and `libc_defects`, and this file imports it rather
+than keeping a second copy. That check reads every family in the lock — the sharp tree under
+`apps/digiquant-app/node_modules` is what the root-only version of this test could not see
+(#6062) — so this file is now a pin on the two families that broke, plus the libc selectors,
+and the deploy lane's own check is the wider net.
+
 The expected set is derived from each parent's own `optionalDependencies` rather than
 hardcoded, so a version bump does not need this file edited — it only needs the lock to
 stay complete.
@@ -33,25 +40,23 @@ that filter, which is why this guard lives on the lock and not on a workflow's t
 
 from __future__ import annotations
 
-import json
+import importlib.util
 from pathlib import Path
-from typing import Any  # score:allow untyped any — scored-lint: heterogeneous lockfile entries
+from types import ModuleType
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK = REPO_ROOT / "package-lock.json"
+CHECK = REPO_ROOT / "scripts" / "check_deploy_lane_contract.py"
 
-# Parent package -> the prefix its platform bindings are published under.
-NATIVE_FAMILIES = {
-    "node_modules/@tailwindcss/oxide": "@tailwindcss/oxide-",
-    "node_modules/unrs-resolver": "@unrs/resolver-binding-",
-}
+#: The families that broke, and the lock key each parent lives at. Named so this test
+#: fails if the shared analysis stops seeing them, instead of passing over an empty set.
+BROKEN_FAMILIES = ("node_modules/@tailwindcss/oxide", "node_modules/unrs-resolver")
 
-# Never installable: no real platform reports cpu "wasm32".
-EXCLUDED = "wasm32-wasi"
-
-# The two the deleted hand-installs covered — glibc runners and Alpine images.
+#: The two the deleted hand-installs covered — glibc runners and Alpine images.
 REQUIRED_LINUX_X64 = {
     "@tailwindcss/oxide-linux-x64-gnu": "glibc",
     "@tailwindcss/oxide-linux-x64-musl": "musl",
@@ -60,44 +65,43 @@ REQUIRED_LINUX_X64 = {
 }
 
 
-def _packages() -> dict[str, Any]:
-    return json.loads(LOCK.read_text(encoding="utf-8"))["packages"]
+def _check_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("check_deploy_lane_contract", CHECK)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CHECK_MODULE = _check_module()
+
+
+def _packages() -> dict[str, object]:
+    return CHECK_MODULE.load_lock(LOCK)
 
 
 @pytest.mark.unit
 def test_every_installable_platform_binding_is_locked() -> None:
     """A parent that declares a binding must have a lock entry for it, at its version."""
     packages = _packages()
-    missing: list[str] = []
-    mismatched: list[str] = []
 
-    for parent_key, prefix in NATIVE_FAMILIES.items():
-        parent = packages.get(parent_key)
-        assert parent is not None, f"{parent_key} absent from the lock"
-        declared = parent.get("optionalDependencies") or {}
-        assert declared, f"{parent_key} declares no optionalDependencies — check the family map"
+    analysed = {parent for parent, _declared in CHECK_MODULE.platform_bindings(packages)}
+    missing_families = [family for family in BROKEN_FAMILIES if family not in analysed]
+    assert not missing_families, (
+        "the shared analysis no longer sees these platform families in the lock, so the "
+        f"guard below would pass over an empty set: {missing_families}"
+    )
 
-        for name, version in declared.items():
-            if EXCLUDED in name:
-                continue
-            assert name.startswith(prefix), f"unexpected optionalDependency {name} on {parent_key}"
-            entry = packages.get(f"node_modules/{name}")
-            if entry is None:
-                missing.append(f"{name}@{version}")
-            elif entry.get("version") != version:
-                mismatched.append(
-                    f"{name}: lock has {entry.get('version')}, parent wants {version}"
-                )
-
+    missing, mismatched = CHECK_MODULE.binding_defects(packages)
     assert not missing, (
         "package-lock.json is missing platform bindings its own tree declares: "
-        f"{sorted(missing)}. This is what a regenerate with node_modules present produces; "
-        "graft the entries back at their locked versions rather than hand-installing them "
-        "in CI lanes, build scripts and Dockerfiles."
+        f"{missing}. This is what a regenerate with node_modules present produces; "
+        "regenerate the lock with npm 10.9.9 (the lane's `node-version: 22`) rather than "
+        "hand-installing the binding in CI lanes, build scripts and Dockerfiles."
     )
     assert not mismatched, (
         "a platform binding is locked at a version its parent does not declare, so the JS "
-        f"wrapper and the native binary would disagree: {sorted(mismatched)}"
+        f"wrapper and the native binary would disagree: {mismatched}"
     )
 
 
@@ -106,22 +110,18 @@ def test_the_linux_x64_bindings_carry_the_libc_that_selects_them() -> None:
     """`libc` is what makes npm pick gnu on the runners and musl in the Alpine images.
 
     Without it npm filters on os/cpu alone and would install both variants everywhere, so
-    an entry that loses the field is a real regression even though it stays present.
+    an entry that loses the field is a real regression even though it stays present. The
+    four that must carry it, and the libc each one needs, are the check's own set: this
+    test would be a second copy of that decision, and the two would drift.
     """
-    packages = _packages()
-    for name, libc in REQUIRED_LINUX_X64.items():
-        entry = packages.get(f"node_modules/{name}")
-        assert entry is not None, f"{name} absent — the Linux builds have no native binary"
-        assert entry.get("libc") == [libc], (
-            f"{name} should declare libc [{libc}], got {entry.get('libc')}"
-        )
-        assert entry.get("os") == ["linux"], (
-            f"{name} should declare os [linux], got {entry.get('os')}"
-        )
-        assert entry.get("cpu") == ["x64"], (
-            f"{name} should declare cpu [x64], got {entry.get('cpu')}"
-        )
-        assert entry.get("optional") is True, f"{name} must stay optional: true"
+    assert CHECK_MODULE.REQUIRED_LINUX_X64 == REQUIRED_LINUX_X64, (
+        "the required-bindings set moved; update this test with it so the pin stays explicit"
+    )
+    defects = CHECK_MODULE.libc_defects(_packages())
+    assert not defects, (
+        "a required Linux x64 binding lost the fields that select it: "
+        f"{defects}. Restore them from the last lockfile that had them; the versions do not move."
+    )
 
 
 @pytest.mark.unit
