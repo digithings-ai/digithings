@@ -111,6 +111,21 @@ PNG/SVG, and renders all 15 module banners from
 canonical upload kit; `packages/brand/README.md` is the map. Do not hand-draw a
 new logo or wordmark — change the studio or the preset.
 
+## Design work
+
+Start at **digiweb**, the live design reference:
+
+```bash
+npm run dev --workspace @digithings/digiweb -- --port 4013
+# http://127.0.0.1:4013/
+```
+
+`/` is the **baseline design document**: the eight rules the shipped surfaces
+already follow, each with a live witness and a specimen in the real tile
+grammar. `/foundations` is the token table, `/components` the kit index, `/rtl`
+the direction proof. Read it before restyling a surface; change it only by
+changing the live code it documents.
+
 ---
 
 ## Non-negotiable rules

@@ -17,8 +17,8 @@ export type NavItem = {
 export const PRIMARY_NAV: readonly NavItem[] = [
   {
     href: "/",
-    label: "Reference",
-    blurb: "What digiweb is, and the three ways into the current language.",
+    label: "Baseline",
+    blurb: "The rules the live surfaces already follow, rendered in their own tile grammar.",
   },
   {
     href: "/foundations",

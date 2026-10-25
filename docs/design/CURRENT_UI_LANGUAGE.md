@@ -9,6 +9,11 @@ Reconstruction method: repository evidence only (tokens → shared sheets → su
 consumers), no rendered inspection. Anything that needed a browser is listed under
 [What I could not determine](#9-what-i-could-not-determine) rather than guessed.
 
+**Live baseline:** digiweb's home page (`apps/digiweb/app/page.tsx`, run with
+`npm run dev --workspace @digithings/digiweb -- --port 4013`) renders these rules
+in the shipped tile grammar — hairline mosaic, tile chrome, density ladder, and
+the deltas named rather than hidden.
+
 ---
 
 ## 1. Surface inventory and generation

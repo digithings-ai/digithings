@@ -2,9 +2,10 @@
 
 The live design reference for digithings — **digiweb**. It renders the current
 generation's tokens, kit and brand as working code in a React / Next.js /
-Tailwind / Motion app. When you build a frontend surface, start here: import
-the kit, keep its grammar, and only add a specimen when the pattern belongs to
-the language.
+Tailwind / Motion app, and its home page is the **baseline design document**:
+the rules the shipped surfaces already follow, each with a live witness. When
+you build a frontend surface, start here: import the kit, keep its grammar, and
+only add a specimen when the pattern belongs to the language.
 
 It replaces the retired 2026-08 blend corpus that lived in `apps/reference`.
 
@@ -24,7 +25,7 @@ banners). Edits to those packages hot-reload here.
 
 | route | kind | what it is |
 |---|---|---|
-| `/` | reference | What digiweb is, the live digithings banner, and the contents map |
+| `/` | reference | **Baseline** — the eight rules the live surfaces follow, rendered in the tile grammar, plus the surfaces table, density ladder and known deltas |
 | `/foundations` | reference | Palette roles, liveries and the type ladder, read from `designTokens` |
 | `/components` | reference | Every kit primitive and composite, parsed from the package barrels |
 | `/rtl` | reference | The direction proof — the kit under a `dir=ltr`/`dir=rtl` toggle |
