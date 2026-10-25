@@ -112,4 +112,3 @@ jobs:
           name: digithings-book-${{ github.sha }}
           path: apps/digithings-web/public/book/*.pdf
           if-no-files-found: error
-          if-no-files-found: error
