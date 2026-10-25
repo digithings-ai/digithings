@@ -149,9 +149,23 @@ export const BOOK_READER_CSS = `
   .book-root { padding: 0 !important; }
   .book-root > div { max-width: none !important; margin: 0 !important; padding: 0 !important; }
   .book-shell { display: block; max-width: none; margin: 0; padding: 0; }
+  /* The paginated source stays on the page for pagedjs, off-screen; on paper it
+     would print as a second, unpaginated copy of the book. */
+  .book-live__source { display: none !important; }
   .book-live { height: auto !important; overflow: visible; }
-  .book-live__stage { transform: none !important; width: auto !important; }
-  .book-live .pagedjs_page { margin: 0 !important; break-after: page; break-inside: avoid; }
+  /* Undo the reader's fit-to-column: the page boxes are already A4, and a
+     scaled box prints cropped because the sheet is measured before the
+     transform. */
+  .book-live__stage { transform: none !important; width: 794px !important; height: auto !important; }
+  .book-live .pagedjs_page {
+    width: 794px !important;
+    height: 1123px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    break-after: page;
+    break-inside: avoid;
+  }
   .book-live .pagedjs_page:last-child { break-after: auto; }
 }
 `;

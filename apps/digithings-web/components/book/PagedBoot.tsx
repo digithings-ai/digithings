@@ -71,6 +71,15 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
 
+        // The raw document is laid out on the page until pagination finishes,
+        // and it starts with the cover — so a reader (and a screenshot) saw the
+        // title page twice: once unbroken, once as page one. Park it off-screen
+        // for the run; pagedjs clones from the node, not from the screen.
+        const priorStyle = content.getAttribute("style") ?? "";
+        content.style.cssText =
+          "position:fixed;left:-200vw;top:0;width:1280px;visibility:visible";
+
+
         // The accent is not written here, and must not be: the page boxes are
         // appended to <html>, so they inherit --accent from the document, and
         // every palette sets its own live. Freezing the computed value inline
@@ -128,6 +137,7 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         content.hidden = true;
         cleanups.current.push(() => {
           content.hidden = false;
+          content.setAttribute("style", priorStyle);
         });
         setStatus("done");
       } catch (err) {

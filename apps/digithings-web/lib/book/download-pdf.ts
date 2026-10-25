@@ -75,7 +75,9 @@ export async function buildBookPdf(
       const isCover = Boolean(page.querySelector(".book-cover"));
       const isContents = Boolean(page.querySelector(".book-contents"));
       const isClosing = Boolean(page.querySelector(".book-colophon"));
-      page.querySelectorAll(".book-cover__field").forEach((node) => node.remove());
+      page
+        .querySelectorAll(".book-cover__field, .book-field")
+        .forEach((node) => node.remove());
       const layer = frame.createElement("div");
       layer.className = "book-field";
       layer.setAttribute("aria-hidden", "true");

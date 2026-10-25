@@ -104,6 +104,34 @@ export default function BookLive({
     return () => observer.disconnect();
   }, []);
 
+  // The paginated source is a second, unpaginated copy of the whole book, and
+  // it has its own cover — what a reader saw as a duplicated title page, and
+  // what a print printed after the last sheet. It cannot be hidden when the
+  // page boxes first appear: pagedjs is still cloning from it, and hiding it
+  // mid-run truncates the page being built. Wait for the completion marker.
+  useEffect(() => {
+    const hide = () => {
+      document.querySelectorAll<HTMLElement>(".book-live__source").forEach((node) => {
+        node.hidden = true;
+      });
+    };
+    if (document.documentElement.hasAttribute("data-book-paginated")) {
+      hide();
+      return;
+    }
+    const observer = new MutationObserver(() => {
+      if (document.documentElement.hasAttribute("data-book-paginated")) {
+        hide();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-book-paginated"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   // Which page the reader is looking at, for the contents highlight.
   useEffect(() => {
     const onScroll = () => {
