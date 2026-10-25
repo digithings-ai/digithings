@@ -260,7 +260,7 @@ metaphor, not a palette swap.
 | 8 | `digigraph` | workflow graph floods along letter strokes | `:227-253` |
 | 9 | `digibook` | flipbook riffle; last, slowest turn lays the word | `:258-282` |
 | 10 | `digidev` | typed at a prompt (one typo, backspaced), then built | `:288-312` |
-| 11 | `digiclaw` | arcade claw plucks glyphs; one seeded grab slips | `:319-346` |
+| 11 | `digibot` | arcade claw plucks glyphs; one seeded grab slips | `:319-346` |
 | 12 | `digivault` | dial turns, bolts slide, leaves part, word lights | `:352-367` |
 | 13 | `digisearch` | scan beam finds the word in decoy pixels | `:372-396` |
 | 14 | `digitrace` | trace waterfall lanes open and grow right | `:402-426` |
@@ -269,6 +269,10 @@ metaphor, not a palette swap.
 Not in `BANNERS`, deliberately: `DIGIVOICE_BASELINE` (parity reference, `:119-134`),
 `DIGIVOICE_VARIANTS` (review previews, `:493-496`), `DIGICHAT_SCRAMBLE` (timing table,
 `:82-91`).
+
+The live visual index is the **brand studio** at `/brand/studio` (in
+`apps/reference`). It renders every registered definition from `BANNERS`, so the
+gallery cannot drift from the source.
 
 ### Where it appears
 

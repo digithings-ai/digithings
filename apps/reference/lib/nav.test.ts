@@ -32,8 +32,13 @@ describe("navigation inventory", () => {
   it("keeps reference-only surfaces off the primary row", () => {
     const primary = new Set(PRIMARY_NAV.map((i) => i.href));
     expect(primary.has("/brand")).toBe(false);
+    expect(primary.has("/brand/studio")).toBe(false);
     expect(primary.has("/iterate")).toBe(false);
-    expect(LAB_NAV.map((i) => i.href).sort()).toEqual(["/brand", "/iterate"]);
+    expect(LAB_NAV.map((i) => i.href).sort()).toEqual([
+      "/brand",
+      "/brand/studio",
+      "/iterate",
+    ]);
   });
 
   it("site-nav and contents-overview read the shared nav data", () => {

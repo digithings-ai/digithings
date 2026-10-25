@@ -32,7 +32,7 @@ const nextConfig = {
   // root-level tree, so it broke the App Router hydration of `/` (React #418)
   // while producing the same 404.html. Do not re-enable it.
   trailingSlash: true,
-  transpilePackages: ["@digithings/ui", "@digithings/design"],
+  transpilePackages: ["@digithings/ui", "@digithings/design", "@digithings/hero-banner"],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   ...(isDev ? { redirects } : {}),
   turbopack: {

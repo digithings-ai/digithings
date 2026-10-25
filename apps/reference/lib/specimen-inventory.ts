@@ -31,6 +31,11 @@ export const ROUTES: readonly RouteEntry[] = [
   { route: "/symbols", group: "symbols", page: "app/(gallery)/(symbols)/symbols/page.tsx" },
   { route: "/account", group: "pages/templates", page: "app/(gallery)/(pages)/(templates)/account/page.tsx" },
   { route: "/brand", group: "lab", page: "app/(gallery)/(lab)/brand/page.tsx" },
+  {
+    route: "/brand/studio",
+    group: "lab",
+    page: "app/(gallery)/(lab)/brand/studio/page.tsx",
+  },
   { route: "/iterate", group: "lab", page: "app/(gallery)/(lab)/iterate/page.tsx" },
   { route: "/chatbot", group: "chat", page: "app/(chatbot)/chatbot/page.tsx" },
 ] as const;

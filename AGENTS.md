@@ -96,6 +96,23 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 
 ---
 
+## Brand work
+
+Start at the **brand studio**. Run the reference app and open `/brand/studio`:
+
+```bash
+npm run dev --workspace @digithings/reference -- --port 4013
+# http://127.0.0.1:4013/brand/studio/
+```
+
+It composes the logo and 4×4 hero wordmark, previews every upload format, exports
+PNG/SVG, and renders all 15 module banners from
+`packages/hero-banner/src/definitions/index.ts`. `packages/brand/` is the
+canonical upload kit; `packages/brand/README.md` is the map. Do not hand-draw a
+new logo or wordmark — change the studio or the preset.
+
+---
+
 ## Non-negotiable rules
 
 - Polars only — never pandas

@@ -94,6 +94,11 @@ export const LAB_NAV: readonly NavItem[] = [
     blurb: "Avatars, social headers, OG card, mail sign-off — local kit only.",
   },
   {
+    href: "/brand/studio",
+    label: "Brand studio",
+    blurb: "Compose the logo and 4×4 wordmark, preview every format, export PNG/SVG.",
+  },
+  {
     href: "/iterate",
     label: "Iterate",
     blurb: "Working blend lab — corners, type, CTAs, heroes. Not product canon.",

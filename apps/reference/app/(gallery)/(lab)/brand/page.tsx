@@ -58,6 +58,12 @@ export default function BrandPage() {
           than drawing a new one. This page is the design-reference kit — it is not a public
           marketing URL.
         </p>
+        <p className="mt-[1rem] font-mono text-[0.8rem]">
+          <Link className="text-accent hover:text-ink" href="/brand/studio">
+            Open the brand studio →
+          </Link>{" "}
+          <span className="text-ink-mute">compose and export the logo + wordmark.</span>
+        </p>
       </header>
 
       <section className="section-block" id="avatars">

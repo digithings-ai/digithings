@@ -8,6 +8,25 @@ below with a pointer to its canonical copy, deliberately *not* copied here: two
 copies of a logo become two different logos the first time one is updated. If you
 need a file that lives elsewhere, take it from the path given.
 
+## Start here: the brand studio
+
+Compose and export the logo + hero wordmark at **`/brand/studio`** in the
+reference app:
+
+```bash
+npm run dev --workspace @digithings/reference -- --port 4013
+# http://127.0.0.1:4013/brand/studio/
+```
+
+The studio is the working surface for marketing, social, docs and any new brand
+composition: 15 format presets, the embedding field, the 33 theme palettes, PNG
+and self-contained SVG export, and a live gallery of every module wordmark
+banner. The gallery reads `packages/hero-banner/src/definitions/index.ts`, so a
+module definition change reaches it automatically.
+
+Use the **wordmark** for headers, web pages and docs; use the **logo** for app
+icons and favicons. One or the other, never both in the same view.
+
 ## Upload targets
 
 | where | use this | why |
@@ -24,8 +43,8 @@ need a file that lives elsewhere, take it from the path given.
 
 The same bytes are previewed on the local design-reference at `/brand`
 (`npm run dev --workspace @digithings/reference` → http://127.0.0.1:4013/brand/).
-That page is a `--check` mirror, not a second set of logos, and it is **not**
-shipped on digithings.ai.
+That page is a `--check` mirror and the upload kit; the **composer and exporter**
+is `/brand/studio` on the same app. Neither is shipped on digithings.ai.
 
 The avatar is the compact `d` + block cursor — the terminal identity's reduction,
 not the full `digi` lockup, which closes up below about 64px.
@@ -45,10 +64,34 @@ headers/
   digithings-linkedin-company-1128x191.{svg,png}
 email/
   signoff.txt                   signoff.html
+studio/
+  logo-animated.svg             logo-mark.svg
+  wordmark-animated.svg         wordmark-mask.svg
+  field-{x,og,square,story,linkedin-personal,linkedin-company}.svg
+  presets.json                  palettes.json
 build-avatar.py                 regenerates the six avatars from the favicon tile
 build-og.py                     regenerates both cards, wordmark outlined from Geist Mono
 build-header.py                 regenerates social headers + the served kit copies
+build-studio.py                 syncs studio assets to the reference public mirror
 ```
+
+### The brand studio assets
+
+`studio/` holds the generated sources the composer renders: the 60×60-pixel-grid
+`logo-animated.svg` (100×100 viewBox), the 4×4 `wordmark-animated.svg`, the
+thumbnail masks, the six field patterns, and the preset/palette JSON. The
+reference app serves a byte-identical copy from
+`apps/reference/public/brand/studio/`; the canonical copy is this folder.
+
+```bash
+python3 packages/brand/build-studio.py           # write the served mirror
+python3 packages/brand/build-studio.py --check   # verify, write nothing
+# or: make brand-studio-check
+```
+
+The studio does not store module banners as files. The gallery renders the 15
+definitions from `packages/hero-banner/src/definitions/index.ts` live, so the
+source of truth stays the code that the sites and terminals already use.
 
 **The avatar is derived, never drawn.** `build-avatar.py` reads the `d` glyph path
 straight out of `apps/digithings-web/public/favicon-dg.svg`, so the mark cannot
@@ -79,10 +122,13 @@ radius in the PNG shows as a seam inside its frame.
 | **digiquant.io favicons** | `apps/digiquant-web/public/favicon-dg{,-light}.svg` | byte-identical to digithings' — the mark is monochrome, nothing site-specific differs |
 | **favicon specimens** | `apps/reference/public/{,digiquant-}favicon-dg{,-light}.svg` | copies for the design-reference specimen page only; not served to users |
 | **the marks in code** | `packages/ui/src/components/symbols/terminal-marks.tsx` | `TerminalMark`, `TerminalWordmark`, `HairlineWordmark` — inline SVG in `currentColor`, which is why the nav follows `[data-theme]` |
+| **module wordmark banners** | `packages/hero-banner/src/definitions/index.ts` | 15 `BANNERS` definitions (digithings + 14 modules). Rendered live in the brand studio gallery; no copied banner files |
 | **module emblems** | `packages/ui/src/components/emblems.tsx` | one geometric idea per module, on a 32-grid |
 
 There is no build step syncing the three `public/` directories. If you change a
-favicon tile, change all copies, then re-run `build-avatar.py`.
+favicon tile, change all copies, then re-run `build-avatar.py`. The brand studio
+mirror is the exception: `build-studio.py` keeps
+`apps/reference/public/brand/studio/` in sync with `studio/`.
 
 ### The Open Graph cards
 

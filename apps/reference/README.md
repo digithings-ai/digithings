@@ -11,6 +11,7 @@ start here: copy a pattern, keep its grammar.
 ```bash
 npm run dev --workspace @digithings/reference -- --port 4013
 # Gallery: http://127.0.0.1:4013/
+# Brand studio: http://127.0.0.1:4013/brand/studio/
 # Chatbot (isolated root): http://127.0.0.1:4013/chatbot/
 ```
 
@@ -29,9 +30,9 @@ is the only shared chrome.
 Families live in route groups under `app/(gallery)/` (`(foundations)`, `(controls)`,
 `(data-display)`, `(motion)`, `(layout)`, `(pages)/(templates)`, …) so the folder
 names state the IA without changing the URLs. `/ui` folded into `/controls` and
-`/tearsheet` into `/finance`; `/brand` and `/iterate` are reference-only and stay
-off the primary nav. The route/specimen inventory is machine-readable in
-`lib/specimen-inventory.ts` and pinned by `lib/*.test.ts`.
+`/tearsheet` into `/finance`; `/brand`, `/brand/studio` and `/iterate` are
+reference-only and stay off the primary nav. The route/specimen inventory is
+machine-readable in `lib/specimen-inventory.ts` and pinned by `lib/*.test.ts`.
 
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
@@ -49,6 +50,7 @@ off the primary nav. The route/specimen inventory is machine-readable in
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
 | `/account`         | Templates   | login, sign-up, payment, settings, profile templates |
 | `/brand`           | reference-only | avatars, social headers, OG card, mail sign-off — not shipped on digithings.ai |
+| `/brand/studio`    | reference-only | compose the logo + 4×4 wordmark, preview every format, export PNG/SVG, live module-banner gallery |
 | `/iterate`         | reference-only | blend lab — pick corners, type, CTAs, heroes, density; preference ledger → `design/BLEND.md` |
 
 ## Conventions

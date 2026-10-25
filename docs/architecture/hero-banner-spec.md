@@ -18,6 +18,13 @@ package. Do not make a new wordmark component for one surface.
 - The terminal is the reference surface. A banner must render and animate
   in OpenTUI at 120x30 and at 80x24 before it gets web integration.
 
+## Live gallery
+
+The reference app's **brand studio** at `/brand/studio` renders every registered
+definition in `BANNERS` (`apps/reference/components/brand/studio/module-banners.tsx`).
+Use it as the visual check for a definition: it reads the registry directly, so a
+new or changed banner appears there without a copied asset.
+
 ## Definition format (`src/types.ts`)
 
 | Field | Meaning |
