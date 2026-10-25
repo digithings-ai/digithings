@@ -91,6 +91,16 @@ Scope: this detects. It does not change branch protection, any ruleset, or any
 workflow trigger. Closing the gate is DIG-1952 child B, a human-only
 repo-settings write, sequenced behind this on purpose.
 
+EXIT CODES
+0    the sets agree
+1    they disagree; every disagreement is printed as a ``::error::`` line
+2    the check could not run at all (an input, the API read, or the writer)
+
+A final ``policy-gate-verdict: agree`` / ``policy-gate-verdict: drift`` line
+makes those verdicts machine-readable. ``scripts/policy_gate_live.py`` requires
+it before accepting exit 1 as drift, so a guard that dies on an import or a
+traceback cannot be reported as a policy finding.
+
 Usage::
 
     python3 scripts/check_required_policy_checks.py
@@ -124,6 +134,11 @@ WRITER_SCRIPT = REPO_ROOT / "scripts" / "set-branch-protection.sh"
 #: pre-existing in-file check; this script only asserts the name is accounted
 #: for, and does not duplicate it.
 AGGREGATOR_CONTEXT = "Required checks passed"
+
+#: The one line a caller can rely on to tell a verdict from a crash. An
+#: uncaught exception also exits 1, so ``policy_gate_live.py`` will not call a
+#: bare exit 1 drift: it requires this marker.
+VERDICT_PREFIX = "policy-gate-verdict:"
 
 ENFORCEMENTS = frozenset({"required", "advisory", "other-branch"})
 
@@ -983,6 +998,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     findings += check_writer_coupling(snapshot, writer, WRITER_SCRIPT.name)
     print(report(findings, inventory, contexts))
+    print(f"{VERDICT_PREFIX} {'drift' if findings else 'agree'}")
     return 1 if findings else 0
 
 
