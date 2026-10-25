@@ -33,9 +33,38 @@ const BAKED = {
 
 type Mode = keyof typeof BAKED;
 
-type Tokens = Record<keyof (typeof BAKED)["light"], string>;
+type Tokens = Record<keyof (typeof BAKED)["light"], string> & { surface2: string };
+
+/**
+ * Colours the renderer writes that are not a theme ink or accent: the cluster
+ * and node fills, and one flat grey in the sequence diagrams. They were left
+ * baked before, which is why a box could stay light on a dark page.
+ */
+const FILLS: Record<Mode, [string, string][]> = {
+  light: [
+    ["rgb(244, 244, 241)", "surface2"], // canon-allow: baked into the rendered SVG, mirrors tokens.css --surface-2
+    ["#eaeaea", "surface2"], // canon-allow: baked into the rendered SVG, mirrors tokens.css --surface-2
+  ],
+  dark: [
+    ["rgb(23, 26, 30)", "surface2"], // canon-allow: baked into the rendered SVG, mirrors tokens.css --surface-2
+    ["#eaeaea", "surface2"], // canon-allow: baked into the rendered SVG, mirrors tokens.css --surface-2
+  ],
+};
 
 const cache = new Map<string, string>();
+/** The original SVG source, so a palette switch never waits on the network. */
+const sources = new Map<string, Promise<string>>();
+
+function sourceText(original: string): Promise<string> {
+  let pending = sources.get(original);
+  if (!pending) {
+    pending = fetch(original, { cache: "force-cache" })
+      .then((response) => (response.ok ? response.text() : ""))
+      .catch(() => "");
+    sources.set(original, pending);
+  }
+  return pending;
+}
 const objects = new Set<string>();
 
 function tokensFor(mode: Mode): Tokens {
@@ -55,6 +84,7 @@ function tokensFor(mode: Mode): Tokens {
     ink: read("--ink", BAKED[mode].ink),
     inkSoft: read("--ink-soft", BAKED[mode].inkSoft),
     surface: read("--bg", BAKED[mode].surface),
+    surface2: read("--surface-2", mode === "light" ? "rgb(244, 244, 241)" : "rgb(23, 26, 30)"),
   };
   probe.remove();
   return tokens;
@@ -71,7 +101,11 @@ function rgbOf(hex: string): string {
 function recolour(svg: string, mode: Mode): string {
   const tokens = tokensFor(mode);
   let out = svg;
-  for (const key of Object.keys(BAKED[mode]) as (keyof Tokens)[]) {
+  for (const [from, key] of FILLS[mode]) {
+    out = out.replaceAll(from, tokens[key as keyof Tokens]);
+    out = out.replaceAll(from.toUpperCase(), tokens[key as keyof Tokens]);
+  }
+  for (const key of Object.keys(BAKED[mode]) as Exclude<keyof Tokens, "surface2">[]) {
     const from = BAKED[mode][key];
     const to = tokens[key];
     out = out.replaceAll(from, to);
@@ -89,9 +123,8 @@ async function sourceFor(original: string, mode: Mode): Promise<string> {
   const key = `${palette}|${mode}|${original}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const response = await fetch(original, { cache: "force-cache" });
-  if (!response.ok) return original;
-  const text = await response.text();
+  const text = await sourceText(original);
+  if (!text) return original;
   const url = URL.createObjectURL(new Blob([recolour(text, mode)], { type: "image/svg+xml" }));
   objects.add(url);
   cache.set(key, url);
@@ -129,4 +162,5 @@ export function releaseDiagramObjects(): void {
   for (const url of objects) URL.revokeObjectURL(url);
   objects.clear();
   cache.clear();
+  sources.clear();
 }

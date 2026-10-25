@@ -73,11 +73,14 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
 
         // The raw document is laid out on the page until pagination finishes,
         // and it starts with the cover — so a reader (and a screenshot) saw the
-        // title page twice: once unbroken, once as page one. Park it off-screen
-        // for the run; pagedjs clones from the node, not from the screen.
-        const priorStyle = content.getAttribute("style") ?? "";
-        content.style.cssText =
-          "position:fixed;left:-200vw;top:0;width:1280px;visibility:visible";
+        // title page twice: once unbroken, once as page one.
+        //
+        // The style goes on the WRAPPER, never on the node being paginated:
+        // pagedjs clones that node and copies its inline style with it, which
+        // parked a page's own body off-screen (page 9 lost its text).
+        const host = content.parentElement;
+        const priorStyle = host?.getAttribute("style") ?? "";
+        if (host) host.style.cssText = "position:fixed;left:-200vw;top:0;width:1280px";
 
 
         // The accent is not written here, and must not be: the page boxes are
@@ -91,6 +94,12 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // where the printed book gives it two, so the screen had one page fewer
         // than the PDF and every number after chapter six was wrong.
         await document.fonts.ready;
+        // Point the figures at this palette's drawings BEFORE pagination: the
+        // page boxes are clones, so whatever src they are cloned from is what
+        // they keep, and a baked ink that is light on a dark page is exactly
+        // the mismatch a reader noticed while the first recolour was in flight.
+        await applyDiagramTheme(document);
+
         const chunker = await previewer.preview(
           content,
           [{ "book-print.css": PAGED_CSS }],
@@ -137,7 +146,7 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         content.hidden = true;
         cleanups.current.push(() => {
           content.hidden = false;
-          content.setAttribute("style", priorStyle);
+          if (host) host.setAttribute("style", priorStyle);
         });
         setStatus("done");
       } catch (err) {
