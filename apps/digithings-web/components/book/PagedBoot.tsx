@@ -70,20 +70,11 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
 
-        // The accent is whatever the reader's theme and palette resolve to —
-        // every palette sets its own, and the default sets none (ink is the
-        // accent). Read it, never write a colour: the page boxes are appended
-        // to <html>, so the value has to be set there, inline, where nothing
-        // downstream can outrank it. `text-accent` reads Tailwind's
-        // --color-accent, so both properties are set or half the book follows.
-        const accent = getComputedStyle(document.documentElement)
-          .getPropertyValue("--accent")
-          .trim();
-        if (accent) {
-          document.documentElement.style.setProperty("--accent", accent);
-          document.documentElement.style.setProperty("--color-accent", accent);
-        }
-
+        // The accent is not written here, and must not be: the page boxes are
+        // appended to <html>, so they inherit --accent from the document, and
+        // every palette sets its own live. Freezing the computed value inline
+        // was what made the book keep one palette's colour after the reader
+        // switched to another.
         // Paginate only once the fonts are the ones the book is set in. pagedjs
         // measures line lengths as it flows, and the fallback face is narrower:
         // paginating before the swap fitted the use-cases chapter onto one page

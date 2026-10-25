@@ -91,9 +91,18 @@ export const BOOK_READER_CSS = `
   width: 1280px;
 }
 .book-live .pagedjs_pages { margin: 0; }
+/* A page is separated from the next by a rule above and a rule below, not by a
+   card: the paper is the page, and a frame around it draws a second edge that
+   the book itself does not have. The pair reads as the gutter between two
+   sheets, and both lines take the theme's hairline colour. */
 .book-live .pagedjs_page {
-  margin: 0 0 1.5rem;
+  margin: 0 0 2.25rem;
+  padding: 1.1rem 0;
+  border: 0;
+  border-top: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
+  border-bottom: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
   box-shadow: none;
+  background: transparent;
 }
 .book-live .pagedjs_page:last-child { margin-bottom: 0; }
 
