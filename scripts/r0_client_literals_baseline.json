@@ -413,20 +413,8 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
-      "count": 3,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
-      "count": 3,
-      "ticket": "DIG-4043"
-    },
     "digigraph/src/digigraph/skill_library/loader.py": {
       "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
-      "count": 5,
       "ticket": "DIG-4043"
     },
     "digikey/src/digikey/cli.py": {
@@ -1028,6 +1016,18 @@
     "packages/ui/src/components/chat/stock/tool-display.test.ts": {
       "count": 2,
       "ticket": "DIG-3689"
+    },
+    "digigraph/src/digigraph/skill_library/occ/find-precedent-tickets/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/occ/guide-help-docs/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/occ/summarize-tickets-by-topic/SKILL.md": {
+      "count": 5,
+      "ticket": "DIG-4043"
     }
   }
 }

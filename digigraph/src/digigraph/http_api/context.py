@@ -91,6 +91,24 @@ def _mcp_tool_names(raw: Any) -> list[str] | None:
     return names
 
 
+def _tenant_skills(
+    tenant_slug: str | None, corpus_map: dict[str, Any]
+) -> tuple[str | None, list[str]]:
+    """``(pack, ids)`` for one tenant's skill documents (DIG-2637).
+
+    The pack is the tenant's own directory under ``skill_library/`` and the ids
+    are what its corpus-map entry allows. Never "all": an unmapped, empty or
+    unauthenticated tenant gets ``(None, [])`` and therefore no skill tools.
+    """
+    from digigraph.corpus_routing import tenant_skill_ids
+
+    ids = list(tenant_skill_ids(tenant_slug, corpus_map))
+    slug = (tenant_slug or "").strip().lower()
+    if not ids or not slug:
+        return None, []
+    return slug, ids
+
+
 def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     from digigraph.corpus_routing import (
         TenantCorpusMapError,
@@ -136,6 +154,12 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         tenant_slug=tenant_from_auth,
         corpus_map=corpus_map,
     )
+    # The effective tenant slug, resolved exactly as resolve_corpus_override does
+    # (verified auth first, the unsigned routing hint only when auth named no
+    # tenant) so corpus and skills can never resolve to two different tenants.
+    tenant_slug = tenant_from_auth or (
+        _hget(http_request.headers, "X-Digi-Tenant", "x-digi-tenant").strip().lower() or None
+    )
     # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
     # digisearch_index / vault_path_prefix must be written unconditionally so a client
     # body value cannot survive into graph state (digisearch has no server-side
@@ -150,6 +174,13 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     updates["lock_session_controls"] = bool(corpus.lock_session_controls)
     # Same rule: dedicated per-index search tools come only from the tenant map.
     updates["digisearch_tools"] = corpus.digisearch_tools
+    # Same rule again: a tenant's skill documents are tenant content (DIG-2637).
+    # Both keys are written unconditionally, so a client body value cannot select
+    # a pack and a prior turn's set cannot survive: unmapped / unauthenticated
+    # means no pack and no ids, and `context.has_skills` stays false.
+    update_pack, update_skill_ids = _tenant_skills(tenant_slug, corpus_map)
+    updates["skill_pack"] = update_pack
+    updates["skills"] = update_skill_ids
     # Hosted license gate (spec §7): corpus/vault headers request the hosted
     # corpus capability, which requires the ``digisearch-corpus`` license scope
     # (403 ``insufficient_license_scope`` when lacking). The gate sits after map

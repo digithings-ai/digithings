@@ -379,6 +379,11 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     # per-key last-write-wins) and so an unlocked tenant clears it to False.
     initial["lock_session_controls"] = bool(req.lock_session_controls)
     initial["digisearch_tools"] = req.digisearch_tools
+    # Tenant skill documents (DIG-2637). Unconditional for the same reason: a
+    # prior turn's positive pack/ids must not stick on the same thread, which
+    # would hand one tenant's skill documents to the next request on it.
+    initial["skill_pack"] = req.skill_pack
+    initial["skills"] = req.skills
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
