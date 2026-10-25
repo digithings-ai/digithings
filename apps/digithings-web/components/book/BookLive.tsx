@@ -90,9 +90,13 @@ export default function BookLive({
       // pagedjs clones the source wrapper with the content, so page boxes keep
       // arriving with a copy of the portal host inside them. They are empty and
       // out of flow, but they would accumulate for the life of the page.
+      // Only the empty copies: a page box whose content is wrapped in the
+      // cloned source host is that page's body, not a leftover.
       document
         .querySelectorAll(".pagedjs_page .book-live__source")
-        .forEach((node) => node.remove());
+        .forEach((node) => {
+          if (!(node.textContent ?? "").trim()) node.remove();
+        });
     };
     take();
     const observer = new MutationObserver(take);

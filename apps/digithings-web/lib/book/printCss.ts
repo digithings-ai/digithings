@@ -62,6 +62,16 @@ export const PRINT_CSS = `
    under /book, which is the scope that matters. */
 
 
+/* The print route is paginated and screenshotted under screen media, so the
+   site chrome has to be hidden outside @media print — a rule in there never
+   runs. Scoped to the route's own marker, because this sheet is shared with the
+   reader, which keeps its header and contents. */
+html:has(.book-print) body > header,
+html:has(.book-print) body > footer,
+html:has(.book-print) .site-rails,
+html:has(.book-print) a[href="#main"],
+html:has(.book-print) .book-paged-status { display: none !important; }
+
 @media print {
   html, body { background: transparent; }
   .book-figure__dark { display: none !important; }

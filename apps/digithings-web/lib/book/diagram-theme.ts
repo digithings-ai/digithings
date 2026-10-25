@@ -11,19 +11,23 @@
  * <img> as a blob. It is the same drawing, drawn in whatever the reader chose.
  */
 
-/** The colours the renderer writes into each theme's file. */
+/**
+ * The colours the renderer writes into each theme's file. These are not a
+ * palette: they are the exact strings that appear in the SVG, and they have to
+ * match `scripts/book/render-diagrams.mjs`. Everything else is read live.
+ */
 const BAKED = {
   light: {
-    accent: "#0c7c71",
-    ink: "#14181b",
-    inkSoft: "#5c636a",
-    surface: "#fbfbf9",
+    accent: "#0c7c71", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    ink: "#14181b", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    inkSoft: "#5c636a", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    surface: "#fbfbf9", // canon-allow: baked into the rendered SVG, mirrors tokens.css
   },
   dark: {
-    accent: "#3dd6c4",
-    ink: "#eceef0",
-    inkSoft: "#9aa0a6",
-    surface: "#0a0e0c",
+    accent: "#3dd6c4", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    ink: "#eceef0", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    inkSoft: "#9aa0a6", // canon-allow: baked into the rendered SVG, mirrors tokens.css
+    surface: "#0a0e0c", // canon-allow: baked into the rendered SVG, mirrors tokens.css
   },
 } as const;
 
@@ -78,7 +82,11 @@ function recolour(svg: string, mode: Mode): string {
 }
 
 async function sourceFor(original: string, mode: Mode): Promise<string> {
-  const key = `${mode}|${original}`;
+  // The palette is part of the key: a cached blob made for monokai is the wrong
+  // drawing the moment the reader picks matrix, and the page boxes are not
+  // re-rendered when that happens.
+  const palette = document.documentElement.getAttribute("data-palette") ?? "default";
+  const key = `${palette}|${mode}|${original}`;
   const cached = cache.get(key);
   if (cached) return cached;
   const response = await fetch(original, { cache: "force-cache" });

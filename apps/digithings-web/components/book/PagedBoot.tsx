@@ -98,6 +98,18 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // now, on the page boxes pagedjs cloned, and finish before the ready
         // marker so a screenshot cannot catch the drawing half-recoloured.
         await applyDiagramTheme(document);
+        // The page boxes are clones, so the React component that owns a figure
+        // cannot update them. Watch the two attributes the palette lives on and
+        // recolour the clones in place; the cache is keyed by palette, so a
+        // switch redraws rather than reusing the previous theme's file.
+        const redraw = new MutationObserver(() => {
+          void applyDiagramTheme(document);
+        });
+        redraw.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-theme", "data-palette"],
+        });
+        cleanups.current.push(() => redraw.disconnect());
         // The field reveals column by column over about a second; a screenshot
         // taken at the ready marker caught only the first few columns and
         // printed a stripe down the left edge. Wait for the sweep to finish.

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import BookDocument from "@/components/book/BookDocument";
-import { PRINT_CSS } from "@/lib/book/printCss";
 
 /**
  * The print artefact is a rendering of the same book content with PagedJS
@@ -16,18 +15,17 @@ export const metadata: Metadata = {
  * The printed book. The document itself lives in `BookDocument` because the
  * reader at `/book` paginates the same one; this route only decides that it is
  * a print destination.
- */
-/**
- * The print sheet is injected here, not in the layout, because it hides the
- * site's chrome unconditionally (header, footer, every nav) and would take the
- * reader's own contents with it on `/book`.
+ *
+ * The wrapper is the signal the shared print sheet uses to hide the site's
+ * chrome — header, footer, skip link. On this route there is nothing to
+ * navigate to; on `/book` those rules must not fire, because the reader needs
+ * its own contents.
  */
 export default function BookPrintPage() {
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
+    <div className="book-print">
       <BookDocument />
-    </>
+    </div>
   );
 }
 
