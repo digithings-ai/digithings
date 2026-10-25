@@ -56,6 +56,24 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // one paginated element on this route, so it is that element.
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
+
+        // The site sets --accent to ink, and the stylesheets load in an order
+        // that lets that win over the book's own sheet. The page boxes are
+        // appended to <html>, so the accent has to sit there too — an inline
+        // style on the root is the one declaration nothing downstream outranks.
+        // Values mirror packages/design/tokens.css; the diagram renderer bakes
+        // in the same two, so the figures and the page agree.
+        const accent =
+          document.documentElement.getAttribute("data-theme") === "dark"
+            ? "#3dd6c4" // canon-allow: the theme accent, mirrored from tokens.css
+            : "#0c7c71"; // canon-allow: the theme accent, mirrored from tokens.css
+        document.documentElement.style.setProperty("--accent", accent);
+        // The MDX carries the site's utility classes, and `text-accent` reads
+        // Tailwind's --color-accent, not --accent. Setting only one of them
+        // leaves the chapter number in ink while the folio beside it is
+        // coloured.
+        document.documentElement.style.setProperty("--color-accent", accent);
+
         const chunker = await previewer.preview(
           content,
           [{ "book-print.css": PAGED_CSS }],

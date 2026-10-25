@@ -50,6 +50,16 @@ export const PRINT_CSS = `
 
 /* The book uses the same mono voice as the rest of digithings.ai. */
 .book-root { --font-mono: var(--font-stack-mono); }
+/* The site sets --accent to ink, so the whole app is one colour on one paper.
+   The book is the one place that shows the palette: the accent marks what a
+   reader follows — the pixel field, the chapter number, the folio, the edition
+   line, the rule over a table, the arrows in a diagram. Values mirror the
+   accent in packages/design/tokens.css, which is what the diagram renderer
+   bakes in too, so the page and its figures agree. */
+/* On :root, not on .book-root: the pagination engine appends its page boxes to
+   <html>, outside this layout's subtree, so an accent set lower down never
+   reaches the folio, the field or the chapter number. This sheet is only loaded
+   under /book, which is the scope that matters. */
 
 
 @media print {
@@ -346,6 +356,7 @@ table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 0 0 3mm;
 thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
+thead th { border-bottom-color: var(--accent) !important; }
 
 /* Folios sit bottom right: the PDF is read one page at a time on screen, so
    there is no spread and no outer margin to alternate into. */
@@ -355,7 +366,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   bottom: 8mm;
   font-family: var(--font-sans), monospace;
   font-size: 8pt;
-  color: var(--ink-soft);
+  color: var(--accent);
 }
 .pagedjs_page::after { right: 18mm; }
 .pagedjs_page:last-child::after { content: none; }
@@ -412,6 +423,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   text-wrap: balance;
 }
 .pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; color: var(--accent) !important; }
+.pagedjs_page .book-chapter__num { color: var(--accent) !important; }
 .pagedjs_page .book-chapter__head > p:nth-of-type(2) {
   margin: 0 0 4mm !important;
   font-size: 10pt !important;
@@ -501,6 +513,11 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 }
 
 /* The contents page: the same field, quiet enough to read a list over. */
+/* The field painter reads its hue off accent-color (pixel-field-core), with a
+   hard-coded teal fallback. Point it at the theme accent so the cover and the
+   contents are tinted rather than merely shaded. */
+.book-cover__field, .book-cover__field--quiet { accent-color: var(--accent); }
+
 .book-cover__field--quiet {
   opacity: 0.45 !important;
   -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 55%, transparent 92%) !important;
@@ -515,7 +532,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   font-family: var(--font-mono) !important;
   font-size: 7.5pt !important;
   letter-spacing: 0.04em !important;
-  color: var(--ink-soft) !important;
+  color: var(--accent) !important;
 }
 
 /* Cover: the hero banner, a hairline, and the title set at footer scale —
@@ -560,6 +577,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   font-family: var(--font-mono) !important;
   font-size: 7.5pt !important;
   letter-spacing: 0.04em !important;
+  color: var(--accent) !important;
   color: var(--ink-soft) !important;
 }
 

@@ -99,7 +99,7 @@ export default async function BookPrintPage() {
               {/* Anchors the front matter's page references resolve against. */}
               <div data-book-anchor={chapter.href} />
               <div className="book-chapter__head">
-                <p className="m-0 font-mono text-[0.8rem] text-accent">
+                <p className="book-chapter__num m-0 font-mono text-[0.8rem] text-accent">
                   {String(displayOrder).padStart(2, "0")}
                 </p>
                 {/* The book title above is the page's single h1; chapter openers
