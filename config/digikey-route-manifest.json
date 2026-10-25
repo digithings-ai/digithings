@@ -1,0 +1,88 @@
+{
+  "service": "digikey",
+  "source": "digikey/src/digikey/server.py",
+  "note": "Reference route surface for the DIG-2914 Workers port. Regenerate with `python scripts/check_digikey_route_parity.py --update`.",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/.well-known/jwks.json",
+      "handler": "jwks",
+      "auth": "public",
+      "request_model": null,
+      "response_model": null,
+      "summary": "JWKS public keys"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "health",
+      "auth": "public",
+      "request_model": null,
+      "response_model": null,
+      "summary": "Legacy health check"
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "handler": "healthz",
+      "auth": "public",
+      "request_model": null,
+      "response_model": null,
+      "summary": "Liveness probe"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/bff-sessions/revoke",
+      "handler": "admin_revoke_bff_subject",
+      "auth": "admin",
+      "request_model": "RevokeSessionBody",
+      "response_model": "RevokeResponse",
+      "summary": "Revoke BFF sessions for a subject"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/keys",
+      "handler": "admin_issue_key",
+      "auth": "admin",
+      "request_model": "AdminIssueBody",
+      "response_model": "AdminIssueResponse",
+      "summary": "Issue API key"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/keys/{key_id}/revoke",
+      "handler": "admin_revoke_key",
+      "auth": "admin",
+      "request_model": null,
+      "response_model": "RevokeResponse",
+      "summary": "Revoke API key"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/licenses/{license_id}/revoke",
+      "handler": "admin_revoke_license",
+      "auth": "admin",
+      "request_model": null,
+      "response_model": "LicenseRevokeResponse",
+      "summary": "Revoke customer license"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/licenses/heartbeat",
+      "handler": "license_heartbeat",
+      "auth": "license",
+      "request_model": null,
+      "response_model": null,
+      "summary": "Customer license heartbeat (four-state allowlist read)"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/oauth/token",
+      "handler": "oauth_token",
+      "auth": "api_key",
+      "request_model": "TokenRequest",
+      "response_model": "TokenResponse",
+      "summary": "Exchange API key or BFF session for JWT"
+    }
+  ]
+}
