@@ -168,7 +168,7 @@ def test_the_verdict_line_carries_a_timestamp_and_the_host(
     runner = _Runner(0, stdout=_verdict("agree"))
     pgl.main([], env=_env(POLICY_CHECK_READER_TOKEN="t"), runner=runner)
 
-    line = next(l for l in capsys.readouterr().err.splitlines() if "GREEN" in l)
+    line = next(s for s in capsys.readouterr().err.splitlines() if "GREEN" in s)
     assert "GREEN at " in line
     assert "T" in line and "Z on " in line, line
     assert "digithings-ai/digithings@develop" in line
