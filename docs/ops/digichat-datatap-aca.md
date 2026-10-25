@@ -377,7 +377,7 @@ The ACR is the ledger of record for what is deployed. Digests below are verified
 | `v2.6.5` | `sha256:1e593f7e2987` (GHCR) | 2026-10-21T13:39Z | **OCC prod** (Cloudflare container `shared-5a810b112705`), superseded by `v2.6.7` |
 | `v2.6.6` | `sha256:77d9ba03b05a` (GHCR) | 2026-10-21T22:39Z | superseded by `v2.6.7` |
 | `v2.6.7` | `sha256:8c468adacf80` (GHCR) | 2026-10-22T00:02Z | **OCC prod** (Cloudflare container `shared-eef1ee72c20f`), superseded by `v2.7.0` |
-| `v2.7.0` | `sha256:c26fd6affa33` (GHCR) | 2026-10-24T03:00Z | **OCC prod** (Cloudflare container `shared-b99aa6ba6945`), deployed 2026-10-24T16:19Z via run `40110685537`; carries the OCC helpdesk-MCP fix (digithings#6274) |
+| `v2.7.0` | `sha256:c26fd6affa33` (GHCR) | 2026-10-24T03:00Z | **OCC prod** (Cloudflare container `shared-b99aa6ba6945`), deployed 2026-10-24T16:19Z via run `40110685537`; carries the helpdesk-MCP fix for the OCC lane (digithings#6274) |
 
 `v2.7.0` is built from the `digichat-v2.7.0` tag (`35e8108ac42898536609a3fae2adc4c0ef0b853c`) and is bound to it: publish run `40056294838` (started 2026-10-24T02:57Z, conclusion `success`) pushed `ghcr.io/digithings-ai/digichat:v2.7.0` and `:latest` at 2026-10-24T03:00Z with manifest digest `sha256:c26fd6affa334f20f86e0834dce71c30799f5ec5e31544618e49f49aea17162a`. The OCC lane was then deployed from `main` (run `40110685537`, approved via the `production` environment gate) shipping container `shared-b99aa6ba6945`. The deploy tree (`b99aa6ba6945`) is a descendant of the fix commit `68d6484cb2` (digithings#6274), so the in-image helpdesk MCP now answers with the loopback Host and the edge route is expected to return 200 rather than 421 "Invalid Host header" (unauthenticated probe returns 401, not 421, as of 2026-10-25).
 
