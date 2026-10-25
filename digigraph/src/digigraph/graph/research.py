@@ -399,12 +399,16 @@ def _run_document_rag_path(
     # change language/model/effort/tools/MCP; the client applies the result.
     if "session" not in skill_ids:
         skill_ids.append("session")
-    # Skill documents (DIG-2637) — always on, same trust as session: the agent
-    # lists the ids and fetches one into context on demand, so no instruction
-    # is ever baked into the prompt.
-    from digigraph.skill_library.tools import SKILL_LIBRARY_SKILL_ID
+    # Skill documents (DIG-2637) — tenant-scoped: a tenant chooses its own pack
+    # through the corpus map (corpus_routing.tenant_skill_ids) and a tenant with
+    # no documents gets no bundle at all, so the occ workflows never reach the
+    # house chat. Same trust as session: the agent lists the ids and fetches one
+    # into context on demand, so no instruction is ever baked into the prompt.
+    from digigraph.skill_library.tools import SKILL_LIBRARY_SKILL_ID, SKILL_LIBRARY_TOOL_NAMES
 
-    if SKILL_LIBRARY_SKILL_ID not in skill_ids:
+    _tenant_skill_ids = tuple(state.get("skills") or ())
+    _tenant_skill_pack = (str(state.get("skill_pack") or "").strip().lower()) or None
+    if _tenant_skill_ids and _tenant_skill_pack and SKILL_LIBRARY_SKILL_ID not in skill_ids:
         skill_ids.append(SKILL_LIBRARY_SKILL_ID)
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
@@ -413,9 +417,12 @@ def _run_document_rag_path(
     _allowed_names = frozen_from_state_list(state.get("allowed_tool_names"))
     if _allowed_names is not None:
         from digigraph.orchestration.session_prefs_tools import SESSION_TOOL_NAMES
-        from digigraph.skill_library.tools import SKILL_LIBRARY_TOOL_NAMES
 
-        _allowed_names = _allowed_names | SESSION_TOOL_NAMES | SKILL_LIBRARY_TOOL_NAMES
+        _allowed_names = _allowed_names | SESSION_TOOL_NAMES
+        # Only lift the bundle's names when the bundle is actually in play; a
+        # tenant with no skills keeps a closed allowlist.
+        if SKILL_LIBRARY_SKILL_ID in skill_ids:
+            _allowed_names = _allowed_names | SKILL_LIBRARY_TOOL_NAMES
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     # Normalize before constructing ToolContext (#2295 review): an empty or
@@ -440,6 +447,8 @@ def _run_document_rag_path(
             str(state["vault_path_prefix"]).strip() if state.get("vault_path_prefix") else None
         )
         or None,
+        skill_pack=_tenant_skill_pack,
+        skill_ids=frozenset(_tenant_skill_ids),
     )
     mcp_servers = [s for s in (state.get("mcp_servers") or []) if isinstance(s, dict)]
     context.extra_mcp_servers = mcp_servers

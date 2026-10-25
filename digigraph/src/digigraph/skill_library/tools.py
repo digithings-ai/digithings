@@ -5,6 +5,12 @@ result it gets back is data it must act on. Nothing here is baked into a system
 prompt — the point of the feature is that a document reaches the agent's
 context only when the agent asks for it by id.
 
+Tenant-scoped: the documents this layer will describe or serve come from
+``context.skill_pack`` narrowed to ``context.skill_ids``. An id outside that set
+is answered exactly like an id that does not exist — same message, same
+``known_skills`` — so a tenant cannot tell another tenant's skill from a typo,
+and cannot read one at all.
+
 Deliberately dumb handlers. A skill document is instructions, not a decision:
 this layer resolves an id to text and refuses an unknown id with a corrective
 message naming what does exist. What to do with the instructions is the
@@ -17,16 +23,15 @@ from typing import Any  # score:allow untyped any — JSON tool args and results
 
 from digigraph.orchestration.registry import ToolContext
 from digigraph.skill_library.loader import (
+    SkillDocument,
     SkillDocumentError,
     list_skill_documents,
-    load_skill_document,
 )
 
 LIST_SKILLS = "list_skills"
 GET_SKILL = "get_skill"
 
-# The always-on bundle id research.py appends to the skill ids, exactly as it
-# does for "session".
+# The bundle id research.py appends to the skill ids when the tenant has a set.
 SKILL_LIBRARY_SKILL_ID = "skill_library"
 
 SKILL_LIBRARY_TOOL_NAMES = frozenset({LIST_SKILLS, GET_SKILL})
@@ -71,8 +76,21 @@ SKILL_LIBRARY_TOOL_SCHEMAS: list[tuple[str, dict]] = [
 ]
 
 
-def _handle_list_skills(_args: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
-    documents = list_skill_documents()
+def tenant_documents(context: ToolContext) -> list[SkillDocument]:
+    """The documents this tenant may read: its pack, narrowed to its id set.
+
+    Raises ``SkillDocumentError`` for a malformed document, exactly as before —
+    a packaging fault stays visible. A tenant with no pack or no ids gets ``[]``.
+    """
+    if not context.has_skills:
+        return []
+    return [
+        doc for doc in list_skill_documents(context.skill_pack) if doc.name in context.skill_ids
+    ]
+
+
+def _handle_list_skills(_args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    documents = tenant_documents(context)
     return {
         "ok": True,
         "count": len(documents),
@@ -80,21 +98,22 @@ def _handle_list_skills(_args: dict[str, Any], _context: ToolContext) -> dict[st
     }
 
 
-def _handle_get_skill(args: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
+def _handle_get_skill(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     raw = (args or {}).get("name")
+    name = raw if isinstance(raw, str) else ""
     try:
-        document = load_skill_document(raw if isinstance(raw, str) else "")
+        documents = tenant_documents(context)
     except SkillDocumentError as exc:
-        # Corrective, not fatal: naming the ids that do exist is what lets the
-        # agent retry without another round trip.
-        try:
-            known = [doc.name for doc in list_skill_documents()]
-        except SkillDocumentError:
-            known = []
+        return {"ok": False, "error": str(exc), "known_skills": []}
+    document = next((doc for doc in documents if doc.name == name), None)
+    if document is None:
+        # One refusal for "no such skill" and for "another tenant's skill":
+        # naming the ids that do exist is what lets the agent retry without
+        # another round trip, and it must only ever name this tenant's ids.
         return {
             "ok": False,
-            "error": str(exc),
-            "known_skills": known,
+            "error": f"unknown skill: {name}",
+            "known_skills": sorted(doc.name for doc in documents),
         }
     return {
         "ok": True,
