@@ -540,6 +540,13 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
 
     def test_static_list_drives_single_step_call(self):
+        """Each entry becomes exactly one spec, and the specs are what runs.
+
+        The list used to drive one `step(...)` call per entry. It now drives one
+        `scan_specs.append(...)` per entry, because the independent gates run in
+        a bounded pool (STEP_POOL); the property this pins is unchanged - every
+        entry in the list is executed exactly once, with its own command.
+        """
         tree = self._tree()
         found = self._static_lists(tree)
         self.assertEqual(len(found), 1)
@@ -548,16 +555,102 @@ class StaticGateWiringTest(unittest.TestCase):
             if isinstance(node, ast.For) and node.iter is found[0]
         ]
         self.assertEqual(len(loops), 1)
-        steps = [
+        appends = [
             node for node in ast.walk(loops[0])
             if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "step"
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "append"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "scan_specs"
         ]
-        self.assertEqual(len(steps), 1)
+        self.assertEqual(len(appends), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("fails.extend(run_step_pool(scan_specs, out))", src)
 
     def test_docstring_names_r0_scan(self):
         self.assertIn("R0 client-literal scan", ast.get_docstring(self._tree()))
+
+
+class StepPoolTest(unittest.TestCase):
+    """The independent gates run in a bounded pool (STEP_POOL)."""
+
+    def test_pool_runs_specs_concurrently_and_reports_in_declared_order(self):
+        import threading
+        barrier = threading.Barrier(2, timeout=5)
+        seen = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            seen.append(name)
+            barrier.wait()          # deadlocks (BrokenBarrierError) if serialised
+            if name == "second":
+                if out:
+                    out.write("boom\n")
+                return 1, ""
+            return 0, ""
+
+        specs = [("first", ["true"], 30, None, None, ()),
+                 ("second", ["false"], 30, None, None, ())]
+        log = io.StringIO()
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool(specs, log, limit=2)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(sorted(seen), ["first", "second"], "both specs must run")
+        self.assertEqual(fails, ["second"], "only the failing step is reported")
+        text = log.getvalue()
+        self.assertLess(text.index("===== first"), text.index("===== second"),
+                        "the log keeps the declared order, not the finish order")
+
+    def test_pool_stops_at_the_specs_it_was_given(self):
+        calls = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            calls.append(name)
+            return 0, ""
+
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool([("only", ["true"], 30, None, None, ())],
+                                       io.StringIO(), limit=6)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(fails, [])
+        self.assertEqual(calls, ["only"])
+
+    def test_child_state_holds_every_live_step(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            _mod._write_child_state(111, "one", 30)
+            _mod._write_child_state(222, "two", 30)
+            self.assertEqual(len(_mod.read_child_state()["children"]), 2)
+            _mod._clear_child_state(111)
+            left = _mod.read_child_state()["children"]
+            self.assertEqual([c["pid"] for c in left], [222])
+            _mod._clear_child_state()
+            self.assertIsNone(_mod.read_child_state())
+        finally:
+            _mod._clear_child_state()
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_watchdog_reads_a_state_file_written_before_the_pool(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            with open(_mod.CHILD_STATE, "w") as f:
+                json.dump({"pid": 999999, "name": "old", "started": time.time(),
+                           "budget": 300}, f)
+            st = _mod.read_child_state()
+            self.assertEqual(st["children"][0]["pid"], 999999)
+        finally:
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class PrepareWorktreeTest(unittest.TestCase):
@@ -968,7 +1061,7 @@ class WorktreeSelfHealTest(unittest.TestCase):
         self.assertEqual(ran, [], "run_checks must not be called when the worktree failed")
         self.assertEqual(st, "failure")
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
-        self.assertIn("fails = run_checks(pr, out) if ok_wt else", src)
+        self.assertIn("fails = run_checks(pr, out, summary) if ok_wt else", src)
         self.assertIn('f"worktree checkout ({why})"', src)
 
     def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
