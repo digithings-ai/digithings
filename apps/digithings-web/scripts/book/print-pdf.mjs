@@ -74,7 +74,26 @@ const { server, base } = await serve(OUT);
 const { chromium } = await import("playwright");
 const browser = await chromium.launch();
 
-const EDITIONS = [{ theme: "light", file: "the-digithings-book.pdf" }];
+/**
+ * The palettes that get a printed edition, so their download is a file rather
+ * than a twenty-second render in the browser. The default entry is the site's
+ * own theme (dark, accent = ink). Adding a palette here costs a few seconds of
+ * build time and one file; a palette that is not here still works, it is just
+ * built in the browser.
+ */
+const PRINTED = [
+  // Dark is the site's own theme, so every palette here is instant in the
+  // reader's default mode. Light is covered for the default palette; a light
+  // reader on monokai still renders in the browser (~20s) rather than shipping
+  // sixteen more editions of a nine-megabyte book.
+  { theme: "dark", palette: "", file: "the-digithings-book.pdf" },
+  { theme: "dark", palette: "monokai", file: "the-digithings-book-monokai.pdf" },
+  { theme: "dark", palette: "matrix", file: "the-digithings-book-matrix.pdf" },
+  { theme: "dark", palette: "solarized", file: "the-digithings-book-solarized.pdf" },
+  { theme: "dark", palette: "nord", file: "the-digithings-book-nord.pdf" },
+  { theme: "light", palette: "", file: "the-digithings-book-light.pdf" },
+];
+const THEME = "dark";
 
 /**
  * One edition: paginate the print route in the given theme and screenshot every
@@ -86,8 +105,8 @@ const EDITIONS = [{ theme: "light", file: "the-digithings-book.pdf" }];
  * editions, so the field on the cover is the same pattern in each, differing
  * only in colour.
  */
-async function printEdition({ theme, file, seed }) {
-  const page = await browser.newPage({ deviceScaleFactor: 2.5 });
+async function openBook(seed, theme) {
+  const page = await browser.newPage({ deviceScaleFactor: 2 });
   await page.addInitScript((value) => {
     try {
       localStorage.setItem("dt-theme", value);
@@ -129,6 +148,26 @@ async function printEdition({ theme, file, seed }) {
     return out;
   });
 
+  return { page, pages, map };
+}
+
+/**
+ * Screenshot every page box of the open book into one PDF.
+ *
+ * The book is paginated once and captured once per palette: switching the
+ * palette attribute recolours the same page boxes, so five editions cost one
+ * pagination and five capture passes rather than five of each.
+ */
+async function captureEdition(page, pages, entry) {
+  // Palette only: the theme is set before the document loads, because the
+  // diagrams choose their light or dark file by attribute and a late switch
+  // left a light page carrying a drawing coloured for the dark one.
+  await page.evaluate((palette) => {
+    if (palette) document.documentElement.setAttribute("data-palette", palette);
+    else document.documentElement.removeAttribute("data-palette");
+  }, entry.palette);
+  await page.waitForTimeout(400);
+  const file = entry.file;
   const target = join(APP_ROOT, "public", "book", file);
   mkdirSync(dirname(target), { recursive: true });
 
@@ -146,7 +185,7 @@ async function printEdition({ theme, file, seed }) {
   pdf.setCreator("digithings.ai/book");
   for (let i = 0; i < pages; i += 1) {
     const shot = await page.locator(".pagedjs_page").nth(i).screenshot();
-    const jpeg = await sharp(shot).jpeg({ quality: 85 }).toBuffer();
+    const jpeg = await sharp(shot).jpeg({ quality: 72 }).toBuffer();
     const image = await pdf.embedJpg(jpeg);
     const sheet = pdf.addPage([A4.width, A4.height]);
     // Full bleed: the page box already carries the theme's background and its
@@ -155,31 +194,58 @@ async function printEdition({ theme, file, seed }) {
     sheet.drawImage(image, { x: 0, y: 0, ...A4 });
   }
   await (await import("node:fs/promises")).writeFile(target, await pdf.save());
-  await page.close();
-  return { pages, map };
+  return { pages, theme: entry.theme, palette: entry.palette, file };
 }
 
 try {
-  // One seed for both editions: the field is the same pattern, drawn in each
-  // theme's accent. A new build picks a new one, so the cover is never quite
-  // the same twice.
+  // One seed for the whole run: every palette gets the same field pattern, so
+  // the editions differ only in colour. A new build picks a new one.
   const seed = Math.floor(Math.random() * 100_000);
-  const light = await printEdition({ ...EDITIONS[0], seed });
+  const written = [];
+  let pages = 0;
+  let map = {};
+  for (const theme of ["dark", "light"]) {
+    const entries = PRINTED.filter((entry) => entry.theme === theme);
+    if (!entries.length) continue;
+    const book = await openBook(seed, theme);
+    pages = book.pages;
+    map = book.map;
+    for (const entry of entries) {
+      written.push(await captureEdition(book.page, book.pages, entry));
+    }
+    await book.page.close();
+  }
 
   mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
   writeFileSync(
     join(APP_ROOT, "lib", "book", "generated", "pages.json"),
-    `${JSON.stringify({ pages: light.pages, map: light.map, seed }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        pages,
+        map,
+        seed,
+        theme: THEME,
+        editions: PRINTED.map((entry) => ({
+          palette: entry.palette,
+          theme: entry.theme,
+          file: entry.file,
+        })),
+      },
+      null,
+      2,
+    )}\n`,
   );
 
-  // The exported site is what ships; keep both downloads in it without
+  // The exported site is what ships; keep every download in it without
   // requiring a second build after printing.
-  for (const edition of EDITIONS) {
-    const exported = join(OUT, "book", edition.file);
+  for (const entry of PRINTED) {
+    const exported = join(OUT, "book", entry.file);
     mkdirSync(dirname(exported), { recursive: true });
-    copyFileSync(join(APP_ROOT, "public", "book", edition.file), exported);
+    copyFileSync(join(APP_ROOT, "public", "book", entry.file), exported);
   }
-  console.log(`book: wrote ${light.pages} page(s), seed ${seed}`);
+  console.log(
+    `book: wrote ${pages} page(s) in ${written.length} edition(s), seed ${seed}`,
+  );
 } finally {
   await browser.close();
   server.close();

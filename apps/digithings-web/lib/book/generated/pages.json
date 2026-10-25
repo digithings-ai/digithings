@@ -18,5 +18,38 @@
     "/book/19-local-stack/": 18,
     "/book/23-self-hosting/": 19
   },
-  "seed": 27655
+  "seed": 15074,
+  "theme": "dark",
+  "editions": [
+    {
+      "palette": "",
+      "theme": "dark",
+      "file": "the-digithings-book.pdf"
+    },
+    {
+      "palette": "monokai",
+      "theme": "dark",
+      "file": "the-digithings-book-monokai.pdf"
+    },
+    {
+      "palette": "matrix",
+      "theme": "dark",
+      "file": "the-digithings-book-matrix.pdf"
+    },
+    {
+      "palette": "solarized",
+      "theme": "dark",
+      "file": "the-digithings-book-solarized.pdf"
+    },
+    {
+      "palette": "nord",
+      "theme": "dark",
+      "file": "the-digithings-book-nord.pdf"
+    },
+    {
+      "palette": "",
+      "theme": "light",
+      "file": "the-digithings-book-light.pdf"
+    }
+  ]
 }
