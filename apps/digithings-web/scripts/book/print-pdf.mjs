@@ -10,7 +10,7 @@
  * `/book/…` paths, which do not resolve over `file://`. It is a fixture, not
  * a product surface, and it binds to loopback only.
  */
-import { copyFileSync, createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,6 +94,25 @@ try {
   if (refs.length && filled.length === 0) {
     throw new Error(`no table-of-contents page reference resolved (${refs.length} entries)`);
   }
+
+  // `/book` labels its contents from this map. Writing it here — from the same
+  // pagination that produces the PDF, after the number pass has run — is what
+  // keeps a page number on the site from naming a different page than the
+  // download. The images beside it come from the PDF (scripts/book/page-images.mjs).
+  const map = await page.$$eval(".pagedjs_page [data-book-anchor]", (nodes) => {
+    const out = {};
+    for (const node of nodes) {
+      const slug = node.getAttribute("data-book-anchor");
+      const page = node.closest(".pagedjs_page")?.dataset.bookPage;
+      if (slug && page && !(slug in out)) out[slug] = Number(page);
+    }
+    return out;
+  });
+  mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
+  writeFileSync(
+    join(APP_ROOT, "lib", "book", "generated", "pages.json"),
+    `${JSON.stringify({ pages, map }, null, 2)}\n`,
+  );
 
   const target =
     process.argv[2] ?? join(APP_ROOT, "public", "book", "the-digithings-book.pdf");

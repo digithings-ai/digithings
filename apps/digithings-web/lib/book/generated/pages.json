@@ -1,0 +1,21 @@
+{
+  "pages": 19,
+  "map": {
+    "/book/01-why-a-book/": 3,
+    "/book/02-why-self-hosted/": 4,
+    "/book/03-open-core/": 5,
+    "/book/03-how-it-scales/": 6,
+    "/book/05-environment/": 7,
+    "/book/06-use-cases/": 8,
+    "/book/10-digigraph/": 10,
+    "/book/11-digillm/": 11,
+    "/book/20-mcp/": 12,
+    "/book/17-digisearch/": 13,
+    "/book/13-digiquant/": 14,
+    "/book/12-digichat/": 15,
+    "/book/15-digikey/": 16,
+    "/book/16-digitrace/": 17,
+    "/book/19-local-stack/": 18,
+    "/book/23-self-hosting/": 19
+  }
+}
