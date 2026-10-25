@@ -90,15 +90,13 @@ const browser = await chromium.launch();
  * the list is cheap to extend — add a palette and one line appears in each
  * theme.
  */
-const PALETTES = ["", "monokai", "matrix", "solarized", "nord"];
-const THEMES = ["dark", "light"];
-const PRINTED = THEMES.flatMap((theme) =>
-  PALETTES.map((palette) => ({
-    theme,
-    palette,
-    file: `the-digithings-book-${theme}${palette ? `-${palette}` : ""}.pdf`,
-  })),
-);
+/**
+ * One edition. `/book` is a light, still page, and the print is a fixed
+ * artefact of it, so there is nothing per-theme to print. A palette change does
+ * not alter the download.
+ */
+const PRINTED = [{ theme: "light", palette: "", file: "the-digithings-book.pdf" }];
+const THEMES = ["light"];
 
 /**
  * One edition: paginate the print route in the given theme and screenshot every

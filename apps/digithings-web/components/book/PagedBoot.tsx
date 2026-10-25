@@ -247,7 +247,9 @@ function mountPageFields(): void {
     canvas.className = cover ? "book-cover__field" : "book-cover__field book-cover__field--quiet";
     canvas.setAttribute("aria-hidden", "true");
     page.prepend(canvas);
-    mountField(canvas, createEmbeddingSubject(cover ? COVER_SEED : COVER_SEED + 7));
+    mountField(canvas, createEmbeddingSubject(cover ? COVER_SEED : COVER_SEED + 7), {
+      still: true,
+    });
   });
 }
 

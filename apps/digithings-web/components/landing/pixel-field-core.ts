@@ -77,7 +77,11 @@ function colorsOf(el: HTMLElement): { foreground: [number, number, number]; acce
   };
 }
 
-export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) => Subject): () => void {
+export function mountField(
+  canvas: HTMLCanvasElement,
+  makeSubject: (grid: Grid) => Subject,
+  options: { still?: boolean } = {},
+): () => void {
   const context = canvas.getContext("2d");
   const parent = canvas.parentElement;
   if (!context || !parent) return () => {};
@@ -193,6 +197,13 @@ export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) 
   }
 
   layout(true);
+  if (options.still) {
+    // One frame, then stop. A printed page and a quiet reading surface do not
+    // need a field that moves under them.
+    for (let i = 0; i < display.length; i += 1) display[i] = target[i] ?? 0;
+    draw();
+    return () => {};
+  }
   if (reduced) draw();
   else raf = requestAnimationFrame(tick);
   parent.addEventListener("pointermove", onPointer);

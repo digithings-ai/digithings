@@ -111,7 +111,7 @@ export default function BookExportBar() {
 
   async function build(format: Format): Promise<{ blob: Blob; filename: string }> {
     if (format === "pdf") {
-      const { blob, filename } = await buildBookPdf(({ done, total }) => setProgress({ done, total }));
+      const { blob, filename } = await buildBookPdf();
       return { blob, filename };
     }
     if (format === "html") {

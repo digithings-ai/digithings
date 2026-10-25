@@ -26,6 +26,16 @@ export const metadata: Metadata = {
 export default function BookLayout({ children }: { children: ReactNode }) {
   return (
     <>
+      {/* `/book` is a light page: it shows a printed object, and the page, the
+          still field and every export have to agree. Set before paint so a
+          dark-site reader does not get a dark flash first; BookLive puts the
+          reader's own choice back when they leave. */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "try{document.documentElement.setAttribute('data-theme','light');document.documentElement.removeAttribute('data-palette')}catch(e){}",
+        }}
+      />
       <DtNav />
       {/* Shared with the print route: the book sets its page typography here, and
           the reader paginates the same document, so leaving it out changed the
