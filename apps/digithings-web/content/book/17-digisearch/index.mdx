@@ -50,10 +50,10 @@ on it for grounded answers and the research pipeline calls it for
 background. Ingestion runs on demand, and either way it lands
 in the index the answering path reads.
 
-The index backend is the main thing that changes between homes and is one
-setting: Chroma on local disk by default, pgvector in Postgres, Cloudflare
-Vectorize or Azure AI Search. In every home, ingestion is an explicit act, so
-no document crosses a boundary you did not approve.
+The index backend is one setting: Chroma on local disk by default, pgvector in
+Postgres, Cloudflare Vectorize or Azure AI Search. In every home, ingestion is
+an explicit act, so nothing enters the index you did not put there. Passages
+do go to the model that answers, so confidential work belongs on a local one.
 
 <Reference kind="architecture" href="repo:digisearch/ARCHITECTURE.md" title="digisearch architecture">
   The two paths, the index choices and the access rules.

@@ -29,13 +29,13 @@ Speech is the input people are least willing to share, and the usual way to
 process it is to stream it to someone else's servers. digivoice starts from
 the opposite default: capture, transcription with whisper, an optional rewrite
 by a small local model, and speech back with Piper, all on the speaker's own
-Mac. There is no cloud option, on purpose: the audio never leaves the machine.
+Mac. Today's build has no cloud step: the audio never leaves the machine.
 
 Because the output is ordinary text, voice becomes a way into the rest of the
 stack. A finished transcript pastes into whatever is in focus: a question in the
 chat, a research brief, made out loud while the hands are busy. digichat can
 also switch on the browser's own dictation and read-aloud, which is convenient
-but uses whatever speech engine the browser ships.
+but hands the audio to the browser's engine: in Chrome, Google's.
 
 ## Retrieval over your own documents
 
@@ -84,7 +84,7 @@ returns the filing passages behind the position, and digiquant reruns the
 backtest under the stated parameters. The answer cites both, and with tracing
 on, the trail shows every step that produced it.
 
-No code was written for that question. Each module did its one job, and the
+No new code was written for that question. Each module did its one job, and the
 application is the set of parts that were switched on. The same chain runs
 unchanged when the research moves to a shared server, and that is how an idea
 proved on one machine grows without starting again.

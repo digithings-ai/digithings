@@ -21,7 +21,9 @@ every caller.
 
 digigraph runs each request through a state machine built on LangGraph, with
 stages for research, validation, backtesting and optional optimisation.
-Conditional edges decide which stages a given request needs. Around the
+Conditional edges decide which stages a request needs: a question about
+documents ends after the first stage, where the tools run, and only a trading
+strategy goes on to the rest. Around the
 machine sits a registry of tools. A few live inside the hub. The verticals
 own the rest and publish their descriptions, the name, the inputs and what
 the tool does, which the hub fetches when it first needs them.
