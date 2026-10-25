@@ -62,6 +62,11 @@ class WorkflowState(TypedDict, total=False):
     lock_session_controls: bool
     # Tenant map digisearchTools: tool name -> {index, description} (DIG-3269).
     digisearch_tools: dict[str, dict[str, str]] | None
+    # Tenant skill documents (DIG-2637): the pack directory (tenant slug) the ids
+    # are read from and the ids this tenant may read. Must be declared here — see
+    # the digisearch_index comment above; same LangGraph dropped-key pitfall.
+    skill_pack: str | None
+    skills: list[str] | None
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None

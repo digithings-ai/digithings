@@ -7,7 +7,7 @@ named list of tool names with an optional ``when`` gate and has no body to
 read. Both are called "skill", so they live in different packages rather than
 sharing one directory where the word would mean two incompatible things.
 
-Layout — ``skill_library/<name>/SKILL.md`` with YAML frontmatter::
+Layout — ``skill_library/<pack>/<name>/SKILL.md`` with YAML frontmatter::
 
     ---
     name: present-results
@@ -16,6 +16,17 @@ Layout — ``skill_library/<name>/SKILL.md`` with YAML frontmatter::
     ---
 
     the instructions, in markdown
+
+**A skill is tenant content, not house content.** A *pack* is one tenant's set
+of documents, and the pack name is the tenant slug: the four documents under
+``skill_library/occ/`` belong to the ``occ`` tenant and are never served to any
+other tenant. There is deliberately no house/global pack — an unscoped call
+(``pack=None``) returns nothing rather than every document in the tree, so a
+new tenant starts empty and gains only the skills someone puts in its own
+folder. What a tenant may see is decided by ``corpus_routing.tenant_skill_ids``
+(the tenant corpus map's ``skills`` key, defaulting to that tenant's own pack),
+and the resolved ids are carried on ``ToolContext.skill_ids``; the filesystem
+is where the text lives, not the grant.
 
 The folder name and the frontmatter ``name`` must agree: one id per skill, no
 aliases. A reader grepping the tree and a caller passing the tool argument then
@@ -49,6 +60,11 @@ SKILL_FILENAME = "SKILL.md"
 # between a caller-supplied string and a filesystem join (see load_skill_document),
 # so it admits no dots, no slashes and no leading or trailing separator.
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+# Tenant pack (= tenant slug). Same shape and the same reason: it is joined to
+# SKILL_LIBRARY_DIR, so it can carry no dot, no slash and no leading separator.
+# A pack name that does not match resolves to no directory at all.
+SKILL_PACK_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _FRONTMATTER_RE = re.compile(r"\A---\r?\n(?P<meta>.*?)\r?\n---[ \t]*\r?\n", re.DOTALL)
 _REQUIRED_FRONTMATTER = ("name", "description")
 
@@ -102,8 +118,8 @@ def _parse_frontmatter(text: str, source: str) -> tuple[dict[str, str], str]:
     return clean, text[match.end() :]
 
 
-def _read_document(folder: Path) -> SkillDocument:
-    source = f"skill_library/{folder.name}/{SKILL_FILENAME}"
+def _read_document(folder: Path, pack: str) -> SkillDocument:
+    source = f"skill_library/{pack}/{folder.name}/{SKILL_FILENAME}"
     try:
         text = (folder / SKILL_FILENAME).read_text(encoding="utf-8")
     except OSError as exc:
@@ -136,42 +152,66 @@ def _read_document(folder: Path) -> SkillDocument:
     )
 
 
-def skill_folders() -> list[Path]:
-    """Every folder in the library, sorted, whether or not it parses."""
-    if not SKILL_LIBRARY_DIR.is_dir():  # pragma: no cover - installed layout
+def pack_dir(pack: str | None) -> Path | None:
+    """The directory holding one tenant's skills, or ``None`` when *pack* is not
+    a usable pack name.
+
+    ``None`` is the fail-closed answer, not an error: an absent tenant has no
+    documents, and an invalid pack name must never widen to the library root.
+    """
+    if not isinstance(pack, str):
+        return None
+    name = pack.strip().lower()
+    if not SKILL_PACK_RE.match(name):
+        return None
+    return SKILL_LIBRARY_DIR / name
+
+
+def skill_folders(pack: str | None = None) -> list[Path]:
+    """Every folder in one tenant's pack, sorted, whether or not it parses."""
+    directory = pack_dir(pack)
+    if directory is None or not directory.is_dir():
         return []
-    return sorted(p for p in SKILL_LIBRARY_DIR.iterdir() if p.is_dir())
+    return sorted(p for p in directory.iterdir() if p.is_dir())
 
 
-def list_skill_documents() -> list[SkillDocument]:
-    """Every skill document in the library, sorted by name.
+def list_skill_documents(pack: str | None = None) -> list[SkillDocument]:
+    """Every skill document in one tenant's pack, sorted by name.
 
+    No pack (or an unusable one) means no documents — never the whole library.
     Raises on the first malformed folder rather than skipping it: a folder
     without a SKILL.md is simply not a skill, but one with a broken SKILL.md is
     a packaging fault and must not be invisible to the agent or to this code.
     """
+    directory = pack_dir(pack)
+    if directory is None:  # pragma: no cover - callers resolve a valid pack first
+        return []
+    normalized = directory.name
     documents = []
-    for folder in skill_folders():
+    for folder in skill_folders(normalized):
         if not (folder / SKILL_FILENAME).is_file():
             continue
-        documents.append(_read_document(folder))
+        documents.append(_read_document(folder, normalized))
     return sorted(documents, key=lambda doc: doc.name)
 
 
-def load_skill_document(name: str) -> SkillDocument:
-    """Read one skill document by id.
+def load_skill_document(name: str, pack: str | None = None) -> SkillDocument:
+    """Read one skill document by id from one tenant's pack.
 
-    The id is validated against SKILL_NAME_RE *before* it reaches the
-    filesystem: it carries no dot, no slash and no separator, so the join
-    below cannot escape skill_library.
+    Both the id and the pack are validated against their own narrow pattern
+    *before* either reaches the filesystem: neither carries a dot, a slash or a
+    separator, so the joins below cannot escape ``skill_library/<pack>``.
     """
     if not isinstance(name, str) or not SKILL_NAME_RE.match(name):
         raise SkillDocumentError(f"{name!r} is not a valid skill id")
-    folder = SKILL_LIBRARY_DIR / name
+    directory = pack_dir(pack)
+    if directory is None:
+        raise SkillDocumentError(f"unknown skill: {name}")
+    folder = directory / name
     if not (folder / SKILL_FILENAME).is_file():
         raise SkillDocumentError(f"unknown skill: {name}")
-    return _read_document(folder)
+    return _read_document(folder, directory.name)
 
 
-def known_skill_names() -> list[str]:
-    return [doc.name for doc in list_skill_documents()]
+def known_skill_names(pack: str | None = None) -> list[str]:
+    return [doc.name for doc in list_skill_documents(pack)]
