@@ -99,11 +99,17 @@ jobs:
         run: npm run build --workspace digithings-web
 
       - name: Print the PDF
-        run: npm run book:pdf --workspace digithings-web -- book.pdf
+        run: npm run book:pdf --workspace digithings-web
 
+      # print-pdf.mjs writes each edition it lists in PRINTED to
+      # public/book/<file>, and copies it into out/book/ for the exported site.
+      # It takes no output argument, so a CLI path here is ignored and the
+      # upload then looked for a file nothing writes. The glob keeps this
+      # working when another edition (theme/palette) is added to PRINTED.
       - name: Upload the PDF
         uses: actions/upload-artifact@v4
         with:
           name: digithings-book-${{ github.sha }}
-          path: apps/digithings-web/book.pdf
+          path: apps/digithings-web/public/book/*.pdf
+          if-no-files-found: error
           if-no-files-found: error
