@@ -15,7 +15,6 @@
  *  - **HTML** — the paginated page boxes flattened into one self-contained
  *    file (`lib/book/export-html`);
  *  - **DOCX** — a real OOXML package of the book's text and figures
- *    (`lib/book/export-docx`).
  *
  * The file name is on each button, because three downloads from one page
  * should not arrive as three files the reader has to open to tell apart.
@@ -23,11 +22,10 @@
 import { useEffect, useState } from "react";
 
 import { buildBookPdf, prefetchPrintedEdition } from "@/lib/book/download-pdf";
-import { buildBookDocx } from "@/lib/book/export-docx";
 import { bookFilename, saveBlob } from "@/lib/book/export-file";
 import { buildBookHtml } from "@/lib/book/export-html";
 
-type Format = "pdf" | "html" | "docx";
+type Format = "pdf" | "html";
 type State = "idle" | "working" | "done" | "error";
 
 /**
@@ -37,7 +35,6 @@ type State = "idle" | "working" | "done" | "error";
 export const BOOK_EXPORT_FORMATS = [
   { id: "pdf", label: "PDF", extension: "pdf" },
   { id: "html", label: "HTML", extension: "html" },
-  { id: "docx", label: "DOCX", extension: "docx" },
 ] as const satisfies ReadonlyArray<{ id: Format; label: string; extension: string }>;
 
 /** Line marks rather than a logo per vendor: the format, drawn simply. */
@@ -82,11 +79,10 @@ function FormatMark({ format }: { format: Format }) {
 const staticNames: Record<Format, string> = {
   pdf: "the-digithings-book.pdf",
   html: "the-digithings-book.html",
-  docx: "the-digithings-book.docx",
 };
 
 export default function BookExportBar() {
-  const [state, setState] = useState<Record<Format, State>>({ pdf: "idle", html: "idle", docx: "idle" });
+  const [state, setState] = useState<Record<Format, State>>({ pdf: "idle", html: "idle" });
   const [names, setNames] = useState<Record<Format, string>>(staticNames);
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -98,7 +94,6 @@ export default function BookExportBar() {
       setNames({
         pdf: bookFilename("pdf"),
         html: bookFilename("html"),
-        docx: bookFilename("docx"),
       });
     sync();
     const observer = new MutationObserver(sync);
@@ -118,8 +113,7 @@ export default function BookExportBar() {
       const { blob, filename } = await buildBookHtml();
       return { blob, filename };
     }
-    const { blob, filename } = await buildBookDocx();
-    return { blob, filename };
+    throw new Error(`no builder for ${format}`);
   }
 
   async function run(format: Format) {

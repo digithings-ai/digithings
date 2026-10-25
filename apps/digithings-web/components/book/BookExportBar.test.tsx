@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocked = vi.hoisted(() => ({
   pdf: vi.fn(),
   html: vi.fn(),
-  docx: vi.fn(),
   saved: vi.fn(),
 }));
 
@@ -14,7 +13,6 @@ vi.mock("@/lib/book/download-pdf", () => ({
   prefetchPrintedEdition: () => {},
 }));
 vi.mock("@/lib/book/export-html", () => ({ buildBookHtml: mocked.html }));
-vi.mock("@/lib/book/export-docx", () => ({ buildBookDocx: mocked.docx }));
 vi.mock("@/lib/book/export-file", () => ({
   bookFilename: (extension: string) => `the-digithings-book-light.${extension}`,
   saveBlob: mocked.saved,
@@ -30,7 +28,6 @@ const file = (name: string, bytes: string) => ({
 beforeEach(() => {
   mocked.pdf.mockReset().mockResolvedValue({ ...file("pdf", "%PDF-1.7"), pages: 19 });
   mocked.html.mockReset().mockResolvedValue({ ...file("html", "<!doctype html>"), bytes: 24 });
-  mocked.docx.mockReset().mockResolvedValue({ ...file("docx", "PK"), blocks: 7 });
   mocked.saved.mockReset();
 });
 
@@ -46,7 +43,7 @@ describe("BookExportBar", () => {
 
     // The format list, exercised end to end: what the reader sees on each cell,
     // and the file name the cell promises to produce.
-    expect(BOOK_EXPORT_FORMATS.map((format) => format.label)).toEqual(["PDF", "HTML", "DOCX"]);
+    expect(BOOK_EXPORT_FORMATS.map((format) => format.label)).toEqual(["PDF", "HTML"]);
     for (const [index, format] of BOOK_EXPORT_FORMATS.entries()) {
       const button = buttons[index];
       const expectedName = `the-digithings-book-light.${format.extension}`;
@@ -66,7 +63,6 @@ describe("BookExportBar", () => {
     const cases = [
       { label: "PDF", builder: mocked.pdf, extension: "pdf" },
       { label: "HTML", builder: mocked.html, extension: "html" },
-      { label: "DOCX", builder: mocked.docx, extension: "docx" },
     ] as const;
 
     for (const { label, builder, extension } of cases) {
@@ -90,13 +86,13 @@ describe("BookExportBar", () => {
   });
 
   it("tells the reader when a format could not be built", async () => {
-    mocked.docx.mockRejectedValueOnce(new Error("no pagination"));
+    mocked.html.mockRejectedValueOnce(new Error("no pagination"));
     render(<BookExportBar />);
 
-    screen.getByRole("button", { name: /as DOCX / }).click();
+    screen.getByRole("button", { name: /as HTML / }).click();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("couldn't build the docx — try again"),
+      expect(screen.getByRole("status").textContent).toBe("couldn't build the html — try again"),
     );
     expect(mocked.saved).not.toHaveBeenCalled();
   });
