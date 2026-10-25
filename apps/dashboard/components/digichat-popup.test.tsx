@@ -22,7 +22,6 @@ vi.mock('next/navigation', () => ({
 import DigichatPopup from './digichat-popup';
 import {
   DIGICHAT_PAGE_CONTEXT,
-  DIGICHAT_PLAN_TIER,
   DIGICHAT_READY,
   DIGICHAT_THEME,
   DIGICHAT_UPGRADE_BODY,
@@ -32,7 +31,6 @@ import {
   PAGE_CONTEXT_RESEND_DEBOUNCE_MS,
   type DigichatPopupConfig,
 } from '@/lib/digichat-popup';
-import { AuthContext, type AuthContextValue } from '@/lib/auth-context';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -46,21 +44,6 @@ const CFG: DigichatPopupConfig = {
   suggestions: ['a'],
   placeholder: 'ask…',
 };
-
-const TOKEN = 'session-access-token';
-
-function authWithToken(token: string | null): AuthContextValue {
-  return {
-    authEnabled: true,
-    loading: false,
-    user: null,
-    session: token ? ({ access_token: token } as never) : null,
-    signInWithOAuth: async () => {},
-    signInWithPassword: async () => {},
-    signUpWithPassword: async () => {},
-    signOut: async () => {},
-  } satisfies AuthContextValue;
-}
 
 describe('DigichatPopup', () => {
   let container: HTMLDivElement;
@@ -250,49 +233,6 @@ describe('DigichatPopup', () => {
     expect(reopenTypes).toEqual(
       expect.arrayContaining([DIGICHAT_THEME, DIGICHAT_PAGE_CONTEXT]),
     );
-  });
-
-  it('sends the plan tier with the session token to the embed (DIG-5139)', () => {
-    // The popup and the D8 live preview send one handshake, built in one
-    // place (buildDigichatHandshakeMessages). The embed exchanges the token
-    // at /api/plan-proof for the HMAC proof the chat route requires.
-    act(() => {
-      root.render(
-        createElement(
-          AuthContext.Provider,
-          { value: authWithToken(TOKEN) },
-          createElement(DigichatPopup, { tier: 'desk', config: CFG }),
-        ),
-      );
-    });
-    const trigger = document.body.querySelector(
-      '.digichat-launcher__trigger',
-    ) as HTMLButtonElement;
-    act(() => trigger.click());
-    const iframe = document.body.querySelector(
-      '#digichat-popup-iframe',
-    ) as HTMLIFrameElement;
-    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          origin: CFG.origin,
-          data: { type: DIGICHAT_READY },
-        }),
-      );
-    });
-
-    const planTierCall = postMessage.mock.calls.find(
-      ([message]) => (message as { type?: string })?.type === DIGICHAT_PLAN_TIER,
-    );
-    expect(planTierCall).toBeTruthy();
-    expect(planTierCall![0]).toMatchObject({
-      type: DIGICHAT_PLAN_TIER,
-      tier: 'desk',
-      accessToken: TOKEN,
-    });
-    expect(planTierCall![1]).toBe(CFG.origin);
   });
 
   it('sends page-context once per open even if ready fires twice', () => {

@@ -6,11 +6,8 @@ import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
-import DigichatLivePreview from '@/components/digichat-live-preview';
-import TuiRecordedFrames from '@/components/tui-recorded-frames';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
-import { deskShellEnabled } from '@/components/desk/panes/brief';
 import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
 
@@ -30,11 +27,7 @@ export default function AppFrame({ children }: { children: ReactNode }) {
   // not allowlisted, swap the page for the standardized card. The shell itself
   // (Sidebar, MobileAppBar, CommandPalette) stays mounted in every case, so the
   // app still opens and the owner can navigate to System/Settings.
-  // The brief desk paints each pane's own empty or error state. A down API
-  // must not replace that grid with the full-page card.
-  const deskHome =
-    deskShellEnabled() && ((pathname ?? '').replace(/\/+$/, '') || '/') === '/';
-  const gated = dbStatus !== 'ok' && !isDbExempt(pathname) && !deskHome;
+  const gated = dbStatus !== 'ok' && !isDbExempt(pathname);
 
   return (
     <div className="flex min-h-screen">
@@ -44,14 +37,6 @@ export default function AppFrame({ children }: { children: ReactNode }) {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
         <MobileAppBar />
         <CommandPalette />
-        {/* D9 recorded TUI frame preview (DIG-2698); no-ops when env off. */}
-        <TuiRecordedFrames />
-        {/* D8 live DigiChat preview (DIG-2698, DIG-5138); no-ops when env off.
-            It sits inside the content column: as a row sibling of <main> it
-            took its max-content width and squeezed the page column to 38px
-            (QA, DIG-5134). Both strips are column children on every viewport:
-            neither carries the old `hidden md:block` phone stopgap. */}
-        <DigichatLivePreview />
         <div className="flex min-h-0 flex-1 flex-col">
           {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
         </div>

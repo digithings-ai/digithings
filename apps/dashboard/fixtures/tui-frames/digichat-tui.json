@@ -1,8 +1,0 @@
-{
-  "source": "digichat-tui",
-  "path": "/thread",
-  "capturedAt": "2026-10-22T05:45:00.868Z",
-  "width": 70,
-  "height": 40,
-  "frame": "██████  ▄█████▄  ██   ██   ▄███▄   ███████\n ██     ██       ██   ██  ██   ██     ██\n ██     ██       ███████  ███████     ██\n ██     ██       ██   ██  ██   ██     ██\n██████  ▀█████▀  ██   ██  ██   ██     ██\n\n  > what is a recorded frame\n  edit\n    a recorded captureCharFrame() frame, rendered as text\n  copy  redo  more\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n  ┌──────────────────────────────────────────────────────────────────┐\n  │ █Ask digichat…                                                   │\n  │ +                                                         mic  ↑ │\n  └──────────────────────────────────────────────────────────────────┘\n  ────────────────────────────────────────────────────────────────────"
-}
