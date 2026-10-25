@@ -6,6 +6,7 @@ import { BASE_PATH as APP_BASE_PATH, p as appP } from "./base-path";
 // The shared package's own copy, by source path: the package is not
 // resolvable by name from here (the workspace link is not guaranteed to point
 // at this checkout), and this test is about the two copies agreeing.
+// eslint-disable-next-line no-restricted-imports -- the boundary rule (DIG-3695) is about product code importing package internals; this test exists to compare the two copies in THIS checkout, so the source path is the point, not an accident.
 import { BASE_PATH as UI_BASE_PATH, p as uiP } from "../../../../packages/ui/src/lib/base-path";
 
 /**
