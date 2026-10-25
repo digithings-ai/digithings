@@ -1064,8 +1064,12 @@ def orchestrator_invoke(
                 tag = str(args.get("tag") or "").strip()
                 if not tag:
                     return OrchestratorInvokeResponse(ok=False, tool=tool, error="tag is required")
-                notes = store.search_tag(tag, path_prefix=prefix)
-                return OrchestratorInvokeResponse(ok=True, tool=tool, data={"notes": notes})
+                lookup = store.search_tag(tag, path_prefix=prefix)
+                return OrchestratorInvokeResponse(
+                    ok=True,
+                    tool=tool,
+                    data={"notes": lookup.notes, "truncated": lookup.truncated},
+                )
             name = str(args.get("name") or args.get("vault_path") or "").strip()
             resolved = store.resolve_note_path(name, path_prefix=prefix) if name else None
             if resolved is None or not (resolved == prefix or resolved.startswith(prefix + "/")):
@@ -1075,7 +1079,13 @@ def orchestrator_invoke(
                 )
             links = store.backlinks(resolved, path_prefix=prefix)
             return OrchestratorInvokeResponse(
-                ok=True, tool=tool, data={"name": resolved, "backlinks": links}
+                ok=True,
+                tool=tool,
+                data={
+                    "name": resolved,
+                    "backlinks": links.paths,
+                    "truncated": links.truncated,
+                },
             )
         except D1StoreError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1086,7 +1096,12 @@ def orchestrator_invoke(
     result = dispatch_vault_tool(tool, args, vault)
     if not result.ok:
         return OrchestratorInvokeResponse(ok=False, tool=tool, error=result.error)
-    return OrchestratorInvokeResponse(ok=True, tool=tool, data=result.data)
+    data = dict(result.data or {})
+    if tool in (TOOL_VAULT_SEARCH_TAG, TOOL_VAULT_BACKLINKS):
+        # The filesystem vault has no scan cap, so its answer is always complete;
+        # keep the envelope identical to the D1 path above.
+        data.setdefault("truncated", False)
+    return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 
 
 # Claim runtime-only tools on the canonical dispatch table so

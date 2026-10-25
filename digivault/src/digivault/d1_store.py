@@ -13,6 +13,7 @@ import random
 import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from digivault.d1_errors import D1StoreError as D1StoreError
@@ -40,6 +41,15 @@ _FTS_TERM = re.compile(r"\w+")
 #: 250k rows, comfortably above any real client-vault corpus (see CLAUDE.md's target
 #: market: small/personal vaults, not institutional scale).
 MAX_LIST_PAGES = 500
+
+#: Row caps behind the two lookup scans. They stay as they are — they bound an
+#: unindexed `LIKE` scan — but each answer reports when one was hit, so a short
+#: list never reads as a complete one (DIG-5314; ARCHITECTURE.md, "A truncated
+#: lookup says so"). Both scans ask for one row past the cap: a full page is then
+#: distinguishable from a page that was cut, and the probe row is dropped before
+#: it is examined for a match.
+TAG_CANDIDATE_FACTOR = 4
+BACKLINK_SCAN_LIMIT = 500
 
 #: Bounded retry policy for `D1Store.query()` (#2239 follow-up M6). `query()` is the
 #: synchronous read path a chat turn blocks on, so the bound stays modest: 3 total
@@ -107,14 +117,14 @@ ORDER BY vault_path
 LIMIT ?
 """
 
-# params: prefix, prefix, f"{escaped_prefix}/%", f"%{escaped_stem}%", target_path.
+# params: prefix, prefix, f"{escaped_prefix}/%", f"%{escaped_stem}%", target_path, limit.
 _LINKS_SQL = """
 SELECT vault_path, wikilinks FROM notes
 WHERE (? = '' OR vault_path = ? OR vault_path LIKE ? ESCAPE '\\')
   AND lower(wikilinks) LIKE lower(?) ESCAPE '\\'
   AND vault_path <> ?
 ORDER BY vault_path
-LIMIT 500
+LIMIT ?
 """
 
 
@@ -327,6 +337,22 @@ def _json_obj(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         return {}
     return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+@dataclass(frozen=True)
+class TagLookup:
+    """`search_tag` answer plus whether a scan cap cut it short."""
+
+    notes: list[dict[str, Any]]
+    truncated: bool
+
+
+@dataclass(frozen=True)
+class BacklinkLookup:
+    """`backlinks` answer plus whether the row cap cut it short."""
+
+    paths: list[str]
+    truncated: bool
 
 
 class D1Store:
@@ -555,10 +581,10 @@ class D1Store:
             return path
         if "/" in path:
             return None
-        escaped_prefix = _escape_like(prefix)
+        escaped_prefix = escape_like(prefix)
         rows = self.query(
             _STEM_SQL,
-            [prefix, prefix, f"{escaped_prefix}/%", f"%/{_escape_like(path)}", path],
+            [prefix, prefix, f"{escaped_prefix}/%", f"%/{escape_like(path)}", path],
             operation="resolve_note",
         )
         paths = sorted({str(r.get("vault_path") or "") for r in rows} - {""})
@@ -566,51 +592,77 @@ class D1Store:
 
     def search_tag(
         self, tag: str, *, path_prefix: str | None = None, limit: int = 200
-    ) -> list[dict[str, Any]]:
-        """Notes under ``path_prefix`` carrying ``tag`` (case-insensitive, ``#`` optional)."""
+    ) -> TagLookup:
+        """Notes under ``path_prefix`` carrying ``tag`` (case-insensitive, ``#`` optional).
+
+        Reads at most ``limit * TAG_CANDIDATE_FACTOR`` candidate rows (800 at the
+        default ``limit`` of 200) and returns at most ``limit``. ``truncated`` is
+        true when either cap was hit, so a short answer never reads as complete.
+        """
         want = (tag or "").strip().lstrip("#").strip().lower()
         if not want:
-            return []
+            return TagLookup(notes=[], truncated=False)
         prefix = resolve_path_prefix(path_prefix)
-        escaped_prefix = _escape_like(prefix)
+        escaped_prefix = escape_like(prefix)
+        scan_limit = limit * TAG_CANDIDATE_FACTOR
         rows = self.query(
             _TAG_SQL,
-            [prefix, prefix, f"{escaped_prefix}/%", f"%{_escape_like(want)}%", limit * 4],
+            [prefix, prefix, f"{escaped_prefix}/%", f"%{escape_like(want)}%", scan_limit + 1],
             operation="search_tag",
         )
+        truncated = len(rows) > scan_limit
+        if truncated:
+            # The probe row only proved the scan was cut; it is not a candidate.
+            rows = rows[:scan_limit]
         out: list[dict[str, Any]] = []
         for r in rows:
             tags = _json_list(r.get("tags"))
-            if any(t.strip().lstrip("#").lower() == want for t in tags):
-                out.append(
-                    {
-                        "vault_path": str(r.get("vault_path") or ""),
-                        "title": str(r.get("title") or ""),
-                        "tags": list(tags),
-                    }
-                )
-            if len(out) >= limit:
+            if not any(t.strip().lstrip("#").lower() == want for t in tags):
+                continue
+            out.append(
+                {
+                    "vault_path": str(r.get("vault_path") or ""),
+                    "title": str(r.get("title") or ""),
+                    "tags": list(tags),
+                }
+            )
+            if len(out) > limit:
+                # A further match proves the return cap dropped one.
+                truncated = True
                 break
-        return out
+        return TagLookup(notes=out[:limit], truncated=truncated)
 
-    def backlinks(self, vault_path: str, *, path_prefix: str | None = None) -> list[str]:
+    def backlinks(self, vault_path: str, *, path_prefix: str | None = None) -> BacklinkLookup:
         """Vault paths under ``path_prefix`` whose wikilinks point at ``vault_path``.
 
         A wikilink matches when its target (``[[target|alias]]`` / ``#heading``
         stripped, ``.md`` dropped) equals the note's path, its stem, or a trailing
-        path segment of it, compared case-insensitively.
+        path segment of it, compared case-insensitively. Examines at most
+        ``BACKLINK_SCAN_LIMIT`` rows (500); ``truncated`` is true when more rows
+        matched the prefilter than that cap allowed.
         """
         target = normalize_vault_path(vault_path)
         if not target:
-            return []
+            return BacklinkLookup(paths=[], truncated=False)
         stem = target.rsplit("/", 1)[-1]
         prefix = resolve_path_prefix(path_prefix)
-        escaped_prefix = _escape_like(prefix)
+        escaped_prefix = escape_like(prefix)
         rows = self.query(
             _LINKS_SQL,
-            [prefix, prefix, f"{escaped_prefix}/%", f"%{_escape_like(stem)}%", target],
+            [
+                prefix,
+                prefix,
+                f"{escaped_prefix}/%",
+                f"%{escape_like(stem)}%",
+                target,
+                BACKLINK_SCAN_LIMIT + 1,
+            ],
             operation="backlinks",
         )
+        truncated = len(rows) > BACKLINK_SCAN_LIMIT
+        if truncated:
+            # The probe row only proved the scan was cut; it is not examined.
+            rows = rows[:BACKLINK_SCAN_LIMIT]
         want_full = target.lower()
         out: list[str] = []
         for r in rows:
@@ -619,7 +671,7 @@ class D1Store:
                 if _wikilink_points_at(link, want_full):
                     out.append(src)
                     break
-        return sorted(set(out))
+        return BacklinkLookup(paths=sorted(set(out)), truncated=truncated)
 
     def list_notes(self, *, path_prefix: str | None = None, page_size: int = 500) -> list[NoteRow]:
         if page_size <= 0:
