@@ -2329,8 +2329,11 @@ def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
     is a missing signal, not a clearance, and it must not be treated as one.
+
+    A marker inside a fence or an inline span is quoted, not posted, so the body
+    is read with its code taken out (#4990).
     """
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         fields = {
             m.group("key").lower(): m.group("value")
             for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
@@ -2373,12 +2376,63 @@ _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA
 # and reading its first group as a commit would name a head nobody reviewed.
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
+# A fenced code block or an inline code span *shows* a marker, it does not post
+# one. #6197 merged at 2026-10-21 18:43 on the author's own reply, which quoted
+# the reviewer template inside a fence; the queue read the quoted
+# `verdict=approve` as the newest verdict and cleared three standing
+# changes-requested verdicts. #6196 taught the reader about sentences and
+# blockquotes, but a fence is neither, so the quote still read as a claim. The
+# rule now is the Markdown one: whatever a reader sees as code is not a claim.
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _strip_fenced_blocks(body: str) -> str:
+    """The comment body with fenced code blocks taken out.
+
+    Removed lines become a bare newline, so line numbers and the line-anchored
+    patterns (`^Review verdict:`, `_PROVENANCE_RE`, `_VERDICT_LINE_RE`) keep
+    working on the text that is left.
+    """
+    kept: list[str] = []
+    fence = ""
+    for line in body.splitlines(keepends=True):
+        if fence:
+            match = _FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = _FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def _strip_code_blocks(body: str) -> str:
+    """The body with fenced blocks *and* inline code spans taken out.
+
+    This is the reader for markers and provenance, never for prose: a sha a
+    reviewer writes in backticks is still a sha, so the head bindings a prose
+    verdict names are read from `_strip_fenced_blocks`, where the backticks
+    survive (#4990).
+    """
+    return _INLINE_CODE_RE.sub(" ", _strip_fenced_blocks(body))
+
+
 # The seat a verdict belongs to. Every seat on this org pushes under one GitHub
 # login, so `author.login` cannot tell two reviewers apart — the seat id is the
 # provenance marker's `agent=` field, and it is the only place it is written.
 # A verdict whose seat cannot be read is judged by the newest-verdict rule
 # instead of by seat (see `_standing_seat_blocks`).
-_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
 
 
 def _comment_text(body: str) -> str:
@@ -2419,9 +2473,14 @@ class PostedVerdict:
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
-    """The seat that posted this comment, or "" when it cannot be read."""
-    agent = str(provenance.get("agent") or "").strip()
-    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+    """The seat that posted this comment, or "" when it cannot be read.
+
+    A seat id is a Paperclip uuid. Anything else — a placeholder like
+    `<your-seat-uuid>`, a display name, a typo — names no seat the queue could
+    hold a block to, so it is not read as one (#4990, #4809).
+    """
+    agent = str(provenance.get("agent") or "").strip().lower()
+    return agent if agent and _UUID_RE.match(agent) else ""
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2433,7 +2492,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     misspelled is skipped, and the line beside it still says what the reviewer
     decided.
     """
-    body = str(comment.get("body") or "")
+    body = _strip_fenced_blocks(str(comment.get("body") or ""))
     text = _comment_text(body)
     marker = _marker_verdict(body)
     prose = _prose_verdict(text)
@@ -3365,9 +3424,13 @@ def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
 
 
 def _provenance_fields(body: str) -> dict[str, str]:
-    """The `digithings-review` marker's fields, lower-cased keys."""
+    """The `digithings-review` marker's fields, lower-cased keys.
+
+    A marker inside a fence or an inline span is a quoted example, not a claim:
+    the body is read with its code taken out (#4990).
+    """
     fields: dict[str, str] = {}
-    for marker in _PROVENANCE_RE.finditer(body):
+    for marker in _PROVENANCE_RE.finditer(_strip_code_blocks(body)):
         for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
             fields[match.group("key").lower()] = match.group("value")
     return fields
@@ -3389,7 +3452,7 @@ def _scope_head(body: str) -> str:
     one when the comment carries no provenance marker of its own.
     """
     head = ""
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
         if found:
             head = found.group("sha")
@@ -3403,7 +3466,11 @@ def _carries_review_evidence(body: str, marker_literal: str) -> bool:
     posted verdict marker. The first is the coverage hatch, the second is the
     review rule's own format, and the third is the marker the queue reads for
     a blocking verdict.
+
+    A shape that appears only inside a fence or an inline span is quoted, not
+    posted: the body is read with its code taken out (#4990).
     """
+    body = _strip_code_blocks(body)
     if marker_literal in body:
         return True
     if _VERDICT_LINE_RE.search(body):

@@ -185,6 +185,14 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
 
+**A marker inside code is quoted, not posted.** No clause reads a marker, a provenance
+line or a `Review verdict:` line that sits inside a fenced code block (``` or ~~~) or an
+inline code span: what a reader sees as code is being shown, not claimed, and a quote
+must neither block nor clear anything. `#6197` merged on the author's own write-up, which
+quoted the reviewer template inside a fence; #6196 had taught the reader about sentences
+and blockquotes, and a fence is neither (#4990). A fence nobody closed swallows the rest
+of the comment, because that is how Markdown renders it.
+
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
 pushing under this org shares one GitHub login, so a comment's author cannot say who

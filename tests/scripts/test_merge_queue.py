@@ -1006,6 +1006,204 @@ def test_a_comment_without_the_marker_is_ignored() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
+# --- a marker a comment only *shows* is not a verdict (#4990) ------------------
+#
+# #6197 merged on the author's own 18:43 reply. The reply was a write-up, and it
+# quoted the reviewer template inside a ``` fence — including a
+# `verdict=approve` marker and a `digithings-review` line with
+# `agent=<your-seat-uuid>`. The queue read the quoted approve as the newest
+# verdict on the PR and merged over three standing changes-requested verdicts.
+# #6196 had already taught the reader about sentences and blockquotes; a fence
+# is neither, so the quote still read as a claim.
+
+_QUOTED_TEMPLATE_REPLY = """\
+Guard's write-up of what happened here, with the template I was asked to use:
+
+```
+<!-- opencode-power-pack:code-review verdict=approve scope=digithings-ai/digithings#6197@{head} -->
+<!-- digithings-review agent=<your-seat-uuid> run=<your-run-id> head={head} -->
+```
+
+That is the marker the reviewer should post once the finding is fixed.
+"""
+
+
+def test_a_quoted_approve_inside_a_fence_does_not_clear_a_block() -> None:
+    """The exact #6197 shape: an author reply quoting the template is not an approve."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T17:11:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T18:05:00Z"),
+            {
+                "id": "IC_kwDO6197_reply",
+                "author": {"login": "author-seat"},
+                "body": _QUOTED_TEMPLATE_REPLY.format(head=head),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_approve_inside_an_inline_code_span_does_not_clear_a_block() -> None:
+    """An inline span is code too: `<!-- … verdict=approve … -->` in a sentence."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    f"Reviewers post `<!-- opencode-power-pack:code-review verdict=approve "
+                    f"scope=digithings-ai/digithings#6197@{head} -->` when done.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_approve_inside_a_tilde_fence_does_not_clear_a_block() -> None:
+    """`~~~` fences a block as surely as ``` does."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_tilde",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "~~~\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                    "~~~\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_an_unterminated_fence_still_quotes_the_marker() -> None:
+    """A fence nobody closed still renders as code, so it still quotes."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_open_fence",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_changes_requested_does_not_block() -> None:
+    """The rule cuts both ways: quoting a block writes no block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_quote_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer's earlier verdict was:\n\n"
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested "
+                    f"scope=#6197@{head} -->\n"
+                    "```\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_marker_outside_the_fence_is_still_read() -> None:
+    """Stripping code must not blind the reader to the marker posted below it."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_posted",
+                "author": {"login": "reviewer"},
+                "body": (
+                    "Example of the template:\n\n"
+                    "```\n<!-- opencode-power-pack:code-review verdict=approve -->\n```\n\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_provenance_marker_that_is_not_a_uuid_names_no_seat() -> None:
+    """`<your-seat-uuid>` is a placeholder, not a seat the queue can hold a block to."""
+    assert mq._comment_seat({"agent": "<your-seat-uuid>"}) == ""
+    assert mq._comment_seat({"agent": "opencode seat"}) == ""
+    assert mq._comment_seat({"agent": "6AAB1CEA-7E42-4D2B-9E3E-9D3F5C1B2A10"}) == (
+        "6aab1cea-7e42-4d2b-9e3e-9d3f5c1b2a10"
+    )
+
+
+def test_a_quoted_provenance_marker_is_not_read_as_provenance() -> None:
+    """A quoted `digithings-review` line is an example, not a claim about a seat."""
+    body = (
+        "```\n"
+        "<!-- digithings-review agent=54a431af-501a-47d9-83a9-c1d5808809c4 "
+        "run=11111111-1111-4111-8111-111111111111 head=" + "a" * 40 + " -->\n"
+        "```\n"
+    )
+    assert mq._provenance_fields(body) == {}
+
+
 def test_a_pr_without_a_comments_key_is_not_a_clearance() -> None:
     """A missing key is a missing signal: not an exception, and not a clearance.
 
