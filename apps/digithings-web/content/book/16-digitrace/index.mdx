@@ -7,9 +7,9 @@ summary: >-
 
 When an answer looks
 wrong, someone has to be able to ask which tools ran, in what order, what each
-one saw and how long it took. digitrace is how digithings answers. Once switched on, it records the trail
-of every request as it happens, so nobody has to piece it together from log
-lines afterwards.
+one saw and how long it took. digitrace is how digithings answers: it records
+the trail of every request as it happens, so nobody has to piece it together
+from log lines afterwards.
 
 The trail serves several readers. An operator uses it to debug a bad answer.
 A reviewer uses it to audit a research number. Anyone deciding whether to
@@ -19,11 +19,11 @@ call that fails one time in ten, stands out at once.
 ## How it works
 
 digitrace has two faces. As a library, it gives every service a thin helper
-that sends OpenTelemetry data when an endpoint is set and does nothing when
-it is not. OpenTelemetry is the open standard for traces, so services depend
-on no tracing vendor. As a small service, it reports
-whether tracing is active and healthy, so the hub and the
-dashboards can show its status without touching sensitive configuration.
+that emits OpenTelemetry data to whatever endpoint the deployment names.
+OpenTelemetry is the open standard for traces, so services depend on no
+tracing vendor. As a small service, it reports the tracing state to the hub and
+the dashboards, so an operator can see it without touching sensitive
+configuration.
 
 ```mermaid one request, one story: the trail follows it across every service it touches
 flowchart LR
@@ -40,11 +40,9 @@ to be matched by timestamp.
 
 ## Where it fits
 
-Every service that acts carries the helper, so turning tracing on is one
-setting, not a code change. Tracing is off until you set it: the local stack
-starts a collector only with its `trace` profile. Because the format is
-OpenTelemetry, switching to a different tracing backend changes
-configuration, not service code.
+Every service that acts carries the helper, so where a trace goes is one
+setting, not a code change. Because the format is OpenTelemetry, switching to a
+different tracing backend changes configuration, not service code.
 
 The trail goes wherever you point it: a backend on your own machine, one
 beside your cloud workers, or one on your own servers with the retention you

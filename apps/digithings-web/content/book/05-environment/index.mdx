@@ -26,12 +26,12 @@ published contract, so you can run one of them, a few, or all of them.
 | digitrace | Tracing. A record of what every request did. |
 | digibase | The shared base. Error shapes, request ids, audit redaction. |
 
-MCP, the Model Context Protocol, is missing from the table on purpose: it is
-not something you run. It is the open standard for telling an AI model which
-tools it may call. digigraph, digisearch, digiquant, digivault and digillm each
-publish their tools over it, so Claude Desktop, a code editor or an agent you
-wrote can use them directly. In the other direction, digigraph can call any MCP
-server you add. That is why the table is not a closed list.
+The Model Context Protocol is the layer underneath, not a module: it is the
+open standard for telling an AI model which tools it may call. digigraph,
+digisearch, digiquant, digivault and digillm each publish their tools over it,
+so Claude Desktop, a code editor or an agent you wrote can use them directly.
+In the other direction, digigraph can call any MCP server you add. That is why
+the table is not a closed list.
 
 ## How the parts fit
 
