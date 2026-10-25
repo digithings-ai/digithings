@@ -1129,8 +1129,11 @@ class InstallMarkerTest(unittest.TestCase):
         git_env = _git_env(env)
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
-        shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
-                    os.path.join(checkout, "scripts", "local-ci", "local_ci.py"))
+        # The install refuses a checkout that carries the runner without the
+        # guard (DIG-4796): the two files are installed together.
+        for name in ("local_ci.py", "launch_guard.py"):
+            shutil.copy(os.path.join(_SCRIPTS, name),
+                        os.path.join(checkout, "scripts", "local-ci", name))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1156,6 +1159,19 @@ class InstallMarkerTest(unittest.TestCase):
                          "the marker must name the checkout the runner was installed from")
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
+
+    def test_a_checkout_without_the_guard_is_refused(self):
+        """An installer must not point the daemon at a pre-guard checkout.
+
+        The runner refuses to run without `launch_guard.py` next to it (exit
+        78), so installing that checkout would stop the only pre-merge
+        producer. The install refuses it up front instead (DIG-4796).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
+        self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""
@@ -1826,6 +1842,80 @@ class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
         self._run(pr["number"])
         self.assertIn("process_review", self.calls)
         self.assertNotIn("process", self.calls)
+
+
+class ReviewCoverageEvidenceTest(unittest.TestCase):
+    """DIG-4507: the promotion judgement is evidence, not a second producer.
+
+    The runner used to post `Every commit reaching main was reviewed` as a
+    commit status with a user token while `ci-review-coverage.yml` posted the
+    same context as an app-owned check run. Two implementations of one required
+    context disagree, and the user-token row can never satisfy an app pin. The
+    workflow is the single producer; the runner keeps its per-PR log only.
+    """
+
+    SHA = "b84c114e0000000000000000000000000000000"
+
+    def setUp(self):
+        self._logd = _mod.LOGD
+        self._prepare_wt = _mod.prepare_wt
+        self._run_review_coverage = _mod.run_review_coverage
+        self._gh = _mod.gh
+        self.tmp = tempfile.mkdtemp()
+        _mod.LOGD = self.tmp
+        self.gh_calls = []
+        _mod.gh = lambda *a: self.gh_calls.append(list(a)) or "{}"
+
+    def tearDown(self):
+        _mod.LOGD = self._logd
+        _mod.prepare_wt = self._prepare_wt
+        _mod.run_review_coverage = self._run_review_coverage
+        _mod.gh = self._gh
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _pr(self, number=6400, updated="2026-10-25T10:00:00Z"):
+        return {"number": number, "headRefOid": self.SHA, "baseRefName": "main",
+                "title": "chore: promote develop to main", "isCrossRepository": False,
+                "updatedAt": updated}
+
+    def _log(self, number=6400, age_secs=0):
+        p = os.path.join(self.tmp, f"pr{number}-review-{self.SHA[:12]}.log")
+        with open(p, "w") as f:
+            f.write("judged\n")
+        old = time.time() - age_secs
+        os.utime(p, (old, old))
+        return p
+
+    def test_the_queue_keys_on_the_judgement_log_not_a_status_row(self):
+        pr = self._pr()
+        self.assertEqual(_mod.pending_reviews([pr]), [pr],
+                         "a head with no judgement log has not been judged")
+        self._log()
+        self.assertEqual(_mod.pending_reviews([pr]), [],
+                         "a fresh judgement is evidence and satisfies the hourly re-check")
+
+    def test_a_judgement_older_than_an_hour_is_rechecked(self):
+        pr = self._pr()
+        self._log(age_secs=_mod.REVIEW_RECHECK_SECS + 60)
+        self.assertEqual(_mod.pending_reviews([pr]), [pr])
+
+    def test_judging_a_promotion_posts_no_status(self):
+        pr = self._pr()
+        _mod.prepare_wt = lambda n, sha, base, out: (True, "ok")
+        _mod.run_review_coverage = lambda p, out: (True, 3, 0)
+        self.assertEqual(_mod.process_review(pr, dry=False), "success")
+        self.assertEqual(self.gh_calls, [],
+                         "the judgement is evidence: it must not publish a status row")
+        self.assertTrue(os.path.exists(
+            os.path.join(self.tmp, f"pr{pr['number']}-review-{self.SHA[:12]}.log")))
+
+    def test_the_runner_names_no_second_producer(self):
+        with open(os.path.join(_SCRIPTS, "local_ci.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn("Every commit reaching main was reviewed", src,
+                         "the workflow is the single producer of main's review context (DIG-4507)")
+        self.assertNotIn("def review_status(", src)
+        self.assertNotIn("def review_ci_status(", src)
 
 
 class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
