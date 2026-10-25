@@ -23,8 +23,21 @@ import { createEmbeddingSubject } from "@/components/landing/embedding-map";
 import { mountField } from "@/components/landing/pixel-field-core";
 import { PAGED_CSS } from "@/lib/book/printCss";
 
-/** One seed, so every printing draws the same cover rather than a new map. */
-const COVER_SEED = 2410;
+/**
+ * The field's seed. The print run passes one in the query string so both
+ * editions of a build share a pattern and differ only in colour; opening the
+ * route by hand gets a fresh one, which is what makes a rebuild feel new.
+ */
+function coverSeed(): number {
+  // Server render has no location; the field is only mounted in an effect, so a
+  // placeholder here is never drawn.
+  if (typeof window === "undefined") return 2410;
+  const raw = new URLSearchParams(window.location.search).get("seed");
+  const value = raw === null ? NaN : Number(raw);
+  return Number.isFinite(value) ? value : Math.floor(Math.random() * 100_000);
+}
+
+const COVER_SEED = coverSeed();
 
 export default function PagedBoot({ enabled }: { enabled: boolean }) {
   const [status, setStatus] = useState<"idle" | "paginating" | "done" | "failed">("idle");

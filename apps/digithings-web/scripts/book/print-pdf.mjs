@@ -74,12 +74,35 @@ const { server, base } = await serve(OUT);
 const { chromium } = await import("playwright");
 const browser = await chromium.launch();
 
-try {
+const EDITIONS = [
+  { theme: "light", file: "the-digithings-book.pdf" },
+  { theme: "dark", file: "the-digithings-book-dark.pdf" },
+];
+
+/**
+ * One edition: paginate the print route in the given theme and screenshot every
+ * finished page box into a PDF.
+ *
+ * The theme is set before the document loads. The site's own tokens do the rest
+ * — background, ink, accent, the pixel field's hue — so a dark edition is drawn
+ * dark rather than printed light and inverted. `seed` is shared by both
+ * editions, so the field on the cover is the same pattern in each, differing
+ * only in colour.
+ */
+async function printEdition({ theme, file, seed }) {
   const page = await browser.newPage({ deviceScaleFactor: 2.5 });
+  await page.addInitScript((value) => {
+    try {
+      localStorage.setItem("dt-theme", value);
+    } catch {
+      /* a blocked storage still gets the attribute below */
+    }
+    document.documentElement.setAttribute("data-theme", value);
+  }, theme);
   // emulatedMedia "screen" on purpose: Paged.js paginates into fixed boxes and
   // its own stylesheet, and Chrome's print media would restyle on top of it.
   await page.emulateMedia({ media: "screen" });
-  await page.goto(`${base}/book/print/`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/book/print/?seed=${seed}`, { waitUntil: "networkidle" });
 
   // Wait for the book's own completion marker, not for the page boxes: pagedjs
   // creates those first and the page-number pass runs after, so waiting on the
@@ -88,17 +111,17 @@ try {
   // attached, not visible.
   await page.waitForSelector("[data-book-paginated]", { state: "attached", timeout: 60_000 });
   const pages = await page.locator(".pagedjs_page").count();
-  if (pages < 1) throw new Error("pagination produced no pages");
+  if (pages < 1) throw new Error(`pagination produced no pages (${theme})`);
   const refs = await page.$$eval("[data-book-toc-ref]", (nodes) => nodes.map((n) => n.textContent));
   const filled = refs.filter((r) => r && r.trim() !== "");
   if (refs.length && filled.length === 0) {
-    throw new Error(`no table-of-contents page reference resolved (${refs.length} entries)`);
+    throw new Error(`no table-of-contents page reference resolved (${theme}, ${refs.length} entries)`);
   }
 
-  // `/book` labels its contents from this map. Writing it here — from the same
-  // pagination that produces the PDF, after the number pass has run — is what
-  // keeps a page number on the site from naming a different page than the
-  // download. The images beside it come from the PDF (scripts/book/page-images.mjs).
+  // `/book` labels its contents from this map. The images beside it come from
+  // the PDF (scripts/book/page-images.mjs), so both are taken from the same
+  // pagination and a page number cannot name a different page than the
+  // download.
   const map = await page.$$eval(".pagedjs_page [data-book-anchor]", (nodes) => {
     const out = {};
     for (const node of nodes) {
@@ -108,14 +131,8 @@ try {
     }
     return out;
   });
-  mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
-  writeFileSync(
-    join(APP_ROOT, "lib", "book", "generated", "pages.json"),
-    `${JSON.stringify({ pages, map }, null, 2)}\n`,
-  );
 
-  const target =
-    process.argv[2] ?? join(APP_ROOT, "public", "book", "the-digithings-book.pdf");
+  const target = join(APP_ROOT, "public", "book", file);
   mkdirSync(dirname(target), { recursive: true });
 
   // Print the page boxes we already have, one image per sheet. Chrome's own
@@ -135,20 +152,47 @@ try {
     const jpeg = await sharp(shot).jpeg({ quality: 85 }).toBuffer();
     const image = await pdf.embedJpg(jpeg);
     const sheet = pdf.addPage([A4.width, A4.height]);
-    // Full bleed: the page box already carries the site's light background
-    // and its own @page margins. Drawing it inset produced a visible white
-    // frame around a differently coloured page.
+    // Full bleed: the page box already carries the theme's background and its
+    // own @page margins. Drawing it inset produced a visible frame around a
+    // differently coloured page.
     sheet.drawImage(image, { x: 0, y: 0, ...A4 });
   }
   await (await import("node:fs/promises")).writeFile(target, await pdf.save());
-  // The exported site is what ships; keep the link's target in it without
-  // requiring a second build after printing.
-  const exported = join(OUT, "book", "the-digithings-book.pdf");
-  if (resolve(target) !== resolve(exported)) {
-    mkdirSync(dirname(exported), { recursive: true });
-    copyFileSync(target, exported);
+  await page.close();
+  return { pages, map };
+}
+
+try {
+  // One seed for both editions: the field is the same pattern, drawn in each
+  // theme's accent. A new build picks a new one, so the cover is never quite
+  // the same twice.
+  const seed = Math.floor(Math.random() * 100_000);
+  const light = await printEdition({ ...EDITIONS[0], seed });
+  const dark = await printEdition({ ...EDITIONS[1], seed });
+
+  if (dark.pages !== light.pages) {
+    throw new Error(`editions disagree on length: light ${light.pages}, dark ${dark.pages}`);
   }
-  console.log(`book: wrote ${target} (${pages} pages)`);
+  if (JSON.stringify(dark.map) !== JSON.stringify(light.map)) {
+    throw new Error("editions disagree on which page a chapter starts on");
+  }
+
+  mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
+  writeFileSync(
+    join(APP_ROOT, "lib", "book", "generated", "pages.json"),
+    `${JSON.stringify({ pages: light.pages, map: light.map, seed }, null, 2)}\n`,
+  );
+
+  // The exported site is what ships; keep both downloads in it without
+  // requiring a second build after printing.
+  for (const edition of EDITIONS) {
+    const exported = join(OUT, "book", edition.file);
+    mkdirSync(dirname(exported), { recursive: true });
+    copyFileSync(join(APP_ROOT, "public", "book", edition.file), exported);
+  }
+  console.log(
+    `book: wrote ${light.pages} page(s) in two editions (light, dark), seed ${seed}`,
+  );
 } finally {
   await browser.close();
   server.close();

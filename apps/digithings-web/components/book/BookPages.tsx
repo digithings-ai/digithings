@@ -17,6 +17,33 @@ import { useEffect, useState } from "react";
 
 import { BOOK_READER_CSS } from "@/lib/book/readerCss";
 
+const BOOK_THEME_SYNC = `(function () {
+  var html = document.documentElement;
+  function theme() {
+    return html.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  function apply() {
+    var t = theme();
+    document.querySelectorAll("[data-dark-src]").forEach(function (el) {
+      var next = el.getAttribute("data-" + t + "-src");
+      if (next && el.getAttribute("src") !== next) el.setAttribute("src", next);
+    });
+    document.querySelectorAll("[data-dark-href]").forEach(function (el) {
+      var next = el.getAttribute("data-" + t + "-href");
+      if (next && el.getAttribute("href") !== next) el.setAttribute("href", next);
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", apply, { once: true });
+  } else {
+    apply();
+  }
+  new MutationObserver(apply).observe(html, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+})();`;
+
 export type ReaderChapter = {
   slug: string;
   title: string;
@@ -70,6 +97,12 @@ export default function BookPages({
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: BOOK_READER_CSS }} />
+      {/* Each page exists twice, drawn in each theme. The theme is a stored
+          choice on <html>, applied before first paint by the layout, so the
+          swap has to happen as early as the document allows — an effect would
+          show the light pages first on a dark screen. React never rewrites
+          `src` here, because the prop it renders does not change. */}
+      <script dangerouslySetInnerHTML={{ __html: BOOK_THEME_SYNC }} />
       <div className="book-shell">
         <nav className="book-nav" aria-label="Contents" data-open={open}>
           <button
@@ -98,7 +131,13 @@ export default function BookPages({
               </li>
             ))}
           </ol>
-          <a className="book-nav__download" href="/book/the-digithings-book.pdf" download>
+          <a
+            className="book-nav__download"
+            href="/book/the-digithings-book.pdf"
+            data-light-href="/book/the-digithings-book.pdf"
+            data-dark-href="/book/the-digithings-book-dark.pdf"
+            download
+          >
             download the pdf
           </a>
         </nav>

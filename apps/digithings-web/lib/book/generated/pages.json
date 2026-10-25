@@ -17,5 +17,6 @@
     "/book/16-digitrace/": 17,
     "/book/19-local-stack/": 18,
     "/book/23-self-hosting/": 19
-  }
+  },
+  "seed": 12432
 }

@@ -79,18 +79,13 @@ export const BOOK_READER_CSS = `
   box-shadow: 0 1px 1px var(--hair), 0 10px 30px var(--hair);
 }
 
-/* In the dark theme the pages follow the theme. A sheet of white paper on a
-   black page is the one thing on this site that would ignore the reader's
-   choice, so the page inverts to dark paper and light ink. The book is set in
-   one ink on one paper with line diagrams, which is what makes this work:
-   there is no photograph whose colour could invert wrongly. Printing resets it,
-   because paper is paper. */
+/* Each page exists twice, printed once per theme, so nothing here colours it:
+   the reader swaps the source and the sheet is already the theme's own paper
+   and ink. */
 [data-theme="dark"] .book-frames__page {
-  filter: invert(1) hue-rotate(180deg);
   border-color: var(--hair, rgba(255, 255, 255, 0.09));
   box-shadow: none;
 }
-
 @media (max-width: 1023px) {
   .book-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .book-nav {

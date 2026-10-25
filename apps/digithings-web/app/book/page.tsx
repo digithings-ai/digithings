@@ -53,6 +53,8 @@ export default async function BookIndexPage() {
             <img
               className="book-frames__page"
               src={`/book/pages/${String(number).padStart(2, "0")}.webp`}
+              data-light-src={`/book/pages/${String(number).padStart(2, "0")}.webp`}
+              data-dark-src={`/book/pages/dark/${String(number).padStart(2, "0")}.webp`}
               alt={`Page ${number} of the digithings book`}
               width={1240}
               height={1754}

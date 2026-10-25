@@ -23,36 +23,41 @@ import sharp from "sharp";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = resolve(HERE, "..", "..");
-const PDF = join(APP_ROOT, "public", "book", "the-digithings-book.pdf");
-const OUT = join(APP_ROOT, "public", "book", "pages");
+const EDITIONS = [
+  { pdf: "the-digithings-book.pdf", out: join(APP_ROOT, "public", "book", "pages") },
+  { pdf: "the-digithings-book-dark.pdf", out: join(APP_ROOT, "public", "book", "pages", "dark") },
+];
 const TMP = join(APP_ROOT, ".book-pages-tmp");
 /** Half the printed 150dpi width: crisp on a 2x screen, ~140KB a page. */
 const WIDTH = 1240;
 
 try {
-  rmSync(TMP, { recursive: true, force: true });
-  mkdirSync(TMP, { recursive: true });
-  mkdirSync(OUT, { recursive: true });
+  for (const edition of EDITIONS) {
+    const pdf = join(APP_ROOT, "public", "book", edition.pdf);
+    rmSync(TMP, { recursive: true, force: true });
+    mkdirSync(TMP, { recursive: true });
+    mkdirSync(edition.out, { recursive: true });
 
-  execFileSync("pdftoppm", ["-r", "150", "-png", PDF, join(TMP, "page")], {
-    stdio: "inherit",
-  });
+    execFileSync("pdftoppm", ["-r", "150", "-png", pdf, join(TMP, "page")], {
+      stdio: "inherit",
+    });
 
-  const sources = readdirSync(TMP)
-    .filter((file) => file.endsWith(".png"))
-    .sort();
-  if (sources.length === 0) throw new Error("pdftoppm produced no pages");
+    const sources = readdirSync(TMP)
+      .filter((file) => file.endsWith(".png"))
+      .sort();
+    if (sources.length === 0) throw new Error(`pdftoppm produced no pages for ${edition.pdf}`);
 
-  let bytes = 0;
-  for (const [index, file] of sources.entries()) {
-    const target = join(OUT, `${String(index + 1).padStart(2, "0")}.webp`);
-    await sharp(join(TMP, file)).resize({ width: WIDTH }).webp({ quality: 78 }).toFile(target);
-    bytes += statSync(target).size;
+    let bytes = 0;
+    for (const [index, file] of sources.entries()) {
+      const target = join(edition.out, `${String(index + 1).padStart(2, "0")}.webp`);
+      await sharp(join(TMP, file)).resize({ width: WIDTH }).webp({ quality: 78 }).toFile(target);
+      bytes += statSync(target).size;
+    }
+    console.log(
+      `pages: ${sources.length} webp page(s) from ${edition.pdf}, ${(bytes / 1_048_576).toFixed(2)} MB`,
+    );
   }
   rmSync(TMP, { recursive: true, force: true });
-  console.log(
-    `pages: wrote ${sources.length} webp page(s), ${(bytes / 1_048_576).toFixed(2)} MB total`,
-  );
 } catch (error) {
   rmSync(TMP, { recursive: true, force: true });
   if (String(error).includes("ENOENT")) {
