@@ -262,14 +262,19 @@ def dockerfile_copy_sources(text: str) -> list[str]:
 
 
 def jobs_leading_to_build(document: dict[str, Any]) -> list[str]:
-    """The jobs that touch this lane's image, plus everything they `need`.
+    """The jobs that touch this lane's image, plus the installers they `need`.
 
     A job is in scope when its own text names the container workspace or the
     image Dockerfile, or when it runs the packaging action at all: those are the
-    jobs whose green result is read as "the image is buildable". The `needs`
-    closure is added because a gate job that a build job depends on is part of
-    the same path - if it is red, the build never runs, and if it packages
-    nothing, the build it guards is unproven.
+    jobs whose green result is read as "the image is buildable".
+
+    The `needs` closure adds a prerequisite job only when that job runs `npm ci`:
+    a job that installs the workspace and sits on the build path has the tree
+    the image could be built from, so it is part of the same contract. A
+    prerequisite that installs nothing (a policy or label check) is left alone -
+    demanding generated image inputs from a job that never touches an image
+    would be a false failure, and the first thing anyone does with a false
+    failure is delete the check.
     """
     jobs = document.get("jobs") or {}
     in_scope: set[str] = set()
@@ -285,10 +290,21 @@ def jobs_leading_to_build(document: dict[str, Any]) -> list[str]:
         if isinstance(needs, str):
             needs = [needs]
         for need in needs:
-            if need in jobs and need not in in_scope:
+            if need in jobs and need not in in_scope and installs_workspace(jobs[need]):
                 in_scope.add(need)
                 frontier.append(need)
     return sorted(in_scope)
+
+
+def installs_workspace(job: dict[str, Any]) -> bool:
+    """Whether a job runs `npm ci`, so it has the workspace tree on disk."""
+    for step in job.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        run = str(step.get("run") or "")
+        if "npm ci" in run:
+            return True
+    return False
 
 
 def check_image_inputs(root: Path, document: dict[str, Any]) -> Result:
@@ -454,26 +470,49 @@ def platform_bindings(packages: dict[str, Any]) -> list[tuple[str, dict[str, str
     return found
 
 
-def binding_defects(packages: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """C1: `(missing, mismatched)` platform bindings, as report lines.
+class BindingDefect(NamedTuple):
+    """A platform binding the lock does not carry at the version its parent declares.
+
+    `parent` is the lock key that declares it, so a finding names the TREE as
+    well as the binding: the sharp gap was under a workspace tree, and a report
+    that prints 25 identical-looking lines with no tree is not actionable.
+    """
+
+    parent: str
+    name: str
+    declared: str
+    locked: str | None
+
+    def __str__(self) -> str:
+        if self.locked is None:
+            return f"{self.name}@{self.declared} (declared by {self.parent}, absent from the lock)"
+        return (
+            f"{self.name} (declared by {self.parent} at {self.declared}, locked at {self.locked})"
+        )
+
+
+def binding_defects(
+    packages: dict[str, Any],
+) -> tuple[list[BindingDefect], list[BindingDefect]]:
+    """C1: `(missing, mismatched)` platform bindings, over the whole lock.
 
     `missing` is what a truncated lock looks like: the parent declares the
     variant and the lock carries no entry for it. `mismatched` is a lock where
     the entry exists at a version the parent does not declare, so the JS wrapper
     and the native binary would disagree.
     """
-    missing: list[str] = []
-    mismatched: list[str] = []
+    missing: list[BindingDefect] = []
+    mismatched: list[BindingDefect] = []
     for parent_key, declared in platform_bindings(packages):
         for name, version in sorted(declared.items()):
             if any(token in name for token in EXCLUDED_BINDINGS):
                 continue
             entry = resolve_binding(packages, parent_key, name)
             if entry is None:
-                missing.append(f"{name}@{version} (declared by {parent_key})")
+                missing.append(BindingDefect(parent_key, name, version, None))
             elif entry.get("version") != version:
                 mismatched.append(
-                    f"{name}: lock has {entry.get('version')}, {parent_key} wants {version}"
+                    BindingDefect(parent_key, name, version, str(entry.get("version")))
                 )
     return missing, mismatched
 
@@ -521,24 +560,25 @@ def check_lockfile(root: Path) -> Result:
     findings: list[Finding] = []
 
     missing, mismatched = binding_defects(packages)
-    for line in missing:
+    for defect in missing:
         findings.append(
             Finding(
                 "C",
-                line.split(" ")[0],
-                "is declared as a platform optionalDependency and the lock carries no entry for "
-                "it. npm 10 refuses this lock (npm 11 tolerates it), which is how the lane broke "
-                "in #6062. Regenerate the lock with npm 10.9.9 rather than hand-installing the "
-                "binding in a lane.",
+                defect.name,
+                f"declared by `{defect.parent}` at {defect.declared} and the lock carries no "
+                "entry for it. npm 10 refuses this lock (npm 11 tolerates it), which is how the "
+                "lane broke in #6062. Regenerate the lock with npm 10.9.9 rather than "
+                "hand-installing the binding in a lane.",
             )
         )
-    for line in mismatched:
+    for defect in mismatched:
         findings.append(
             Finding(
                 "C",
-                line.split(":")[0],
-                "is locked at a version its parent does not declare, so the JS wrapper and the "
-                "native binary would disagree. Regenerate the lock with npm 10.9.9.",
+                defect.name,
+                f"is locked at {defect.locked} but `{defect.parent}` declares {defect.declared}, "
+                "so the JS wrapper and the native binary would disagree. Regenerate the lock "
+                "with npm 10.9.9.",
             )
         )
     for line in libc_defects(packages):

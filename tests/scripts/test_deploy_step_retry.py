@@ -150,6 +150,23 @@ def test_an_auth_error_is_not_retried(run_step) -> None:
     assert "Not retrying" in out, out
 
 
+def test_an_auth_error_that_also_says_timeout_is_not_retried(run_step) -> None:
+    """The fatal check runs FIRST, so a log carrying both is never retried.
+
+    This is the case that makes the two regexes safe together: wrangler prints
+    its API wrapper line and whatever the request did, so a bad credential can
+    land in a log that also mentions a timeout. Order of the two greps is the
+    whole property, and a test on the auth log alone cannot see it - it would
+    pass through the non-timeout branch even if the fatal branch were deleted.
+    """
+    mixed = AUTH_LOG + TIMEOUT_LOG
+    code, out, calls, slept = run_step(mixed)
+    assert code != 0, out
+    assert calls == 1, f"an auth failure must not be retried even beside a timeout: {out}"
+    assert slept == [], f"no pause may happen before an auth failure is reported: {slept}"
+    assert "authentication error" in out.lower(), out
+
+
 def test_a_non_timeout_error_is_not_retried(run_step) -> None:
     code, out, calls, slept = run_step(CONFIG_LOG)
     assert code != 0, out

@@ -95,13 +95,13 @@ def test_every_installable_platform_binding_is_locked() -> None:
     missing, mismatched = CHECK_MODULE.binding_defects(packages)
     assert not missing, (
         "package-lock.json is missing platform bindings its own tree declares: "
-        f"{missing}. This is what a regenerate with node_modules present produces; "
+        f"{[str(defect) for defect in missing]}. This is what a regenerate with node_modules present produces; "
         "regenerate the lock with npm 10.9.9 (the lane's `node-version: 22`) rather than "
         "hand-installing the binding in CI lanes, build scripts and Dockerfiles."
     )
     assert not mismatched, (
         "a platform binding is locked at a version its parent does not declare, so the JS "
-        f"wrapper and the native binary would disagree: {mismatched}"
+        f"wrapper and the native binary would disagree: {[str(defect) for defect in mismatched]}"
     )
 
 

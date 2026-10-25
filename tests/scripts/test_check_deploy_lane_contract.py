@@ -256,3 +256,45 @@ def test_all_three_defects_are_reported_in_one_run(
     assert "3 finding(s) across leg(s) A, B, C" in out, (
         "one run must report every leg at once, not the first failure: " + out
     )
+
+
+# --------------------------------------------------------------------------- #
+# The boundary of leg B: a prerequisite that installs nothing is not asked to
+# package an image it never touches.
+# --------------------------------------------------------------------------- #
+
+
+def test_only_prerequisites_that_install_the_workspace_must_package(
+    check: ModuleType, tree: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A `needs` job is in scope only when it runs `npm ci`.
+
+    Widening the rule to every prerequisite would demand generated image inputs
+    from a label or policy check, and a false failure is the fastest way to get
+    a check deleted. Narrowing it to none would let a real installer on the
+    build path skip the packaging. Both directions are asserted here.
+    """
+    workflow = tree / WORKFLOW
+    text = workflow.read_text(encoding="utf-8")
+    needs = "    needs: [check-deploy-gate]\n"
+    assert needs in text, "the deploy job's `needs` moved — update this test"
+    text = text.replace(needs, "    needs: [check-deploy-gate, policy, prereq]\n")
+    text += (
+        "\n  policy:"
+        "\n    runs-on: ubuntu-latest"
+        "\n    steps:"
+        "\n      - run: echo policy"
+        "\n  prereq:"
+        "\n    runs-on: ubuntu-latest"
+        "\n    steps:"
+        "\n      - run: npm ci"
+        "\n"
+    )
+    workflow.write_text(text, encoding="utf-8")
+
+    code, out = _report(check, tree, capsys)
+    assert code == 1, out
+    assert "job `prereq`" in out, f"a prerequisite that runs npm ci must package: {out}"
+    assert "job `policy`" not in out, (
+        f"a prerequisite that installs nothing must not be asked: {out}"
+    )

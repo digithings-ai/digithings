@@ -343,9 +343,11 @@ jobs:
           attempts=3
           pauses=(20 60)
           # Signatures that mean "the Cloudflare API did not answer in time".
-          # Wrangler reports a request timeout, undici reports the two timeout
-          # spellings, and a dropped socket is the same class of transient.
-          timeout_re='request timeout|request timed out|timeout exceeded|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|socket hang up|ECONNRESET'
+          # Wrangler reports a request timeout; undici reports the timeout
+          # spellings, and ETIMEDOUT is the socket-level one. Nothing else is
+          # here: a ticket that says "retry ONLY a timeout signature" is worth
+          # exactly the narrowness of this line.
+          timeout_re='request timeout|request timed out|timeout exceeded|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT'
           # Never retried, whatever else the log says: not authenticated, bad
           # token, or the account/zone the token cannot reach.
           fatal_re='code: ?10000|authentication error|not authenticated|invalid api token|empty token'
