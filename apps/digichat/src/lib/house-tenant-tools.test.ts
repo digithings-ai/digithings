@@ -41,7 +41,7 @@ function houseTenant() {
 }
 
 describe("house chat /tools", () => {
-  it("lists web search, DigiSearch and DigiVault", () => {
+  it("lists web search, digisearch and digivault by backend id", () => {
     // The chain the embed page runs, end to end: the registry row becomes the
     // client config the embed serves, the route projects it into the stock
     // client config, and the connected-tool rows are built from that. The
@@ -62,6 +62,6 @@ describe("house chat /tools", () => {
       mcpCustom: [],
     });
     expect(rows.map((r) => r.slash)).toEqual(["digisearch", "digivault", "websearch"]);
-    expect(rows.map((r) => r.label)).toEqual(["DigiSearch", "DigiVault", "Web search"]);
+    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault", "web_search"]);
   });
 });

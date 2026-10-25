@@ -673,6 +673,19 @@ export const McpServerSchema = z
       .regex(/^[A-Za-z][A-Za-z0-9-]{0,40}$/, "authHeader must be a valid HTTP header name")
       .optional(),
     /**
+     * How the chat authenticates to this server. `"jwt"` makes the BFF mint its
+     * own digikey token, scoped `mcp:<server id>`, for each request and send it
+     * as `Authorization: Bearer` — the edge verifies it and refuses a token
+     * that lacks this server's scope. Absent (the default) is the static
+     * `token`/`tokenEnv` shape, which is what compose and self-host use.
+     *
+     * Precedence, and it is not a fallback chain: `"jwt"` wins over any static
+     * `token`/`tokenEnv` on the same row, and when minting fails the row gets no
+     * credential at all rather than the static one. See
+     * apps/digichat/src/lib/mcp-edge-token.ts. Operator-only, like `authHeader`.
+     */
+    authScheme: z.enum(["static", "jwt"]).optional(),
+    /**
      * Operator tool allowlist for this server row (DIG-284). Remote tool names,
      * matched exactly by digigraph — no globs, no patterns. Omit it to deny
      * every tool on this server; an empty list means the same thing. Bound by

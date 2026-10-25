@@ -14,8 +14,12 @@
  *   /_stack/key/*       → digikey (strip prefix)
  *
  * /_stack/mcp/{digisearch,digivault}/* → in-container MCP servers on
- * :8765/:8769 (secret-gated edge paths; require the x-digi-mcp-key header
- * matching MCP_EDGE_KEY — fail-closed 401 otherwise).
+ * :8765/:8769. Two credentials are accepted, either one grants: a digikey JWT
+ * in `Authorization: Bearer` carrying `mcp:digisearch` / `mcp:digivault`
+ * (verified against DIGIKEY_JWKS_URL), or the static `x-digi-mcp-key` header
+ * matching MCP_EDGE_KEY / MCP_EDGE_KEYS (compose and self-host, where no
+ * digikey mints a token). Fail-closed 401 otherwise, 403 for a valid token
+ * without the server's scope. See ./mcp-edge-auth.
  * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
  *
  * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
@@ -48,6 +52,7 @@ import {
   safeErrorMessage,
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
+import { authorizeMcpEdge } from "./mcp-edge-auth";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 // ports.ts stays a static import: the two Container subclasses below need
@@ -161,7 +166,7 @@ export class DigiStackContainer extends Container {
     DIGISEARCH_WORKERS_AI_INDEXES: env.DIGISEARCH_WORKERS_AI_INDEXES ?? "",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings","researchSystemPrompt":"You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings."},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\"in Bearbeitung\\"), or: I searched for mailbox (\\"Postfach\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings","researchSystemPrompt":"You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings."},"occ":{"digisearchIndex":"occ_help","digisearchTools":{"digisearch_zammad_tickets":{"index":"occ-tickets","description":"Semantic search over past OCC support tickets (Zammad), refreshed daily at 05:00 Rome. Finds similar past cases and how they were resolved, in any language."}},"vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nFor similar past cases or how an issue was resolved before, use digisearch_zammad_tickets (semantic search over past Zammad tickets, refreshed daily at 05:00). For a specific ticket number, the tickets of a customer, current status or anything since this morning, use the live Zammad ticket tools.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\"in Bearbeitung\\"), or: I searched for mailbox (\\"Postfach\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -527,6 +532,14 @@ export interface Env {
   MCP_EDGE_KEY?: string;
   /** Optional per-server edge keys (`{"digivault":"…"}`); falls back to MCP_EDGE_KEY. */
   MCP_EDGE_KEYS?: string;
+  /**
+   * digikey JWKS endpoint the MCP edge verifies `Authorization: Bearer` JWTs
+   * against (./mcp-edge-auth). Worker-scoped: the Container's copy of this name
+   * is the loopback URL in `envVars` below, which the Worker cannot reach.
+   * Unset means the JWT path cannot verify and refuses; the static edge key is
+   * unaffected. Public URL, not a secret — it ships in wrangler.toml `[vars]`.
+   */
+  DIGIKEY_JWKS_URL?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
   GLOOMBERB_SESSION_COOKIE?: string;
@@ -705,21 +718,37 @@ export default {
     // In-container MCP servers for the OCC embed, reached over secret-gated edge
     // paths. The container-internal servers cannot be resolved from the
     // Cloudflare runtime (/etc/hosts is read-only), so digigraph dials this
-    // public HTTPS path instead; the embed tenant entry carries the matching
-    // x-digi-mcp-key (#3841 authHeader). Fail closed: no secret -> 401.
+    // public HTTPS path instead. Two credentials are accepted (./mcp-edge-auth):
+    // a digikey JWT carrying `mcp:<serverId>`, or the static x-digi-mcp-key the
+    // embed tenant entry carries (#3841 authHeader) for compose/self-host. Fail
+    // closed: neither credential valid -> 401; valid JWT, wrong server -> 403.
     if (url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)) {
       const rest = url.pathname.slice(MCP_EDGE_PREFIX.length + 1);
       const slash = rest.indexOf("/");
       const serverId = slash === -1 ? rest : rest.slice(0, slash);
       const port = MCP_EDGE_SERVERS[serverId];
       if (typeof port === "number") {
-        const expected = mcpEdgeKeyFor(serverId, workerEnv);
-        const provided = request.headers.get("x-digi-mcp-key")?.trim();
-        if (!expected || !provided || provided !== expected) {
-          return new Response("digithings-stack: unauthorized", { status: 401 });
+        const decision = await authorizeMcpEdge({
+          request,
+          serverId,
+          expectedKey: mcpEdgeKeyFor(serverId, workerEnv),
+          env: workerEnv,
+        });
+        if (!decision.ok) {
+          // The body names neither the credential nor the reason: the status is
+          // the whole answer to the caller, and the decision log has the rest.
+          return new Response(
+            decision.status === 403
+              ? "digithings-stack: forbidden"
+              : "digithings-stack: unauthorized",
+            {
+              status: decision.status,
+              headers: { "www-authenticate": 'Bearer realm="digikey"' },
+            },
+          );
         }
         // Lazy ports import per route group (#4685): a failing import
-        // degrades only these paths (503); the fail-closed 401 above stays
+        // degrades only these paths (503); the fail-closed refusal above stays
         // synchronous and untouched.
         return runIsolated("mcp-edge", () => import("./ports"), async ({}) => {
           // Forward the client path unchanged: mcp>=1.26 serves `/mcp` and

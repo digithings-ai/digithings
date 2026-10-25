@@ -229,14 +229,16 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   tools: {
     allowUserToggle: true,
     catalog: [
-      { id: "digisearch", default: true, label: "Search" },
-      { id: "digivault", default: true, label: "Vault" },
+      // Labels repeat the backend id, never a title-cased display name: the
+      // /tools and /mcp rows render the id, and a missing label falls back to it.
+      { id: "digisearch", default: true, label: "digisearch" },
+      { id: "digivault", default: true, label: "digivault" },
     ],
   },
   mcp: {
     servers: [
-      { id: "digisearch", label: "Search", default: true },
-      { id: "digivault", label: "Vault", default: true },
+      { id: "digisearch", label: "digisearch", default: true },
+      { id: "digivault", label: "digivault", default: true },
     ],
     allowUserServers: false,
     allowAddForm: false,
