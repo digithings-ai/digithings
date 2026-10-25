@@ -3,8 +3,8 @@
 /**
  * The empty-state starter chips, capped and cycled.
  *
- * A tenant defines its own starter list (the house tenant 8, OCC 8, DataTap 5)
- * and the welcome used to print all of them, which turned the empty state into
+ * A tenant defines its own starter list (eight for the house tenant, five for
+ * the trial) and the welcome used to print all of them, turning the empty state into
  * a wall of prompts. Four is what fits on one line of reading; the rest are
  * reached by cycling, so every defined starter is still seen.
  *

@@ -4,7 +4,7 @@
 /**
  * The starter chips a tenant defines are capped at the welcome row.
  *
- * The house tenant defines 8, OCC 8, DataTap 5. All of them reaching the
+ * The house tenant defines eight, the trial five. All of them reaching the
  * welcome was the "extensive list" the owner called out; the product shell is
  * the single boundary every surface mounts, so the cap is asserted here — 8
  * defined, 4 rendered.

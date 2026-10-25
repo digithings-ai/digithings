@@ -5,7 +5,7 @@
  * Starter-chip cap and cycle.
  *
  * The welcome used to print every starter a tenant defines (the house tenant
- * 8, OCC 8, DataTap 5) — a wall of prompts. Four is the whole row; the rest is
+ * defines eight, the trial five) — a wall of prompts. Four is the whole row; the rest is
  * reached by cycling, which never starts under reduced motion, holds while the
  * row is hovered or focused, and stops for good once the conversation has
  * started or the composer holds text.
