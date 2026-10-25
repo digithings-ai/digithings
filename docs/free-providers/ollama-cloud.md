@@ -11,7 +11,7 @@ access_requirements:
   - email
   - ollama_account
 data_privacy_on_free: unknown
-verified_at: 2026-10-18
+verified_at: 2026-10-25
 source_urls:
   - https://ollama.com/cloud
 ---
@@ -113,3 +113,4 @@ Ollama Cloud Pro: $20/month (50× free compute, 3 concurrent models). Max: $100/
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
 | 2026-10-18 | Automated snapshot sync | provider-review scan |
+| 2026-10-25 | Automated snapshot sync | provider-review scan |
