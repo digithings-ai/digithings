@@ -71,8 +71,9 @@ export default async function BookDocument() {
           />
           <div className="book-cover__foot">
             <h1 className="book-cover__title">the digithings book</h1>
+            <div className="book-cover__title">Chris Stefan · digithings.ai/book</div>
           </div>
-          <p className="book-cover__imprint">edition 26 · version 1</p>
+          <p className="book-cover__imprint">2026 edition · version 1</p>
         </section>
 
         {/* Front matter. The reference beside each chapter is filled in by
