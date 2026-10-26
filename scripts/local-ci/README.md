@@ -314,6 +314,14 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   released. The `local-ci/app` row is a second context, not the required
   check: a refused app row is logged and the head keeps the receipt it
   earned on `local-ci`.
+- **a metadata failure is re-checked, not re-committed**: a failure that names
+  only `pr-title` and `pr-template` is the one class whose remedy does not touch
+  the tree, so a corrected title or body queues the same head again - no new
+  commit, and no review on the head goes stale for it (DIG-5695, PR #6513). The
+  metadata a verdict judged is remembered in `metadata-recheck-<sha>` next to
+  the gitleaks sentinel, so one edit buys one re-check and not one per tick. A
+  failure that names any code gate keeps its row terminal: its remedy is a
+  commit.
 
 ## The bun suites
 

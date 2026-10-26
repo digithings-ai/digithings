@@ -22,11 +22,16 @@ required review context: that verdict has one producer, the workflow
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
+A failure that names only the PR metadata gates (`pr-title`, `pr-template`) is
+re-checked on the same head once the title or the body is corrected: that
+remedy does not touch the tree, so no commit and no review is thrown away for
+it (DIG-5695). A failure that names a code gate stays terminal.
 A run that no trusted launcher started is refused before anything happens:
 the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
 import concurrent.futures
+import hashlib
 import io
 import json
 import os
@@ -202,6 +207,13 @@ REVIEW_MAX_PER_TICK = 1
 # Mac for nothing.
 REVIEW_RECHECK_SECS = 3600
 SKIP_PREFIX = "local-ci skipped:"
+# A failure whose gates are all PR metadata (DIG-5695). These are the only
+# gates whose remedy does not touch the tree: the author edits the title or the
+# body, the head and every review on it stay as they are, and the head is worth
+# one more look on the same sha. A failure that names any other gate stays
+# terminal: re-queueing a code failure would loop the daemon on every tick and
+# re-run a whole lane for nothing.
+METADATA_GATES = frozenset({"pr-title", "pr-template"})
 # Memory gate (DIG-3706, fixed DIG-3783): vm.swapusage "free" is headroom inside
 # already-allocated swap files, which macOS grows on demand, so it false-trips
 # while the Mac is healthy (727-855MB free vs 900MB gate, with 81% system-wide
@@ -1851,9 +1863,17 @@ def run_checks(pr, out, summary=None):
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
     # its workflow removal rides on DIG-3845)
     if pr_template is None:
-        fails.append("pr-template"); out.write("pr-template FAIL: checker module missing\n")
+        # A missing checker is a runner defect, not author metadata: the name
+        # keeps it out of METADATA_GATES, so the row stays terminal instead of
+        # buying a full lane on every title or body edit (DIG-5695 review).
+        fails.append("pr-template:checker-missing")
+        out.write("pr-template:checker-missing FAIL: checker module missing\n")
     else:
-        body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+        body = pr_body(pr)
+        if summary is not None and body is not None:
+            # What this gate judges, so the queue can tell a corrected title or
+            # body from the same failed one (DIG-5695).
+            summary["metadata_revision"] = metadata_revision(title, body)
         ok, reasons = pr_template.check_template(body or "")
         if not ok:
             fails.append("pr-template")
@@ -1965,11 +1985,17 @@ def process(pr, dry):
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
     else: st, desc = "success", success_desc(mins, summary.get("bun"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
-    if not dry and status(sha, st, desc):
-        # The verdict is in, so the claim is spent. When the verdict could not
-        # be posted the claim stays: the head is owed a receipt and the queue
-        # gives it one instead of waiting for a row that never came.
-        clear_claim(sha)
+    if not dry:
+        if metadata_failure_gates(desc) is not None:
+            # Remember what this verdict judged so the same failed metadata is
+            # not re-queued tick after tick (DIG-5695). A code failure records
+            # nothing: its row is terminal.
+            record_judged_metadata(pr, summary.get("metadata_revision"))
+        if status(sha, st, desc):
+            # The verdict is in, so the claim is spent. When the verdict could
+            # not be posted the claim stays: the head is owed a receipt and the
+            # queue gives it one instead of waiting for a row that never came.
+            clear_claim(sha)
     return st
 
 def skip_reason():
@@ -2396,6 +2422,105 @@ def ci_status(sha):
     return st, desc
 
 
+def metadata_failure_gates(desc):
+    """The gates a metadata-only failure names, or None.
+
+    A row names its failed gates after ``local-ci failed: `` and ends with the
+    run time in minutes. Only plain gate names count: a stall or an overrun
+    reads as a sentence, and one name outside METADATA_GATES makes the whole
+    verdict a code failure, whose row stays terminal (DIG-5695).
+    """
+    prefix = "local-ci failed: "
+    text = desc or ""
+    if not text.startswith(prefix):
+        return None
+    names = re.sub(r" \(\d+m\)$", "", text[len(prefix):])
+    gates = [g.strip() for g in names.split(",") if g.strip()]
+    if not gates or any(g not in METADATA_GATES for g in gates):
+        return None
+    return gates
+
+
+def metadata_revision(title, body):
+    """A stable digest of the metadata a metadata gate reads: title and body.
+
+    The timestamp is not the revision: GitHub moves `updatedAt` on every
+    comment and review, so a time comparison would re-run a full lane for a
+    conversation the gates never read.
+    """
+    h = hashlib.sha256()
+    h.update((title or "").encode("utf-8"))
+    h.update(b"\0")
+    h.update((body or "").encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+def pr_body(pr):
+    """The pull request's body, or None when GitHub could not be read."""
+    body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+    return None if body is None else body
+
+
+def judged_metadata_revision(sha):
+    """The metadata revision this head's last metadata verdict judged, or None.
+
+    Kept next to the gitleaks re-check sentinel, for the same reason: one
+    re-check per change, never one per tick.
+    """
+    try:
+        with open(f"{LOGD}/metadata-recheck-{sha}") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def record_judged_metadata(pr, revision=None):
+    """Remember the metadata a metadata-only verdict was judged on (DIG-5695).
+
+    `revision` is what the gates read during the run; when a run could not read
+    the body, the current body is hashed instead so the same failure cannot
+    re-queue for ever. An unreadable body records nothing: a revision nobody
+    saw is not a judgement, and the timestamp rule covers that head.
+    """
+    if revision is None:
+        body = pr_body(pr)
+        if body is None:
+            return
+        revision = metadata_revision(pr.get("title"), body)
+    try:
+        with open(f"{LOGD}/metadata-recheck-{pr['headRefOid']}", "w") as f:
+            f.write(revision + "\n")
+    except OSError:
+        pass
+
+
+def metadata_recheck_due(pr, desc, created):
+    """True when a metadata-only failure is worth one more look on the same head.
+
+    A metadata gate is the one class of failure whose remedy does not touch the
+    tree, so the head does not have to be replaced to clear it (DIG-5695, PR
+    #6513). The head is re-queued when the metadata it carries now differs from
+    the metadata its verdict judged.
+
+    A head with no record - a row from before this rule, or a run that could
+    not read the body - falls back to the row's own clock: the pull request
+    must have been updated after the row that judged it. Either way a metadata
+    failure buys at most one re-check per change.
+    """
+    if metadata_failure_gates(desc) is None:
+        return False
+    body = pr_body(pr)
+    if body is None:
+        return False  # nothing readable to judge: the row stays terminal
+    revision = metadata_revision(pr.get("title"), body)
+    judged = judged_metadata_revision(pr["headRefOid"])
+    if judged is not None:
+        return judged != revision
+    updated = _status_age_secs_or_none(pr.get("updatedAt"))
+    row = _status_age_secs_or_none(created)
+    return updated is not None and row is not None and updated < row
+
+
 def pending(prs, forks, dry=False):
     """Open PRs still needing a check, oldest first.
 
@@ -2408,9 +2533,11 @@ def pending(prs, forks, dry=False):
 
     A head is queued when it carries no `local-ci` row, when its only row is a
     re-checkable skip (DIG-3706), when its row is a gitleaks failure worth one
-    more try, when its row says the post itself failed (`error`), or when its
-    `pending` row belongs to a run that is gone: the claim ledger names the
-    holder, and a holder that is dead means the receipt is owed again.
+    more try, when its row says the post itself failed (`error`), when a
+    metadata-only failure has been overtaken by a corrected title or body
+    (DIG-5695), or when its `pending` row belongs to a run that is gone: the
+    claim ledger names the holder, and a holder that is dead means the receipt
+    is owed again.
 
     A head whose claim is held by a living run is left alone: it is not
     queued, not skipped, and its claim is not released. The run that took the
@@ -2434,6 +2561,9 @@ def pending(prs, forks, dry=False):
             # scanning commits already on the base. A second failure stays put.
             retry = (st == "failure" and (desc or "").startswith("local-ci failed: gitleaks")
                      and not os.path.exists(f"{LOGD}/gitleaks-recheck-{sha}"))
+            # A metadata-only failure is the one failure a corrected title or
+            # body can clear without touching the tree (DIG-5695).
+            meta = st == "failure" and metadata_recheck_due(p, desc, created)
             lost = st == "pending" and claim_is_lost(sha, created)
             if st in ("success", "failure", "error") and not dry:
                 # The verdict is in, or the row says the post itself failed:
@@ -2441,7 +2571,7 @@ def pending(prs, forks, dry=False):
                 # still holds is that run's to release.
                 clear_claim(sha)
             if (st is None or st == "error" or (desc or "").startswith(SKIP_PREFIX)
-                    or retry or lost):
+                    or retry or meta or lost):
                 out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))
