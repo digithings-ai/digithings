@@ -2365,8 +2365,11 @@ def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
     is a missing signal, not a clearance, and it must not be treated as one.
+
+    A marker inside a fence or an inline span is quoted, not posted, so the body
+    is read with its code taken out (#4990).
     """
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         fields = {
             m.group("key").lower(): m.group("value")
             for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
@@ -2410,7 +2413,8 @@ _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA
 # (DIG-5246). The heads it names are read with `_PROSE_SHA_RE`; a line naming
 # none is a withdrawal of the seat's blocks that name no head at all.
 _WITHDRAWAL_LINE_RE = re.compile(
-    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*withdraws?[*_`]*[ \t]*:[ \t]*(?P<refs>[^\n]*)$",
+    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*(?P<token>withdraws?)[*_`]*[ \t]*:[ \t]*"
+    r"(?P<refs>[^\n]*)$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -2419,12 +2423,63 @@ _WITHDRAWAL_LINE_RE = re.compile(
 # and reading its first group as a commit would name a head nobody reviewed.
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
+# A fenced code block or an inline code span *shows* a marker, it does not post
+# one. #6197 merged at 2026-10-21 18:43 on the author's own reply, which quoted
+# the reviewer template inside a fence; the queue read the quoted
+# `verdict=approve` as the newest verdict and cleared three standing
+# changes-requested verdicts. #6196 taught the reader about sentences and
+# blockquotes, but a fence is neither, so the quote still read as a claim. The
+# rule now is the Markdown one: whatever a reader sees as code is not a claim.
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _strip_fenced_blocks(body: str) -> str:
+    """The comment body with fenced code blocks taken out.
+
+    Removed lines become a bare newline, so line numbers and the line-anchored
+    patterns (`^Review verdict:`, `_PROVENANCE_RE`, `_VERDICT_LINE_RE`) keep
+    working on the text that is left.
+    """
+    kept: list[str] = []
+    fence = ""
+    for line in body.splitlines(keepends=True):
+        if fence:
+            match = _FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = _FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def _strip_code_blocks(body: str) -> str:
+    """The body with fenced blocks *and* inline code spans taken out.
+
+    This is the reader for markers and provenance, never for prose: a sha a
+    reviewer writes in backticks is still a sha, so the head bindings a prose
+    verdict names are read from `_strip_fenced_blocks`, where the backticks
+    survive (#4990).
+    """
+    return _INLINE_CODE_RE.sub(" ", _strip_fenced_blocks(body))
+
+
 # The seat a verdict belongs to. Every seat on this org pushes under one GitHub
 # login, so `author.login` cannot tell two reviewers apart — the seat id is the
 # provenance marker's `agent=` field, and it is the only place it is written.
 # A verdict whose seat cannot be read is judged by the newest-verdict rule
 # instead of by seat (see `_standing_seat_blocks`).
-_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
 
 
 def _comment_text(body: str) -> str:
@@ -2440,11 +2495,40 @@ def _line_at(body: str, index: int) -> str:
 
 
 def _prose_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
-    match = _PROSE_VERDICT_RE.search(body)
-    if match is None:
-        return None
-    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+    """`(verdict, the line it was read from)` from a `Review verdict:` line.
+
+    A line whose `Review verdict:` token sits inside an inline code span is a
+    quote, not a claim, and it is skipped (#4990). The spans are not stripped
+    from the whole body the way `_strip_code_blocks` does for markers: a prose
+    verdict binds the head through every sha in the comment, and a reviewer who
+    writes that sha in backticks has still named it. Only the token decides
+    whether the line is posted, so `Review verdict: `approve`` — the verdict
+    word itself in backticks — is still read, and `` `Review verdict: approve` ``
+    is not. Fenced blocks are already gone: the caller strips them first.
+    """
+    for match in _PROSE_VERDICT_RE.finditer(body):
+        if _inside_inline_code(body, match.start()):
+            continue
+        return match.group("verdict").lower().replace(" ", "_"), _line_at(
+            body, match.start()
+        )
+    return None
+
+
+def _inside_inline_code(body: str, index: int) -> bool:
+    """True when `index` falls inside an inline code span of `body`.
+
+    The withdrawal reader gets the fence-stripped body, so fenced blocks are
+    already gone. Inline spans are still there on purpose: a seat may write the
+    withdrawn head in backticks — ``Withdraws: `3f2a9c1d4b5e` `` — and that is
+    still a withdrawal. So the span cannot be stripped from the whole body the
+    way `_strip_code_blocks` does for markers; only a line whose `Withdraws:`
+    token is itself inside a span is skipped (#4990).
+    """
+    for span in _INLINE_CODE_RE.finditer(body):
+        if span.start() <= index < span.end():
+            return True
+    return False
 
 
 def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
@@ -2457,10 +2541,19 @@ def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
     occurrence first, deduplicated. A line naming no sha withdraws only blocks
     that name no head, so it can never spend a block scoped to a commit the
     reviewer did not name.
+
+    A line inside a fenced block or an inline code span is a quote, not a claim:
+    it withdraws nothing (#4990). That is the same rule the verdict readers
+    follow, and #6197 is why it exists — a comment that shows the syntax must not
+    be able to clear a block.
     """
     declared = False
     heads: list[str] = []
     for match in _WITHDRAWAL_LINE_RE.finditer(body):
+        if _inside_inline_code(body, match.start("token")):
+            # `_strip_fenced_blocks` already removed the fenced case; this is the
+            # inline one: ``Withdraws: 3f2a9c1d4b5e`` in backticks is shown.
+            continue
         declared = True
         for found in _PROSE_SHA_RE.finditer(match.group("refs")):
             sha = found.group("sha").lower()
@@ -2491,9 +2584,14 @@ class PostedVerdict:
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
-    """The seat that posted this comment, or "" when it cannot be read."""
-    agent = str(provenance.get("agent") or "").strip()
-    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+    """The seat that posted this comment, or "" when it cannot be read.
+
+    A seat id is a Paperclip uuid. Anything else — a placeholder like
+    `<your-seat-uuid>`, a display name, a typo — names no seat the queue could
+    hold a block to, so it is not read as one (#4990, #4809).
+    """
+    agent = str(provenance.get("agent") or "").strip().lower()
+    return agent if agent and _UUID_RE.match(agent) else ""
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2505,7 +2603,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     misspelled is skipped, and the line beside it still says what the reviewer
     decided.
     """
-    body = str(comment.get("body") or "")
+    body = _strip_fenced_blocks(str(comment.get("body") or ""))
     text = _comment_text(body)
     marker = _marker_verdict(body)
     prose = _prose_verdict(text)
@@ -2735,7 +2833,87 @@ def _unbound_block_clearance(head_text: str) -> str:
     )
 
 
-def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocking verdicts that still speak for the head the PR stands at.
+
+    A block naming another commit is spent by the branch moving
+    (`verdict_applies_to_head`): it is not a `changes_requested` this gate can
+    clear, and it asks no seat for anything. A block that names no head is not
+    stale, so it is counted.
+    """
+    return [
+        verdict
+        for verdict in _readable_verdicts(pr)
+        if verdict.verdict in BLOCKING_VERDICTS
+        and verdict_applies_to_head(verdict, head)
+    ]
+
+
+def _clearance_seat_reason(
+    pr: dict[str, Any],
+    approve: PostedVerdict,
+    cfg: ReviewIndependence | None,
+    prov: ReviewerProvenance | None,
+) -> str:
+    """A refusal when an approve that clears a block cannot be shown non-author.
+
+    DIG-4990, item 3. Clause 2 of the verdict rule reads the newest readable
+    verdict, and it used to be enough for that verdict to be an approve: a
+    `changes_requested` whose seat could not be read was cleared by the next
+    comment that said "approve", including the author's own reply. #6197 is
+    the shape — the author's write-up was the newest verdict, and the queue
+    read it as one. The block now survives any approve that names no seat, and
+    any approve from a seat that wrote the PR.
+
+    The author is read the way the reviewer-independence gate reads it:
+    `_author_context` takes the seats from the commits and their Paperclip
+    runs, never from the ticket's assignee. The assignee is the seat asked to
+    move the ticket along, not the seat whose commits are on the branch, and
+    reading it as the author refused the ticket owner's review on #6145
+    (DIG-4809).
+
+    "" is the answer whenever the gate cannot ask the question: `off` reads no
+    provenance at all, and `shadow` measures the reviewer gate without refusing;
+    a Paperclip read that failed says nothing about the branch either. The
+    reviewer-independence gate is the one that reports those — it defers a
+    failed read and refuses an author it cannot identify — so this gate does
+    not publish a second, misleading reason.
+    """
+    if cfg is None or _effective_mode(cfg) != "enforce":
+        return ""
+    try:
+        authors, _ = _author_context(pr, prov or _provenance_for(cfg))
+    except (_PaperclipUnavailable, _AuthorUnidentified):
+        return ""
+    if not authors:
+        return ""
+    head = str(pr.get("headRefOid") or "")
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {approve.comment_id}" if approve.comment_id else "a comment"
+    if not approve.seat:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) names no "
+            "reviewer seat, so it cannot clear the block: a clearance needs the "
+            "provenance marker's `agent=` to name a seat that did not write the PR"
+        )
+    if approve.seat in authors:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) comes from "
+            f"the PR's authoring seat `{approve.seat[:8]}`, so it cannot clear the "
+            "block: only a seat that did not write the PR can"
+        )
+    return ""
+
+
+def _verdict_value_reason(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """A refusal when the newest readable verdict does not clear this PR.
 
     DIG-4878. A blocking verdict used to be spent the moment the commit it named
@@ -2783,7 +2961,10 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
        it names the head the PR stands at (or names no head at all, which
        cannot be stale); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
-       clearance.
+       clearance. A clearance of a `changes_requested` on the current head must
+       also name a non-author seat: an approve with no provenance seat, or one
+       from a seat that wrote the PR, clears nothing (`_clearance_seat_reason`,
+       item 3 of DIG-4990).
 
     Clause 1 needs the seat, and the seat is written only in the provenance
     marker (`agent=`): every seat pushes under one GitHub login, so a comment's
@@ -2838,6 +3019,10 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
             f"verdict stands until a later approve names the head it covers"
         ]
     if _covers_head(latest, head):
+        if _blocks_on_head(pr, head):
+            clearance = _clearance_seat_reason(pr, latest, cfg, prov)
+            if clearance:
+                return [clearance]
         return []
     return [
         f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
@@ -3030,7 +3215,11 @@ def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
     return False
 
 
-def _gate_review(pr: dict[str, Any]) -> list[str]:
+def _gate_review(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """Open change requests block: a formal one, or a verdict posted as a comment.
 
     This gate no longer demands an approving review from a non-author, and it no
@@ -3044,7 +3233,10 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
 
     `_verdict_value_reason` is the value gate, and it runs here, before the
     coverage gate: a PR whose newest verdict blocks must not be carried to a
-    merge by a `reviewed:agent` label (DIG-4878).
+    merge by a `reviewed:agent` label (DIG-4878). A clearance of a block also
+    needs a non-author seat, so the value gate is handed the same reviewer
+    configuration and provenance reader the coverage gate uses (item 3 of
+    DIG-4990).
 
     Both arms are scoped to the head the PR stands at. `reviewDecision` is an
     aggregate GitHub keeps after the branch moves, and a posted verdict keeps
@@ -3057,7 +3249,7 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
             reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_verdict_value_reason(pr))
+    reasons.extend(_verdict_value_reason(pr, cfg, prov))
     return reasons
 
 
@@ -3873,9 +4065,13 @@ def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
 
 
 def _provenance_fields(body: str) -> dict[str, str]:
-    """The `digithings-review` marker's fields, lower-cased keys."""
+    """The `digithings-review` marker's fields, lower-cased keys.
+
+    A marker inside a fence or an inline span is a quoted example, not a claim:
+    the body is read with its code taken out (#4990).
+    """
     fields: dict[str, str] = {}
-    for marker in _PROVENANCE_RE.finditer(body):
+    for marker in _PROVENANCE_RE.finditer(_strip_code_blocks(body)):
         for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
             fields[match.group("key").lower()] = match.group("value")
     return fields
@@ -3897,7 +4093,7 @@ def _scope_head(body: str) -> str:
     one when the comment carries no provenance marker of its own.
     """
     head = ""
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
         if found:
             head = found.group("sha")
@@ -3911,7 +4107,11 @@ def _carries_review_evidence(body: str, marker_literal: str) -> bool:
     posted verdict marker. The first is the coverage hatch, the second is the
     review rule's own format, and the third is the marker the queue reads for
     a blocking verdict.
+
+    A shape that appears only inside a fence or an inline span is quoted, not
+    posted: the body is read with its code taken out (#4990).
     """
+    body = _strip_code_blocks(body)
     if marker_literal in body:
         return True
     if _VERDICT_LINE_RE.search(body):
@@ -4690,7 +4890,7 @@ def evaluate(
     unreadable = _ensure_comments(pr, repo)
     if unreadable:
         reasons.append(unreadable)
-    reasons.extend(_gate_review(pr))
+    reasons.extend(_gate_review(pr, policy.review_independence, prov))
     coverage_reasons, review_evidence, deferred = _review_coverage(
         pr, repo, policy.review_independence, prov
     )

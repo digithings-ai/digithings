@@ -1006,6 +1006,280 @@ def test_a_comment_without_the_marker_is_ignored() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
+# --- a marker a comment only *shows* is not a verdict (#4990) ------------------
+#
+# #6197 merged on the author's own 18:43 reply. The reply was a write-up, and it
+# quoted the reviewer template inside a ``` fence — including a
+# `verdict=approve` marker and a `digithings-review` line with
+# `agent=<your-seat-uuid>`. The queue read the quoted approve as the newest
+# verdict on the PR and merged over three standing changes-requested verdicts.
+# #6196 had already taught the reader about sentences and blockquotes; a fence
+# is neither, so the quote still read as a claim.
+
+_QUOTED_TEMPLATE_REPLY = """\
+Guard's write-up of what happened here, with the template I was asked to use:
+
+```
+<!-- opencode-power-pack:code-review verdict=approve scope=digithings-ai/digithings#6197@{head} -->
+<!-- digithings-review agent=<your-seat-uuid> run=<your-run-id> head={head} -->
+```
+
+That is the marker the reviewer should post once the finding is fixed.
+"""
+
+
+def test_a_quoted_approve_inside_a_fence_does_not_clear_a_block() -> None:
+    """The exact #6197 shape: an author reply quoting the template is not an approve."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T17:11:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T18:05:00Z"),
+            {
+                "id": "IC_kwDO6197_reply",
+                "author": {"login": "author-seat"},
+                "body": _QUOTED_TEMPLATE_REPLY.format(head=head),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_approve_inside_an_inline_code_span_does_not_clear_a_block() -> None:
+    """An inline span is code too: `<!-- … verdict=approve … -->` in a sentence."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    f"Reviewers post `<!-- opencode-power-pack:code-review verdict=approve "
+                    f"scope=digithings-ai/digithings#6197@{head} -->` when done.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_prose_approve_in_an_inline_span_does_not_clear_a_block() -> None:
+    """A `Review verdict:` line is a verdict too: shown in backticks it claims nothing."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer wrote `Review verdict: approve` before the finding was "
+                    f"closed; the block still stands at `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_prose_changes_requested_in_an_inline_span_does_not_block() -> None:
+    """The same rule the other way round: a shown block is not a block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="approve", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "When a finding is open, write `Review verdict: changes requested` "
+                    f"and name the head `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_prose_verdict_with_the_verdict_word_in_backticks_is_still_read() -> None:
+    """Only a shown *token* is a quote: `Review verdict: `approve`` is posted."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_value_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "Review verdict: `approve`\n\n"
+                    f"At `{head[:12]}` the finding is closed.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_quoted_approve_inside_a_tilde_fence_does_not_clear_a_block() -> None:
+    """`~~~` fences a block as surely as ``` does."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_tilde",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "~~~\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                    "~~~\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_an_unterminated_fence_still_quotes_the_marker() -> None:
+    """A fence nobody closed still renders as code, so it still quotes."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_open_fence",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_changes_requested_does_not_block() -> None:
+    """The rule cuts both ways: quoting a block writes no block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_quote_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer's earlier verdict was:\n\n"
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested "
+                    f"scope=#6197@{head} -->\n"
+                    "```\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_marker_outside_the_fence_is_still_read() -> None:
+    """Stripping code must not blind the reader to the marker posted below it."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_posted",
+                "author": {"login": "reviewer"},
+                "body": (
+                    "Example of the template:\n\n"
+                    "```\n<!-- opencode-power-pack:code-review verdict=approve -->\n```\n\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_provenance_marker_that_is_not_a_uuid_names_no_seat() -> None:
+    """`<your-seat-uuid>` is a placeholder, not a seat the queue can hold a block to."""
+    assert mq._comment_seat({"agent": "<your-seat-uuid>"}) == ""
+    assert mq._comment_seat({"agent": "opencode seat"}) == ""
+    assert mq._comment_seat({"agent": "6AAB1CEA-7E42-4D2B-9E3E-9D3F5C1B2A10"}) == (
+        "6aab1cea-7e42-4d2b-9e3e-9d3f5c1b2a10"
+    )
+
+
+def test_a_quoted_provenance_marker_is_not_read_as_provenance() -> None:
+    """A quoted `digithings-review` line is an example, not a claim about a seat."""
+    body = (
+        "```\n"
+        "<!-- digithings-review agent=54a431af-501a-47d9-83a9-c1d5808809c4 "
+        "run=11111111-1111-4111-8111-111111111111 head=" + "a" * 40 + " -->\n"
+        "```\n"
+    )
+    assert mq._provenance_fields(body) == {}
+
+
 def test_a_pr_without_a_comments_key_is_not_a_clearance() -> None:
     """A missing key is a missing signal: not an exception, and not a clearance.
 
@@ -1724,6 +1998,254 @@ def test_a_same_head_approve_does_not_clear_the_seats_block_by_itself() -> None:
     )
 
 
+# --- a clearance names a seat that did not write the PR -------------------------
+#
+# DIG-4990, item 3. Clause 2 read the newest readable verdict, so a
+# `changes_requested` whose seat could not be read was cleared by the next
+# comment that said "approve" — including the author's own reply. #6197 is the
+# shape: the author's write-up was the newest verdict, and the queue read it as
+# one. The block now survives an approve that names no seat, and an approve
+# from a seat that wrote the PR.
+
+
+def _clearance_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    comments: list[dict[str, Any]],
+    *,
+    head: str = "d" * 40,
+    prov: Any = None,
+) -> list[str]:
+    """The value gate's reasons for one comment record, with Paperclip faked."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(comments, head_sha=head)
+    return mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="enforce"), prov or _paperclip()
+    )
+
+
+def test_an_author_seats_approve_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author's own reply is not a second sign-off (#6197, item 3).
+
+    The block carries no seat — the shape 31 verdicts since #6196 were written
+    in — so clause 1 has nothing to hold it to and clause 2 decides. The newest
+    approve comes from the seat whose commits are on the branch, so the block
+    stands.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in reasons
+    ), reasons
+
+
+def test_an_approve_with_no_seat_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A quotation-free "approve" with no provenance is still not a clearance.
+
+    This is the second half of the same defect: the comment says approve and
+    names the head, but no `agent=` says who said it, so the queue cannot show
+    it came from a seat that did not write the PR.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any("names no reviewer seat" in reason for reason in reasons), reasons
+
+
+def test_a_non_author_seats_approve_clears_a_seatless_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The way out is unchanged: another seat's approve on the head clears it."""
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_shadow_mode_measures_a_clearance_without_refusing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shadow keeps merging: the new condition is enforced only in `enforce`.
+
+    `shadow` is a measurement of the reviewer gate, and a measurement that
+    refuses is not a measurement. The shipped policy is `enforce`; this pins
+    the switch so a shadow run does not silently become a second gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
+    head = "d" * 40
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    reasons = mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="shadow"), _paperclip()
+    )
+    assert reasons == []
+
+
+def test_an_approve_with_no_seat_is_enough_when_no_block_stands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The condition is on a clearance, not on every approve.
+
+    A PR with no `changes_requested` on its head is judged by the coverage gate
+    and by nothing new: this change must not demand provenance from a review
+    that clears nothing.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_a_block_on_a_head_the_pr_left_needs_no_non_author_approve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The head moving is not a clearance: the stale block is already spent.
+
+    A block scoped to a commit the PR has left asks no seat for anything
+    (`verdict_applies_to_head`), so an approve on the new head is not read as
+    clearing it.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha="e" * 40,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_the_author_seats_approve_does_not_clear_the_block_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wiring, not just the helper: `evaluate` refuses on the value gate.
+
+    The same PR also fails the reviewer-independence gate, which is the point:
+    the two gates agree, and the value gate no longer lets the author's reply
+    spend a block the coverage gate then refuses to count.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    head = "d" * 40
+    run = "00000000-0000-0000-0000-000000000000"
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(run, AUTHOR_AGENT)],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in verdict.reasons
+    ), verdict.reasons
+
+
 def test_a_same_head_approve_withdrawing_the_block_clears_it() -> None:
     """The way out: the approving comment says it withdraws the block.
 
@@ -1826,6 +2348,93 @@ def test_a_withdrawal_naming_no_head_does_not_clear_a_scoped_block() -> None:
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def _approve_with_withdrawal_line(*, head: str, line: str) -> dict[str, Any]:
+    """The same-seat approve on the head, carrying `line` as its withdrawal."""
+    comment = _seat_verdict_comment(
+        seat=SECURITY_SEAT,
+        verdict="approve",
+        head_sha=head,
+        created="2026-10-21T14:59:53Z",
+    )
+    comment["body"] += line
+    return comment
+
+
+def _pr_with_same_head_block(approve: dict[str, Any]) -> dict[str, Any]:
+    """A PR whose security-desk block on the current head is the open finding."""
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def test_a_withdrawal_quoted_in_an_inline_span_does_not_clear_the_block() -> None:
+    """#4990: a line a comment only shows is not a claim, even a `Withdraws:` line.
+
+    The verdict readers stop at code (#6197). `Withdraws:` arrived later
+    (DIG-5246) and was read from the raw comment, so a reviewer who quoted the
+    syntax beside an approve cleared their own block by accident.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"Do not paste this:\n\n`Withdraws: {head}`\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.verdict == "approve"
+    assert not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_quoted_in_a_fence_does_not_clear_the_block() -> None:
+    """The fenced half of the same rule: a template in a fence withdraws nothing."""
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"```\nWithdraws: {head}\n```\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_with_the_sha_in_backticks_still_clears_the_block() -> None:
+    """The quote rule must not break the real line: a sha in backticks is a sha.
+
+    The `Withdraws:` token is outside code here, so the line is a claim about
+    the commit it names — which is exactly how a reviewer writes it.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(head=head, line=f"Withdraws: `{head}`\n")
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.withdrawal
+    assert posted.withdrawn_heads == (head,)
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert verdict.eligible, verdict.reasons
 
 
 # --- a block whose `scope=` did not parse (DIG-5630) ---------------------------

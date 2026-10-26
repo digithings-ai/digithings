@@ -237,6 +237,45 @@ IN_SESSION_VERDICT_RE = re.compile(
     re.I | re.M,
 )
 
+# A fenced block is a quote. One reviewer template copied into a reply carried
+# `verdict=approve` inside a fence and merged #6197; the same template can carry
+# a `Review verdict:` line, and this parser reads the first decisive line. So a
+# verdict line inside a fence is an example, not a claim (DIG-4990), the same
+# rule the merge queue applies when it strips fences before reading a marker.
+FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+
+
+def strip_fenced_blocks(text):
+    """``text`` with fenced code blocks (backtick or tilde) taken out.
+
+    Removed lines become a bare newline, so the line-anchored verdict reader
+    still sees the text that is left at the line numbers it had. An
+    unterminated fence runs to the end of the text, and a closing fence matches
+    the character and length of the opening one, so a ``` block cannot be
+    closed by ~~~.
+    """
+    kept = []
+    fence = ""
+    for line in str(text or "").splitlines(keepends=True):
+        if fence:
+            match = FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
 # A separator ("-", an en or em dash) starts the review's own summary and ends
 # the verdict: "changes requested - #5968 @ 36fad1f9" is the verdict
 # "changes requested".
@@ -329,8 +368,11 @@ def in_session_verdict_state(body):
     This is the one place that reads a verdict line, so the local-ci
     ``review-applied`` producer and the merge queue read the fleet's verdicts
     the same way.
+
+    Fenced blocks are removed first: a verdict line inside a fence is an example
+    a comment quotes, not a claim it makes (DIG-4990).
     """
-    for match in IN_SESSION_VERDICT_RE.finditer(body or ""):
+    for match in IN_SESSION_VERDICT_RE.finditer(strip_fenced_blocks(body)):
         state = verdict_state(verdict_phrase(match.group("rest")))
         if state != "COMMENTED":
             return state

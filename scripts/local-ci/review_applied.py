@@ -6,7 +6,12 @@ develop. It passes only when:
 
 - (a) at least one review pass left comments on the PR. That can be Chris's
   in-session review comment (``AGENT_REVIEW_MARKER``) or a reviewer bot
-  (Bugbot, Copilot, CodeRabbit, Claude ``/code-review``, ...); and
+  (Bugbot, Copilot, CodeRabbit, Claude ``/code-review``, ...). A comment that
+  only *quotes* the marker in code, or *names* it in a sentence, is not a
+  review pass (DIG-4990). An in-session pass whose provenance names a
+  different head is not a pass for this head either: ``#6451`` and ``#6460``
+  went green on 26 Oct 2026 on a pass that named the head they had left
+  (DIG-4990); and
 - (b) every review thread is resolved, OR is followed by a fix commit (pushed
   after the comment) and a reply on that thread.
 
@@ -43,6 +48,114 @@ APPLIED_CTX = "review-applied"
 # In-session review marker: the comment body fragment an in-session review
 # posts (same marker scripts/check_review_coverage.py looks for).
 AGENT_REVIEW_MARKER = "<!-- in-session-review -->"
+
+# A marker *shown* in a code block or an inline span, or *named* in a sentence,
+# is not a marker that was posted. On 26 Oct 2026 nine CI-triage notes that
+# described the marker therefore contained it, and any one of them would have
+# turned this check green with no review having happened (DIG-4990, the same
+# class as #6197). The reader below takes the code out first, then asks whether
+# anything but HTML comments is left on the line the marker sits on: a posted
+# marker is a line of its own, a quoted or described one is not.
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_PROVENANCE_HEAD_RE = re.compile(r"\bhead=([0-9a-fA-F]{7,40})\b")
+
+
+def _strip_fenced_blocks(body):
+    """The body with fenced code blocks (``` and ~~~) taken out.
+
+    Removed lines become a bare newline, so line numbers and the line-anchored
+    readers keep working on the text that is left. Mirrors the reader
+    ``scripts/merge_queue.py`` uses, so the two gates agree on what is code.
+    """
+    kept = []
+    fence = ""
+    for line in body.splitlines(keepends=True):
+        if fence:
+            match = _FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = _FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def _strip_code_blocks(body):
+    """The body with fenced blocks *and* inline code spans taken out."""
+    return _INLINE_CODE_RE.sub(" ", _strip_fenced_blocks(str(body or "")))
+
+
+def carries_agent_review_marker(body):
+    """True when the comment *posts* the in-session marker.
+
+    A marker inside a fence or an inline span is quoted, not posted, and a
+    marker inside a sentence or a blockquote is described, not posted. Both are
+    how a note *about* a review reads, and neither is a review (DIG-4990). A
+    posted marker is on a line of its own; a provenance marker beside it on that
+    same line is still that line's only content.
+    """
+    text = _strip_code_blocks(body)
+    if AGENT_REVIEW_MARKER not in text:
+        return False
+    for line in text.splitlines():
+        if AGENT_REVIEW_MARKER not in line:
+            continue
+        if not _HTML_COMMENT_RE.sub("", line).strip():
+            return True
+    return False
+
+
+def _posted_head(body):
+    """The head a *posted* in-session marker names in its provenance, if any.
+
+    The provenance sits beside the marker, on the marker's own line or on the
+    HTML-comment-only line after it (the fleet's reviews write it that way).
+    A ``head=`` inside code or in prose is not provenance and is not read.
+    Returns a lower-case hex prefix, or None when the marker names no head.
+    """
+    lines = _strip_code_blocks(body).splitlines()
+    for index, line in enumerate(lines):
+        if AGENT_REVIEW_MARKER not in line:
+            continue
+        if _HTML_COMMENT_RE.sub("", line).strip():
+            continue
+        candidates = [line]
+        if index + 1 < len(lines):
+            following = lines[index + 1]
+            if not _HTML_COMMENT_RE.sub("", following).strip():
+                candidates.append(following)
+        for candidate in candidates:
+            match = _PROVENANCE_HEAD_RE.search(candidate)
+            if match:
+                return match.group(1).lower()
+    return None
+
+
+def _names_this_head(named, head):
+    """True when a provenance head and the PR head are the same commit.
+
+    Accepts the short form either side (a review may write 12 hex chars, the
+    API returns 40). An unknown head on either side cannot be compared, so it
+    does not reject the pass.
+    """
+    named = str(named or "").lower()
+    head = str(head or "").lower()
+    if not named or not head:
+        return True
+    return head.startswith(named) or named.startswith(head)
+
 
 # Reviewer-bot logins, bare and [bot]-suffixed (REST often returns the suffix,
 # `gh pr view --json` the bare login). github-advanced-security posts CodeQL
@@ -282,8 +395,12 @@ _PP_APPROVING = frozenset({"approved", "approve"})
 
 def marker_state(body):
     """CHANGES_REQUESTED / APPROVED from a power-pack marker's ``verdict=``,
-    or None when the comment carries no readable marker verdict."""
-    for m in _PP_MARKER_RE.finditer(body or ""):
+    or None when the comment carries no readable marker verdict.
+
+    A marker inside a fence or an inline span is a quoted example, not a posted
+    verdict (DIG-4990), so the body is read with its code taken out.
+    """
+    for m in _PP_MARKER_RE.finditer(_strip_code_blocks(body)):
         fields = {f.group("key").lower(): f.group("value")
                   for f in _PP_FIELD_RE.finditer(m.group("fields"))}
         v = fields.get("verdict", "").strip().strip("'\";").lower().replace("-", "_")
@@ -299,7 +416,7 @@ def comment_state(body):
     state = marker_state(body)
     if state is not None:
         return state
-    if AGENT_REVIEW_MARKER in (body or ""):
+    if carries_agent_review_marker(body):
         return in_session_state(body)
     return None
 
@@ -421,7 +538,8 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
     key = (repo, pr_number)
     if key in _PR_CONTEXT:
         return _PR_CONTEXT[key]
-    context = {"login": None, "body": "", "identity": {}, "push_times": {}}
+    context = {"login": None, "body": "", "identity": {}, "push_times": {},
+               "head": None}
     data = None
     if run_rest is not None:
         try:
@@ -439,6 +557,7 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
             or (data.get("author") or {}).get("login")
         )
         context["body"] = data.get("body") or ""
+        context["head"] = (data.get("head") or {}).get("sha") or None
         commits = data.get("commits")
         if not isinstance(commits, list):
             # The pull endpoint returns a count in `commits`; the list lives on
@@ -493,7 +612,14 @@ def _filter_passes(passes, pr_number, context):
         if commit_id:
             push_at = (context.get("push_times") or {}).get(commit_id)
         else:
-            # A comment carries no commit: it speaks about the head.
+            # A comment carries no commit: it speaks about the head, unless
+            # its provenance names a different one. A pass that names another
+            # head is a review of that head, not this one: #6451 and #6460
+            # were both green on a pass naming the head they had left.
+            named = _posted_head(candidate.get("body"))
+            if not _names_this_head(named, context.get("head")):
+                dropped.append(dict(candidate, reason="names another head"))
+                continue
             push_at = _head_push_at(context)
         if review_pass_filter.review_too_close_to_push(candidate.get("at"), push_at):
             dropped.append(dict(candidate, reason="posted inside the push window"))
@@ -603,7 +729,7 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
     for c in comments:
         if not isinstance(c, dict):
             continue
-        if AGENT_REVIEW_MARKER in (c.get("body") or ""):
+        if carries_agent_review_marker(c.get("body") or ""):
             try:
                 login = (c.get("user") or {}).get("login")
             except AttributeError:

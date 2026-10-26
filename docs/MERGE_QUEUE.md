@@ -195,6 +195,29 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
 
+**A clearance names a seat that did not write the PR.** When a `changes_requested` on the
+current head would be cleared by the newest approve, that approve must carry the
+provenance marker's `agent=`, and that seat must not be one of the seats that wrote the
+PR (#4990, item 3). A comment that says "approve" with no marker, or one from an
+authoring seat, clears nothing while the block stands: `#6197` merged on the author's own
+write-up, and that write-up was the newest verdict. The authoring seats are read from the
+commits and their Paperclip runs (`_author_context`), never from the ticket's assignee —
+the assignee is the seat asked to move the ticket along, and reading it as the author
+refused the ticket owner's review on `#6145` (DIG-4809). When the queue cannot read who
+wrote the PR — the API is down, or a commit names an author it cannot resolve — this
+condition adds no gate of its own: the reviewer-independence row above is where that
+failure is reported, and it defers the PR rather than clearing it.
+
+**A marker inside code is quoted, not posted.** No clause reads a marker, a provenance
+line or a `Review verdict:` line that sits inside a fenced code block (``` or ~~~) or an
+inline code span: what a reader sees as code is being shown, not claimed, and a quote
+must neither block nor clear anything. `#6197` merged on the author's own write-up, which
+quoted the reviewer template inside a fence; #6196 had taught the reader about sentences
+and blockquotes, and a fence is neither (#4990). A fence nobody closed swallows the rest
+of the comment, because that is how Markdown renders it. The `review-applied` producer
+reads the same rule: its verdict line comes from the shared parser in
+`scripts/review_pass_filter.py`, which takes fenced blocks out before it reads a line.
+
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
 pushing under this org shares one GitHub login, so a comment's author cannot say who
@@ -219,7 +242,9 @@ written once:
   marker and cleared the block through the provenance head.
 - A **prose verdict names the head** through any sha written in the comment — on the
   verdict line, in the sentence after it, or in the scope line the review opens with —
-  and through the provenance marker's `head=`.
+  and through the provenance marker's `head=`. Inline code is kept here, because a sha
+  a reviewer writes in backticks (`3f2a9c1d4b5e`) is still the sha they named; only the
+  `Review verdict:` token has to sit outside a span to count as posted (#4990).
 
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.
@@ -244,8 +269,10 @@ Withdraws: changes requested on 3f2a9c1d4b5e
   it names, not a password that unlocks the seat.
 - The withdrawal is **part of the approve**: a `Withdraws:` line on its own, in a comment
   with no approving verdict, still leaves the block standing.
-- Do not paste the line into a comment to show someone the syntax: the queue reads the
-  raw comment, so a quoted `Withdraws:` beside an approve is a live withdrawal.
+- Do not paste the line into a comment to show someone the syntax: a `Withdraws:`
+  line inside a fenced block or an inline code span is a quote, not a claim, and it
+  withdraws nothing — the same rule the verdict readers follow (#4990). Write it
+  outside code, and it is a live withdrawal.
 
 The line is what `#6280` was missing: two blocking findings were still open when the same
 seat approved the same head 1h43m later, and the queue read the later verdict as a
