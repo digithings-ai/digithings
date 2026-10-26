@@ -107,7 +107,7 @@ def required_contexts(protection):
 
 
 def workflow_producers(workflow_dir, ctx):
-    """Workflow files whose JOB name is exactly ctx - the check-run name."""
+    """Workflow files with a JOB name of exactly ctx - the check-run name."""
     hits = []
     if not os.path.isdir(workflow_dir):
         return hits
@@ -115,11 +115,61 @@ def workflow_producers(workflow_dir, ctx):
         if not name.endswith(WORKFLOW_SUFFIXES):
             continue
         p = os.path.join(workflow_dir, name)
-        for line in _read(p).splitlines():
-            if line.strip() == "name: " + ctx:
-                hits.append(p)
-                break
+        if ctx in _job_names(_read(p)):
+            hits.append(p)
     return hits
+
+
+def _job_names(text):
+    """The check-run names the workflow's jobs publish.
+
+    GitHub names a job's check run after its `name:`, or after the job id when
+    the job has no `name:`. Only a job-level `name:` counts: a workflow-level
+    `name:` (no indentation) names the workflow, and a step's `- name:` names a
+    step, so neither publishes a check run and neither is a producer. Counting
+    one of those would let a rename look like a second producer.
+    """
+    names = []
+    in_jobs = False
+    job_indent = None
+    job_id = None
+    job_name = None
+    child_indent = None
+
+    def flush():
+        if job_id is not None:
+            names.append(job_name if job_name is not None else job_id)
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            flush()
+            job_id = job_name = None
+            in_jobs = stripped == "jobs:"
+            job_indent = None
+            continue
+        if not in_jobs:
+            continue
+        if job_indent is None:
+            job_indent = indent
+        if indent == job_indent and not stripped.startswith("- "):
+            flush()
+            job_id = stripped.split(":", 1)[0].strip().strip("'\"")
+            job_name = None
+            child_indent = None
+            continue
+        if job_id is None or stripped.startswith("- "):
+            continue
+        if child_indent is None:
+            child_indent = indent
+        if indent == child_indent and stripped.startswith("name:"):
+            job_name = stripped.split(":", 1)[1].strip().strip("'\"") or None
+    flush()
+    return names
 
 
 def host_producers(host_dir, ctx):

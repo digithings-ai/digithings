@@ -1918,6 +1918,80 @@ class ReviewCoverageEvidenceTest(unittest.TestCase):
         self.assertNotIn("def review_ci_status(", src)
 
 
+class ProducerGuardTickTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4507: the tick asks the producer guard once, and survives its report.
+
+    The guard's own `main()` prints UNREADABLE, but the daemon calls `run()`,
+    so the per-tick call site owns the reporting. A tick that logged `ok` while
+    the protection could not be read would be a silent pass: healthy-looking
+    logs over a guard that cannot see. These tests pin the call itself, because
+    deleting it would otherwise leave the suite green.
+    """
+
+    def setUp(self):
+        self._isolate()
+        self._saved = {}
+        self.logs = []
+        self._saved_env = dict(os.environ)
+        os.environ["LOCAL_CI_MAIN"] = os.path.abspath(os.path.join(_HERE, "..", ".."))
+        os.environ.pop("LOCAL_CI_WT", None)
+        self._saved_argv = list(sys.argv)
+
+    def tearDown(self):
+        for name, value in self._saved.items():
+            setattr(_mod, name, value)
+        sys.argv = self._saved_argv
+        self._unisolate()
+
+    def _stub(self, name, value):
+        if name not in self._saved:
+            self._saved[name] = getattr(_mod, name)
+        setattr(_mod, name, value)
+
+    def _run_tick(self):
+        """main() with every side effect stubbed: only the guard stays real."""
+        self._stub("_guard", lambda *a, **kw: None)
+        self._stub("watchdog", lambda: None)
+        self._stub("acquire_lock", lambda: True)
+        self._stub("release_lock", lambda: None)
+        self._stub("prune_claims", lambda: None)
+        self._stub("refresh_checkout", lambda: None)
+        self._stub("list_prs", lambda base: [])
+        self._stub("skip_reason", lambda: None)
+        self._stub("pending", lambda prs, applied, dry=False: [])
+        self._stub("pending_applied", lambda prs: [])
+        self._stub("pending_reviews", lambda prs: [])
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", lambda *a: None)          # protection unreadable
+        sys.argv = ["local_ci.py"]
+        stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            _mod.main()
+        finally:
+            sys.stdout = stdout
+
+    def test_the_tick_asks_the_guard_once(self):
+        calls = []
+        self._stub("check_required_context_producers", lambda: calls.append(1))
+        self._run_tick()
+        self.assertEqual(calls, [1], "the tick must ask the guard exactly once")
+
+    def test_an_unreadable_protection_is_reported_and_never_logged_ok(self):
+        self._run_tick()
+        self.assertTrue(any("UNREADABLE (not failed)" in m for m in self.logs), self.logs)
+        self.assertFalse(any(m.startswith("required-context producers: ok") for m in self.logs),
+                         self.logs)
+
+    def test_a_guard_error_is_logged_and_never_raised(self):
+        def boom(*a):
+            raise RuntimeError("boom")
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", boom)
+        _mod.check_required_context_producers()   # must not raise
+        self.assertTrue(any("guard error" in m for m in self.logs), self.logs)
+
+
 class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
     """DIG-4794: the `local-ci` status must name the build that made it green.
 

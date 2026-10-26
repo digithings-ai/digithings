@@ -623,6 +623,11 @@ def pending_reviews(prs):
     The judgement is evidence only (see review_judged_at): the verdict that
     gates main comes from the ci-review-coverage workflow, which is the single
     producer of that required context since DIG-4507.
+
+    A judged head is re-walked once an hour on purpose, success included: the
+    walk is capped at REVIEW_MAX_PER_TICK per tick, so an open promotion costs
+    at most one extra walk per hour and the evidence stays fresh while reviews,
+    approvals and labels land on the head.
     """
     out = []
     for p in prs:
@@ -2747,6 +2752,12 @@ def check_required_context_producers():
     reads main's protection live and checks that every required context has
     exactly one producer. A failure here is logged and is never fatal to the
     tick: an unreadable protection is reported, not failed.
+
+    The report is logged per repo, because this is the only automated path:
+    the guard's own `main()` prints UNREADABLE, but the tick calls `run()`.
+    Printing `ok` for a repo whose protection could not be read would be a
+    silent pass - a tick that looks healthy while the guard is blind - so
+    `ok` is written only for the repos that were actually checked.
     """
     try:
         import importlib.util
@@ -2767,11 +2778,17 @@ def check_required_context_producers():
                 return False, None
 
         rep = mod.run(host_dir=here, reader=reader)
+        readable = [r["repo"] for r in rep["repos"] if r.get("readable")]
+        for r in rep["repos"]:
+            if not r.get("readable"):
+                log("required-context producers: %s protection UNREADABLE (not failed)"
+                    % r["repo"])
         if rep["violations"]:
             log("required-context producers: VIOLATION " + json.dumps(rep["violations"]))
+        elif readable:
+            log("required-context producers: ok " + json.dumps(readable))
         else:
-            log("required-context producers: ok "
-                + json.dumps([r["repo"] for r in rep["repos"]]))
+            log("required-context producers: nothing checked: no readable protection")
     except Exception as e:
         log(f"required-context producers: guard error {type(e).__name__}: {e}")
 

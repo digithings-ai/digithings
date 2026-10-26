@@ -92,6 +92,25 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(rep["violations"], [])
         self.assertFalse(rep["repos"][0]["readable"])
 
+    def test_a_workflow_level_name_is_not_a_producer(self):
+        """`name:` at the top of the file names the workflow, not a check run."""
+        self.write("wt/.github/workflows/ci-x.yml", "name: %s\njobs:\n  j:\n    runs-on: ubuntu-latest\n" % CTX)
+        rep = g.run(repos=[self.spec], host_dir=self.tmp, reader=reader_for(prot([CTX])))
+        self.assertEqual(len(rep["violations"]), 1, rep["repos"])
+
+    def test_a_step_name_is_not_a_producer(self):
+        """A step's `- name:` names the step, not a job, so it is not a check run."""
+        self.write("wt/.github/workflows/ci-x.yml",
+                   "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - name: %s\n        run: true\n" % CTX)
+        rep = g.run(repos=[self.spec], host_dir=self.tmp, reader=reader_for(prot([CTX])))
+        self.assertEqual(len(rep["violations"]), 1, rep["repos"])
+
+    def test_a_job_id_is_the_check_run_name_when_the_job_has_no_name(self):
+        """GitHub falls back to the job id, so a producer may carry no `name:`."""
+        self.write("wt/.github/workflows/ci-x.yml", "jobs:\n  %s:\n    runs-on: ubuntu-latest\n" % CTX)
+        rep = g.run(repos=[self.spec], host_dir=self.tmp, reader=reader_for(prot([CTX])))
+        self.assertEqual(rep["violations"], [])
+
     def test_no_producer_at_all_is_a_violation(self):
         rep = g.run(repos=[self.spec], host_dir=self.tmp, reader=reader_for(prot([CTX])))
         self.assertEqual(len(rep["violations"]), 1)
