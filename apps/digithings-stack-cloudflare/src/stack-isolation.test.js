@@ -306,7 +306,7 @@ describe("warning sink", () => {
 });
 
 describe("getStackStatus", () => {
-  it("reports all six groups as unloaded before any traffic", () => {
+  it("reports all seven groups as unloaded before any traffic", () => {
     expect(getStackStatus()).toEqual({
       ok: true,
       service: "digithings-stack",
@@ -314,6 +314,7 @@ describe("getStackStatus", () => {
         "key-proxy": { state: "unloaded", lastError: null },
         "mcp-edge": { state: "unloaded", lastError: null },
         "market-data": { state: "unloaded", lastError: null },
+        "digiquant-mcp": { state: "unloaded", lastError: null },
         "dashboard-api": { state: "unloaded", lastError: null },
         digichat: { state: "unloaded", lastError: null },
         "container-routes": { state: "unloaded", lastError: null },

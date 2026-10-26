@@ -44,6 +44,7 @@ export type StackModuleName =
   | "key-proxy"
   | "mcp-edge"
   | "market-data"
+  | "digiquant-mcp"
   | "dashboard-api"
   | "digichat"
   | "container-routes";
@@ -65,6 +66,7 @@ const MODULE_NAMES: StackModuleName[] = [
   "key-proxy",
   "mcp-edge",
   "market-data",
+  "digiquant-mcp",
   "dashboard-api",
   "digichat",
   "container-routes",
@@ -75,6 +77,7 @@ function freshHealth(): Record<StackModuleName, StackModuleHealth> {
     "key-proxy": { state: "unloaded", lastError: null },
     "mcp-edge": { state: "unloaded", lastError: null },
     "market-data": { state: "unloaded", lastError: null },
+    "digiquant-mcp": { state: "unloaded", lastError: null },
     "dashboard-api": { state: "unloaded", lastError: null },
     digichat: { state: "unloaded", lastError: null },
     "container-routes": { state: "unloaded", lastError: null },
@@ -181,6 +184,7 @@ export function getStackStatus(): StackStatus {
       "key-proxy": { ...health["key-proxy"] },
       "mcp-edge": { ...health["mcp-edge"] },
       "market-data": { ...health["market-data"] },
+      "digiquant-mcp": { ...health["digiquant-mcp"] },
       "dashboard-api": { ...health["dashboard-api"] },
       digichat: { ...health["digichat"] },
       "container-routes": { ...health["container-routes"] },

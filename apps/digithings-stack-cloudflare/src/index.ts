@@ -6,8 +6,10 @@
  *   key.digithings.ai    → digikey    :8005
  *   search.digithings.ai → digisearch :8002 (digikey JWT `digisearch:query`;
  *                          new external route #4063, owner-approved)
- *   mcp.digithings.ai    → digiquant-mcp :8767 (reserved; see HUMAN GATE in
- *                          wrangler.toml — route enabled only with edge auth)
+ *   mcp.digithings.ai    → digiquant market-data MCP, Worker-native
+ *                          (Durable Object + direct R2 reads; see
+ *                          src/digiquant-mcp.ts). Reserved; see HUMAN GATE in
+ *                          wrangler.toml — route enabled only with edge auth.
  *
  * workers.dev fallbacks:
  *   /healthz            → digigraph
@@ -20,7 +22,10 @@
  * matching MCP_EDGE_KEY / MCP_EDGE_KEYS (compose and self-host, where no
  * digikey mints a token). Fail-closed 401 otherwise, 403 for a valid token
  * without the server's scope. See ./mcp-edge-auth.
- * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
+ * mcp.digithings.ai is Worker-native (#DIG-2913): POST /mcp on the
+ * DigiQuantMcpAgent Durable Object, reading sealed R2 generations directly
+ * behind that same edge gate (scope `digiquant:backtest`). The hostname route
+ * stays reserved (HUMAN GATE).
  *
  * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
  * allocations, brief, performance, kpis/live, nav-series, benchmarks, ledger,
@@ -88,6 +93,12 @@ import {
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
+
+/**
+ * Durable Object class for the Worker-native digiquant MCP (DIG-2913).
+ * Wrangler requires DO classes to be exported from the entry module.
+ */
+export { DigiQuantMcpAgent } from "./digiquant-mcp-do";
 
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
@@ -494,6 +505,11 @@ export interface Env {
    * reach it from inside (see mcp-edge-auth).
    */
   DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /**
+   * Worker-native digiquant market-data MCP (DIG-2913). One pinned id
+   * (`MCP_CONTAINER_ID`) owns the 900s read cache; no container involved.
+   */
+  DIGIQUANT_MCP: DurableObjectNamespace;
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -827,21 +843,23 @@ export default {
     // surface never rides the base platform, and so a deploy of this Worker
     // stops fighting another Worker for the same digithings.ai routes.
 
-    // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
-    // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE
-    // in wrangler.toml — needs Worker-edge digikey JWT enforcement first; the
-    // MCP tools are unauthenticated localhost today). No workers.dev forwarding
-    // route ships: an unauthenticated /_stack/mcp/* forwarder must not go live.
+    // digiquant market-data MCP (DIG-2913): Worker-native. The tools read the
+    // sealed R2 generations directly (src/digiquant-mcp.ts) inside a Durable
+    // Object (src/digiquant-mcp-do.ts), so the read path no longer boots a
+    // Firecracker container. Still reachable only via the reserved
+    // mcp.digithings.ai hostname once its route is enabled (HUMAN GATE in
+    // wrangler.toml), behind the shared edge gate (`./mcp-edge-auth`: a digikey
+    // JWT carrying `digiquant:backtest`, or `x-digi-mcp-key` vs MCP_EDGE_KEY —
+    // fail-closed 503/401/403). No workers.dev forwarding route ships: an
+    // unauthenticated /_stack/mcp/* forwarder must not go live.
+    // The legacy DigiQuantMcpContainer stays declared (unrouted) until its
+    // removal sweep lands; nothing routes to MCP_STACK any more.
     if (isMcpHostname(url.hostname)) {
-      // Lazy ports import per route group (#4685).
-      return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
-        const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-        // DIG-4477: retry once on a recycled container (see
-        // ./container-retry.ts). DIG-4928: the answer for a hop that rejected
-        // with a value that is not an Error names the container it came from.
-        return fetchWithContainerRetry(() => container.fetch(request.clone()), {
-          service: "mcp",
-        });
+      return runIsolated("digiquant-mcp", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
+        // Same pinned id the container used: one DO instance owns the 900s
+        // read cache, which is the coherence the single-replica rule bought.
+        const id = workerEnv.DIGIQUANT_MCP.idFromName(MCP_CONTAINER_ID);
+        return workerEnv.DIGIQUANT_MCP.get(id).fetch(request);
       });
     }
 

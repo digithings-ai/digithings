@@ -360,8 +360,37 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
+#### Worker-native read path (DIG-2913)
+
+The market-data read path no longer needs the container: `mcp.digithings.ai`
+routes to the `DigiQuantMcpAgent` Durable Object in
+`apps/digithings-stack-cloudflare/src/digiquant-mcp.ts`, which reads the sealed
+R2 generations through the `MARKET_DATA` binding and decodes them with
+`hyparquet` — the same objects and dumper as `/v1/market/closes`. Endpoint:
+stateless Streamable HTTP `POST /mcp` (JSON responses), `GET /healthz` for
+liveness, behind the same gate as `/_stack/mcp/*`: a digikey JWT carrying
+`digiquant:backtest` (the scope the HTTP API already mints; no new scope), or
+the static `x-digi-mcp-key` matching `MCP_EDGE_KEY` (compose/self-host). No
+credential source configured is a 503; a wrong or absent credential is a 401, a
+valid JWT without the scope a 403.
+Tools: `digiquant_list_market_data`,
+`digiquant_get_price_history`, `digiquant_get_macro_series`.
+
+Two capability limits are deliberate and must not be papered over:
+`digiquant_get_price_technicals` is **not** served here (a second hand-written
+implementation of `TECHNICAL_COLUMNS` on a read path is a silent-wrong-number
+risk; it stays on the Python server until the seal carries precomputed
+indicators), and there is **no live vendor overlap** — an `as_of` after the
+manifest seal is an error (`beyond_seal`) rather than a history-only window that
+looks fresh. The 900s fresh-window cache moves into the DO instance, which is
+why one pinned id still owns the endpoint. The container class, its
+`[[containers]]` entry and the `MCP_STACK` binding remain declared but
+unrouted until the removal sweep lands.
+
 Per-component secrets (`wrangler secret put`, never committed):
-`GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
+`MCP_EDGE_KEY` (edge key for the Worker-native endpoint above and the
+`/_stack/mcp/*` proxies), `GLOOMBERB_SESSION_COOKIE` (session-gated digifetch
+tools, #4260), and the four
 R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
 archive). The read path is registry-read-only (registry inserts raise) so the
