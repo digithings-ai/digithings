@@ -270,7 +270,9 @@ Three consequences worth stating plainly.
   variant is not shipped because the marker only appeared on 2026-10-21: it would hold
   a PR whose blocking seat's earlier verdict carries no marker and whose later clearance
   does, and there is no way for that seat to clear it. The hole this closes is the
-  future one.
+  future one. The measurement predates the withdrawal clause (DIG-5246, 2026-10-26),
+  which was not re-measured: it changes only the same-head path, and `#6280` is the
+  one PR it is known to have taken.
 
 ### The `local-ci` provenance gate (DIG-4794)
 
