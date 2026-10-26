@@ -1,7 +1,11 @@
 # Design: split digikey / digigraph / digisearch off `DigiStackContainer` — DIG-2914
 
-**Status:** proposal, docs-only. No service, secret, route, or DNS change is made by
-this document. Everything under §7 marked *human-only* is gated.
+**Status:** superseded. Chris answered the `[scope]` card with **C — stop and
+re-plan the box before any port**, so §5 Steps 1–5 are not funded and no port
+starts. The re-plan is `docs/plans/2026-10-26-digistackcontainer-replan.md`; this
+document stays as the record of how the port was sized and why it stopped.
+Docs-only: no service, secret, route, or DNS change is made by this document.
+Everything under §7 marked *human-only* is gated.
 
 **Goal:** G02 Cloudflare infra & leave Supabase (`657cd9ec-cba3-467e-9afb-e2b4df7f8c44`).
 **Epic:** DIG-2904 Cloudflare cost minimum.
@@ -201,3 +205,27 @@ the digigraph/digisearch port behind a product decision.
 
 The scope choice is Chris's ([scope]); it is raised as one question card on
 DIG-2914. Until it is answered, no further port work starts.
+
+## 10. Scope decision: C — stop and re-plan (2026-10-26)
+
+Chris answered the `[scope]` card with **C: stop and re-plan the box before any
+port.**
+
+Consequences, applied:
+
+- **No port.** Steps 1–5 of §5 are not funded. No digikey cut, no digisearch
+  Worker, no digigraph rewrite.
+- **No container deletion, no deploy.** `DigiStackContainer` stays; no
+  `wrangler deploy`, no secret writes, no D1 database, no route or DNS change.
+  `key.digithings.ai` and the other stack hostnames are unchanged.
+- **DIG-5548's Worker is parked.** It is built, tested, unmerged and undeployed on
+  its branch. It is not merged as dead code and not deleted, so a later decision
+  can revive it.
+- **DIG-5549's record stands** as the evidence for the re-plan (PR #6462).
+- **The re-plan is** `docs/plans/2026-10-26-digistackcontainer-replan.md`: the fate
+  of all eleven programs, the cost while the box stays, the two live routes, and
+  the recommendation to keep the box and close the port line.
+
+That memo is the outcome this issue now carries. The port outcome in the header is
+withdrawn.
+
