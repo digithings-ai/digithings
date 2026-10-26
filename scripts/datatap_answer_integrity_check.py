@@ -24,10 +24,12 @@ an event stream, any answer not fully parseable, any discovery failure.
 
 One secret, no local persistence
 --------------------------------
-The embed token is read out of the public ``/chat`` page on every run — DataTap's
-own by default, the one the operator names otherwise.
-It is not a credential and it is not treated as one: it is a client-published
-identifier scraped from a public page, and no bypass is keyed on it.
+The embed token is read out of the public ``/chat`` page on every client run —
+DataTap's own by default, the one the operator names otherwise. A first-party
+page publishes no token at all, and none is presented; see "Two published
+shapes" below. Where a token is read it is not a credential and it is not
+treated as one: it is a client-published identifier scraped from a public page,
+and no bypass is keyed on it.
 
 The check does read one real secret, from one place. ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN``
 holds our sanctioned internal-monitor identity, and it is sent on the ``/api/chat``
@@ -59,6 +61,37 @@ the variable and the host it saw. Refusing the redirect stops the header
 travelling; pinning the host says where it may travel to. digichat
 ignores an allowlist entry shorter than 32 characters, so a value below that is
 sent and then refused; the same secret has to be in both places.
+
+Two published shapes, one contract
+----------------------------------
+The page the check reads publishes one of two shapes, and both are read. A
+client surface embeds its chat app by publishing an ``embedUrl`` and the token
+that belongs to it in a React Server Component payload; both probes then
+present that token. A first-party page of ours embeds the same app in an
+``<iframe src="{origin}/embed?host={tenant}&layout=page&...">`` and publishes no
+token at all: the tenant is authorised by the host pair — ``X-Embed-Host``
+naming the tenant the iframe names, and ``Origin`` naming the same host —
+exactly as a browser sitting on that page is authorised. A first-party run therefore
+sends no ``X-Embed-Token`` header at all, not an empty one and not a placeholder.
+
+The answer path is derived from the embed origin and never from the iframe's
+query string: the host of the request is the embed app's host, and the path is
+``/api/chat`` on it. The presentation state in that query — layout, theme,
+welcome text, suggestions — is not part of the answer path, and cutting a
+suffix off the string would append ``/api/chat`` inside the query and reach
+nothing.
+
+The house user agent
+--------------------
+Our own zone answers an unnamed agent with HTTP 403 and error 1010 on every
+path, the discovery read and the answer path alike, so a probe that presents no
+name is a permanent exit 2 rather than a verdict. The check therefore presents
+the agent the site smoke check presents, the constant ``PROBE_USER_AGENT`` in
+``apps/digithings-cron/src/probe.ts``:
+``digithings-site-smoke/1.0 (+https://github.com/digithings-ai/digithings)``.
+It rides on the discovery read and on both probes whenever the run names its
+target; the unnamed default surface keeps its previously verified header set
+byte for byte. It is a transport detail and it moves no exit code.
 
 The target is an input
 ----------------------
@@ -121,7 +154,7 @@ from urllib.error import HTTPError
 # named it — and building the URL the probes are sent to, so that the host of
 # the request is the host of the embed URL rather than whatever cutting a
 # suffix off a string happens to leave behind.
-from urllib.parse import SplitResult, urlsplit, urlunsplit
+from urllib.parse import SplitResult, parse_qs, urlsplit, urlunsplit
 
 # Imported under an alias on purpose. The read-only test greps this file for the
 # literal substring used to spell the stdlib file-opening builtin in call
@@ -200,6 +233,16 @@ EMBED_MONITOR_TOKEN_HEADER = "x-embed-monitor-token"
 # the monitor token's variable above is where the name already lives.
 EMBED_HOSTS_ENV_VAR = "ANSWER_CHECK_EMBED_HOSTS"
 
+# The agent this deployment presents when it reads one of our own surfaces.
+# The value is the constant ``PROBE_USER_AGENT`` in
+# ``apps/digithings-cron/src/probe.ts``, spelled out here because a Python
+# check cannot import it, and it is what the zone allowlists: an unnamed agent
+# is answered with HTTP 403 and "error code: 1010" on every path of the site,
+# so a run without it could only ever be exit 2. It is not a credential and it
+# moves no exit code — it is a transport detail, which is exactly why it is
+# pinned by name rather than left to urllib's default.
+PROBE_USER_AGENT = "digithings-site-smoke/1.0 (+https://github.com/digithings-ai/digithings)"
+
 # Anything a header value cannot carry: control characters (CR and LF above all)
 # and anything outside printable ASCII, which urllib cannot even encode for the
 # wire. Such a value is refused rather than sent, because urllib reports the
@@ -264,8 +307,37 @@ class ProbeError(Exception):
 
 @dataclass(frozen=True)
 class EmbedTarget:
+    """Where the answer path is, and how the tenant on it is authorised.
+
+    Two published shapes produce one of these, and they differ in how the
+    tenant is authorised. A client surface publishes an embed URL and its own
+    token, and the token is presented on every probe. A first-party page
+    publishes an iframe naming the embed origin and the tenant host and no
+    token at all, and the tenant is authorised by that host pair — the way a
+    browser on that page is. ``presents_token`` is the one place that
+    difference is read, so no caller has to remember which shape it holds.
+
+    ``tenant_host`` is empty for a client surface, which presents the host the
+    caller named instead. It is never guessed at: an empty value here means the
+    page published none, not that the page's own host may serve as one.
+    """
+
     embed_url: str
-    token: str
+    token: str = ""
+    tenant_host: str = ""
+
+    @property
+    def presents_token(self) -> bool:
+        """Whether the probes carry an ``X-Embed-Token`` header at all.
+
+        A token published by the page is presented. A first-party page
+        publishes none, and the header is then absent rather than empty: an
+        empty or invented token is a different request from the one a browser
+        on that page makes, and the surface would answer it as a different
+        caller. The environment is not consulted; only what the page
+        published.
+        """
+        return bool(self.token)
 
     @property
     def api_chat_url(self) -> str:
@@ -306,12 +378,21 @@ class CheckTarget:
     """The surface this run probes: the page to read, and the host to present.
 
     The two are named separately because they are different things. The page is
-    where the embed token is discovered; the host is the tenant key the
+    where the embed target is discovered; the host is the tenant key the
     surface resolves the assistant with.
+
+    ``named`` says whether the caller named the target at all, and it decides
+    one transport detail: the house user agent rides on a run that names its
+    target, and the unnamed default keeps the header set that was verified
+    against it byte for byte. Our own zone refuses an unnamed agent, so a named
+    run without the house agent is a permanent exit 2; the default surface is
+    reached through the same zone-shaped gate and its pins are older than this
+    rule, so the two are kept apart deliberately rather than by accident.
     """
 
     discovery_url: str
     embed_host: str
+    named: bool = False
 
 
 def _read_url_parts(url: str) -> SplitResult | None:
@@ -352,16 +433,22 @@ def resolve_target(discovery_url: str | None, embed_host: str | None) -> CheckTa
     the named page is served from, so naming a page names the whole target:
     leaving the default host beside a new page would send the tenant key of
     one surface to another.
+
+    ``named`` is set from the same two values, so a run that names either half
+    of the target is a run that presents the house user agent. A run that names
+    nothing keeps the default surface's header set exactly as it was.
     """
     url = (discovery_url or "").strip() or (os.environ.get(DISCOVERY_URL_ENV_VAR) or "").strip()
     host = (embed_host or "").strip() or (os.environ.get(EMBED_HOST_ENV_VAR) or "").strip()
     if not url:
         # Nothing named a page: the default target, host and all.
-        return CheckTarget(discovery_url=DISCOVERY_URL, embed_host=host or EMBED_HOST)
+        return CheckTarget(
+            discovery_url=DISCOVERY_URL, embed_host=host or EMBED_HOST, named=bool(host)
+        )
     if not host:
         # A named page names its own host.
         host = _url_host(url) or EMBED_HOST
-    return CheckTarget(discovery_url=url, embed_host=host)
+    return CheckTarget(discovery_url=url, embed_host=host, named=True)
 
 
 def _is_bare_host(host: str) -> bool:
@@ -544,7 +631,7 @@ def _own_token(flat: str, open_at: int) -> str | None:
     return None
 
 
-def discover_embed_target(html: str) -> EmbedTarget:
+def _discover_client_target(html: str) -> EmbedTarget:
     """Read the embed URL and token out of DataTap's own public /chat page.
 
     The page is a React Server Component payload: the JSON is escaped inside a
@@ -594,6 +681,107 @@ def discover_embed_target(html: str) -> EmbedTarget:
         # off a 401 and report *them* as broken.
         raise ProbeError("no embed token in the DataTap /chat page")
     return EmbedTarget(embed_url=embed.group(1), token=token)
+
+
+# An ``<iframe>`` that carries a ``src`` attribute. The attribute may be
+# single- or double-quoted and may carry other attributes on either side of it,
+# so the pattern asks for a quote pair and takes everything up to the matching
+# quote rather than assuming a position. ``re.DOTALL`` is on because an
+# attribute list may wrap onto a second line in a formatted page.
+_IFRAME_SRC_RE = re.compile(
+    r"<iframe\b[^>]*?\bsrc\s*=\s*(?:\"([^\"]*)\"|'([^']*)')", re.IGNORECASE | re.DOTALL
+)
+
+# The entities an attribute value carries. Decoded in one pass, because a
+# second pass would turn the text "&amp;lt;" into "<" — a value the page never
+# wrote. Only the five named entities and the two numeric spellings of the
+# apostrophe are here: they are what an HTML serialiser emits, and anything
+# else is left alone rather than guessed at.
+_HTML_ENTITY_RE = re.compile(r"&(amp|lt|gt|quot|#39|#x27);")
+_HTML_ENTITIES = {"amp": "&", "lt": "<", "gt": ">", "quot": '"', "#39": "'", "#x27": "'"}
+
+
+def _unescape_html(value: str) -> str:
+    """Decode the entities an attribute value carries, in a single pass."""
+    return _HTML_ENTITY_RE.sub(lambda found: _HTML_ENTITIES[found.group(1)], value)
+
+
+def discover_first_party_target(html: str) -> EmbedTarget | None:
+    """The embed target a first-party page names in an iframe, or ``None``.
+
+    Our own page publishes no React Server Component payload: it embeds the
+    chat app in an ``<iframe src="{origin}/embed?host={tenant}&...">`` and
+    publishes no token at all. The tenant is authorised by the host pair, so
+    the two values this reader returns are the embed origin and the host the
+    iframe names — the page's own host is a third, different host and is never
+    used as either.
+
+    The markup has to be recognisable, not merely present: an ``https`` iframe
+    whose path ends in ``/embed`` and whose ``host`` parameter is a bare host
+    name. An iframe somebody else embeds (".../survey?utm_source=docs") names
+    neither an embed origin nor a tenant, and reading it as one would send this
+    check's probes to an unrelated host. ``None`` is a page this reader cannot
+    recognise, and the caller treats that as a discovery failure (exit 2).
+
+    The query string is dropped from the returned embed URL. It carries the
+    page's presentation state — layout, theme, welcome text, suggestions — and
+    none of it is part of the answer path: ``api_chat_url`` is built from the
+    origin and the path, and a query left on the URL would end up appended
+    inside the answer path rather than after it.
+
+    A ``host`` parameter that is not a bare host name is skipped rather than
+    refused, because the value goes out as a header and a URL in it is not a
+    tenant key. Skipping leaves the page unrecognised, which is the same exit 2
+    a missing iframe produces — never a request carrying a junk key.
+    """
+    for iframe in _IFRAME_SRC_RE.finditer(html):
+        src = _unescape_html(iframe.group(1) or iframe.group(2) or "").strip()
+        parsed = _read_url_parts(src)
+        if parsed is None or parsed.scheme != "https" or not parsed.hostname:
+            continue
+        path = parsed.path.rstrip("/")
+        if not path.endswith("/embed"):
+            continue
+        tenant_host = (parse_qs(parsed.query).get("host") or [""])[0].strip()
+        if not tenant_host or not _is_bare_host(tenant_host):
+            continue
+        return EmbedTarget(
+            embed_url=urlunsplit((parsed.scheme, parsed.netloc, path, "", "")),
+            token="",
+            tenant_host=tenant_host,
+        )
+    return None
+
+
+def discover_embed_target(html: str) -> EmbedTarget:
+    """Read the embed target a discovery page publishes, in either shape.
+
+    A client surface publishes an ``embedUrl`` and the token that belongs to it
+    (``_discover_client_target``). A first-party page of ours publishes an
+    iframe naming the embed origin and the tenant host, and no token
+    (``discover_first_party_target``). Both are read, and neither is guessed at
+    from the other: a page that publishes a token gets a token presented, and a
+    page that publishes only the host pair gets no token header at all.
+
+    A page that publishes neither is a discovery failure, and the reason names
+    both shapes that were looked for — an operator reading it has to know which
+    page was expected, because the two are re-pointed by different means.
+
+    The client shape is tried first and its reason is kept when neither shape
+    is found. That keeps the failure text an operator already knows for the
+    surface this check has probed longest, and adds the first-party shape to it
+    rather than replacing it.
+    """
+    try:
+        return _discover_client_target(html)
+    except ProbeError as client_error:
+        first_party = discover_first_party_target(html)
+        if first_party is not None:
+            return first_party
+        raise ProbeError(
+            f"{client_error.reason}, and no first-party embed iframe naming an "
+            "embed origin and a tenant host"
+        ) from None
 
 
 def _allowed_embed_hosts() -> frozenset[str]:
@@ -756,17 +944,33 @@ def build_headers(embed_target: EmbedTarget, check_target: CheckTarget) -> dict[
     The reason names the variable and never the value: urllib's own rejection
     quotes what it was handed, and that text reaches stdout through the exit-2
     path, so an unsendable secret would be printed rather than refused quietly.
+
+    Two members are conditional, and both are read from the target rather than
+    guessed at here. ``X-Embed-Token`` is present only when the page published a
+    token: a first-party page publishes none, and its tenant is authorised by
+    the host pair instead, so an empty or placeholder token would be a
+    different request from the one a browser on that page makes. The house user
+    agent is present on a run that names its target, because our own zone
+    refuses an unnamed agent; the unnamed default keeps its verified header set
+    byte for byte. Neither conditional moves an exit code.
     """
     require_allowlisted_embed_host(embed_target.embed_url)
     require_allowlisted_embed_host(embed_target.api_chat_url, what="the URL the probes are sent to")
+    # The tenant key is the host the page named when it named one. A first-party
+    # page's iframe is the source: the page's own host is a different host, and
+    # presenting it would resolve a tenant nobody asked for.
+    tenant_host = embed_target.tenant_host or check_target.embed_host
     headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
-        "X-Embed-Host": check_target.embed_host,
-        "X-Embed-Token": embed_target.token,
+        "X-Embed-Host": tenant_host,
         "Referer": check_target.discovery_url,
-        "Origin": f"https://{check_target.embed_host}",
+        "Origin": f"https://{tenant_host}",
     }
+    if embed_target.presents_token:
+        headers["X-Embed-Token"] = embed_target.token
+    if check_target.named:
+        headers["User-Agent"] = PROBE_USER_AGENT
     monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
     if not monitor_token:
         return headers
@@ -777,6 +981,23 @@ def build_headers(embed_target: EmbedTarget, check_target: CheckTarget) -> dict[
         )
     headers[EMBED_MONITOR_TOKEN_HEADER] = monitor_token
     return headers
+
+
+def _discovery_headers(check_target: CheckTarget) -> dict[str, str]:
+    """What the discovery read presents: the house agent, or nothing at all.
+
+    The page is public, so no credential rides on this request — not the
+    monitor identity and not a token. The house agent does, on a run that names
+    its target, because our own zone answers an unnamed agent with HTTP 403 and
+    error 1010 and this read is to that zone. The value is not a credential and
+    moves no exit code.
+
+    An unnamed run is the default surface, whose discovery request is pinned as
+    header-free, so it is left exactly as it was.
+    """
+    if not check_target.named:
+        return {}
+    return {"User-Agent": PROBE_USER_AGENT}
 
 
 def build_payload(probe_text: str) -> dict:
@@ -1614,7 +1835,10 @@ def _check(argv: list[str] | None = None) -> int:
     print(f"DataTap answer integrity check (read-only) — discovering {check_target.discovery_url}")
     try:
         discovery = http_request(
-            "GET", check_target.discovery_url, timeout=DISCOVERY_TIMEOUT_SECONDS
+            "GET",
+            check_target.discovery_url,
+            headers=_discovery_headers(check_target),
+            timeout=DISCOVERY_TIMEOUT_SECONDS,
         )
         if discovery.status != 200:
             reason = f"the public /chat page came back HTTP {discovery.status}"
