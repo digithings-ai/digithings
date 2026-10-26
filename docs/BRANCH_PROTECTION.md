@@ -182,27 +182,51 @@ Doing that by hand leaves one gap: nothing catches a branch-protection edit that
 protection at all, so putting the read on the PR path would mean putting a human-only
 credential in front of every merge.
 
-**Nothing closes that gap today, and this section says so instead of pretending otherwise.**
-An earlier draft of this work carried a `policy-gate-live` job in
-[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) that was meant to run the
-`--live` read on a clock. It was removed, for three reasons that are all still true:
+**A dispatch-only workflow carries the read, and it is not on the merge path.**
+[`policy-gate-live.yml`](../.github/workflows/policy-gate-live.yml) runs
+[`scripts/policy_gate_live.py`](../scripts/policy_gate_live.py), which hands
+`POLICY_CHECK_READER_TOKEN` to the guard through `GH_TOKEN` and turns the guard's answer into
+a scheduling decision:
 
-- **It could never run.** The workflow it lived in is `disabled_manually` on GitHub since
-  the 2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
-  (`apps/digithings-cron/src/jobs.ts`). A job on a lane that is deliberately silent is a job
-  that reports nothing.
+- **`workflow_dispatch` only.** No `pull_request`, no `push`, no `on.schedule`. A GHA schedule
+  is forbidden repository-wide ([`tests/scripts/test_no_gha_schedules.py`](../tests/scripts/test_no_gha_schedules.py)),
+  and the 2026-10-14 cost lock disabled the lanes that used to carry one. A dispatch spends
+  minutes only when someone asks for one.
+- **`environment: cron`.** The PAT is environment-scoped, so a job that did not declare the
+  environment would resolve the name to empty and fail as "no key" rather than "permission
+  denied".
+- **A loud skip is never a green.** With no token the run prints `SKIPPED`, says the gate was
+  not read, and exits 0 — so the merge path and a dispatch stay green while nobody can
+  provision the credential. A token that is present but cannot read, or a guard that crashes,
+  exits 2. The guard's final `policy-gate-verdict:` line is what separates a real drift from
+  an uncaught exception, which also exits 1.
+- **A citable verdict.** Each outcome line carries a UTC timestamp and the Actions run id and
+  URL (the hostname on a plain host), which is the record a green run leaves behind.
+
+**It has not yet run against the real API, and this section says so.** The credential is still
+not provisioned: `cron` holds no `POLICY_CHECK_READER_TOKEN`, and creating the fine-grained PAT
+is Chris's personal-account step
+([`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md) § Provisioning).
+The lane therefore skips today. Until the PAT lands, the manual `--live` read remains the only
+way to compare the snapshot with the live gate, and a recorded green run is still outstanding.
+
+An earlier draft carried the read as a `policy-gate-live` **job inside `ci-pr-hygiene.yml`**,
+meant to run on that workflow's clock. It was removed, and the reasons shaped the replacement:
+
+- **It could never run.** `ci-pr-hygiene.yml` is `disabled_manually` on GitHub since the
+  2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
+  (`apps/digithings-cron/src/jobs.ts`). A job on a deliberately silent lane reports nothing,
+  so the replacement is its own workflow with an on-demand trigger.
 - **Its credential design was rejected.** It read `POLICY_CHECK_APP_PRIVATE_KEY` /
   `POLICY_CHECK_APP_ID` / `POLICY_CHECK_INSTALLATION_ID` and called
-  `scripts/mint_policy_check_token.py` — the GitHub App design that was **rejected on
-  2026-10-07**, whose manifest, minting script and tests were deleted by that same change.
-  The credential the registry actually names is a fine-grained PAT stored as
-  `POLICY_CHECK_READER_TOKEN` (see
-  [`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md)), and it
-  needs no app id and no installation id.
-- **It would have been a red run, not a check.** The secret it read is not provisioned (the
-  `cron` environment holds no secrets at all) and creating it needs `Administration: write`,
-  which is Chris-only on this one-member org. A canary that starts red because it cannot
-  read its own secret is how a check becomes a silent stop.
+  `scripts/mint_policy_check_token.py` — the GitHub App design **rejected on 2026-10-07**,
+  whose manifest, minting script and tests were deleted by that same change. The credential the
+  registry names is the fine-grained PAT `POLICY_CHECK_READER_TOKEN`, and the replacement uses
+  only that name.
+- **It would have been a red run, not a check.** The secret it read was never provisioned, and
+  creating it needs a personal-account action that is Chris-only on this one-member org. A
+  canary that starts red because it cannot read its own secret is how a check becomes a silent
+  stop, so the replacement skips loudly instead.
 
 **What the guard does check, mechanically.** `scripts/check_required_policy_checks.py` always
 compares the committed snapshot against `scripts/set-branch-protection.sh` — the writer that
@@ -214,12 +238,14 @@ the gate, and a live context that the inventory never declares), and separately 
 snapshot against the writer. So a hand edit of branch protection shows up as a drift between
 the live set and the inventory, while a hand edit of the snapshot alone shows up as a drift
 between the snapshot and the writer. Only the combination of both checks is a proof that the
-three agree, and running them is a human step today.
+three agree.
 
-**When the credential is provisioned**, the automated live read belongs in its own workflow
-with its own clock row, against the PAT the registry names — not in a job riding a disabled
-lane. That is a separate piece of work with a human gate, not a follow-up hidden in this
-change.
+**What remains once the PAT is provisioned:** dispatch
+[`policy-gate-live.yml`](../.github/workflows/policy-gate-live.yml) once, record the run URL and
+timestamp in the tracker, and add `POLICY_CHECK_READER_TOKEN` to
+[`SECRETS_INVENTORY.md`](ops/SECRETS_INVENTORY.md) per step 5 of the credential document. The
+`accepted_missing` entry in [`secret-names.json`](../.github/secret-names.json) exists only
+until then and has a review date; do not leave it in place after the secret lands.
 
 ### Declaring a new policy check
 

@@ -1,0 +1,73 @@
+# Reconcile develop's *live* branch protection against the policy inventory.
+#
+# WHY THIS IS ITS OWN WORKFLOW, AND DISPATCH-ONLY
+#
+# The guard reads a committed snapshot on the PR path, because no workflow
+# token can read branch protection: `administration` is not a permission
+# `GITHUB_TOKEN` can hold. That leaves one gap — a branch-protection edit that
+# nobody followed with `--live` changes the gate while the snapshot stays put.
+# Putting the live read on the PR path would put a human-only credential in
+# front of every merge (docs/ops/policy-check-credential.md §1), so it does not
+# go there.
+#
+# It cannot ride `ci-pr-hygiene.yml` either: that workflow is
+# `disabled_manually` since the 2026-10-14 GitHub cost lock (DIG-4364), and its
+# digithings-cron row is `enabled: false`. A job on that lane would be a job
+# that never runs and reports nothing.
+#
+# `on.schedule` is not available here at all: tests/scripts/test_no_gha_schedules.py
+# fails CI on any workflow under this directory carrying a schedule, because
+# every production clock belongs to the Cloudflare Worker. So this workflow is
+# **dispatch-only**. It spends no Actions minutes unless a person or the Worker
+# dispatches it, which is what the cost lock asks for.
+#
+# A SKIP IS NOT A GREEN
+#
+# `POLICY_CHECK_READER_TOKEN` is a fine-grained PAT that only Chris can create
+# (docs/ops/policy-check-credential.md § Provisioning). Until it is provisioned
+# the run exits 0 with a loud `SKIPPED` line and a step-summary warning; it never
+# fails the merge path and never claims the gate agreed. A token that is present
+# but cannot read exits 2. See scripts/policy_gate_live.py for the contract.
+name: "Policy gate: live drift check"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Reconcile the live gate
+    runs-on: ubuntu-latest
+    # DIG-248: the credential is `cron`-environment scoped. A job that does not
+    # declare this environment resolves the name to empty, which would fail as
+    # "no key" rather than "permission denied" and hide a mis-wired job.
+    environment: cron
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The checkout token is not the read credential; do not leave it in
+          # the git config where the guard's `gh` call could pick it up.
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # PyYAML, because the guard parses workflows and the inventory instead of
+      # scanning them as text.
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Read develop's live gate
+        env:
+          # Name only, never a value in this file. The wrapper hands it to the
+          # guard through GH_TOKEN and drops GITHUB_TOKEN so the call has one
+          # identity.
+          POLICY_CHECK_READER_TOKEN: ${{ secrets.POLICY_CHECK_READER_TOKEN }}
+        run: |
+          python3 scripts/policy_gate_live.py \
+            --repo "${{ github.repository }}" \
+            --branch develop
