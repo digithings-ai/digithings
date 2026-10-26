@@ -104,13 +104,13 @@ on:
       # run `npm ci`, which catches a bad range by refusing to run when manifest and lock
       # disagree rather than by resolving it — a different route to the same cover. The
       # fourth,
-      # apps/reference, was in no path filter in this repo at all — of the
+      # apps/digiweb, was in no path filter in this repo at all — of the
       # eight it was the one manifest watched by nothing — so it is now named below. Note
       # that this site never builds that workspace: the entry is an install input, not a
       # build input, and it is here because the root `npm install` above resolves all
       # eight manifests before either site compiles.
       #
-      # Only the manifest, not `apps/reference/**`. Nothing in CI *builds*
+      # Only the manifest, not `apps/digiweb/**`. Nothing in CI *builds*
       # that app. Since #1981 the directory is reached by ci.yml's `web` lane, which
       # lints and type-checks it, as well as by the unconditional frontend-canon guard —
       # so the narrow entry here is a division of labour, not the app's only coverage:
@@ -127,7 +127,7 @@ on:
       # Containers Worker). Pages does not build it; name the manifest so it is
       # not an orphan under tests/scripts/test_deploy_build_inputs.py.
       - "apps/digithings-stack-cloudflare/package.json"
-      - "apps/reference/package.json"
+      - "apps/digiweb/package.json"
   workflow_dispatch:
 
 concurrency:

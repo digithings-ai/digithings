@@ -2,7 +2,7 @@
 /**
  * build-manifest.mjs — regenerate packages/ui/MANIFEST.json.
  *
- * Walks the reference app and emits a machine-readable index of every reusable
+ * Walks digiweb and emits a machine-readable index of every reusable
  * component so agents can discover patterns without reading each file. Structure
  * (name, path, family) is derived from the filesystem + which family page imports
  * the component; the human summary is the component's leading /** *\/ docblock.
@@ -16,14 +16,14 @@ import { fileURLToPath } from "node:url";
 
 // Repo root (this script lives in <root>/scripts/).
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const REF = join(ROOT, "apps", "reference");
+const REF = join(ROOT, "apps", "digiweb");
 const COMPONENTS = join(REF, "components");
 const APP = join(REF, "app");
 
 /**
- * Package families — sources under `@digithings/ui` that have no reference-app
+ * Package families — sources under `@digithings/ui` that have no digiweb
  * importer. The gallery proves the shadcn kit with `@digithings/ui/ui`, not a
- * `@/components/*` path, so no page maps it and the reference walk's
+ * `@/components/*` path, so no page maps it and the digiweb walk's
  * `components/ui` skip leaves it unindexed (#4225).
  */
 const PACKAGE_FAMILIES = [{ dir: join(ROOT, "packages", "ui", "src", "ui"), family: "ui" }];
@@ -195,7 +195,7 @@ for (const file of walk(COMPONENTS, ".tsx").sort()) {
     id,
     path: relPath,
     // Where the implementation actually lives, when `path` is only the stub
-    // left behind by a promotion. Consume from here, not from the reference.
+    // left behind by a promotion. Consume from here, not from digiweb.
     ...(shared ? { promotedTo: shared } : {}),
     summary,
     ...(names.length > 1 ? { exports: names } : {}),

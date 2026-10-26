@@ -20,7 +20,7 @@ collapse duplicated surfaces — **not** "move UI into one folder".
 | Design tokens (`--bg/--ink/--term-*`, `[data-theme]`) | `packages/design/tokens.css` | unchanged |
 | Tailwind v4 `@theme inline` bridge | `packages/ui/src/styles/web-theme.css` | unchanged |
 | digichat skin palette (`.digichat-thread` dark/light + portal mirrors) | `packages/ui/src/styles/chat-aui.css` | merge into one theme file |
-| digichat theme grammar (caret, radii, composer, markdown, tooltips) | `apps/reference/app/(chatbot)/chatbot/chatbot.css`, re-exported by a 4-line package shim | move into `packages/ui/src/styles/` |
+| digichat theme grammar (caret, radii, composer, markdown, tooltips) | `apps/digiweb/app/(chatbot)/chatbot/chatbot.css`, re-exported by a 4-line package shim | move into `packages/ui/src/styles/` |
 | First-party Thread + DotMatrix + caret + boot loader | `packages/ui/src/components/chat/` | unchanged |
 | 12 skins + registry + dispatch | `apps/digichat/src/components/assistant-ui/skins/`, `apps/digichat/src/lib/thread-skins.ts` | move into the package |
 | Shared primitives for the catalog skins | `apps/digichat/src/app/(baseline)/stock/` | move out of a route folder |
@@ -30,7 +30,7 @@ collapse duplicated surfaces — **not** "move UI into one folder".
 ## Findings
 
 - **F1** — ✅ Landed (WS1): the sheet moved to `packages/ui/src/styles/chat-digichat.css`,
-  `apps/reference` imports it back, and the 4-line `chatbot.css` shim is deleted.
+  `apps/digiweb` imports it back, and the 4-line `chatbot.css` shim is deleted.
 - **F2** — Three palettes / three bridges for one product (`packages/design/tokens.css`,
   `chat-aui.css`, `chatbot.css`), plus two app entry sheets re-declaring their own
   `@theme inline` instead of importing the shared bridge. Direct cause of the white
@@ -112,7 +112,7 @@ fail-closed config loader, browser-visible-env discipline); do **not** remove th
 1. Part A commit `1ad29faff` folds into this branch — no separate PR; one PR into
    `module/digichat` at the end (branch name may be renamed at PR time).
 2. Scope = structural cleanliness only; all 12 skins' visuals stay as-is.
-3. Approved: chatbot sheet moves into `packages/ui`; `apps/reference` imports it; shim deleted.
+3. Approved: chatbot sheet moves into `packages/ui`; `apps/digiweb` imports it; shim deleted.
 4. Skin system reusable by other apps → full WS4.
 5. Vendored `reference/assistant-ui-templates/` stays as provenance — no deletion.
 

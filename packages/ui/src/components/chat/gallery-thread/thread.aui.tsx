@@ -569,7 +569,7 @@ const ThreadRoot: FC<{
         className,
       )}
       data-user-align="left"
-      // The skin scope marker: `apps/reference/…/chatbot.css` carries the whole
+      // The skin scope marker: `chat-digichat.css` carries the whole
       // first-party theme under `:is(.aui-theme-stage, [data-thread-skin="digichat"])`
       // and the portal mirrors under `html:has([data-thread-skin="digichat"])`.
       // Declaring it here means every mount path gets the same theme — the

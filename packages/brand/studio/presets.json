@@ -1,0 +1,351 @@
+{
+  "version": 2,
+  "system": "One or the other: the wordmark carries social headers, web pages and docs; the logo carries app icons and favicons. Never both in the same view.",
+  "presets": [
+    {
+      "id": "x-profile-header",
+      "label": "X profile header",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1500,
+        "height": 500,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 15
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "linkedin-personal",
+      "label": "LinkedIn personal",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1584,
+        "height": 396,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 15
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "linkedin-company",
+      "label": "LinkedIn company",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1128,
+        "height": 191,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 18
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "open-graph",
+      "label": "Open Graph 1200\u00d7630",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1200,
+        "height": 630,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 9
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "square",
+      "label": "Square 1080",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1080,
+        "height": 1080,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 5.5
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "story",
+      "label": "Story 1080\u00d71920",
+      "group": "Wordmark \u00b7 Social",
+      "settings": {
+        "width": 1080,
+        "height": 1920,
+        "background": "field",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 3
+        },
+        "animated": true,
+        "center": true
+      }
+    },
+    {
+      "id": "wordmark-transparent",
+      "label": "Wordmark transparent",
+      "group": "Wordmark \u00b7 Web",
+      "settings": {
+        "width": 1500,
+        "height": 500,
+        "background": "transparent",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 15
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "wordmark-solid",
+      "label": "Wordmark solid",
+      "group": "Wordmark \u00b7 Web",
+      "settings": {
+        "width": 1500,
+        "height": 500,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "word-only",
+        "logo": {
+          "show": false,
+          "size": 10
+        },
+        "wordmark": {
+          "show": true,
+          "size": 15
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "favicon-512",
+      "label": "Favicon 512",
+      "group": "Logo \u00b7 Icons",
+      "settings": {
+        "width": 512,
+        "height": 512,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 78
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "favicon-32",
+      "label": "Favicon 32",
+      "group": "Logo \u00b7 Icons",
+      "settings": {
+        "width": 32,
+        "height": 32,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 90
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "app-icon-1024",
+      "label": "App icon 1024",
+      "group": "Logo \u00b7 Icons",
+      "settings": {
+        "width": 1024,
+        "height": 1024,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 60
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "app-icon-maskable",
+      "label": "App icon maskable",
+      "group": "Logo \u00b7 Icons",
+      "settings": {
+        "width": 512,
+        "height": 512,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 52
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "avatar",
+      "label": "Avatar 512",
+      "group": "Logo \u00b7 Icons",
+      "settings": {
+        "width": 512,
+        "height": 512,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 78
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "logo-transparent",
+      "label": "Logo transparent",
+      "group": "Logo \u00b7 Mark",
+      "settings": {
+        "width": 1024,
+        "height": 1024,
+        "background": "transparent",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 60
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    },
+    {
+      "id": "logo-solid",
+      "label": "Logo solid",
+      "group": "Logo \u00b7 Mark",
+      "settings": {
+        "width": 1024,
+        "height": 1024,
+        "background": "solid",
+        "theme": "default",
+        "mode": "dark",
+        "layout": "logo-only",
+        "logo": {
+          "show": true,
+          "size": 60
+        },
+        "wordmark": {
+          "show": false,
+          "size": 10
+        },
+        "animated": false,
+        "center": true
+      }
+    }
+  ]
+}

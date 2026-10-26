@@ -2,10 +2,9 @@ import type { HTMLAttributes } from "react"
 import { cn } from "../lib/utils"
 
 /**
- * Kbd — the keycap chip. Promoted from the reference gallery's global `.kbd`
- * (apps/reference/app/globals.css), which was reference-only: an app that
- * wanted a keycap had no canonical part to reach for and would have tripped
- * the family census.
+ * Kbd — the keycap chip. Promoted from the old reference gallery's global
+ * `.kbd`, which was reference-only: an app that wanted a keycap had no
+ * canonical part to reach for and would have tripped the family census.
  *
  * The keycap look: hairline box, a heavier bottom border so it reads as a
  * physical key, the ink-wash fill, mono at the micro size. Token utilities
