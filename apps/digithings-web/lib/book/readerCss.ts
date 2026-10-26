@@ -186,6 +186,12 @@ html:has(.book-live) { scrollbar-gutter: stable; }
      happens; a narrower source fitted the use-cases chapter onto one page
      where the printed book gives it two. */
   width: 1280px;
+  /* The print route paginates inside `.book-root`, which swaps the mono stack
+     for the book's own face (printCss.ts). The reader's source is a body-level
+     host and was therefore measured in a different font — close enough to look
+     right, different enough to break the pages elsewhere: twenty sheets on
+     paper, eighteen on screen. Same face, same breaks. */
+  --font-mono: var(--font-stack-mono);
 }
 /* The book's own gutters come from a vw token, so a phone measured them at 16px
    where the print run measured 52 and broke the pages differently. Pin the
