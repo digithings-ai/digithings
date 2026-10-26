@@ -267,6 +267,15 @@ deleted_classes = ["DigiChatContainer"]
 binding = "TENANT_CONFIG"
 id = "361b710bee56466097053275404535ba"
 
+# Service binding to this same Worker. The digikey JWKS lives on
+# key.digithings.ai, which this Worker itself serves, so a plain fetch from
+# inside the Worker re-enters its own public route and does not complete —
+# verification then fails closed and every MCP call answers 401. Through the
+# binding the subrequest stays inside the Worker and reaches the container.
+[[services]]
+binding = "DIGIKEY_SELF"
+service = "digithings-stack"
+
 [vars]
 # Canonical Supabase project ref (#4700): public value, same as the standalone
 # dashboard-api worker's [vars]; doubles as the fallback source for the legacy
