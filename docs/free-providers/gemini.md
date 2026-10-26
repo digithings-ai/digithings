@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - google_account
 data_privacy_on_free: trains_on_data
-verified_at: 2026-10-18
+verified_at: 2026-10-25
 source_urls:
   - https://ai.google.dev/gemini-api/docs/rate-limits
   - https://ai.google.dev/gemini-api/docs/models
@@ -118,3 +118,4 @@ Enable billing on the linked Google Cloud project — same API key, zero extra c
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
 | 2026-10-18 | Automated snapshot sync | provider-review scan |
+| 2026-10-25 | Automated snapshot sync | provider-review scan |

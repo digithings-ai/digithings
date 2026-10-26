@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-10-18
+verified_at: 2026-10-25
 source_urls:
   - https://console.groq.com/docs/rate-limits
   - https://console.groq.com/docs/models
@@ -113,3 +113,4 @@ Pay-as-you-go after free tier. Llama 3.3 70B ~$0.59/$0.79 per 1M in/out; Llama 4
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
 | 2026-10-18 | Automated snapshot sync | provider-review scan |
+| 2026-10-25 | Automated snapshot sync | provider-review scan |

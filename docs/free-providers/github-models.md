@@ -10,7 +10,7 @@ free_tier_type: retired
 access_requirements:
   - github_account
 data_privacy_on_free: unknown
-verified_at: 2026-10-18
+verified_at: 2026-10-25
 source_urls:
   - https://docs.github.com/en/github-models/about-github-models
   - https://docs.github.com/en/github-models/prototyping-with-ai-models
@@ -125,3 +125,4 @@ Graduate to Azure AI Foundry (same models, production SLA, full rate limits). Pr
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
 | 2026-10-18 | Automated snapshot sync | provider-review scan |
+| 2026-10-25 | Automated snapshot sync | provider-review scan |
