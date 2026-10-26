@@ -1992,6 +1992,220 @@ def test_a_same_head_approve_does_not_clear_the_seats_block_by_itself() -> None:
     )
 
 
+# --- a clearance names a seat that did not write the PR -------------------------
+#
+# DIG-4990, item 3. Clause 2 read the newest readable verdict, so a
+# `changes_requested` whose seat could not be read was cleared by the next
+# comment that said "approve" — including the author's own reply. #6197 is the
+# shape: the author's write-up was the newest verdict, and the queue read it as
+# one. The block now survives an approve that names no seat, and an approve
+# from a seat that wrote the PR.
+
+
+def _clearance_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    comments: list[dict[str, Any]],
+    *,
+    head: str = "d" * 40,
+    prov: Any = None,
+) -> list[str]:
+    """The value gate's reasons for one comment record, with Paperclip faked."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(comments, head_sha=head)
+    return mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="enforce"), prov or _paperclip()
+    )
+
+
+def test_an_author_seats_approve_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author's own reply is not a second sign-off (#6197, item 3).
+
+    The block carries no seat — the shape 31 verdicts since #6196 were written
+    in — so clause 1 has nothing to hold it to and clause 2 decides. The newest
+    approve comes from the seat whose commits are on the branch, so the block
+    stands.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in reasons
+    ), reasons
+
+
+def test_an_approve_with_no_seat_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A quotation-free "approve" with no provenance is still not a clearance.
+
+    This is the second half of the same defect: the comment says approve and
+    names the head, but no `agent=` says who said it, so the queue cannot show
+    it came from a seat that did not write the PR.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any("names no reviewer seat" in reason for reason in reasons), reasons
+
+
+def test_a_non_author_seats_approve_clears_a_seatless_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The way out is unchanged: another seat's approve on the head clears it."""
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_an_approve_with_no_seat_is_enough_when_no_block_stands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The condition is on a clearance, not on every approve.
+
+    A PR with no `changes_requested` on its head is judged by the coverage gate
+    and by nothing new: this change must not demand provenance from a review
+    that clears nothing.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_a_block_on_a_head_the_pr_left_needs_no_non_author_approve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The head moving is not a clearance: the stale block is already spent.
+
+    A block scoped to a commit the PR has left asks no seat for anything
+    (`verdict_applies_to_head`), so an approve on the new head is not read as
+    clearing it.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha="e" * 40,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_the_author_seats_approve_does_not_clear_the_block_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wiring, not just the helper: `evaluate` refuses on the value gate.
+
+    The same PR also fails the reviewer-independence gate, which is the point:
+    the two gates agree, and the value gate no longer lets the author's reply
+    spend a block the coverage gate then refuses to count.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    head = "d" * 40
+    run = "00000000-0000-0000-0000-000000000000"
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(run, AUTHOR_AGENT)],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in verdict.reasons
+    ), verdict.reasons
+
+
 def test_a_same_head_approve_withdrawing_the_block_clears_it() -> None:
     """The way out: the approving comment says it withdraws the block.
 

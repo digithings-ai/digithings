@@ -2806,7 +2806,86 @@ def _sha_text(sha: str) -> str:
     return f"`{sha[:12]}`" if sha else "no commit"
 
 
-def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocking verdicts that still speak for the head the PR stands at.
+
+    A block naming another commit is spent by the branch moving
+    (`verdict_applies_to_head`): it is not a `changes_requested` this gate can
+    clear, and it asks no seat for anything. A block that names no head is not
+    stale, so it is counted.
+    """
+    return [
+        verdict
+        for verdict in _readable_verdicts(pr)
+        if verdict.verdict in BLOCKING_VERDICTS
+        and verdict_applies_to_head(verdict, head)
+    ]
+
+
+def _clearance_seat_reason(
+    pr: dict[str, Any],
+    approve: PostedVerdict,
+    cfg: ReviewIndependence | None,
+    prov: ReviewerProvenance | None,
+) -> str:
+    """A refusal when an approve that clears a block cannot be shown non-author.
+
+    DIG-4990, item 3. Clause 2 of the verdict rule reads the newest readable
+    verdict, and it used to be enough for that verdict to be an approve: a
+    `changes_requested` whose seat could not be read was cleared by the next
+    comment that said "approve", including the author's own reply. #6197 is
+    the shape — the author's write-up was the newest verdict, and the queue
+    read it as one. The block now survives any approve that names no seat, and
+    any approve from a seat that wrote the PR.
+
+    The author is read the way the reviewer-independence gate reads it:
+    `_author_context` takes the seats from the commits and their Paperclip
+    runs, never from the ticket's assignee. The assignee is the seat asked to
+    move the ticket along, not the seat whose commits are on the branch, and
+    reading it as the author refused the ticket owner's review on #6145
+    (DIG-4809).
+
+    "" is the answer whenever the gate cannot ask the question: `off` reads no
+    provenance at all, and a Paperclip read that failed says nothing about the
+    branch. The reviewer-independence gate is the one that reports both — it
+    defers a failed read and refuses an author it cannot identify — so this
+    gate does not publish a second, misleading reason.
+    """
+    if cfg is None or _effective_mode(cfg) == "off":
+        return ""
+    try:
+        authors, _ = _author_context(pr, prov or _provenance_for(cfg))
+    except (_PaperclipUnavailable, _AuthorUnidentified):
+        return ""
+    if not authors:
+        return ""
+    head = str(pr.get("headRefOid") or "")
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {approve.comment_id}" if approve.comment_id else "a comment"
+    if not approve.seat:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) names no "
+            "reviewer seat, so it cannot clear the block: a clearance needs the "
+            "provenance marker's `agent=` to name a seat that did not write the PR"
+        )
+    if approve.seat in authors:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) comes from "
+            f"the PR's authoring seat `{approve.seat[:8]}`, so it cannot clear the "
+            "block: only a seat that did not write the PR can"
+        )
+    return ""
+
+
+def _verdict_value_reason(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """A refusal when the newest readable verdict does not clear this PR.
 
     DIG-4878. A blocking verdict used to be spent the moment the commit it named
@@ -2851,7 +2930,10 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
        it names the head the PR stands at (or names no head at all, which
        cannot be stale); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
-       clearance.
+       clearance. A clearance of a `changes_requested` on the current head must
+       also name a non-author seat: an approve with no provenance seat, or one
+       from a seat that wrote the PR, clears nothing (`_clearance_seat_reason`,
+       item 3 of DIG-4990).
 
     Clause 1 needs the seat, and the seat is written only in the provenance
     marker (`agent=`): every seat pushes under one GitHub login, so a comment's
@@ -2895,6 +2977,10 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
             f"verdict stands until a later approve names the head it covers"
         ]
     if _covers_head(latest, head):
+        if _blocks_on_head(pr, head):
+            clearance = _clearance_seat_reason(pr, latest, cfg, prov)
+            if clearance:
+                return [clearance]
         return []
     return [
         f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
@@ -3071,7 +3157,11 @@ def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
     return False
 
 
-def _gate_review(pr: dict[str, Any]) -> list[str]:
+def _gate_review(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """Open change requests block: a formal one, or a verdict posted as a comment.
 
     This gate no longer demands an approving review from a non-author, and it no
@@ -3085,7 +3175,10 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
 
     `_verdict_value_reason` is the value gate, and it runs here, before the
     coverage gate: a PR whose newest verdict blocks must not be carried to a
-    merge by a `reviewed:agent` label (DIG-4878).
+    merge by a `reviewed:agent` label (DIG-4878). A clearance of a block also
+    needs a non-author seat, so the value gate is handed the same reviewer
+    configuration and provenance reader the coverage gate uses (item 3 of
+    DIG-4990).
 
     Both arms are scoped to the head the PR stands at. `reviewDecision` is an
     aggregate GitHub keeps after the branch moves, and a posted verdict keeps
@@ -3098,7 +3191,7 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
             reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_verdict_value_reason(pr))
+    reasons.extend(_verdict_value_reason(pr, cfg, prov))
     return reasons
 
 
@@ -4448,7 +4541,7 @@ def evaluate(
     unreadable = _ensure_comments(pr, repo)
     if unreadable:
         reasons.append(unreadable)
-    reasons.extend(_gate_review(pr))
+    reasons.extend(_gate_review(pr, policy.review_independence, prov))
     coverage_reasons, review_evidence, deferred = _review_coverage(
         pr, repo, policy.review_independence, prov
     )

@@ -192,6 +192,19 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
 
+**A clearance names a seat that did not write the PR.** When a `changes_requested` on the
+current head would be cleared by the newest approve, that approve must carry the
+provenance marker's `agent=`, and that seat must not be one of the seats that wrote the
+PR (#4990, item 3). A comment that says "approve" with no marker, or one from an
+authoring seat, clears nothing while the block stands: `#6197` merged on the author's own
+write-up, and that write-up was the newest verdict. The authoring seats are read from the
+commits and their Paperclip runs (`_author_context`), never from the ticket's assignee —
+the assignee is the seat asked to move the ticket along, and reading it as the author
+refused the ticket owner's review on `#6145` (DIG-4809). When the queue cannot read who
+wrote the PR — the API is down, or a commit names an author it cannot resolve — this
+condition adds no gate of its own: the reviewer-independence row above is where that
+failure is reported, and it defers the PR rather than clearing it.
+
 **A marker inside code is quoted, not posted.** No clause reads a marker, a provenance
 line or a `Review verdict:` line that sits inside a fenced code block (``` or ~~~) or an
 inline code span: what a reader sees as code is being shown, not claimed, and a quote
