@@ -13,7 +13,6 @@ public/swagger-ui/
 public/openapi/
 apps/digichat/reference/
 apps/digichat/cli/
-apps/reference/components/ui/dot-matrix.tsx
 # Palette tables emitted by scripts/generate_platform_palettes.py.
 packages/design/palettes.css
 packages/ui/src/theme/palette-registry.ts

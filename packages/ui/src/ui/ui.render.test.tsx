@@ -259,10 +259,10 @@ describe("vendored ui kit renders server-side", () => {
   it("Switch thumb mirrors its checked travel under dir=rtl", () => {
     const html = renderToStaticMarkup(<Switch aria-label="toggle" />);
     expect(html).toContain(
-      "rtl:group-data-[size=default]/switch:data-checked:-translate-x-[calc(100%-2px)]",
+      "rtl:group-data-[size=default]/switch:data-checked:-translate-x-3.5",
     );
     expect(html).toContain(
-      "rtl:group-data-[size=sm]/switch:data-checked:-translate-x-[calc(100%-2px)]",
+      "rtl:group-data-[size=sm]/switch:data-checked:-translate-x-2.5",
     );
   });
 

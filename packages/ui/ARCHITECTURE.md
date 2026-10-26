@@ -16,25 +16,25 @@ packages/ui/
 ├── CHARTS.md              finance chart house rules
 ├── CHAT_THEME.md          first-party digichat skin on /chatbot
 ├── ASSISTANT_UI_ELEMENTS.md  full assistant-ui elements catalog (fetch map)
-├── MANIFEST.json          generated machine index of every reference + kit component
+├── MANIFEST.json          generated machine index of every digiweb + kit component
 ├── scripts/
-│   └── build-manifest.mjs regenerates MANIFEST.json from the reference + kit sources
+│   └── build-manifest.mjs regenerates MANIFEST.json from the digiweb + kit sources
 ├── design/                @digithings/design — tokens.css + CSS primitives
 │   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
 │   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
 │   └── references/        external north-star scans (Cursor, herdr, …)
-├── brand/                 generated identity kit (avatars, headers, OG) — previewed at design-reference `/brand`, not on digithings.ai
+├── brand/                 generated identity kit (avatars, headers, OG) — previewed at digiweb `/brand`, not on digithings.ai
 ├── web/                   @digithings/ui — shared React component layer
-└── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/(gallery)/      family pages (foundations, iterate, controls, …)
-    ├── app/(chatbot)/      isolated /chatbot root — do not compile the gallery graph
-    ├── components/         the reusable patterns (one file each, docblock-headed)
-    └── README.md           the canon: tokens, livery, type, motion, chart rules
+└── digiweb/               the live reference app (Next.js 16 / React 19 / Tailwind v4 / Motion)
+    ├── app/               reference, foundations, components, rtl
+    ├── app/brand/         the upload kit (`/brand`) and the brand studio (`/brand/studio`)
+    ├── components/        the app-local patterns (site nav, brand studio, rtl proof)
+    └── README.md          what the app is and how it stays honest
 ```
-The **`/iterate`** family is the human preference gallery for the utilitarian
-terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
-locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
-rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
+The app is the **reference**, not a pattern dump: it renders the current
+generation from `@digithings/design` tokens, the `@digithings/ui` kit and the
+`@digithings/hero-banner` definitions. The old fifteen-family specimen gallery
+(`apps/reference`) was deleted in October 2026.
 
 Live apps import `@digithings/design` tokens and `@digithings/ui` primitives —
 they do not fork a second look. Phase 3 product-local fights on this branch:
@@ -161,7 +161,7 @@ pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
 thumbs, token-bridged to the accent mechanic), **EmptyState**, **Skeleton**
 (+ `SkeletonGroup`), **RadioGroup**/**Radio**, **Field**, **IconButton**, and
 **SegmentedControl**. Every live consumer was repointed — the canon specimens
-(`apps/reference/components/controls/*`), the dashboard's empty-state/skeleton/
+(`apps/digiweb/components/controls/*`), the dashboard's empty-state/skeleton/
 icon-button/segmented-control files, `packages/digichat-ui`, and
 `packages/ui/src/components/ThemeProvider.tsx`. The controls copies stayed in
 place and kept exporting until the retirement batch; only the reference's local
@@ -349,14 +349,14 @@ components without reading every file. Shape:
 ```jsonc
 {
   "generatedAt": "<ISO timestamp>",
-  "source": "apps/reference",
+  "source": "apps/digiweb",
   "counts": { "components": 0, "described": 0, "families": 0 },
   "families": {
     "<family>": [
       {
-        "name": "PortfolioReference",       // exported component
-        "id": "portfolio",                   // file basename, -reference stripped
-        "path": "reference/components/portfolio-reference.tsx",
+        "name": "BrandStudio",               // exported component
+        "id": "brand-studio",                // file basename, -reference stripped
+        "path": "apps/digiweb/components/brand/studio/brand-studio.tsx",
         "summary": "…first sentence of the file's /** */ docblock…"
       }
     ]
@@ -375,20 +375,18 @@ the family a component is imported into, and the `summary` from the leading
 `/** … */` docblock. Components without a docblock appear with `summary: null` —
 the generator prints the coverage so gaps are visible and easy to backfill.
 
-Two indexing rules are worth calling out (#4225): next.js route groups
-(`(gallery)`, `(chatbot)`) are transparent, so family pages at
-`reference/app/(gallery)/<fam>/page.tsx` land under `<fam>` and
-`reference/app/(gallery)/page.tsx` under `foundations`; and the vendored shadcn
-kit at `web/src/ui/*.tsx` — importable only as the package export
-`@digithings/ui/ui`, so no reference page ever maps it — is indexed directly
-from source, one row per `<name>.tsx` with `path` relative to the digiweb root,
-under family `ui`.
+Two indexing rules are worth calling out (#4225): next.js route groups are
+transparent, so a family page at `app/<fam>/page.tsx` lands under `<fam>` and
+`app/page.tsx` under `foundations`; and the vendored shadcn kit at
+`web/src/ui/*.tsx` — importable only as the package export
+`@digithings/ui/ui`, so no digiweb page ever maps it — is indexed directly
+from source, one row per `<name>.tsx`, under family `ui`.
 
 ## Brand identity — the terminal marks
 
 `@digithings/ui` `components/symbols/terminal-marks.tsx` is the canonical
-identity; `reference/components/symbols/terminal-marks.tsx` re-exports it as the
-specimen. Three components, each matching the weight of the surface it imitates:
+identity; digiweb renders the same exports on `/components` and the home banner.
+Three components, each matching the weight of the surface it imitates:
 
 | export | form | weight | use |
 |--------|------|--------|-----|
@@ -538,7 +536,7 @@ physical edge in the API; `.nav-shell-group-caret` and the
 logical `inline-start/end` rules); markdown-table `[[align=right]]:text-right`
 (HTML `align` is physical); toast-stack `inset` shorthand.
 
-**Proof route.** `apps/reference/app/(gallery)/rtl/page.tsx` renders the canon
+**Proof route.** `apps/digiweb/app/rtl/page.tsx` renders the canon
 behind an LTR/RTL toggle (`DirectionProvider root`), covering chrome, every
 button variant × size, fields, Select + `SelectPopup`, checkbox/switch, dropdown,
 dialog and both sheet sides, both tab systems, tooltip, pager/date-pager, a
@@ -558,7 +556,7 @@ kit sheet rule) so the state names the affordance instead of inheriting the
 base pointer.
 
 The convention is enforced: `scripts/check_frontend_canon.py` flags any
-`cursor-*` utility under `apps/**` (`apps/reference` is the exempt proof
+`cursor-*` utility under `apps/**` (`apps/digiweb` is the exempt proof
 surface). An app-local cursor is treated as a missing-kit signal — promote the
 part, or leave a reviewed `canon-allow: <reason>` on genuinely app-specific
 chrome (canvas gestures, native `<summary>`, custom timelines). See
@@ -567,15 +565,15 @@ chrome (canvas gestures, native `<summary>`, custom timelines). See
 ## Build / CI posture
 
 The reference app is **linted and type-checked** in CI by the `web` lane
-(`test-web.yml`), gated on `apps/reference/**`: `npm run lint` and
-`npm run typecheck` (`tsc --noEmit`) for the `@digithings/reference` workspace (#1981).
-Run the same two commands locally from `reference/`, plus a live browser check —
+(`test-web.yml`), gated on `apps/digiweb/**`: `npm run lint` and
+`npm run typecheck` (`tsc --noEmit`) for the `@digithings/digiweb` workspace (#1981).
+Run the same two commands locally from `apps/digiweb/`, plus a live browser check —
 that last half is the only one CI cannot do.
 
 It is deliberately **not built** in CI. Neither Cloudflare site compiles this
 workspace, so a `next build` here would cost two app builds with no consumer.
 
-Both Cloudflare deploy checks nevertheless watch `reference/package.json` in their
+Both Cloudflare deploy checks nevertheless watch `apps/digiweb/package.json` in their
 `paths:` filters (#1977). That is an *install* input, not a build input: the root
 `npm install` both build scripts run resolves all eight workspace manifests before
 either site compiles, so an unresolvable range here fails both production builds,
@@ -583,7 +581,7 @@ and of the eight this was the only manifest watched by nothing.
 `tests/scripts/test_deploy_build_inputs.py` now asserts no workspace manifest is
 orphaned, so a newly scaffolded workspace cannot silently reopen that hole. The
 *directory* stays out of those two filters — see the comment beside the entry —
-because neither site builds it; `apps/reference/**` is watched by the
+because neither site builds it; `apps/digiweb/**` is watched by the
 `web` lane instead, which lints and type-checks rather than building.
 
 Before #1981 nothing built, linted or type-checked this app, but "no coverage at
@@ -607,8 +605,7 @@ lose to them belongs in `components`. The reference's per-family sheets wrap
 their dress in `@layer components { … }` for exactly that reason; a rule that
 has to beat a utility stays unlayered and says so inline (the reference's
 `.sb-hint` vs the unlayered `.kbd`). `@import` lines stay ahead of the layer
-block. The reference `(chatbot)` root, which themes vendor assistant-ui CSS,
-keeps its own unlayered cascade. Full rule and the pinned test:
+block. Full rule and the pinned test:
 [MIGRATION.md § App family CSS layering](MIGRATION.md).
 
 ## Overlay scrollbar pointer contract (DIG-4600)

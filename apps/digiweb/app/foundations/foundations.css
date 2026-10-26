@@ -1,0 +1,164 @@
+/* Foundations — token tables and the type ladder. */
+
+.fd-groups {
+  display: grid;
+  gap: 1.6rem;
+  margin-top: 1.6rem;
+}
+
+.fd-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.fd-group-head h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.fd-group-head p {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 0.75rem;
+}
+
+.fd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.fd-table th,
+.fd-table td {
+  padding: 0.45rem 0.5rem;
+  border-top: 1px solid var(--hair);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.fd-table thead th {
+  border-top: 0;
+  color: var(--ink-mute);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.625rem;
+}
+
+.fd-table tbody th {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.fd-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 0.45rem;
+  border: 1px solid var(--hair-2);
+  vertical-align: -1px;
+}
+
+.fd-table code {
+  color: var(--ink-mute);
+}
+
+.fd-liveries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.35rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.fd-liveries li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--hair);
+}
+
+.fd-liveries code {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.fd-type {
+  margin-top: 1.4rem;
+  border-top: 1px solid var(--hair);
+}
+
+.fd-type-row {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.fd-type-token {
+  color: var(--ink-mute);
+  font-size: 0.6875rem;
+}
+
+.fd-type-row p {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.fd-rules {
+  margin: 1.2rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+}
+
+.fd-rules li {
+  padding: 0.3rem 0;
+}
+
+@media (max-width: 720px) {
+  .fd-type-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .fd-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 0.6875rem;
+  }
+
+  .fd-table th,
+  .fd-table td {
+    padding: 0.35rem 0.3rem;
+  }
+
+  .fd-table tbody th {
+    overflow-wrap: anywhere;
+  }
+
+  .fd-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .fd-table code {
+    font-size: 0.6875rem;
+  }
+}

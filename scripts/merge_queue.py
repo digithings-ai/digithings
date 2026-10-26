@@ -2806,6 +2806,26 @@ def _sha_text(sha: str) -> str:
     return f"`{sha[:12]}`" if sha else "no commit"
 
 
+def _unbound_block_clearance(head_text: str) -> str:
+    """The one way out of a block that names no head (DIG-5630).
+
+    A block whose `scope=` did not parse binds nothing, so there is no commit
+    for the branch to leave behind and no head an approve can name to spend it.
+    The remedies the queue used to prescribe — "a later approve naming the head"
+    and "move the PR to a new head and approve that head" — are both false for
+    this block, and `#6426` took 20+ handbacks over two days following them.
+    `_withdraws` clears it only on an approve naming the current head with a
+    `Withdraws:` line that names no sha (a line naming a sha spends nothing,
+    because the block has no binding to match), so that is what the handback
+    says.
+    """
+    return (
+        "A block that names no head is not spent by the PR moving to a new head: "
+        "the clearing comment is that seat's approve naming the current head "
+        f"{head_text} plus a `Withdraws:` line with no sha on it"
+    )
+
+
 def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocking verdicts that still speak for the head the PR stands at.
 
@@ -2925,7 +2945,10 @@ def _verdict_value_reason(
        `develop` on 2026-10-21 with the security desk's `changes requested` still
        on the branch, because the code reviewer's later approve on the head was
        the newest readable verdict — a second sign-off was never asked for, so
-       the queue never held the PR for it.
+       the queue never held the PR for it. A block that names no head (its
+       `scope=` did not parse, DIG-5630) is spent by no head at all: the PR
+       moving leaves nothing behind, so the clearing comment is the seat's
+       approve naming the current head plus a `Withdraws:` line with no sha.
     2. **Everything else is judged by the newest readable verdict.** The newest
        readable verdict is the one that counts: a blocking verdict blocks when
        it names the head the PR stands at (or names no head at all, which
@@ -2970,7 +2993,18 @@ def _verdict_value_reason(
         elif latest.bindings:
             scope_text = f", naming `{latest.bindings[0][:12]}`"
         else:
-            scope_text = ""
+            scope_text = ", naming no head"
+        if not latest.bindings:
+            # DIG-5630: a block whose `scope=` did not parse names no head, so
+            # "a later approve naming the head it covers" is not a way out of it
+            # — any head the PR stands at is covered by nothing. The handback has
+            # to name the form that does clear it.
+            return [
+                f"PR #{pr.get('number')}: the latest review verdict is "
+                f"'{latest.verdict}' ({latest.source}, posted by {latest.author} "
+                f"in {where}){scope_text}, and the PR now stands at {head_text}. "
+                f"{_unbound_block_clearance(head_text)}"
+            ]
         return [
             f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
             f"({latest.source}, posted by {latest.author} in {where}){scope_text}; "
@@ -3000,7 +3034,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
     elif block.bindings:
         scope_text = f", naming `{block.bindings[0][:12]}`"
     else:
-        scope_text = ""
+        scope_text = ", naming no head"
     later = [
         verdict
         for verdict in _readable_verdicts(pr)
@@ -3014,19 +3048,35 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         and not _withdraws(approve, block)
     ):
         # DIG-5246: the handback for the #6280 timeline. The seat did come back
-        # and approve the same head; what it did not do is say it withdraws the
+        # and approve the head; what it did not do is say it withdraws the
         # finding, so the queue cannot read the approve as clearing it.
         if block.bindings:
             withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
-        else:
-            withdraw = "`Withdraws:` line"
+            return (
+                f"PR #{pr.get('number')}: seat {block.seat} posted "
+                f"'{block.verdict}' ({block.source}, in {where}){scope_text} and "
+                f"then approved the same head {head_text} (comment "
+                f"{approve.comment_id or 'a comment'}); an approve on an unchanged "
+                "head does not clear the block it left behind. Add a "
+                f"{withdraw} to the approving comment, or move the PR to a new "
+                "head and approve that head"
+            )
+        # DIG-5630: the block names no head, so "move to a new head" is not a
+        # remedy — every head is outside it, and only the bare withdrawal spends
+        # it. A line naming a sha spends nothing here (`_withdraws`).
         return (
             f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
-            f"({block.source}, in {where}){scope_text} and then approved the same "
-            f"head {head_text} (comment {approve.comment_id or 'a comment'}); an "
-            "approve on an unchanged head does not clear the block it left behind. "
-            f"Add a {withdraw} to the approving comment, or move the PR to a new "
-            "head and approve that head"
+            f"({block.source}, in {where}){scope_text}, and that seat's later "
+            f"approve of {head_text} (comment "
+            f"{approve.comment_id or 'a comment'}) does not clear the block it "
+            f"left behind. {_unbound_block_clearance(head_text)}"
+        )
+    if not block.bindings:
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+            f"{head_text}; a blocking verdict stands until that seat clears it. "
+            f"{_unbound_block_clearance(head_text)}"
         )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "

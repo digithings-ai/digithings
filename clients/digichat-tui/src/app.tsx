@@ -1,5 +1,7 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
+
+import { railColumns } from "./layout";
 import {
   attachmentLine,
   exportMarkdown,
@@ -14,7 +16,6 @@ import {
   type ThreadLine,
   type Tone,
 } from "./chrome";
-import { railColumns } from "./frame";
 import { INITIAL_UI, reduceKey, type KeyEffect, type UiState } from "./keys";
 import { choiceOptions, mentionRows, paletteRows, paneRows, type PaneCatalog } from "./palette";
 import {

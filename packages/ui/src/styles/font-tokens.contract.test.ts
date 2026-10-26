@@ -33,7 +33,7 @@ const PENDING_PORT = ["apps/digichat/", "apps/digiquant-app/"];
 
 /** Type-specimen galleries and demos show font alternatives on purpose. */
 const OUT_OF_SCOPE = [
-  "apps/reference/",
+  "apps/digiweb/",
   "apps/digichat/reference/",
 ];
 

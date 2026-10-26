@@ -4,6 +4,7 @@ Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-
 
 - **Basis:** code presence on `cursor/ui-surfaces-d8c5` at `35ee78cf8` (PR #4986). Not run-tested. A row's status changes only on run evidence (a screenshot or a test) posted to its owner ticket.
 - **Status words:** `yes` = drawn and wired. `stub` = drawn, not wired. `none` = absent. `n/a` = out of scope by design.
+- **Row updates:** D8 and D9 read `yes` from 2026-10-26, on merged and test-pinned evidence: the DigiChat preview and its embed handshake (#6267), the recorded-frame surface (#6264), the digiquant frame (#6264), the digichat frame (#6295) and the digivoice frame (#6468). The recording kit runs in CI at `apps/dashboard/lib/tui-frame-acceptance.test.ts`; the phone and desktop screenshots are on the leaves that own each frame.
 - **Data/API** and **MCP** name the endpoint each side reads. Endpoint names (`desk`, `chat`, `mcp`, `graph`) are the services in ADR D5.
 - **Owner ticket** is the sibling that closes the gap. The ticket owns the ETA.
 
@@ -73,8 +74,8 @@ The dashboard has no TUI. Its parity question is real data (DIG-2697) and previe
 | D5 | Settings, broker callback | n/a | yes | Supabase | — | real data | DIG-2697 |
 | D6 | Auth (login, signup, callback, invite) | n/a | yes | Supabase auth | — | — | DIG-2697 |
 | D7 | DigiChat popup | n/a | yes (`digichat-popup.ts`; `frame-src` allows `digichat.digithings.ai`, `:3005`) | `chat` | — | align the local port with the profile (ADR D5) | DIG-2703 |
-| D8 | Live preview: DigiChat, the Brief desk | n/a | none | iframe | — | exact-origin `frame-src` PR, its own security review (ADR D7) | DIG-2698 |
-| D9 | Live preview: TUIs | n/a | none | recorded `captureCharFrame()` frames | — | no live socket in 1.0 (ADR D7) | DIG-2698 |
+| D8 | Live preview: DigiChat, the Brief desk | n/a | yes: DigiChat iframe (#6267); the desk is the native Brief pane, no second origin | iframe | — | — | DIG-2698 |
+| D9 | Live preview: TUIs | n/a | yes: three recorded frames (#6264, #6295, #6468) | recorded `captureCharFrame()` frames | — | no live socket in 1.0 (ADR D7) | DIG-2698 |
 | D10 | Mark, Gloomberb mark, font | n/a | `dashboard-mark.tsx`, `gloomberb-mark.tsx`; Geist Mono only (canonical `fonts.ts`) | — | — | shared wordmark model; the dashboard's `fonts.ts` is the canonical file (ADR D4) | DIG-2695, DIG-2702 |
 
 ## 5. Cross-cutting rows

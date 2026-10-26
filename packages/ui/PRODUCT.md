@@ -26,7 +26,9 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 ## Operating Context
 
 - Two live frontend deployments consume digiweb's packages by name: `@digithings/design` (tokens) and `@digithings/ui` (shared React components) — not by on-disk path, so digiweb can move without breaking consumers.
-- The reference gallery (`apps/reference/`) is a pattern browser, not the canon: no live surface imports it, and `packages/design/README.md` calls it out of scope. `docs/design/CURRENT_UI_LANGUAGE.md` is the current language.
+- The reference app (`apps/digiweb/`) is a live catalogue, not the canon: no product
+  surface imports it, and that is deliberate — products import the packages. The
+  current language is `docs/design/CURRENT_UI_LANGUAGE.md`.
 - `MANIFEST.json` is a machine-readable index of every reusable component (name, path, family, purpose) that agents are expected to consult before adding new UI.
 - **Consuming surfaces with their own PRODUCT.md-eligible context** (recorded here as durable facts only; visual specifics stay out of PRODUCT.md per init's own rule):
   - **dashboard** (`apps/dashboard/`) — FX Hub and the research/portfolio routes. The digiquant operator surface is the desk at `/app` (`apps/digiquant-web`, ADR D2). Its patterns live in the reference under `/finance` (dashboard workspace, tearsheet, performance metrics, order book) and `/layout-patterns` (the dashboard app's phone mockup frame) and `/effects` (the pipeline workflow viz).

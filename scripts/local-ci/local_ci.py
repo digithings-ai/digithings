@@ -52,6 +52,10 @@ try:
     import launch_guard
 except ImportError:  # fail closed everywhere: a run without the guard does not run at all
     launch_guard = None
+try:
+    import import_preflight
+except ImportError:  # the install check itself is missing: _require_install refuses
+    import_preflight = None
 
 
 def _guard(ctx="local-ci"):
@@ -62,12 +66,62 @@ def _guard(ctx="local-ci"):
     through main(), so a guard that only lived in main() would not be asked on
     the path the live job takes. A run that no trusted launcher started is
     refused with exit 78 before the lock, the worktree, the log or GitHub.
+
+    A launcher that is trusted is not enough: the install has to be complete,
+    so the same entry points then check every module the runner imports
+    (DIG-5585). A helper that was never copied in binds to None and fails
+    closed, which reads as a real verdict on every PR; the tick is refused
+    instead, naming the module.
     """
     if launch_guard is None:
         sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
                          "run rather than run unguarded (DIG-4796)\n")
         sys.exit(78)
     launch_guard.enforce(__file__, ctx)
+    _require_install()
+
+
+#: Set once the install has been checked in this process: the guard is asked at
+#: every entry point, and rescanning the same files each time buys nothing.
+_INSTALL_CHECKED = False
+
+
+def _require_install(runner_path=None):
+    """Refuse to tick when a module this runner imports is absent (DIG-5585).
+
+    The runner imports its helpers with a ``None`` fallback and each helper
+    fails closed, so a module that was never copied in does not stop the tick:
+    it makes every verdict read as a real failure. On 24 Oct a checkout
+    without ``scripts/review_pass_filter.py`` left eight PRs red on
+    ``review-applied`` while the status blamed the review (DIG-4674).
+
+    A broken install is refused before anything else happens: no lock, no
+    worktree, no GitHub write. The refusal names the missing module and the
+    module that imports it, and exits 78 (EX_CONFIG).
+    """
+    global _INSTALL_CHECKED
+    if runner_path is None:
+        if _INSTALL_CHECKED:
+            return
+        runner_path = __file__
+    if import_preflight is None:
+        lines = ["local-ci: the import_preflight module is missing; refusing to tick "
+                 "rather than tick without the install check (DIG-5585)"]
+    else:
+        missing = import_preflight.check(runner_path)
+        if not missing:
+            _INSTALL_CHECKED = True
+            return
+        lines = import_preflight.report(missing, runner_path)
+    for line in lines:
+        sys.stderr.write(line + "\n")
+        try:
+            log(line)
+        except OSError:
+            # A log directory that cannot be written must not turn a refusal
+            # into a traceback: the refusal is the message.
+            pass
+    sys.exit(78)
 
 
 HOME = os.path.expanduser("~")
@@ -1672,7 +1726,7 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py"]:
+              "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
             scan_specs.append((s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
     scan_specs.append(("actionlint", ["actionlint"], 300, None, None, ()))

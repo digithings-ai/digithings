@@ -155,7 +155,7 @@ jobs:
               - 'packages/ui/**'
               - 'packages/design/**'
               - 'packages/brand/**'
-              - 'apps/reference/**'
+              - 'apps/digiweb/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/digitrace-langfuse/**'
@@ -284,7 +284,7 @@ jobs:
   # property of the diff. Gate it on any filter (as the per-app test jobs still are)
   # and a PR whose diff falls outside that filter skips a check whose scope was never
   # the diff in the first place. The mismatch is structural, so closing glob gaps does
-  # not fix it: packages/digichat-ui/** and apps/reference/** were both in
+  # not fix it: packages/digichat-ui/** and apps/digiweb/** were both in
   # no lane when this job was written and both are covered now (digichat + web, and
   # web since #1981) — the argument is unchanged. Keep the census case in view when
   # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),

@@ -51,7 +51,7 @@ def test_the_scripts_exist():
 def test_the_three_deployed_apps_are_declared():
     assert ui_routes.DEPLOYED_APPS == ("dashboard", "digithings-web", "digiquant-web")
     # Firing control: the exclusion list is not empty and does not overlap.
-    assert ui_routes.REFERENCE_APPS == ("reference",)
+    assert ui_routes.REFERENCE_APPS == ("digiweb",)
     assert not set(ui_routes.DEPLOYED_APPS) & set(ui_routes.REFERENCE_APPS)
 
 
@@ -74,9 +74,9 @@ def test_per_app_counts(app, expected):
 
 def test_reference_app_is_enumerated_but_excluded_from_the_total():
     report = ui_routes.build(target="hosted", env={})
-    reference = report["apps"]["reference"]
+    reference = report["apps"]["digiweb"]
     assert reference["deployed"] is False
-    assert reference["routes"], "reference should still be enumerated, not dropped"
+    assert reference["routes"], "digiweb should still be enumerated, not dropped"
     # An app that is never deployed must not be handed a URL, and must not be
     # handed an env var either. Offering one invents an obligation nobody has.
     assert reference["url"] is None

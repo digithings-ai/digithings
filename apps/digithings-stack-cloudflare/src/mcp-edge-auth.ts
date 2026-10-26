@@ -35,6 +35,9 @@
 export const MCP_EDGE_SCOPES: Record<string, string> = {
   digisearch: "mcp:digisearch",
   digivault: "mcp:digivault",
+  // The digiquant MCP surface reuses the scope its HTTP API already mints
+  // (`digiquant_path_scopes()` in digikey); no new scope is introduced.
+  digiquant: "digiquant:backtest",
 };
 
 /** The scope a caller must hold to reach `serverId`, or "" when unmapped. */

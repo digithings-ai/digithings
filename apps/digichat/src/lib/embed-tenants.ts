@@ -148,7 +148,7 @@ export type EmbedTenantConfig = {
   guardrails?: GuardrailsConfig;
   /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
   limits?: LimitsConfig;
-  gateMode: "turn_limited" | "ungated" | "trial_form";
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
   theme: "dark" | "light";
   /**
    * Seed language for this tenant's embed session (#4532). Omit falls back to
@@ -599,8 +599,19 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     );
   }
 
-  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
-    throw new Error(`${ctx}: gateMode must be "turn_limited", "ungated", or "trial_form"`);
+  // `invite` round-trips a deployment document whose gate is enforced at the
+  // edge (`deploymentToEmbedTenant`); the registry does not enforce it and the
+  // app accounts its turns like `ungated` (see `gateMetersTurns` in
+  // deploy-config/schema.ts).
+  if (
+    v.gateMode !== "turn_limited" &&
+    v.gateMode !== "ungated" &&
+    v.gateMode !== "trial_form" &&
+    v.gateMode !== "invite"
+  ) {
+    throw new Error(
+      `${ctx}: gateMode must be "turn_limited", "ungated", "trial_form", or "invite"`,
+    );
   }
 
   let gate: EmbedTenantConfig["gate"];

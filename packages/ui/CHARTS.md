@@ -46,6 +46,7 @@ into it in #1463; do not reintroduce a second matrix.
 
 ## Live catalog
 
-`/finance` (reference app, port 4013) shows the canvas family, including the
-screen-only SyncedTearsheet composite; `/tearsheet` shows the SVG family
-end-to-end, including a working Download PDF export.
+The old `/finance` reference page (canvas family, SyncedTearsheet, the SVG
+tearsheet with a working Download PDF) was deleted with the 2026-08 corpus. The
+components remain in `@digithings/ui` (`finance-charts`, `finance-tearsheet`);
+read their source and the contract tests until a new proof page exists.

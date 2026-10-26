@@ -105,8 +105,33 @@ Failure uses the same GitHub labels as the workflows, on `digithings-ai/twelve-x
 - heartbeat exit 0 → comment and close open `primemarket-session-expired` issues
 
 A fresh open issue inside 24 hours gets a comment instead of a new issue.
-Logs record job, start, exit, and duration. They do not record the log tail
-or any secret.
+Logs record job, start, exit, duration and the one line reason of a failed
+run. They do not record the log tail or any secret.
+
+## The reason of a failed run
+
+A reason that stays inside the container is a reason the run watch cannot
+read, so the reason travels with the exit:
+
+- the container keeps the head and the tail of the log. The ingest prints its
+  verdict line on stdout and stdout comes first, so a log that keeps only the
+  end drops the line that names the cause.
+- the Worker reads the reason off the log tail and puts it in the exit log
+  line, in the response body and in the alert.
+- `digithings-cron` logs the reason and puts it in the error it throws. That
+  message is what the Worker error column holds.
+
+The reason is one line. It is never a secret: the container redacts the log
+before it leaves the image.
+
+The pinned twelve-x prints one machine-readable line per failed exit, and
+splits a transport failure into exit 3:
+
+    MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview
+
+Both come from the twelve-x head in `twelvex-ref.txt`. An older pin has
+neither: the Worker then falls back to the `market_context:` log marker and
+then to the last line the run said.
 
 ## Secrets to set before a deploy
 

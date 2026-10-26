@@ -38,10 +38,10 @@ But `page.tsx` files, grouped by owning app-router root, decompose as:
 | `apps/digithings-web/app` | 21 |
 | `apps/digiquant-web/app` | 7 |
 | **sum** | **53** |
-| `apps/reference/app` (templates, not shipped) | 15 |
+| `apps/digiweb/app` (live reference, not shipped) | 6 |
 | `apps/digichat/src/app` | 3 |
 | `apps/digichat/reference/assistant-ui-templates/*/app` | 4 |
-| repo total | 75 |
+| repo total | 66 |
 
 The first three sum to exactly 53 and are the three deployed web surfaces.
 Treat this as a **measurement, not a recovered spec**: no file names the list.

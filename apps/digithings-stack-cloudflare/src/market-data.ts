@@ -13,7 +13,7 @@ export type Manifest = { version?: number; as_of?: string; datasets?: Record<str
  * would yield "Thu Sep 10" and silently empty every real response, so normalize
  * once here for both the window filter and shapeCloses.
  */
-function isoDate(value: unknown): string {
+export function isoDate(value: unknown): string {
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 }
 
@@ -81,8 +81,10 @@ export function corsHeaders(origin: string | null, allowlist: string[]): Record<
 
 const PRICE_COLUMNS = ["date", "ticker", "open", "high", "low", "close", "volume"] as const;
 
-/** Wider read when the generation has OHLC. A close-only file falls back so a missing column is not a 502. */
-async function readPriceRows(bytes: ArrayBuffer): Promise<Array<Record<string, unknown>>> {
+/** Wider read when the generation has OHLC. A close-only file falls back so a missing column is not a 502.
+ *  Shared with the Worker-native digiquant MCP read path (src/digiquant-mcp.ts) so
+ *  both surfaces decode a sealed generation identically. */
+export async function readPriceRows(bytes: ArrayBuffer): Promise<Array<Record<string, unknown>>> {
   try {
     return (await parquetReadObjects({
       file: bytes,

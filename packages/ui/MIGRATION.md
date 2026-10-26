@@ -77,8 +77,8 @@ review.
 
 ## Shared primitives first
 
-Before writing new UI, check `packages/ui/MANIFEST.json` (144 components,
-17 families) and `@digithings/ui` exports: NavShell, Footer/Colophon,
+Before writing new UI, check `packages/ui/MANIFEST.json` (41 components,
+5 families) and `@digithings/ui` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
@@ -87,8 +87,7 @@ controls layer was retired in batch K3), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
 (LazyMotion `domAnimation` `strict` — a raw `motion.*` element creator throws).
-The reference app (port 4013) is the live catalog; `/digiweb` is the agent
-entry point.
+The reference app, digiweb (port 4013), is the live catalog.
 
 ## The vendored UI kit (shadcn, #4206 wave 0)
 
@@ -124,9 +123,8 @@ and deleted the controls files that then had zero consumers — `Avatar`,
 `Badge`, `Sheet`, `Collapsible` — plus digichat's four dead `ui/` wrappers and
 the second gallery-thread component library. Batch K1 (#4306) then promoted the
 seven highest-impact remaining parts, K2 finished the wayfinding/form parts, and
-K3 retired the layer outright. Proof route:
-`reference/app/(gallery)/(controls)/controls/page.tsx` (dark, light, and a
-scoped livery).
+K3 retired the layer outright. Proof: digiweb's `/components` page renders the
+kit's button, badge and input directly (dark, light, and a scoped livery).
 
 Batch K1 (#4306) promoted the seven highest-impact keep-list parts into the kit
 in one pass — **Slider, EmptyState, Skeleton (+ `SkeletonGroup`), RadioGroup/
@@ -179,10 +177,10 @@ The repeatable shape K1 used for each of the seven:
    existing `@digithings/ui/ui` import block in the file rather than adding a
    second import from the same module. Leave every other main-barrel import
    (Pager, TabStrip, Tooltip, …) where it is.
-4. **Add a specimen entry.** `apps/reference/lib/specimen-inventory.ts` needs a
-   `SPECIMENS` key for the new `ui/index.ts` module pointing at the canonical
-   specimen file + a marker the file contains, or `specimens.test.ts` fails.
-   Repoint the specimen's own import to `@digithings/ui/ui`.
+4. **No specimen registry to update.** digiweb's `/components` page parses
+   `ui/index.ts` and `index.ts` directly (`apps/digiweb/lib/kit-index.ts`), so a
+   newly exported part appears there without an entry. If the part needs a live
+   proof, add it to the page's proof row, not to a hand-maintained catalogue.
 5. **Pin the part in `ui.render.test.tsx`** (render + variant/pointer/RTL
    assertions) and, for pointer contracts that only exist in the DOM, in
    `ui.pointer.client.test.tsx`.
@@ -317,12 +315,9 @@ reordered imports. The rule for every app that keeps local family CSS:
   which has to outrank the unlayered `.kbd` in `globals.css`.
 - `@import` statements stay ahead of the layer block (CSS drops a late
   `@import`).
-- A second Next root that themes vendor CSS (the reference `(chatbot)` shell
-  around assistant-ui) keeps its own unlayered cascade; it is not a canon
-  family sheet.
 
-`apps/reference/lib/layering.test.ts` pins the wrapped set and the `.sb-hint`
-exception, and the reference documents the convention in its README.
+The convention is documented here and enforced by the canon guard;
+`apps/digiweb` is the exempt proof surface.
 
 ## Overlay scrollbar pointer contract (DIG-4600)
 

@@ -66,13 +66,17 @@ pattern = "search.digithings.ai"
 zone_name = "digithings.ai"
 custom_domain = true
 
-# HUMAN GATE — infra/network: mcp.digithings.ai exposes the digiquant-mcp
-# market-data tools to the public internet, and those tools are unauthenticated
-# localhost today. Enable this route ONLY together with Worker-edge digikey JWT
-# enforcement (scope `digiquant:backtest`, see digiquant/ARCHITECTURE.md § MCP
-# hosting). Until then the MCP container answers only on the custom-domain route
-# once enabled with that gate — there is deliberately no workers.dev forwarding
-# route (an unauthenticated /_stack/mcp/* forwarder must not ship).
+# HUMAN GATE — infra/network: mcp.digithings.ai exposes the digiquant market-data
+# tools to the public internet. The endpoint is Worker-native (DIG-2913): a
+# Durable Object reading sealed R2 generations, no container in the read path,
+# behind the same gate as `/_stack/mcp/*` (./mcp-edge-auth: a digikey JWT
+# carrying `digiquant:backtest`, or `x-digi-mcp-key` vs MCP_EDGE_KEY; 503 when no
+# credential source exists, 401/403 otherwise).
+# Enable this route ONLY together with the digikey JWT enforcement decision in
+# digiquant/ARCHITECTURE.md § MCP hosting; the edge key alone is a
+# service-to-service gate, not a user auth story. There is
+# deliberately no workers.dev forwarding route (an unauthenticated /_stack/mcp/*
+# forwarder must not ship).
 # [[routes]]
 # pattern = "mcp.digithings.ai"
 # zone_name = "digithings.ai"
@@ -157,6 +161,17 @@ class_name = "DigiQuantMcpContainer"
 # v3 (DigiChatContainer) is left in the migration history deliberately: the DO
 # namespace it created is unbound now, and rewriting an applied migration tag
 # is not a supported operation.
+
+# Worker-native digiquant market-data MCP (DIG-2913). The read path is the
+# Worker itself (src/digiquant-mcp.ts) inside this Durable Object: one pinned id
+# (MCP_CONTAINER_ID) owns the 900s fresh-window cache, reads the MARKET_DATA
+# bucket with hyparquet, and serves `POST /mcp` (stateless Streamable HTTP).
+# MCP_STACK above is legacy: nothing routes to it any more; its removal ships
+# with the container sweep (see the issue's follow-up).
+[[durable_objects.bindings]]
+name = "DIGIQUANT_MCP"
+class_name = "DigiQuantMcpAgent"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiStackContainer"]
@@ -176,6 +191,12 @@ new_sqlite_classes = ["DigiChatContainer"]
 [[migrations]]
 tag = "v4"
 deleted_classes = ["DigiChatContainer"]
+
+# Worker-native digiquant MCP (DIG-2913). New class, so it needs its own
+# migration tag; DO migrations are append-only — never edit v1..v4.
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["DigiQuantMcpAgent"]
 
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN

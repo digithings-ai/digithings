@@ -41,9 +41,10 @@ def manifest(tmp_path_factory: pytest.TempPathFactory) -> dict:
 def test_route_groups_are_not_families(manifest: dict) -> None:
     families = set(manifest["families"])
     assert not [f for f in families if f.startswith("(")], families
-    # app/(gallery)/page.tsx → foundations; app/(gallery)/<fam>/ → <fam>.
+    # app/page.tsx → foundations; app/<fam>/page.tsx → <fam>.
     assert "foundations" in families
-    assert "account" in families
+    assert "rtl" in families
+    assert "brand" in families
 
 
 def test_counts_match_the_index(manifest: dict) -> None:
