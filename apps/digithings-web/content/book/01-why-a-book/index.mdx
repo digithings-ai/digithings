@@ -2,53 +2,55 @@
 title: Why this book exists
 order: 1
 summary: >-
-  What digithings stands for, in the order it was decided. The docs explain how to run the software; this book explains why it is built the way it is.
+  Why digithings exists, the six rules behind it, and where each one is taken up.
 ---
 
-digithings started as one builder's own AI stack: the parts needed to use AI
-for real work, on a laptop or in the cloud, without a vendor deciding which
-model, which database or which interface that work has to use. It is published
-whole, under the MIT licence.
+I built digithings as my own AI stack. I wanted to use AI for real work, on a
+laptop or in the cloud, without a vendor deciding which model, database or
+interface I was allowed to use. It's all published, under the MIT licence.
 
-AI tooling changes every few months. A better model, a cheaper vector store or
-a new agent client arrives, and most applications need a rewrite to take it.
-This stack is shaped so they need a setting. The book explains the shape and
-the decisions behind it; setup and endpoints live in the documentation.
+AI tooling changes every few months. A better model shows up, or a cheaper vector
+store, or a new agent client, and most applications need a rewrite to take it on.
+
+Here, it's a setting.
 
 ## What we hold to
 
-**Own the stack.** Every part is code you can read, run and change. When an
-answer looks wrong, you can follow it to the line that made the decision.
+Six rules we build by. Each is taken up again later, and the argument matters
+more than the rule.
 
-**Location is a deployment decision.** The same services run in Docker on a
-laptop and in containers in a cloud account, and read the same setting names in
-both. Moving them changes values, not code.
+**Own the stack.** Every part is code you can read, run and change, and when an
+answer looks wrong you follow it down to the line that decided. Chapter 03 makes
+the case.
 
-**Open at the seams.** Models are reached over the OpenAI chat format, tools
-over MCP, identity as standard signed tokens and traces over OpenTelemetry.
-Each is a standard the stack did not invent, so any part can be swapped for
-something else that speaks it.
+**Location is a deployment decision.** Chapter 02 is the argument. The same
+services run in Docker on a laptop and in containers in a cloud account, and read
+the same setting names in both. Moving them changes values, not code.
 
-**Small parts, one job each.** Model access, orchestration, retrieval,
-identity, tracing and the interface are separate modules. A project that only
-needs search over its documents runs retrieval and leaves the rest off.
+**Open at the seams.** Models are reached over the OpenAI chat format, tools over
+MCP, identity as signed tokens, traces over OpenTelemetry. Standards the stack
+didn't invent, so any part can be swapped for another that speaks them. Chapter 03
+argues it, and says what stays closed.
 
-**Grow in place.** A solo builder and an organisation use the same contracts.
-Capability and cost go up as the work proves itself.
+**Small parts, one job each.** Model access, orchestration, retrieval, identity,
+tracing and the interface are separate modules, so a project that only needs search
+runs retrieval and leaves the rest off. Chapter 04 turns it into three dials.
 
-**Show the working.** Answers cite the passages they used, backtests record
-the engine build that produced them, and with tracing on, every request leaves
-a trail. Trust comes from what the system records, not from what it claims.
+**Grow in place.** A solo builder and an organisation use the same contracts, and
+the scaling chapter shows how far that carries before the ceiling.
+
+**Show the working.** Answers cite the passages they used, backtests record the
+engine build that produced them, and with tracing on, every request leaves a trail.
+The environment chapter is where those records come from.
 
 ## How to read it
 
-The case comes first: software that can live anywhere, an open core, a stack
-that scales without a rewrite, and what people build with it. Then the modules,
-each with what it does, where its seam is and what it costs to replace. It ends
-on your own machine, with the first thing to build.
+The case comes first: software that can live anywhere, an open core, a stack that
+scales without a rewrite, and what people build with it. Then the modules, each with
+what it does, where its seam is and what it costs to run. It ends on your own
+machine, with the first thing to build.
 
-The module chapters are written for whoever will run the stack: someone at home
-with Docker and a settings file. If nobody on your team is, the last chapter
-says who does that work.
+The module chapters assume you're comfortable with Docker and a settings file. If
+nobody on your team is, the last chapter says who does that work.
 
 Read it through in one sitting, or open the chapter your question lives in.
