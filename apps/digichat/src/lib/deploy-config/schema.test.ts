@@ -2,19 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
+import { materializeDigichatConfig } from "./loader";
 import {
   allowlistModelId,
+  BootLoadingSchema,
   disclosureDefaultOpen,
   disclosureIsLocked,
   disclosureIsVisible,
   GateSchema,
   parseDigichatConfig,
   resolveHouseModelSelection,
+  deploymentRateLimitEnabled,
   premiumModelsHeader,
   routerModelsHeader,
   welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
+import { resolveBootLabVariant } from "@digithings/ui/chat/boot-lab";
 import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 
 const examplesDir = resolve(__dirname, "../../../config/examples");
@@ -38,6 +42,7 @@ describe("DigichatConfigSchema", () => {
     expect(cfg.deployment?.features.effort).toBe("medium");
     expect(cfg.deployment?.chrome.toolbar).toBe(true);
     expect(cfg.deployment?.chrome.scrollbars).toBe("always");
+    expect(cfg.deployment?.chrome.loading).toBe("banner");
     expect(cfg.deployment?.chrome.palette).toBeUndefined();
     expect(cfg.deployment?.chrome.defaultLanguage).toBe("en");
     expect(cfg.deployment?.chrome.transcript.userAlign).toBe("right");
@@ -208,6 +213,46 @@ describe("DigichatConfigSchema", () => {
     ).toThrow(/chrome/);
   });
 
+  it("accepts a chrome.loading boot animation and fails closed on unknown ones", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "x",
+        chrome: { loading: "tooltask" },
+        backend: { type: "digigraph" },
+      },
+    });
+    expect(cfg.deployment?.chrome.loading).toBe("tooltask");
+    // The pre-banner welcome loader stays reachable as an explicit opt-out.
+    expect(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { loading: "classic" },
+          backend: { type: "digigraph" },
+        },
+      }).deployment?.chrome.loading,
+    ).toBe("classic");
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "x",
+          chrome: { loading: "spinner9000" },
+          backend: { type: "digigraph" },
+        },
+      }),
+    ).toThrow(/chrome/);
+  });
+
+  it("keeps every config loading value wired to a real boot-lab variant", () => {
+    for (const value of BootLoadingSchema.options) {
+      // `classic` is the documented opt-out to the pre-banner loader.
+      expect(resolveBootLabVariant(value)).toBe(value === "classic" ? null : value);
+    }
+  });
+
   it("accepts official thread skins and fails closed on unknown ones", () => {
     const cfg = parseDigichatConfig({
       version: 1,
@@ -338,11 +383,18 @@ describe("DigichatConfigSchema", () => {
     // The trial config filename contains a tenant name. Assemble it so this
     // public test file does not carry that literal.
     const trialFile = ["data", "tap-trial-foundry.yaml"].join("");
-    const trial = parseDigichatConfig(
+    const trial = materializeDigichatConfig(
       loadYaml(readFileSync(resolve(__dirname, "../../../config", trialFile), "utf8")),
       trialFile,
     );
-    expect(trial.deployment?.guardrails).toBeUndefined();
+    expect(trial.deployment?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: true,
+    });
+    expect(trial.deployment?.guardrails?.tokensPerMinute).toBeUndefined();
+    expect(deploymentRateLimitEnabled(trial.deployment?.guardrails)).toBe(true);
     expect(trial.deployment?.backend).not.toHaveProperty("maxToolCalls");
   });
 
@@ -428,7 +480,7 @@ describe("DigichatConfigSchema", () => {
     for (const name of [...files, ...skinFiles]) {
       const raw = readFileSync(resolve(examplesDir, name), "utf8");
       const doc = loadYaml(raw);
-      const cfg = parseDigichatConfig(doc, name);
+      const cfg = materializeDigichatConfig(doc, name);
       expect(cfg.version).toBe(1);
       expect(cfg.deployment || (cfg.hosts && Object.keys(cfg.hosts).length > 0)).toBeTruthy();
     }
@@ -455,7 +507,7 @@ describe("DigichatConfigSchema", () => {
   });
 
   it("pins product embed YAML to digichat skin + digigraph tool catalog", () => {
-    const digithings = parseDigichatConfig(
+    const digithings = materializeDigichatConfig(
       loadYaml(readFileSync(resolve(examplesDir, "digithings-ai-embed.yaml"), "utf8")),
       "digithings-ai-embed.yaml",
     );
@@ -486,7 +538,12 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.models.available).not.toContain("qwen/qwen3.8-max");
     expect(dt?.models.costPerWindow).toEqual({ usd: 0.0125565, windowSeconds: 86400 });
     expect(
-      dt?.models.picker?.groups.find((group) => group.premium)?.models.map((model) => model.id),
+      dt?.models.picker?.groups.find((group) => group.premium),
+    ).toBeUndefined();
+    expect(
+      dt?.models.picker?.groups.flatMap((group) =>
+        group.models.filter((model) => model.premium).map((model) => model.id),
+      ),
     ).toEqual(["google/gemini-3.8-flash", "z-ai/glm-5.3"]);
     expect(dt?.models.picker?.presets.find((preset) => preset.id === "reasoning")?.model).toBe(
       "z-ai/glm-5.3-flash",
@@ -506,17 +563,33 @@ describe("DigichatConfigSchema", () => {
     ]);
     expect(dt?.models.picker?.groups.length).toBeGreaterThan(0);
     expect(dt?.mcp?.allowUserServers).toBe(false);
-    expect(dt?.guardrails).toBeUndefined();
+    expect(dt?.gate.webSearch).toBe(true);
+    expect(dt?.gate.showContextMeter).toBe(true);
+    expect(dt?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: true,
+      tokensPerMinute: { user: 80000 },
+    });
+    expect(deploymentRateLimitEnabled(dt?.guardrails)).toBe(true);
+    expect(dt?.prompt).toContain("Web search is on");
     expect(allowedForceTools(dt)).toEqual(["digisearch", "digivault"]);
 
-    const occ = parseDigichatConfig(
+    const occ = materializeDigichatConfig(
       loadYaml(readFileSync(resolve(examplesDir, "occ-embed.yaml"), "utf8")),
       "occ-embed.yaml",
     );
     const occHost = occ.hosts?.["occ.digithings.ai"];
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
-    expect(occHost?.guardrails).toBeUndefined();
+    expect(occHost?.guardrails).toEqual({
+      maxToolCallsPerTurn: 5,
+      answerAt: 0.7,
+      pauseAt: 0.9,
+      rateLimit: false,
+    });
+    expect(deploymentRateLimitEnabled(occHost?.guardrails)).toBe(false);
     // backend.digisearchIndex was retired; Help search reaches the model only as
     // the digisearch MCP server, whose setup names the occ_help index.
     expect(occHost?.tools?.catalog).toEqual([]);
@@ -538,7 +611,7 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.models.catalog).toBe(true);
     expect(occHost?.models.allowPicker).toBe(true);
     expect(occHost?.models.picker?.presets[0]?.id).toBe("auto");
-    expect(occHost?.models.occPicker).toBe(true);
+    expect(occHost?.models.occPicker).toBeUndefined();
     expect(occHost?.models.costPerWindow).toBeUndefined();
     expect(occHost?.models.available).toContain("z-ai/glm-5.3");
     expect(occHost?.models.available).toContain("google/gemini-3.8-flash");
@@ -554,7 +627,7 @@ describe("DigichatConfigSchema", () => {
     expect(allowedForceTools(occHost)).toEqual(["zammad", "digisearch", "digivault"]);
   });
 
-  it("keeps the OCC picker locked unless occPicker is true", () => {
+  it("keeps the OCC picker locked only when occPicker is false", () => {
     const locked = parseDigichatConfig({
       version: 1,
       hosts: {
@@ -566,6 +639,7 @@ describe("DigichatConfigSchema", () => {
           models: {
             catalog: true,
             occPicker: false,
+            priceCapUsdPerMillion: 2,
             costPerWindow: { usd: 0.0125565 },
           },
         },
@@ -587,7 +661,12 @@ describe("DigichatConfigSchema", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
-          models: { catalog: true, occPicker: true, costPerWindow: { usd: 0.0125565 } },
+          models: {
+            catalog: true,
+            occPicker: true,
+            priceCapUsdPerMillion: 2,
+            costPerWindow: { usd: 0.0125565 },
+          },
         },
       },
     });
@@ -944,7 +1023,7 @@ describe("preset selection on the BFF", () => {
 
   it("lets the catalog win over a hand list instead of failing the config", () => {
     const raw = loadYaml(
-      readFileSync(resolve(examplesDir, "digithings-ai-embed.yaml"), "utf8"),
+      readFileSync(resolve(examplesDir, "../defaults.yaml"), "utf8"),
     ) as { hosts: Record<string, { models: Record<string, unknown> }> };
     const host = Object.keys(raw.hosts)[0]!;
     raw.hosts[host]!.models.available = ["openai/gpt-5.6-sol"];

@@ -38,14 +38,17 @@ from digivault.local_search import search_local_vault
 from digivault.models import LintReport, Note, NoteDetail
 from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
+    TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
     TOOL_VAULT_GET_NOTE,
     TOOL_VAULT_SEARCH_NOTES,
+    TOOL_VAULT_SEARCH_TAG,
     OpenAIToolDict,
     build_orchestrator_tool_manifest,
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
-from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
+from digivault.store_helpers import first_env
+from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.tenant_scope import enforce_tenant_path_prefix, mapped_tenant_path_prefix
 from digivault.tool_dispatch import (
     ART9_REFUSED,
@@ -90,13 +93,38 @@ _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/healthz"}
 
 
+def _d1_backed_for_lookup() -> bool:
+    """``_d1_configured`` for the tag/backlink lookups: a partial D1 config is a 503."""
+    try:
+        return _d1_configured()
+    except D1StoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _is_loopback_peer(host: str) -> bool:
+    import ipaddress
+
+    try:
+        return ipaddress.ip_address((host or "").strip("[]")).is_loopback
+    except ValueError:
+        return host == "localhost"
+
+
 def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
     if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
         return None
     xff = request.headers.get("X-Forwarded-For")
-    ip = (
-        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
-    )
+    peer = request.client.host if request.client else "unknown"
+    if not xff and _is_loopback_peer(peer):
+        # In-container callers (digigraph on the same container) reach this
+        # service over loopback with no X-Forwarded-For. They all share one
+        # socket address, so a per-IP window turns into one shared bucket for
+        # every chat user at once (10 tool calls/min across all tenants). The
+        # service only listens on loopback in the stack container, and edge
+        # callers always arrive with X-Forwarded-For, so this exempts exactly
+        # the in-container hop.
+        return None
+    ip = xff.split(",")[0].strip() if xff else peer
     if ip == "testclient":
         return None
     now = _time.monotonic()
@@ -182,12 +210,12 @@ def _d1_credentials() -> tuple[str, str]:
     names when the canonical ones are unset. This keeps the rename zero-downtime: the
     deployed Worker's live ``VECTORIZE_ACCOUNT_ID``/``VECTORIZE_API_TOKEN`` secrets
     keep working the moment this ships, with no coordinated secret-rotation required
-    before deploy. Reuses ``supabase_store._first_env``'s multi-name lookup shape.
+    before deploy. Reuses ``store_helpers.first_env``'s multi-name lookup shape.
     """
     _warn_legacy_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
     _warn_legacy_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
-    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    account_id = first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     return account_id, api_token
 
 
@@ -1014,13 +1042,66 @@ def orchestrator_invoke(
             ok=True, tool=tool, data={"notes": notes, "errors": errors}
         )
 
+    if tool in (TOOL_VAULT_SEARCH_TAG, TOOL_VAULT_BACKLINKS) and _d1_backed_for_lookup():
+        # Same corpus as digivault_search_notes / digivault_get_note. Without this the
+        # tag and backlink lookups read the filesystem vault, which in the stack
+        # container is not the D1 corpus the other two tools answer from: tags came
+        # back empty and every backlink lookup was "No such note".
+        try:
+            prefix = resolve_path_prefix(args.get("path_prefix"))
+        except ValueError:
+            prefix = ""
+        if not prefix:
+            return OrchestratorInvokeResponse(
+                ok=False,
+                tool=tool,
+                error="path_prefix is required when the D1 backend is configured",
+            )
+        enforce_tenant_path_prefix(_tenant_slug(request), prefix)
+        store = _open_d1_store_or_503(prefix)
+        try:
+            if tool == TOOL_VAULT_SEARCH_TAG:
+                tag = str(args.get("tag") or "").strip()
+                if not tag:
+                    return OrchestratorInvokeResponse(ok=False, tool=tool, error="tag is required")
+                lookup = store.search_tag(tag, path_prefix=prefix)
+                return OrchestratorInvokeResponse(
+                    ok=True,
+                    tool=tool,
+                    data={"notes": lookup.notes, "truncated": lookup.truncated},
+                )
+            name = str(args.get("name") or args.get("vault_path") or "").strip()
+            resolved = store.resolve_note_path(name, path_prefix=prefix) if name else None
+            if resolved is None or not (resolved == prefix or resolved.startswith(prefix + "/")):
+                # Outside the prefix reads the same as missing (no sibling probing).
+                return OrchestratorInvokeResponse(
+                    ok=False, tool=tool, error=f"No such note: {name!r}"
+                )
+            links = store.backlinks(resolved, path_prefix=prefix)
+            return OrchestratorInvokeResponse(
+                ok=True,
+                tool=tool,
+                data={
+                    "name": resolved,
+                    "backlinks": links.paths,
+                    "truncated": links.truncated,
+                },
+            )
+        except D1StoreError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     vault = _open_scoped_vault(request)
     if tool not in VAULT_HANDLERS:
         raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
     result = dispatch_vault_tool(tool, args, vault)
     if not result.ok:
         return OrchestratorInvokeResponse(ok=False, tool=tool, error=result.error)
-    return OrchestratorInvokeResponse(ok=True, tool=tool, data=result.data)
+    data = dict(result.data or {})
+    if tool in (TOOL_VAULT_SEARCH_TAG, TOOL_VAULT_BACKLINKS):
+        # The filesystem vault has no scan cap, so its answer is always complete;
+        # keep the envelope identical to the D1 path above.
+        data.setdefault("truncated", False)
+    return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
 
 
 # Claim runtime-only tools on the canonical dispatch table so

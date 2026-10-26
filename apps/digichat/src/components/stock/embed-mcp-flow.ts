@@ -28,7 +28,7 @@ export type ConnectedToolRow = {
   label: string;
   kind: "catalog" | "mcp";
   /** Individual tools under this row (per-tool session toggles). */
-  tools?: ReadonlyArray<{ id: string; label?: string }>;
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
   /**
    * The built-in tools a house service always offers, listed under it when the
    * deployment names none. They follow the service's switch; they are not
@@ -56,7 +56,7 @@ export const DIGIVAULT_BUILTIN_TOOLS = [
 type CatalogRef = {
   id: string;
   label?: string;
-  tools?: ReadonlyArray<{ id: string; label?: string }>;
+  tools?: ReadonlyArray<{ id: string; label?: string; group?: string }>;
 };
 
 export function emptyMcpConfig(): SessionMcpConfig {
@@ -214,8 +214,28 @@ export function connectedToolIsOn(
   return input.extraToolOn(id);
 }
 
-export function connectedTools(input: {
-  hasDigisearch: boolean;
+/**
+ * The house services whose backend id is also their only public name. A
+ * deployment used to label them "Search"/"Vault"; a tenant document (or an
+ * OCC row) that still does must not leak that vocabulary into `/tools`, `/mcp`
+ * or the menu summaries. Individual tools already render raw backend ids
+ * (digivault_get_note), so the group cannot use a different vocabulary.
+ */
+export const HOUSE_SERVER_IDS: ReadonlySet<string> = new Set(["digisearch", "digivault"]);
+
+/**
+ * The rendered name of a server row: the backend id for the house services,
+ * otherwise the deployment label with the id as fallback. Never a title-cased
+ * or otherwise derived pretty name.
+ */
+export function serverRowLabel(id: string, _label?: string): string {
+  // Raw backend id, always. A deployment label is how an operator describes a
+  // server to themselves; the row must name what the backend calls it, so the
+  // chat and the tool trace never disagree.
+  return id.trim();
+}
+
+export function connectedTools(input: {  hasDigisearch: boolean;
   hasVault: boolean;
   tenantAllowsWeb: boolean;
   catalogTools: readonly CatalogRef[];
@@ -224,8 +244,10 @@ export function connectedTools(input: {
 }): ConnectedToolRow[] {
   const mcp = connectedMcpConfigs(input.mcpServers, input.mcpCustom);
   const mcpIds = new Set(mcp.map((s) => s.id));
-  const labelOf = (id: string, fallback: string) =>
-    input.catalogTools.find((t) => t.id === id)?.label?.trim() || fallback;
+  /**
+   * Labels are raw backend ids everywhere: `serverRowLabel` returns the id,
+   * and the web search row uses the backend's own `web_search`.
+   */
   const subsOf = (id: string) => {
     const hit =
       input.catalogTools.find((t) => t.id === id)?.tools ??
@@ -240,7 +262,7 @@ export function connectedTools(input: {
     rows.push({
       id: "digisearch",
       slash: "digisearch",
-      label: labelOf("digisearch", "Search"),
+      label: serverRowLabel("digisearch"),
       kind: "catalog",
       ...subsOf("digisearch"),
     });
@@ -249,7 +271,7 @@ export function connectedTools(input: {
     rows.push({
       id: "digivault",
       slash: "digivault",
-      label: labelOf("digivault", "Vault"),
+      label: serverRowLabel("digivault"),
       kind: "catalog",
       ...subsOf("digivault"),
     });
@@ -258,7 +280,7 @@ export function connectedTools(input: {
     rows.push({
       id: "websearch",
       slash: "websearch",
-      label: labelOf("web_search", "Web search"),
+      label: "web_search",
       kind: "catalog",
     });
   }
@@ -276,16 +298,22 @@ export function connectedTools(input: {
     rows.push({
       id,
       slash: catalogSlashId(id),
-      label: t.label?.trim() || id,
+      label: id,
       kind: "catalog",
       ...subsOf(id),
     });
   }
+  // One row per backend id. A service row is pushed above when its capability
+  // is on, and the same id also arrives in `mcp.servers`; without this guard
+  // the menu lists digisearch and digivault twice.
+  const seen = new Set(rows.map((r) => r.id));
   for (const s of mcp) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
     rows.push({
       id: s.id,
       slash: s.id,
-      label: s.label || s.id,
+      label: serverRowLabel(s.id, s.label),
       kind: "mcp",
       ...subsOf(s.id),
     });
@@ -312,7 +340,7 @@ export function mcpMenuSummaryFromConfigs(
   if (!servers.length) return "None";
   const on = servers.filter((s) => extraToolOn(s.id));
   if (!on.length) return "Off";
-  if (on.length === 1) return on[0]!.label.trim() || on[0]!.id;
+  if (on.length === 1) return serverRowLabel(on[0]!.id, on[0]!.label);
   return `${on.length} on`;
 }
 

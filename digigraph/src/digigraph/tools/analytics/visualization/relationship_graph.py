@@ -7,12 +7,12 @@ from typing import Any
 
 import polars as pl
 
-from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import (
-    _artifacts_dir,
-    _next_filename,
-    _sanitize_node_id,
+from digigraph.tools.analytics._artifacts import (
+    artifacts_dir,
+    next_filename,
+    sanitize_node_id,
 )
+from digigraph.tools.analytics.load import load_dataset
 
 
 def build_relationship_graph(
@@ -81,8 +81,8 @@ def build_relationship_graph(
             G.add_node(n)
         for e in edges:
             G.add_edge(e["source"], e["target"], weight=e["weight"])
-        out_dir = _artifacts_dir(dataset_path)
-        path = _next_filename(out_dir, "graph")
+        out_dir = artifacts_dir(dataset_path)
+        path = next_filename(out_dir, "graph")
         fig, ax = plt.subplots(figsize=(8, 6))
         pos = nx.spring_layout(G, k=0.5, iterations=50) if layout == "force" else nx.shell_layout(G)
         nx.draw(G, pos, ax=ax, with_labels=True, font_size=6, node_size=200, arrows=True)
@@ -95,8 +95,8 @@ def build_relationship_graph(
         lines = ["flowchart LR"]
         seen = set()
         for e in edges[:100]:
-            sid = _sanitize_node_id(e["source"])
-            tid = _sanitize_node_id(e["target"])
+            sid = sanitize_node_id(e["source"])
+            tid = sanitize_node_id(e["target"])
             key = (sid, tid)
             if key not in seen:
                 seen.add(key)

@@ -116,7 +116,7 @@ describe("motion and live config", () => {
 
 describe("terminal fit", () => {
   for (const def of all) {
-    // Five half-block rows for the 10-row font; digiclaw adds two rows of claw headroom.
+    // Five half-block rows for the 10-row font; digibot adds two rows of claw headroom.
     const lines = def.font.rows / 2;
     test(`${def.id} fits 120x30 and 80x24 as ${lines} half-block rows`, () => {
       for (const [cols, rows] of [[120, 30], [80, 24]] as const) {

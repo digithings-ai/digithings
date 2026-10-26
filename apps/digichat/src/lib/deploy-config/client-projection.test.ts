@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { BASELINE_EMBED_SUGGESTIONS } from "@/lib/baseline-embed";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { load as loadYaml } from "js-yaml";
 import { DEFAULT_CLIENT_CONFIG, toDigichatClientConfig } from "./client-projection";
 import { clientConfigFromEmbedTenant } from "./embed-bridge";
+import { parseDigichatConfig } from "./schema";
 import type { EmbedTenantClientConfig } from "@/lib/embed-client-config";
 import type { DigichatDeployment } from "./schema";
+
+const HOUSE_DEFAULTS = resolve(__dirname, "../../../config/defaults.yaml");
 
 function depWithCatalog(
   catalog: Array<{ id: string; default?: boolean; label?: string }>,
@@ -56,6 +61,37 @@ describe("mcp.servers client projection never leaks operator secrets (#3841)", (
     expect(serialized).not.toContain("DATATAP_MCP_TOKEN");
     expect(serialized).not.toContain("X-API-Key");
     expect(serialized).not.toContain("mcp.datatap.example");
+  });
+
+  it("drops authScheme too: a jwt row projects no credential shape at all", () => {
+    // The minted token only ever exists on the server-to-server header to
+    // digigraph (lib/mcp-edge-token.ts). A client that learned the row is a
+    // jwt row would have learned about the deployment's identity model without
+    // being able to use it, and the field is operator-only.
+    //
+    // Read the real house document rather than a literal: the first assertion
+    // fails if defaults.yaml stops marking its MCP rows jwt, and the second
+    // fails if the projection starts leaking the scheme or a credential.
+    const raw = loadYaml(readFileSync(HOUSE_DEFAULTS, "utf8")) as unknown;
+    const parsed = parseDigichatConfig(raw, "defaults.yaml");
+    const host = Object.keys(parsed.hosts ?? {})[0]!;
+    const dep = (parsed.hosts ?? {})[host]!;
+    expect(dep).toBeDefined();
+    expect(dep.mcp?.servers.map((s) => [s.id, s.authScheme])).toEqual([
+      ["digisearch", "jwt"],
+      ["digivault", "jwt"],
+    ]);
+    const client = toDigichatClientConfig(dep);
+    // Raw backend ids, never a humanised name: the client shows what the
+    // backend calls the server, so a label that disagrees is a bug.
+    expect(client.mcp.servers).toEqual([
+      { id: "digisearch", label: "digisearch", default: true },
+      { id: "digivault", label: "digivault", default: true },
+    ]);
+    const serialized = JSON.stringify(client);
+    expect(serialized).not.toContain("authScheme");
+    expect(serialized).not.toContain("_stack/mcp");
+    expect(serialized).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}/);
   });
 });
 
@@ -170,14 +206,17 @@ describe("baseline embed models catalog (Cheaper Inference default)", () => {
   });
 });
 
-describe("baseline embed defaults (unconfigured container) are least-privilege", () => {
-  it("ships template suggestions but leaves user MCP, web search, and BYOK off", () => {
-    expect(BASELINE_EMBED_SUGGESTIONS).toHaveLength(4);
-    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toEqual(BASELINE_EMBED_SUGGESTIONS);
+describe("client fallback matches house", () => {
+  it("ships the house suggestions with web search, BYOK, and the context meter on", () => {
+    expect(DEFAULT_CLIENT_CONFIG.slug).toBe("digithings-ai");
+    expect(DEFAULT_CLIENT_CONFIG.chrome.suggestions).toHaveLength(8);
+    expect(DEFAULT_CLIENT_CONFIG.chrome.welcome).toBe("Ask about digithings");
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowUserServers).toBe(false);
     expect(DEFAULT_CLIENT_CONFIG.mcp.allowAddForm).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(false);
-    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(false);
+    expect(DEFAULT_CLIENT_CONFIG.gate.webSearch).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showByok).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.gate.showContextMeter).toBe(true);
+    expect(DEFAULT_CLIENT_CONFIG.features.attachments).toBe(false);
   });
 
   it("enables user MCP, web search, and BYOK only for an explicitly-configured deployment", () => {
@@ -245,5 +284,39 @@ describe("baseline embed defaults (unconfigured container) are least-privilege",
       mcp: { servers: [], allowUserServers: true, allowAddForm: true },
     } as unknown as DigichatDeployment);
     expect(client.gate.searchEngine).toBeUndefined();
+  });
+});
+
+describe("chrome.scroll client projection", () => {
+  it("defaults to follow when the deployment does not say", () => {
+    const client = toDigichatClientConfig(depWithCatalog([]));
+    expect(client.chrome.scroll).toEqual({ mode: "follow" });
+    expect(DEFAULT_CLIENT_CONFIG.chrome.scroll).toEqual({ mode: "follow" });
+  });
+
+  it("carries free through to the client", () => {
+    const dep = depWithCatalog([]);
+    const free = {
+      ...dep,
+      chrome: { ...dep.chrome, scroll: { mode: "free" as const } },
+    } as DigichatDeployment;
+    expect(toDigichatClientConfig(free).chrome.scroll).toEqual({ mode: "free" });
+  });
+});
+
+describe("chrome.loading client projection", () => {
+  it("defaults to the banner cover when the deployment does not say", () => {
+    const client = toDigichatClientConfig(depWithCatalog([]));
+    expect(client.chrome.loading).toBe("banner");
+    expect(DEFAULT_CLIENT_CONFIG.chrome.loading).toBe("banner");
+  });
+
+  it("carries a chosen boot animation through to the client", () => {
+    const dep = depWithCatalog([]);
+    const chosen = {
+      ...dep,
+      chrome: { ...dep.chrome, loading: "tooltask" as const },
+    } as DigichatDeployment;
+    expect(toDigichatClientConfig(chosen).chrome.loading).toBe("tooltask");
   });
 });

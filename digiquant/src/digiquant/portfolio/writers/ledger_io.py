@@ -63,6 +63,7 @@ from digiquant.portfolio.turnover import no_trade_band_pp
 from digiquant.research.data.queries import r2_backend_enabled
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import is_cash
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +137,6 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
         if not str(row.get("workspace_id") or "").strip():
             raise ValueError(f"{table} insert refused: workspace_id is missing on a row")
     _execute(client.table(table).insert(rows))
-
-
-def _is_cash(ticker: Any) -> bool:
-    return isinstance(ticker, str) and ticker.strip().upper() == _CASH
 
 
 def _symbol(raw: Any) -> str:
@@ -421,7 +418,7 @@ def _pct_adjustments_by_symbol(
     for adjustment in adjustments:
         if adjustment.unit != "pct":
             continue
-        if _is_cash(adjustment.ticker):
+        if is_cash(adjustment.ticker):
             continue
         by_symbol[_symbol(adjustment.ticker)].append(adjustment)
     return by_symbol
@@ -489,7 +486,7 @@ def append_commit_chain(
     order_heads = _head_by_symbol(_heads(prior_orders))
     frozen = _frozen_symbols(client=client, order_rows=prior_orders)
 
-    targets = {_symbol(t): float(w) for t, w in weights.items() if not _is_cash(t)}
+    targets = {_symbol(t): float(w) for t, w in weights.items() if not is_cash(t)}
     targets[_CASH] = float(cash_pct)
     prior = _prior_weights(state)
 

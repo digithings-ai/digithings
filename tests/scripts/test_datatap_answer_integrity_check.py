@@ -248,10 +248,10 @@ def test_request_carries_the_full_verified_header_set() -> None:
     assert chat["headers"] == {
         "content-type": "application/json",
         "accept": "text/event-stream",
-        "X-Embed-Host": "datatap.stream",
+        "X-Embed-Host": mod.EMBED_HOST,
         "X-Embed-Token": "t" * 48,
-        "Referer": "https://datatap.stream/chat",
-        "Origin": "https://datatap.stream",
+        "Referer": mod.DISCOVERY_URL,
+        "Origin": f"https://{mod.EMBED_HOST}",
     }
 
 
@@ -267,7 +267,7 @@ def test_request_body_is_the_ai_sdk_v7_messages_shape() -> None:
 def test_discovery_reads_the_public_page_and_sends_no_credentials() -> None:
     _, fake = _run_main(_both_probes_clean())
     discovery = fake.calls[0]
-    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["url"] == mod.DISCOVERY_URL
     assert discovery["headers"] == {}, "discovery reads a public page; it sends nothing"
     assert all("authorization" not in {k.lower() for k in c["headers"]} for c in fake.calls)
 
@@ -354,7 +354,7 @@ def test_the_monitor_token_is_never_sent_to_the_discovery_request(
     monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
     _, fake = _run_main(_both_probes_clean())
     discovery = fake.calls[0]
-    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["url"] == mod.DISCOVERY_URL
     assert discovery["headers"] == {}
 
 
@@ -1776,30 +1776,77 @@ def test_the_only_write_in_the_script_is_stderr() -> None:
     assert set(writes) == {"stderr"}, f"only stderr may be written, found: {sorted(set(writes))}"
 
 
+def _read_name(node: ast.AST) -> str:
+    """The name of the variable a read names.
+
+    A constant is unquoted, so the walk reports ``X`` for both
+    ``os.environ.get("X")`` and ``os.environ["X"]``, and the allowlist below
+    can be written in terms of names rather than of source text.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return ast.unparse(node)
+
+
+def _env_reads(source: str) -> set[str]:
+    """Every environment variable the source reads, under the name it reads.
+
+    Two shapes are a read: ``os.environ.get("X")`` and ``os.environ["X"]``.
+    The second is a subscript and not a call, so a walk that collects calls
+    only never sees it — and a read nobody can see is a read nobody pinned,
+    which is the thing this walk is here to prevent.
+    """
+    tree = ast.parse(source)
+    reads: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "get"
+                and isinstance(func.value, ast.Attribute)
+                and func.value.attr == "environ"
+            ):
+                reads.update(_read_name(arg) for arg in node.args)
+            elif isinstance(func, ast.Name) and func.id == "getenv":
+                reads.update(_read_name(arg) for arg in node.args)
+        elif (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "environ"
+        ):
+            reads.add(_read_name(node.slice))
+    return reads
+
+
 def test_the_check_reads_no_credential_from_the_environment() -> None:
     # Narrowed in the batch fold: seed #5473 documents one sanctioned env read,
-    # the monitor's own ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN`` (its docstring:
-    # "The check does read one real secret, from one place"). The probe path
-    # still takes its token from DataTap's own public page, so every env read
-    # must name one of those two variables and no other. The second is the
-    # embed host allowlist, and it is not a credential: a host name is a
-    # hostname, and the value is configuration rather than a secret.
-    import ast as _ast
-
+    # the monitor's own token variable (its docstring: "The check does read one
+    # real secret, from one place"). The probe path still takes its token from
+    # the public page it discovers, so every env read must name one of the
+    # variables below and no other. The other three are configuration and not
+    # credentials: two host names and a page URL are a hostname and a URL.
     source = SCRIPT.read_text(encoding="utf-8")
-    tree = _ast.parse(source)
-    reads = set()
-    for node in _ast.walk(tree):
-        if isinstance(node, _ast.Call):
-            f = node.func
-            if isinstance(f, _ast.Attribute) and f.attr == "get" and isinstance(f.value, _ast.Attribute) and f.value.attr == "environ":
-                reads.update(_ast.unparse(a) for a in node.args)
-            elif isinstance(f, _ast.Name) and f.id == "getenv":
-                reads.update(_ast.unparse(a) for a in node.args)
-    assert reads <= {"MONITOR_TOKEN_ENV_VAR", "EMBED_HOSTS_ENV_VAR"}, (
-        f"env reads beyond the monitor token and the host allowlist: {reads}"
-    )
+    reads = _env_reads(source)
+    assert reads <= {
+        "MONITOR_TOKEN_ENV_VAR",
+        "EMBED_HOSTS_ENV_VAR",
+        "DISCOVERY_URL_ENV_VAR",
+        "EMBED_HOST_ENV_VAR",
+    }, f"env reads beyond the sanctioned variables: {reads}"
     assert "dotenv" not in source
+
+
+def test_the_env_read_walk_sees_a_subscript_read_too() -> None:
+    """The walk itself is pinned, because a walk that cannot see is not a walk.
+
+    ``os.environ["X"]`` reads the environment exactly as ``os.environ.get("X")``
+    does. A walk built on calls alone reports the second shape as no read at
+    all, and then the check's own secret reads can be added without the
+    allowlist noticing.
+    """
+    assert "SEEN_BY_THE_WALK" in _env_reads('import os\nos.environ["SEEN_BY_THE_WALK"]\n')
+    assert "SEEN_BY_THE_WALK" in _env_reads('import os\nos.environ.get("SEEN_BY_THE_WALK")\n')
 
 
 def test_the_check_writes_no_persistence() -> None:
@@ -2451,3 +2498,268 @@ def test_discovery_never_takes_a_token_from_a_neighbouring_object() -> None:
         )
     )
     assert target.token == real, "discovery returned a token from a different object"
+
+
+# --------------------------------------------------------------------------
+# DIG-718 leaf A: the target is an input, not a hardcoded datatap.stream one.
+#
+# The check is re-pointed from a client surface we do not control to a
+# digithings-stack surface we operate (DIG-718). That only works if the target
+# is something the caller hands in, so the discovery URL and the embed host
+# become explicit inputs: the command line first, then the environment, then
+# the datatap.stream default that the still-live retired clock keeps using
+# until the DIG-4435 deploy retires it.
+#
+# These six cases are the EM's. The worker makes them pass and may not edit
+# them.
+# --------------------------------------------------------------------------
+
+DISCOVERY_URL_ENV_VAR = "ANSWER_CHECK_DISCOVERY_URL"
+EMBED_HOST_ENV_VAR = "ANSWER_CHECK_EMBED_HOST"
+
+
+@pytest.fixture(autouse=True)
+def _no_target_from_the_ambient_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's shell must not decide what the check probes.
+
+    The two target variables are read by name, exactly like the monitor token.
+    A shell that happens to export them would otherwise silently re-point the
+    check, which is the one thing a run must never do on its own.
+    """
+    monkeypatch.delenv(DISCOVERY_URL_ENV_VAR, raising=False)
+    monkeypatch.delenv(EMBED_HOST_ENV_VAR, raising=False)
+
+
+def test_the_discovery_url_given_on_the_command_line_is_the_url_the_check_requests() -> None:
+    """The caller names the page the check reads. The check follows it."""
+    code, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "https://digithings.ai/chat", "--embed-host", "digithings.ai"],
+    )
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "https://digithings.ai/chat"
+
+
+def test_the_embed_host_given_on_the_command_line_lands_in_the_host_and_origin_headers() -> None:
+    """The tenant key and the origin follow the target, not a hardcoded name.
+
+    X-Embed-Host is the tenant key DigiChat resolves the assistant with, and
+    Origin is the browser-attested host it authorises a first-party tenant
+    against. Both have to name the surface that was asked for.
+    """
+    _, fake = _run_main(_both_probes_clean(), ["--embed-host", "digithings.ai"])
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+
+
+def test_the_target_comes_from_the_environment_when_no_flag_is_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduler hands the target in through the environment.
+
+    The cron clock cannot pass a command line to a Makefile target without
+    another knob, and a secret-free workflow reads its configuration from the
+    environment. Both paths have to reach the same place.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "https://digithings.ai/chat")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "digithings.ai")
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "https://digithings.ai/chat"
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+
+
+def test_the_command_line_wins_over_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit flag beats an inherited variable, always.
+
+    A re-point is an explicit act. If a stale variable in the environment could
+    overrule the flag, the person re-pointing the check would not be the person
+    deciding where it goes.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "https://env.example/chat")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "env.example")
+    _, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "https://cli.example/chat", "--embed-host", "cli.example"],
+    )
+    assert fake.calls[0]["url"] == "https://cli.example/chat"
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "cli.example"
+    assert chat["headers"]["Origin"] == "https://cli.example"
+
+
+def test_a_non_https_discovery_url_is_refused_and_never_reports_a_pass() -> None:
+    """A plaintext target is refused before a request is made.
+
+    The check reads a page that carries an embed token. Over http that token
+    would travel in clear, so a non-https target is refused the way a missing
+    target is refused: exit 2, the check could not run, never a pass.
+    """
+    code, fake = _run_main(
+        _both_probes_clean(),
+        ["--discovery-url", "http://digithings.ai/chat"],
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+def test_with_nothing_given_the_target_is_still_datatap_stream() -> None:
+    """The default stays where it was until the retired clock is gone.
+
+    The datatap-answer-check row in apps/digithings-cron/src/jobs.ts still
+    fires every hour until the DIG-4435 deploy lands, and until then that
+    clock has to keep reading the surface it was built for.
+    """
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == mod.DISCOVERY_URL
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == mod.EMBED_HOST
+    assert chat["headers"]["Origin"] == f"https://{mod.EMBED_HOST}"
+
+
+# --------------------------------------------------------------------------
+# DIG-5145: the shape of a named target.
+#
+# The six cases above pin that the target is an input. These pin what a named
+# target may look like, and what happens to the host when only the page is
+# named. Each shape below is one a re-point can produce by accident, and each
+# one is refused before a request is made.
+# --------------------------------------------------------------------------
+
+
+def test_the_script_names_the_target_env_vars() -> None:
+    """The two target variables are named as module constants.
+
+    The same reason the monitor token's variable and the allowlist's variable
+    are constants: an operator has to be told which name to set, and the
+    scheduler that runs this check has to be told the same name.
+    """
+    assert mod.DISCOVERY_URL_ENV_VAR == DISCOVERY_URL_ENV_VAR
+    assert mod.EMBED_HOST_ENV_VAR == EMBED_HOST_ENV_VAR
+
+
+def test_a_blank_target_in_the_environment_counts_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exported-but-empty variable must not re-point a run.
+
+    A shell that exports the variable with nothing in it is a shell that meant
+    nothing, and a variable holding only spaces is the same thing said
+    quietly. Treating either as a target would make the run fail on a value
+    nobody chose.
+    """
+    monkeypatch.setenv(DISCOVERY_URL_ENV_VAR, "   ")
+    monkeypatch.setenv(EMBED_HOST_ENV_VAR, "")
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == mod.DISCOVERY_URL
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == mod.EMBED_HOST
+
+
+def test_naming_a_page_names_the_host_with_it() -> None:
+    """A page without a host is a target whose host is the page's own.
+
+    The tenant key is not a decoration: it is the key the surface resolves the
+    assistant with, so it has to name the surface that was asked for. Leaving
+    the default host beside a new page would send one surface's key to another
+    surface, and the answer would come back as a 401 that reads like their
+    fault rather than like ours.
+    """
+    _, fake = _run_main(_both_probes_clean(), ["--discovery-url", "https://digithings.ai/chat"])
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert chat["headers"]["X-Embed-Host"] == "digithings.ai"
+    assert chat["headers"]["Origin"] == "https://digithings.ai"
+    assert chat["headers"]["Referer"] == "https://digithings.ai/chat"
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://digithings.ai",
+        "digithings.ai/chat",
+        "digithings.ai?x=1",
+        "user@digithings.ai",
+        "dig ithings.ai",
+    ],
+    ids=["scheme", "path", "query", "userinfo", "whitespace"],
+)
+def test_an_embed_host_that_is_not_a_bare_host_is_refused(host: str) -> None:
+    """The tenant key is a host name, and a URL in it is refused.
+
+    The value goes out as a header, and a header that carries a scheme, a path
+    or a query is not a host name: the surface would resolve nothing, and the
+    run would end as a 401 that says nothing about the answer path. It is
+    refused before the request instead, with the reason on stdout.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--embed-host", host])
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse {host!r}"
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://digithings.ai/chat",
+        "https://",
+        "https://user:pw@digithings.ai/chat",
+        "digithings.ai/chat",
+    ],
+    ids=["plaintext", "no-host", "userinfo", "no-scheme"],
+)
+def test_a_discovery_url_that_cannot_be_probed_safely_is_refused(url: str) -> None:
+    """The page has to be an https URL that names a host and nobody else.
+
+    Three shapes, because three different wrong comparisons would let them
+    through: a plaintext page would carry the embed token in clear, a page
+    with no host behind it is not a page, and a page that hides its host
+    behind userinfo is not the host it looks like. The URL is read with a
+    parser rather than tested for a prefix, so "https://" with nothing after
+    it is refused as well.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--discovery-url", url])
+    assert code == mod.COULD_NOT_RUN == 2, f"must refuse {url!r}"
+    assert fake.calls == [], "a refused target must not be requested at all"
+
+
+def test_an_https_url_in_capitals_is_not_refused_for_its_case() -> None:
+    """A URL's scheme is case-insensitive, and the check reads it as a URL.
+
+    Comparing a prefix would refuse "HTTPS://..." for its capitals while
+    accepting "https://" with no host behind it. Reading the URL asks the
+    parser instead, and the parser is where the rules live.
+    """
+    code, fake = _run_main(_both_probes_clean(), ["--discovery-url", "HTTPS://digithings.ai/chat"])
+    assert code == mod.OK
+    assert fake.calls[0]["url"] == "HTTPS://digithings.ai/chat"
+
+
+def test_a_page_naming_an_unvetted_host_never_carries_the_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host the page names is vetted, so the identity cannot follow it out.
+
+    The page is public, so the host in it is only as trustworthy as the page —
+    and the page is now something the caller names. Whatever that page says,
+    the request that carries our identity is only made to a host the
+    deployment has allowlisted, and a host that is not on that list ends the
+    run before the POST rather than after it.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("no customer records here")),
+            "/chat$": _ok("text/html; charset=utf-8", _discovery_page("https://attacker.example")),
+        },
+        ["--discovery-url", "https://attacker.example/chat"],
+    )
+    assert code == mod.COULD_NOT_RUN == 2
+    assert [call for call in fake.calls if call["url"].endswith("/api/chat")] == [], (
+        "the identity must never reach a host the deployment has not vetted"
+    )

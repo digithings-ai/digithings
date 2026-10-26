@@ -126,7 +126,7 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       {
         method: "POST",
         path: "/workflow",
-        summary: "Run the full research + backtest graph (digiclaw custom skill).",
+        summary: "Run the full research + backtest graph (digibot custom skill).",
         auth: "digigraph:workflow (optional)",
         rateLimit: "10/min/IP",
         request: [
@@ -645,20 +645,20 @@ for hit in r.json()["results"]:
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  digiclaw: {
-    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digiclaw (Compose profile heartbeat).",
+  digibot: {
+    authNote: "CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digibot (Compose profile heartbeat).",
     run: {
-      cli: "python -m digiclaw            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
+      cli: "python -m digibot            # one cycle\ndocker compose --profile heartbeat up -d heartbeat\n# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d",
     },
     env: [
       { name: "DIGIGRAPH_URL", description: "digigraph base URL for health checks." },
       { name: "DIGIQUANT_URL", description: "digiquant base URL for health + drift checks." },
-      { name: "DIGICLAW_DIGIKEY_API_KEY", description: "Key (digiquant:backtest+optimize) for auth-gated drift checks." },
+      { name: "DIGIBOT_DIGIKEY_API_KEY", description: "Key (digiquant:backtest+optimize) for auth-gated drift checks." },
       { name: "AUDIT_LOG_PATH", def: "digiquant/results/audit/events.jsonl", description: "Append-only JSONL audit destination." },
       { name: "REOPTIMIZE_STRATEGY", def: "mean_reversion_tech", description: "Strategy id for the drift check." },
     ],
     publicInterface: [
-      { signature: "python -m digiclaw", description: "Run one heartbeat cycle: health-check services, run an auth-gated drift check, and (on drift) trigger re-optimization." },
+      { signature: "python -m digibot", description: "Run one heartbeat cycle: health-check services, run an auth-gated drift check, and (on drift) trigger re-optimization." },
       { signature: "audit_log(event_type, agent_id, payload)", description: "Append one redacted JSON line to the audit log." },
     ],
     notes: [

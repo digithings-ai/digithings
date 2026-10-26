@@ -8,7 +8,7 @@ web
 
 ## Users
 
-digiweb is the shared design suite behind two customer-facing domains, both co-primary:
+digiweb is the shared design suite behind four surfaces: the digithings.ai and digiquant.io domains (both customer-facing and co-primary), the dashboard, and digichat.
 
 - **digithings.ai visitors** — evaluating the open-core agentic stack (quant finance, RAG, chat) as a platform hub.
 - **digiquant.io visitors** — evaluating the quant product (research, portfolio, execution) as an investment-research/profiling demo.
@@ -26,10 +26,10 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 ## Operating Context
 
 - Two live frontend deployments consume digiweb's packages by name: `@digithings/design` (tokens) and `@digithings/ui` (shared React components) — not by on-disk path, so digiweb can move without breaking consumers.
-- The reference app (`reference/`) is the live, browsable canon at `http://127.0.0.1:4013` — the first place to check before building any new pattern.
+- The reference gallery (`apps/reference/`) is a pattern browser, not the canon: no live surface imports it, and `packages/design/README.md` calls it out of scope. `docs/design/CURRENT_UI_LANGUAGE.md` is the current language.
 - `MANIFEST.json` is a machine-readable index of every reusable component (name, path, family, purpose) that agents are expected to consult before adding new UI.
 - **Consuming surfaces with their own PRODUCT.md-eligible context** (recorded here as durable facts only; visual specifics stay out of PRODUCT.md per init's own rule):
-  - **dashboard** (`apps/dashboard/`) — the digiquant operator surface (task completion, not persuasion): research pipeline runs, portfolio/tearsheet views, performance monitoring. Its patterns live in the reference under `/finance` (dashboard workspace, tearsheet, performance metrics, order book) and `/layout-patterns` (the dashboard app's phone mockup frame) and `/effects` (the pipeline workflow viz).
+  - **dashboard** (`apps/dashboard/`) — FX Hub and the research/portfolio routes. The digiquant operator surface is the desk at `/app` (`apps/digiquant-web`, ADR D2). Its patterns live in the reference under `/finance` (dashboard workspace, tearsheet, performance metrics, order book) and `/layout-patterns` (the dashboard app's phone mockup frame) and `/effects` (the pipeline workflow viz).
   - **digichat** (`apps/digichat/`, `packages/digichat-ui/`) — the chat UI, presented as a terminal-style CLI chatbot: monospace scrollback, `>` prompt, thinking chain, collapsible tool-call chain, inline charts/route graphs, custom action widgets embedded in the terminal. Its pattern lives in the reference under `/chatbot` (and shares grammar with the diegetic `/terminal` family). Persuade-adjacent on marketing surfaces, Operate-mode once a user is actually chatting.
 
 ## Capabilities and Constraints
@@ -37,7 +37,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 - **Tokens, never literals** — all colour comes from `@digithings/design/tokens.css`; no ad-hoc hex/rgb in surface code.
 - **Monochrome is the default livery** — colour is opt-in per product, not a baseline choice.
 - **Money colours** (`--up` / `--down`) are P&L-only and never follow a livery override.
-- **One motion moment per surface** — motion is deliberate and singular, always honoring `prefers-reduced-motion`.
+- **Motion is deliberate, not one moment per surface** — the landing runs a hero-rise stagger, a continuous pixel field, per-cell build/glint and scroll reveals; every animation honors `prefers-reduced-motion`.
 - **Token-backed Tailwind utilities + semantic classes** are preferred over ad-hoc CSS values, so spacing/colour stay consistent across both domains.
 - Digi product/module names are always lowercase in prose and UI copy (e.g. digithings, digiquant, digichat) — see the repo's `CLAUDE.md` naming table; this is a hard constraint on any UI copy digiweb work touches.
 - `packages/design/` and `**.css` are a preview-driven surface — design work here iterates live via preview servers, with review as the quality gate.

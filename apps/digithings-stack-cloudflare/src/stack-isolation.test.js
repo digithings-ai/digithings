@@ -110,6 +110,23 @@ describe("runIsolated", () => {
       "plain string failure",
     );
   });
+
+  it("keeps the query string of a URL out of the body and out of the status", async () => {
+    // The value of a rejected hop can be a request URL whose query string
+    // carries an embed token (run-watch DIG-4928). The message of a failed
+    // module reaches a client-visible body and the status surface, so the
+    // query string must be in neither.
+    const res = await runIsolated("container-routes", async () => {
+      throw new Error("failed to GET https://digithings.ai/embed?token=xy7");
+    }, async () => ok());
+    expect(res.status).toBe(503);
+    const body = await res.text();
+    expect(body).not.toContain("xy7");
+    expect(body).toContain("https://digithings.ai/embed");
+    const lastError = getStackStatus().modules["container-routes"].lastError ?? "";
+    expect(lastError).not.toContain("xy7");
+    expect(lastError).toContain("https://digithings.ai/embed");
+  });
 });
 
 describe("dashboard-api isolation (#4687)", () => {
@@ -355,15 +372,18 @@ describe("index.ts isolation wiring", () => {
     expect(source).not.toContain("import { handleMarketData }");
   });
 
-  it("keeps the MCP edge path fail-closed and synchronous (401 before isolation)", () => {
+  it("keeps the MCP edge path fail-closed and ahead of isolation (401/403 before isolation)", () => {
     const mcpStart = source.indexOf("MCP_EDGE_PREFIX}/`)");
     expect(mcpStart).toBeGreaterThan(-1);
-    const authCheck = source.indexOf(
-      "if (!expected || !provided || provided !== expected)",
-    );
+    // The credential decision is delegated to ./mcp-edge-auth since the
+    // digikey JWT identity landed; it still runs before the lazy route group,
+    // so a refusal costs no import and no container hop.
+    const authCheck = source.indexOf("await authorizeMcpEdge({");
+    const refusal = source.indexOf("if (!decision.ok) {");
     const isolated = source.indexOf('runIsolated("mcp-edge"');
     expect(authCheck).toBeGreaterThan(mcpStart);
-    expect(isolated).toBeGreaterThan(authCheck);
+    expect(refusal).toBeGreaterThan(authCheck);
+    expect(isolated).toBeGreaterThan(refusal);
   });
 
   it("mounts the folded dashboard-api under /dashboard-api without shadowing MCP paths", () => {

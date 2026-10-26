@@ -110,7 +110,7 @@ function mermaidConfig(t) {
   return {
     themeCSS: terminalThemeCss(t),
     // 8px grid, the kit's spacing step.
-    flowchart: { htmlLabels: false, useMaxWidth: false, curve: "linear", padding: 16, nodeSpacing: 40, rankSpacing: 48 },
+    flowchart: { htmlLabels: false, useMaxWidth: false, curve: "step", padding: 18, nodeSpacing: 42, rankSpacing: 54 },
     startOnLoad: false,
     theme: "base",
     darkMode: false, // colours below are explicit per theme; no page detection
@@ -125,37 +125,37 @@ function mermaidConfig(t) {
     securityLevel: "strict",
     themeVariables: {
       fontFamily: FONT_FAMILY,
-      fontSize: "14px",
-      background: t.bg,
-      mainBkg: t.surface,
-      primaryColor: t.surface,
+      fontSize: "18px",
+      background: "transparent",
+      mainBkg: "transparent",
+      primaryColor: "transparent",
       primaryTextColor: t.ink,
       primaryBorderColor: t["ink-soft"],
-      secondaryColor: t["surface-2"],
-      tertiaryColor: t["surface-2"],
+      secondaryColor: "transparent",
+      tertiaryColor: "transparent",
       secondaryTextColor: t.ink,
       tertiaryTextColor: t.ink,
       lineColor: t["ink-soft"],
       textColor: t.ink,
       nodeTextColor: t.ink,
       titleColor: t.ink,
-      edgeLabelBackground: t.bg,
-      clusterBkg: t["surface-2"],
+      edgeLabelBackground: "transparent",
+      clusterBkg: "transparent",
       clusterBorder: t["ink-soft"],
-      actorBkg: t.surface,
+      actorBkg: "transparent",
       actorBorder: t["ink-soft"],
       actorTextColor: t.ink,
       actorLineColor: t["ink-soft"],
       signalColor: t.ink,
       signalTextColor: t.ink,
-      labelBoxBkgColor: t.surface,
+      labelBoxBkgColor: "transparent",
       labelBoxBorderColor: t["ink-soft"],
       labelTextColor: t.ink,
       loopTextColor: t.ink,
-      noteBkgColor: t["surface-2"],
+      noteBkgColor: "transparent",
       noteTextColor: t.ink,
       noteBorderColor: t["ink-soft"],
-      activationBkgColor: t["surface-2"],
+      activationBkgColor: "transparent",
       activationBorderColor: t["ink-soft"],
       sequenceNumberColor: t.bg,
     },
@@ -167,12 +167,22 @@ const THEMES = [
   { name: "dark", suffix: ".dark" },
 ];
 
-// --font-render-hinting=none: on Linux, Chromium hints glyphs and rounds
-// advance widths to whole pixels (Geist Mono at 14px measures 8px, not 8.4px),
-// so mermaid sized every box differently than on macOS and the committed SVGs
-// never matched CI's render. Unhinted metrics are fractional on every OS, so
-// the output is byte-identical on Linux and macOS. No-op off Linux.
-const browser = await chromium.launch({ args: ["--font-render-hinting=none"] });
+// Every number below is written into a file that CI compares byte for byte
+// (`Diagrams are committed`) and that a reader sees in print. So each one has
+// to be a function of the diagram source alone, never of the host's text
+// stack: mermaid sizes every box from the metrics it measures in this browser,
+// and two hosts that measure a glyph 0.05px apart write different files
+// (DIG-5436). These switches take the host out of the measurement.
+//  --font-render-hinting=none: Linux otherwise hints glyphs and rounds advance
+//    widths to whole pixels (Geist Mono at 14px measures 8px, not 8.4px), so
+//    mermaid sized every box differently than on macOS. No-op off Linux.
+//  --disable-font-subpixel-positioning: without it the advance a label
+//    accumulates depends on the platform's glyph positioning, which is the
+//    0.05px-per-glyph drift that broke the gate.
+//  --force-device-scale-factor=1: a hidpi host must not measure at 2x.
+const browser = await chromium.launch({
+  args: ["--font-render-hinting=none", "--disable-font-subpixel-positioning", "--force-device-scale-factor=1"],
+});
 let written = 0;
 try {
   for (const theme of THEMES) {
@@ -192,6 +202,23 @@ try {
       const result = await page.evaluate(
         async ([id, source, fontFace, bg]) => {
           const { svg } = await window.mermaid.render(`d${id}`, source);
+          // Measure the rendered diagram, then crop the viewBox to its actual
+          // ink. Mermaid's own canvas often leaves a wide empty margin; an
+          // image at page width then renders labels at half the size they were
+          // drawn at. The bbox is measured in the live document, not the
+          // parsed one, because getBBox needs layout.
+          const holder = document.createElement("div");
+          holder.style.cssText = "position:absolute;left:-99999px;top:0";
+          holder.innerHTML = svg;
+          document.body.append(holder);
+          const live = holder.querySelector("svg");
+          let bbox = null;
+          try {
+            bbox = live?.getBBox() ?? null;
+          } catch {
+            bbox = null;
+          }
+          holder.remove();
           // Re-serialise through the XML parser so the file is well-formed XML
           // whatever mermaid emitted; a parse error fails the build here rather
           // than shipping a figure an <img> silently cannot decode.
@@ -201,10 +228,25 @@ try {
           const root = doc.documentElement;
           if (root.querySelector("foreignObject")) return { error: "foreignObject label survived htmlLabels:false" };
           const style = doc.createElementNS("http://www.w3.org/2000/svg", "style");
-          style.textContent = `${fontFace} svg{background:${bg}} text,tspan{font-family:"Geist Mono",ui-monospace,monospace !important;}`;
+          style.textContent = `${fontFace} svg{background:transparent} text,tspan{font-family:"Geist Mono",ui-monospace,monospace !important;}`;
           root.insertBefore(style, root.firstChild);
           root.removeAttribute("style"); // drop max-width; the viewer sizes it
           root.setAttribute("width", "100%");
+          if (bbox && bbox.width > 0 && bbox.height > 0) {
+            const pad = 10;
+            // Snap the ink box OUTWARD to whole pixels before it is written.
+            // The raw bbox is fractional and its last digits are the host's
+            // glyph rasteriser talking; rounding it here keeps the crop stable
+            // across hosts at no visible cost. `height` is rewritten from the
+            // same box because mermaid's own value is also measured (349 on
+            // one host, 345 on another) and the file must not carry both.
+            const x = Math.floor(bbox.x - pad);
+            const y = Math.floor(bbox.y - pad);
+            const w = Math.ceil(bbox.x + bbox.width + pad) - x;
+            const h = Math.ceil(bbox.y + bbox.height + pad) - y;
+            root.setAttribute("height", String(h));
+            root.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+          }
           return { svg: new XMLSerializer().serializeToString(root) };
         },
         [`${diagram.id}${theme.suffix.replace(".", "_")}`, diagram.source, FONT_FACE, tokens.bg],
@@ -227,3 +269,10 @@ try {
 }
 
 console.log(`book: rendered ${written} diagram file(s) (light + dark) into public/book/diagrams`);
+// A local render proves the diagrams still render; it does not prove the bytes
+// are the ones CI will accept. `Book: print the PDF` re-renders and runs
+// `git diff --exit-code` on this directory, and the CI runner's text stack is
+// the authority for the committed files (DIG-5436). When they differ, take
+// them from that run's `book-diagrams` artifact instead of committing a local
+// render.
+console.log("book: commit the output of the Book: print the PDF run, not a local render");

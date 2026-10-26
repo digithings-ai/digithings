@@ -84,12 +84,23 @@ class ToolContext:
     workflow_id: str | None = None
     # Optional digivault path prefix for multi-tenant corpus isolation.
     vault_path_prefix: str | None = None
+    # Per-tenant skill documents (DIG-2637). ``skill_pack`` is the tenant's
+    # directory under ``skill_library/`` (the tenant slug) and ``skill_ids`` the
+    # documents that tenant may read. Both default to "nothing": a context built
+    # without them exposes no skill tools and serves no document.
+    skill_pack: str | None = None
+    skill_ids: frozenset[str] = frozenset()
     # Operator MCP servers for this turn (BFF). Not globally registered.
     extra_mcp_servers: list[dict[str, str]] | None = None
 
     @property
     def has_run_data_dir(self) -> bool:
         return bool(self.run_data_dir and self.run_data_dir.strip())
+
+    @property
+    def has_skills(self) -> bool:
+        """Whether this tenant has any skill document at all."""
+        return bool(self.skill_pack and self.skill_ids)
 
 
 # Tool descriptor: name -> (schema | None, schema_factory | None, handler, tags)
@@ -205,20 +216,15 @@ def _skill_called_as_tool(
     """A model that calls a skill id (e.g. ``summarize-tickets-by-topic``) as if
     it were a tool gets that skill's document, exactly as ``get_skill`` would
     return it, instead of an unknown-tool error that ended the run (DIG-1210).
-    Only when get_skill itself is available to this session."""
+    Only when get_skill itself is available to this session, and only for an id
+    this tenant may read — another tenant's skill stays an unknown tool."""
     from digigraph.skill_library.tools import GET_SKILL, _handle_get_skill
 
     if not has_tool(GET_SKILL):
         return None
     if context.allowed_tool_names is not None and GET_SKILL not in context.allowed_tool_names:
         return None
-    try:
-        from digigraph.skill_library.loader import list_skill_documents
-
-        known = {doc.name for doc in list_skill_documents()}
-    except Exception:  # a broken library must not mask the unknown-tool path
-        return None
-    if name not in known:
+    if name not in context.skill_ids:
         return None
     out = _handle_get_skill({"name": name}, context)
     if isinstance(out, dict) and out.get("ok"):

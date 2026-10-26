@@ -1,8 +1,16 @@
 version: 1
-# OCC (Online Compliance Center) corpus embed
+# OCC (Online Compliance Center). Unique copy, light theme, and its own MCP
+# servers. The Cheaper Inference picker (Auto, Fast, Reasoning) is inherited
+# from defaults; OCC does not re-state it. The keys below clear the public
+# house spend limits: per-visitor TPM, the premium cost meter, and the
+# context meter. The invite link is the only gate. The tool-call cap and
+# the answer guard stay.
+extends: defaults
+deployment: null
 hosts:
   occ.digithings.ai:
     slug: occ
+    aliases: null
     chrome:
       mode: embed
       theme: light
@@ -22,8 +30,7 @@ hosts:
         - How do I contact the OCC support team?
         - Search the knowledge base for onboarding
       attribution: true
-    persistence: none
-    auth: anonymous
+      launcher: null
     features:
       attachments: false
       dictation: false
@@ -31,44 +38,29 @@ hosts:
       toolCalls: true
       sources: true
       branchPicker: true
-      modelPicker: true
       speech: false
+    # Premium spend meter off. The picker list stays the default catalog.
     models:
-      # Chris, 21 Oct 2026 19:19 Rome: "Yes, enable the model picker on OCC
-      # for 2.6.6, I sign off on overriding the DIG-4488 lock". occPicker is
-      # the switch (off keeps the operator model). The catalog is the same
-      # policy as digithings.ai. lockSessionControls below still hides MCP
-      # and tool session controls. DIG-4750 still refuses a raw id list.
-      occPicker: true
-      allowPicker: true
-      catalog: true
-      default: deepseek/deepseek-v4.1-flash-1017
-      priceCapUsdPerMillion: 2
-      # Chris, 21 Oct 2026 22:51 Rome: OCC has no token limits and no model
-      # limits. The invite link is the gate. No costPerWindow, so there is
-      # no premium meter and no premium-to-Auto fallback. The #6182 tool-call
-      # cap and answer guard stay; they are stability guardrails, not a
-      # token budget.
-      presets: [auto, reasoning, fast, light]
-      showFullList: true
+      # Picker is the inherited catalog. `occPicker: false` is the off
+      # switch (Chris, 21 Oct 2026, 19:19 Rome). No premium meter
+      # (22:51 Rome: the invite link is the gate).
+      costPerWindow: null
     backend:
       type: digigraph
-    # digisearch/digivault reach the model only as the MCP servers below
-    # (Help search, Knowledge vault) — no built-in duplicates in the tool list.
+      digisearchIndex: null
+      vaultPathPrefix: null
+    # Per-visitor TPM off. Request limiter off. The invite is the only gate.
+    # Tool-call cap and answer guard stay from defaults.
+    guardrails:
+      rateLimit: false
+      tokensPerMinute: null
+    prompt: null
+    tokenEnv: null
     tools:
       allowUserToggle: true
       catalog: []
-    # Operator MCP servers stay on the BFF — URLs are never projected to the
-    # browser. Zammad rides its `Token token=<x>` scheme as a raw authHeader
-    # value (#3841); digigraph treats the dotless `zammad-mcp` name as
-    # container-internal DNS (loopback URLs are never dialable, #3879).
-    # In production (Cloudflare) the same server runs inside the digichat
-    # image and is served via the key-gated digichat Worker route instead:
-    # url https://digithings.ai/api/mcp/zammad/mcp,
-    # token: <ZAMMAD_EDGE_KEY value>, authHeader: x-digi-mcp-key (tokenEnv
-    # cannot resolve the digichat Worker's ZAMMAD_EDGE_KEY secret, which is
-    # Worker-scoped and never forwarded to the container, so the value goes in
-    # `token` literally; fail-closed 401 without the key).
+    # Operator MCP servers stay on the BFF. Zammad rides Token token=<x> as a
+    # raw authHeader (#3841). tokenEnv names the var; the value is not here.
     mcp:
       allowUserServers: false
       allowAddForm: false
@@ -79,16 +71,12 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
-          # Read-only ticket tools. The MCP brake (DIG-284) refuses every tool
-          # of a server row without an explicit allowedTools list.
           allowedTools:
             - search_tickets
             - list_tickets
             - get_ticket
             - ticket_report
             - aggregate_tickets
-          # All five are read-only; an explicit empty list stops the brake
-          # from falling back to allowedTools and asking approval for each read.
           mutatingTools: []
         - id: digisearch
           url: http://digisearch-mcp:8765/mcp
@@ -97,7 +85,6 @@ hosts:
           allowedTools: [semantic, web_search]
           mutatingTools: []
           setup:
-            # Docs only. The ticket corpus snapshot was retired in DIG-1380, so there is no second leg to fan out to.
             index_name: occ_help
         - id: digivault
           url: http://digivault-mcp:8769/mcp
@@ -113,9 +100,6 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      # Pins the session: digigraph strips the session_* tools and the client
-      # hides MCP server controls (tools.allowUserToggle above still shows
-      # the tool toggle). The model picker stays available because
-      # models.available is the catalog, not empty. /theme stays available.
+      showContextMeter: null
       lockSessionControls: true
       webSearch: false

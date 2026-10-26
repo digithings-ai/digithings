@@ -49,7 +49,6 @@ export const DT_NAV_PRIMARY: NavItem[] = [
       { label: "Changelog", href: "/changelog" },
     ],
   },
-  { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
 /** One row of boxes. None of these are the top-bar links (Docs, API, Wiki,

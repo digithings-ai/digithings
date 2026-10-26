@@ -1,5 +1,9 @@
 """Per-tenant corpus routing for digisearch index + digivault path prefix.
 
+Also the per-tenant **skill document** set (``skills``): a skill pack is tenant
+content, so the map — not the filesystem and not a client header — decides which
+documents a tenant may read (``tenant_skill_ids``). Unmapped means none.
+
 Resolves overrides from ``DIGI_TENANT_CORPUS_MAP`` (keyed by tenant slug) and,
 only when that map is unset, from request headers / body-driven callers.
 
@@ -42,6 +46,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digigraph.skill_library.loader import SKILL_NAME_RE, known_skill_names
+
 logger = logging.getLogger(__name__)
 
 _ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
@@ -75,8 +81,47 @@ _KNOWN_ENTRY_KEYS = frozenset(
         "research_system_prompt",
         "lockSessionControls",
         "lock_session_controls",
+        # DIG-3269 dedicated per-index digisearch tools. The parser honours
+        # both spellings, so both are known keys - an OCC map that carries
+        # digisearchTools must not be warned about as unknown.
+        "digisearchTools",
+        "digisearch_tools",
+        # Per-tenant skill documents (DIG-2637). ``skills`` is a list of skill
+        # ids this tenant may read; absent, the tenant's own pack
+        # (``skill_library/<slug>/``) is the set. An unmapped tenant gets none.
+        "skills",
+        "skill_ids",
     }
 )
+
+
+def _parse_skill_ids(raw: Any, slug: str) -> list[str] | None:
+    """Validate the ``skills`` key: a list of kebab-case ids, or nothing.
+
+    ``None`` (key absent) means "the tenant's own pack", which is what lets the
+    ``occ`` map entry keep its four documents without restating them. A key that
+    is present but unusable fails *closed* to an empty list: falling back to the
+    pack after an operator tried to narrow the set would serve exactly the ids
+    they meant to remove.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        # A bare string is read as a one-id shorthand; anything with a slash,
+        # dot or space in it is a mistake, not an id.
+        raw = [raw]
+    if not isinstance(raw, list):
+        logger.warning("%s[%s]: skills must be a list of skill ids", _ENV_VAR, slug)
+        return []
+    out: list[str] = []
+    for value in raw:
+        candidate = value.strip().lower() if isinstance(value, str) else ""
+        if not candidate or not SKILL_NAME_RE.match(candidate):
+            logger.warning("%s[%s]: skip invalid skill id %r", _ENV_VAR, slug, value)
+            continue
+        if candidate not in out:
+            out.append(candidate)
+    return out
 
 
 class TenantCorpusMapError(RuntimeError):
@@ -106,6 +151,12 @@ class TenantCorpusOverride(BaseModel):
         default=False,
         description="Hide model/MCP/tool session controls (session_set_model, "
         "session_upsert_mcp, session_remove_mcp, session_toggle_tool) from this tenant",
+    )
+    skills: list[str] | None = Field(
+        default=None,
+        description="Skill document ids this tenant may read (DIG-2637). None means "
+        "the tenant's own pack (skill_library/<slug>/); a list narrows that pack, "
+        "and an empty list means no skills at all.",
     )
 
 
@@ -190,6 +241,7 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         tools = _parse_digisearch_tools(
             value.get("digisearchTools") or value.get("digisearch_tools"), normalized_slug
         )
+        skills = _parse_skill_ids(value.get("skills", value.get("skill_ids")), normalized_slug)
         if not isinstance(lock, bool):
             # A known key carrying a bad value is a safety problem, not a
             # forward-compatibility problem: fail closed to LOCKED for this
@@ -208,6 +260,7 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
                 research_system_prompt=str(prompt).strip() if prompt else None,
                 lock_session_controls=lock,
                 digisearch_tools=tools,
+                skills=skills,
             )
         except Exception as exc:
             logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
@@ -227,6 +280,43 @@ def load_tenant_corpus_map(
     value raises ``TenantCorpusMapError`` (callers surface HTTP 503).
     """
     return _parse_map(raw if raw is not None else os.environ.get(_ENV_VAR))
+
+
+def tenant_skill_ids(
+    tenant_slug: str | None,
+    corpus_map: dict[str, TenantCorpusOverride] | None = None,
+) -> tuple[str, ...]:
+    """The skill document ids one tenant may read — and nothing for anyone else.
+
+    Skills are tenant content (DIG-2637): the ``occ`` documents are the ``occ``
+    tenant's, and the house chat must not receive them. So the set comes from
+    the tenant's own map entry only:
+
+    * the slug is unmapped, absent, or not a slug → ``()``. Unmapped is empty,
+      never "every document in the tree"; a single-tenant deployment with no map
+      gets no skills at all until someone maps one.
+    * the entry names ``skills`` → exactly those ids, narrowed to the ones that
+      actually exist in the pack (a stale id is drift, not a crash).
+    * the entry names no ``skills`` → the tenant's own pack
+      (``skill_library/<slug>/``), which for ``occ`` is the four documents and
+      for every other tenant is nothing.
+
+    The map is authoritative here for the same reason it is for the corpus: a
+    client cannot pick its own skill set.
+    """
+    slug = (tenant_slug or "").strip().lower()
+    if not slug or not _SLUG.match(slug):
+        return ()
+    table = corpus_map if corpus_map is not None else load_tenant_corpus_map()
+    if not table:
+        return ()
+    entry = table.get(slug)
+    if entry is None:
+        return ()
+    available = known_skill_names(slug)
+    if entry.skills is None:
+        return tuple(available)
+    return tuple(name for name in entry.skills if name in available)
 
 
 def _header(headers: Any, name: str) -> str | None:
@@ -305,6 +395,7 @@ def resolve_corpus_override(
             research_system_prompt=mapped.research_system_prompt,
             lock_session_controls=mapped.lock_session_controls,
             digisearch_tools=mapped.digisearch_tools,
+            skills=mapped.skills,
         )
 
     # Single-tenant (map unset): headers may select corpus.

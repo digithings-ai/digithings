@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.digithings.dt-broker -- copy of record for the per-run GitHub credential broker (DIG-4805).
+
+  Installed at /Library/LaunchDaemons/com.digithings.dt-broker.plist by Chris, with sudo. The
+  daemon runs as the `_dtbroker` account: it is the only identity that holds the four GitHub App
+  private keys, so a seat process never holds a long-lived GitHub credential at all. It answers on
+  a unix socket, 0660, group `_dtseats`, and mints an installation token scoped to one repository
+  and only while the calling run is running.
+
+  ProgramArguments points at the installed copy of the package. The source of truth is
+  scripts/dt_broker/ in this repo; the installed copy is refreshed by Chris with the same command
+  he uses for the kit (`sudo cp -R`), because a daemon that runs from a seat's checkout could be
+  edited by a seat.
+
+  The socket path is /Users/_dtbroker/run/dt-broker.sock and not the /var/run/dt-broker.sock of
+  the ticket: /var/run is owned by root and is not writable by a daemon running as `_dtbroker`, so
+  a socket there needs a sudo-created parent directory that a cleanup can remove under the
+  daemon's feet. The daemon creates its own run directory, so it comes back on its own after a
+  reboot. The mode (0660) and the group (`_dtseats`) are as the ticket says.
+
+  Installing this file does not start anything: launchd reads it at the next bootstrap, and
+  bootstrapping a system daemon is a Chris action (see INSTALL.md).
+
+  The `--socket` option belongs to the command, not to the `serve` subcommand: it comes before
+  the subcommand on the command line, and a `serve` that is given an option it does not know
+  exits with a usage error instead of listening.
+-->
+<plist version="1.0"><dict>
+<key>Label</key><string>com.digithings.dt-broker</string>
+<key>UserName</key><string>_dtbroker</string>
+<key>GroupName</key><string>_dtseats</string>
+<key>ProgramArguments</key><array>
+  <string>/usr/bin/python3</string>
+  <string>/usr/local/lib/dt-broker/scripts/dt-broker</string>
+  <string>--socket</string><string>/Users/_dtbroker/run/dt-broker.sock</string>
+  <string>serve</string>
+  <string>--policy</string><string>/Users/_dtbroker/policy.json</string>
+  <string>--state-dir</string><string>/Users/_dtbroker/state</string>
+  <string>--auth-mode-path</string><string>/Users/_dtbroker/.config/digithings/github-auth-mode</string>
+</array>
+<key>WorkingDirectory</key><string>/Users/_dtbroker</string>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>ThrottleInterval</key><integer>10</integer>
+<key>StandardOutPath</key><string>/Users/_dtbroker/state/dt-broker.out.log</string>
+<key>StandardErrorPath</key><string>/Users/_dtbroker/state/dt-broker.err.log</string>
+</dict></plist>

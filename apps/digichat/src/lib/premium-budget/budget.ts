@@ -33,7 +33,7 @@ export const DEFAULT_PREMIUM_WINDOW_SECONDS = 86_400;
  * Three of those turns is $0.0125565 per rolling day.
  */
 export const PREMIUM_BUDGET_MESSAGE =
-  "You've used today's premium budget. Answering with Auto instead.";
+  "You've used today's premium budget. Answering with Default instead.";
 
 export type PremiumRate = { inputPerM: number; outputPerM: number };
 

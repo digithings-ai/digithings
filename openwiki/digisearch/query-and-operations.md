@@ -207,7 +207,7 @@ persist, delivery, and optional bridge handoff to websets.
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as digiclaw (tick agent)
+    participant Scheduler as digibot (tick agent)
     participant HTTP as server.py
     participant Runner as monitors/runner.py
     participant Recall as web_exa / web_search
@@ -266,7 +266,7 @@ sequenceDiagram
 - **`POST /v1/monitors/tick`** — evaluates every enabled watch (cron or interval)
   with `is_due` and runs the due ones. Per-watch failures are isolated so one
   broken watch never aborts the tick. Datatap-scoped watches are skipped. Called
-  by digiclaw's `web-watch-tick` agent (continuous, 60s).
+  by digibot's `web-watch-tick` agent (continuous, 60s).
 
 ### EXA webhook
 

@@ -86,7 +86,9 @@ export function ContactForm({ className }: { className?: string }) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="you@example.com"
-        className="mt-[0.4rem] w-full border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
+        aria-invalid={state.kind === "error"}
+        aria-describedby={state.kind === "error" ? "contact-error" : undefined}
+        className="mt-[0.4rem] w-full border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] text-ink placeholder:text-ink-mute focus-visible:border-accent"
       />
 
       <label className={`mt-[1.2rem] block ${GROUPED_LABEL}`} htmlFor="contact-message">
@@ -100,11 +102,13 @@ export function ContactForm({ className }: { className?: string }) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="What are you running today, and what would you like to build?"
-        className="mt-[0.4rem] max-h-[24rem] min-h-[8rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] leading-[1.7] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
+        aria-invalid={state.kind === "error"}
+        aria-describedby={state.kind === "error" ? "contact-error" : undefined}
+        className="mt-[0.4rem] max-h-[24rem] min-h-[8rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] leading-[1.7] text-ink placeholder:text-ink-mute focus-visible:border-accent"
       />
 
       {state.kind === "error" ? (
-        <p role="alert" className="mt-[0.8rem] mb-0 text-[0.82rem] text-warn">
+        <p id="contact-error" role="alert" className="mt-[0.8rem] mb-0 text-[0.82rem] text-warn">
           {state.message}
         </p>
       ) : null}

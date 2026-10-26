@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { DASH, asOfStatus, cell, fieldKind, formatTimestamp, toneOf } from "./format";
-import { fieldLines, presentResponse } from "./read";
+import { DASH, asOfStatus, cell, fieldKind, formatTimestamp, stateLines, stateTone, toneOf } from "./format";
+import { STUB_READ, fieldLines, presentResponse } from "./read";
 
 test("a raw float is rounded by its field, never painted as sent", () => {
   expect(cell(123.50887821352958, "nav")).toBe("123.51");
@@ -103,4 +103,23 @@ test("presentResponse formats fields and carries the data date beside the asked 
   expect(read.asOf).toBeNull();
   expect(read.dataAsOf).toBe("2026-10-08");
   expect(fieldLines({ rows: [{ ticker: "AAA", day_return_pct: 1 }] })).toEqual(["rows  1. ticker AAA  day_return_pct +1.00%"]);
+});
+
+test("a withheld read is caution, not a failure", () => {
+  expect(stateTone("ok")).toBe("ink");
+  expect(stateTone("empty")).toBe("mute");
+  expect(stateTone("loading")).toBe("mute");
+  expect(stateTone("stub")).toBe("warn");
+  expect(stateTone("error")).toBe("danger");
+});
+
+test("only a failure is marked, and an empty failure still says something", () => {
+  expect(stateLines("ok", ["nav  1.00"])).toEqual(["nav  1.00"]);
+  expect(stateLines("stub", [STUB_READ])).toEqual([STUB_READ]);
+  expect(stateLines("error", ["/brief failed (500)"])).toEqual(["! /brief failed (500)"]);
+  expect(stateLines("error", ["/brief failed (500)", "retry later"])).toEqual([
+    "! /brief failed (500)",
+    "retry later",
+  ]);
+  expect(stateLines("error", [])).toEqual(["! the read failed"]);
 });

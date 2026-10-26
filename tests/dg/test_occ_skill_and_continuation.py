@@ -19,6 +19,17 @@ def _ctx(**kw: object) -> ToolContext:
         "index_config": {},
         "state": {},
         "request_id": "r",
+        # DIG-2637: skills are tenant content, so the OCC context is the one that
+        # carries the OCC pack and its four ids.
+        "skill_pack": "occ",
+        "skill_ids": frozenset(
+            {
+                "find-precedent-tickets",
+                "guide-help-docs",
+                "present-results",
+                "summarize-tickets-by-topic",
+            }
+        ),
     }
     d.update(kw)
     return ToolContext(**d)  # type: ignore[arg-type]
@@ -28,7 +39,7 @@ def test_skill_id_called_as_tool_returns_the_skill_document() -> None:
     from digigraph.skill_library.loader import list_skill_documents
 
     name = "summarize-tickets-by-topic"
-    assert name in {d.name for d in list_skill_documents()}
+    assert name in {d.name for d in list_skill_documents("occ")}
     if not registry.has_tool("get_skill"):
         pytest.skip("skill library tools not registered in this process")
     out = registry.execute(name, {}, _ctx())
@@ -42,13 +53,21 @@ def test_real_unknown_tool_still_reports_unknown() -> None:
 
 
 def test_skill_route_respects_allowlist_without_get_skill() -> None:
-    out = registry.execute("summarize-tickets-by-topic", {}, _ctx(allowed_tool_names={"digisearch"}))
+    out = registry.execute(
+        "summarize-tickets-by-topic", {}, _ctx(allowed_tool_names={"digisearch"})
+    )
     assert out == "Unknown tool: summarize-tickets-by-topic"
 
 
 @pytest.mark.parametrize(
     "text",
-    ["Here is what I found.\n\nLet me", "I'll now check the tickets", "The steps are:", "", "Lass mich nachsehen"],
+    [
+        "Here is what I found.\n\nLet me",
+        "I'll now check the tickets",
+        "The steps are:",
+        "",
+        "Lass mich nachsehen",
+    ],
 )
 def test_unfinished_answers_detected(text: str) -> None:
     assert answer_looks_unfinished(text)
@@ -74,7 +93,9 @@ def test_tenant_map_lock_session_controls_parses() -> None:
         }
     )
     table = load_tenant_corpus_map(raw)
-    assert resolve_corpus_override(headers={}, tenant_slug="occ", corpus_map=table).lock_session_controls
+    assert resolve_corpus_override(
+        headers={}, tenant_slug="occ", corpus_map=table
+    ).lock_session_controls
     assert not resolve_corpus_override(
         headers={}, tenant_slug="digithings", corpus_map=table
     ).lock_session_controls
@@ -85,7 +106,12 @@ def test_locked_session_tools_filtered_by_name() -> None:
 
     tools = [
         {"type": "function", "function": {"name": n}}
-        for n in ["session_set_model", "session_set_language", "zammad_search_tickets", "session_toggle_tool"]
+        for n in [
+            "session_set_model",
+            "session_set_language",
+            "zammad_search_tickets",
+            "session_toggle_tool",
+        ]
     ]
     kept = [t for t in tools if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
     assert [_tool_def_name(t) for t in kept] == ["session_set_language", "zammad_search_tickets"]
@@ -95,7 +121,5 @@ def test_locked_session_tools_filtered_by_name() -> None:
 def test_workflow_request_carries_lock_into_state() -> None:
     from digigraph.models import WorkflowRequest
 
-    req = WorkflowRequest.model_validate(
-        {"prompt": "hi", "lock_session_controls": True}
-    )
+    req = WorkflowRequest.model_validate({"prompt": "hi", "lock_session_controls": True})
     assert req.lock_session_controls is True

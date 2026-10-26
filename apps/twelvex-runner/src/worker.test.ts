@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { decideAlert, SESSION_LABEL, SOURCE_LABEL, TRANSPORT_LABEL } from "./alerts";
 import type { Env } from "./env";
 import { handle, type RunResult } from "./worker";
+import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -205,6 +206,79 @@ describe("routing and auth", () => {
     const forwarded = JSON.parse(await request.text()) as { dry_run: boolean };
     expect(forwarded.dry_run).toBe(true);
     expect(github).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Durable Object hop", () => {
+  it("answers 503 with the Retry-After when the instance was not available", async () => {
+    // The container hop can reject with a value that is not an Error, and the
+    // Durable Object then answers 503 with a Retry-After so the caller backs
+    // off instead of hammering a runner that is still coming up (run-watch
+    // DIG-4928). That answer is retryable, so it reaches the client with its
+    // status and its header instead of being rewritten to a 502 that drops
+    // the only instruction the caller needs.
+    const container = vi.fn(async (_request: Request) =>
+      new Response(
+        JSON.stringify({
+          error: "durable_object_unavailable",
+          detail: RUNNER_UNAVAILABLE_DETAIL,
+        }),
+        {
+          status: 503,
+          headers: { "content-type": "application/json", "retry-after": "30" },
+        },
+      ),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("30");
+    const body = (await res.json()) as { error?: string; detail?: string };
+    expect(body.error).toBe("durable_object_unavailable");
+    // The Durable Object and the Worker answer the same contract, so the
+    // detail is the one wording and not two copies of it.
+    expect(body.detail).toBe(RUNNER_UNAVAILABLE_DETAIL);
+  });
+
+  it("still answers 502 when the container itself fails", async () => {
+    const container = vi.fn(async (_request: Request) =>
+      new Response("the container died", { status: 500 }),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(502);
+    expect(res.headers.get("retry-after")).toBeNull();
+  });
+
+  it("still answers 502 when the container answers 503 without the code of the Durable Object", async () => {
+    // A 503 that does not come from the Durable Object is the container's own
+    // answer (the @cloudflare/containers no-instance answer is a 503 whose
+    // body is plain text), so it is a container failure and not an
+    // unavailable instance. It must not be answered as the retryable one: a
+    // caller that backs off on it would wait for an instance that is there.
+    const container = vi.fn(async (_request: Request) =>
+      new Response("There is no Container instance available at this time.", {
+        status: 503,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    const res = await handle(
+      post("heartbeat", { job_id: "twelve-x-primemarket-heartbeat" }),
+      env(),
+      stubOf(container),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(res.status).toBe(502);
+    expect(res.headers.get("retry-after")).toBeNull();
+    expect(await res.json()).toEqual({ error: "container_failed" });
   });
 });
 

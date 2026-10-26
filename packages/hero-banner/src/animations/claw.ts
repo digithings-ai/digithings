@@ -2,7 +2,7 @@ import { emptyFrame, litCells, mulberry32, setPixel } from "../layout";
 import type { Animation, Frame, Glyph, Layout, Pixel, PixelFont } from "../types";
 
 /**
- * CLAW (digiclaw). An arcade claw machine picks the word out of a pile.
+ * CLAW (digibot). An arcade claw machine picks the word out of a pile.
  * The font carries `HEADROOM` blank rows over each glyph; that is the claw's
  * gantry. LOADING: the glyphs lie sunk in a pile at the bottom (dim `accent`,
  * seeded depths). A claw (`accent`) hangs from a faint rail, travels to each

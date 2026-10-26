@@ -50,7 +50,7 @@ Apply::
 One Cloudflare account + token now covers both the D1 read and the Vectorize write
 (#2239 credential rename) -- ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` are
 canonical; the legacy ``D1_ACCOUNT_ID``/``D1_API_TOKEN``/``VECTORIZE_ACCOUNT_ID``/
-``VECTORIZE_API_TOKEN`` names still work as a fallback (see ``_first_env`` below).
+``VECTORIZE_API_TOKEN`` names still work as a fallback (see ``digivault.store_helpers.first_env``).
 """
 
 from __future__ import annotations
@@ -356,15 +356,15 @@ def main(argv: list[str] | None = None) -> int:
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
     from digivault.d1_errors import D1StoreError
     from digivault.d1_store import D1Store
-    from digivault.supabase_store import _first_env
+    from digivault.store_helpers import first_env
 
     # Canonical-first, legacy-fallback (#2239 credential rename): D1 and Vectorize
     # now share one Cloudflare account + token, so this single resolution feeds both
     # the D1 read below and the Vectorize sink further down -- CLOUDFLARE_ACCOUNT_ID/
     # CLOUDFLARE_API_TOKEN first, then the legacy VECTORIZE_*/D1_* names, whichever
     # the operator still has set.
-    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    account_id = first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
         # Checked before the D1 read below, not only before the Vectorize write
         # further down: D1 is read on every invocation, `--dry-run` included, so

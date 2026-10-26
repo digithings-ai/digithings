@@ -3,12 +3,57 @@
 Check tracked .example and .template files for credential-shaped values
 that are not obvious placeholders. Fails if found.
 """
+import os
 import re
 import subprocess
 import sys
 from collections import Counter
 from math import log2
 from pathlib import Path
+
+# Git must answer for itself here, without the fsmonitor daemon. The daemon is
+# a per-clone cache of the working tree, and a busy machine can wedge it: in
+# the post-merge worktree `git ls-files` spent 5.2 s of wall clock on 0.01 s of
+# CPU inside the daemon and then failed with "could not read IPC response"
+# (DIG-5318).
+GIT_FLAGS = ('-c', 'core.fsmonitor=false')
+
+# Installed dependencies and build output, never source. The tracked-file path
+# never sees them, because git does not track them; the fallback walk must not
+# either.
+SKIP_DIRS = frozenset({
+    ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", ".tox", ".nox", ".cache", "dist", "build",
+    ".next", ".nuxt", ".turbo", ".wrangler", "coverage", "htmlcov",
+})
+
+# A walk that visits more than this is a crawl, not a scan (DIG-5318).
+MAX_WALK_FILES = 20000
+
+
+def _walk_source_files(root: Path) -> list[Path]:
+    """The .example and .template paths under ``root``, without the dependency
+    and build trees, and never more than ``MAX_WALK_FILES`` files visited.
+
+    The old fallback was ``Path('.').rglob('*')``: on a checkout with
+    node_modules and .venv it read 146k files -- installed packages that the
+    tracked-file path never reads -- and blew the CI budget (DIG-5318).
+    """
+    found: list[Path] = []
+    visited = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for name in sorted(filenames):
+            visited += 1
+            if visited > MAX_WALK_FILES:
+                raise RuntimeError(
+                    f"the tree under {root} holds more than {MAX_WALK_FILES} "
+                    "files; a full walk is not a scan"
+                )
+            rel = (Path(dirpath) / name).as_posix()
+            if '.example' in rel or '.template' in rel:
+                found.append(Path(dirpath) / name)
+    return sorted(found)
 
 PLACEHOLDER_PATTERNS = [
     # A placeholder marker counts only as the *first* token, and the separator that
@@ -44,7 +89,7 @@ GENERIC_PLACEHOLDER_VALUES = (
 # weak real credential, not a placeholder, so it is never exempt.
 PRODUCT_NAME_VALUES = (
     'digichat', 'digigraph', 'digiquant', 'digisearch', 'digikey',
-    'digivault', 'digiclaw', 'digibase', 'digitrace', 'digillm',
+    'digivault', 'digibot', 'digibase', 'digitrace', 'digillm',
     'digifetch', 'digiskills', 'digiweb', 'digivoice', 'digidev',
     'digismith', 'digithings',
 )
@@ -378,10 +423,25 @@ def looks_cred_val(v, var=''):
 
 def main():
     try:
-        result = subprocess.run(['git', 'ls-files'], stdout=subprocess.PIPE, text=True, check=True)
+        result = subprocess.run(
+            ['git', '-c', 'core.fsmonitor=false', 'ls-files'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
+        )
         tracked = [Path(f) for f in result.stdout.splitlines()]
     except Exception:
-        tracked = list(Path('.').rglob('*'))
+        print(
+            'note: not a git checkout; scanning a bounded walk of the tree '
+            'instead',
+            file=sys.stderr,
+        )
+        try:
+            tracked = _walk_source_files(Path('.'))
+        except RuntimeError as exc:
+            # Exit 3, not 1: the guard did not find a credential, it could not
+            # establish what to look at. The runner tells the two apart
+            # (DIG-5318).
+            print(f'ERROR: {exc}', file=sys.stderr)
+            return 3
     issues = []
     for f in tracked:
         name = str(f)

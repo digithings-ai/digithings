@@ -3,7 +3,6 @@ import {
   MAX_REPAIR_INPUT_CHARS,
   formatJsonDump,
   formatToolDurationMs,
-  humanizeToolName,
   repairPartialJson,
 } from "./format-json-dump";
 
@@ -127,27 +126,5 @@ describe("formatToolDurationMs", () => {
     expect(formatToolDurationMs(1000)).toBe("1.0s");
     expect(formatToolDurationMs(2300)).toBe("2.3s");
     expect(formatToolDurationMs(65000)).toBe("1m 5s");
-  });
-});
-
-describe("humanizeToolName", () => {
-  it("keeps the exact backend tool id, including underscores", () => {
-    expect(humanizeToolName("digisearch")).toBe("digisearch");
-    expect(humanizeToolName("digisearch", '{"mode":"keyword"}')).toBe("digisearch");
-    expect(humanizeToolName("digisearch", '{"search_mode":"hybrid"}')).toBe("digisearch");
-    expect(humanizeToolName("digisearch", '{"search_type":"keyword"}')).toBe("digisearch");
-  });
-
-  it("keeps fetch_all and research ids verbatim regardless of method args", () => {
-    expect(humanizeToolName("digisearch_fetch_all")).toBe("digisearch_fetch_all");
-    expect(humanizeToolName("digisearch_research", '{"mode":"hybrid"}')).toBe(
-      "digisearch_research",
-    );
-  });
-
-  it("keeps vault and web tool ids verbatim", () => {
-    expect(humanizeToolName("digivault_search_notes")).toBe("digivault_search_notes");
-    expect(humanizeToolName("digivault_get_note")).toBe("digivault_get_note");
-    expect(humanizeToolName("web_search")).toBe("web_search");
   });
 });

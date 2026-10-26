@@ -9,13 +9,13 @@
 
 ## 1. Overview
 
-digigraph is the central orchestration brain of the digithings stack. Every user request flows through it: from digiclaw (gateway), from digichat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). digigraph owns three distinct roles:
+digigraph is the central orchestration brain of the digithings stack. Every user request flows through it: from digibot (gateway), from digichat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). digigraph owns three distinct roles:
 
 1. **LangGraph state machine.** Maintains a compiled `StateGraph[WorkflowState]` that routes through research, strategy validation, backtest, and optional optimize nodes. Profile-driven conditional edges control which path executes.
 
 2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, digistore introspection, planning primitives). Verticals (digisearch, digiquant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; digigraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
 
-3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digiclaw custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digiclaw agent integration.
+3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digibot custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digibot agent integration.
 
 digigraph is deliberately minimal as a hub: it does not implement the quant pipeline ordering (owned by digiquant) or tiered RAG (owned by digisearch). It coordinates them.
 
@@ -70,7 +70,7 @@ The following is built and functional as of this architecture review (March 2026
 |--------|------|------|------------|-------|
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
-| `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
+| `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digibot custom skill; body: `WorkflowRequest` |
 | `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
 | `POST` | `/v1/chat/completions` | digikey JWT (optional) | 60 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
@@ -301,6 +301,7 @@ real node executions rather than compiled graph nodes.
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
 | `research_system_prompt_override` | `str \| None` | Research system prompt resolved **server-side only** (tenant corpus map / project config) and written unconditionally including `None` — a client body value is always overwritten so a caller cannot inject a system prompt. |
 | `lock_session_controls` | `bool` | Tenant session-control lock (tenant corpus map `lockSessionControls`). Hides the session-control tools (`session_set_model`, `session_upsert_mcp`, `session_remove_mcp`, `session_toggle_tool`) from the model and refuses them on direct execution. On an unlocked tenant `session_toggle_tool` stays registered and its handler returns `{"ok": False, "error": "Tools are changed in /tools."}`. **Must** be declared — LangGraph drops undeclared keys. `_initial_graph_state` writes it **unconditionally** (including `False`) so a prior turn's `True` never sticks on a reused `session_id`. |
+| `skill_pack` / `skills` | `str \| None` / `list[str] \| None` | Tenant skill documents (DIG-2637, tenant corpus map `skills`): the pack directory (the tenant slug) and the ids this request may read. Both **must** be declared and are written **unconditionally** server-side, so a client body cannot select a pack and a prior turn's set never sticks on a reused `session_id`. Empty means the `skill_library` bundle is not exposed at all. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. `research_node` prepends a mapped directive to **this turn's user query** (not the tenant system prompt). See `digigraph.languages`. |
 | `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). Extra operator MCP **server ids** are accepted too: those hint the model with `tool_choice="required"` rather than injecting a locate. **Must** be declared. |
 | `mcp_servers` | `list[dict]` | Streamable HTTP MCP `{id, url, auth?, token?, authHeader?}` pairs (`X-Digi-Mcp-Servers` after BFF merge). **Must** be declared. Always overwritten from the BFF header (empty list clears a prior tenant). URLs never come from an untrusted JSON body. Tokens are never logged. `authHeader` is operator-only (#3841), never session-overlay-settable. **In-request only for persistence (#3794, #3969):** secret-named keys (`token`, `authorization`, `api_key`, `client_secret`, and comparable `*_token` / `*_secret` / `*_password` names, including nested `headers` / `auth` sub-objects) are stripped recursively by `McpTokenRedactingCheckpointer` before checkpointer write so durable/R2-archived blobs do not retain OAuth/session bearer values; the same-turn graph state still carries tokens for MCP calls. |
@@ -466,6 +467,10 @@ digigraph/src/digigraph/
 │   └── executor.py              Plan executor: topo-sort, placeholder resolution, parallel steps
 ├── skills/
 │   └── __init__.py              get_tools_for_skills (delegates to registry)
+├── skill_library/
+│   ├── loader.py                Per-tenant SKILL.md packs: skill_library/<tenant>/<id>/SKILL.md
+│   ├── tools.py                 list_skills / get_skill handlers (tenant-scoped)
+│   └── occ/                     The OCC tenant's four skill documents (occ only)
 ├── formatters/
 │   └── __init__.py              get_stream_formatter, neutral and Open WebUI formatters
 ```
@@ -519,6 +524,8 @@ Three-layer structure:
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
 3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair, plus the read-only `digivault_search_tag` and `digivault_backlinks` lookups) activates only when `DIGIVAULT_URL` is set. The `web` skill (`web_search`: first-party digisearch `web_search` tool via the orchestrator hub — tool-only, no synthesis fallback and no vendor search tooling; a failed search fails hard instead of answering ungrounded) activates only when `WorkflowState.enable_web_search` is true — digichat sends `X-Digi-Enable-Web-Search` when the tenant allows and the user pref is on (user pref defaults on #3859; tenant gate still opt-in #3420), so web never mixes into corpus RAG silently. External cites use `evidence_tier: External` and supplement vault/search hits. `X-Digi-Disabled-Tools` (catalog ids `digisearch` / `digivault` and aliases) subtracts those tools from the request allowlist (#3733).
+
+**Skill documents are tenant content** (DIG-2637, `skill_library/`): `list_skills` / `get_skill` read `skill_library/<tenant-slug>/<id>/SKILL.md`, and the `skill_library` bundle activates only when that tenant has documents (`ToolContext.has_skills`). The set comes from `corpus_routing.tenant_skill_ids`: the tenant's own map entry (`skills` narrows it; a missing key means its own pack), and an unmapped tenant gets nothing — never "all". The four documents under `skill_library/occ/` are the `occ` tenant's only, so the house chat cannot list or read them; a new tenant adds a pack folder plus a map entry.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -770,6 +777,73 @@ can't comply at the provider level: a provider that rejects forced tool use for
 that model outright now returns a hard error for the whole request, rather than
 the model quietly answering without tools the way a tool-incapable model
 degrades today.
+
+#### 6.2.2 An unreachable MCP server is not an MCP server with no tools
+
+A remote MCP server that cannot be listed — unreachable, refused (421 / 401 / 404),
+misconfigured — offers the model no tool. A server that has no tools offers the
+model no tool. The model cannot tell the two apart, so the only conclusion it can
+draw from an outage is "there is no data", and it says so. That is what a tenant
+chat did in October 2026 (DIG-5187): the helpdesk MCP was unreachable, the model
+had no tool for it, and the answer was "no live queue data is retrievable in
+this chat" instead of "the helpdesk integration is not reachable". The only
+trace was one `log.warning`.
+
+**Where the failure lives.** `_list_tools_blocking()`
+(`orchestration/mcp_client.py`) records the failure in a second map, `_failures`,
+keyed by `mcp_list_cache_key(server)` — the key the catalog cache already uses,
+so a failure and a catalog always describe the same server, token and auth
+header. It has its own TTL (`_FAILURE_TTL_S`, 10 s), shorter than the catalog's
+60 s: a catalog is worth caching for a minute, an outage is not worth
+remembering for a minute, and the short TTL is what makes a recovered server
+dialled again on the next turn. A successful listing clears the entry.
+
+**A failed listing is never cached as an empty catalog.** `list_tools_cached()`
+drops the cache entry when the listing failed instead of writing `[]` into it.
+Caching the failure as an empty catalog is the defect itself: for the next 60 s
+every caller is told the server has no tools, and the outage stays
+indistinguishable from a server that genuinely offers none. The failure map is
+what survives a failure.
+
+**How the failure reaches the model.** `mcp_server_failures(servers)` returns
+the servers whose listing failed, with the reason. `graph/research.py` reads it
+in `_run_document_rag_path` — the only turn path that offers MCP tools — and
+`mcp_failure_note()` turns it into a short "Unreachable integrations" line that
+is prepended to the **user message**. The model then reports an outage instead
+of an absence of data. The read has to happen after the listing that records the
+failure; `extra_tool_names_for_servers()` is what dials the server.
+
+**Why the user message and not the system prompt.** The system prompt is a
+tenant-wide constant: the tenant `researchSystemPrompt` in
+`DIGI_TENANT_CORPUS_MAP` is written into six deployment files
+(`apps/digithings-stack-cloudflare/wrangler.toml`,
+`apps/digithings-stack-cloudflare/src/index.ts`, `config/contract/contract.yaml`,
+`config/contract/generated/wrangler.vars.digithings-stack.json`,
+`infra/digichat-release/compose.profile-a-bundle.override.yml`,
+`infra/digichat-release/DIG-3556-staged-prod-tenant-config.json`): the first five
+are the live copies and are edited together, while the staged rollout overlay
+carries the map as of its own rollout. A per-request
+fact does not belong in a constant that has to be edited in six places to stay
+true; the user message is per-turn by construction. The note is prepended, so the
+model reads it before the question.
+
+**Why the note names servers and not reasons.** The reason is the failed call's
+exception text, and it can carry an internal URL or a token. The prompt goes to
+a model provider and is kept in the debug log; the reason stays in the
+`log.warning("remote MCP list_tools failed for %s: %s", ...)` line, which is
+where an operator goes looking for the cause.
+
+**A healthy server changes nothing.** With no failure recorded, `mcp_failures` is
+empty, no note is built, and the user message is byte-identical to the prompt
+the turn would have had before.
+
+**What pins it.** `tests/dg/test_mcp_client.py` pins the cache and the reader.
+`tests/dg/test_research_mcp_failure_note.py` pins the turn: an unreachable
+server puts "Unreachable integrations: helpdesk" into the turn's user message;
+a healthy server leaves the user message exactly as it was and still gets its
+tool. The turn test is the one that matters — without it the note could be
+dropped from `research.py` and the whole suite would stay green, which is how
+the wiring would have rotted.
 
 ### 6.3 Code Execution Gate
 
@@ -1139,7 +1213,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
-| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt, lockSessionControls}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). Unmapped / empty-tenant requests clear those fields to `None` on the request **and** in `_initial_graph_state` so LangGraph checkpoints do not keep a prior turn's index sticky on a reused `session_id`. `digisearchIndex` accepts a comma-separated fan-out list (e.g. `occ_help,occ_tickets`, #4756), validated per element and passed through verbatim — digisearch merges the indexes with RRF. When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. `lockSessionControls` (or `lock_session_controls`) turns the tenant's session-control lock on: the model never sees the session-control tools (`session_set_model`, `session_upsert_mcp`, `session_remove_mcp`, `session_toggle_tool`) and a direct call to one is refused. It is operator-only — the map is authoritative, so a client body cannot unlock it — and it is written into graph state on every turn, so a prior turn's lock never sticks on a reused `session_id`. It must be a **real JSON boolean**: a non-boolean value fails closed to **locked** for that entry (§6.12). Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt, lockSessionControls, digisearchTools, skills}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). Unmapped / empty-tenant requests clear those fields to `None` on the request **and** in `_initial_graph_state` so LangGraph checkpoints do not keep a prior turn's index sticky on a reused `session_id`. `digisearchIndex` accepts a comma-separated fan-out list (e.g. `occ_help,occ_tickets`, #4756), validated per element and passed through verbatim — digisearch merges the indexes with RRF. When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. `skills` names the skill document ids this tenant may read (`skill_library/<slug>/` is its pack; a list narrows it, an empty list means none) — skills are tenant content, so an unmapped tenant gets none, never "all" (§5, DIG-2637). `lockSessionControls` (or `lock_session_controls`) turns the tenant's session-control lock on: the model never sees the session-control tools (`session_set_model`, `session_upsert_mcp`, `session_remove_mcp`, `session_toggle_tool`) and a direct call to one is refused. It is operator-only — the map is authoritative, so a client body cannot unlock it — and it is written into graph state on every turn, so a prior turn's lock never sticks on a reused `session_id`. It must be a **real JSON boolean**: a non-boolean value fails closed to **locked** for that entry (§6.12). `digisearchTools` (or `digisearch_tools`) gives the tenant dedicated digisearch tools: each tool names its own index and description, so one tenant can search more than one corpus without changing `digisearchIndex` (the tenant's own default corpus). The tool name must match `digisearch_[a-z0-9_]{1,48}` and the index it names must be a valid digisearch index. Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
@@ -1202,7 +1276,7 @@ The following are explicitly documented as roadmap items:
 | **Per-user RBAC** | JWT subject not bound to checkpoint or tool access | Shared `thread_id` namespace; allowlists are per-request not per-user |
 | **Auth-bound checkpoints** | `thread_id` is caller-supplied; no ownership enforcement | Trust the client not to use other users' thread IDs |
 | **Request cancellation** | No mechanism to cancel in-flight streaming workflows | Background threads run to completion |
-| **digiclaw subgraph exposure** | digiclaw can attach only to the hub, not to vertical MCP servers directly | digiclaw calls `/workflow` only |
+| **digibot subgraph exposure** | digibot can attach only to the hub, not to vertical MCP servers directly | digibot calls `/workflow` only |
 
 ---
 

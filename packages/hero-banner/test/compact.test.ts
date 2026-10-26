@@ -6,7 +6,6 @@ import { canonicalLayout } from "../src/layout";
 import { COMPACT_SAMPLE_Y, compactLines, toPlain } from "../src/tui";
 import type { TermCell } from "../src/tui";
 
-const BRAILLE = /^[\u2800-\u28ff ]$/;
 const dots = (line: string) => [...line].map((ch) => (ch === " " ? 0 : ch.charCodeAt(0) - 0x2800));
 
 /** The dot mask the definition's own layout and sampled rows produce: the

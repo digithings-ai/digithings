@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
+from digigraph.tools.analytics._artifacts import artifacts_dir, next_filename
 from digigraph.tools.analytics.load import load_dataset
-from digigraph.tools.analytics.visualization._helpers import _artifacts_dir, _next_filename
 
 
 def plot_sankey(
@@ -82,8 +82,8 @@ def plot_sankey(
         title_text=f"Sankey: {source_column} → {target_column}", font_size=10, height=500
     )
 
-    out_dir = _artifacts_dir(dataset_path)
-    path = _next_filename(out_dir, "sankey", "png")
+    out_dir = artifacts_dir(dataset_path)
+    path = next_filename(out_dir, "sankey", "png")
     try:
         fig.write_image(path, scale=1.5)
     except (OSError, ValueError, RuntimeError) as e:

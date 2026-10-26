@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { paintFrame, toneColors } from "./canvas";
+import { createClock } from "./clock";
 import { claimLoading, nextTickMs, preparedBanner, resolveLive, resolveMotion, sampleBanner } from "./engine";
 import { settledFallback } from "./ssr";
 import type { BannerDefinition } from "./types";
@@ -13,6 +14,10 @@ import type { BannerDefinition } from "./types";
  * pixel ratio. LOADING plays once per tab (sessionStorage); reduced motion
  * paints the settled mark and never starts a timer. `armed` holds the banner
  * blank until a scroll-triggered surface lets it start (footer marks).
+ *
+ * The repaint loop only runs while the mark is on screen and the tab is
+ * visible: pausing banks the animation time, so a banner scrolled back into
+ * view resumes mid-build rather than jumping to the end of its script.
  */
 export function HeroBanner({
   def,
@@ -64,22 +69,51 @@ export function HeroBanner({
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx || !armed) return;
-    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    const motion = resolveMotion({ prefersReduced: media?.matches === true });
+
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const scheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+    let motion = resolveMotion({ prefersReduced: reduced?.matches === true });
     let store: Storage | null = null;
     try {
       store = window.sessionStorage;
     } catch {
       store = null;
     }
-    const skipLoading =
-      motion === "full" ? (replayLoading ? false : !claimLoading(def, store)) : true;
+    const skipLoading = motion === "full" ? (replayLoading ? false : !claimLoading(def, store)) : true;
     const liveOn = resolveLive(def, { config: live });
-    const origin = performance.now();
+    const clock = createClock(performance.now());
+
     let timer: ReturnType<typeof setTimeout> | null = null;
     let raf = 0;
+    let visible = document.visibilityState !== "hidden";
+    let onScreen = true;
+    let colors: Record<string, string> | null = null;
 
-    const draw = () => {
+    const running = () => visible && onScreen && motion !== "reduced";
+
+    const resolveColors = (): Record<string, string> => {
+      const styles = getComputedStyle(canvas);
+      return toneColors(def.palette, (name) => styles.getPropertyValue(name));
+    };
+
+    const stop = (): void => {
+      if (timer) clearTimeout(timer);
+      if (raf) cancelAnimationFrame(raf);
+      timer = null;
+      raf = 0;
+    };
+
+    const schedule = (wait: number): void => {
+      if (!running() || timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        raf = requestAnimationFrame(draw);
+      }, wait);
+    };
+
+    const draw = (): void => {
+      timer = null;
+      raf = 0;
       const dpr = window.devicePixelRatio || 1;
       const cssWidth = canvas.clientWidth || width;
       const pixel = Math.max(1, Math.floor((cssWidth * dpr) / width));
@@ -87,12 +121,54 @@ export function HeroBanner({
         canvas.width = width * pixel;
         canvas.height = layout.height * pixel;
       }
-      const sample = sampleBanner(def, { t: performance.now() - origin, live: liveOn, motion, skipLoading, gap: usedGap });
-      const styles = getComputedStyle(canvas);
-      paintFrame(ctx, sample.frame, { pixel, colors: toneColors(def.palette, (v) => styles.getPropertyValue(v)) });
+      // Read the theme once per paint, not once per pixel, and refresh it only
+      // when the theme actually changes: getComputedStyle here forces a style
+      // flush that has no business inside a 40ms loop.
+      if (!colors) colors = resolveColors();
+      const sample = sampleBanner(def, {
+        t: clock.elapsed(performance.now()),
+        live: liveOn,
+        motion,
+        skipLoading,
+        gap: usedGap,
+      });
+      paintFrame(ctx, sample.frame, { pixel, colors });
       const wait = nextTickMs(def, sample.phase);
-      if (wait != null) timer = setTimeout(() => (raf = requestAnimationFrame(draw)), wait);
+      if (wait != null) schedule(wait);
     };
+
+    /** Start or stop the loop for the current tab, viewport and motion state. */
+    const sync = (): void => {
+      if (!running()) {
+        clock.pause(performance.now());
+        stop();
+        return;
+      }
+      clock.resume(performance.now());
+      if (!timer && !raf) draw();
+    };
+
+    const onVisibilityChange = (): void => {
+      visible = document.visibilityState !== "hidden";
+      sync();
+    };
+
+    const onMotionChange = (): void => {
+      motion = resolveMotion({ prefersReduced: reduced?.matches === true });
+      stop();
+      if (motion === "reduced") {
+        clock.pause(performance.now());
+        draw();
+      } else {
+        sync();
+      }
+    };
+
+    const onThemeChange = (): void => {
+      colors = null;
+      if (!timer && !raf) draw();
+    };
+
     draw();
     // The canvas now carries the mark itself, so drop the server-rendered
     // fallback in the same task, before the browser paints the frame.
@@ -100,9 +176,32 @@ export function HeroBanner({
     canvas.style.backgroundImage = "";
     canvas.style.maskImage = "";
     setPainted(true);
+
+    const intersection =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver((entries) => {
+            const entry = entries[entries.length - 1];
+            onScreen = entry ? entry.isIntersecting : true;
+            sync();
+          });
+    intersection?.observe(canvas);
+    // A theme class lands on <html>; the mark's tones are CSS variables, so
+    // they have to be re-resolved when it changes.
+    const themeWatch =
+      typeof MutationObserver === "undefined" ? null : new MutationObserver(onThemeChange);
+    themeWatch?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    reduced?.addEventListener?.("change", onMotionChange);
+    scheme?.addEventListener?.("change", onThemeChange);
+
     return () => {
-      if (timer) clearTimeout(timer);
-      cancelAnimationFrame(raf);
+      stop();
+      intersection?.disconnect();
+      themeWatch?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      reduced?.removeEventListener?.("change", onMotionChange);
+      scheme?.removeEventListener?.("change", onThemeChange);
     };
   }, [def, live, armed, replayLoading, usedGap, width, layout.height]);
 

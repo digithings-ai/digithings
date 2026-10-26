@@ -15,6 +15,8 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
  * out of the repository, and a demo that named a client would leak one.
  *
  * Enabled by `DIGICHAT_DEMO_CHAT=1` and never in production.
+ * `DIGICHAT_DEMO_CHAT=long` streams a longer trace (three reasoning blocks
+ * around five tool calls, then a list answer) for density and spacing review.
  */
 
 const REASONING = [
@@ -71,14 +73,101 @@ function sleep(ms: number): Promise<void> {
 
 /** The demo is a development affordance; it must never reach production. */
 export function isDemoChatEnabled(): boolean {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    process.env.DIGICHAT_DEMO_CHAT === "1"
-  );
+  const mode = process.env.DIGICHAT_DEMO_CHAT;
+  return process.env.NODE_ENV !== "production" && (mode === "1" || mode === "long");
+}
+
+/** The long trace: used to review density and spacing across a full chain. */
+export function isLongDemoChat(): boolean {
+  return process.env.DIGICHAT_DEMO_CHAT === "long";
+}
+
+const LONG_STEPS: (
+  | { kind: "reasoning"; id: string; deltas: string[] }
+  | { kind: "tool"; toolCallId: string; toolName: string; input: unknown; output: string }
+)[] = [
+  { kind: "reasoning", id: "long-r1", deltas: [REASONING[0], REASONING[1]] },
+  { kind: "tool", ...TOOLS[0] },
+  { kind: "tool", ...TOOLS[1] },
+  {
+    kind: "reasoning",
+    id: "long-r2",
+    deltas: [
+      "The articles and the notes agree on the categories.\n",
+      "I still need the response times and the live ticket list before I answer.\n",
+    ],
+  },
+  {
+    kind: "tool",
+    toolCallId: "long-4",
+    toolName: "digisearch",
+    input: { query: "service desk response times", index: "help_articles" },
+    output: "help_articles: 1 document — “Response times”. Snippet: “First response within one working day; urgent access issues within four hours.”",
+  },
+  { kind: "tool", ...TOOLS[2] },
+  {
+    kind: "tool",
+    toolCallId: "long-5",
+    toolName: "ticketing_get_ticket",
+    input: { id: 4147 },
+    output: "#4147 · state open · category Mail archive · opened 2 days ago · last update today",
+  },
+  { kind: "reasoning", id: "long-r3", deltas: [REASONING[2]] },
+];
+
+const LONG_TEXT = [
+  "You raise a ticket from the customer portal.\n\n",
+  "1. Open **Service Desk → New ticket**.\n",
+  "2. Pick the category: *Access & onboarding*, *Mail archive* or *Data protection*.\n",
+  "3. Add the subject, a short description and the affected mailbox, then submit.\n\n",
+  "- First response within one working day.\n",
+  "- Urgent access issues within four hours.\n\n",
+  "The three most recent open tickets are #4120, #4131 and #4147.\n",
+];
+
+function longDemoChatResponse(): Response {
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      for (const step of LONG_STEPS) {
+        if (step.kind === "reasoning") {
+          writer.write({ type: "reasoning-start", id: step.id });
+          for (const delta of step.deltas) {
+            writer.write({ type: "reasoning-delta", id: step.id, delta });
+            await sleep(120);
+          }
+          writer.write({ type: "reasoning-end", id: step.id });
+          continue;
+        }
+        writer.write({ type: "tool-input-start", toolCallId: step.toolCallId, toolName: step.toolName });
+        writer.write({
+          type: "tool-input-delta",
+          toolCallId: step.toolCallId,
+          inputTextDelta: JSON.stringify(step.input),
+        });
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: step.toolCallId,
+          toolName: step.toolName,
+          input: step.input,
+        });
+        await sleep(160);
+        writer.write({ type: "tool-output-available", toolCallId: step.toolCallId, output: step.output });
+        await sleep(80);
+      }
+      writer.write({ type: "text-start", id: "long-text" });
+      for (const delta of LONG_TEXT) {
+        writer.write({ type: "text-delta", id: "long-text", delta });
+        await sleep(60);
+      }
+      writer.write({ type: "text-end", id: "long-text" });
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
 }
 
 /** A canned reply, streamed in the same shape as a real one. */
 export function demoChatResponse(): Response {
+  if (isLongDemoChat()) return longDemoChatResponse();
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       writer.write({ type: "reasoning-start", id: "demo-reasoning" });

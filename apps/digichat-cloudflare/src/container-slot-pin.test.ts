@@ -60,7 +60,12 @@ describe("the proxy call site", () => {
   const indexSource = readFileSync(INDEX, "utf-8");
 
   it("routes the container call through the bounded retry", () => {
-    expect(indexSource).toMatch(/import \{ fetchContainerWithRetry \} from "\.\/container-retry";/);
+    // The import carries the retry helper and the constants of its retryable
+    // answer, so the statement is not pinned to one name. The call site below
+    // is pinned exactly.
+    expect(indexSource).toMatch(
+      /import \{[^}]*fetchContainerWithRetry[^}]*\} from "\.\/container-retry";/,
+    );
     // Wrapped only so a failed page/frame load renders as HTML (frame-safe-error.ts).
     // The request that reaches the container is the base-path-mapped one
     // (DIG-5121), so the wiring is pinned by NAME: computing a mapped request

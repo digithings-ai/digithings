@@ -105,10 +105,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    "apps/digichat/embed-hosts.txt": {
-      "count": 7,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
       "count": 18,
       "ticket": "DIG-2912"
@@ -171,10 +167,6 @@
     },
     "apps/digichat/src/components/stock/embed-mcp-catalog.test.ts": {
       "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "apps/digichat/src/components/stock/embed-mcp-flow.test.ts": {
-      "count": 15,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/components/stock/session-prefs-tools.test.ts": {
@@ -317,10 +309,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "apps/digichat/src/lib/embed-turn-limits.ts": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "apps/digichat/src/lib/embed-ui-flags.test.ts": {
       "count": 4,
       "ticket": "DIG-3689"
@@ -374,7 +362,7 @@
       "ticket": "DIG-3689"
     },
     "config/contract/contract.yaml": {
-      "count": 25,
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "config/contract/generated/compose.env": {
@@ -425,20 +413,8 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
-      "count": 3,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
-      "count": 3,
-      "ticket": "DIG-4043"
-    },
     "digigraph/src/digigraph/skill_library/loader.py": {
       "count": 1,
-      "ticket": "DIG-4043"
-    },
-    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
-      "count": 5,
       "ticket": "DIG-4043"
     },
     "digikey/src/digikey/cli.py": {
@@ -677,14 +653,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "packages/ui/src/components/chat/stock/tool-display.ts": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
     "renovate.json": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -866,7 +834,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_occ_ticket_payload_retired.py": {
-      "count": 25,
+      "count": 23,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_skill_library.py": {
@@ -954,7 +922,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
-      "count": 15,
+      "count": 12,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_digichat_aca_secret_detector.py": {
@@ -1044,6 +1012,22 @@
     "tests/dg/test_tenant_digisearch_tools.py": {
       "count": 8,
       "ticket": "DIG-2203"
+    },
+    "packages/ui/src/components/chat/stock/tool-display.test.ts": {
+      "count": 2,
+      "ticket": "DIG-3689"
+    },
+    "digigraph/src/digigraph/skill_library/occ/find-precedent-tickets/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/occ/guide-help-docs/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-4043"
+    },
+    "digigraph/src/digigraph/skill_library/occ/summarize-tickets-by-topic/SKILL.md": {
+      "count": 5,
+      "ticket": "DIG-4043"
     }
   }
 }

@@ -3,6 +3,7 @@ export {
   DigichatConfigSchema,
   DeploymentSchema,
   ChromeModeSchema,
+  BootLoadingSchema,
   ThreadSkinSchema,
   PersistenceSchema,
   AuthModeSchema,
@@ -32,6 +33,7 @@ export {
   type UserAlign,
   type PageContextMode,
   type ToolCatalogEntry,
+  type BootLoading,
 } from "./schema";
 
 export {

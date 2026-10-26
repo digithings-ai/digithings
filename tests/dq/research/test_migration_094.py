@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "094_olympus_policy_replay.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "engine" / "094_olympus_policy_replay.sql"
 
 TABLES = (
     "olympus_replay_input_manifests",
@@ -53,11 +53,11 @@ def _table_body(sql: str, table: str) -> str:
 
 
 def test_migration_is_the_only_094() -> None:
-    assert sorted(MIGRATIONS_DIR.glob("094_*.sql")) == [MIGRATION_PATH]
+    assert sorted(MIGRATIONS_DIR.rglob("094_*.sql")) == [MIGRATION_PATH]
 
 
 def test_migration_follows_093() -> None:
-    assert (MIGRATIONS_DIR / "093_olympus_outcome_learning.sql").is_file()
+    assert (MIGRATIONS_DIR / "engine" / "093_olympus_outcome_learning.sql").is_file()
 
 
 def test_migration_remains_single_transaction_compatible(raw: str) -> None:

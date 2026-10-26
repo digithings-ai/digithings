@@ -17,8 +17,11 @@ digikey). `/_stack/status` reports per-module health (`loaded` / `degraded` +
 last error, never secrets) for the fault-isolated route groups (#4685); like
 `/_stack/meta` it never touches a module loader, so it stays up when groups
 degrade. `/_stack/mcp/*` (the digisearch + digivault MCP servers, proxied to
-their in-container ports) is **not** auth-exempt: it requires `x-digi-mcp-key`
-matching the `MCP_EDGE_KEY` secret or returns a fail-closed 401.
+their in-container ports) is **not** auth-exempt: it accepts either a digikey
+JWT in `Authorization: Bearer` carrying `mcp:digisearch` / `mcp:digivault`
+(verified against `DIGIKEY_JWKS_URL`, see `src/mcp-edge-auth.ts`), or
+`x-digi-mcp-key` matching the `MCP_EDGE_KEY` secret; with neither it returns a
+fail-closed 401, and a valid token without the server's scope gets 403.
 Secrets only via `npx wrangler secret put` — never commit values. Operator
 secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
 with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by

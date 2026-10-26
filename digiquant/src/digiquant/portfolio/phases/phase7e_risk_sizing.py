@@ -73,6 +73,7 @@ from digiquant.portfolio.turnover import (
 from digiquant.research.data.queries import get_return_correlations
 from digiquant.research.state import PhasePortfolioState, RebalancePayload, ResearchState
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.scalars import is_cash, opt_float
 
 logger = logging.getLogger(__name__)
 
@@ -95,17 +96,6 @@ class RiskSizingDeps:
     """Wiring deps for the Phase 7E enforcement node (injected Supabase client)."""
 
     client: SupabaseClient
-
-
-def _opt_float(val: Any) -> float | None:
-    try:
-        return float(val) if val is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _is_cash(ticker: Any) -> bool:
-    return isinstance(ticker, str) and ticker.strip().upper() == "CASH"
 
 
 def _clamp_conviction(value: float) -> float:
@@ -140,7 +130,7 @@ def confidence_scales_from_memo(memo: PMDirectionMemo) -> dict[str, float] | Non
     :data:`SIZING_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
     """
     longs = [
-        entry for entry in memo.roster if entry.direction == "long" and not _is_cash(entry.ticker)
+        entry for entry in memo.roster if entry.direction == "long" and not is_cash(entry.ticker)
     ]
     if not longs:
         return None
@@ -183,9 +173,9 @@ def _pm_direction_legacy(recommended: list[Any]) -> dict[str, float]:
         if not isinstance(row, dict):
             continue
         ticker = row.get("ticker")
-        if not isinstance(ticker, str) or not ticker or _is_cash(ticker):
+        if not isinstance(ticker, str) or not ticker or is_cash(ticker):
             continue
-        weight = _opt_float(row.get("target_pct")) or 0.0
+        weight = opt_float(row.get("target_pct")) or 0.0
         if weight <= 0:
             continue
         targets[ticker] = targets.get(ticker, 0.0) + weight
@@ -250,12 +240,12 @@ def _effective_inputs(
         analyst = analysts.get(ticker) or {}
         debate = debates.get(ticker) or {}
         if analyst:
-            base = _opt_float(analyst.get("conviction_score")) or 0.0
+            base = opt_float(analyst.get("conviction_score")) or 0.0
             stance = str(analyst.get("stance") or "hold")
         else:
             base = default_conviction
             stance = "hold"
-        delta = _opt_float(debate.get("conviction_delta")) or 0.0
+        delta = opt_float(debate.get("conviction_delta")) or 0.0
         convictions[ticker] = _clamp_conviction(base + delta)
         stances[ticker] = stance
     return convictions, stances
@@ -382,8 +372,8 @@ def _load_ticker_risk(
     return {
         ticker: TickerRisk(
             ticker=ticker,
-            hist_vol_21=_opt_float((latest.get(ticker) or {}).get("hist_vol_21")),
-            atr_pct=_opt_float((latest.get(ticker) or {}).get("atr_pct")),
+            hist_vol_21=opt_float((latest.get(ticker) or {}).get("hist_vol_21")),
+            atr_pct=opt_float((latest.get(ticker) or {}).get("atr_pct")),
             sector=sector_bucket(ticker),
             asset_class=asset_class(ticker),
         )
@@ -502,9 +492,9 @@ def _rebuild_actions(
         if ticker in sized:
             new_target = round(sized[ticker], 4)
             row["target_pct"] = new_target
-            current = _opt_float(action.get("current_pct"))
+            current = opt_float(action.get("current_pct"))
             if current is None:
-                current = _opt_float(live.get(ticker))
+                current = opt_float(live.get(ticker))
             if current is not None:
                 row["current_pct"] = round(current, 4)
                 row["action"] = _verb(current, new_target, preferences=pref or None)
@@ -522,7 +512,7 @@ def _rebuild_actions(
     # add / trim / hold for existing positions, "new" only for genuinely new names.
     for ticker, target in sized.items():
         if ticker not in seen:
-            current = _opt_float(live.get(ticker))
+            current = opt_float(live.get(ticker))
             verb = _verb(current, target, preferences=pref or None)
             row: dict[str, Any] = {
                 "ticker": ticker,
@@ -581,12 +571,12 @@ def _held_carry_weights(state: ResearchState) -> dict[str, float]:
 
 def _drifted_weight(state: ResearchState, ticker: str) -> float | None:
     """Current (mark-to-market) weight for *ticker*, falling back to the prior book."""
-    current = _opt_float((state.config.preferences.get("current_weights") or {}).get(ticker))
+    current = opt_float((state.config.preferences.get("current_weights") or {}).get(ticker))
     if current is not None and current > 0:
         return float(current)
     for row in state.prior_context.prior_book:
         if str(row.get("ticker")).strip().upper() == ticker:
-            prior = _opt_float(row.get("weight_pct"))
+            prior = opt_float(row.get("weight_pct"))
             if prior is not None and prior > 0:
                 return float(prior)
     return None
@@ -715,7 +705,7 @@ def _lineage_materiality_pct(preferences: Mapping[str, Any]) -> float:
     threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)
     current_weights = preferences.get("current_weights") or {}
     widest_current = max(
-        (_opt_float(v) or 0.0 for v in current_weights.values()),
+        (opt_float(v) or 0.0 for v in current_weights.values()),
         default=0.0,
     )
     return no_trade_band_pp(widest_current, dict(preferences)) if widest_current > 0 else threshold
@@ -750,7 +740,7 @@ def _validate_sizing_lineage(
     if not targets_are_weights:
         return
     approved = {
-        str(row["ticker"]): _opt_float(row.get("target_pct")) or 0.0
+        str(row["ticker"]): opt_float(row.get("target_pct")) or 0.0
         for row in sized_book.get("recommended_portfolio") or []
     }
     adjustments = [
@@ -842,7 +832,7 @@ def _build_sized_book(
                 )
             )
             bundle_tickers = sorted(
-                entry.ticker for entry in memo_obj.roster if not _is_cash(entry.ticker)
+                entry.ticker for entry in memo_obj.roster if not is_cash(entry.ticker)
             )
             if bundle_tickers == sorted(pm_tickers):
                 bundle_covariance = risk_artifacts.covariance_snapshot
@@ -972,7 +962,7 @@ def _build_sized_book(
     sized = apply_rebalancing_cadence(
         sized,
         current_weights={
-            str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+            str(k): float(v) for k, v in current_weights.items() if opt_float(v) is not None
         },
         prior_book=list(state.prior_context.prior_book),
         preferences=dict(state.config.preferences),
@@ -982,7 +972,7 @@ def _build_sized_book(
     sized = _apply_held_continuity_backstop(sized, state, events=events)
     sized = _cap_total_invested(sized, events=events)
     drifted_current = {
-        str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+        str(k): float(v) for k, v in current_weights.items() if opt_float(v) is not None
     }
     sized = clamp_no_trade_band(
         sized,
@@ -1072,10 +1062,10 @@ def _prior_book_weights_for_report(
     risky: dict[str, float] = {}
     cash = 0.0
     for key, value in current.items():
-        weight = _opt_float(value)
+        weight = opt_float(value)
         if weight is None:
             continue
-        if _is_cash(str(key)):
+        if is_cash(str(key)):
             cash += weight
             continue
         if weight > 0:
@@ -1178,15 +1168,15 @@ def _cost_scalars_from_state(state: ResearchState) -> CostLiquidityScalars | Non
     for payload in estimates.values():
         if not isinstance(payload, dict):
             continue
-        cost = _opt_float(payload.get("expected_cost_bps"))
+        cost = opt_float(payload.get("expected_cost_bps"))
         if cost is None:
-            cost = _opt_float(payload.get("expected_cost"))
+            cost = opt_float(payload.get("expected_cost"))
         if cost is not None:
             expected_costs.append(cost)
-        adv = _opt_float(payload.get("adv_participation_pct"))
+        adv = opt_float(payload.get("adv_participation_pct"))
         if adv is not None:
             adv_vals.append(adv)
-        days = _opt_float(payload.get("days_to_liquidate"))
+        days = opt_float(payload.get("days_to_liquidate"))
         if days is not None:
             days_vals.append(days)
     if not expected_costs and not adv_vals and not days_vals:

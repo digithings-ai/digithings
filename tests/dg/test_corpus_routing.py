@@ -519,12 +519,24 @@ def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
                 "vaultPathPrefix": "clients/occ",
                 "researchSystemPrompt": "Answer only about occ.",
                 "lockSessionControls": True,
+                "digisearchTools": {
+                    "digisearch_past_cases": {
+                        "index": "past-cases",
+                        "description": "Semantic search over past cases.",
+                    }
+                },
             },
             "ok-tenant": {
                 "digisearch_index": "ok_docs",
                 "vault_path_prefix": "clients/ok",
                 "research_system_prompt": "Answer only about ok.",
                 "lock_session_controls": False,
+                "digisearch_tools": {
+                    "digisearch_old_notes": {
+                        "index": "old-notes",
+                        "description": "Semantic search over old notes.",
+                    }
+                },
             },
         }
     )
@@ -533,6 +545,20 @@ def test_known_map_keys_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
     assert not [r for r in caplog.records if "unknown key" in r.getMessage()]
     assert table["occ"].lock_session_controls is True
     assert table["ok-tenant"].digisearch_index == "ok_docs"
+    # DIG-3269: the dedicated-tools key is honoured in both spellings and is
+    # a known key - a map that carries it must not be warned about as unknown.
+    assert table["occ"].digisearch_tools == {
+        "digisearch_past_cases": {
+            "index": "past-cases",
+            "description": "Semantic search over past cases.",
+        }
+    }
+    assert table["ok-tenant"].digisearch_tools == {
+        "digisearch_old_notes": {
+            "index": "old-notes",
+            "description": "Semantic search over old notes.",
+        }
+    }
 
 
 def test_unknown_key_does_not_relax_fail_closed_on_known_values(

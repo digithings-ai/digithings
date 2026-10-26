@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { isRecord } from "@digithings/ui/lib/record";
 import { officialApiBase } from "@/lib/official-api";
 import {
   findDeskId,
@@ -18,6 +19,7 @@ import { isInviteSurface } from "./public-surface";
 import { readSettings, useAppSettings, writeSettings } from "./app-settings-store";
 
 const DESK_KEY = "dq-desk";
+const DESK_CHANGE_EVENT = "dq-desk";
 
 /** Drop invite rows the caller is not granted. The public rail does not name them. */
 function publicNav(groups: NavGroup[]): NavGroup[] {
@@ -55,10 +57,6 @@ const DeskCtx = createContext<Ctx>({
 });
 
 export const useDeskAccess = () => useContext(DeskCtx);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function failReason(status: number, body: unknown): string {
   if (isRecord(body) && isRecord(body.error) && typeof body.error.message === "string") {
@@ -108,6 +106,7 @@ export function DeskAccess({ children, manifest: seed }: { children: ReactNode; 
     } catch {
       /* storage unavailable */
     }
+    window.dispatchEvent(new Event(DESK_CHANGE_EVENT));
   }, []);
   const nav = useMemo(() => (desk ? publicNav(navFromDesk(desk)) : []), [desk]);
   const value = useMemo<Ctx>(() => ({ manifest, err, desk, setDesk, nav }), [manifest, err, desk, setDesk, nav]);

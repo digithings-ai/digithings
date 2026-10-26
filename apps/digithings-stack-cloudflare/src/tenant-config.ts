@@ -27,7 +27,7 @@
  *
  * PRECEDENCE (highest first)
  *   1. the KV namespace, when bound and readable;
- *   2. `DIGI_TENANT_CORPUS_MAP` from wrangler `[vars]`, the interim source;
+ *   2. the wrangler `[vars]` pair, the interim source;
  *   3. `DIGITHINGS_ONLY_CORPUS_MAP`, first-party only.
  * Arm 2 is NOT this leaf's to remove. `wrangler.toml` `[vars]` still carries the
  * live OCC entry and the `TENANT_CONFIG` namespace does not exist yet, so
@@ -36,19 +36,16 @@
  * REPLACED, not merged: merging would keep a client tenant alive from a source
  * that is supposed to have been retired, which is the fail-open direction.
  *
- * WHY `index.ts` IS NOT WIRED YET
- * `scripts/check_tenant_corpus_map.py` locates the fallback literal with
- * `_FALLBACK_RE`, a regex that pins the EXACT source shape of the
- * `DIGI_TENANT_CORPUS_MAP:` line in `index.ts`. Replacing that literal's `??`
- * arm with this module makes the regex miss, and the drift gate then fails on
- * an unreadable blob rather than on real drift. The literal and that regex are
- * the same scrub's to change, so one owner edits both -- see the DIG-3689 note.
- * Wiring is then one line in `index.ts`:
- *
- *     DIGI_TENANT_CORPUS_MAP: (await tenantCorpusJson(workerEnv)) ?? DIGITHINGS_ONLY_CORPUS_JSON
- *
- * where `workerEnv.TENANT_CONFIG` is the KV binding. That binding is a
- * Cloudflare account change and is outside this ticket's hard limits.
+ * THE `[vars]` SPLIT (2026-10-25)
+ * Cloudflare caps one text binding at 5.1 kB. The single map was 5285 bytes --
+ * the OCC research prompt alone is 4239 of them -- so `wrangler deploy` failed
+ * with code 10054 and the Worker could not ship. The value is now two vars,
+ * `DIGI_TENANT_CORPUS_MAP` (the house `digithings` entry alone) and
+ * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant, today just `occ`), and
+ * {@link composeCorpusMap} joins them into the one string the container reads.
+ * The house entry keeps the unsuffixed name because digigraph reads that name
+ * directly; splitting is a binding-size workaround, not a shape change, so the
+ * composed value is byte-identical to the map that used to sit in one var.
  *
  * FAIL CLOSED, EVERYWHERE
  * An unbound namespace, a KV read that throws, malformed JSON, a non-object
@@ -172,7 +169,17 @@ export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusM
   return projected;
 }
 
-/** Parse a `DIGI_TENANT_CORPUS_MAP` value (the `[vars]` legacy arm). */
+/** Wrangler `[vars]` name for the second half of the split corpus map. */
+export const CORPUS_MAP_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA";
+
+/**
+ * Parse a `DIGI_TENANT_CORPUS_MAP` value (the `[vars]` legacy arm).
+ *
+ * Silent by design: {@link readTenantConfig} degrades between arms and must not
+ * turn a bad value into log noise on a hot path. {@link composeCorpusMap} is the
+ * caller that reports, because a half-unreadable `[vars]` pair is a deployment
+ * fault an operator has to see once at boot.
+ */
 export function parseCorpusMapJson(raw: string | null | undefined): TenantCorpusMap | undefined {
   const parsed = parseJson(raw);
   if (!isPlainObject(parsed)) return undefined;
@@ -182,6 +189,47 @@ export function parseCorpusMapJson(raw: string | null | undefined): TenantCorpus
     out[slug] = value as TenantCorpusEntry;
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** One arm of the split pair; `label` makes an unparseable arm say so. */
+function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpusMap | undefined {
+  if (typeof raw !== "string" || raw.trim() === "") return undefined;
+  const parsed = parseCorpusMapJson(raw);
+  if (parsed === undefined) {
+    console.warn(
+      `[tenant-config] ${label} is not a usable slug-keyed JSON object; ignoring it`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Join the split `[vars]` pair into the single corpus map the container reads.
+ *
+ * The merge rule is one sentence: the primary half wins on every slug collision,
+ * so a stale `DIGI_TENANT_CORPUS_MAP_EXTRA` can never shadow or widen the house
+ * entry it does not own. Extra entries therefore only ADD tenants.
+ *
+ * Never returns an empty string. A half that does not parse is dropped with a
+ * warning and the other half still ships; when neither is usable (unset, blank
+ * or unparseable) the answer is {@link DIGITHINGS_ONLY_CORPUS_JSON}, because the
+ * first-party corpus must survive a missing `[vars]` and an empty map would make
+ * every tenant unknown, which the container reads as a refusal.
+ *
+ * Byte-for-byte the pre-split value for the current pair: primary keys keep
+ * their order, then the non-colliding extra keys, serialised compact.
+ */
+export function composeCorpusMap(primary?: string, extra?: string): string {
+  const house = parseCorpusMapArm(primary, "DIGI_TENANT_CORPUS_MAP");
+  const others = parseCorpusMapArm(extra, CORPUS_MAP_EXTRA_ENV_VAR);
+  if (house === undefined && others === undefined) return DIGITHINGS_ONLY_CORPUS_JSON;
+
+  const merged: TenantCorpusMap = { ...house };
+  for (const [slug, entry] of Object.entries(others ?? {})) {
+    if (slug in merged) continue;
+    merged[slug] = entry;
+  }
+  return JSON.stringify(merged);
 }
 
 function nonEmpty(map: TenantCorpusMap | undefined): map is TenantCorpusMap {

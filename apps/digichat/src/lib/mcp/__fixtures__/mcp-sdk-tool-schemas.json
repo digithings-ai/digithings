@@ -1,0 +1,2495 @@
+{
+ "_note": "Tool input schemas exactly as the .NET MCP SDK 0.3.0-preview.2 publishes them for the client MCP server behind the trial agent (DC-18), descriptions stripped. Regenerate from the server's tools/list when it changes.",
+ "snapshots": {
+  "master": [
+   {
+    "name": "collect_email",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "collect_files",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "indexFromPaths": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "path": {
+          "type": "string"
+         },
+         "type": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "default": null
+         }
+        },
+        "required": [
+         "path"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "collect_sharepoint_site",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "create_email_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "create_files_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "indexFromPaths": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "path": {
+          "type": "string"
+         },
+         "type": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "default": null
+         }
+        },
+        "required": [
+         "path"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "create_sharepoint_site_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "create_teams_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "delete_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "get_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "get_collector_status",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      },
+      "taskId": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "list_collectors",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "running": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": false
+      }
+     }
+    }
+   },
+   {
+    "name": "run_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "stop_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "connect_destination",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "connect_source",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      },
+      "organizationId": {
+       "type": "string"
+      },
+      "clientId": {
+       "type": "string"
+      },
+      "clientSecret": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "type",
+      "organizationId",
+      "clientId",
+      "clientSecret"
+     ]
+    }
+   },
+   {
+    "name": "disconnect_connection",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "list_connections",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   },
+   {
+    "name": "get_collection_summary",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string"
+      },
+      "includeDetails": {
+       "type": "boolean",
+       "default": false
+      }
+     },
+     "required": [
+      "connector"
+     ]
+    }
+   },
+   {
+    "name": "browse_source_items",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "nodeId": {
+       "type": "string",
+       "default": "-"
+      },
+      "types": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": "integer",
+       "default": 50
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      },
+      "fromDate": {
+       "type": "string",
+       "default": null
+      },
+      "toDate": {
+       "type": "string",
+       "default": null
+      },
+      "nameFilter": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "connectionId",
+      "sourceId"
+     ]
+    }
+   },
+   {
+    "name": "discover_groups",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "discover_users",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "nameFilter": {
+       "type": "string",
+       "default": null
+      },
+      "includeSharedMailboxes": {
+       "type": "boolean",
+       "default": false
+      },
+      "pageSize": {
+       "type": "integer",
+       "default": 15
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "preview_item",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "itemId": {
+       "type": "string"
+      },
+      "fragmentId": {
+       "type": "string",
+       "default": null
+      },
+      "format": {
+       "type": "string",
+       "default": "json"
+      }
+     },
+     "required": [
+      "connectionId",
+      "sourceId",
+      "itemId"
+     ]
+    }
+   },
+   {
+    "name": "get_collection_stats",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connector"
+     ]
+    }
+   },
+   {
+    "name": "get_collector_report_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "get_running_collector_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "list_collector_reports",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "jobId": {
+       "type": "string",
+       "default": null
+      },
+      "startDate": {
+       "type": "string",
+       "default": null
+      },
+      "endDate": {
+       "type": "string",
+       "default": null
+      },
+      "connector": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "list_running_collectors",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "create_restore_job",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": true
+      },
+      "users": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "count_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "find_related_items",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uniqueKey": {
+       "type": "string"
+      },
+      "relation": {
+       "type": "string",
+       "default": "thread"
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "uniqueKey"
+     ]
+    }
+   },
+   {
+    "name": "get_channel_thread",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "messageId": {
+       "type": "string"
+      },
+      "top": {
+       "type": "integer",
+       "default": 50
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": true
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "messageId"
+     ]
+    }
+   },
+   {
+    "name": "get_conversation_thread",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "conversationId": {
+       "type": "string"
+      },
+      "top": {
+       "type": "integer",
+       "default": 50
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": true
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "conversationId"
+     ]
+    }
+   },
+   {
+    "name": "get_item",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uniqueKey": {
+       "type": "string"
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "uniqueKey"
+     ]
+    }
+   },
+   {
+    "name": "list_searchable_fields",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_attachments",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "fileName": {
+       "type": "string",
+       "default": null
+      },
+      "contentType": {
+       "type": "string",
+       "default": null
+      },
+      "minSizeBytes": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "skip": {
+       "type": "integer",
+       "default": 0
+      },
+      "orderBy": {
+       "type": "string",
+       "default": null
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": false
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_content_advanced",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "select": {
+       "type": "string",
+       "default": null
+      },
+      "orderBy": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 10
+      },
+      "skip": {
+       "type": "integer",
+       "default": 0
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "summarize_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "facets": {
+       "type": "string"
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "facets"
+     ]
+    }
+   }
+  ],
+  "feature-mcp-insights-phase1": [
+   {
+    "name": "get_archive_report_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "list_archive_reports",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "jobId": {
+       "type": "string",
+       "default": null
+      },
+      "startDate": {
+       "type": "string",
+       "default": null
+      },
+      "endDate": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "collect_email",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   },
+   {
+    "name": "collect_files",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "indexFromPaths": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "path": {
+          "type": "string"
+         },
+         "type": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "default": null
+         }
+        },
+        "required": [
+         "path"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   },
+   {
+    "name": "collect_sharepoint_site",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": false
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   },
+   {
+    "name": "create_email_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "create_files_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "users": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "email": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "email",
+         "type"
+        ]
+       },
+       "default": null
+      },
+      "indexFromPaths": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "path": {
+          "type": "string"
+         },
+         "type": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "default": null
+         }
+        },
+        "required": [
+         "path"
+        ]
+       },
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "create_sharepoint_site_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "create_teams_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string",
+       "default": null
+      },
+      "destinationId": {
+       "type": "string",
+       "default": null
+      },
+      "newDestinationName": {
+       "type": "string",
+       "default": null
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": "DISABLED"
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "delete_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "get_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "get_collector_status",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      },
+      "taskId": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "list_collectors",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "running": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": false
+      },
+      "type": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "run_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "stop_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "update_collector",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "collectorId": {
+       "type": "string"
+      },
+      "scheduleType": {
+       "type": "string",
+       "default": null
+      },
+      "executionTime": {
+       "type": "string",
+       "default": null
+      },
+      "daysOfWeek": {
+       "type": "string",
+       "default": null
+      },
+      "enabled": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": false
+      },
+      "name": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "collectorId"
+     ]
+    }
+   },
+   {
+    "name": "connect_destination",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "description"
+     ]
+    }
+   },
+   {
+    "name": "connect_source",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      },
+      "organizationId": {
+       "type": "string"
+      },
+      "clientId": {
+       "type": "string"
+      },
+      "clientSecret": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "type",
+      "organizationId",
+      "clientId",
+      "clientSecret"
+     ]
+    }
+   },
+   {
+    "name": "disconnect_connection",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "list_connections",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   },
+   {
+    "name": "get_collection_summary",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string"
+      },
+      "includeDetails": {
+       "type": "boolean",
+       "default": false
+      }
+     },
+     "required": [
+      "connector"
+     ]
+    }
+   },
+   {
+    "name": "browse_source_items",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "nodeId": {
+       "type": "string",
+       "default": "-"
+      },
+      "types": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": "integer",
+       "default": 50
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      },
+      "fromDate": {
+       "type": "string",
+       "default": null
+      },
+      "toDate": {
+       "type": "string",
+       "default": null
+      },
+      "nameFilter": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "connectionId",
+      "sourceId"
+     ]
+    }
+   },
+   {
+    "name": "discover_groups",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "discover_users",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "nameFilter": {
+       "type": "string",
+       "default": null
+      },
+      "filterType": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": "integer",
+       "default": 15
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "connectionId"
+     ]
+    }
+   },
+   {
+    "name": "preview_item",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connectionId": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "itemId": {
+       "type": "string"
+      },
+      "fragmentId": {
+       "type": "string",
+       "default": null
+      },
+      "format": {
+       "type": "string",
+       "default": "json"
+      }
+     },
+     "required": [
+      "connectionId",
+      "sourceId",
+      "itemId"
+     ]
+    }
+   },
+   {
+    "name": "get_anomalies",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "default": null
+      },
+      "minSeverity": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "get_collection_points",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "jobId": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "get_coverage_gaps",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "default": null
+      },
+      "workload": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "get_insights_freshness",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   },
+   {
+    "name": "get_insights_summary",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "get_recommendations",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "get_collection_stats",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "connector"
+     ]
+    }
+   },
+   {
+    "name": "get_collector_report_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "get_datamanagement_report_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "get_running_collector_accounts",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "reportId": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reportId"
+     ]
+    }
+   },
+   {
+    "name": "list_collector_reports",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "jobId": {
+       "type": "string",
+       "default": null
+      },
+      "startDate": {
+       "type": "string",
+       "default": null
+      },
+      "endDate": {
+       "type": "string",
+       "default": null
+      },
+      "connector": {
+       "type": "string",
+       "default": null
+      },
+      "jobTypes": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "list_datamanagement_reports",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "excludeSystemJobs": {
+       "type": "boolean",
+       "default": true
+      },
+      "startDate": {
+       "type": "string",
+       "default": null
+      },
+      "endDate": {
+       "type": "string",
+       "default": null
+      },
+      "pageSize": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "marker": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "list_running_collectors",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "connector": {
+       "type": "string",
+       "default": null
+      },
+      "jobTypes": {
+       "type": "string",
+       "default": null
+      }
+     }
+    }
+   },
+   {
+    "name": "create_restore_job",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "sourceId": {
+       "type": "string"
+      },
+      "destinationId": {
+       "type": "string"
+      },
+      "runNow": {
+       "type": "boolean",
+       "default": true
+      },
+      "users": {
+       "type": "string",
+       "default": null
+      },
+      "priority": {
+       "type": "string",
+       "default": "Medium"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "sourceId",
+      "destinationId"
+     ]
+    }
+   },
+   {
+    "name": "count_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "find_related_items",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uniqueKey": {
+       "type": "string"
+      },
+      "relation": {
+       "type": "string",
+       "default": "thread"
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "uniqueKey"
+     ]
+    }
+   },
+   {
+    "name": "get_channel_thread",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "messageId": {
+       "type": "string"
+      },
+      "top": {
+       "type": "integer",
+       "default": 50
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": true
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "messageId"
+     ]
+    }
+   },
+   {
+    "name": "get_conversation_thread",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "conversationId": {
+       "type": "string"
+      },
+      "top": {
+       "type": "integer",
+       "default": 50
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": true
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "conversationId"
+     ]
+    }
+   },
+   {
+    "name": "get_item",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "uniqueKey": {
+       "type": "string"
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "uniqueKey"
+     ]
+    }
+   },
+   {
+    "name": "list_searchable_fields",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_attachments",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "fileName": {
+       "type": "string",
+       "default": null
+      },
+      "contentType": {
+       "type": "string",
+       "default": null
+      },
+      "minSizeBytes": {
+       "type": [
+        "string",
+        "integer",
+        "null"
+       ],
+       "default": 0
+      },
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 25
+      },
+      "skip": {
+       "type": "integer",
+       "default": 0
+      },
+      "orderBy": {
+       "type": "string",
+       "default": null
+      },
+      "includePreview": {
+       "type": "boolean",
+       "default": false
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "search_content_advanced",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "select": {
+       "type": "string",
+       "default": null
+      },
+      "orderBy": {
+       "type": "string",
+       "default": null
+      },
+      "top": {
+       "type": "integer",
+       "default": 10
+      },
+      "skip": {
+       "type": "integer",
+       "default": 0
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     }
+    }
+   },
+   {
+    "name": "summarize_content",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "facets": {
+       "type": "string"
+      },
+      "filter": {
+       "type": "string",
+       "default": null
+      },
+      "query": {
+       "type": "string",
+       "default": null
+      },
+      "indexName": {
+       "type": "string",
+       "default": "dg-search-index"
+      }
+     },
+     "required": [
+      "facets"
+     ]
+    }
+   }
+  ]
+ }
+}

@@ -19,6 +19,10 @@ This module is the prose half of the guard. It is deliberately standalone:
   output contract, because the CI log of a leaked-secret guard is the one place
   the value is most likely to get copied into a ticket.
 
+Exit codes: 0 clean, 1 a finding, 2 nothing to scan, 3 the list of files to
+scan could not be established. 3 is not a finding: it means the guard could not
+answer, and the runner tells the two apart (DIG-5318).
+
 Stdlib only; no install step. Add it to CI as its own unconditional job -- the
 verdict is a property of the whole tracked tree, not of the diff, so a path filter
 is the wrong tool for it.
@@ -27,6 +31,7 @@ is the wrong tool for it.
 from __future__ import annotations
 
 import math
+import os
 import re
 import subprocess
 import sys
@@ -456,8 +461,69 @@ def is_skipped(path: str) -> bool:
     return False
 
 
+# Git must answer for itself here, without the fsmonitor daemon. The daemon is
+# a per-clone cache of the working tree, and a busy machine can wedge it: in
+# the post-merge worktree (4.3 GB, node_modules + .venv) `git ls-files` spent
+# 5.2 s of wall clock on 0.01 s of CPU inside the daemon, and then failed
+# outright with "could not read IPC response" -- which dropped this guard into
+# its full-tree fallback and the 600 s CI budget with it (DIG-5318). A file
+# list for a leak scan has to come from git, not from a cache that can be
+# stale, slow or broken.
+GIT_FLAGS = ("-c", "core.fsmonitor=false")
+
+# Installed dependencies and build output, never source. The tracked-file path
+# never sees them, because git does not track them; the fallback walk must not
+# either.
+SKIP_DIRS = frozenset({
+    ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", ".tox", ".nox", ".cache", "dist", "build",
+    ".next", ".nuxt", ".turbo", ".wrangler", "coverage", "htmlcov",
+})
+
+# A walk that finds more than this is a crawl, not a scan. The post-merge
+# worktree holds 146k files; reading them all takes longer than the CI budget
+# and the result is a red check that says nothing about the tree (DIG-5318).
+MAX_WALK_FILES = 20000
+
+
+class ScanUnavailable(RuntimeError):
+    """The list of files to scan could not be established."""
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """Run git in ``root`` with the fsmonitor daemon switched off."""
+    return subprocess.run(
+        ["git", "-C", str(root), *GIT_FLAGS, *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+
+
+def walk_files(root: Path) -> list[Path]:
+    """Every file under ``root`` except the dependency and build trees.
+
+    Bounded on purpose (DIG-5318). The old fallback was ``root.rglob("*")``,
+    which on a checkout with node_modules and .venv read 146k files --
+    installed packages and build output that the tracked-file path never reads
+    -- and blew the CI budget.
+    """
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for name in sorted(filenames):
+            found.append(Path(dirpath) / name)
+            if len(found) > MAX_WALK_FILES:
+                raise ScanUnavailable(
+                    f"the tree under {root} holds more than {MAX_WALK_FILES} "
+                    "files; a full walk is not a scan"
+                )
+    return sorted(found)
+
+
 def tracked_files(root: Path) -> list[Path]:
-    """Tracked files under ``root``, or every file under it when not a repo.
+    """Tracked files under ``root``, or a bounded walk when not a repo.
 
     ``git ls-files`` prints paths relative to the **repository root**, not to the
     directory passed to ``-C``. Joining its output onto ``root`` therefore built
@@ -466,28 +532,40 @@ def tracked_files(root: Path) -> list[Path]:
     outcome available: green, and having checked zero files. Hence the toplevel
     probe: only trust ``ls-files`` when ``root`` really is the toplevel, and fall
     back to a filesystem walk otherwise.
+
+    A git that is present but broken is not the same as a directory that is not
+    a checkout. The first used to fall into the same walk, and that walk is
+    what turned a broken git into a 600 s timeout (DIG-5318). Now it fails
+    closed with the reason instead of scanning an arbitrary tree.
     """
     try:
-        toplevel = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        if Path(toplevel).resolve() == root.resolve():
-            result = subprocess.run(
-                ["git", "-C", str(root), "ls-files", "-z"],
-                stdout=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
-            return [root / name for name in result.stdout.split("\0") if name]
+        toplevel = _git(root, "rev-parse", "--show-toplevel").stdout.strip()
     except (subprocess.CalledProcessError, OSError, ValueError):
-        # Not a git checkout (or git failed / undecodable output): fall back
-        # to a full-tree walk. Anything else is a real bug and must surface.
-        pass
-    return sorted(p for p in root.rglob("*") if p.is_file())
+        # Not a git checkout (or git is not installed): walk the tree instead.
+        print(
+            f"note: {root} is not a git checkout; scanning a bounded walk of "
+            "the tree instead",
+            file=sys.stderr,
+        )
+        return walk_files(root)
+    if Path(toplevel).resolve() != root.resolve():
+        # A subdirectory of a repo: git's list is relative to the repository
+        # root, so the only honest list for this directory is a walk.
+        print(
+            f"note: {root} is not the top of the checkout; scanning a bounded "
+            "walk of the tree instead",
+            file=sys.stderr,
+        )
+        return walk_files(root)
+    try:
+        result = _git(root, "ls-files", "-z")
+    except (subprocess.CalledProcessError, OSError, ValueError) as exc:
+        detail = getattr(exc, "stderr", "") or ""
+        raise ScanUnavailable(
+            f"git could not list the tracked files under {root}: "
+            f"{detail.strip() or exc}. Refusing to scan an arbitrary tree instead."
+        ) from exc
+    return [root / name for name in result.stdout.split("\0") if name]
 
 
 def read_text(path: Path) -> str | None:
@@ -562,7 +640,19 @@ def main(argv: list[str] | None = None) -> int:
         index += 1
 
     if not paths:
-        paths = tracked_files(root)
+        try:
+            paths = tracked_files(root)
+        except ScanUnavailable as exc:
+            # Exit 3, not 1: the guard did not find a credential, it could not
+            # establish what to look at. The runner tells the two apart
+            # (DIG-5318): a machine that cannot answer is not a tree with a
+            # leak in it.
+            print(
+                f"ERROR: {exc}. A credential guard that cannot list the files "
+                "to scan must not report OK.",
+                file=sys.stderr,
+            )
+            return 3
     else:
         # A relative positional path is relative to --root, not to the process
         # cwd. Resolving it against cwd instead made `--root X Y` silently read

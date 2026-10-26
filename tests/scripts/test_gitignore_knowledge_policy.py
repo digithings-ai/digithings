@@ -55,7 +55,7 @@ IGNORED = (
 TRACKED = (
     "AGENTS.md",
     "docs/agents/CODE_REVIEW_POLICY.md",
-    "digiquant/supabase/migrations/118_knowledge_notes_vault_namespace.sql",
+    "digiquant/supabase/migrations/engine/118_knowledge_notes_vault_namespace.sql",
     "scripts/seed_knowledge_vault.py",
     # The `/projects/*` allowlist exception must survive an edit next to it.
     "projects/README.md",

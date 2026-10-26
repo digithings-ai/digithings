@@ -1,11 +1,13 @@
 """Unit tests for scripts/check_tenant_corpus_map.py (refs #3854).
 
-The tenant corpus map lives in three blobs that must stay identical: the
-``DIGICHAT_EMBED_TENANTS`` JSON in the profile-a compose override, the
-``DIGI_TENANT_CORPUS_MAP`` var in the stack wrangler.toml, and the ``??``
-fallback literal in the stack ``src/index.ts``. This drift check compares key
-sets AND per-key ``digisearchIndex``/``vaultPathPrefix`` values across all
-three and fails non-zero with a unified diff on drift.
+The tenant corpus map is carried in two blobs that must stay identical: the
+``DIGICHAT_EMBED_TENANTS`` JSON in the profile-a compose override and the
+wrangler ``[vars]`` PAIR ``DIGI_TENANT_CORPUS_MAP`` + ``DIGI_TENANT_CORPUS_MAP_EXTRA``
+(split on 2026-10-25 because one Cloudflare text binding may not exceed 5.1 kB;
+the single value was 5285 bytes and failed the deploy with code 10054). This
+drift check compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix``
+values across them, and separately refuses an inline corpus map or a dropped half
+in ``src/index.ts``, which is what the retired ``??`` fallback literal used to be.
 """
 
 from __future__ import annotations
@@ -42,6 +44,16 @@ def ccm() -> Any:
 _CORPUS_A = {"digisearchIndex": "digithings_docs", "vaultPathPrefix": "clients/digithings"}
 _CORPUS_B = {"digisearchIndex": "occ_help", "vaultPathPrefix": "clients/online-compliance-center"}
 
+#: What ``src/index.ts`` must contain: both halves named, composed by name.
+_INDEX_WIRING = (
+    "const x = {\n"
+    "  DIGI_TENANT_CORPUS_MAP: composeCorpusMap(\n"
+    "    env.DIGI_TENANT_CORPUS_MAP,\n"
+    "    env.DIGI_TENANT_CORPUS_MAP_EXTRA,\n"
+    "  ),\n"
+    "};\n"
+)
+
 
 def _tenants(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     tenants: dict[str, Any] = {
@@ -53,8 +65,20 @@ def _tenants(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return tenants
 
 
+def _split_corpus(corpus: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The house entry in the unsuffixed var, every other tenant in the extra one."""
+    primary = {"digithings": corpus["digithings"]}
+    extra = {slug: entry for slug, entry in corpus.items() if slug != "digithings"}
+    return primary, extra
+
+
 def _write_blobs(
-    tmp_path: Path, tenants: dict[str, Any], corpus: dict[str, Any]
+    tmp_path: Path,
+    tenants: dict[str, Any],
+    corpus: dict[str, Any],
+    *,
+    drop_extra: bool = False,
+    index_ts_source: str = _INDEX_WIRING,
 ) -> tuple[Path, Path, Path]:
     compose = tmp_path / "compose.override.yml"
     compose.write_text(
@@ -67,16 +91,28 @@ def _write_blobs(
         ),
         encoding="utf-8",
     )
+    primary, extra = _split_corpus(corpus)
     wrangler = tmp_path / "wrangler.toml"
-    escaped = json.dumps(corpus).replace("\\", "\\\\").replace('"', '\\"')
-    wrangler.write_text(f'[vars]\nDIGI_TENANT_CORPUS_MAP = "{escaped}"\n', encoding="utf-8")
+    escaped = json.dumps(primary).replace("\\", "\\\\").replace('"', '\\"')
+    body = f'[vars]\nDIGI_TENANT_CORPUS_MAP = "{escaped}"\n'
+    if not drop_extra:
+        extra_escaped = json.dumps(extra).replace("\\", "\\\\").replace('"', '\\"')
+        body += f'DIGI_TENANT_CORPUS_MAP_EXTRA = "{extra_escaped}"\n'
+    wrangler.write_text(body, encoding="utf-8")
     index_ts = tmp_path / "index.ts"
-    index_ts.write_text(
-        "const x = {\n  DIGI_TENANT_CORPUS_MAP:\n"
-        f"    env.DIGI_TENANT_CORPUS_MAP ?? '{json.dumps(corpus)}',\n}};\n",
-        encoding="utf-8",
-    )
+    index_ts.write_text(index_ts_source, encoding="utf-8")
     return compose, wrangler, index_ts
+
+
+def _args(compose: Path, wrangler: Path, index_ts: Path) -> list[str]:
+    return [
+        "--compose-file",
+        str(compose),
+        "--wrangler-file",
+        str(wrangler),
+        "--index-ts-file",
+        str(index_ts),
+    ]
 
 
 def test_extract_embed_uses_slug_and_skips_entries_without_backend_index(ccm: Any) -> None:
@@ -94,13 +130,57 @@ def test_loaders_agree_on_tmp_blobs(ccm: Any, tmp_path: Path) -> None:
     )
     expected = {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     assert ccm.load_embed_map(compose) == expected
+    # The pair is joined, not just the first half: a loader that read only
+    # DIGI_TENANT_CORPUS_MAP would answer with the house tenant alone.
     assert ccm.load_wrangler_map(wrangler) == expected
-    assert ccm.load_index_ts_map(index_ts) == expected
+    assert ccm.check_index_ts_wiring(index_ts) == []
 
 
-def test_compare_maps_passes_when_all_three_agree(ccm: Any) -> None:
+def test_compose_corpus_vars_lets_the_primary_half_win(ccm: Any) -> None:
+    """A stale extra must never shadow the house entry it does not own."""
+    merged = ccm.compose_corpus_vars(
+        json.dumps({"digithings": {"digisearchIndex": "house"}}),
+        json.dumps(
+            {
+                "digithings": {"digisearchIndex": "stale"},
+                "occ": {"digisearchIndex": "occ_help"},
+            }
+        ),
+    )
+    assert merged["digithings"]["digisearchIndex"] == "house"
+    assert merged["occ"]["digisearchIndex"] == "occ_help"
+
+
+def test_index_ts_wiring_refuses_a_reintroduced_literal(ccm: Any, tmp_path: Path) -> None:
+    """The 5.1 kB regression, stated as a property of the source."""
+    index_ts = tmp_path / "index.ts"
+    index_ts.write_text(
+        _INDEX_WIRING.replace(
+            "    env.DIGI_TENANT_CORPUS_MAP,\n",
+            '    env.DIGI_TENANT_CORPUS_MAP ?? \'{"digithings":{"researchSystemPrompt":"x"}}\',\n',
+        ),
+        encoding="utf-8",
+    )
+    problems = ccm.check_index_ts_wiring(index_ts)
+    assert any("inline corpus map" in problem for problem in problems), problems
+
+
+def test_index_ts_wiring_refuses_a_dropped_half(ccm: Any, tmp_path: Path) -> None:
+    """Reading one half strips those tenants off the container and fails nothing."""
+    index_ts = tmp_path / "index.ts"
+    index_ts.write_text(
+        "const x = {\n"
+        "  DIGI_TENANT_CORPUS_MAP: composeCorpusMap(env.DIGI_TENANT_CORPUS_MAP),\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    problems = ccm.check_index_ts_wiring(index_ts)
+    assert any("does not compose the [vars] pair" in problem for problem in problems), problems
+
+
+def test_compare_maps_passes_when_all_agree(ccm: Any) -> None:
     agreed = {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
-    report = ccm.compare_maps([("embed", agreed), ("wrangler", agreed), ("index.ts", agreed)])
+    report = ccm.compare_maps([("embed", agreed), ("wrangler", agreed)])
     assert report["ok"] is True
     assert report["problems"] == []
 
@@ -108,7 +188,7 @@ def test_compare_maps_passes_when_all_three_agree(ccm: Any) -> None:
 def test_compare_maps_catches_value_drift(ccm: Any) -> None:
     base = {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     drifted = {"digithings": dict(_CORPUS_A), "occ": {**_CORPUS_B, "digisearchIndex": "occ_stale"}}
-    report = ccm.compare_maps([("embed", base), ("wrangler", drifted), ("index.ts", base)])
+    report = ccm.compare_maps([("embed", base), ("wrangler", drifted)])
     assert report["ok"] is False
     assert any("occ" in problem for problem in report["problems"])
     assert "---" in report["diff"] and "+++" in report["diff"]
@@ -117,7 +197,7 @@ def test_compare_maps_catches_value_drift(ccm: Any) -> None:
 def test_compare_maps_catches_key_set_drift(ccm: Any) -> None:
     base = {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     dropped = {"digithings": dict(_CORPUS_A)}
-    report = ccm.compare_maps([("embed", base), ("wrangler", dropped), ("index.ts", base)])
+    report = ccm.compare_maps([("embed", base), ("wrangler", dropped)])
     assert report["ok"] is False
     assert any("occ" in problem for problem in report["problems"])
 
@@ -128,7 +208,7 @@ def test_compare_maps_catches_prefix_drift(ccm: Any) -> None:
         "digithings": {**_CORPUS_A, "vaultPathPrefix": "clients/renamed"},
         "occ": dict(_CORPUS_B),
     }
-    report = ccm.compare_maps([("embed", drifted), ("wrangler", base), ("index.ts", base)])
+    report = ccm.compare_maps([("embed", drifted), ("wrangler", base)])
     assert report["ok"] is False
     assert "clients/renamed" in report["diff"]
 
@@ -137,19 +217,7 @@ def test_main_exit_zero_on_agreeing_blobs(ccm: Any, tmp_path: Path) -> None:
     compose, wrangler, index_ts = _write_blobs(
         tmp_path, _tenants(), {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     )
-    assert (
-        ccm.main(
-            [
-                "--compose-file",
-                str(compose),
-                "--wrangler-file",
-                str(wrangler),
-                "--index-ts-file",
-                str(index_ts),
-            ]
-        )
-        == 0
-    )
+    assert ccm.main(_args(compose, wrangler, index_ts)) == 0
 
 
 def test_main_exit_nonzero_with_unified_diff_on_drift(
@@ -163,80 +231,65 @@ def test_main_exit_nonzero_with_unified_diff_on_drift(
     compose, wrangler, index_ts = _write_blobs(
         tmp_path, tenants, {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     )
-    assert (
-        ccm.main(
-            [
-                "--compose-file",
-                str(compose),
-                "--wrangler-file",
-                str(wrangler),
-                "--index-ts-file",
-                str(index_ts),
-            ]
-        )
-        == 1
-    )
+    assert ccm.main(_args(compose, wrangler, index_ts)) == 1
     out = capsys.readouterr().out
     assert "occ_stale" in out
     assert "---" in out and "+++" in out
 
 
+def test_main_exit_nonzero_when_the_extra_half_is_dropped(
+    ccm: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The vars are one map in two bindings, not two independent opts-in."""
+    compose, wrangler, index_ts = _write_blobs(
+        tmp_path,
+        _tenants(),
+        {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)},
+        drop_extra=True,
+    )
+    assert ccm.main(_args(compose, wrangler, index_ts)) == 1
+    assert "occ" in capsys.readouterr().out
+
+
 def test_real_repo_blobs_agree(ccm: Any) -> None:
-    """The three real blobs agree at this commit — the drift gate has a green baseline."""
+    """The real blobs agree at this commit — the drift gate has a green baseline."""
     report = ccm.compare_maps(
         [
             ("embed", ccm.load_embed_map(ccm.default_compose_file())),
             ("wrangler", ccm.load_wrangler_map(ccm.default_wrangler_file())),
-            ("index.ts", ccm.load_index_ts_map(ccm.default_index_ts_file())),
         ]
     )
     assert report["ok"] is True, f"repo blobs drifted: {report['problems']}"
+    assert ccm.check_index_ts_wiring(ccm.default_index_ts_file()) == []
 
 
 def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
-    """Parse the three real ``DIGI_TENANT_CORPUS_MAP`` blobs WITHOUT field reduction.
+    """Parse the real corpus-map blobs WITHOUT field reduction.
 
     The drift gate deliberately compares only ``digisearchIndex``/``vaultPathPrefix``
     (sibling keys such as the OCC ``researchSystemPrompt`` are out of its scope),
     so prompt parity is pinned here instead: the compose override's stack-service
-    value, the wrangler ``[vars]`` value, and the ``index.ts`` ``??`` fallback
-    (TS-decoded first — the runtime TS-evaluates the literal before parsing it).
+    value and the wrangler ``[vars]`` pair, joined. ``index.ts`` is no longer a
+    blob — it composes the pair, and `corpus-map-compose.test.js` in the app
+    asserts the composed value is byte-identical to the compose one.
     """
-    import tomllib
 
     compose_doc = yaml.safe_load(ccm.default_compose_file().read_text(encoding="utf-8"))
     compose_raw = compose_doc["services"]["digithings-stack"]["environment"][
         "DIGI_TENANT_CORPUS_MAP"
     ]
-    with open(ccm.default_wrangler_file(), "rb") as fh:
-        wrangler_doc = tomllib.load(fh)
-    wrangler_raw = wrangler_doc["vars"]["DIGI_TENANT_CORPUS_MAP"]
-    index_src = ccm.default_index_ts_file().read_text(encoding="utf-8")
-    match = ccm._FALLBACK_RE.search(index_src)
-    assert match, "DIGI_TENANT_CORPUS_MAP fallback literal not found in index.ts"
+    primary, extra = ccm.load_wrangler_vars(ccm.default_wrangler_file())
     return {
         "compose": json.loads(compose_raw),
-        "wrangler": json.loads(wrangler_raw),
-        "index.ts": json.loads(ccm.decode_ts_string_literal(match.group(1))),
+        "wrangler": ccm.compose_corpus_vars(primary, extra),
     }
-
-
-def test_decode_ts_string_literal_doubled_escapes(ccm: Any) -> None:
-    """The fallback's doubled escapes decode to the JSON the runtime parses."""
-    assert ccm.decode_ts_string_literal("a\\\\nb") == "a\\nb"
-    assert ccm.decode_ts_string_literal('\\\\"q\\\\"') == '\\"q\\"'
-    assert ccm.decode_ts_string_literal("\\\\u0027") == "\\u0027"
-    assert ccm.decode_ts_string_literal("\\\\u2014") == "\\u2014"
-    assert ccm.decode_ts_string_literal("plain") == "plain"
-    with pytest.raises(ValueError, match="unsupported TS escape"):
-        ccm.decode_ts_string_literal("\\q")
 
 
 def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
     """Each map's occ entry carries the same researchSystemPrompt (#4717 follow-up 2).
 
     Task 6 wired the OCC prompt into the deployed wrangler map only; the two
-    dev-path maps (index.ts fallback, local compose) must carry byte-identical
+    dev-path maps (the app's fallback, local compose) must carry byte-identical
     prompt text — decoded comparison, so per-file escaping may differ.
     """
     raw = _load_raw_corpus_maps(ccm)
@@ -248,10 +301,8 @@ def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
     assert len(set(prompts.values())) == 1, "occ researchSystemPrompt drifted across maps"
 
 
-def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
-    """digithings entries stay prompt-free in all three maps (generic project prompt)."""
+def test_real_blobs_digithings_prompt_parity(ccm: Any) -> None:
+    """Each map's digithings entry carries the same short house prompt."""
     raw = _load_raw_corpus_maps(ccm)
-    for name, blob in raw.items():
-        entry = blob["digithings"]
-        assert "researchSystemPrompt" not in entry, f"{name}[digithings] carries a prompt"
-        assert "research_system_prompt" not in entry, f"{name}[digithings] carries a prompt"
+    prompts = {name: blob["digithings"].get("researchSystemPrompt") for name, blob in raw.items()}
+    assert all(isinstance(p, str) and "Web search is on." in p for p in prompts.values()), prompts

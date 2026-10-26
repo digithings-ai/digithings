@@ -56,20 +56,19 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
-- `guardrails` (optional) is off unless a key is set. `maxToolCallsPerTurn`
-  follows the per-adapter matrix in `toolCallCapSupport`
+- `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 5`,
+  `answerAt: 0.7`, `pauseAt: 0.9`. The per-visitor house minute is cleared.
+  `tokensPerMinute.deployment` is the trial's one shared allowance.
+  TODO: it stays unset until the Azure TPM for gpt-5.6-terra in westeurope
+  is known. The request limiter stays on.
+  `maxToolCallsPerTurn` follows the per-adapter matrix in `toolCallCapSupport`
   (`src/lib/deploy-config/schema.ts`) and the Guardrails section of
   `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
   (openai-completions, openai-responses, anthropic, google-vertex) enforce
   it and stop the tool loop. langgraph and ag-ui stop forwarding the next
   call (notice/best-effort, no `tool_choice: none` follow-up). digigraph is
   notice only. a2a is refused at config load. `backend.maxToolCalls` remains
-  the Foundry alias and the shared key wins. `tokensPerMinute.deployment`
-  matches an upstream TPM and `tokensPerMinute.user` is a per-person limit.
-  The trial yaml leaves a proposed cap of `5` (alternative `4`) and the
-  deployment TPM commented out until the Azure number for gpt-5.6-terra in
-  westeurope is filled in. See the Guardrails section in
-  `apps/digichat/ARCHITECTURE.md`.
+  the Foundry alias and the shared key wins.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on
   `GET /indexes/<name>`, and the tool is refused with "Access denied. Check
@@ -80,6 +79,44 @@ and the agent carries the search index + MCP tool server-side.
   call from an operator's own session can therefore succeed while the
   container's managed identity is refused. A key connection is the same for
   every caller, which is why the trial uses one.
+
+## MCP schema proxy (V1, DC-18)
+
+The .NET MCP SDK publishes every `int?` tool parameter (`pageSize`,
+`minSizeBytes`) as `{"type":["string","integer","null"],"default":0}`. The
+server's own argument check (DCE-152) reads only the first member, so a
+numeric `pageSize` on a call that fails for ANY reason is reported as
+"'pageSize' must be a string, but a number was provided" — the real error is
+replaced. digichat can sit between the agent and the MCP to fix this without
+touching the server:
+
+1. Set on the Container App (server-only env, not a secret — no credential in it):
+   `DIGICHAT_MCP_SCHEMA_PROXY={"datatap":{"url":"https://datatap-dev-mcp.azurewebsites.net/","toolErrorsAsResults":true}}`
+2. Set the proxy's own caller secret, also server-only:
+   `DIGICHAT_MCP_PROXY_KEY=<random string>`. Without it the proxy answers **503**
+   and forwards nothing — a configured proxy is a relay to a URL only the server
+   picks, so it is never left open. With the env set but the header missing or
+   wrong the answer is **401**.
+3. Point the agent's MCP tool `server_url` at
+   `https://<this-app-fqdn>/api/mcp-proxy/datatap`, and have the caller send
+   `x-digi-mcp-key: <that same string>`. The header is consumed at the route and
+   stripped before the hop upstream, so it never reaches the MCP server. The
+   custom-keys connection (`X-API-Key`) is unchanged: the proxy forwards the
+   caller's header and adds nothing.
+
+Every `tools/list` reply is normalized (`integer|null`, mismatched defaults
+dropped), every `tools/call` is coerced back onto the server's original schema
+(a number becomes the string the server leads with; an optional `null` is
+omitted), and with `toolErrorsAsResults` an `isError` tool result reaches the
+model as a normal result that names the error, so the agent can retry or
+explain instead of the turn ending. Unset the env var (or point `server_url`
+back) to remove it.
+
+**Exposure.** The route adds no credentials: it forwards the caller's own auth
+headers, so all authorisation is the upstream's. Publish it only behind the
+same edge gate as `/api/mcp/zammad` (`x-digi-mcp-key`), and treat a loopback
+target (`http://127.0.0.1:<port>`) as a development setting — it would publish
+an internal, unauthenticated MCP to whoever can reach the app.
 
 ## Container environment (V2 — DigiGraph harness, parked)
 

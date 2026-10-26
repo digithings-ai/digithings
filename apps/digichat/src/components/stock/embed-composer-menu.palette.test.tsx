@@ -30,6 +30,7 @@ function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setToolbar: vi.fn(),
     setScrollbars: vi.fn(),
     setDensity: vi.fn(),
+    setScroll: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: false,
     showByok: false,
@@ -78,6 +79,31 @@ describe("composer palette sync", () => {
   beforeEach(mountHost);
   afterEach(() => {
     document.body.replaceChildren();
+  });
+
+  it("flips scroll follow/free from the main palette, naming the state it switches to", async () => {
+    const user = userEvent.setup();
+    const api = prefs();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="settings" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const toFree = await screen.findByRole("menuitemcheckbox", { name: /scroll free/i });
+    await user.click(toFree);
+    expect(api.setScroll).toHaveBeenCalledWith("free");
+
+    document.body.replaceChildren();
+    mountHost();
+    const free = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, scroll: "free" } });
+    render(
+      <EmbedChatPrefsProvider value={free}>
+        <EmbedComposerMenu kind="settings" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const toFollow = await screen.findByRole("menuitemcheckbox", { name: /scroll follow/i });
+    await user.click(toFollow);
+    expect(free.setScroll).toHaveBeenCalledWith("follow");
   });
 
   it("writes /language English when that row is chosen and filters as the user types", async () => {
@@ -150,10 +176,11 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    expect(screen.getByRole("menuitem", { name: /^\/file_search/ })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /^\/records/ })).toBeTruthy();
-    expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
-    await user.click(screen.getByRole("menuitem", { name: /^\/file_search/ }));
+    const fileSearch = screen.getByRole("menuitemcheckbox", { name: /^\/file_search/ });
+    expect(fileSearch.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("menuitemcheckbox", { name: /^\/records/ })).toBeTruthy();
+    expect(screen.queryByText(/managed by the agent/i)).toBeNull();
+    await user.click(fileSearch);
     expect(api.setExtraTool).not.toHaveBeenCalled();
     expect(api.setDigisearch).not.toHaveBeenCalled();
     unmount();
@@ -163,8 +190,8 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    expect(screen.getByRole("menuitem", { name: /Records/ })).toBeTruthy();
-    expect(screen.getAllByText("Managed by the agent").length).toBeGreaterThan(0);
+    expect(screen.getByRole("menuitem", { name: /^records/ })).toBeTruthy();
+    expect(screen.queryByText(/managed by the agent/i)).toBeNull();
   });
 
   it("lists OCC tools and MCP servers without toggling them", async () => {
@@ -195,7 +222,7 @@ describe("composer palette sync", () => {
         <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    await user.click(screen.getByRole("menuitem", { name: /Support tickets/ }));
+    await user.click(screen.getByRole("menuitem", { name: /^desk/ }));
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /mcp new/i })).toBeNull();
   });
@@ -247,16 +274,39 @@ describe("/tools tree", () => {
     );
     expect(toolsTree()).toMatchInlineSnapshot(`
       "/digisearch                  On
-        ├─ search                  On
-        └─ fetch_all               On
+        ├─ digisearch              On
+        └─ digisearch_fetch_all    On
       /digivault                   On
-        ├─ search_notes            On
-        └─ get_note                On
+        ├─ digivault_search_notes  On
+        └─ digivault_get_note      On
       /desk                        On
-        ├─ search_tickets          On
-        ├─ get_ticket              Off
-        └─ ticket_report           On"
+        ├─ desk_search_tickets     On
+        ├─ desk_get_ticket         Off
+        └─ desk_ticket_report      On"
     `);
+  });
+
+  it("keeps one row per id when the capability and an MCP server share it", () => {
+    // The duplicate digisearch/digivault row: the capability pushes a service
+    // row and the same id also arrives from mcpServers. One backend id, one row.
+    const api = prefs({
+      toolControl: "toggle",
+      hasDigisearch: true,
+      hasVault: true,
+      mcpServers: [
+        { id: "digisearch", label: "Help search" },
+        { id: "digivault", label: "Knowledge vault" },
+      ],
+    });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.getAllByRole("menuitemcheckbox", { name: /^\/digisearch/ })).toHaveLength(1);
+    expect(screen.getAllByRole("menuitemcheckbox", { name: /^\/digivault/ })).toHaveLength(1);
+    // The surviving row still carries the service's tools.
+    expect(screen.getByRole("menuitem", { name: /^digisearch_fetch_all/ })).toBeTruthy();
   });
 
   it("keeps the tree when the agent owns the tools", () => {
@@ -267,18 +317,54 @@ describe("/tools tree", () => {
       </EmbedChatPrefsProvider>,
     );
     expect(toolsTree()).toMatchInlineSnapshot(`
-      "/digisearch                  Managed by the agent
-        ├─ search                  Managed by the agent
-        └─ fetch_all               Managed by the agent
-      /digivault                   Managed by the agent
-        ├─ search_notes            Managed by the agent
-        └─ get_note                Managed by the agent
-      /desk                        Managed by the agent
-        ├─ search_tickets          Managed by the agent
-        ├─ get_ticket              Managed by the agent
-        └─ ticket_report           Managed by the agent"
+      "/digisearch                  On
+        ├─ digisearch              On
+        └─ digisearch_fetch_all    On
+      /digivault                   On
+        ├─ digivault_search_notes  On
+        └─ digivault_get_note      On
+      /desk                        On
+        ├─ desk_search_tickets     On
+        ├─ desk_get_ticket         On
+        └─ desk_ticket_report      On"
     `);
-    expect(screen.queryAllByRole("menuitemcheckbox")).toHaveLength(0);
+    const switches = screen.queryAllByRole("menuitemcheckbox");
+    expect(switches.length).toBeGreaterThan(0);
+    expect(switches.every((row) => row.getAttribute("aria-checked") === "true")).toBe(true);
+  });
+
+  it("shows tool names only, without a note in parentheses", () => {
+    const api = prefs({
+      toolControl: "locked",
+      mcpServers: [
+        {
+          id: "search",
+          label: "Help search (help docs)",
+          tools: [
+            { id: "search_help", label: "search_help (help docs)" },
+            { id: "search_older", label: "search_older (past tickets)" },
+          ],
+        },
+      ],
+    });
+    const { unmount } = render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(toolsTree()).toMatchInlineSnapshot(`
+      "/search                      On
+        ├─ search_help             On
+        └─ search_older            On"
+    `);
+    unmount();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="mcp" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: /^search/ })).toBeTruthy();
+    expect(document.body.textContent ?? "").not.toMatch(/\(help docs\)|\(past tickets\)/);
   });
 
   it("toggles a configured tool, and a built-in tool follows its service", async () => {
@@ -289,9 +375,9 @@ describe("/tools tree", () => {
         <EmbedComposerMenu kind="tools" onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /^get_ticket/ }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /^desk_get_ticket/ }));
     expect(api.setExtraTool).toHaveBeenCalledWith("desk_get_ticket", false);
-    await user.click(screen.getByRole("menuitem", { name: /^fetch_all/ }));
+    await user.click(screen.getByRole("menuitem", { name: /^digisearch_fetch_all/ }));
     expect(api.setDigisearch).not.toHaveBeenCalled();
     expect(api.setExtraTool).toHaveBeenCalledTimes(1);
   });
@@ -300,7 +386,15 @@ describe("/tools tree", () => {
     const api = prefs({
       toolControl: "toggle",
       hasDigisearch: true,
-      catalogTools: [{ id: "digisearch", label: "Search", tools: [{ id: "digisearch", label: "search_docs" }] }],
+      catalogTools: [
+        {
+          id: "digisearch",
+          label: "Search",
+          // The tool row shows the backend id, so the fixture carries a real
+          // one rather than reusing the server id.
+          tools: [{ id: "digisearch_search_docs", label: "search_docs" }],
+        },
+      ],
     });
     render(
       <EmbedChatPrefsProvider value={api}>
@@ -309,7 +403,7 @@ describe("/tools tree", () => {
     );
     expect(toolsTree()).toMatchInlineSnapshot(`
       "/digisearch                  On
-        └─ search_docs             On"
+        └─ digisearch_search_docs  On"
     `);
   });
 });

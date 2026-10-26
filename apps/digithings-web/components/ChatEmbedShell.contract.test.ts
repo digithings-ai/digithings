@@ -8,6 +8,7 @@ import {
   buildEmbedParentErrorMessage,
   buildEmbedThemeMessage,
   formatShellLoadDiagnostic,
+  readParentDocumentPalette,
   readParentDocumentTheme,
 } from "@/components/ChatEmbedShell";
 
@@ -22,7 +23,7 @@ describe("ChatEmbedShell contracts", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 
-  it("posts digichat:theme with light|dark only", () => {
+  it("posts digichat:theme with light|dark and an optional palette", () => {
     expect(THEME).toBe("digichat:theme");
     expect(buildEmbedThemeMessage("light")).toEqual({
       type: "digichat:theme",
@@ -36,6 +37,23 @@ describe("ChatEmbedShell contracts", () => {
     });
   });
 
+  it("forwards only a known parent palette on the theme message", () => {
+    const attr = (v: string | null) => ({ getAttribute: () => v });
+    expect(readParentDocumentPalette(attr("dracula"))).toBe("dracula");
+    expect(readParentDocumentPalette(attr(" Nord "))).toBe("nord");
+    expect(readParentDocumentPalette(attr("default"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr("nope"))).toBeUndefined();
+    expect(readParentDocumentPalette(attr(null))).toBeUndefined();
+    expect(buildEmbedThemeMessage("light", 1, "dracula")).toEqual({
+      type: THEME,
+      theme: "light",
+      ts: 1,
+      palette: "dracula",
+    });
+    expect(buildEmbedThemeMessage("dark", 1)).toEqual({ type: THEME, theme: "dark", ts: 1 });
+    expect("palette" in buildEmbedThemeMessage("dark", 1)).toBe(false);
+  });
+
   it("posts digichat:parent-error for in-chat handshake failures", () => {
     expect(PARENT_ERROR).toBe("digichat:parent-error");
     expect(buildEmbedParentErrorMessage("ready_timeout", 99)).toEqual({
@@ -43,9 +61,7 @@ describe("ChatEmbedShell contracts", () => {
       code: "ready_timeout",
       ts: 99,
     });
-    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe(
-      "embed_unloadable",
-    );
+    expect(buildEmbedParentErrorMessage("embed_unloadable").code).toBe("embed_unloadable");
   });
 
   it("keeps the operator diagnostic for the dev console only", async () => {
@@ -86,22 +102,29 @@ describe("ChatEmbedShell contracts", () => {
     expect(handler).toContain("buildEmbedThemeMessage");
   });
 
-  it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
+  it("covers the cold Container with the digichat hero banner until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
-    // and keep the cold-start window animated. The shell mounts the shared
-    // @digithings/ui tool-chain boot (the loader the embed itself runs), but only after
-    // WARMUP_DELAY_MS (warm loads stay flash-free) and only until ready; the
-    // iframe is opacity-0 underneath and .dc-chat-frame paints the theme
-    // canvas from the first HTML (see globals.css).
+    // and keep the cold-start window animated. One cover for every surface —
+    // /chat, /chat/occ, the landing pop-up and the host panels: the digichat
+    // hero banner's LOADING pass, the same animation digichat paints itself.
+    // The old BootLabOverlay tool-chain rows are gone on purpose; they
+    // simulated tool work the visitor never started and made the OCC chat
+    // differ from the digichat chat. Mounted only after WARMUP_DELAY_MS (warm
+    // loads stay flash-free) and only until ready; the iframe is opacity-0
+    // underneath and .dc-chat-frame paints the theme canvas from the first
+    // HTML (see globals.css).
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
-    expect(src).toContain("BootLabOverlay");
-    expect(src).toContain('variant="tooltask"');
+    // No caller can reach the old tool-call rows: the variant, the component
+    // and the switch that chose between them are all gone.
+    expect(src).not.toContain("BootLabOverlay");
+    expect(src).not.toContain("tooltask");
+    expect(src).not.toContain("warmupLoader");
     // Reveal waits on the iframe handshake AND the shared service warm-up.
     // Same gate for the landing pop-up, /chat, and /chat/occ.
-    expect(src).toContain("readyEdge={revealed}");
+    expect(src).toContain("aria-busy={!revealed}");
     expect(src).toContain("waitForServices");
     expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
     expect(src).toContain(`signalDigichatBootStep("services")`);
@@ -110,23 +133,22 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: revealed ? 1 : 0");
 
-    // The full-page routes paint the digichat hero banner in that same cover
-    // instead of the tool chain: /chat and /chat/occ are only the chat, so a
-    // simulated tool list would invent work the visitor never started. The
-    // landing pop-up leaves warmupLoader at its default ("toolchain") and
-    // keeps the BootLabOverlay branch above.
+    // The banner is the cover, unconditionally, and the screen-reader line with
+    // it. The error card is a sibling of this region (see EmbedLoadErrorCard
+    // below), so removing the tool-chain branch orphaned nothing.
     expect(src).toContain('from "@digithings/hero-banner/web"');
     expect(src).toContain('from "@digithings/hero-banner/definitions"');
-    expect(src).toContain('warmupLoader?: "toolchain" | "banner"');
-    expect(src).toContain('warmupLoader = "toolchain"');
-    expect(src).toContain('warmupLoader === "banner"');
     expect(src).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
+    expect(src).toContain("min(560px, 72vw)");
+    expect(src).toContain("Loading chat…");
+    expect(src).toContain("<EmbedLoadErrorCard onRetry={retryEmbed} />");
 
     const pageShellSrc = readFileSync(
       fileURLToPath(new URL("./ChatPageShell.tsx", import.meta.url)),
       "utf8",
     );
-    expect(pageShellSrc).toContain('warmupLoader="banner"');
+    // The full-page route no longer asks for the banner — it is the default.
+    expect(pageShellSrc).not.toContain("warmupLoader");
     // Curated per-host copy rides into the iframe URL. The strings themselves
     // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
     // same conversation with the same welcome — assert both halves: the URL
@@ -161,7 +183,8 @@ describe("ChatEmbedShell contracts", () => {
     // pick up a stray ?token= and hand it to a tenant that never asked for one.
     expect(src).toContain("acceptsInviteToken");
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    // Formatting-agnostic: Prettier may keep the guard ternary on one line.
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(guardIndex).toBeLessThan(readIndex);
 
@@ -197,7 +220,8 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
-    expect(shellSrc).toContain("BootLabOverlay");
+    // The transparent overlay is the banner cover now, not the tool-chain rows.
+    expect(shellSrc).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
     expect(shellSrc).toContain('background: "transparent"');
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));
@@ -227,7 +251,7 @@ describe("ChatEmbedShell contracts", () => {
     // visit never touches history.
     const readIndex = src.indexOf("readInviteToken(window.location.search)");
     const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
-    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    const guardIndex = src.search(/acceptsInviteToken\s*\?\s*readInviteToken/);
     expect(guardIndex).toBeGreaterThan(-1);
     expect(stripIndex).toBeGreaterThan(readIndex);
     expect(stripIndex).toBeGreaterThan(-1);

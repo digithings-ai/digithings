@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "org": "digithings-ai",
+  "paperclip_api_url": "http://127.0.0.1:3100",
+  "review_app": "digithings-review",
+  "apps": {
+    "digithings-seat": {
+      "app_id": "REPLACE_WITH_THE_APP_ID",
+      "installation_id": "REPLACE_WITH_THE_INSTALLATION_ID",
+      "key_path": "/Users/_dtbroker/keys/digithings-seat.pem",
+      "bot_login": "digithings-seat[bot]"
+    },
+    "digithings-ci": {
+      "app_id": "REPLACE_WITH_THE_APP_ID",
+      "installation_id": "REPLACE_WITH_THE_INSTALLATION_ID",
+      "key_path": "/Users/_dtbroker/keys/digithings-ci.pem",
+      "bot_login": "digithings-ci[bot]"
+    },
+    "digithings-queue": {
+      "app_id": "REPLACE_WITH_THE_APP_ID",
+      "installation_id": "REPLACE_WITH_THE_INSTALLATION_ID",
+      "key_path": "/Users/_dtbroker/keys/digithings-queue.pem",
+      "bot_login": "digithings-queue[bot]"
+    },
+    "digithings-review": {
+      "app_id": "REPLACE_WITH_THE_APP_ID",
+      "installation_id": "REPLACE_WITH_THE_INSTALLATION_ID",
+      "key_path": "/Users/_dtbroker/keys/digithings-review.pem",
+      "bot_login": "digithings-review[bot]"
+    }
+  },
+  "classes": {
+    "seat": {
+      "app": "digithings-seat",
+      "permissions": {
+        "contents": "write",
+        "metadata": "read",
+        "pull_requests": "write",
+        "issues": "write"
+      }
+    },
+    "reviewer": {
+      "app": "digithings-review",
+      "permissions": {
+        "contents": "read",
+        "metadata": "read",
+        "pull_requests": "write",
+        "issues": "write"
+      }
+    },
+    "ci": {
+      "app": "digithings-ci",
+      "permissions": {
+        "contents": "write",
+        "metadata": "read",
+        "checks": "write",
+        "statuses": "write"
+      }
+    },
+    "queue": {
+      "app": "digithings-queue",
+      "permissions": {
+        "contents": "write",
+        "metadata": "read",
+        "pull_requests": "write"
+      }
+    }
+  },
+  "seats": {
+    "REPLACE_WITH_THE_AGENT_UUID": {
+      "class": "seat"
+    },
+    "REPLACE_WITH_THE_AGENT_UUID_OF_A_SEAT_BOUND_TO_ONE_REPOSITORY": {
+      "class": "seat",
+      "repos": [
+        "digithings-ai/digithings"
+      ]
+    },
+    "REPLACE_WITH_THE_AGENT_UUID_OF_THE_REVIEWER": {
+      "class": "reviewer"
+    },
+    "REPLACE_WITH_THE_AGENT_UUID_OF_THE_CI_SEAT": {
+      "class": "ci"
+    },
+    "REPLACE_WITH_THE_AGENT_UUID_OF_THE_MERGE_QUEUE": {
+      "class": "queue"
+    }
+  }
+}

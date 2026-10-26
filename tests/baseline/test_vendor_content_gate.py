@@ -22,6 +22,7 @@ Each fixture asserts the harness *can* fail before asserting it passed: a
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -588,3 +589,84 @@ def test_json_under_enforce_pending_still_reports_pending_as_pending(tmp_path: P
     assert payload["enforce_pending"] is True
     assert payload["fails"] == []
     assert any(p["drift"] for p in payload["pending"])
+
+
+# --------------------------------------------------------------------------
+# partial clone (DIG-5344)
+#
+# On a `--filter=blob:none` clone the base commit has no blobs. `git grep` then
+# fetches them one at a time over the network: thousands of round-trips, and the
+# gate dies on local-ci's 600 s timeout. The fix backfills the base commit's
+# missing objects in one request before the baseline pass. These tests build a
+# real partial clone and read git's trace, because the defect being guarded
+# against (a batch that transfers nothing) is invisible in the exit code on a
+# machine whose blobs happen to be present.
+# --------------------------------------------------------------------------
+
+
+def _partial_clone(tmp_path: Path) -> tuple[Path, Path]:
+    """A partial clone whose base commit's blobs are absent. Skips if unsupported.
+
+    The feature branch edits every file the base commit has vendor content in,
+    so checking it out materialises only the feature blobs: the base versions
+    stay missing, which is exactly the CI shape.
+    """
+    repo = _make_repo(tmp_path)
+    _land_on_main(repo, "docs/baseline.md", ENV_NAME_ONLY, "vendor note lands on main")
+    _stage(repo, "docs/baseline.md", "clean now, no vendor name here\n")
+    _git("-c", "user.email=t@example.invalid", "-c", "user.name=t",
+         "commit", "-m", "feature removes the vendor name", cwd=repo)
+
+    # A local clone only applies a filter when it is served over a URL.
+    _git("config", "uploadpack.allowFilter", "true", cwd=repo)
+    _git("config", "uploadpack.allowAnySHA1InWant", "true", cwd=repo)
+    clone = tmp_path / "partial"
+    proc = subprocess.run(
+        [GIT, "clone", "-q", "--filter=blob:none", "--no-checkout", "--no-local",
+         f"file://{repo}", str(clone)],
+        cwd=tmp_path, capture_output=True, text=True, errors="replace",
+    )
+    if proc.returncode != 0:
+        pytest.skip(f"this git cannot serve a partial clone: {proc.stderr.strip()}")
+    filt = subprocess.run([GIT, "config", "--get", "remote.origin.partialclonefilter"],
+                          cwd=clone, capture_output=True, text=True)
+    if filt.stdout.strip() != "blob:none":
+        pytest.skip("the clone did not apply the blob:none filter")
+    _git("checkout", "-q", "feature-after-base", cwd=clone)
+    if not _missing(repo=clone, rev="origin/main"):
+        pytest.skip("the checkout materialised the base blobs; nothing to backfill")
+    return repo, clone
+
+
+def _missing(*, repo: Path, rev: str) -> list[str]:
+    """Blob OIDs reachable from `rev` that `repo` does not have locally."""
+    proc = subprocess.run([GIT, "rev-list", "--objects", "--missing=print", rev],
+                          cwd=repo, capture_output=True, text=True, errors="replace")
+    assert proc.returncode == 0, proc.stderr
+    return [line[1:] for line in proc.stdout.splitlines() if line.startswith("?")]
+
+
+def test_partial_clone_backfills_the_baseline_in_one_fetch(tmp_path: Path) -> None:
+    """One batched fetch, then the baseline pass reads local objects only."""
+    repo, clone = _partial_clone(tmp_path)
+    trace = tmp_path / "trace.json"
+    env = dict(os.environ, GIT_TRACE2_EVENT=str(trace))
+    proc = subprocess.run(
+        [sys.executable, str(clone / "scripts/check_vendor_content.py"),
+         "--base-ref", "origin/main"],
+        cwd=clone, capture_output=True, text=True, errors="replace", env=env,
+    )
+    assert proc.returncode == 0, proc.stdout
+    assert "0 failing" in proc.stdout, proc.stdout
+
+    events = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line]
+    fetches = [e.get("argv", []) for e in events
+               if e.get("event") == "start" and "fetch" in e.get("argv", [])]
+    batched = [argv for argv in fetches if "--stdin" in argv]
+    assert len(batched) == 1, f"expected one batched fetch, saw {fetches}"
+    assert "--no-filter" in batched[0], batched[0]
+    assert len(fetches) == len(batched), f"a second, unbounded fetch ran: {fetches}"
+
+    assert _missing(repo=clone, rev="origin/main") == [], (
+        "objects are still missing, so the baseline grep would promisor-fetch per blob"
+    )

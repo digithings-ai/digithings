@@ -73,6 +73,10 @@ const ITEMS: ModuleGridItem[] = [
     version: moduleVersion(module.id),
     counts: moduleCountLabel(module.id) || undefined,
     mark: markFor(module.id),
+    link:
+      module.id === "digiquant"
+        ? { href: "https://digiquant.io", label: "Open digiquant.io" }
+        : undefined,
   })),
   {
     module: DIGIVOICE_MODULE,

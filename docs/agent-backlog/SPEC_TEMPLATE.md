@@ -19,7 +19,7 @@ One sentence: what will be true when this task is done.
 - [ ] `digiquant`
 - [ ] `digisearch`
 - [ ] `digismith`
-- [ ] `digiclaw`
+- [ ] `digibot`
 - [ ] `digibase`
 - [ ] `digikey`
 - [ ] `digichat`

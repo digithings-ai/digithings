@@ -138,6 +138,20 @@ describe("digichat Env / envVars parity", () => {
     ).toEqual([]);
   });
 
+  it("forwards the MCP edge key to the container", () => {
+    // digisearch/digivault are reached through digithings-stack's
+    // `/_stack/mcp/<id>` routes, which are gated on `x-digi-mcp-key` against
+    // that Worker's MCP_EDGE_KEY secret. The container can only send the header
+    // if the key is forwarded under its own name; a var declared on `Env` and
+    // missing here stays undefined in the container and every MCP call 401s.
+    // The value is set by a human with `wrangler secret put`, never in the repo.
+    const entry = extractEnvVarsKeyToRefs(envBody).find(
+      ({ key }) => key === "DIGICHAT_MCP_EDGE_KEY",
+    );
+    expect(entry, "DIGICHAT_MCP_EDGE_KEY is not keyed in envVars").toBeDefined();
+    expect(entry?.refs).toEqual(["DIGICHAT_MCP_EDGE_KEY"]);
+  });
+
   it("keeps the worker-only allowlist honest and one-way", () => {
     const declared = new Set(envMembers);
     const forwarded = new Set(forwardedKeys);

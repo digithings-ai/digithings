@@ -8,6 +8,7 @@ import {
 import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
+import { useSuggestionGroup } from "../../suggestion-cycle";
 import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { BackendNotice } from "../../stock/chat-notice";
@@ -355,7 +356,7 @@ const SUGGESTION_GROUPS: SuggestionGroup[] = [
 ];
 
 const suggestionChipClass =
-  "aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors [&_svg]:size-4";
+  "aui-thread-welcome-suggestion fade-in animate-in fill-mode-both duration-(--dur) text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors [&_svg]:size-4";
 
 const ThreadSuggestions: FC = () => {
   const aui = useAui();
@@ -363,6 +364,9 @@ const ThreadSuggestions: FC = () => {
     "How can I help you today?",
     "Send a message...",
   );
+  // Keyed by the cycle's group offset so a new group remounts and re-runs the
+  // chips' entrance fade; hover/focus handlers hold the cycle while it is read.
+  const { groupKey, handlers } = useSuggestionGroup();
   const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
   const expandedGroup = SUGGESTION_GROUPS.find(
     (group) => group.label === expandedLabel,
@@ -378,7 +382,11 @@ const ThreadSuggestions: FC = () => {
 
   if (suggestions.length > 0) {
     return (
-      <div className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4">
+      <div
+        key={groupKey}
+        className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
+        {...handlers}
+      >
         <div className="w-full scrollbar-none overflow-x-auto">
           <div className="mx-auto flex w-max items-center gap-2">
             {suggestions.map((prompt) => (
@@ -398,7 +406,11 @@ const ThreadSuggestions: FC = () => {
   }
 
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4">
+    <div
+      key={groupKey}
+      className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
+      {...handlers}
+    >
       <div className="w-full scrollbar-none overflow-x-auto">
         <div className="mx-auto flex w-max items-center gap-2">
           {SUGGESTION_GROUPS.map((group) => (

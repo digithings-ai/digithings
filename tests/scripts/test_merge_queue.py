@@ -351,7 +351,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     """Two repos in this org report different names, so one global list cannot serve both.
 
     `digithings` runs every test suite through reusable workflows, so GitHub reports
-    each as `<caller> / test` — `digibase / test`, `digiclaw / test`, and eleven more —
+    each as `<caller> / test` — `digibase / test`, `digibot / test`, and eleven more —
     and names nothing `test`. `twelve-x` runs one job and does report a bare `test`.
     A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
     which: 28 PRs blocked, every one of them on `required check 'test' has not
@@ -514,8 +514,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
-    near = mq._near_misses(("test",), ("digibase / test", "digiclaw / test", "path-filter"))
-    assert near[:2] == ["digibase / test", "digiclaw / test"]
+    near = mq._near_misses(("test",), ("digibase / test", "digibot / test", "path-filter"))
+    assert near[:2] == ["digibase / test", "digibot / test"]
     assert "path-filter" not in near, "no shared word; listing it would be noise"
     # Word-based, so an unrelated check that merely contains the letters is excluded.
     assert mq._near_misses(("mypy",), ("mypy — digibase + digikey", "npm-audit")) == [
@@ -1131,15 +1131,15 @@ def test_a_comments_field_that_is_not_a_list_is_refused() -> None:
     assert any("not a list" in r for r in verdict.reasons)
 
 
-def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
-    """The second leg of `#5903`: a block is never spent by the branch.
+def test_a_missing_commits_key_does_not_change_the_verdict() -> None:
+    """The verdict gate reads the verdict, and no longer reads the branch list.
 
-    The old gate answered "is the verdict's commit still on this branch?" from
-    `pr["commits"]`, and retired the block when the answer was no. That made
-    the branch — not the verdict — decide whether a block stood, and any new
-    commit or rebase retired it (DIG-4878). The value gate asks the verdict
-    instead, so a row with no commit list refuses on the same ground as every
-    other row: the newest readable verdict is a block.
+    DIG-4878 retired the old question "is the verdict's commit still on this
+    branch?" because the branch answered it, not the verdict. The rule since
+    #6263 asks the verdict's own scope instead: a block naming `b` says nothing
+    about a PR standing at `c`, and that is true whether or not the row carries
+    a `commits` key. The key is still fetched — the reviewer-independence gate
+    reads commit author dates from it — but it does not decide this gate.
     """
     pr = _pr(
         347,
@@ -1149,16 +1149,19 @@ def test_a_missing_commits_key_does_not_clear_a_posted_block() -> None:
         omit=("commits",),
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert not verdict.eligible
-    assert any("changes_requested" in r and "bbbbbbbbbbbb" in r for r in verdict.reasons)
+    assert verdict.eligible, verdict.reasons
 
 
-def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
-    """A reviewer who blocked commit A still blocks A+B.
+def test_a_verdict_against_an_older_commit_on_the_branch_does_not_block() -> None:
+    """A reviewer who blocked commit A has said nothing about A+B.
 
-    Forgetting to re-review after pushing a fix is the common case, and the
-    finding is normally still there. Clearing this silently is how the gate
-    becomes decoration.
+    This test asserted the opposite until 2026-10-23. `#6263` was approved at
+    01:01 on `177278b680f4` and handed back at 01:05 because a
+    `changes_requested` against `a87fc55760e9` still stood: a verdict on code
+    the PR has left held the head it stands at, and only the seat that posted it
+    could clear it. The verdict is scoped to the commit it names, so it neither
+    blocks this head nor asks for a re-review of it. A block on the current head
+    still blocks; see the #6263 tests.
     """
     older = "b" * 40
     head = "c" * 40
@@ -1170,22 +1173,16 @@ def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
         comments=[_review_comment(verdict="changes_requested", head_sha=older)],
         commits=[{"oid": older}, {"oid": head}],
     )
-    assert not mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
-def test_a_verdict_against_a_head_this_pr_does_not_carry_still_blocks() -> None:
-    """A verdict on a head that has moved is still the newest verdict.
+def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
+    """A verdict names one commit; this PR stands at another.
 
-    This test asserted the opposite until 2026-10-21, and the shape it pinned
-    is the defect DIG-4878 is about: the block was spent when the commit it
-    named left the branch, so a rebase or a new commit retired it and the
-    coverage gate carried the merge on a label. Six digithings PRs merged that
-    way between 2026-10-20 and 2026-10-21 (#6115, #6074, #6071, #6019, #5968,
-    #5761).
-
-    The finding is still worth answering; it just cannot be answered against
-    code that no longer exists. The remedy is a fresh verdict on the head the
-    PR stands at, and until then the PR waits.
+    This test asserted the opposite until 2026-10-23, on the DIG-4878 reasoning
+    that a block on code that no longer exists still has to be answered. Under
+    the #6263 rule the block is scoped to the commit it named: it is a statement
+    about code the PR has left, so it does not hold the head the PR stands at.
     """
     head = "c" * 40
     pr = _pr(
@@ -1197,8 +1194,8 @@ def test_a_verdict_against_a_head_this_pr_does_not_carry_still_blocks() -> None:
         commits=[{"oid": head}],
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert not verdict.eligible
-    assert any("changes_requested" in r and "ffffffffffff" in r for r in verdict.reasons)
+    assert verdict.eligible, verdict.reasons
+
 
 
 def test_the_latest_posted_verdict_wins() -> None:
@@ -1256,9 +1253,10 @@ def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None
 #
 # DIG-4878. A blocking verdict used to be spent the moment the commit it named
 # left the branch, so a rebase retired it and `reviewed:agent` carried the
-# merge. The gate below asks the verdict instead: the newest readable verdict is
-# the one that counts, whatever it is scoped to, and an approve counts only when
-# it names the head the PR stands at.
+# merge. The gate below asks the verdict instead: a verdict is scoped to the head
+# it names, so a block on the current head blocks, a block on a head the PR has
+# left does not (#6263), and an approve counts only when it names the head the
+# PR stands at.
 
 
 def _in_session_review_comment(
@@ -1287,13 +1285,15 @@ def _in_session_review_comment(
     }
 
 
-def test_a_stale_scope_changes_requested_is_not_spent_by_a_new_head() -> None:
-    """The defect in one fixture: the branch moved, and the block was retired.
+def test_a_block_on_a_head_the_pr_has_left_does_not_hold_it() -> None:
+    """The #6263 defect in one fixture: the branch moved, and the hold is stale.
 
     The verdict names a commit that is no longer on the branch, which is what a
-    rebase or a merge from develop leaves behind. The label says a review ran,
-    so the coverage gate would carry this PR to a merge — and it did, six times
-    over between 2026-10-20 and 2026-10-21.
+    rebase or a merge from develop leaves behind. Under the rule until
+    2026-10-23 that kept the PR held indefinitely — the label says a review ran,
+    so the coverage gate was satisfied, and only the same seat could clear a
+    block on code that no longer exists. A verdict is scoped to the commit it
+    names, so this block does not apply to the head the PR stands at.
     """
     head = "c" * 40
     stale = "f" * 40
@@ -1313,13 +1313,7 @@ def test_a_stale_scope_changes_requested_is_not_spent_by_a_new_head() -> None:
     )
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert not verdict.eligible
-    # The refusal has to name the PR, the verdict, the scope it was written
-    # against and the head the PR stands at, or nobody can tell what to do.
-    assert any(
-        "6071" in r and "changes_requested" in r and stale[:12] in r and head[:12] in r
-        for r in verdict.reasons
-    )
+    assert verdict.eligible, verdict.reasons
 
 
 def test_the_label_alone_still_carries_a_pr_with_no_blocking_verdict() -> None:
@@ -1457,14 +1451,16 @@ def test_a_non_answer_is_not_a_verdict() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
-def test_the_6071_timeline_is_refused() -> None:
-    """The shape the audit found: blocked, rebased, merged on the label.
+def test_the_6071_timeline_does_not_hold_the_current_head() -> None:
+    """The shape the DIG-4878 audit found: blocked, rebased, merged on the label.
 
     `digithings-ai/digithings#6071` was blocked at 01:30 Rome against
     `028e67ed`, merged at 02:28 on head `7b3b921d95`, and approved at 02:44 —
-    sixteen minutes after the merge, which is why the queue never saw an
-    approve on the head it merged. This fixture is the record as it stood at
-    02:28, when the merge decision was taken.
+    sixteen minutes after the merge. DIG-4878 read that as a merge that should
+    have waited; since #6263 the block on `028e67ed` is scoped to that commit
+    and does not hold `7b3b921d95`, so the same record now queues on its
+    coverage evidence. This test pins the consequence rather than hiding it:
+    the block is not retired by the branch moving — it was never about this head.
     """
     head = "7b3b921d95" + "0" * 30
     pr = _pr(
@@ -1483,11 +1479,7 @@ def test_the_6071_timeline_is_refused() -> None:
     )
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert not verdict.eligible
-    assert any(
-        "6071" in r and "changes_requested" in r and "028e67ed" in r and "7b3b921d95" in r
-        for r in verdict.reasons
-    )
+    assert verdict.eligible, verdict.reasons
 
 
 # --- a block belongs to the seat that posted it ---------------------------------
@@ -1496,8 +1488,10 @@ def test_the_6071_timeline_is_refused() -> None:
 # security desk found #6170: two seats posted verdicts on one PR, the code
 # reviewer approved the head, and the queue read that approve as the newest
 # verdict — while the security desk's `changes requested` was still standing and
-# the commit it named was still an ancestor of the merged head. A block belongs
-# to the seat that posted it, and only that seat can clear it.
+# the commit it named was still an ancestor of the merged head. A block on the
+# current head belongs to the seat that posted it, and only that seat can clear
+# it. Since #6263 the same verdict is scoped to the head it names first: a block
+# on a head the PR has left does not stand at all, so there is nothing to clear.
 
 # The seats in the #6170 timeline, by the uuid the provenance marker carries.
 REVIEWER_SEAT = "c59332b4-a0ef-4a6a-8027-5c081486f899"
@@ -1614,27 +1608,22 @@ def _the_6170_timeline(*, with_the_security_approve: bool = False) -> dict[str, 
     return pr
 
 
-def test_the_6170_timeline_is_refused() -> None:
-    """The shape the security desk found: another seat's approve does not clear it.
+def test_the_6170_timeline_does_not_hold_the_current_head() -> None:
+    """The security desk's block named `fb309e6458`; the PR stood at `cd17d6539b`.
 
-    The code reviewer's approve on the head is the newest readable verdict, so
-    the newest-verdict rule alone lets this PR through — while the security
-    desk's `changes requested` is still standing on a commit that is still an
-    ancestor of the head. The refusal has to name the PR, the seat that still
-    holds the block, the verdict, the scope and the head.
+    This test asserted a refusal until 2026-10-23, on the DIG-4911 rule that a
+    block belongs to the seat that posted it and no other seat's approve clears
+    it. That rule is what #6263 ran into: the block is still scoped to a commit
+    the PR has left, so no approve on its own head could ever clear it and the
+    seat had to re-review a head it never read. Under the head-scoped rule the
+    block is spent by the branch moving, and the reviewer's approve on the head
+    is what counts. The seat rule itself is unchanged and applies to a block on
+    the current head — see `test_a_block_on_the_current_head_still_holds`.
     """
     verdict = mq.evaluate(
         _the_6170_timeline(), mq.load_policy(), acting_role="em", base="develop"
     )
-    assert not verdict.eligible
-    assert any(
-        "6170" in r
-        and "changes_requested" in r
-        and STALE_6170[:12] in r
-        and HEAD_6170[:12] in r
-        for r in verdict.reasons
-    )
-    assert any(SECURITY_SEAT in r for r in verdict.reasons)
+    assert verdict.eligible, verdict.reasons
 
 
 def test_the_6170_timeline_is_cleared_by_the_security_desks_own_approve() -> None:
@@ -1753,12 +1742,14 @@ def test_a_seats_approve_naming_another_head_does_not_clear_its_block() -> None:
 def test_a_stale_scoped_approve_does_not_clear_a_block_through_the_provenance_head() -> None:
     """A marker verdict binds to its own `scope=`, and to nothing else.
 
-    The finding the review raised on #6177: seat R blocks on head A, then
-    approves with `scope=@A` while its provenance marker names the head the PR
-    stands at. The provenance head used to be read as a second binding, so the
-    approve covered the current head and cleared the block — while the approve
-    itself said it was about the stale commit. A verdict that names a stale head
-    says nothing about the current one, so the block stands.
+    The finding the review raised on #6177: seat R blocks head A, then approves
+    with `scope=@A` while its provenance marker names the head the PR stands
+    at. The provenance head used to be read as a second binding, so the approve
+    covered the current head and cleared the block — while the approve itself
+    said it was about the stale commit. A verdict that names a stale head says
+    nothing about the current one, so the block stands. (The block here is on
+    the stale head, so it is the approve, not the block, that the refusal names
+    — an approve must name the head to clear anything at all.)
     """
     head = "c" * 40
     stale = "d" * 40
@@ -1787,10 +1778,7 @@ def test_a_stale_scoped_approve_does_not_clear_a_block_through_the_provenance_he
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
-    assert any(
-        REVIEWER_SEAT in r and "changes_requested" in r and stale[:12] in r
-        for r in verdict.reasons
-    )
+    assert any("approve" in r and stale[:12] in r for r in verdict.reasons)
 
 
 def test_an_approve_whose_scope_names_the_head_clears_its_own_block() -> None:
@@ -1868,6 +1856,61 @@ def test_a_marker_with_no_scope_still_binds_the_provenance_head() -> None:
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize(
+    "scope_field",
+    [
+        "@" + "D" * 40,  # uppercase: not a sha the queue reads
+        "@dddd",  # too short to bind a head
+        "d" * 40,  # no `@`
+        "@",  # empty
+    ],
+)
+def test_a_scope_that_does_not_parse_does_not_fall_back_to_the_provenance_head(
+    scope_field: str,
+) -> None:
+    """A `scope=` the queue cannot read binds nothing; it does not fall back.
+
+    The field's presence decides whether a marker names a head. A stale approve
+    whose `scope=` is written in a form the sha pattern misses used to lose its
+    scope, fall back to the provenance marker's `head=`, and clear a block on
+    that head. The block here is on the current head, so the approve has to bind
+    it to clear it — and it binds nothing.
+    """
+    head = "c" * 40
+    approve = {
+        "id": "IC_unparsed_scope",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": (
+            f"<!-- digithings-review agent={REVIEWER_SEAT} "
+            "run=00000000-0000-0000-0000-000000000000 "
+            f"head={head} -->\n"
+            f"<!-- opencode-power-pack:code-review verdict=approve scope={scope_field} -->\n\n"
+            "Review verdict: approve\n"
+        ),
+        "createdAt": "2026-10-21T14:50:24Z",
+    }
+    pr = _pr(
+        6177,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(REVIEWER_SEAT in r and "changes_requested" in r for r in verdict.reasons)
 
 
 def test_a_block_whose_seat_cannot_be_read_is_judged_by_the_newest_verdict() -> None:
@@ -3350,6 +3393,58 @@ def test_an_unknown_mode_is_treated_as_enforce(monkeypatch: pytest.MonkeyPatch) 
     closed, because the switch decides whether the queue trusts a status.
     """
     monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, "shadoww")
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
+def test_the_rollback_flag_puts_the_gate_back_into_shadow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`host` switches the broker off, and the gate it depends on goes with it.
+
+    The receipt this gate trusts is written by the broker. With the broker
+    off there is nothing to enforce against, so the gate measures and merges
+    instead of refusing.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("host\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_the_rollback_flag_never_raises_a_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The flag lowers a gate. It never raises one."""
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
+
+
+def test_the_rollback_flag_never_raises_a_shadowed_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`app` does not switch the shadow gate to enforce.
+
+    The flag only ever lowers a gate. A gate that is already measuring (the
+    mode the queue ships in) stays measuring when the flag says `app`, so the
+    flag can never be used to switch a gate on.
+    """
+    flag = tmp_path / "github-auth-mode"
+    flag.write_text("app\n", encoding="utf-8")
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", flag)
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_SHADOW)
+    assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_SHADOW
+
+
+def test_an_unreadable_rollback_flag_leaves_the_gate_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flag that cannot be read is not a flag that says `host`."""
+    monkeypatch.setattr(mq, "AUTH_MODE_FLAG_PATH", tmp_path / "not-there")
+    monkeypatch.setenv(mq.PROVENANCE_MODE_ENV, mq.PROVENANCE_ENFORCE)
     assert mq.provenance_mode(mq.load_policy()) == mq.PROVENANCE_ENFORCE
 
 

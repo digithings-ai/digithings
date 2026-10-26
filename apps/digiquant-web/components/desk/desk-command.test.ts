@@ -15,13 +15,14 @@ describe("desk slash field", () => {
     expect(html).toContain('value="/app/brief/"');
   });
 
-  it("lists OpenTUI pages plus Terminal, Charts, and digichat", () => {
+  it("lists OpenTUI pages plus Terminal, Gloomberb, Vela, and digichat", () => {
     const hits = searchDeskPages("");
     expect(hits.map((hit) => hit.path)).toEqual([
       ...publicCatalogPages().map((page) => page.path),
       "/tools/terminal",
-      "/tools/charts",
-      "/tools/chat",
+      "/tools/gloomberb",
+      "/tools/vela",
+      "/tools/digichat",
     ]);
     expect(hits.some((hit) => hit.path === "/fx" || hit.path.startsWith("/fx/"))).toBe(false);
     expect(JSON.stringify(hits)).not.toMatch(/fx hub|12x/i);
@@ -38,8 +39,9 @@ describe("desk slash field", () => {
       "/portfolio/theses",
       "/portfolio/tearsheet",
     ]);
-    expect(searchDeskPages("charts")[0]?.href).toBe("/app/tools/charts/");
-    expect(searchDeskPages("digichat")[0]?.href).toBe("/app/tools/chat/");
+    expect(searchDeskPages("vela")[0]?.href).toBe("/app/tools/vela/");
+    expect(searchDeskPages("gloomberb")[0]?.href).toBe("/app/tools/gloomberb/");
+    expect(searchDeskPages("digichat")[0]?.href).toBe("/app/tools/digichat/");
     expect(searchDeskPages("/app/tools/terminal/").map((hit) => hit.label)).toEqual(["Terminal"]);
     expect(searchDeskPages("luxalgo")).toEqual([]);
     expect(searchDeskPages("fx")).toEqual([]);
@@ -88,7 +90,13 @@ describe("desk slash field", () => {
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     const narrow = css.slice(css.indexOf("@media (max-width: 759px)"));
     expect(narrow).toContain(".desk-head .cmd:focus-within");
-    expect(narrow).toMatch(/\.desk-head \.cmd\s*\{[^}]*flex:\s*0 0 2\.5rem/s);
+    expect(narrow).toContain("--desk-field-collapsed-w: 2.5rem");
+    expect(narrow).toMatch(
+      /\.desk-head \.cmd\s*\{[^}]*flex:\s*0 0 var\(--desk-field-collapsed-w\)/s,
+    );
+    expect(narrow).toMatch(
+      /\.desk-head \.cmd-in\s*\{[^}]*width:\s*var\(--desk-field-collapsed-w\)/s,
+    );
     // The shell clips sideways overflow so the document stays at the
     // viewport width while the head scrolls internally.
     expect(css).toMatch(/\.desk-shell\s*\{[^}]*overflow-x:\s*hidden/s);

@@ -863,3 +863,61 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Embed-Plan-Proof (#3
     unmount();
   });
 });
+
+describe("onTurnCharge — every outgoing turn counts", () => {
+  it("charges when a request is prepared", async () => {
+    const charge = vi.fn();
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ onTurnCharge: charge })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed");
+
+    await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+
+    expect(charge).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("charges per request, so a redo counts like a send", async () => {
+    const charge = vi.fn();
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ onTurnCharge: charge })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed");
+
+    await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+
+    expect(charge).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Embed-Trial-Proof (DIG-4523)", () => {
+  it("omits the header when no proof is available", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({});
+    expect(headers.has("X-Embed-Trial-Proof")).toBe(false);
+  });
+
+  it("reads the proof fresh on every send, so a proof that arrives after mount still reaches the header", async () => {
+    let currentProof: string | null = null;
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getTrialProof: () => currentProof })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).has("X-Embed-Trial-Proof")).toBe(false);
+
+    currentProof = "hmac.trial.proof.token";
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).get("X-Embed-Trial-Proof")).toBe("hmac.trial.proof.token");
+
+    unmount();
+  });
+});

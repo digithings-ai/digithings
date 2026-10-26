@@ -81,6 +81,17 @@ def _tail(rows: list[Any], n: int) -> list[Any]:
     return rows[-n:]
 
 
+def _tool_error(exc: BaseException) -> str:
+    """JSON error envelope for a tool that caught an unexpected exception.
+
+    Tool bodies never raise across the MCP boundary: a defect inside the
+    service surfaces as ``{"error": "<ExcType>: <message>"}`` so the caller
+    gets a readable failure instead of a transport error. One implementation,
+    so the envelope cannot drift per tool.
+    """
+    return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
 # Calendar days of live overlap fetched ahead of the R2 manifest seal.
 _R2_LIVE_OVERLAP_DAYS = 30
 
@@ -100,8 +111,8 @@ def _supabase_macro(series_ids: list[str], lookback: int) -> str:
     try:
         client = build_client(SupabaseConfig.from_env())
         result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-    except Exception as exc:  # surface as JSON to the caller, never crash
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    except Exception as exc:
+        return _tool_error(exc)
     return json.dumps(result, default=str)
 
 
@@ -417,7 +428,7 @@ def digiquant_get_price_technicals(
             _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _tool_error(exc)
 
 
 def digiquant_get_macro_series(
@@ -469,7 +480,7 @@ def digiquant_get_macro_series(
             _ttl[cache_key] = (time.time(), payload)
         return payload
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _tool_error(exc)
 
 
 def digiquant_get_trade_levels(
@@ -1000,8 +1011,8 @@ def create_mcp_server(
                 offset=offset,
                 full_content=full_content,
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return json.dumps(result, default=str)
 
     # ── Slapper tearsheet pipeline (price → Nautilus backtest → TradingView parity) ──
@@ -1055,7 +1066,7 @@ def create_mcp_server(
                 fetch_all_daily,
             )
         except ImportError as exc:
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            return _tool_error(exc)
 
         cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE
         cache.mkdir(parents=True, exist_ok=True)
@@ -1114,8 +1125,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().quote({"symbol": symbol, "exchange": exchange})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_quotes_batch")
@@ -1127,8 +1138,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().quotes_batch({"symbols": symbols})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_price_history")
@@ -1163,8 +1174,8 @@ def create_mcp_server(
                     "end_date": end_date,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_ticker_financials")
@@ -1187,8 +1198,8 @@ def create_mcp_server(
                     "extended_statements": extended_statements,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_options_chain")
@@ -1206,8 +1217,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().options_chain(
                 {"symbol": symbol, "exchange": exchange, "expiration": expiration}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_sec_filings")
@@ -1236,8 +1247,8 @@ def create_mcp_server(
                     "form": form,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_holders")
@@ -1252,8 +1263,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().holders(
                 {"symbol": symbol, "owner_type": owner_type}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_analyst_research")
@@ -1267,8 +1278,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().analyst_research(
                 {"symbol": symbol, "limit": limit}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_corporate_actions")
@@ -1280,8 +1291,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().corporate_actions({"symbol": symbol})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_earnings_calendar")
@@ -1296,8 +1307,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().earnings_calendar(
                 {"symbols": symbols, "horizon_days": horizon_days}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_exchange_rate")
@@ -1312,8 +1323,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().exchange_rate(
                 {"from_currency": from_currency, "to_currency": to_currency}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_search")
@@ -1325,8 +1336,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().search({"query": query, "limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_news")
@@ -1346,8 +1357,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().news(
                 {"feed": feed, "ticker": ticker, "story_id": story_id, "limit": limit}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_econ_calendar")
@@ -1362,8 +1373,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().econ_calendar()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_econ_series")
@@ -1377,8 +1388,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().econ_series(
                 {"series_id": series_id, "limit": limit, "sort_order": sort_order}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_yield_curve")
@@ -1390,8 +1401,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().yield_curve()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_cds")
@@ -1406,8 +1417,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().cds(
                 {"issuer": issuer, "days": days, "limit": limit}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_research_search")
@@ -1424,8 +1435,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().research_search(
                 {"query": query, "limit": limit, "offset": offset}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_congress_trades")
@@ -1442,8 +1453,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().congress_trades({"year": year, "limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_transcripts")
@@ -1466,8 +1477,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().transcripts(
                 {"ticker": ticker, "limit": limit, "transcript_id": transcript_id}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         # Detail mode has no ticker argument, but the row can carry one — the
         # spec's "or the payload carries one" deep-link rule. Kept in `ticker`
         # so the parity test still reads the deep-link field from `symbol=ticker`.
@@ -1492,8 +1503,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().statements(
                 {"symbol": symbol, "period": period, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_ticker_tweets")
@@ -1521,8 +1532,8 @@ def create_mcp_server(
                     "include_replies": include_replies,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_tweet_search")
@@ -1541,8 +1552,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().tweet_search(
                 {"query": query, "query_type": query_type, "limit": limit, "hours": hours}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_venues")
@@ -1554,8 +1565,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().venues()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_saved_searches")
@@ -1570,8 +1581,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().saved_searches()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_screener")
@@ -1588,8 +1599,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().screener(
                 {"category": category, "count": count, "mode": mode}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_13f_funds")
@@ -1625,8 +1636,8 @@ def create_mcp_server(
                     "offset": offset,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_13f_holdings")
@@ -1665,8 +1676,8 @@ def create_mcp_server(
                     "offset": offset,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_shiller")
@@ -1681,8 +1692,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().shiller({"limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_proxy_statements")
@@ -1699,8 +1710,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().proxy_statements(
                 {"what": what, "ticker": ticker, "year": year}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_filing_events")
@@ -1715,8 +1726,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().filing_events({"ticker": ticker, "limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_risk_reports")
@@ -1733,8 +1744,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().risk_reports(
                 {"what": what, "ticker": ticker, "year": year}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_short_interest")
@@ -1750,8 +1761,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().short_interest({"symbol": symbol, "years": years})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_equity_diagnostic")
@@ -1773,8 +1784,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().equity_diagnostic(
                 {"symbol": symbol, "exchange": exchange, "mode": mode}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_prediction_markets")
@@ -1804,8 +1815,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── Calculators + compositions (130-coverage Task 2) ────────────────────
@@ -1841,8 +1852,8 @@ def create_mcp_server(
                     "price": price,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_bond_calculator")
@@ -1860,8 +1871,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().bond_calculator(
                 {"coupon": coupon, "face": face, "ytm": ytm, "years": years, "freq": freq}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_kelly_sizer")
@@ -1875,8 +1886,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().kelly_sizer(
                 {"win_prob": win_prob, "win_loss_ratio": win_loss_ratio}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_dividend_yield")
@@ -1889,8 +1900,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().dividend_yield({"symbol": symbol})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_fx_cross_rates")
@@ -1905,8 +1916,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().fx_cross_rates(
                 {"currencies": currencies, "to_currency": to_currency}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_vix_term_structure")
@@ -1923,8 +1934,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().vix_term_structure(
                 {"near_series": near_series, "far_series": far_series, "limit": limit}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── Options scenario (130-coverage Task 8: OSA) ──────────────────────────
@@ -1963,8 +1974,8 @@ def create_mcp_server(
                     "vol_shifts": vol_shifts if vol_shifts is not None else [0.0],
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── Portfolio-math compositions (130-coverage Task 3) ───────────────────
@@ -1986,8 +1997,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().compare_performance(
                 {"tickers": tickers, "resolution": resolution, "range": range}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_correlation_matrix")
@@ -2004,8 +2015,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().correlation_matrix(
                 {"tickers": tickers, "resolution": resolution, "range": range}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_relationship_graph")
@@ -2031,8 +2042,8 @@ def create_mcp_server(
                     "window": window,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_relative_valuation")
@@ -2044,8 +2055,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().relative_valuation({"tickers": tickers})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_fundamental_graph")
@@ -2061,8 +2072,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().fundamental_graph(
                 {"symbol": symbol, "field": field, "period": period}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_valuation_graph")
@@ -2076,8 +2087,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().valuation_graph(
                 {"symbol": symbol, "period": period}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_custom_chart")
@@ -2092,8 +2103,8 @@ def create_mcp_server(
         try:
             legs = json.loads(series_json)
             envelope = _build_gloomberb_client().custom_chart({"series": legs})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_market_valuation")
@@ -2109,8 +2120,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().market_valuation(
                 {"limit": limit, "econ_series_ids": econ_series_ids or []}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_money_markets")
@@ -2134,8 +2145,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_rate_path")
@@ -2147,8 +2158,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().rate_path({"limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── Probe-backed tools (130-coverage Task 5) ─────────────────────────────
@@ -2169,8 +2180,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().time_and_sales(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_quote_recap")
@@ -2185,8 +2196,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().quote_recap(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_estimate_revisions")
@@ -2201,8 +2212,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().estimate_revisions(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_short_volume")
@@ -2215,8 +2226,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().short_volume({"symbol": symbol, "scope": scope})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_hiring")
@@ -2244,8 +2255,8 @@ def create_mcp_server(
                     "offset": offset,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker)
 
     @_maybe_tool("digifetch_central_bank_rates")
@@ -2256,8 +2267,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().central_bank_rates({})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_cdx")
@@ -2269,8 +2280,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().cdx({"days": days})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_sovereign_cds")
@@ -2282,8 +2293,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().sovereign_cds({"days": days})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_options_flow")
@@ -2316,8 +2327,8 @@ def create_mcp_server(
                     "symbols": symbols,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_cot")
@@ -2335,8 +2346,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().cot(
                 {"report": report, "trader_class": trader_class, "code": code}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_crypto_markets")
@@ -2349,8 +2360,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().crypto_markets({})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_iv_screen")
@@ -2362,8 +2373,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().iv_screen({"symbols": symbols})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_iv_history")
@@ -2376,8 +2387,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().iv_history({"symbol": symbol, "days": days})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_iv_surface")
@@ -2391,8 +2402,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().iv_surface({"symbol": symbol, "date": date})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_debt_maturities")
@@ -2404,8 +2415,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().debt_maturities({"symbol": symbol})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol)
 
     @_maybe_tool("digifetch_session_movers")
@@ -2422,8 +2433,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().session_movers(
                 {"category": category, "side": side, "count": count, "mode": mode}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_trending")
@@ -2435,8 +2446,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().trending({"limit": limit})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_substack")
@@ -2464,8 +2475,8 @@ def create_mcp_server(
                     "offset": offset,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_ipo_calendar")
@@ -2493,8 +2504,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope)
 
     @_maybe_tool("digifetch_fear_greed")
@@ -2507,8 +2518,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().fear_greed({})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_polls")
@@ -2530,8 +2541,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_treasury_auctions")
@@ -2555,8 +2566,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_market_halts")
@@ -2576,8 +2587,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_hacker_news")
@@ -2594,8 +2605,8 @@ def create_mcp_server(
                     "limit": limit,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── Workspace writes + broker reads + approval-gated orders (130-coverage Task 7) ──
@@ -2617,8 +2628,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().portfolio_view({})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_watchlist_add")
@@ -2633,8 +2644,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().watchlist_add(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_watchlist_remove")
@@ -2649,8 +2660,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().watchlist_remove(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_portfolio_add")
@@ -2670,8 +2681,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().portfolio_add(
                 {"symbol": symbol, "exchange": exchange, "quantity": quantity, "note": note}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_portfolio_remove")
@@ -2686,8 +2697,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().portfolio_remove(
                 {"symbol": symbol, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_alert_add")
@@ -2705,8 +2716,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().alert_add(
                 {"symbol": symbol, "condition": condition, "price": price, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_alert_list")
@@ -2720,8 +2731,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_gloomberb_client().alert_list({})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_note_add")
@@ -2738,8 +2749,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().note_add(
                 {"symbol": symbol, "content": content, "title": title, "exchange": exchange}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_thesis_add")
@@ -2754,8 +2765,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().thesis_add(
                 {"ticker": ticker, "title": title, "document": document}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=ticker, attributed=False)
 
     @_maybe_tool("digifetch_view_add")
@@ -2770,8 +2781,8 @@ def create_mcp_server(
         try:
             spec = json.loads(spec_json)
             envelope = _build_gloomberb_client().view_add({"name": name, "spec": spec})
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_broker_positions")
@@ -2788,8 +2799,8 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().broker_positions(
                 {"broker": broker, "account": account}
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digifetch_ibkr_preview_order")
@@ -2821,8 +2832,8 @@ def create_mcp_server(
                     "exchange": exchange,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     @_maybe_tool("digifetch_ibkr_execute_order")
@@ -2858,8 +2869,8 @@ def create_mcp_server(
                     "dry_run": dry_run,
                 }
             )
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
@@ -2902,8 +2913,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_search", exc)
         try:
             envelope = _build_luxalgo_client().library_search(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_get_concept")
@@ -2922,8 +2933,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_get_concept", exc)
         try:
             envelope = _build_luxalgo_client().library_get_concept(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_get_indicator")
@@ -2941,8 +2952,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_get_indicator", exc)
         try:
             envelope = _build_luxalgo_client().library_get_indicator(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_list_concepts")
@@ -2960,8 +2971,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_list_concepts", exc)
         try:
             envelope = _build_luxalgo_client().library_list_concepts(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_list_indicators")
@@ -2979,8 +2990,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_list_indicators", exc)
         try:
             envelope = _build_luxalgo_client().library_list_indicators(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_list_tags")
@@ -2991,8 +3002,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_luxalgo_client().library_list_tags()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_list_families")
@@ -3003,8 +3014,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_luxalgo_client().library_list_families()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_library_get_family")
@@ -3021,8 +3032,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_library_get_family", exc)
         try:
             envelope = _build_luxalgo_client().library_get_family(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("luxalgo_edge_symbols")
@@ -3034,8 +3045,8 @@ def create_mcp_server(
         """
         try:
             envelope = _build_luxalgo_client().edge_symbols()
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_symbols")
 
     @_maybe_tool("luxalgo_edge_presets")
@@ -3052,8 +3063,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_edge_presets", exc)
         try:
             envelope = _build_luxalgo_client().edge_presets(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_presets")
 
     @_maybe_tool("luxalgo_edge_report")
@@ -3073,8 +3084,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_edge_report", exc)
         try:
             envelope = _build_luxalgo_client().edge_report(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_report")
 
     @_maybe_tool("luxalgo_trackers_datasets")
@@ -3094,8 +3105,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_trackers_datasets", exc)
         try:
             envelope = _build_luxalgo_client().trackers_datasets(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_datasets")
 
     @_maybe_tool("luxalgo_trackers_latest")
@@ -3147,8 +3158,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_trackers_latest", exc)
         try:
             envelope = _build_luxalgo_client().trackers_latest(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_latest")
 
     @_maybe_tool("luxalgo_trackers_ticker")
@@ -3167,8 +3178,8 @@ def create_mcp_server(
             return _luxalgo_invalid_input("luxalgo_trackers_ticker", exc)
         try:
             envelope = _build_luxalgo_client().trackers_ticker(args)
-        except Exception as exc:  # surface as JSON to the caller, never crash
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
         return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_ticker")
 
     @_maybe_tool("digiquant_fit_btc_power_law")
@@ -3206,6 +3217,7 @@ def create_mcp_server(
                 incremental_update,
                 load_cached,
             )
+
             # Repo-split 1.2 (DIG-3691): power-law fitter resolves through the
             # plugin hook first; in-tree implementation is the fallback while
             # R1 still lives in this repo.
@@ -3223,7 +3235,7 @@ def create_mcp_server(
                     save_coefficients,
                 )
         except ImportError as exc:
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            return _tool_error(exc)
 
         cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
         try:
@@ -3249,8 +3261,8 @@ def create_mcp_server(
                 or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
             )
             path = save_coefficients(coefficients, Path(output_path) if output_path else None)
-        except Exception as exc:  # surface as JSON, never crash the server
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
 
         return json.dumps(
             {
@@ -3492,7 +3504,7 @@ def create_mcp_server(
         try:
             import generate_tearsheets as gt
         except ImportError as exc:
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            return _tool_error(exc)
 
         if signal_delay_days < 0:
             return json.dumps({"error": "signal_delay_days must be >= 0"})
@@ -3505,8 +3517,8 @@ def create_mcp_server(
                 prefer_supabase=False,
                 allow_example=allow_example_calibrations,
             )
-        except Exception as exc:  # surface as JSON to the caller
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
 
         settings = gt.load_settings()
         if strategy is not None and strategy not in settings["strategies"]:
@@ -3557,13 +3569,13 @@ def create_mcp_server(
         try:
             from compare_tv import compare
         except ImportError as exc:
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            return _tool_error(exc)
         try:
             return json.dumps(
                 compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
             )
-        except Exception as exc:  # surface as JSON to the caller
-            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        except Exception as exc:
+            return _tool_error(exc)
 
     @_maybe_tool("dashboard_run_policy_replay")
     def dashboard_run_policy_replay(

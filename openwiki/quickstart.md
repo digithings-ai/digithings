@@ -9,7 +9,7 @@ sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f
     resource: repo://BRANCHING.md
   - id: openwiki-source-72050835d3541ab62444987d
-    resource: repo://digiclaw/AGENTS.md
+    resource: repo://digibot/AGENTS.md
   - id: openwiki-source-deb1497ccdcada935084b098
     resource: repo://digigraph/AGENTS.md
   - id: openwiki-source-5a73d428d9c326b6be1e4770
@@ -54,7 +54,7 @@ service, verify with health/status curls, run the unit gates — per its
 | Work with the markdown vault | [digivault Quickstart](/openwiki/digivault/quickstart.md) |
 | Issue keys, exchange JWTs | [digikey Quickstart](/openwiki/digikey/quickstart.md) |
 | Run the chat UI (assistant-ui skins, multi-backend, deploy-config) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
-| Heartbeat, audit log, drift check, monitors_tick | [digiclaw Quickstart](/openwiki/digiclaw/quickstart.md) |
+| Heartbeat, audit log, drift check, monitors_tick | [digibot Quickstart](/openwiki/digibot/quickstart.md) |
 | Shared helpers (errors, metrics, OTel, audit) | [digibase Library Guide](/openwiki/digibase/library-guide.md) |
 | LLM client, fetch engine, skill compiler | [digillm](/openwiki/libraries/digillm.md), [digifetch](/openwiki/libraries/digifetch.md), [digiskills](/openwiki/libraries/digiskills.md) |
 | Operator dashboard — research, portfolio, tearsheet | [Dashboard Architecture](/openwiki/dashboard/architecture.md) |

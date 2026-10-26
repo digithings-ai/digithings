@@ -22,6 +22,12 @@ import {
   type PageContextMode,
 } from "@/lib/deploy-config/schema";
 import {
+  applyUnsupportedPolicy,
+  collectLimitIssues,
+  LimitsSchema,
+  type LimitsConfig,
+} from "@/lib/limits/schema";
+import {
   MAX_MCP_TOOL_ENTRIES,
   MAX_MCP_TOOL_NAME_LENGTH,
 } from "@/lib/deploy-config/mcp-servers";
@@ -140,6 +146,8 @@ export type EmbedTenantConfig = {
   backend: EmbedBackendConfig;
   /** Same block as the deployment YAML. Omit and every guard is off. */
   guardrails?: GuardrailsConfig;
+  /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
+  limits?: LimitsConfig;
   gateMode: "turn_limited" | "ungated" | "trial_form";
   theme: "dark" | "light";
   /**
@@ -227,6 +235,8 @@ export type EmbedTenantConfig = {
   toolbar?: boolean;
   /** Scrollbar gutter. Omit keeps `always`. */
   scrollbars?: "always" | "auto";
+  /** Whether the thread follows the answer. Omit keeps `follow`. */
+  scroll?: { mode: "follow" | "free" };
   /** Web-search engine name. Omit means auto. */
   searchEngine?: "auto" | "internal" | "exa" | "tavily" | "parallel" | "firecrawl" | "tinyfish";
   /** page = full content chrome inside iframe; embed = compact iframe child. */
@@ -250,6 +260,12 @@ export type EmbedTenantConfig = {
        */
       setup?: Record<string, string>;
       authHeader?: string;
+      /**
+       * Mirrors the YAML `mcp.servers[].authScheme` (defaults.yaml). `"jwt"`
+       * makes the chat mint its own digikey token, scoped `mcp:<id>`, instead of
+       * sending `token`/`tokenEnv`. Absent means the static shape.
+       */
+      authScheme?: "static" | "jwt";
       /**
        * Operator tool allowlist for this row (DIG-284). RAW MCP tool names,
        * matched exactly by digigraph — bare `list_tickets`, never the
@@ -292,7 +308,7 @@ export type EmbedTenantConfig = {
       default?: boolean;
       label?: string;
       /** Individual tools under this catalog entry (per-tool session toggles). */
-      tools?: Array<{ id: string; label?: string }>;
+      tools?: Array<{ id: string; label?: string; group?: string }>;
     }>;
   };
   /**
@@ -714,6 +730,10 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.scrollbars !== undefined && v.scrollbars !== "always" && v.scrollbars !== "auto") {
     throw new Error(`${ctx}: scrollbars must be "always" or "auto"`);
   }
+  const scrollMode = (v.scroll as { mode?: unknown } | undefined)?.mode;
+  if (v.scroll !== undefined && scrollMode !== "follow" && scrollMode !== "free") {
+    throw new Error(`${ctx}: scroll.mode must be "follow" or "free"`);
+  }
   // An embed pins its own document theme (embed-route-shell), so a tenant
   // palette could never paint. Refuse it rather than accept a no-op key; the
   // deploy YAML's chrome.palette works for mode: app.
@@ -824,6 +844,15 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
           `embed tenant "${hostKey}": mcp.servers[${index}].authHeader must be a string`,
         );
       }
+      if (
+        server.authScheme !== undefined &&
+        server.authScheme !== "static" &&
+        server.authScheme !== "jwt"
+      ) {
+        throw new Error(
+          `embed tenant "${hostKey}": mcp.servers[${index}].authScheme must be "static" or "jwt"`,
+        );
+      }
       if (server.allowedTools !== undefined && !Array.isArray(server.allowedTools)) {
         throw new Error(
           `embed tenant "${hostKey}": mcp.servers[${index}].allowedTools must be an array`,
@@ -858,6 +887,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         // Empty maps are legal and simply omitted — nothing to forward.
         if (entries.length) setup = { ...(rawSetup as Record<string, string>) };
       }
+      // Narrowed once here: the shape check above guarantees the value, but a
+      // spread cannot carry the narrowing into the literal's inferred type.
+      const authScheme: "static" | "jwt" | undefined =
+        server.authScheme === "jwt" || server.authScheme === "static"
+          ? server.authScheme
+          : undefined;
       return {
         id: server.id,
         url: server.url,
@@ -867,6 +902,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(authScheme ? { authScheme } : {}),
         ...(allowedTools ? { allowedTools } : {}),
         ...(mutatingTools ? { mutatingTools } : {}),
       };
@@ -903,12 +939,31 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   );
   if (capIssue) throw new Error(`${ctx}: ${capIssue}`);
 
+  let limits: LimitsConfig | undefined;
+  if (v.limits !== undefined) {
+    const parsed = LimitsSchema.safeParse(v.limits);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "invalid limits";
+      throw new Error(`${ctx}: limits ${message}`);
+    }
+    const backendType = typeof backendCfg.type === "string" ? backendCfg.type : "unknown";
+    const issues = collectLimitIssues(parsed.data, backendType);
+    if (issues.length) {
+      throw new Error(`${ctx}: ${issues[0]?.message ?? "invalid limits"}`);
+    }
+    limits =
+      (parsed.data.onUnsupported ?? "reject") === "warn"
+        ? applyUnsupportedPolicy(parsed.data, backendType).limits
+        : parsed.data;
+  }
+
   return {
     mcp,
     slug: v.slug,
     aliases: v.aliases as string[] | undefined,
     backend: backendCfg,
     ...(guardrails ? { guardrails } : {}),
+    ...(limits ? { limits } : {}),
     gateMode: v.gateMode,
     theme: (v.theme as "dark" | "light" | undefined) ?? "dark",
     skin:
@@ -945,6 +1000,12 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     ...(v.toolbar === false ? { toolbar: false as const } : {}),
     ...(v.scrollbars === "always" || v.scrollbars === "auto"
       ? { scrollbars: v.scrollbars }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "follow"
+      ? { scroll: { mode: "follow" as const } }
+      : {}),
+    ...(v.scroll && (v.scroll as { mode?: string }).mode === "free"
+      ? { scroll: { mode: "free" as const } }
       : {}),
     ...(typeof v.searchEngine === "string" &&
     (SEARCH_ENGINES as readonly string[]).includes(v.searchEngine.trim().toLowerCase())
@@ -999,7 +1060,11 @@ function parseTenantTools(
           if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
             throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
           }
-          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+          return {
+            id: st.id,
+            ...(typeof st.label === "string" ? { label: st.label } : {}),
+            ...(typeof st.group === "string" && st.group.trim() ? { group: st.group.trim() } : {}),
+          };
         })
       : undefined;
     return {
