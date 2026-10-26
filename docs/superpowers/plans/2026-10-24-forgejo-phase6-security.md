@@ -42,11 +42,11 @@
 set -a; . /Users/chrisstefan/Code/source-control/deploy/local-forge/local-forge.env; set +a
 docker exec -u git local-forge-forgejo-1 cp /data/gitea/conf/app.ini /data/gitea/conf/app.ini.bak.$(date +%Y%m%d)
 docker exec -u git local-forge-forgejo-1 grep '^SECRET_KEY' /data/gitea/conf/app.ini
-# Copy the printed SECRET_KEY value into a password manager entry named
+# Copy the printed SECRET_KEY value into an entry in the sanctioned secret store, named
 # "forgejo-secret-key (localhost:3000)" — do NOT paste it into any ticket/chat.
 ```
 
-Expected: backup file created; SECRET_KEY value captured in password manager.
+Expected: backup file created; SECRET_KEY value captured in the secret store.
 
 - [ ] **Step 2: Set `GLOBAL_TWO_FACTOR_REQUIREMENT = admin` in app.ini**
 
