@@ -2109,6 +2109,40 @@ def test_a_non_author_seats_approve_clears_a_seatless_block(
     assert reasons == []
 
 
+def test_shadow_mode_measures_a_clearance_without_refusing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shadow keeps merging: the new condition is enforced only in `enforce`.
+
+    `shadow` is a measurement of the reviewer gate, and a measurement that
+    refuses is not a measurement. The shipped policy is `enforce`; this pins
+    the switch so a shadow run does not silently become a second gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
+    head = "d" * 40
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    reasons = mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="shadow"), _paperclip()
+    )
+    assert reasons == []
+
+
 def test_an_approve_with_no_seat_is_enough_when_no_block_stands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -2846,12 +2846,13 @@ def _clearance_seat_reason(
     (DIG-4809).
 
     "" is the answer whenever the gate cannot ask the question: `off` reads no
-    provenance at all, and a Paperclip read that failed says nothing about the
-    branch. The reviewer-independence gate is the one that reports both — it
-    defers a failed read and refuses an author it cannot identify — so this
-    gate does not publish a second, misleading reason.
+    provenance at all, and `shadow` measures the reviewer gate without refusing;
+    a Paperclip read that failed says nothing about the branch either. The
+    reviewer-independence gate is the one that reports those — it defers a
+    failed read and refuses an author it cannot identify — so this gate does
+    not publish a second, misleading reason.
     """
-    if cfg is None or _effective_mode(cfg) == "off":
+    if cfg is None or _effective_mode(cfg) != "enforce":
         return ""
     try:
         authors, _ = _author_context(pr, prov or _provenance_for(cfg))
