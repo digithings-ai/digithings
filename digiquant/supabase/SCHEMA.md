@@ -1295,8 +1295,11 @@ explicit allowlist in the ingest Worker (DIG-2656), never a blanket OTLP copy.
   `public.refresh_digitrace_session(workspace_id, session_id)` recomputes the row from
   `digitrace_spans_index` and upserts it. It recomputes rather than accumulates because
   the consumer's Queue is at-least-once: a redelivered batch must refresh the totals,
-  not double them. It is `SECURITY INVOKER` (the only grantee, `service_role`, already
-  holds the DML and the SELECT), `search_path = ''`, EXECUTE to `service_role` only.
+  not double them. Refreshes for one session serialise on a transaction-scoped advisory
+  lock keyed on `(workspace_id, session_id)`: recompute is idempotent but not
+  concurrency-safe on its own, and without the lock the later writer can store the older
+  total. It is `SECURITY INVOKER` (the only grantee, `service_role`, already holds the DML
+  and the SELECT), `search_path = ''`, EXECUTE to `service_role` only.
   The consumer (DIG-2657) calls it over PostgREST `rpc` once per (workspace, session)
   after writing that batch's spans. There is no `title` column: nothing in the ingest
   contract carries one, and the dashboard derives a label from the trace names.

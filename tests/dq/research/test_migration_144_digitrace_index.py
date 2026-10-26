@@ -355,6 +355,50 @@ def test_sessions_writer_is_locked_down_and_pins_its_path(sql: str) -> None:
         assert re.search(grant, sql, re.I), grant
 
 
+def test_sessions_writer_serialises_concurrent_refreshes(sql: str) -> None:
+    """Recompute is idempotent, not concurrency-safe. Two overlapping calls
+    each read the spans before either writes, and the later writer can store
+    the older total - an undercount that never corrects itself. The function
+    takes a transaction-scoped advisory lock on the session before it reads.
+    """
+    fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.refresh_digitrace_session") :]
+    fn = fn[: fn.index("$$;")]
+    lock = re.search(
+        r"pg_catalog\.pg_advisory_xact_lock\(\s*"
+        r"pg_catalog\.hashtextextended\(p_workspace_id::text \|\| ':' \|\| p_session_id, 0\)\s*\)",
+        fn,
+    )
+    assert lock, "the refresh must serialise on (workspace_id, session_id) before it reads"
+    # ...and before the aggregate, or it protects nothing.
+    assert fn.index("pg_advisory_xact_lock") < fn.index("FROM public.digitrace_spans_index"), (
+        "the lock must be taken before the recompute, not after it"
+    )
+
+
+def test_sessions_token_total_is_wide_enough_for_a_bigint_sum(sql: str) -> None:
+    """The reviewer's note: `sum(total_tokens)` is bigint, so an int4 column
+    raises `integer out of range` above 2 147 483 647 instead of storing it.
+    No rows exist yet, so widening is free now and never free later.
+    """
+    columns = _columns(sql, "digitrace_sessions")
+    assert "total_tokens" in columns
+    assert re.search(
+        r"total_tokens\s+bigint\s+NOT NULL DEFAULT 0", _table_body(sql, "digitrace_sessions")
+    ), "total_tokens must be bigint to receive a bigint sum"
+
+
+def test_apply_section_stops_on_an_already_applied_ledger(raw: str) -> None:
+    """#6525 edits a migration that already merged. Re-running it against an
+    applied database is a silent no-op (CREATE TABLE IF NOT EXISTS keeps the old
+    columns), so the file itself has to say stop and go through 145 instead.
+    """
+    assert re.search(r"already carries 144,\s*\n?--\s*STOP", raw, re.I), (
+        "the Apply section must stop the operator when the ledger already has 144"
+    )
+    assert "SILENT NO-OP" in raw.upper()
+    assert re.search(r"\b145\b", raw), "and must name the migration that would carry the fix"
+
+
 def test_sessions_writer_does_not_invent_an_empty_row(sql: str) -> None:
     """A call for a session with no spans written yet must not create a row
     full of zeroes that later reads as a real, empty session."""

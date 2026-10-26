@@ -128,7 +128,16 @@
 -- ============================================================================
 -- Target: the Supabase `core` project. Apply as the table owner.
 -- Applying this file is a CHRIS STEP (production schema change) - see the
--- checklist on DIG-2658. There is no auto-apply workflow: `.github/workflows/
+-- checklist on DIG-2658.
+--
+-- IF the ledger (`public.digithings_schema_migrations`) already carries 144,
+-- STOP. This file changed shape after it merged: #6525 removed the
+-- `tenant_slug` columns and added the sessions writer. A re-run against an
+-- already-applied database is a SILENT NO-OP - `CREATE TABLE IF NOT EXISTS`
+-- keeps the old columns, so the fix would read as applied while `tenant_slug`
+-- stayed. In that case the fix must ship as its own migration (145) with
+-- explicit ALTER/DROP, which is the one situation where this directory's
+-- additive-only rule has to be broken deliberately. There is no auto-apply workflow: `.github/workflows/
 -- db-migrate.yml` was removed in #4919, so the apply is manual and followed by
 -- the ledger insert into `public.digithings_schema_migrations`.
 --
@@ -222,7 +231,7 @@ CREATE TABLE IF NOT EXISTS public.digitrace_sessions (
     ended_at              timestamptz,
     trace_count           integer NOT NULL DEFAULT 0,
     span_count            integer NOT NULL DEFAULT 0,
-    total_tokens          integer NOT NULL DEFAULT 0,
+    total_tokens          bigint NOT NULL DEFAULT 0,   -- sum() is bigint; do not narrow it
     total_cost_usd        numeric(18, 8) NOT NULL DEFAULT 0,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now(),
@@ -342,6 +351,14 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_sessions
 -- `digitrace_spans_index_workspace_session_idx`. The consumer calls it once per
 -- (workspace, session) after writing that batch's spans.
 --
+-- Recompute is idempotent, NOT automatically concurrency-safe: two overlapping
+-- calls each read the spans before either writes, and the later writer can
+-- store the older total. The function therefore takes a transaction-scoped
+-- advisory lock on (workspace_id, session_id) before it reads, so refreshes for
+-- one session serialise and the last writer always holds the newest totals.
+-- PostgREST runs one request per transaction, so the lock is released at
+-- commit. Different sessions never contend.
+--
 -- Two limits, stated rather than hidden:
 --   - a trace with no spans is not counted in `trace_count` (the session id
 --     lives on the spans, so there is nothing else to count them from);
@@ -375,6 +392,17 @@ BEGIN
         RAISE EXCEPTION
             'refresh_digitrace_session: a workspace_id and a non-empty session_id are required';
     END IF;
+
+    -- SERIALISE the refreshes for one session. Recomputing makes a redelivery
+    -- idempotent, but on its own it is only sequential-safe: two overlapping
+    -- calls each read the spans before either writes, and the later writer can
+    -- store the older total (a silent undercount that never corrects itself
+    -- until the next batch). The key is (workspace, session) so two tenants
+    -- sharing a session id never contend. Transaction-scoped: PostgREST is one
+    -- request per transaction, so the lock is released at commit.
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(p_workspace_id::text || ':' || p_session_id, 0)
+    );
 
     SELECT min(s.started_at),
            max(COALESCE(s.ended_at, s.started_at)),
