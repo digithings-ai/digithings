@@ -4,8 +4,12 @@ Cadence: quarterly (Jan/Apr/Jul/Oct) and on any seat offboarding or suspected
 compromise. Owner: Security & Risk (or Chris in solo mode).
 
 ## Checklist
-1. Run `scripts/forgejo-access-review.sh` and save the report to
-   `docs/ops/access-reviews/YYYY-MM-DD-forgejo.md`.
+1. Run `scripts/forgejo-access-review.sh`. It discovers the repo inventory from
+   the forge, so the report names a client repo; keep the report in the
+   gitignored `.agent-tmp/access-review/` (the script's default), not in this
+   public tree. Commit a dated pass/finding summary to
+   `docs/ops/access-reviews/YYYY-MM-DD-forgejo.md` without the repo names, or
+   link the branch-protection matrix in `docs/ops/forgejo-branch-protection.md`.
 2. Users: confirm the 7 expected accounts exist; no unexpected accounts.
    Admins must be exactly `sctl` and (via team `admins`) `chris`.
 3. Teams: `admins` = {sctl, chris}; `agent-writers` = the four agents;
@@ -33,5 +37,7 @@ compromise. Owner: Security & Risk (or Chris in solo mode).
 5. Log in the rotation log.
 
 ## Next review date
-First Monday of the next quarter. Report stored under `docs/ops/access-reviews/`
-(usernames are not secrets; commit the report).
+First Monday of the next quarter. Usernames are not secrets, so a short dated
+summary is committed under `docs/ops/access-reviews/`. The full report stays in
+the gitignored `.agent-tmp/access-review/`: it lists the repo inventory, and one
+of those names is a client name.

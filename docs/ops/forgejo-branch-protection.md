@@ -13,7 +13,7 @@ lighter because agents merge into it continuously.
 | digithings | `develop` | off | 1 | off | off | on | on | off | off |
 | twelve-x | `main` | off | 1 | on | off | on | on | on | on |
 | twelve-x | `develop` | off | 1 | off | off | on | on | off | off |
-| datatap-web | `main` | off | 1 | off | off | on | on | off | off |
+| `<client-web>` | `main` | off | 1 | off | off | on | on | off | off |
 | paperclip | `main` | off | 1 | on | off | on | on | on | on |
 | paperclip | `master` | off | 1 | off | off | on | on | off | off |
 | digiforge | `main` | off | 1 | on | off | on | on | on | on |
@@ -29,6 +29,23 @@ The verifier asserts this **current** state:
 scripts/forgejo-branch-protection-verify.sh
 ```
 
+The repo/branch inventory is not in the script: one of those repos carries a
+client name, and this tree is public (the R0 client-literals guard in
+`scripts/check_r0_no_client_literals.py`). It is read from
+`FORGEJO_PROTECTED_REPOS` in the local forge env file
+(`$LOCAL_FORGE_ENV`, default `~/Code/source-control/deploy/local-forge/local-forge.env`),
+as a comma-separated list of `repo:branch:profile` with `strict` or `light` as
+the profile:
+
+```bash
+FORGEJO_PROTECTED_REPOS="digithings:main:strict,digithings:develop:light,<client-web>:main:light"
+```
+
+The token is exported, never passed as an argument, so it does not appear in
+`ps`. An unset inventory, an unreachable forge or a wrong token all exit
+non-zero: the verifier fails closed and never reports a clean run it did not
+measure.
+
 It exits non-zero for a missing rule or any flag mismatch, and prints the
 mismatch with the repo/branch/field.
 
@@ -36,7 +53,7 @@ mismatch with the repo/branch/field.
 
 The target is stricter than the current state:
 
-- `datatap-web/main` has status checks, stale dismissal and outdated blocking
+- `<client-web>/main` has status checks, stale dismissal and outdated blocking
   all off; the other `main` rules have them on.
 - The four `main` rules that enable status checks name no required context.
 - The `admins` team has access to **0 repos**; `agent-writers`, `ci-runners`,

@@ -22,7 +22,7 @@ mkdir -p "$OUT_DIR"
 DATE=$(date +%Y-%m-%d)
 REPORT="$OUT_DIR/$DATE-forgejo-access-review.md"
 
-python3 - "$BASE" "$FORGEJO_TOKEN" "$OWNER" "$HOME" "$DATE" "$CONTAINER" <<'PY' > "$REPORT"
+python3 - "$BASE" "$OWNER" "$HOME" "$DATE" "$CONTAINER" <<'PY' > "$REPORT"
 import glob
 import json
 import os
@@ -30,12 +30,19 @@ import subprocess
 import sys
 import urllib.request
 
-base, tok, owner, home, date, container = sys.argv[1:7]
+# The token is read from the environment, never from argv: an argument is
+# readable in `ps -ww` for the life of the process.
+base, owner, home, date, container = sys.argv[1:6]
+tok = os.environ["FORGEJO_TOKEN"]
 
 def api(path):
     req = urllib.request.Request(base + path, headers={"Authorization": f"token {tok}"})
     with urllib.request.urlopen(req) as r:
         return json.load(r)
+
+# The repo inventory comes from the forge, not from a hard-coded list: a name
+# here would publish a client identifier in this public tree.
+REPOS = sorted(r["name"] for r in api(f"/api/v1/orgs/{owner}/repos?limit=50"))
 
 print(f"# Forgejo access review — {date}")
 print()
@@ -67,7 +74,7 @@ for f in sorted(glob.glob(os.path.join(home, ".config/digithings/forgejo-tokens/
     print(f"- {u}: expires {exp}")
 print()
 print("## Branch protection matrix")
-for repo in ["digithings", "twelve-x", "datatap-web", "paperclip", "digiforge"]:
+for repo in REPOS:
     print(f"### {repo}")
     try:
         rules = api(f"/api/v1/repos/{owner}/{repo}/branch_protections")

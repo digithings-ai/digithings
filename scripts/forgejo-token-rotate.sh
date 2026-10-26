@@ -37,11 +37,23 @@ quote() {
   python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
 }
 
+# curl_auth <token> [curl args...]
+#
+# The Authorization header is fed to curl on stdin with --config -, never as an
+# argv element: an argument is readable in `ps -ww` for the life of the process.
+# Only the token value moves into the config; every other argument stays here.
+curl_auth() {
+  token="$1"
+  shift
+  curl --config - "$@" <<CURLRC
+header = "Authorization: token ${token}"
+CURLRC
+}
+
 if [ "${1:-}" = "--revoke" ]; then
   USER="${2:-}"; NAME="${3:-}"
   [ -n "$USER" ] && [ -n "$NAME" ] || usage
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-    -H "Authorization: token $FORGEJO_TOKEN" \
+  CODE=$(curl_auth "$FORGEJO_TOKEN" -s -o /dev/null -w "%{http_code}" -X DELETE \
     "$BASE/api/v1/admin/users/$USER/tokens/$(quote "$NAME")")
   if [ "$CODE" = "204" ] || [ "$CODE" = "200" ]; then
     echo "revoked token '$NAME' for $USER"
@@ -75,7 +87,7 @@ echo "minted $NAME for $USER"
 # 2. Verify before overwriting anything. Use a repo endpoint, not /user: a
 # scoped token may not carry user-read, and a failed check must not orphan the
 # new token silently.
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $NEW" \
+CODE=$(curl_auth "$NEW" -s -o /dev/null -w "%{http_code}" \
   "$BASE/api/v1/repos/$OWNER/digithings")
 if [ "$CODE" != "200" ]; then
   echo "new token failed verification: HTTP $CODE" >&2
@@ -95,7 +107,7 @@ echo "wrote $TOKEN_DIR/$USER.token (expires $EXPIRY)"
 
 # 4. Show what is still live, but do not revoke it here. Consumers must be
 # updated first; revoking immediately is how sctl/chris lose their only token.
-TOKENS_JSON=$(curl -s -H "Authorization: token $FORGEJO_TOKEN" \
+TOKENS_JSON=$(curl_auth "$FORGEJO_TOKEN" -s \
   "$BASE/api/v1/admin/users/$USER/tokens" || true)
 if [ -n "$TOKENS_JSON" ]; then
   printf '%s' "$TOKENS_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); [print('  still live:', t['name']) for t in (d if isinstance(d,list) else d.get('data',[])) if t['name']!='$NAME']" \

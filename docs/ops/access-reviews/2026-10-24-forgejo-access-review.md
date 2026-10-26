@@ -38,21 +38,13 @@ ID   Username      Email                    IsActive IsAdmin 2FA
 - sctl: expires 2027-01-22
 
 ## Branch protection matrix
-### digithings
-  - develop: push=false approvals=1 status=false signed=false admins=true dismiss_stale=true outdated=true
-  - main: push=false approvals=1 status=true signed=false admins=true dismiss_stale=true outdated=true
-### twelve-x
-  - develop: push=false approvals=1 status=false signed=false admins=true dismiss_stale=true outdated=true
-  - main: push=false approvals=1 status=true signed=false admins=true dismiss_stale=true outdated=true
-### datatap-web
-  - develop: push=false approvals=1 status=false signed=false admins=true dismiss_stale=true outdated=true
-  - main: push=false approvals=1 status=true signed=false admins=true dismiss_stale=true outdated=true
-### paperclip
-  - develop: push=false approvals=1 status=false signed=false admins=true dismiss_stale=true outdated=true
-  - main: push=false approvals=1 status=true signed=false admins=true dismiss_stale=true outdated=true
-### digiforge
-  - develop: push=false approvals=1 status=false signed=false admins=true dismiss_stale=true outdated=true
-  - main: push=false approvals=1 status=true signed=false admins=true dismiss_stale=true outdated=true
+
+Removed on 2026-10-26. The matrix printed here came from an older generation of
+`scripts/forgejo-access-review.sh`: it listed a fixed five-repo list with both
+branches for each, so it disagreed with the forge (9 rules, not 10) from the day
+it was committed, and it printed a client repo name that the R0 client-literals
+guard forbids in this public tree. The current matrix, and the verifier that
+asserts it, are in `docs/ops/forgejo-branch-protection.md`.
 
 ## Stale-token check (expired sidecars)
 ## Done
