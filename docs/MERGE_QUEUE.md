@@ -716,6 +716,29 @@ bytes) and the deadline is checked between them, so a server that answers the
 headers and then trickles the body cannot hold the tick open. A slow tick is the
 accepted price; a false handback re-posts itself every other tick, which is not.
 
+**The cache, and why a slow tick stopped being an acceptable price.** The budget
+above was chosen so a slow answer would not read as a refusal, and that is still
+right. What it did not account for is that the reader lived for exactly one tick:
+every tick asked for every ticket, every ticket's run list and every named run
+again, over every open pull request of both repos. At the measured cost — 12 s
+for a ticket, 28-144 s for a ticket's run list — a tick took 3 to 13 minutes
+against a 180 s interval, and it wrote nothing to its log until every PR had been
+judged. So the job read as alive and silent, `develop` moved about once every
+quarter of an hour instead of once every three minutes, and the liveness check
+paged for a queue that was working (DIG-5632, 26 Oct 2026).
+
+The answers are now kept between ticks in
+`~/.config/digithings/merge-queue/provenance-cache.json`, and the rule that makes
+that safe is narrow: **an answer may stand in for a read only for the commits that
+were already written when the answer was taken.** A run that covered such a commit
+existed by then, so the answer names it; a run that started after the answer was
+taken cannot have covered an older commit; and a commit written after the answer
+forces the fresh read that would see it. A run's seat and a ticket's id never
+change, so those answers do not expire at all. "The API has no such record" is
+believed for 60 s only, because a ticket can be filed and a run can start. Only
+the fields the gate reads are written down — a ticket's body and its comments are
+not — and a cache the queue cannot write is a slower queue, not a stopped one.
+
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
 provenance against the Paperclip record — it cannot check the keystroke. Per-seat
