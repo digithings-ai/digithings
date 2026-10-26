@@ -396,7 +396,8 @@ thead th { border-bottom-color: var(--accent) !important; }
   color: var(--accent);
 }
 .pagedjs_page::after { right: 18mm; }
-.pagedjs_page:last-child::after { content: none; }
+/* The last page carries its number like every other: a reader flipping to the
+   end should not find the book stopped counting. */
 
 /* Paged.js paints its margin boxes (the slots that would hold a running
    header) with the page background. Over the injected field those slots read

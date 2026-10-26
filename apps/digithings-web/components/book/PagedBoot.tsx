@@ -244,7 +244,7 @@ function stampPages(): void {
     if (index > 0 && !page.querySelector(".book-page-imprint")) {
       const imprint = document.createElement("span");
       imprint.className = "book-page-imprint";
-      imprint.textContent = "E26 · V1";
+      imprint.textContent = "2026 · V1";
       page.appendChild(imprint);
     }
   });
