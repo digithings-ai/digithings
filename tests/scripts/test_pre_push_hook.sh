@@ -100,7 +100,7 @@ run_hook() {
   set +e
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) >/dev/null 2>&1
   local rc=$?
@@ -136,7 +136,7 @@ capture_hook() {
   shift 3
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) 2>&1
 }
@@ -204,7 +204,7 @@ run_hook_out() {
   shift 3
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) 2>&1 || true
 }

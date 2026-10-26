@@ -1,3 +1,4 @@
+forge_repo: digithings
 # `sctl publish` runs the first `test:` line below as an argv, with the
 # repository root as its working directory and WITHOUT a shell. `uv run` on
 # its own resolves only the root virtualenv — no pytest, no workspace
