@@ -8,7 +8,10 @@ develop. It passes only when:
   in-session review comment (``AGENT_REVIEW_MARKER``) or a reviewer bot
   (Bugbot, Copilot, CodeRabbit, Claude ``/code-review``, ...). A comment that
   only *quotes* the marker in code, or *names* it in a sentence, is not a
-  review pass (DIG-4990); and
+  review pass (DIG-4990). An in-session pass whose provenance names a
+  different head is not a pass for this head either: ``#6451`` and ``#6460``
+  went green on 26 Oct 2026 on a pass that named the head they had left
+  (DIG-4990); and
 - (b) every review thread is resolved, OR is followed by a fix commit (pushed
   after the comment) and a reply on that thread.
 
@@ -57,6 +60,7 @@ _FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 _FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
 _INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_PROVENANCE_HEAD_RE = re.compile(r"\bhead=([0-9a-fA-F]{7,40})\b")
 
 
 def _strip_fenced_blocks(body):
@@ -111,6 +115,47 @@ def carries_agent_review_marker(body):
         if not _HTML_COMMENT_RE.sub("", line).strip():
             return True
     return False
+
+
+def _posted_head(body):
+    """The head a *posted* in-session marker names in its provenance, if any.
+
+    The provenance sits beside the marker, on the marker's own line or on the
+    HTML-comment-only line after it (the fleet's reviews write it that way).
+    A ``head=`` inside code or in prose is not provenance and is not read.
+    Returns a lower-case hex prefix, or None when the marker names no head.
+    """
+    lines = _strip_code_blocks(body).splitlines()
+    for index, line in enumerate(lines):
+        if AGENT_REVIEW_MARKER not in line:
+            continue
+        if _HTML_COMMENT_RE.sub("", line).strip():
+            continue
+        candidates = [line]
+        if index + 1 < len(lines):
+            following = lines[index + 1]
+            if not _HTML_COMMENT_RE.sub("", following).strip():
+                candidates.append(following)
+        for candidate in candidates:
+            match = _PROVENANCE_HEAD_RE.search(candidate)
+            if match:
+                return match.group(1).lower()
+    return None
+
+
+def _names_this_head(named, head):
+    """True when a provenance head and the PR head are the same commit.
+
+    Accepts the short form either side (a review may write 12 hex chars, the
+    API returns 40). An unknown head on either side cannot be compared, so it
+    does not reject the pass.
+    """
+    named = str(named or "").lower()
+    head = str(head or "").lower()
+    if not named or not head:
+        return True
+    return head.startswith(named) or named.startswith(head)
+
 
 # Reviewer-bot logins, bare and [bot]-suffixed (REST often returns the suffix,
 # `gh pr view --json` the bare login). github-advanced-security posts CodeQL
@@ -493,7 +538,8 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
     key = (repo, pr_number)
     if key in _PR_CONTEXT:
         return _PR_CONTEXT[key]
-    context = {"login": None, "body": "", "identity": {}, "push_times": {}}
+    context = {"login": None, "body": "", "identity": {}, "push_times": {},
+               "head": None}
     data = None
     if run_rest is not None:
         try:
@@ -511,6 +557,7 @@ def _pr_context(pr_number, repo, run_gh, run_rest=None):
             or (data.get("author") or {}).get("login")
         )
         context["body"] = data.get("body") or ""
+        context["head"] = (data.get("head") or {}).get("sha") or None
         commits = data.get("commits")
         if not isinstance(commits, list):
             # The pull endpoint returns a count in `commits`; the list lives on
@@ -565,7 +612,14 @@ def _filter_passes(passes, pr_number, context):
         if commit_id:
             push_at = (context.get("push_times") or {}).get(commit_id)
         else:
-            # A comment carries no commit: it speaks about the head.
+            # A comment carries no commit: it speaks about the head, unless
+            # its provenance names a different one. A pass that names another
+            # head is a review of that head, not this one: #6451 and #6460
+            # were both green on a pass naming the head they had left.
+            named = _posted_head(candidate.get("body"))
+            if not _names_this_head(named, context.get("head")):
+                dropped.append(dict(candidate, reason="names another head"))
+                continue
             push_at = _head_push_at(context)
         if review_pass_filter.review_too_close_to_push(candidate.get("at"), push_at):
             dropped.append(dict(candidate, reason="posted inside the push window"))

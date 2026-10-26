@@ -251,6 +251,108 @@ class Dig4990QuotedMarkerTest(unittest.TestCase):
         self.assertEqual(_mod.marker_state(body), "APPROVED")
 
 
+class Dig4990StaleHeadPassTest(unittest.TestCase):
+    """DIG-4990: a pass that names another head is not a pass for this head.
+
+    On 26 Oct 2026 ``review-applied`` posted success at ``#6451``'s and
+    ``#6460``'s new heads on the 10:12Z review pass, which named the heads
+    both branches had already left. ``_filter_passes`` only dropped a pass
+    posted inside the push window; nothing read the ``head=`` the provenance
+    marker carries.
+    """
+
+    HEAD = "eeacc41a87acf3cdfdf10ddb7550c1ec46c49c53"
+    OLD = "8c43d62fbc236ea69c79e89e377361391b8c89b0"
+
+    def _body(self, head=None):
+        provenance = ("<!-- digithings-review agent=c59332b4-a0ef-4a6a-8027-"
+                      "5c081486f899 run=ee40d570-48d4-412a-9c43-9b84572c53aa")
+        if head:
+            provenance += " head=" + head
+        provenance += " -->"
+        return ("%s\n%s\nreviewed:agent\n\nReview verdict: approve\n"
+                % (_mod.AGENT_REVIEW_MARKER, provenance))
+
+    def _context(self):
+        return {"login": "chrizefan", "body": "", "identity": {},
+                "push_times": {self.HEAD: "2026-10-26T17:40:00Z"},
+                "head": self.HEAD}
+
+    def _pass(self, body):
+        return {"kind": "in-session", "author": "digiforge-board",
+                "has_comments": True, "at": "2026-10-26T10:12:16Z",
+                "commit_id": None, "body": body}
+
+    def test_a_pass_naming_another_head_is_dropped(self):
+        kept, dropped = _mod._filter_passes(
+            [self._pass(self._body(self.OLD))], 6451, self._context())
+        self.assertEqual(kept, [])
+        self.assertEqual([d["reason"] for d in dropped], ["names another head"])
+
+    def test_a_pass_naming_this_head_is_kept(self):
+        kept, dropped = _mod._filter_passes(
+            [self._pass(self._body(self.HEAD))], 6451, self._context())
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(dropped, [])
+
+    def test_a_short_form_of_this_head_is_kept(self):
+        kept, _ = _mod._filter_passes(
+            [self._pass(self._body(self.HEAD[:12]))], 6451, self._context())
+        self.assertEqual(len(kept), 1)
+
+    def test_a_pass_without_provenance_is_kept(self):
+        kept, _ = _mod._filter_passes(
+            [self._pass(self._body())], 6451, self._context())
+        self.assertEqual(len(kept), 1)
+
+    def test_a_head_quoted_in_code_does_not_drop_a_pass(self):
+        body = self._body() + "\nThe head was:\n\n```\nhead=%s\n```\n" % self.OLD
+        kept, _ = _mod._filter_passes([self._pass(body)], 6451, self._context())
+        self.assertEqual(len(kept), 1)
+
+    def test_an_unknown_head_does_not_drop_a_pass(self):
+        context = dict(self._context(), head=None)
+        kept, _ = _mod._filter_passes(
+            [self._pass(self._body(self.OLD))], 6451, context)
+        self.assertEqual(len(kept), 1)
+
+    def test_fetch_keeps_only_the_pass_that_names_the_head(self):
+        stale = {"user": {"login": "digiforge-board"},
+                 "body": self._body(self.OLD),
+                 "created_at": "2026-10-26T10:12:16Z"}
+        current = {"user": {"login": "digiforge-board"},
+                   "body": self._body(self.HEAD),
+                   "created_at": "2026-10-27T09:00:00Z"}
+
+        def run_rest(path):
+            if path.endswith("/reviews"):
+                return []
+            if "/issues/" in path:
+                return [stale, current]
+            return {"head": {"sha": self.HEAD}, "user": {"login": "chrizefan"},
+                    "body": "", "commits": []}
+
+        passes = _mod.fetch_review_passes(6451, "o/r", lambda argv: None, run_rest)
+        self.assertEqual(len(passes), 1)
+        self.assertEqual(passes[0]["at"], "2026-10-27T09:00:00Z")
+
+    def test_only_the_stale_pass_leaves_the_check_red(self):
+        def run_rest(path):
+            if path.endswith("/reviews"):
+                return []
+            if "/issues/" in path:
+                return [{"user": {"login": "digiforge-board"},
+                         "body": self._body(self.OLD),
+                         "created_at": "2026-10-26T10:12:16Z"}]
+            return {"head": {"sha": self.HEAD}, "user": {"login": "chrizefan"},
+                    "body": "", "commits": []}
+
+        passes = _mod.fetch_review_passes(6451, "o/r", lambda argv: None, run_rest)
+        ok, message, _ = _mod.evaluate(passes, [])
+        self.assertFalse(ok)
+        self.assertIn("no review pass", message)
+
+
 class Dig4631ReviewPassTest(unittest.TestCase):
     """DIG-4631: evidence that must not count as a review pass.
 
