@@ -85,22 +85,16 @@ class TraceStatus(BaseModel):
 SmithStatus = TraceStatus
 
 
-# Phase 2 dual-export env (#4931). Langfuse OTLP ingest is plain OTel
-# HTTP/protobuf, so the Langfuse leg reuses the standard OTLP endpoint +
-# headers variables already honored by digibase.otel (headers carry the
-# Langfuse public:secret Basic auth). LANGSMITH_ENDPOINT always stays the
+# Phase 2 dual-export env (#4931). The OTLP endpoint and header names are
+# resolved by ``digibase.otel`` only (ADR-0036 §6): one plumbing, not a second
+# copy of the fallback chain. The Langfuse-only alias below is transitional —
+# DIG-5136 removes it with the Langfuse app. LANGSMITH_ENDPOINT always stays the
 # real LangSmith API — never point it at Langfuse.
 _LANGFUSE_ENDPOINT_ENVS = (
     "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
     "LANGFUSE_OTLP_ENDPOINT",
 )
 _LANGFUSE_HOST_ENVS = ("LANGFUSE_HOST", "LANGFUSE_URL")
-_OTLP_ENDPOINT_ENVS = (
-    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-    "LANGFUSE_OTLP_ENDPOINT",
-    "DIGI_OTEL_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-)
 
 
 def langfuse_otlp_endpoint() -> str:
@@ -120,8 +114,19 @@ def langfuse_configured() -> bool:
 
 
 def otel_export_configured() -> bool:
-    """True when any OTLP endpoint env var is set (the OTel fan-out leg is active)."""
-    return any((os.environ.get(key) or "").strip() for key in _OTLP_ENDPOINT_ENVS)
+    """True when any OTLP endpoint env var is set (the OTel fan-out leg is active).
+
+    The ``DIGI_OTEL_ENDPOINT`` / ``OTEL_EXPORTER_OTLP_ENDPOINT`` pair is resolved
+    by :func:`digibase.otel.resolve_otel_endpoint`, the same resolver the
+    exporter is configured from — ``digitrace`` keeps no copy of that chain.
+    """
+    try:
+        from digibase.otel import resolve_otel_endpoint
+    except ImportError:  # pragma: no cover - digibase is a hard dependency
+        endpoint = ""
+    else:
+        endpoint = resolve_otel_endpoint()
+    return bool(endpoint or langfuse_otlp_endpoint())
 
 
 def langfuse_host_sanitized() -> str | None:
