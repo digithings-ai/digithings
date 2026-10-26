@@ -49,6 +49,11 @@ if [ ! -f "$SCRIPT" ]; then
   echo "install.sh: no runner at $SCRIPT" >&2
   exit 1
 fi
+if [ ! -f "$CHECKOUT/scripts/local-ci/launch_guard.py" ]; then
+  echo "install.sh: no launch_guard.py next to the runner; refusing to install a runner that cannot be guarded" >&2
+  echo "install.sh: a checkout from before DIG-4796 installs a runner any seat can start" >&2
+  exit 1
+fi
 if ! git -C "$CHECKOUT" rev-parse --verify -q HEAD > /dev/null 2>&1; then
   echo "install.sh: $CHECKOUT is not a git checkout; the runner fetches and needs one" >&2
   exit 1
