@@ -70,10 +70,23 @@ scripts/digiquant-host-runner/run_job.py research-metrics --arg date=2026-10-20 
 `--dry-run` prints the resolved argv and the env *names* a job may receive. It never
 prints a value, so it is safe to paste into a ticket.
 
-A real run needs the checkout's Python environment. `install.sh` calls
-`/opt/homebrew/bin/uv run --frozen`, which builds `.venv` on first use; run
-`uv sync --frozen` once in the checkout first so the first clock does not spend its
-window installing `nautilus`.
+A real run needs the checkout's Python environment. The plans call
+`uv run --frozen --no-sync`, so nothing is installed when a clock fires: the checkout's
+`.venv` must already hold the packages the image holds. The workspace root declares no
+dependencies of its own, so a plain `uv sync --frozen` leaves `.venv` empty and every
+clock fails its first step with `ModuleNotFoundError`. Build it once, from the same lock
+the image uses (the second sync is `--inexact` so it keeps the `psycopg` the first one
+installed, as the Dockerfile comment explains):
+
+```sh
+cd /path/to/clone-on-develop
+/opt/homebrew/bin/uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus --no-dev
+/opt/homebrew/bin/uv sync --frozen --package digigraph --extra checkpoint-postgres --no-dev --inexact
+```
+
+`install.sh --install` refuses a checkout whose `.venv` cannot import `polars`, `psycopg`
+and `nautilus_trader`, so a missing environment cannot become 13 broken clocks. Rebuild
+the environment after a `git pull` only when `uv.lock` changed.
 
 Exit codes: `0` success, `1` the job failed, `2` usage, `75` another run holds the
 lock (a skip, not a failure), `78` the env file is missing, unreadable or readable by
