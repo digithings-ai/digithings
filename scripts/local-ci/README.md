@@ -126,13 +126,37 @@ somewhere else, a job that asks for one PR, a shadowed `launchctl`. The
 queue-side provenance check (DIG-4794) is what makes a `local-ci` status count
 only when it comes from the pipeline.
 
+## When the install is incomplete
+
+A trusted launcher is not enough: the checkout also has to be complete. The
+runner imports its helpers with a `None` fallback and each helper fails closed.
+That is the right answer to one missing fact and the wrong answer to a broken
+install. On 24 Oct 2026 a checkout without `scripts/review_pass_filter.py` left
+eight PRs red on `review-applied` with "no review pass left comments": the
+status blamed the review while the missing file was the fault (DIG-4674).
+
+`import_preflight.py` resolves, before anything else happens, every module the
+runner imports - transitively, including the shared modules one directory up
+(`scripts/review_pass_filter.py`) and the modules the runner loads by file path
+(`check_required_context_producers.py`) - and refuses the tick when one is
+absent. The refusal exits 78 (`EX_CONFIG`) with a log line that names the
+missing module and the module that imports it, so a broken install reads as a
+broken install. No lock is taken, no worktree is built and no status is posted.
+
+Check an install without ticking it:
+
+```
+python3 scripts/local-ci/import_preflight.py scripts/local-ci/local_ci.py
+```
+
 ## Deploying it
 
 The guard fails closed: a runner without `launch_guard.py` next to it refuses to
-run at all (exit 78, before any side effect). So the two files have to land
-together, and the order matters. `install.sh` refuses a checkout that carries
-the runner but not the guard for the same reason: an installer must not be able
-to point the daemon at a pre-guard checkout and reopen the hole.
+run at all (exit 78, before any side effect). The install check fails closed the
+same way, so the runner and every module it imports have to land together. The
+order matters. `install.sh` refuses a checkout that carries the runner but not
+the guard for the same reason: an installer must not be able to point the daemon
+at a pre-guard checkout and reopen the hole.
 
 1. the guard lands in the repository (this change),
 2. a trusted launcher is live - the launchd daemon has to be running under the
@@ -143,12 +167,20 @@ The runner and the guard have to move together, in the same change, in every
 place the runner lives:
 
 - **the host copy** (`~/Code/local-ci/`): `local_ci.py` and `launch_guard.py`
-  side by side. The host copy is its own checkout and has diverged from this
-  repository, so it is synced deliberately, not copied over.
+  side by side, plus the modules the runner imports (`review_applied.py`,
+  `pr_template.py`, `import_preflight.py`,
+  `check_required_context_producers.py`) and the shared
+  `scripts/review_pass_filter.py` one directory up. The host copy is its own
+  checkout and has diverged from this repository, so it is synced deliberately,
+  not copied over.
 - **the worker image**: `Dockerfile.worker` copies `local_ci.py` into
   `/opt/local-ci`, and it has to copy `launch_guard.py` next to it, or the
-  container's runner refuses every run. A guarded runner must never enter the
-  image before the guard does.
+  container's runner refuses every run. It also has to copy the modules the
+  runner imports - `review_applied.py`, `pr_template.py`,
+  `import_preflight.py`, `check_required_context_producers.py` and
+  `review_pass_filter.py` (next to the runner in the container's flat layout) -
+  or the install check refuses every run for the same reason. A guarded runner
+  must never enter the image before the guard does.
 - **the launchd job**: the plist `install.sh` writes points at the host copy,
   so the daemon picks up the guard with the runner.
 
