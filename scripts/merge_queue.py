@@ -3382,6 +3382,40 @@ PROVENANCE_CACHE_MAX_ENTRIES = 4096
 #: posted), so this answer expires and the others do not.
 PROVENANCE_CACHE_MISS_TTL = 60.0
 
+#: The environment variable the driver sets to the epoch second this tick must
+#: stop reading Paperclip by, and the clock reading that answers it.
+#:
+#: The cache above fixes the steady state; this bounds the worst one. A cold
+#: cache, or a batch of branches that all moved at once, still asks for facts the
+#: cache cannot answer, and one PR was measured at **313.6 s** of reads on
+#: 2026-10-26 — longer than the whole 180 s interval. No budget *between* PRs can
+#: bound that, because the cost is inside one PR. So the driver states a deadline
+#: and the reader stops asking when it passes.
+#:
+#: A read past the deadline is `_PaperclipUnavailable`, which the gate already
+#: treats as `transient`: nothing is concluded about the PR, nothing is published
+#: as a gate, and the PR is judged again on a later tick (DIG-5573). That is the
+#: same answer a slow API already gives — the difference is that it now arrives
+#: before the tick has outlived its interval.
+PAPERCLIP_DEADLINE_ENV = "MQ_PAPERCLIP_DEADLINE"
+
+
+def _paperclip_tick_deadline() -> float | None:
+    """The epoch second this tick must stop reading by, or None for no deadline.
+
+    A value that cannot be read is no deadline: the queue must not stop answering
+    because an environment value was malformed. An absent value is no deadline
+    too, which is what an older driver gives a newer runner.
+    """
+    raw = str(os.environ.get(PAPERCLIP_DEADLINE_ENV) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 #: The stand-in for "the API answered that there is no such record". It is not
 #: None, because None is a payload the JSON could hold.
 _MISSING = object()
@@ -3619,6 +3653,17 @@ class ReviewerProvenance:
                     raise _PaperclipMissing(f"Paperclip has no {path}")
                 self._cache[path] = (taken, kept)
                 return kept
+        # The tick's budget for *asking* is spent: no read is started. Nothing is
+        # concluded about the PR, so the gate defers it instead of refusing it
+        # (DIG-5573). A read that has already started is left to finish on its own
+        # budget — a read cut in half is a fact the cache never gets to keep, and
+        # the PR then costs exactly the same on the next tick and every tick after
+        # it, which is a queue that never converges.
+        tick_deadline = _paperclip_tick_deadline()
+        if tick_deadline is not None and time.time() >= tick_deadline:
+            raise _PaperclipUnavailable(
+                f"the tick's read budget is spent, so {path} was not read"
+            )
         url = f"{self._cfg.api_url.rstrip('/')}{path}"
         request = urllib.request.Request(
             url,

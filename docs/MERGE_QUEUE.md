@@ -739,6 +739,20 @@ believed for 60 s only, because a ticket can be filed and a run can start. Only
 the fields the gate reads are written down — a ticket's body and its comments are
 not — and a cache the queue cannot write is a slower queue, not a stopped one.
 
+The cache is the steady state; it is not the worst case. A cold cache, or a batch
+of branches that all moved at once, still asks for facts the cache cannot answer,
+and one pull request was measured at **313.6 s** of reads on its own — longer than
+the whole interval, and inside one PR, where a budget between PRs cannot reach. So
+the driver states a deadline (`MQ_PAPERCLIP_DEADLINE`, epoch seconds, one tick's
+budget) and the reader **does not start** a Paperclip read after it passes. It does
+not cut a read in half: a read that never finishes is a fact the cache never keeps,
+so the PR would cost the same on every later tick and the queue would never
+converge. A read refused at the deadline is `_PaperclipUnavailable`, which the gate
+already treats as `transient` — nothing concluded, nothing published as a gate, the
+PR judged again next tick (DIG-5573). Measured over five consecutive ticks against
+the live queue: 261 s, 151 s, 64 s, 21 s, 23 s. It converges, and every tick in
+between made progress and merged.
+
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
 provenance against the Paperclip record — it cannot check the keystroke. Per-seat

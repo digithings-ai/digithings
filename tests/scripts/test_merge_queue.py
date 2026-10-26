@@ -7350,6 +7350,52 @@ def test_a_record_the_api_does_not_have_is_remembered_and_then_forgotten(
     assert len(asked) == 1
 
 
+def test_a_read_is_not_started_after_the_tick_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A spent tick budget stops the read, and the gate defers instead of refusing.
+
+    The cache fixes the steady state; this bounds the worst one. One PR was
+    measured at 313.6 s of reads against a 180 s interval, and no budget between
+    PRs can bound that because the cost is inside one PR. What the deadline must
+    *not* do is cut a read in half: a read that never finishes is a fact the cache
+    never keeps, so the PR costs the same on every later tick and the queue never
+    converges.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse({"id": "issue-0000"})
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, str(mq.time.time() - 1))
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable):
+        reader.ticket("DIG-4795")
+    assert asked == []
+
+
+def test_a_deadline_that_cannot_be_read_is_no_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed deadline must not stop the queue reading anything."""
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(
+        mq.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse({"id": "issue-0000"}),
+    )
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, "later, please")
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
+
+
 def test_the_read_numbers_are_the_measured_ones() -> None:
     """The four numbers are the fix, so the suite has to pin them.
 
