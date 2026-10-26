@@ -1511,6 +1511,7 @@ def _seat_verdict_comment(
     scope_sha: str = "",
     provenance_head: str = "",
     withdraws: str = "",
+    scope_field: str = "",
 ) -> dict[str, Any]:
     """A verdict comment as the fleet posts it: both markers and a prose line.
 
@@ -1523,15 +1524,20 @@ def _seat_verdict_comment(
     fleet writes; they are separate arguments so a comment whose marker names a
     different head than its provenance marker can be built.
 
+    `scope_field` replaces the whole `scope=` value, for a `scope=` the queue
+    cannot read (DIG-5630). It is written verbatim, so `head_sha` means a
+    `scope=` with no `@` on it.
+
     `withdraws` is the target of a `Withdraws:` line in the same comment
     (DIG-5246). Empty means the comment carries no withdrawal line.
     """
     scope = scope_sha or head_sha
     provenance = provenance_head or head_sha
+    scope_value = scope_field or f"@{scope}"
     body = (
         f"<!-- digithings-review agent={seat} "
         f"run=00000000-0000-0000-0000-000000000000 head={provenance} -->\n"
-        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{scope} -->\n\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope={scope_value} -->\n\n"
         f"Review verdict: {verdict.replace('_', ' ')}\n"
     )
     if withdraws:
@@ -1820,6 +1826,137 @@ def test_a_withdrawal_naming_no_head_does_not_clear_a_scoped_block() -> None:
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+# --- a block whose `scope=` did not parse (DIG-5630) ---------------------------
+#
+# `#6426`'s `changes_requested` carried a `scope=` the sha pattern could not read,
+# so the block bound no head at all. The two remedies the queue prescribed for it
+# were both false: a later approve naming "the head it covers" clears nothing
+# (the block covers no head), and moving the PR to a new head leaves nothing
+# behind to spend. Only the seat's approve naming the current head plus a
+# `Withdraws:` line with no sha clears it, and the handback has to say so —
+# `#6426` took 20+ handbacks over two days following the old text.
+
+UNBOUND_HEAD = "e" * 40  # `#6426`'s `dea4349365`, widened to a full sha
+
+
+def _unbound_block_comment(seat: str = SECURITY_SEAT) -> dict[str, Any]:
+    """A blocking verdict whose `scope=` is written without its `@` anchor."""
+    return _seat_verdict_comment(
+        seat=seat,
+        verdict="changes_requested",
+        head_sha=UNBOUND_HEAD,
+        created="2026-10-25T22:55:00Z",
+        scope_field=UNBOUND_HEAD,
+    )
+
+
+def test_the_handback_for_an_unbound_block_states_the_bare_withdrawal() -> None:
+    """The seat-scoped handback: no "new head" alternative, and a bare line.
+
+    The queue cannot read this block's head, so the branch moving cannot spend
+    it. The approving comment has to name the current head and carry
+    `Withdraws:` with no sha on it; a line naming a sha spends nothing.
+    """
+    pr = _pr(
+        6426,
+        head_sha=UNBOUND_HEAD,
+        comments=[
+            _unbound_block_comment(),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=UNBOUND_HEAD,
+                created="2026-10-26T10:07:00Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": UNBOUND_HEAD}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reasons = [reason for reason in verdict.reasons if SECURITY_SEAT in reason]
+    assert len(reasons) == 1, verdict.reasons
+    reason = reasons[0]
+    assert "`Withdraws:` line with no sha" in reason
+    assert "naming no head" in reason
+    assert "not spent by the PR moving to a new head" in reason
+    assert "move the PR to a new head" not in reason
+    assert "until that seat posts a later approve naming the head it covers" not in reason
+
+
+def test_the_newest_verdict_handback_for_an_unbound_block_says_the_same() -> None:
+    """The newest-verdict handback (`_verdict_value_reason`) states one remedy.
+
+    A block whose seat cannot be read is judged by the newest readable verdict.
+    The same false remedies apply there, so the same words do.
+    """
+    block = {
+        "id": "IC_unbound_noseat",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": (
+            "<!-- opencode-power-pack:code-review "
+            f"verdict=changes_requested scope={UNBOUND_HEAD} -->\n\n"
+            "Review verdict: changes requested\n"
+        ),
+        "createdAt": "2026-10-25T22:55:00Z",
+    }
+    pr = _pr(
+        6426,
+        head_sha=UNBOUND_HEAD,
+        comments=[block, _in_session_review_comment()],
+        commits=[{"oid": UNBOUND_HEAD}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reasons = [reason for reason in verdict.reasons if "latest review verdict" in reason]
+    assert len(reasons) == 1, verdict.reasons
+    reason = reasons[0]
+    assert "`Withdraws:` line with no sha" in reason
+    assert "naming no head" in reason
+    assert "not spent by the PR moving to a new head" in reason
+    assert "until a later approve names the head it covers" not in reason
+
+
+def test_only_the_bare_withdrawal_clears_a_block_that_names_no_head() -> None:
+    """The matrix from the ticket: which clearing comments actually work.
+
+    Approve of the head with no line, and with a line naming the sha, both leave
+    the block standing; the bare line clears it; and an approve of a new head
+    does not spend it either.
+    """
+    new_head = "f" * 40
+
+    def _reasons(withdraws: str, head_sha: str, approve_head: str) -> list[str]:
+        pr = _pr(
+            6426,
+            head_sha=head_sha,
+            comments=[
+                _unbound_block_comment(),
+                _seat_verdict_comment(
+                    seat=SECURITY_SEAT,
+                    verdict="approve",
+                    head_sha=approve_head,
+                    created="2026-10-26T10:07:00Z",
+                    withdraws=withdraws,
+                ),
+                _in_session_review_comment(),
+            ],
+            commits=[{"oid": head_sha}],
+        )
+        pr["labels"] = [{"name": "reviewed:agent"}]
+        return mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").reasons
+
+    assert any(SECURITY_SEAT in r for r in _reasons("", UNBOUND_HEAD, UNBOUND_HEAD))
+    assert any(
+        SECURITY_SEAT in r for r in _reasons(UNBOUND_HEAD, UNBOUND_HEAD, UNBOUND_HEAD)
+    )
+    assert not _reasons("the finding", UNBOUND_HEAD, UNBOUND_HEAD)
+    assert any(SECURITY_SEAT in r for r in _reasons("", new_head, new_head))
 
 
 def test_an_approve_on_a_new_head_clears_the_seats_earlier_block() -> None:
