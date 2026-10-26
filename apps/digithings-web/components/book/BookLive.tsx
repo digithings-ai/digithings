@@ -45,6 +45,13 @@ export default function BookLive({
   const [open, setOpen] = useState(false);
   const [scale, setScale] = useState(1);
   const [host, setHost] = useState<HTMLElement | null>(null);
+  // Where each chapter actually starts once paginated. The server sends the
+  // printed edition's map, which is right for the PDF but can be a page off
+  // here: the book's gutters come from a viewport token, so a narrow window
+  // breaks the last lines differently. Reading the chart off the page boxes
+  // keeps the contents honest about the pages on screen.
+  const [starts, setStarts] = useState<number[]>([]);
+  const [liveHeight, setLiveHeight] = useState(0);
 
   // The document is paginated outside the reader's own markup. pagedjs reflows
   // what it is handed, and a document nested in the shell was reflowed with its
@@ -103,48 +110,48 @@ export default function BookLive({
       if (pages && stage.current && pages.parentElement !== stage.current) {
         stage.current.appendChild(pages);
       }
-      // pagedjs clones the source wrapper with the content, so page boxes keep
-      // arriving with a copy of the portal host inside them. They are empty and
-      // out of flow, but they would accumulate for the life of the page.
-      // Only the empty copies: a page box whose content is wrapped in the
-      // cloned source host is that page's body, not a leftover.
-      document
-        .querySelectorAll(".pagedjs_page .book-live__source")
-        .forEach((node) => {
-          if (!(node.textContent ?? "").trim()) node.remove();
-        });
+
+      // pagedjs clones the source wrapper with the content, so a page box can
+      // arrive holding a copy of the portal host — and with it the inline style
+      // that parks the source off-screen. A page whose body sits inside that
+      // wrapper is a blank sheet: the words are there, ten thousand pixels to
+      // the left. Drop the empty copies, unwrap the ones that carry a page.
+      document.querySelectorAll<HTMLElement>(".pagedjs_page .book-live__source").forEach((node) => {
+        if (!(node.textContent ?? "").trim()) {
+          node.remove();
+          return;
+        }
+        node.removeAttribute("style");
+        const parent = node.parentNode;
+        while (node.firstChild) parent?.insertBefore(node.firstChild, node);
+        node.remove();
+      });
+
+      // Where each chapter starts, read from the page boxes rather than from the
+      // printed edition's map: the book's gutters come from a viewport token, so
+      // a narrow window can break the last lines differently by a page.
+      const marks = document.querySelectorAll<HTMLElement>(".pagedjs_page [data-book-anchor]");
+      if (marks.length) {
+        // Anchors arrive in reading order, one per chapter, which is the order
+        // the contents is in. Index them rather than matching hrefs against
+        // slugs: the anchor carries an href and the list carries a slug.
+        const next: number[] = [];
+        const seen = new Set<string>();
+        for (const node of marks) {
+          const anchor = node.dataset.bookAnchor ?? "";
+          if (seen.has(anchor)) continue;
+          seen.add(anchor);
+          const page = node.closest<HTMLElement>(".pagedjs_page")?.dataset.bookPage;
+          if (page) next.push(Number(page));
+        }
+        setStarts(next);
+        const height = stage.current?.querySelector<HTMLElement>(".pagedjs_pages")?.clientHeight;
+        if (height) setLiveHeight(height);
+      }
     };
     take();
     const observer = new MutationObserver(take);
     observer.observe(document.documentElement, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-
-  // The paginated source is a second, unpaginated copy of the whole book, and
-  // it has its own cover — what a reader saw as a duplicated title page, and
-  // what a print printed after the last sheet. It cannot be hidden when the
-  // page boxes first appear: pagedjs is still cloning from it, and hiding it
-  // mid-run truncates the page being built. Wait for the completion marker.
-  useEffect(() => {
-    const hide = () => {
-      document.querySelectorAll<HTMLElement>(".book-live__source").forEach((node) => {
-        node.hidden = true;
-      });
-    };
-    if (document.documentElement.hasAttribute("data-book-paginated")) {
-      hide();
-      return;
-    }
-    const observer = new MutationObserver(() => {
-      if (document.documentElement.hasAttribute("data-book-paginated")) {
-        hide();
-        observer.disconnect();
-      }
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-book-paginated"],
-    });
     return () => observer.disconnect();
   }, []);
 
@@ -163,13 +170,16 @@ export default function BookLive({
     return () => window.removeEventListener("scroll", onScroll);
   }, [chapters]);
 
+  /** Where this chapter starts in the pagination on screen. */
+  const startOf = (chapter: ReaderChapter, index: number) => starts[index] ?? chapter.page;
+
   // The chapter under the reading position, for the bar's own label: the last
   // one that starts at or before the page on screen.
-  const current =
-    chapters.reduce<(typeof chapters)[number] | undefined>(
-      (found, chapter) => (chapter.page <= active ? chapter : found),
-      undefined,
-    ) ?? chapters[0];
+  const current = chapters.reduce<{ chapter: ReaderChapter; index: number }>(
+    (found, chapter, index) =>
+      startOf(chapter, index) <= active ? { chapter, index } : found,
+    { chapter: chapters[0], index: 0 },
+  );
 
   const goTo = (page: number) => {
     setOpen(false);
@@ -192,30 +202,30 @@ export default function BookLive({
             onClick={() => setOpen((value) => !value)}
           >
             <span className="book-nav__toggle-num">
-              {String(current?.order ?? 1).padStart(2, "0")}
+              {String(current.chapter?.order ?? 1).padStart(2, "0")}
             </span>
-            <span className="book-nav__toggle-text">{current?.title ?? "contents"}</span>
+            <span className="book-nav__toggle-text">{current.chapter?.title ?? "contents"}</span>
             <svg className="book-nav__chevron" viewBox="0 0 12 12" aria-hidden>
               <path d="M2 4.5 6 8l4-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
             </svg>
           </button>
           <p className="book-nav__title">contents</p>
           <ol>
-            {chapters.map((chapter) => (
+            {chapters.map((chapter, index) => (
               <li key={chapter.slug}>
                 <a
-                  href={`#book-page-${chapter.page}`}
-                  aria-current={chapter.page === active ? "true" : undefined}
+                  href={`#book-page-${startOf(chapter, index)}`}
+                  aria-current={startOf(chapter, index) === active ? "true" : undefined}
                   onClick={(event) => {
                     event.preventDefault();
-                    goTo(chapter.page);
+                    goTo(startOf(chapter, index));
                   }}
                 >
                   <span className="book-nav__num">
                     {String(chapter.order).padStart(2, "0")}
                   </span>
                   <span>{chapter.title}</span>
-                  <span className="book-nav__page">{chapter.page}</span>
+                  <span className="book-nav__page">{startOf(chapter, index)}</span>
                 </a>
               </li>
             ))}
@@ -228,7 +238,7 @@ export default function BookLive({
         <div
           className="book-live"
           ref={frame}
-          style={{ height: pageCount * PAGE_HEIGHT * scale }}
+          style={{ height: (liveHeight || pageCount * PAGE_HEIGHT) * scale }}
         >
           <div
             className="book-live__stage"

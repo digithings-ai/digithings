@@ -55,8 +55,8 @@ export const BOOK_READER_CSS = `
 /* Where you are is said by the title going bright, and by nothing else: the
    swatch behind the number read as a selection control in a list that is not
    selectable. */
-.book-nav a[aria-current="true"] { color: var(--color-ink, #1a1815); }
-.book-nav a[aria-current="true"] .book-nav__page { color: var(--color-ink, #1a1815); }
+.book-nav a[aria-current="true"] { color: var(--ink); }
+.book-nav a[aria-current="true"] .book-nav__page { color: var(--ink); }
 .book-nav__num { flex: none; width: 1.5rem; color: var(--accent); }
 .book-nav__page { margin-left: auto; color: var(--ink-soft); }
 
@@ -145,6 +145,12 @@ export const BOOK_READER_CSS = `
      where the printed book gives it two. */
   width: 1280px;
 }
+/* The book's own gutters come from a vw token, so a phone measured them at 16px
+   where the print run measured 52 and broke the pages differently. Pin the
+   value the PDF was printed with; the page box is fixed, so nothing else here
+   depends on the window. */
+.book-live__source,
+.book-print { --gutter: 3.25rem; }
 .book-live .pagedjs_pages { margin: 0; }
 /* A page is separated from the next by a rule above and a rule below, not by a
    card: the paper is the page, and a frame around it draws a second edge that
@@ -188,7 +194,7 @@ export const BOOK_READER_CSS = `
     overflow: visible;
     padding: 0.5rem var(--gutter) calc(0.5rem + env(safe-area-inset-bottom));
     background: var(--bg);
-    border-top: 1px solid var(--hair, #e5e0d8);
+    border-top: 1px solid var(--hair);
     border-bottom: 0;
   }
   /* A bordered pill with the chapter you are in, the way a reader thinks of
@@ -202,7 +208,7 @@ export const BOOK_READER_CSS = `
     max-width: 100%;
     min-height: 2.5rem;
     padding: 0 0.6rem;
-    border: 1px solid var(--hair, #e5e0d8);
+    border: 1px solid var(--hair);
     border-radius: var(--radius-sm);
     background: var(--surface, transparent);
     font-family: var(--font-mono);
@@ -237,7 +243,7 @@ export const BOOK_READER_CSS = `
     margin: 0;
     padding: 0.5rem var(--gutter) 0.75rem;
     background: var(--bg);
-    border-top: 1px solid var(--hair, #e5e0d8);
+    border-top: 1px solid var(--hair);
   }
   .book-nav[data-open="true"] ol { display: block; }
   .book-nav__title { display: none; }
@@ -275,7 +281,7 @@ export const BOOK_READER_CSS = `
    set them. */
 @media print {
   @page { size: A4; margin: 0; }
-  html, body { background: var(--bg, #fff); }
+  html, body { background: var(--bg); }
   header, footer, .dt-nav, .dt-footer, .book-shell .book-nav { display: none !important; }
   /* The kit's skip link is parked off-screen with a translate; paper has no
      transforms, so it prints as a black chip on the first sheet. There is

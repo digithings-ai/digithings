@@ -86,6 +86,10 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         if (host) {
           host.style.cssText =
             "position:fixed;left:-10000px;top:0;width:1280px;visibility:hidden";
+          // Marked, because pagedjs clones this wrapper into a page box with its
+          // inline style — and a page whose body sits inside the parked wrapper
+          // is blank: the words are there, ten thousand pixels away.
+          host.dataset.pagedParked = "true";
         }
 
 
@@ -144,6 +148,20 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // pagedjs creates the page boxes before the numbers exist, so waiting
         // for boxes printed the table of contents with every reference still
         // empty. Measured, not assumed.
+        // Unwrap the parked wrapper where pagedjs cloned it around a page's
+        // body. Empty copies are leftovers; a copy carrying text is that page
+        // itself, and it would print blank.
+        document.querySelectorAll<HTMLElement>(".pagedjs_page [data-paged-parked]").forEach((node) => {
+          if (!(node.textContent ?? "").trim()) {
+            node.remove();
+            return;
+          }
+          node.removeAttribute("style");
+          const parent = node.parentNode;
+          while (node.firstChild) parent?.insertBefore(node.firstChild, node);
+          node.remove();
+        });
+
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
         // Paged.js leaves the source document in place beside the page boxes.
         // In print that would emit the source as extra pages before the book —
