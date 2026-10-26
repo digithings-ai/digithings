@@ -249,8 +249,10 @@ Withdraws: changes requested on 3f2a9c1d4b5e
   it names, not a password that unlocks the seat.
 - The withdrawal is **part of the approve**: a `Withdraws:` line on its own, in a comment
   with no approving verdict, still leaves the block standing.
-- Do not paste the line into a comment to show someone the syntax: the queue reads the
-  raw comment, so a quoted `Withdraws:` beside an approve is a live withdrawal.
+- Do not paste the line into a comment to show someone the syntax: a `Withdraws:`
+  line inside a fenced block or an inline code span is a quote, not a claim, and it
+  withdraws nothing — the same rule the verdict readers follow (#4990). Write it
+  outside code, and it is a live withdrawal.
 
 The line is what `#6280` was missing: two blocking findings were still open when the same
 seat approved the same head 1h43m later, and the queue read the later verdict as a

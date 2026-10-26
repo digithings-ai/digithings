@@ -2406,7 +2406,8 @@ _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA
 # (DIG-5246). The heads it names are read with `_PROSE_SHA_RE`; a line naming
 # none is a withdrawal of the seat's blocks that name no head at all.
 _WITHDRAWAL_LINE_RE = re.compile(
-    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*withdraws?[*_`]*[ \t]*:[ \t]*(?P<refs>[^\n]*)$",
+    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*(?P<token>withdraws?)[*_`]*[ \t]*:[ \t]*"
+    r"(?P<refs>[^\n]*)$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -2494,6 +2495,22 @@ def _prose_verdict(body: str) -> tuple[str, str] | None:
     return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
 
 
+def _inside_inline_code(body: str, index: int) -> bool:
+    """True when `index` falls inside an inline code span of `body`.
+
+    The withdrawal reader gets the fence-stripped body, so fenced blocks are
+    already gone. Inline spans are still there on purpose: a seat may write the
+    withdrawn head in backticks — ``Withdraws: `3f2a9c1d4b5e` `` — and that is
+    still a withdrawal. So the span cannot be stripped from the whole body the
+    way `_strip_code_blocks` does for markers; only a line whose `Withdraws:`
+    token is itself inside a span is skipped (#4990).
+    """
+    for span in _INLINE_CODE_RE.finditer(body):
+        if span.start() <= index < span.end():
+            return True
+    return False
+
+
 def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
     """`(declared, heads named)` from a `Withdraws:` line, or `(False, ())`.
 
@@ -2504,10 +2521,19 @@ def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
     occurrence first, deduplicated. A line naming no sha withdraws only blocks
     that name no head, so it can never spend a block scoped to a commit the
     reviewer did not name.
+
+    A line inside a fenced block or an inline code span is a quote, not a claim:
+    it withdraws nothing (#4990). That is the same rule the verdict readers
+    follow, and #6197 is why it exists — a comment that shows the syntax must not
+    be able to clear a block.
     """
     declared = False
     heads: list[str] = []
     for match in _WITHDRAWAL_LINE_RE.finditer(body):
+        if _inside_inline_code(body, match.start("token")):
+            # `_strip_fenced_blocks` already removed the fenced case; this is the
+            # inline one: ``Withdraws: 3f2a9c1d4b5e`` in backticks is shown.
+            continue
         declared = True
         for found in _PROSE_SHA_RE.finditer(match.group("refs")):
             sha = found.group("sha").lower()

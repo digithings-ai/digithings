@@ -2020,6 +2020,93 @@ def test_a_withdrawal_naming_no_head_does_not_clear_a_scoped_block() -> None:
     assert any("does not clear the block" in reason for reason in verdict.reasons)
 
 
+def _approve_with_withdrawal_line(*, head: str, line: str) -> dict[str, Any]:
+    """The same-seat approve on the head, carrying `line` as its withdrawal."""
+    comment = _seat_verdict_comment(
+        seat=SECURITY_SEAT,
+        verdict="approve",
+        head_sha=head,
+        created="2026-10-21T14:59:53Z",
+    )
+    comment["body"] += line
+    return comment
+
+
+def _pr_with_same_head_block(approve: dict[str, Any]) -> dict[str, Any]:
+    """A PR whose security-desk block on the current head is the open finding."""
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def test_a_withdrawal_quoted_in_an_inline_span_does_not_clear_the_block() -> None:
+    """#4990: a line a comment only shows is not a claim, even a `Withdraws:` line.
+
+    The verdict readers stop at code (#6197). `Withdraws:` arrived later
+    (DIG-5246) and was read from the raw comment, so a reviewer who quoted the
+    syntax beside an approve cleared their own block by accident.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"Do not paste this:\n\n`Withdraws: {head}`\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.verdict == "approve"
+    assert not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_quoted_in_a_fence_does_not_clear_the_block() -> None:
+    """The fenced half of the same rule: a template in a fence withdraws nothing."""
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"```\nWithdraws: {head}\n```\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_with_the_sha_in_backticks_still_clears_the_block() -> None:
+    """The quote rule must not break the real line: a sha in backticks is a sha.
+
+    The `Withdraws:` token is outside code here, so the line is a claim about
+    the commit it names — which is exactly how a reviewer writes it.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(head=head, line=f"Withdraws: `{head}`\n")
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.withdrawal
+    assert posted.withdrawn_heads == (head,)
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert verdict.eligible, verdict.reasons
+
+
 def test_an_approve_on_a_new_head_clears_the_seats_earlier_block() -> None:
     """The other way out: the PR moved, and the seat approved the new head.
 
