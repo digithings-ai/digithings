@@ -5,6 +5,7 @@ import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 
 import { PRINT_CSS } from "@/lib/book/printCss";
+import { BOOK_READER_CSS } from "@/lib/book/readerCss";
 
 
 export const metadata: Metadata = {
@@ -41,6 +42,10 @@ export default function BookLayout({ children }: { children: ReactNode }) {
           the reader paginates the same document, so leaving it out changed the
           page breaks. Its chrome rules are scoped to the print marker. */}
       <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
+      {/* The reader's own layout, shipped in the HTML: injected from the client
+          component it arrived after first paint, and the page was 100px narrower
+          until it did — the shift a reader saw on every load. */}
+      <style dangerouslySetInnerHTML={{ __html: BOOK_READER_CSS }} />
       <main id="main" tabIndex={-1} className="book-root pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <div className="mx-auto w-full max-w-[var(--wrap)] px-[var(--gutter)]">{children}</div>
       </main>

@@ -171,7 +171,12 @@ body {
    inset on each side; the @page margin is the only frame a printed page needs.
    Body copy also inherited the site's 16px base and its 92% max-width, which
    is what made the text look like a narrow column. */
-.book-root > div, .book-flow, [data-paged-content] {
+/* The first selector is the print route's wrapper, and it has to stay scoped:
+   unscoped it also matched the reader's own wrapper, which then lost its
+   max-width and padding a second after load — the page visibly jumped left.
+   The other two are the paginated content itself, which needs the reset on both
+   routes because it is what the page boxes are made of. */
+html:has(.book-print) .book-root > div, .book-flow, [data-paged-content] {
   width: auto !important;
   max-width: none !important;
   margin-left: 0 !important;

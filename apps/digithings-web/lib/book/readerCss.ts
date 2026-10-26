@@ -123,6 +123,48 @@ export const BOOK_READER_CSS = `
 }
 .book-nav__toggle { display: none; }
 
+/* The book takes a couple of seconds to paginate. Page-shaped placeholders hold
+   the exact space in the meantime — same width, same height, same gutter as the
+   real page boxes — so nothing moves when the pages arrive. The squares are the
+   reader's own pixel field, breathing rather than scrolling. */
+.book-live { position: relative; }
+.book-live__skeleton { display: flex; flex-direction: column; gap: 2.25rem; }
+.book-live__skeleton-page {
+  position: relative;
+  width: ${BOOK_PAGE_WIDTH}px;
+  height: ${BOOK_PAGE_HEIGHT}px;
+  overflow: hidden;
+  background: var(--surface);
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+}
+.book-live__skeleton-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(currentColor 1.4px, transparent 1.4px);
+  background-size: 6px 6px;
+  color: var(--ink-mute);
+  opacity: 0.18;
+  animation: book-shimmer 1.6s var(--ease) infinite;
+}
+@keyframes book-shimmer {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.3; }
+}
+/* Fade rather than vanish, and only then take the placeholders out of the way:
+   the pages are underneath, already painted. */
+.book-live__skeleton { transition: opacity 320ms var(--ease), visibility 0s linear 320ms; }
+.book-live__skeleton[data-ready="true"] { opacity: 0; visibility: hidden; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .book-live__skeleton-page::before { animation: none; opacity: 0.28; }
+}
+
+/* A tall page arriving mid-load grows the document and summons a scrollbar,
+   which shifts a centred layout sideways. Reserve its gutter from the first
+   paint instead. */
+html:has(.book-live) { scrollbar-gutter: stable; }
+
 /* The document is laid out at A4 (BOOK_PAGE_WIDTH), then scaled to the column. The
    wrapper carries the scaled height so the page scrolls to the right length;
    the stage keeps its real width so the pagination never depends on the

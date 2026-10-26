@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import BookExportBar from "@/components/book/BookExportBar";
-import { BOOK_PAGE_HEIGHT as PAGE_HEIGHT, BOOK_PAGE_WIDTH as PAGE_WIDTH, BOOK_READER_CSS } from "@/lib/book/readerCss";
+import { BOOK_PAGE_HEIGHT as PAGE_HEIGHT, BOOK_PAGE_WIDTH as PAGE_WIDTH } from "@/lib/book/readerCss";
 
 /** A4 at 96dpi — the width the page boxes are laid out at. */
 
@@ -52,6 +52,11 @@ export default function BookLive({
   // keeps the contents honest about the pages on screen.
   const [starts, setStarts] = useState<number[]>([]);
   const [liveHeight, setLiveHeight] = useState(0);
+  // The pages take a moment to paginate. Until they are in the stage the reader
+  // shows page-shaped placeholders at the exact size, so nothing moves when the
+  // real thing arrives.
+  const [ready, setReady] = useState(false);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The document is paginated outside the reader's own markup. pagedjs reflows
   // what it is handed, and a document nested in the shell was reflowed with its
@@ -109,6 +114,13 @@ export default function BookLive({
       const pages = document.querySelector<HTMLElement>(".pagedjs_pages");
       if (pages && stage.current && pages.parentElement !== stage.current) {
         stage.current.appendChild(pages);
+      }
+      // The boxes arrive in a stream. Waiting for the count to settle is what
+      // keeps a reader from watching one page become nineteen; the map's count
+      // is a hint, not a fact, because a narrow window paginates one page short.
+      if (pages && stage.current?.contains(pages)) {
+        if (settle.current) clearTimeout(settle.current);
+        settle.current = setTimeout(() => setReady(true), 320);
       }
 
       // pagedjs clones the source wrapper with the content, so a page box can
@@ -191,7 +203,6 @@ export default function BookLive({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: BOOK_READER_CSS }} />
       <div className="book-shell">
         <nav className="book-nav" aria-label="Contents" data-open={open}>
           <button
@@ -238,13 +249,20 @@ export default function BookLive({
         <div
           className="book-live"
           ref={frame}
+          data-ready={ready ? "true" : undefined}
           style={{ height: (liveHeight || pageCount * PAGE_HEIGHT) * scale }}
         >
           <div
             className="book-live__stage"
             ref={stage}
             style={{ width: PAGE_WIDTH, transform: `scale(${scale})` }}
-          />
+          >
+            <div className="book-live__skeleton" aria-hidden data-ready={ready ? "true" : undefined}>
+              {Array.from({ length: pageCount }, (_, index) => (
+                <div className="book-live__skeleton-page" key={index} />
+              ))}
+            </div>
+          </div>
           {/* The document paginates in the body-level host and the finished
               page boxes are moved into the stage above. */}
           {host ? createPortal(children, host) : null}
