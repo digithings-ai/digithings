@@ -165,6 +165,14 @@ export default function BookLive({
     return () => window.removeEventListener("scroll", onScroll);
   }, [chapters]);
 
+  // The chapter under the reading position, for the bar's own label: the last
+  // one that starts at or before the page on screen.
+  const current =
+    chapters.reduce<(typeof chapters)[number] | undefined>(
+      (found, chapter) => (chapter.page <= active ? chapter : found),
+      undefined,
+    ) ?? chapters[0];
+
   const goTo = (page: number) => {
     setOpen(false);
     const box = document.querySelector<HTMLElement>(`[data-book-page="${page}"]`);
@@ -182,9 +190,16 @@ export default function BookLive({
             type="button"
             className="book-nav__toggle"
             aria-expanded={open}
+            aria-label={open ? "hide contents" : "contents"}
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? "hide contents" : "contents"}
+            <span className="book-nav__toggle-num">
+              {String(current?.order ?? 1).padStart(2, "0")}
+            </span>
+            <span className="book-nav__toggle-text">{current?.title ?? "contents"}</span>
+            <svg className="book-nav__chevron" viewBox="0 0 12 12" aria-hidden>
+              <path d="M2 4.5 6 8l4-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
           </button>
           <p className="book-nav__title">contents</p>
           <ol>

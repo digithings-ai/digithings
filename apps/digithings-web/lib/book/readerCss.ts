@@ -170,9 +170,13 @@ export const BOOK_READER_CSS = `
     min-width: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    /* Export on the left, contents on the right: the right edge is where a
+       right-handed thumb lands. Areas, so the two cannot land on separate
+       rows when the text grows. */
+    grid-template-areas: "export toggle";
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     max-height: none;
     overflow: visible;
     padding: 0.5rem var(--gutter) calc(0.5rem + env(safe-area-inset-bottom));
@@ -180,15 +184,40 @@ export const BOOK_READER_CSS = `
     border-top: 1px solid var(--hair, #e5e0d8);
     border-bottom: 0;
   }
+  /* A bordered pill with the chapter you are in, the way a reader thinks of
+     where they are — not a word that says "contents" and nothing else. */
   .book-nav__toggle {
+    grid-area: toggle;
+    justify-self: end;
     display: inline-flex;
     align-items: center;
-    min-height: 2.75rem;
+    gap: 0.4rem;
+    max-width: 100%;
+    min-height: 2.5rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--hair, #e5e0d8);
+    border-radius: 2px;
+    background: var(--surface, transparent);
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.78rem;
-    color: var(--accent);
+    font-size: 0.72rem;
+    color: var(--ink);
     cursor: pointer;
   }
+  .book-nav__toggle-num { flex: none; color: var(--accent); }
+  .book-nav__toggle-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .book-nav__chevron {
+    flex: none;
+    width: 0.7rem;
+    height: 0.7rem;
+    color: var(--ink-soft);
+    transition: transform 150ms ease;
+  }
+  .book-nav[data-open="true"] .book-nav__chevron { transform: rotate(180deg); }
   /* The list opens upward from the bar, over the page. */
   .book-nav ol {
     display: none;
@@ -206,8 +235,7 @@ export const BOOK_READER_CSS = `
   .book-nav[data-open="true"] ol { display: block; }
   .book-nav__title { display: none; }
   /* The export stays in the bar: two compact cells, no heading. */
-  .book-nav__toggle { grid-column: 1; }
-  .book-nav .book-export { margin: 0; grid-column: 3; min-width: 0; }
+  .book-nav .book-export { grid-area: export; margin: 0; min-width: 0; }
   /* The bar is a control strip, not a place for progress prose. */
   .book-nav .book-export__status { display: none; }
   .book-nav .book-export__title { display: none; }
