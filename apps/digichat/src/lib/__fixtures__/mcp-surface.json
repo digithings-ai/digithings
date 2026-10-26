@@ -1,0 +1,42 @@
+{
+  "_reviewed": {
+    "digisearch": "digisearch/src/digisearch/mcp_server.py \u2014 every @mcp.tool() registered at import",
+    "digivault": "digivault/src/digivault/tool_dispatch.py \u2014 _MCP_SURFACE_NAMES (mcp_tool_names())",
+    "native": "digigraph/src/digigraph/orchestration/builtin.py \u2014 register_tool() names a tenant can call without an MCP row"
+  },
+  "digisearch": [
+    "semantic",
+    "web_search",
+    "search_strategies",
+    "research_turn",
+    "monitors_create_watch",
+    "monitors_list_watches",
+    "monitors_trigger_watch",
+    "monitors_get_runs",
+    "websets_create",
+    "websets_get",
+    "websets_add_search",
+    "websets_list_items",
+    "websets_events",
+    "websets_export",
+    "grokipedia_search",
+    "grokipedia_get_page"
+  ],
+  "digivault": [
+    "search_notes",
+    "search_tag",
+    "backlinks",
+    "lint",
+    "create_note"
+  ],
+  "native": [
+    "digisearch",
+    "digisearch_fetch_all",
+    "digivault_search_notes",
+    "digivault_get_note",
+    "digivault_search_tag",
+    "digivault_backlinks",
+    "web_search"
+  ],
+  "_private_surface": "infra/digichat-release/mcp-surface.private.json"
+}

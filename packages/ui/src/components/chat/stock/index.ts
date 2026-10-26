@@ -105,6 +105,17 @@ export {
 export { toolRowTitle } from "./tool-display";
 
 export {
+  HOUSE_BUILTIN_TOOL_IDS,
+  HOUSE_SERVER_IDS,
+  connectedToolIsOn,
+  countToolSurface,
+  expandToolRows,
+  type ToolSurfaceCount,
+  type ToolSurfaceRow,
+  type ToolSurfaceRowInput,
+} from "./tool-surface";
+
+export {
   DEFAULT_SCROLL_MODE,
   SCROLL_MODES,
   normalizeScrollMode,

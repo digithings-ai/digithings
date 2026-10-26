@@ -2,6 +2,7 @@
 
 import { Fragment, type ReactNode } from "react";
 import type { EmbedChatPrefsApi } from "../stock/embed-chat-prefs";
+import { connectedToolIsOn, countToolSurface } from "../stock/tool-surface";
 import { DigichatContextMeter } from "./digichat-context-meter";
 import { DigichatUsageMeter } from "./digichat-usage-meter";
 
@@ -30,26 +31,20 @@ export function DigichatComposerToolbar({ prefs }: { prefs: EmbedChatPrefsApi })
   const showProvider = providerLabel.length > 0;
 
   // Connected MCP servers and the tools inside them: one ticket server with
-  // five tools reads "1 MCP / 5 tools", not "5 MCPs". A server with no
-  // sub-tool list counts as one tool. Per-tool toggles live in prefs.extra
-  // (tool id -> off).
-  const mcpCounts = prefs.mcpServers.reduce(
-    (counts, server) => {
-      const tools = server.tools ?? [];
-      const enabled =
-        tools.length === 0
-          ? prefs.prefs.extra[server.id] === false
-            ? 0
-            : 1
-          : tools.filter((tool) => prefs.prefs.extra[tool.id] !== false).length;
-      if (enabled > 0) {
-        counts.servers += 1;
-        counts.tools += enabled;
-      }
-      return counts;
-    },
-    { servers: 0, tools: 0 },
-  );
+  // five tools reads "1 MCP / 5 tools", not "5 MCPs". The rows come from the
+  // same expansion `/tools` renders (`../stock/tool-surface`), so the count
+  // and the list behind it cannot disagree. Per-tool toggles live in
+  // prefs.extra (tool id -> off); a row follows its own switch.
+  const toolSwitch = {
+    digisearch: prefs.hasDigisearch,
+    vault: prefs.hasVault,
+    webSearch: prefs.tenantAllowsWeb,
+    extraToolOn: prefs.extraToolOn,
+  };
+  const mcpCounts = countToolSurface(prefs.mcpServers, {
+    isOn: (id) => connectedToolIsOn(id, toolSwitch),
+    isToolOn: prefs.extraToolOn,
+  });
   const mcpToolTotal = mcpCounts.tools;
 
   // The row is a list of facts separated by slashes. Build the list and
