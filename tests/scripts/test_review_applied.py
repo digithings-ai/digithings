@@ -186,6 +186,71 @@ class FetchTest(unittest.TestCase):
         self.assertIsNone(_mod.fetch_threads_graphql(1, "o/r", lambda argv: None))
 
 
+class Dig4990QuotedMarkerTest(unittest.TestCase):
+    """DIG-4990: a comment that only *shows* or *names* the in-session marker is
+    not a review pass.
+
+    Nine CI-triage notes on 26 Oct 2026 described the marker and therefore
+    contained it; on #6465 and #6453 that was the only marker comment, so the
+    next ``review-applied`` recheck would have posted a success with no review
+    having happened. The same shape, one file over, is #6197: text that talks
+    about a marker is not the marker.
+    """
+
+    MARKER = _mod.AGENT_REVIEW_MARKER
+
+    def _passes(self, body):
+        def run_rest(path):
+            if path.endswith("/reviews"):
+                return []
+            return [{"user": {"login": "chrizefan"},
+                     "body": body, "created_at": "2026-10-26T07:21:21Z"}]
+        return _mod.fetch_review_passes(1, "o/r", lambda argv: None, run_rest)
+
+    def test_a_marker_quoted_in_a_fence_is_not_a_pass(self):
+        body = "The review template is:\n\n```\n%s\n```\n" % self.MARKER
+        self.assertEqual(self._passes(body), [])
+
+    def test_a_marker_quoted_in_an_inline_span_is_not_a_pass(self):
+        body = "It needs a comment with `%s` in it.\n" % self.MARKER
+        self.assertEqual(self._passes(body), [])
+
+    def test_a_marker_named_in_a_sentence_is_not_a_pass(self):
+        body = "A review pass posts %s and a reviewed:agent claim.\n" % self.MARKER
+        self.assertEqual(self._passes(body), [])
+
+    def test_a_marker_on_its_own_line_with_provenance_is_still_a_pass(self):
+        body = ("%s <!-- digithings-review agent=c59332b4-a0ef-4a6a-8027-"
+                "5c081486f899 head=e6cf8603888c9e877396063a83e6bf87e36510de -->\n"
+                "reviewed:agent\n" % self.MARKER)
+        passes = self._passes(body)
+        self.assertEqual(len(passes), 1)
+        self.assertEqual(passes[0]["kind"], "in-session")
+
+    def test_a_quoted_marker_creates_no_blocking_verdict(self):
+        body = ("The note ended:\n\n```\n%s\nReview verdict: changes requested\n```\n"
+                % self.MARKER)
+        self.assertIsNone(_mod.comment_state(body))
+        self.assertEqual(_mod.blocking_verdicts([], [
+            {"id": 1, "user": {"login": "chrizefan"}, "body": body,
+             "created_at": "2026-10-26T07:21:21Z"}]), [])
+
+    def test_a_marker_named_in_a_sentence_creates_no_blocking_verdict(self):
+        body = ("The gate looks for %s and then reads its Review verdict: "
+                "changes requested line.\n" % self.MARKER)
+        self.assertIsNone(_mod.comment_state(body))
+
+    def test_a_quoted_power_pack_marker_posts_no_verdict(self):
+        body = ("```\n<!-- opencode-power-pack:code-review verdict=approve "
+                "scope=@6aab1cea -->\n```\n")
+        self.assertIsNone(_mod.marker_state(body))
+        self.assertIsNone(_mod.comment_state(body))
+
+    def test_a_posted_power_pack_marker_still_posts_a_verdict(self):
+        body = "<!-- opencode-power-pack:code-review verdict=approve scope=@6aab1cea -->\n"
+        self.assertEqual(_mod.marker_state(body), "APPROVED")
+
+
 class Dig4631ReviewPassTest(unittest.TestCase):
     """DIG-4631: evidence that must not count as a review pass.
 

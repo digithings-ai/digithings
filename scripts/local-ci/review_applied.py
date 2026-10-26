@@ -6,7 +6,9 @@ develop. It passes only when:
 
 - (a) at least one review pass left comments on the PR. That can be Chris's
   in-session review comment (``AGENT_REVIEW_MARKER``) or a reviewer bot
-  (Bugbot, Copilot, CodeRabbit, Claude ``/code-review``, ...); and
+  (Bugbot, Copilot, CodeRabbit, Claude ``/code-review``, ...). A comment that
+  only *quotes* the marker in code, or *names* it in a sentence, is not a
+  review pass (DIG-4990); and
 - (b) every review thread is resolved, OR is followed by a fix commit (pushed
   after the comment) and a reply on that thread.
 
@@ -43,6 +45,72 @@ APPLIED_CTX = "review-applied"
 # In-session review marker: the comment body fragment an in-session review
 # posts (same marker scripts/check_review_coverage.py looks for).
 AGENT_REVIEW_MARKER = "<!-- in-session-review -->"
+
+# A marker *shown* in a code block or an inline span, or *named* in a sentence,
+# is not a marker that was posted. On 26 Oct 2026 nine CI-triage notes that
+# described the marker therefore contained it, and any one of them would have
+# turned this check green with no review having happened (DIG-4990, the same
+# class as #6197). The reader below takes the code out first, then asks whether
+# anything but HTML comments is left on the line the marker sits on: a posted
+# marker is a line of its own, a quoted or described one is not.
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _strip_fenced_blocks(body):
+    """The body with fenced code blocks (``` and ~~~) taken out.
+
+    Removed lines become a bare newline, so line numbers and the line-anchored
+    readers keep working on the text that is left. Mirrors the reader
+    ``scripts/merge_queue.py`` uses, so the two gates agree on what is code.
+    """
+    kept = []
+    fence = ""
+    for line in body.splitlines(keepends=True):
+        if fence:
+            match = _FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = _FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def _strip_code_blocks(body):
+    """The body with fenced blocks *and* inline code spans taken out."""
+    return _INLINE_CODE_RE.sub(" ", _strip_fenced_blocks(str(body or "")))
+
+
+def carries_agent_review_marker(body):
+    """True when the comment *posts* the in-session marker.
+
+    A marker inside a fence or an inline span is quoted, not posted, and a
+    marker inside a sentence or a blockquote is described, not posted. Both are
+    how a note *about* a review reads, and neither is a review (DIG-4990). A
+    posted marker is on a line of its own; a provenance marker beside it on that
+    same line is still that line's only content.
+    """
+    text = _strip_code_blocks(body)
+    if AGENT_REVIEW_MARKER not in text:
+        return False
+    for line in text.splitlines():
+        if AGENT_REVIEW_MARKER not in line:
+            continue
+        if not _HTML_COMMENT_RE.sub("", line).strip():
+            return True
+    return False
 
 # Reviewer-bot logins, bare and [bot]-suffixed (REST often returns the suffix,
 # `gh pr view --json` the bare login). github-advanced-security posts CodeQL
@@ -282,8 +350,12 @@ _PP_APPROVING = frozenset({"approved", "approve"})
 
 def marker_state(body):
     """CHANGES_REQUESTED / APPROVED from a power-pack marker's ``verdict=``,
-    or None when the comment carries no readable marker verdict."""
-    for m in _PP_MARKER_RE.finditer(body or ""):
+    or None when the comment carries no readable marker verdict.
+
+    A marker inside a fence or an inline span is a quoted example, not a posted
+    verdict (DIG-4990), so the body is read with its code taken out.
+    """
+    for m in _PP_MARKER_RE.finditer(_strip_code_blocks(body)):
         fields = {f.group("key").lower(): f.group("value")
                   for f in _PP_FIELD_RE.finditer(m.group("fields"))}
         v = fields.get("verdict", "").strip().strip("'\";").lower().replace("-", "_")
@@ -299,7 +371,7 @@ def comment_state(body):
     state = marker_state(body)
     if state is not None:
         return state
-    if AGENT_REVIEW_MARKER in (body or ""):
+    if carries_agent_review_marker(body):
         return in_session_state(body)
     return None
 
@@ -603,7 +675,7 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
     for c in comments:
         if not isinstance(c, dict):
             continue
-        if AGENT_REVIEW_MARKER in (c.get("body") or ""):
+        if carries_agent_review_marker(c.get("body") or ""):
             try:
                 login = (c.get("user") or {}).get("login")
             except AttributeError:
