@@ -6507,14 +6507,16 @@ def test_a_ticket_the_api_does_not_know_is_not_a_crash(
     assert "authoring seat could not be identified" in reason
 
 
-def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
+def test_an_api_that_cannot_be_read_defers_the_pr_and_publishes_no_gate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The API going away is not a verdict. The PR waits, and nothing crashes.
+    """The API going away is not a verdict, and it is not published as one.
 
-    A partial judgement is not a judgement: if the queue cannot read the
-    run record, it cannot say the reviewer was another seat, so it refuses
-    the PR — and it says why.
+    A partial judgement is not a judgement: if the queue cannot read the run
+    record, it cannot say the reviewer was another seat, so the PR waits. But
+    the wait is a fact about the API, not a gate the branch failed, so it is
+    kept out of `reasons` — the list the handback comment publishes — and
+    recorded as `deferred` instead (DIG-5573).
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
@@ -6531,9 +6533,104 @@ def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
     verdict = _judge(pr, prov)
     assert not verdict.eligible
-    reason = " ".join(verdict.reasons)
-    assert "reviewer independence" in reason
-    assert "could not be checked" in reason
+    assert verdict.reasons == ()
+    assert verdict.deferred.startswith("reviewer independence:")
+    assert "could not be checked" in verdict.deferred
+
+
+def test_a_transient_read_failure_does_not_change_the_gate_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure that made #6418 re-post 42 handbacks: the reasons alternate.
+
+    The live driver keys its handback comment on the reasons it is given, so a
+    transient that appears in that set is a change of reasons on every other
+    tick — and each change is a new comment. The same PR, judged once with a
+    working API and once with a failing one, must produce the same reason set:
+    the transient says nothing about the branch, so it adds no reason.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    healthy = _judge(pr, _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)]))
+    broken = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert healthy.reasons == broken.reasons == ()
+    assert healthy.eligible
+    assert not broken.eligible
+    assert broken.deferred
+
+
+def test_a_deferred_pr_beside_a_real_gate_publishes_only_the_gate(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A PR that also fails a real gate keeps that gate and adds no transient.
+
+    The gate set must stay the set a reader can act on: the branch is a draft,
+    and that is what the handback says. The unreadable fact is logged, not
+    published, so the next tick — with a working API — reports the same gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    pr["isDraft"] = True
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert verdict.reasons == ("draft",)
+    assert verdict.deferred
+
+    mq.print_queue([verdict], queued_only=False)
+    out = capsys.readouterr().out
+    assert "blocked (1)" in out
+    assert "· draft" in out
+    assert "deferred (1)" in out
+    assert "could not be checked" in out
+
+
+def test_a_deferred_row_is_listed_apart_from_the_blocked_gates(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A deferred PR is reported for the log, in its own list, with no reason.
+
+    The run summary is what an operator reads to know whether anything needs a
+    hand. A read failure that appeared under `blocked` would say the branch is
+    broken; it is not, so it is named apart and the next tick asks again.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    mq.print_queue([verdict], queued_only=False)
+    out = capsys.readouterr().out
+    assert "deferred (1)" in out
+    assert "could not be checked" in out
+    assert "blocked" not in out
+    assert "queued: none" in out
 
 
 def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
@@ -6689,7 +6786,7 @@ class _FakeResponse:
     """The shape `urlopen` returns: a context manager whose `read` is bytes."""
 
     def __init__(self, payload: Any) -> None:
-        self._payload = payload
+        self._payload = json.dumps(payload).encode("utf-8")
 
     def __enter__(self) -> "_FakeResponse":
         return self
@@ -6697,8 +6794,17 @@ class _FakeResponse:
     def __exit__(self, *exc: Any) -> bool:
         return False
 
-    def read(self) -> bytes:
-        return json.dumps(self._payload).encode("utf-8")
+    def read(self, size: int | None = None) -> bytes:
+        """The body, in chunks of `size` when one is asked for.
+
+        The production read asks for a chunk at a time so the deadline can be
+        checked between them; a fake that ignored `size` would hand the whole
+        body over in one call and hide that.
+        """
+        if size is None:
+            return self._payload
+        chunk, self._payload = self._payload[:size], self._payload[size:]
+        return chunk
 
 
 def test_a_slow_read_that_times_out_once_is_asked_again(
@@ -6853,16 +6959,69 @@ def test_a_server_error_is_asked_for_again(
 def test_the_read_numbers_are_the_measured_ones() -> None:
     """The four numbers are the fix, so the suite has to pin them.
 
-    The slowest answer measured on 2026-10-21 was 36.5 s, so a timeout below
-    45 s turns a slow API back into a refusal — the exact failure this change
-    exists to remove. A budget below the timeout leaves no room for the second
-    attempt, and a backoff of zero hammers a control plane that is already
-    struggling.
+    On 2026-10-26 the slowest answer measured was 119.9 s for
+    `GET /api/issues/{id}/runs` (41 296 bytes, HTTP 200), while the same read
+    on two other tickets in the same minute took 34.6 s and 38.9 s. A timeout
+    below that turns a slow API back into a refusal — the exact failure this
+    change exists to remove — and a budget below two timeouts plus the backoff
+    leaves no room for the second attempt after a slow first one. A backoff of
+    zero hammers a control plane that is already struggling.
+
+    The bounded window (`?limit=`) is not an alternative: the server ignores it
+    and returns the same 41 296 bytes, so the numbers are the whole fix.
     """
-    assert mq.PAPERCLIP_READ_TIMEOUT >= 45
-    assert mq.PAPERCLIP_READ_BUDGET >= mq.PAPERCLIP_READ_TIMEOUT
+    assert mq.PAPERCLIP_READ_TIMEOUT > 119.9
+    assert (
+        mq.PAPERCLIP_READ_BUDGET
+        >= 2 * mq.PAPERCLIP_READ_TIMEOUT + mq.PAPERCLIP_RETRY_BACKOFF
+    )
     assert mq.PAPERCLIP_READ_ATTEMPTS == 2
     assert mq.PAPERCLIP_RETRY_BACKOFF == 3.0
+
+
+def test_a_paperclip_body_that_trickles_cannot_outlast_the_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A socket timeout bounds one operation, not the whole body.
+
+    A server can answer the headers immediately and then send the body a byte
+    at a time: every single read is inside the socket timeout, and the read
+    still never ends. The budget is checked between chunks, so the read gives
+    up at the deadline instead of holding the tick open.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    clock = {"now": 1_000.0}
+    trickle = 20.0
+
+    class _Trickle:
+        def __enter__(self) -> "_Trickle":
+            return self
+
+        def __exit__(self, *exc: Any) -> bool:
+            return False
+
+        def read(self, size: int | None = None) -> bytes:
+            clock["now"] += trickle
+            return b" " * 8
+
+    def _sleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        return _Trickle()
+
+    monkeypatch.setattr(mq.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(mq.time, "sleep", _sleep)
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    assert "exceeded its budget" in str(excinfo.value)
+    # The deadline is checked between chunks, so the read can overshoot it by
+    # the one chunk that was in flight — never by the rest of the body.
+    assert clock["now"] - 1_000.0 <= mq.PAPERCLIP_READ_BUDGET + trickle
 
 
 def test_a_read_stays_inside_its_budget(

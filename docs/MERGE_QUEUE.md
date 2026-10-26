@@ -636,6 +636,41 @@ judgement, so the queue concludes nothing about the marker and refuses the PR,
 naming the reason. It refuses only that: a PR covered by Bugbot or by a human
 approval still merges, because the marker was never what cleared it.
 
+**A read failure is not a gate, and is never published as one.** The two
+"cannot judge" cases above are not the same thing, and the queue keeps them
+apart (DIG-5573). "The authoring seat could not be identified" is a fact about
+the commits on this branch — the remedy is on the branch, so it is a gate and
+appears in `reasons`. "Paperclip could not be read" says nothing about the
+branch at all: the queue records it in the verdict's `deferred` field, lists it
+in its own `deferred` block in the run summary, and leaves the PR out of the
+`blocked` list for that tick. Nothing is merged on an unread gate — a deferred
+PR is not eligible — and the next tick asks again.
+
+That separation is what stops the handback storm. The live driver keys its
+handback comment on the `reasons` it is given (`docs` cannot enforce that, it is
+the driver's own contract), so a transient read failure in that list is a
+*change of reasons* on every other tick, and each change is a new comment:
+**42 handbacks on #6418 in 29 h**, alternating between "the review seats could
+not be checked" and the real gate, several of them saying "nothing here needs a
+human". With the transient out of `reasons`, the gate set is stable, so the
+driver has nothing to re-post — and a PR cannot be held after its review lands
+by a slow read.
+
+**The read budget.** Each read of the Paperclip API is a GET with two attempts
+inside one deadline. On 2026-10-26 `GET /api/issues/{id}/runs` took **119.9 s**
+for 41 296 bytes on one ticket while the same read on two others in the same
+minute took 34.6 s and 38.9 s — the read is load-dependent, not PR-dependent.
+The socket timeout is **150 s** and the budget is **310 s** (two timeouts plus
+the 3 s backoff), so a 120-second answer fits and a slow first attempt still
+leaves room for the second. A bounded window is not available: the server
+ignores `?limit=` on that endpoint and returns the identical payload (measured
+at `?limit=5` twice), so there is no cheaper form of the same read to switch to
+— and the URL, the facts and the judgement are unchanged. The budget is a
+deadline, not a sum of timeouts: the body is read in chunks and the deadline is
+checked between them, so a server that answers the headers and then trickles the
+body cannot hold the tick open. A slow tick is the accepted price; a false
+handback re-posts itself every other tick, which is not.
+
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
 provenance against the Paperclip record — it cannot check the keystroke. Per-seat
@@ -698,6 +733,11 @@ against the new base first, so it queues on a later tick.
 Each merge passes `--match-head-commit`, so a push landing between evaluation and merge
 aborts the merge rather than landing a commit that was never gated. The queue never passes
 `--admin`.
+
+`list` and `run` end with four lists: `queued`, `stale` (nobody has to act; a tick
+updates them), `blocked` (each row with the gates it failed) and `deferred` (a fact the
+queue could not read). A deferred row is not a gate and is never published as one: it
+carries no reason, says what could not be read, and the next tick asks again.
 
 Every merge leaves an audit comment on the PR naming the role, the head SHA, the merge
 method, the review basis and the checks that were green. That comment is the answer to
