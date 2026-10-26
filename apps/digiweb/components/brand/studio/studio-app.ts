@@ -272,7 +272,7 @@ export function initBrandStudio(root: HTMLElement): () => void {
     const { w, h } = dims();
     const mode = bgmode.value;
     bg.className = `bs-bg ${
-      mode === "transparent" ? "" : mode === "solid" ? "bs-solid" : `bs-field${mode === "field-anim" ? " bs-anim" : ""}`
+      mode === "transparent" ? "" : mode === "solid" ? "bs-solid" : `bs-bg-field${mode === "field-anim" ? " bs-anim" : ""}`
     }`;
     bg.style.webkitMaskImage = "";
     bg.style.maskImage = "";
@@ -871,7 +871,10 @@ export function initBrandStudio(root: HTMLElement): () => void {
       if (!card) return;
       applyPreset(card.dataset.preset ?? "");
       if (window.innerWidth <= 980) {
-        root.querySelector(".bs-canvas-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        root.querySelector(".bs-canvas-card")?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start",
+        });
       }
     }, { signal });
 

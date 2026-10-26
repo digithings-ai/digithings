@@ -107,7 +107,7 @@ export function EmptyState({
       {glyphless ? null : (
         <span
           className={cn(
-            "mb-[0.15rem] grid size-11 place-items-center rounded-full bg-ink/8 text-ink-mute",
+            "mb-[0.15rem] grid size-11 place-items-center rounded-none bg-ink/8 text-ink-mute",
             variant === "error" && "bg-danger/12 text-danger",
           )}
           aria-hidden="true"

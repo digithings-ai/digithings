@@ -947,7 +947,7 @@
     width: var(--ctl-empty-glyph);
     height: var(--ctl-empty-glyph);
     margin-bottom: 0.15rem;
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in oklab, var(--ink) 8%, transparent);
     color: var(--ink-mute);
   }

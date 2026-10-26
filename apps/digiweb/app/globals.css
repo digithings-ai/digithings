@@ -208,6 +208,17 @@ html {
    that); the sheet carries them while hidden. At >=1600px the livery starts
    the right-aligned control group. */
 
+.site-nav-lab-sep {
+  margin-left: 0.2rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid var(--hair);
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .site-nav-livery {
   margin-left: auto;
   display: none;
@@ -286,15 +297,10 @@ html {
 
 /* Row composition is breakpoint-driven (SiteNav):
      <1080px          hamburger only — the full menu is the kit Sheet.
-     1080–1599px      primary family map inline; the reference-only lab group
-                      and both choosers stay in the sheet behind the hamburger.
-     >=1600px         lab group + livery/type choosers join the row; the
-                      hamburger retires (nothing is hidden any more).
-   These blocks sit after every base rule so they win on source order. The
-   1080px row needs the brand mark, the 13 primary links, the theme toggle and
-   the hamburger: measured ~1047px, so it clears with ~33px of air. (At 1024px
-   the same row overflowed by ~23px — hence 1080, not 1024, as the low end of
-   the "~1024–1280" range: readable, not crowded.) */
+     1080–1279px      primary map + the brand entry inline; choosers in the sheet.
+     1280–1599px      livery/type choosers join; the hamburger stays for the sheet.
+     >=1600px         the hamburger retires (nothing is hidden any more).
+   These blocks sit after every base rule so they win on source order. */
 @media (min-width: 1080px) {
   .site-nav {
     gap: 1.2rem;
@@ -305,26 +311,14 @@ html {
     gap: 0.85rem;
   }
 
-  /* the lab group shares `.site-nav-links`; keep it out of the mid row so it
-     does not crowd the primary map — it rejoins at >=1600px below. */
-  .site-nav-links--lab {
-    display: none;
-  }
-}
-
-@media (min-width: 1600px) {
-  .site-nav {
-    gap: 1.6rem;
-  }
-
-  .site-nav-links {
-    gap: 1rem;
-  }
-
+  /* the lab group shares `.site-nav-links`; five links fit on the mid row, so
+     it stays visible instead of hiding the brand surface in the sheet. */
   .site-nav-links--lab {
     display: flex;
   }
+}
 
+@media (min-width: 1280px) {
   .site-nav-livery,
   .site-nav-suite {
     display: inline-flex;
@@ -336,6 +330,16 @@ html {
 
   .site-nav-theme {
     margin-left: 0;
+  }
+}
+
+@media (min-width: 1600px) {
+  .site-nav {
+    gap: 1.6rem;
+  }
+
+  .site-nav-links {
+    gap: 1rem;
   }
 
   .site-nav-burger {

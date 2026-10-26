@@ -15,6 +15,16 @@
   gap: 2.5rem;
 }
 
+.rtl-proof > * {
+  min-width: 0;
+}
+
+.rtl-proof .tab-strip {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* two-column / pinned layout proof — a sticky row-header column that pins to
    the inline-start edge (left in LTR, right in RTL) over a scrollable body. */
 .rtl-pinned {

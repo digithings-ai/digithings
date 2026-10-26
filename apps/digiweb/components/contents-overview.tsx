@@ -67,7 +67,7 @@ export function ContentsOverview() {
       </p>
       <div className="mt-[0.6rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
         {LAB_NAV.map((item, i) => (
-          <FamilyCard key={item.href} item={item} index={i} />
+          <FamilyCard key={item.href} item={item} index={i + PRIMARY_NAV.length} />
         ))}
       </div>
     </section>

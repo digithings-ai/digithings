@@ -50,7 +50,7 @@ export function LiverySwitcher() {
       <p className="kicker">{"// livery"}</p>
       <h2 className="title">One instrumentation color per module. Pick one.</h2>
       <p className="section-copy">
-        Law 02: color is quarantined to data and identity, never decoration. Every module
+        Rule 06: colour is quarantined to data and identity, never decoration. Every module
         gets exactly one accent — switching here previews the same components under a
         different livery, live.
       </p>

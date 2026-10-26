@@ -51,7 +51,7 @@
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: 0.6rem;
+  font-size: 0.625rem;
 }
 
 .fd-table tbody th {
@@ -139,5 +139,31 @@
   .fd-type-row {
     grid-template-columns: 1fr;
     gap: 0.35rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .fd-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 0.625rem;
+  }
+
+  .fd-table th,
+  .fd-table td {
+    padding: 0.35rem 0.3rem;
+  }
+
+  .fd-table tbody th {
+    overflow-wrap: anywhere;
+  }
+
+  .fd-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .fd-table code {
+    font-size: 0.625rem;
   }
 }

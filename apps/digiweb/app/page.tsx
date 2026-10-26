@@ -109,17 +109,17 @@ export default function BaselinePage() {
             <ul className="bl-list">
               <li>
                 <span>BTC-PERP</span>
-                <span className="bl-num">1.20</span>
+                <span className="bl-qty">1.20</span>
                 <span className="bl-up">+1.8%</span>
               </li>
               <li>
                 <span>ETH-PERP</span>
-                <span className="bl-num">15.00</span>
+                <span className="bl-qty">15.00</span>
                 <span className="bl-down">-0.4%</span>
               </li>
               <li>
                 <span>SOL-PERP</span>
-                <span className="bl-num">200</span>
+                <span className="bl-qty">200</span>
                 <span className="bl-up">+0.9%</span>
               </li>
             </ul>

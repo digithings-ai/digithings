@@ -10,7 +10,7 @@
   gap: 1.2rem;
   margin-top: 1rem;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .bs-hero-links a {
@@ -23,31 +23,27 @@
 }
 
 .bs {
-  --bs-bg: #080b09;
-  --bs-bg-2: #0b0f0d;
-  --bs-panel: #0f1412;
-  --bs-panel-2: #121816;
-  --bs-line: rgba(236, 238, 240, 0.1);
-  --bs-line-strong: rgba(236, 238, 240, 0.18);
-  --bs-text: #eceef0;
-  --bs-muted: #8e9a94;
-  --bs-muted-2: #6f7c76;
-  --bs-accent: #3dd6c4;
-  --bs-radius: 14px;
-  --bs-radius-sm: 8px;
-  --bs-shadow: 0 28px 90px -50px #000;
+  --bs-bg: var(--term-bg);
+  --bs-bg-2: var(--term-bg);
+  --bs-panel: var(--term-bg);
+  --bs-panel-2: var(--term-fill);
+  --bs-line: var(--term-hair);
+  --bs-line-strong: color-mix(in srgb, var(--term-ink) 28%, transparent);
+  --bs-text: var(--term-ink);
+  --bs-muted: var(--term-mute);
+  --bs-muted-2: var(--term-mute);
+  --bs-accent: var(--accent);
+  --bs-radius: 0;
+  --bs-radius-sm: 0;
+  --bs-shadow: none;
 
   position: relative;
   margin-top: 2.4rem;
   padding: 14px;
-  border: 1px solid var(--hair);
-  border-radius: var(--bs-radius);
-  background:
-    radial-gradient(900px 520px at 78% -12%, #12211b 0%, transparent 58%),
-    radial-gradient(700px 480px at 0% 100%, #0d1713 0%, transparent 55%),
-    var(--bs-bg);
+  border: 1px solid var(--bs-line);
+  border-radius: 0;
+  background: var(--bs-bg);
   color: var(--bs-text);
-  box-shadow: var(--bs-shadow);
   font-family: var(--font-sans);
 }
 
@@ -57,9 +53,7 @@
   box-sizing: border-box;
 }
 
-.bs button,
-.bs input,
-.bs select {
+:where(.bs) :where(button, input, select) {
   font: inherit;
   color: inherit;
 }
@@ -82,15 +76,15 @@
 
 .bs-panel {
   position: sticky;
-  top: 5.5rem;
-  max-height: calc(100vh - 7rem);
+  top: 4.4rem;
+  max-height: calc(100dvh - 5.6rem);
   overflow: auto;
   padding: 2px 16px 14px;
   border: 1px solid var(--bs-line);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #101613 0%, #0d1210 100%);
+  border-radius: 0;
+  background: var(--bs-panel);
   scrollbar-width: thin;
-  scrollbar-color: #2a3530 transparent;
+  scrollbar-color: var(--bs-line) transparent;
 }
 
 .bs-panel::-webkit-scrollbar {
@@ -98,9 +92,9 @@
 }
 
 .bs-panel::-webkit-scrollbar-thumb {
-  border: 2px solid #0f1412;
-  border-radius: 8px;
-  background: #24302a;
+  border: 1px solid var(--bs-line);
+  border-radius: 0;
+  background: var(--bs-line-strong);
 }
 
 .bs-section {
@@ -116,9 +110,9 @@
 .bs-section h2 {
   margin: 0;
   color: var(--bs-muted);
-  font-size: 9px;
+  font-size: 0.625rem;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -136,7 +130,7 @@
   border-bottom: 1px solid transparent;
   background: none;
   color: var(--bs-muted);
-  font-size: 10px;
+  font-size: 0.6875rem;
   line-height: 1.2;
 }
 
@@ -155,7 +149,7 @@
   flex-direction: column;
   gap: 6px;
   color: var(--bs-muted);
-  font-size: 10px;
+  font-size: 0.6875rem;
 }
 
 .bs-row {
@@ -175,14 +169,14 @@
 .bs-input,
 .bs-select {
   width: 100%;
-  height: 34px;
+  height: 2rem;
   padding: 0 10px;
   border: 1px solid var(--bs-line);
   border-radius: var(--bs-radius-sm);
   outline: none;
   background: var(--bs-panel-2);
   color: var(--bs-text);
-  font-size: 12px;
+  font-size: 0.75rem;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -193,13 +187,14 @@
 
 .bs-input:focus,
 .bs-select:focus {
-  border-color: rgba(61, 214, 196, 0.55);
-  box-shadow: 0 0 0 3px rgba(61, 214, 196, 0.1);
+  border-color: var(--bs-accent);
+  outline: 1px solid var(--bs-accent);
+  outline-offset: 1px;
 }
 
 .bs-input[type="number"] {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .bs-select {
@@ -214,7 +209,7 @@
 
 .bs-select option,
 .bs-select optgroup {
-  background: #121816;
+  background: var(--bs-bg);
   color: var(--bs-text);
 }
 
@@ -230,7 +225,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--bs-muted);
-  font-size: 10px;
+  font-size: 0.6875rem;
 }
 
 .bs-seg {
@@ -240,17 +235,17 @@
   padding: 2px;
   border: 1px solid var(--bs-line);
   border-radius: var(--bs-radius-sm);
-  background: #0a0e0c;
+  background: var(--bs-bg-2);
 }
 
 .bs-seg button {
-  height: 28px;
+  height: 1.75rem;
   padding: 0 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   color: var(--bs-muted);
-  font-size: 10.5px;
+  font-size: 0.6875rem;
   letter-spacing: 0.01em;
   white-space: nowrap;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
@@ -261,9 +256,9 @@
 }
 
 .bs-seg button[aria-pressed="true"] {
-  background: #1c2621;
+  background: var(--bs-panel-2);
   color: var(--bs-text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
 }
 
 .bs-seg-4 {
@@ -272,7 +267,7 @@
 }
 
 .bs-seg-4 button {
-  height: 29px;
+  height: 1.75rem;
 }
 
 .bs-slider {
@@ -291,13 +286,13 @@
   align-items: center;
   justify-content: space-between;
   color: var(--bs-muted);
-  font-size: 10px;
+  font-size: 0.6875rem;
 }
 
 .bs-slider-head output {
   color: var(--bs-text);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.6875rem;
 }
 
 .bs input[type="range"] {
@@ -312,45 +307,38 @@
 
 .bs input[type="range"]::-webkit-slider-runnable-track {
   height: 3px;
-  border-radius: 999px;
-  background: #232d28;
+  border-radius: 0;
+  background: var(--bs-line-strong);
 }
 
 .bs input[type="range"]::-moz-range-track {
   height: 3px;
-  border-radius: 999px;
-  background: #232d28;
+  border-radius: 0;
+  background: var(--bs-line-strong);
 }
 
 .bs input[type="range"]::-webkit-slider-thumb {
   width: 12px;
   height: 12px;
   margin-top: -4.5px;
-  border: 2px solid #0f1412;
-  border-radius: 50%;
+  border: 1px solid var(--bs-line);
+  border-radius: 0;
   appearance: none;
   -webkit-appearance: none;
   background: var(--bs-text);
-  box-shadow: 0 0 0 1px rgba(236, 238, 240, 0.25);
   transition: transform 0.12s, background 0.12s;
 }
 
 .bs input[type="range"]::-moz-range-thumb {
   width: 12px;
   height: 12px;
-  border: 2px solid #0f1412;
-  border-radius: 50%;
+  border: 1px solid var(--bs-line);
+  border-radius: 0;
   background: var(--bs-text);
-  box-shadow: 0 0 0 1px rgba(236, 238, 240, 0.25);
-}
-
-.bs input[type="range"]:hover::-webkit-slider-thumb {
-  transform: scale(1.12);
 }
 
 .bs input[type="range"]:active::-webkit-slider-thumb {
   background: var(--bs-accent);
-  transform: scale(1.05);
 }
 
 .bs input[type="range"]:disabled {
@@ -363,7 +351,7 @@
   align-items: center;
   gap: 8px;
   color: var(--bs-muted);
-  font-size: 10px;
+  font-size: 0.6875rem;
   cursor: pointer;
   user-select: none;
 }
@@ -382,8 +370,8 @@
   width: 32px;
   height: 18px;
   border: 1px solid var(--bs-line);
-  border-radius: 999px;
-  background: #202924;
+  border-radius: 0;
+  background: var(--bs-panel-2);
   transition: background 0.16s, border-color 0.16s;
 }
 
@@ -393,15 +381,15 @@
   left: 2px;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
-  background: #8e9a94;
+  border-radius: 0;
+  background: var(--bs-muted);
   content: "";
   transition: transform 0.16s, background 0.16s;
 }
 
 .bs-switch input:checked + .bs-track {
-  border-color: rgba(61, 214, 196, 0.48);
-  background: rgba(61, 214, 196, 0.2);
+  border-color: var(--bs-accent);
+  background: color-mix(in srgb, var(--bs-accent) 20%, transparent);
 }
 
 .bs-switch input:checked + .bs-track::after {
@@ -449,7 +437,7 @@
 .bs-hint {
   margin: 8px 0 0;
   color: var(--bs-muted-2);
-  font-size: 10.5px;
+  font-size: 0.6875rem;
   line-height: 1.55;
 }
 
@@ -458,13 +446,13 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 34px;
+  height: 2rem;
   padding: 0 13px;
   border: 1px solid var(--bs-line-strong);
   border-radius: var(--bs-radius-sm);
-  background: #141b18;
+  background: var(--bs-panel-2);
   color: var(--bs-text);
-  font-size: 11.5px;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -472,8 +460,8 @@
 }
 
 .bs-btn:hover:not(:disabled) {
-  border-color: rgba(236, 238, 240, 0.28);
-  background: #1a2320;
+  border-color: var(--bs-line-strong);
+  background: var(--bs-bg-2);
 }
 
 .bs-btn:active:not(:disabled) {
@@ -488,20 +476,12 @@
 .bs-btn-primary {
   border-color: transparent;
   background: var(--bs-text);
-  color: #0a0e0c;
-}
-
-.bs .bs-btn-primary {
-  color: #0a0e0c;
+  color: var(--bs-bg);
 }
 
 .bs-btn-primary:hover:not(:disabled) {
   border-color: transparent;
-  background: #fff;
-}
-
-.bs .bs-btn-primary:hover:not(:disabled) {
-  color: #0a0e0c;
+  background: var(--bs-text);
 }
 
 .bs-btn-ghost {
@@ -510,23 +490,15 @@
   color: var(--bs-muted);
 }
 
-.bs .bs-btn-ghost {
-  color: var(--bs-muted);
-}
-
 .bs-btn-ghost:hover:not(:disabled) {
-  background: rgba(236, 238, 240, 0.05);
-  color: var(--bs-text);
-}
-
-.bs .bs-btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bs-text) 5%, transparent);
   color: var(--bs-text);
 }
 
 .bs-btn-sm {
-  height: 30px;
+  height: 1.75rem;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .bs-btn.bs-is-busy {
@@ -544,9 +516,8 @@
 .bs-canvas-card {
   overflow: hidden;
   border: 1px solid var(--bs-line);
-  border-radius: var(--bs-radius);
-  background: linear-gradient(180deg, #0f1512 0%, #0b100e 100%);
-  box-shadow: var(--bs-shadow);
+  border-radius: 0;
+  background: var(--bs-panel);
 }
 
 .bs-toolbar {
@@ -565,8 +536,8 @@
 
 .bs-eyebrow {
   color: var(--bs-muted-2);
-  font-size: 8.5px;
-  letter-spacing: 0.18em;
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -582,7 +553,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--bs-text);
-  font-size: 15px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.015em;
   text-overflow: ellipsis;
@@ -591,11 +562,11 @@
 
 .bs-badge {
   padding: 2px 6px;
-  border: 1px solid rgba(61, 214, 196, 0.28);
-  border-radius: 999px;
-  background: rgba(61, 214, 196, 0.13);
+  border: 1px solid color-mix(in srgb, var(--bs-accent) 45%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bs-accent) 13%, transparent);
   color: var(--bs-accent);
-  font-size: 8.5px;
+  font-size: 0.625rem;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -608,15 +579,16 @@
   margin-top: 4px;
   color: var(--bs-muted-2);
   font-family: var(--font-mono);
-  font-size: 10px;
-  white-space: nowrap;
+  font-size: 0.6875rem;
+  flex-wrap: wrap;
+  white-space: normal;
 }
 
 .bs-dot {
   width: 2px;
   height: 2px;
   flex: none;
-  border-radius: 50%;
+  border-radius: 0;
   background: currentColor;
   opacity: 0.7;
 }
@@ -630,21 +602,21 @@
 
 .bs-toolbar-select {
   width: 56px;
-  height: 30px;
+  height: 1.75rem;
   padding: 0 22px 0 8px;
   background-position: right 7px center;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.6875rem;
 }
 
 .bs-canvas-area {
   display: grid;
   place-items: center;
-  height: min(62vh, 680px);
+  height: min(62dvh, 680px);
   min-height: 360px;
   padding: 28px;
   overflow: hidden;
-  background-image: radial-gradient(rgba(236, 238, 240, 0.055) 1px, transparent 1px);
+  background-image: radial-gradient(color-mix(in srgb, var(--bs-text) 8%, transparent) 1px, transparent 1px);
   background-position: center;
   background-size: 16px 16px;
 }
@@ -652,18 +624,17 @@
 .bs-stage {
   position: relative;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--bg, #0a0e0c);
-  box-shadow: 0 30px 80px -40px #000, 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
 .bs-stage.bs-checker {
-  background-color: #0b0f0d;
+  background-color: var(--bs-bg-2);
   background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+    linear-gradient(45deg, color-mix(in srgb, var(--bs-text) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--bs-text) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--bs-text) 5%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--bs-text) 5%, transparent) 75%);
   background-position: 0 0, 0 10px, 10px -10px, -10px 0;
   background-size: 20px 20px;
 }
@@ -678,13 +649,13 @@
   background: var(--bg);
 }
 
-.bs-bg.bs-field {
+.bs-bg.bs-bg-field {
   background: var(--ink);
   -webkit-mask: var(--field) center / 100% 100% no-repeat;
   mask: var(--field) center / 100% 100% no-repeat;
 }
 
-.bs-bg.bs-field.bs-anim {
+.bs-bg.bs-bg-field.bs-anim {
   animation: bs-field-drift 9s ease-in-out infinite;
 }
 
@@ -981,16 +952,16 @@
 .bs-gallery-head h2 {
   margin: 0;
   color: var(--bs-text);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .bs-gallery-head span {
   color: var(--bs-muted-2);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 0.6875rem;
 }
 
 .bs-preset-group {
@@ -1011,7 +982,7 @@
 .bs-preset-group-head h3 {
   margin: 0;
   color: var(--bs-muted);
-  font-size: 9px;
+  font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1020,11 +991,11 @@
 .bs-preset-group-head span {
   padding: 1px 6px;
   border: 1px solid var(--bs-line);
-  border-radius: 999px;
-  background: #121815;
+  border-radius: 0;
+  background: var(--bs-panel-2);
   color: var(--bs-muted-2);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 0.6875rem;
 }
 
 .bs-preset-grid {
@@ -1039,8 +1010,8 @@
   gap: 9px;
   padding: 8px;
   border: 1px solid var(--bs-line);
-  border-radius: 10px;
-  background: #0f1512;
+  border-radius: 0;
+  background: var(--bs-panel);
   color: inherit;
   text-align: left;
   transition: border-color 0.15s, transform 0.15s, background 0.15s, box-shadow 0.15s;
@@ -1048,8 +1019,7 @@
 
 .bs-pcard:hover {
   border-color: var(--bs-line-strong);
-  background: #121a16;
-  transform: translateY(-1px);
+  background: var(--bs-panel-2);
 }
 
 .bs-pcard:active {
@@ -1057,8 +1027,7 @@
 }
 
 .bs-pcard.bs-active {
-  border-color: rgba(61, 214, 196, 0.55);
-  box-shadow: 0 0 0 1px rgba(61, 214, 196, 0.22);
+  border-color: var(--bs-accent);
 }
 
 .bs-pthumb {
@@ -1067,15 +1036,15 @@
   height: 108px;
   padding: 8px;
   overflow: hidden;
-  border-radius: 6px;
-  background: #0a0e0c;
+  border-radius: 0;
+  background: var(--bs-bg-2);
 }
 
 .bs-pstage {
   position: relative;
   flex: none;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--bg, #0a0e0c);
 }
 
@@ -1095,12 +1064,12 @@
 }
 
 .bs-pstage.bs-checker {
-  background-color: #0b0f0d;
+  background-color: var(--bs-bg-2);
   background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.05) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.05) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.05) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.05) 75%);
+    linear-gradient(45deg, color-mix(in srgb, var(--bs-text) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--bs-text) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--bs-text) 5%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--bs-text) 5%, transparent) 75%);
   background-position: 0 0, 0 7px, 7px -7px, -7px 0;
   background-size: 14px 14px;
 }
@@ -1167,7 +1136,7 @@
 
 .bs-pname {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1176,7 +1145,7 @@
 .bs-pdims {
   color: var(--bs-muted-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.6875rem;
 }
 
 .bs-toast {
@@ -1186,11 +1155,13 @@
   z-index: 60;
   padding: 9px 14px;
   border: 1px solid var(--bs-line-strong);
-  border-radius: 999px;
-  background: #141b18;
+  border-radius: 0;
+  background: var(--bs-panel-2);
   color: var(--bs-text);
-  font-size: 11.5px;
-  white-space: nowrap;
+  font-size: 0.75rem;
+  max-width: calc(100vw - 2rem);
+  white-space: normal;
+  text-align: center;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 12px);
@@ -1259,7 +1230,7 @@
 
 .mb-name {
   color: #eceef0;
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
 }
 
@@ -1268,7 +1239,7 @@
   align-items: center;
   gap: 6px;
   color: #8e9a94;
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1302,7 +1273,15 @@
   }
 
   .bs-main {
+    display: contents;
+  }
+
+  .bs-canvas-card {
     order: 1;
+  }
+
+  .bs-gallery {
+    order: 3;
   }
 
   .bs-canvas-area {
@@ -1340,7 +1319,7 @@
   }
 
   .bs-seg button {
-    font-size: 9.5px;
+    font-size: 0.6875rem;
   }
 
   .bs-preset-grid {
@@ -1359,7 +1338,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bs-bg.bs-field.bs-anim {
+  .bs-bg.bs-bg-field.bs-anim {
     animation: none;
   }
 
@@ -1378,7 +1357,10 @@
   .bs-pcard,
   .bs-seg button,
   .bs-switch .bs-track,
-  .bs-switch .bs-track::after {
+  .bs-switch .bs-track::after,
+  .bs-input,
+  .bs-select,
+  .bs-toast {
     transition: none;
   }
 }
