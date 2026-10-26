@@ -15,11 +15,15 @@
  * The payloads are the shapes the client reads (src/read.ts:8-11,99,189): a
  * conversation list and one conversation's messages. Any other route answers
  * 404, so a frame can never be recorded from an unexpected endpoint.
+ *
+ * The server counts the requests it served: the exporter refuses to write a
+ * frame the client did not read here, which is what keeps live customer data
+ * out of a recorded frame.
  */
 
 import {
   startFixtureApi as startServer,
-  type FixtureApi,
+  type FixtureApi as ServerFixtureApi,
 } from "../../../packages/tui-frame/src/fixture-server.ts";
 
 const CONVERSATIONS = {
@@ -40,13 +44,20 @@ const MESSAGES = {
   ],
 };
 
-export type { FixtureApi };
+export type FixtureApi = ServerFixtureApi & {
+  /** How many requests the client made to this server. */
+  served: () => number;
+};
 
 /** Start the fixture API on a free loopback port. */
-export function startFixtureApi(options?: { unref?: boolean }): Promise<FixtureApi> {
-  return startServer({
+export async function startFixtureApi(options?: {
+  unref?: boolean;
+}): Promise<FixtureApi> {
+  let served = 0;
+  const server = await startServer({
     unref: options?.unref,
     route: (pathname) => {
+      served += 1;
       if (pathname === "/api/conversations") {
         return { status: 200, body: CONVERSATIONS };
       }
@@ -59,4 +70,8 @@ export function startFixtureApi(options?: { unref?: boolean }): Promise<FixtureA
       };
     },
   });
+  return {
+    ...server,
+    served: () => served,
+  };
 }

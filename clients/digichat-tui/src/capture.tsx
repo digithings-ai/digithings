@@ -20,8 +20,9 @@ import { testRender } from "@opentui/react/test-utils";
 
 import { makeRecordedFrame, type RecordedFrame } from "../../../packages/tui-frame/src/record.ts";
 import {
-  cropMainPane,
+  cropChatPane,
   railColumns,
+  WORDMARK_ROWS,
   DEFAULT_FRAME_HEIGHT,
   DEFAULT_FRAME_WIDTH,
 } from "./frame";
@@ -77,12 +78,17 @@ export async function captureChatThread(options?: {
     if (captured.includes(UNREACHABLE)) {
       throw new Error("the digichat thread did not load from the fixture API");
     }
-    const cropped = cropMainPane(captured, { railCols: railColumns(width) });
+    if (api.served() === 0) {
+      throw new Error(
+        "the digichat client did not read from the fixture API; the recorded frame would be live data",
+      );
+    }
+    const cropped = cropChatPane(captured, {
+      railCols: railColumns(width),
+      headerRows: WORDMARK_ROWS,
+    });
     // The composer is part of the thread screen, not of the fixture copy: a
-    // frame without it recorded a loading or error screen. Using a fixture
-    // message as the marker tied the guard to the fixture's wording, and the
-    // old marker ("captureCharFrame") happened to be a substring of the
-    // assistant reply, so it proved nothing.
+    // frame without it recorded a loading or error screen.
     if (!cropped.frame.includes(PLACEHOLDER)) {
       throw new Error("the captured frame does not show the digichat thread");
     }
