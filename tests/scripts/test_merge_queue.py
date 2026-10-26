@@ -1079,6 +1079,82 @@ def test_a_quoted_approve_inside_an_inline_code_span_does_not_clear_a_block() ->
     assert any("changes_requested" in r for r in verdict.reasons)
 
 
+def test_a_quoted_prose_approve_in_an_inline_span_does_not_clear_a_block() -> None:
+    """A `Review verdict:` line is a verdict too: shown in backticks it claims nothing."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer wrote `Review verdict: approve` before the finding was "
+                    f"closed; the block still stands at `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_prose_changes_requested_in_an_inline_span_does_not_block() -> None:
+    """The same rule the other way round: a shown block is not a block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="approve", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "When a finding is open, write `Review verdict: changes requested` "
+                    f"and name the head `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_prose_verdict_with_the_verdict_word_in_backticks_is_still_read() -> None:
+    """Only a shown *token* is a quote: `Review verdict: `approve`` is posted."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_value_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "Review verdict: `approve`\n\n"
+                    f"At `{head[:12]}` the finding is closed.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
 def test_a_quoted_approve_inside_a_tilde_fence_does_not_clear_a_block() -> None:
     """`~~~` fences a block as surely as ``` does."""
     head = "a" * 40

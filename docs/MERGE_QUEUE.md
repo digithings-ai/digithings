@@ -224,7 +224,9 @@ written once:
   marker and cleared the block through the provenance head.
 - A **prose verdict names the head** through any sha written in the comment — on the
   verdict line, in the sentence after it, or in the scope line the review opens with —
-  and through the provenance marker's `head=`.
+  and through the provenance marker's `head=`. Inline code is kept here, because a sha
+  a reviewer writes in backticks (`3f2a9c1d4b5e`) is still the sha they named; only the
+  `Review verdict:` token has to sit outside a span to count as posted (#4990).
 
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.

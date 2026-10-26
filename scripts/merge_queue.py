@@ -2488,11 +2488,24 @@ def _line_at(body: str, index: int) -> str:
 
 
 def _prose_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
-    match = _PROSE_VERDICT_RE.search(body)
-    if match is None:
-        return None
-    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+    """`(verdict, the line it was read from)` from a `Review verdict:` line.
+
+    A line whose `Review verdict:` token sits inside an inline code span is a
+    quote, not a claim, and it is skipped (#4990). The spans are not stripped
+    from the whole body the way `_strip_code_blocks` does for markers: a prose
+    verdict binds the head through every sha in the comment, and a reviewer who
+    writes that sha in backticks has still named it. Only the token decides
+    whether the line is posted, so `Review verdict: `approve`` — the verdict
+    word itself in backticks — is still read, and `` `Review verdict: approve` ``
+    is not. Fenced blocks are already gone: the caller strips them first.
+    """
+    for match in _PROSE_VERDICT_RE.finditer(body):
+        if _inside_inline_code(body, match.start()):
+            continue
+        return match.group("verdict").lower().replace(" ", "_"), _line_at(
+            body, match.start()
+        )
+    return None
 
 
 def _inside_inline_code(body: str, index: int) -> bool:
