@@ -10,7 +10,8 @@
  * `/book/…` paths, which do not resolve over `file://`. It is a fixture, not
  * a product surface, and it binds to loopback only.
  */
-import { copyFileSync, createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,6 +69,27 @@ function serve(dir) {
   return new Promise((ok) => {
     server.listen(0, "127.0.0.1", () => ok({ server, base: `http://127.0.0.1:${server.address().port}` }));
   });
+}
+
+
+/** The text the book is made of, hashed, so a stale PDF cannot sit unnoticed. */
+function contentHash() {
+  const root = join(APP_ROOT, "content", "book");
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".mdx")) files.push(full);
+    }
+  };
+  walk(root);
+  const hash = createHash("sha256");
+  for (const file of files) {
+    hash.update(file.slice(root.length));
+    hash.update(readFileSync(file));
+  }
+  return hash.digest("hex").slice(0, 16);
 }
 
 const { server, base } = await serve(OUT);
@@ -196,8 +218,19 @@ async function captureEdition(page, pages, entry) {
     // differently coloured page.
     sheet.drawImage(image, { x: 0, y: 0, ...A4 });
   }
-  await (await import("node:fs/promises")).writeFile(target, await pdf.save());
-  return { pages, theme: entry.theme, palette: entry.palette, file };
+  const bytes = await pdf.save();
+  await (await import("node:fs/promises")).writeFile(target, bytes);
+  // Content-addressed name: a browser cannot serve yesterday's file for today's
+  // book because the name changes when the file does.
+  const stamp = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+  const named = file.replace(/\.pdf$/, `-${stamp}.pdf`);
+  if (named !== file) {
+    const renamed = join(APP_ROOT, "public", "book", named);
+    copyFileSync(target, renamed);
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(target);
+  }
+  return { pages, theme: entry.theme, palette: entry.palette, file: named };
 }
 
 try {
@@ -219,6 +252,14 @@ try {
     await book.page.close();
   }
 
+  // Anything this run did not write is yesterday's book.
+  const keep = new Set(written.map((edition) => edition.file));
+  for (const old of readdirSync(join(APP_ROOT, "public", "book"))) {
+    if (/^the-digithings-book.*\.pdf$/.test(old) && !keep.has(old)) {
+      unlinkSync(join(APP_ROOT, "public", "book", old));
+    }
+  }
+
   mkdirSync(join(APP_ROOT, "lib", "book", "generated"), { recursive: true });
   writeFileSync(
     join(APP_ROOT, "lib", "book", "generated", "pages.json"),
@@ -227,10 +268,11 @@ try {
         pages,
         map,
         seed,
-        editions: PRINTED.map((entry) => ({
-          palette: entry.palette,
-          theme: entry.theme,
-          file: entry.file,
+        contentHash: contentHash(),
+        editions: written.map((edition) => ({
+          palette: edition.palette,
+          theme: edition.theme,
+          file: edition.file,
         })),
       },
       null,
@@ -240,7 +282,8 @@ try {
 
   // The exported site is what ships; keep every download in it without
   // requiring a second build after printing.
-  for (const entry of PRINTED) {
+  for (const edition of written) {
+    const entry = { file: edition.file };
     const exported = join(OUT, "book", entry.file);
     mkdirSync(dirname(exported), { recursive: true });
     copyFileSync(join(APP_ROOT, "public", "book", entry.file), exported);

@@ -9,6 +9,8 @@
  * say which is which without being opened.
  */
 
+import pages from "@/lib/book/generated/pages.json";
+
 export type BookAppearance = { theme: "light" | "dark"; palette: string };
 
 export function bookAppearance(): BookAppearance {
@@ -19,6 +21,16 @@ export function bookAppearance(): BookAppearance {
 
 /** `the-digithings-book-<theme>[-<palette>].<extension>` */
 export function bookFilename(extension: string, appearance = bookAppearance()): string {
+  // The PDF is a file that already exists, and its name carries the hash of its
+  // own bytes. Promising a different name than the one saved is how a reader
+  // ends up opening yesterday's book.
+  if (extension === "pdf") {
+    const printed = (pages as { editions?: { palette: string; theme: string; file: string }[] })
+      .editions?.find(
+        (edition) => edition.theme === appearance.theme && edition.palette === appearance.palette,
+      );
+    if (printed) return printed.file;
+  }
   return `the-digithings-book-${appearance.theme}${appearance.palette ? `-${appearance.palette}` : ""}.${extension}`;
 }
 
