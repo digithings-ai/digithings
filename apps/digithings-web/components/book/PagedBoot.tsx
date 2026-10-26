@@ -80,7 +80,13 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // parked a page's own body off-screen (page 9 lost its text).
         const host = content.parentElement;
         const priorStyle = host?.getAttribute("style") ?? "";
-        if (host) host.style.cssText = "position:fixed;left:-200vw;top:0;width:1280px";
+        // A fixed pixel offset, never a viewport unit: at 320px wide, -200vw is
+        // -640px and a 1280px document still reaches x=640 — on screen, over the
+        // title page. Ten thousand pixels is off-screen at every width.
+        if (host) {
+          host.style.cssText =
+            "position:fixed;left:-10000px;top:0;width:1280px;visibility:hidden";
+        }
 
 
         // The accent is not written here, and must not be: the page boxes are

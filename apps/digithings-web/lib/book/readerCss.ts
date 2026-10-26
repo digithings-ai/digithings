@@ -167,9 +167,10 @@ export const BOOK_READER_CSS = `
   .book-nav {
     position: fixed;
     inset: auto 0 0 0;
+    min-width: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.75rem;
     max-height: none;
@@ -206,7 +207,7 @@ export const BOOK_READER_CSS = `
   .book-nav__title { display: none; }
   /* The export stays in the bar: two compact cells, no heading. */
   .book-nav__toggle { grid-column: 1; }
-  .book-nav .book-export { margin: 0; grid-column: 3; }
+  .book-nav .book-export { margin: 0; grid-column: 3; min-width: 0; }
   /* The bar is a control strip, not a place for progress prose. */
   .book-nav .book-export__status { display: none; }
   .book-nav .book-export__title { display: none; }
@@ -217,6 +218,20 @@ export const BOOK_READER_CSS = `
     font-size: 0.72rem;
   }
   .book-nav .book-export__mark { display: none; }
+  .book-nav .book-export__row { gap: 0.3rem; }
+}
+
+/* A 320px phone cannot hold "contents" and two full-size cells side by side:
+   the grid overflowed by a measured 32px, which widened the layout viewport and
+   pushed the fixed bar below the fold. Tighten, do not wrap — the bar has to
+   stay one line and stay put. */
+@media (max-width: 420px) {
+  .book-nav { padding-inline: 0.9rem; gap: 0.5rem; }
+  .book-nav .book-export__btn {
+    padding: 0 0.45rem;
+    font-size: 0.66rem;
+    min-height: 2.3rem;
+  }
 }
 
 /* Printing this page gives the book, not the site around it. The pages are
