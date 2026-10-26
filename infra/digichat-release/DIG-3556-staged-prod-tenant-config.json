@@ -17,8 +17,8 @@
     "digithings.ai": {
       "tools": {
         "catalog": [
-          { "id": "digisearch", "label": "DigiSearch", "default": true },
-          { "id": "digivault", "label": "DigiVault", "default": true }
+          { "id": "digisearch", "label": "digisearch", "default": true },
+          { "id": "digivault", "label": "digivault", "default": true }
         ]
       }
     }

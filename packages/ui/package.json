@@ -58,6 +58,7 @@
     "./chat/context-meter": "./src/components/chat/skins/digichat-context-meter.tsx",
     "./chat/composer-toolbar": "./src/components/chat/skins/digichat-composer-toolbar.tsx",
     "./chat/stock": "./src/components/chat/stock/index.ts",
+    "./chat/tool-surface": "./src/components/chat/stock/tool-surface.ts",
     "./chat/stock/thread": "./src/components/chat/stock/thread.aui.tsx",
     "./chat/notice": "./src/components/chat/stock/chat-notice.tsx",
     "./chat/transcript": "./src/components/chat/transcript/index.ts",

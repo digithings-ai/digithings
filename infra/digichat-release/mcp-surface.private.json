@@ -1,0 +1,16 @@
+{
+  "_reviewed": {
+    "zammad": "scripts/zammad_mcp/server.py \u2014 every @mcp.tool()"
+  },
+  "_unvalidated_servers": [
+    "datatap",
+    "digiquant"
+  ],
+  "zammad": [
+    "search_tickets",
+    "list_tickets",
+    "get_ticket",
+    "ticket_report",
+    "aggregate_tickets"
+  ]
+}

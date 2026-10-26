@@ -248,3 +248,58 @@ describe("DigichatComposerToolbar usage meter", () => {
     expect(screen.getByRole("img", { name: /^Context / })).toBeTruthy();
   });
 });
+
+describe("DigichatComposerToolbar tool count (#tool-contract)", () => {
+  // The count is derived from the same expansion `/tools` renders, so a row a
+  // deployment broke down into tools is counted as those tools and a house row
+  // it did not break down is counted as the built-in pair the menu lists.
+  const tickets = {
+    id: "tickets",
+    tools: [
+      { id: "tickets_search" },
+      { id: "tickets_list" },
+      { id: "tickets_get" },
+      { id: "tickets_report" },
+      { id: "tickets_aggregate" },
+    ],
+  };
+
+  const occPrefs = (over: Partial<EmbedChatPrefsApi> = {}) =>
+    prefsApi({
+      hasDigisearch: true,
+      hasVault: true,
+      mcpServers: [tickets, { id: "digisearch" }, { id: "digivault" }],
+      ...over,
+    });
+
+  it("counts the built-in pair the menu lists, not one bare server", () => {
+    render(<DigichatComposerToolbar prefs={occPrefs()} />);
+    // 5 ticket tools + 2 digisearch built-ins + 2 digivault built-ins.
+    expect(screen.getByLabelText("Open tools").textContent).toBe("9 tools");
+    expect(screen.getByLabelText("Open MCP servers").textContent).toBe("3 MCPs");
+  });
+
+  it("does not count the tools of a row that is switched off", () => {
+    render(
+      <DigichatComposerToolbar
+        prefs={occPrefs({
+          prefs: {
+            ...DEFAULT_EMBED_CHAT_PREFS,
+            extra: { ...DEFAULT_EMBED_CHAT_PREFS.extra, tickets: false },
+          },
+          extraToolOn: (id) => id !== "tickets",
+        })}
+      />,
+    );
+    expect(screen.getByLabelText("Open tools").textContent).toBe("4 tools");
+    expect(screen.getByLabelText("Open MCP servers").textContent).toBe("2 MCPs");
+  });
+
+  it("does not count a house row whose switch is off", () => {
+    render(
+      <DigichatComposerToolbar prefs={occPrefs({ hasDigisearch: false })} />,
+    );
+    expect(screen.getByLabelText("Open tools").textContent).toBe("7 tools");
+    expect(screen.getByLabelText("Open MCP servers").textContent).toBe("2 MCPs");
+  });
+});
