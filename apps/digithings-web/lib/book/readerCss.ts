@@ -128,7 +128,18 @@ export const BOOK_READER_CSS = `
    real page boxes — so nothing moves when the pages arrive. The squares are the
    reader's own pixel field, breathing rather than scrolling. */
 .book-live { position: relative; }
-.book-live__skeleton { display: flex; flex-direction: column; gap: 2.25rem; }
+/* Overlaid on the pages, never in the flow: a placeholder that keeps its space
+   after the real pages arrive leaves them nineteen thousand pixels below the
+   fold, which reads as a blank page. */
+.book-live__skeleton {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+  pointer-events: none;
+}
 /* A shimmer alone reads as a page that never loads. Say what is happening, and
    say how far along it is. */
 .book-live__skeleton-status {
@@ -185,6 +196,7 @@ html:has(.book-live) { scrollbar-gutter: stable; }
   overflow: hidden;
 }
 .book-live__stage {
+  position: relative;
   transform-origin: top left;
 }
 .book-live__source {
