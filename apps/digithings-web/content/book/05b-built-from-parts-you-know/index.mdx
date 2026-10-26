@@ -1,0 +1,41 @@
+---
+title: Built from parts you know
+order: 6
+summary: >-
+  Every module stands on open projects you can name and replace. What digithings adds is the contract between them.
+---
+
+A stack can look larger than it is. Strip the names away and digithings is a
+handful of services, each standing on projects that already have users and
+documentation: a graph library for the hub, an OpenAI client for model calls, a
+vector index for retrieval, a backtesting engine for research, a token standard
+for identity. Naming them is the fastest way to see how much of the stack is
+ordinary.
+
+Recognition answers the first question a technical buyer asks: could we run
+this ourselves? The harder question is what sits between the parts. A library
+gives you a graph or an index. It does not decide which service owns the run,
+what a result must carry, or how a caller proves who it is. That is the work in
+the third column.
+
+| Module | The open part | What digithings adds |
+| --- | --- | --- |
+| digigraph | LangGraph | A tool registry the verticals publish into, a tool allowlist, one streamed answer shape |
+| digillm | OpenAI client, Pydantic | Shared request and answer types, retries, a response cache, usage records and a ledger of what left for a provider |
+| digisearch | Chroma, pgvector | Ingest and answer as separate paths, reranking, workspace filters, citations |
+| digiquant | NautilusTrader | A fixed stage order, provenance on every result, a partial mark when data is missing, the pipeline as tools |
+| digichat | OpenID Connect, Postgres | A sign-in traded for a short-lived token, history that can stay in the browser |
+| digikey | JSON Web Tokens, bcrypt | One issuer, narrow scopes, fifteen-minute tokens, revocation, verification against a published key |
+
+Two parts sit outside the table. digitrace is one helper in every service that
+emits OpenTelemetry, so a request keeps one trail across service boundaries and
+the tracing backend is a setting. The local stack is one Docker Compose file
+with a profile per optional module, so the core starts together and the rest
+arrives when the work does.
+
+If the parts were the product, you could glue them yourself. What digithings
+adds is the contract each part keeps: the query index has several backends
+behind one interface, models are reached by name through one routing layer,
+sign-in accepts any OpenID Connect provider, and the backtesting engine is
+pinned to one exact build so a result can be reproduced. The parts are
+ordinary. The seams are the work.

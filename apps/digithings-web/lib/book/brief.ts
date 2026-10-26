@@ -21,6 +21,7 @@ export const BRIEF: readonly string[] = [
   "03-open-core",
   "03-how-it-scales",
   "05-environment",
+  "05b-built-from-parts-you-know",
   "06-use-cases",
   "10-digigraph",
   "11-digillm",
