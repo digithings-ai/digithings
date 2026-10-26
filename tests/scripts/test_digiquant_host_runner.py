@@ -496,6 +496,37 @@ class InstallerTest(unittest.TestCase):
             self.assertFalse((Path(home) / "Library" / "LaunchAgents").exists())
 
     @unittest.skipUnless(shutil.which("plutil"), "install.sh needs plutil (macOS)")
+    def test_install_refuses_a_checkout_without_the_image_environment(self):
+        # The plans call `uv run --frozen --no-sync`, so a checkout whose .venv was
+        # never built, or was built with a plain `uv sync`, fails every job at its
+        # first step. The installer must refuse instead of writing 13 broken clocks.
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as checkout:
+            git = ["git", "-C", checkout]
+            subprocess.run([*git, "init", "-q", "-b", "develop"], check=True)
+            subprocess.run(
+                [*git, "-c", "user.email=t@example.com", "-c", "user.name=t",
+                 "commit", "-q", "--allow-empty", "-m", "checkout"],
+                check=True,
+            )
+            script = Path(checkout, "scripts", "digiquant-host-runner", "run_job.py")
+            script.parent.mkdir(parents=True)
+            script.write_text("# placeholder\n", encoding="utf-8")
+            env_file = Path(home) / "runner.env"
+            env_file.write_text("A=1\n", encoding="utf-8")
+            env_file.chmod(0o600)
+            result = subprocess.run(
+                ["/bin/sh", str(_INSTALL), "--install", checkout],
+                cwd=str(_ROOT),
+                capture_output=True,
+                text=True,
+                check=False,
+                env=dict(os.environ, HOME=home, DIGIQUANT_HOST_RUNNER_ENV=str(env_file)),
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(".venv is missing or incomplete", result.stderr)
+            self.assertFalse((Path(home) / "Library" / "LaunchAgents").exists())
+
+    @unittest.skipUnless(shutil.which("plutil"), "install.sh needs plutil (macOS)")
     def test_install_refuses_a_linked_worktree(self):
         # A checkout whose `.git` is a file is a linked worktree, and the clocks must
         # not run from one: the branch it names is deleted eventually. The guard is
@@ -528,6 +559,15 @@ class DocsTest(unittest.TestCase):
         text = _DOC.read_text(encoding="utf-8")
         self.assertIn("Not true yet", text)
         self.assertIn("still dispatches to the container", text)
+
+    def test_the_doc_gives_the_environment_the_clocks_actually_need(self):
+        # A plain `uv sync --frozen` leaves the root workspace's .venv empty, and the
+        # plans run with --no-sync. The doc must name the sync the image uses and say
+        # that nothing installs at run time.
+        text = _DOC.read_text(encoding="utf-8")
+        self.assertIn("--no-sync", text)
+        self.assertIn("--package digiquant --extra prices --extra research --extra nautilus", text)
+        self.assertIn("--package digigraph --extra checkpoint-postgres", text)
 
 
 if __name__ == "__main__":
