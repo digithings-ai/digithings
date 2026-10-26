@@ -5,22 +5,24 @@ summary: >-
   Strategy research, backtesting and optimisation behind one ordered pipeline. Quant work keeps its own rules.
 ---
 
-Quantitative research has a failure mode most software does not: results
-that look rigorous and are not. A backtest that peeks at the future, steps
-run in a convenient order, a number nobody can reproduce. Each one
-manufactures confidence. digiquant is built so those outcomes are hard to
-produce by accident, because the honest order of operations is the only
-order the pipeline will run.
+digiquant is one example of what a domain service looks like: one
+discipline's rules, packaged so the rest of the stack can call them. Here the
+discipline is quantitative research, and its failure mode is unusual. Results
+look rigorous and are not: a backtest that peeks at the future, steps run in a
+convenient order, a number nobody can reproduce. Each one manufactures
+confidence. digiquant makes those outcomes hard to produce by accident,
+because the honest order of operations is the only order the pipeline will run.
 
-Belief in a digiquant number rests on process. Research moves through fixed
-stages, each stage declares what it reads, and every result records the
-engine and build that produced it, so it can be checked later.
+A digiquant number is only as good as the process behind it, so the process
+is fixed. Research follows one path. Each stage declares what it reads, and
+every result records the engine and build behind it, so it can be checked
+later.
 
 ## How it works
 
 The unit of work is the whole pipeline. A caller asks for a research task;
 digiquant runs the stages in order on NautilusTrader, an open trading engine
-with a Rust core pinned to one exact version, and returns the result with its
+pinned so any result can be reproduced, and returns the result with its
 provenance attached.
 
 ```mermaid each arrow is a contract: a stage reads only what the stage before it wrote
@@ -35,8 +37,8 @@ The engine replays history one bar at a time, so a strategy cannot read a
 price before its moment; that is what keeps look-ahead bias out. The fixed
 order keeps the rest out: nothing is optimised before it has been validated
 and backtested. A result whose engine cannot be identified comes back marked
-partial and not citable, with no plausible number to mislead anyone. The price
-is one engine: a strategy written for another has to be ported.
+partial and not citable, with no plausible number to mislead anyone. The
+cost is one engine. A strategy written for another has to be ported.
 
 ## Where it fits
 
@@ -48,10 +50,9 @@ ratio, a profit or a trade count unless it came from digiquant. Each result
 names the engine version, the pin and the lockfile it ran on, so a number on a
 dashboard leads back to the build behind it.
 
-The pipeline runs wherever compute is cheapest for you: beside the data on
-one machine for fast backtests, on a timetable in the cloud, or on hardware
-sized to the workload. The ordering rules travel with it,
-because they are written into the code itself.
+The pipeline runs wherever compute is cheapest: beside the data for fast
+backtests, on a timetable in the cloud, or on hardware sized to the workload.
+The ordering rules travel with it, because they are written into the code.
 
 <Reference kind="architecture" href="repo:digiquant/ARCHITECTURE.md" title="digiquant architecture">
   The pipeline stages, the honesty rules and the integration points.

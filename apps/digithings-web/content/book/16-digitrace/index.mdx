@@ -2,19 +2,20 @@
 title: digitrace, seeing what the system did
 order: 16
 summary: >-
-  Every request leaves a trail an operator can follow. Observability is a library first and a service second.
+  Every request leaves a trail you can follow. Observability is a library first and a service second.
 ---
 
-When an answer looks
-wrong, someone has to be able to ask which tools ran, in what order, what each
-one saw and how long it took. digitrace is how digithings answers: it records
-the trail of every request as it happens, so nobody has to piece it together
-from log lines afterwards.
+When a client asks why the assistant said what it said, or a regulator asks
+six months later, someone has to be able to show the answer's working: which
+tools ran, in what order, what each one saw and how long it took. digitrace is
+how digithings answers. It records the trail of every request as it happens,
+so nobody has to piece it together from log lines afterwards.
 
-The trail serves several readers. An operator uses it to debug a bad answer.
-A reviewer uses it to audit a research number. Anyone deciding whether to
-trust the system can see the steps behind a result. And the trail shows where to improve: a tool that takes four seconds, or a
-call that fails one time in ten, stands out at once.
+The trail serves several readers. A support engineer chasing a bad answer on a
+Friday afternoon follows it step by step. An auditor checking a research
+number reads the same trail a quarter later. And it shows where to improve: a
+tool that takes four seconds, or a call that fails one time in ten, stands out
+at once.
 
 ## How it works
 
@@ -22,7 +23,7 @@ digitrace has two faces. As a library, it gives every service a thin helper
 that emits OpenTelemetry data to whatever endpoint the deployment names.
 OpenTelemetry is the open standard for traces, so services depend on no
 tracing vendor. As a small service, it reports the tracing state to the hub and
-the dashboards, so an operator can see it without touching sensitive
+the dashboards, so whoever is on call can see it without touching sensitive
 configuration.
 
 ```mermaid one request, one story: the trail follows it across every service it touches
@@ -30,19 +31,18 @@ flowchart LR
   REQ[request] --> HUB[hub steps]
   HUB --> VERT[vertical steps]
   VERT --> TRAIL[one trail]
-  TRAIL --> OP[operator]
+  TRAIL --> OP[whoever asks]
 ```
 
-The trail follows a request across service boundaries: each call carries
-the standard `traceparent` header, so a step in the hub and the step it
-triggered in a vertical appear in one story rather than in two logs that have
-to be matched by timestamp.
+The trail follows a request across service boundaries. A step in the hub and
+the step it triggered in a vertical appear in one story, so nobody has to
+match two logs by timestamp.
 
 ## Where it fits
 
 Every service that acts carries the helper, so where a trace goes is one
-setting, not a code change. Because the format is OpenTelemetry, switching to a
-different tracing backend changes configuration, not service code.
+setting. Because the format is OpenTelemetry, switching to a different tracing
+backend is a configuration change.
 
 The trail goes wherever you point it: a backend on your own machine, one
 beside your cloud workers, or one on your own servers with the retention you

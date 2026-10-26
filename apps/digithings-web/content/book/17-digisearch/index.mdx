@@ -2,7 +2,7 @@
 title: digisearch, finding what matters
 order: 17
 summary: >-
-  Retrieval over the operator's own documents. Ingestion stays separate from answering.
+  Retrieval over your own documents. Ingestion stays separate from answering.
 ---
 
 Language models know a great deal and remember nothing of yours. Everything
@@ -13,8 +13,11 @@ them.
 
 Without retrieval a model answers from training memory: fluent, confident
 and sometimes invented. With it, the answer arrives with the passages it
-stands on, and a sceptical reader can check them. digisearch makes that the
-default shape of every answer that touches private knowledge.
+stands on, and a sceptical colleague can check them. digisearch makes that
+the default shape of every answer that touches private knowledge.
+
+Passages go to whichever model answers, so confidential work belongs on a
+local one.
 
 ## How it works
 
@@ -36,11 +39,11 @@ flowchart LR
 ```
 
 The paths share storage and nothing else, and they need different
-permissions: a key with `digisearch:query` can ask but cannot add documents,
-which takes `digisearch:ingest`. When a workspace is set, its filter is added
-to every query by the service, not by the caller, so one index can hold
-several workspaces without one reading another. The cost of the split is a
-step: nothing is searchable until someone ingests it.
+permissions: a search key can ask questions and cannot add documents. When
+a workspace is set, the service adds its filter to every query, so one index
+can hold several workspaces and one team can't read another's documents,
+even by asking. The catch is that nothing is searchable until someone
+ingests it.
 
 ## Where it fits
 
@@ -52,8 +55,7 @@ in the index the answering path reads.
 
 The index backend is one setting: Chroma on local disk by default, pgvector in
 Postgres, Cloudflare Vectorize or Azure AI Search. In every home, ingestion is
-an explicit act, so nothing enters the index you did not put there. Passages
-do go to the model that answers, so confidential work belongs on a local one.
+an explicit act, so nothing enters the index you did not put there.
 
 <Reference kind="architecture" href="repo:digisearch/ARCHITECTURE.md" title="digisearch architecture">
   The two paths, the index choices and the access rules.

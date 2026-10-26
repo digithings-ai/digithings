@@ -11,11 +11,11 @@ everything. digikey is the narrow answer: exactly one service issues the signed 
 other service checks them for itself, and no service ever
 takes a caller at its word.
 
-Two kinds of caller need access. Services and outside callers hold long-lived
-access keys (they start `dgk_live_`), shown once when issued, and exchange them
-for a signed token that lasts 15 minutes. People sign in through the interface, and the request layer
-trades their session for the same short-lived credential. Both come from the
-same issuer.
+Two kinds of caller need access. Services and outside systems hold long-lived
+access keys, shown once when issued, and exchange one for a signed token that
+lasts fifteen minutes. People sign in through the interface, and the request
+layer trades their session for the same short-lived credential. Both come from
+the same issuer.
 
 ## How it works
 
@@ -35,10 +35,9 @@ flowchart LR
   SVC --> OK[verifies locally]
 ```
 
-Access keys are stored only as bcrypt hashes, so a lost one is replaced, never
-recovered. Scopes keep every credential narrow: a key with `digisearch:query`
-can search documents but cannot add them, because it was never granted
-`digisearch:ingest`.
+Keys are stored scrambled, so nobody can read them back. Lose one and you get
+a new one. Scopes keep every credential narrow: a key scoped to search can read
+documents and cannot add them.
 
 ## Where it fits
 
@@ -47,12 +46,11 @@ paths. Each service declares which scopes its routes need, and shared code
 enforces them the same way everywhere. Outside callers come in through the
 same exchange, so there is no side door with different rules.
 
-Identity is a service of its own, rather than code in each service, so there
-is one place to issue, list and revoke. That makes it a single point of trust,
-and the design contains it. Tokens expire in minutes, scopes are narrow, and
-revoking a key also blocks the tokens already issued from it. The price is
-another service to run, and rotating the signing key today means a redeploy. Because checking is local, identity works
-the same on one machine, on your own servers and in a cloud account.
+Identity lives in one service, so there is one place to issue, list and
+revoke keys. That makes it a single point of trust, and the design contains
+it. Tokens expire in minutes, scopes are narrow, and revoking a key also
+blocks the tokens already issued from it. It costs one more service to run.
+Because checking is local, identity works the same wherever the stack runs.
 
 <Reference kind="architecture" href="repo:digikey/ARCHITECTURE.md" title="digikey architecture">
   Issuance, verification, scopes and the credential lifecycle.

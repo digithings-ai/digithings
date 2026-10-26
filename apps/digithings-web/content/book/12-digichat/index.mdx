@@ -10,15 +10,12 @@ questions go in and answers stream out. Everything behind it, the hub, the
 verticals and the models, serves that surface, and the
 surface itself does very little.
 
-A person signs in, opens a conversation and talks. Answers stream in as they
-are produced, history is kept per conversation, and artifacts such as
-documents and visuals render beside the chat rather than inside a wall of
-text. The same interface can be embedded in another site, so a host can offer
-the experience to its own visitors with the same backend behind it.
-
-Dictation and read-aloud are two more ways into the same conversation: the
-browser's own speech support, off by default, not a digithings model. Chrome
-sends that audio to Google, so keep dictation off for anything confidential.
+An analyst signs in, opens a conversation and asks why a holding moved.
+Answers stream in as they are produced, history is kept per conversation,
+and artifacts such as documents and visuals render beside the chat rather
+than inside a wall of text. The same interface can be embedded in another
+site, so a host can offer the experience to its own visitors with the same
+backend behind it.
 
 ## How it works
 
@@ -30,10 +27,9 @@ surface renders the streaming answer, the history and the artifacts.
 
 Neither half holds anything worth stealing. Sessions are verified on every
 request. Conversations live in the browser, and in Postgres when one is
-configured, never in the chat server itself.
-Embedded visitors are authorised per host before they see anything, and a
-registered host alone authorises nothing: the credential for that visit
-does.
+configured, never in the chat server itself. An embedded visitor gets a
+credential issued for that one visit and that one host, so registering a host
+grants nothing by itself.
 
 ## Where it fits
 

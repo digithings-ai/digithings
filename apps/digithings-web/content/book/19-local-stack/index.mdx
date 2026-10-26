@@ -15,18 +15,20 @@ You need Docker and about 20 GB of free disk; a local model also wants
 plenty of memory. Services start side by side, talk over the machine's own
 network and keep their data in local stores. A developer runs the same
 composition they ship, and a small firm can run the whole product on one
-well-chosen computer. There is no digithings account. Model calls go wherever you point them: a
+well-chosen computer.
+
+There is no digithings account. Model calls go wherever you point them: a
 provider with your own key, or Ollama on the machine, one setting apart. Which
 one you choose decides where your text goes.
 
 ## How it works
 
 One Docker Compose file describes which services run, what each needs and
-how they reach each other. `make up` starts the core: identity, the hub,
-research, retrieval, tracing status, the model router and Ollama. The chat,
-the vault, the MCP servers and a trace collector are profiles you add.
-Stopping it puts everything away. Sample documents ship with it and load with
-one command.
+how they reach each other. A single command starts the core: identity, the
+hub, research, retrieval, tracing status, the model router and Ollama. The
+chat, the vault, the MCP servers and a trace collector are profiles you add.
+One command stops everything. Sample documents ship with it and load on first
+run.
 
 ```mermaid one file describes the whole machine; the services inside are the ones that run everywhere
 flowchart LR
@@ -36,9 +38,9 @@ flowchart LR
   FILE --> STORES[local stores]
 ```
 
-The services behave exactly as they do in any other home, and a request is
-signed and checked exactly as in a cloud account, because the code never
-learns where it is running. The only local concessions are friendlier defaults and warm
+The services behave as they do in any other home, and a request is signed and
+checked as in a cloud account, because the code never learns where it is
+running. The only local concessions are friendlier defaults and warm
 caches.
 
 ## Where it fits
@@ -47,9 +49,8 @@ The local stack is where the working day happens: development, experiments,
 demonstrations and small production workloads. digithings runs its own
 production on the cloud home instead; nothing in the stack insists that a
 client do the same. The last chapter covers what happens when one machine is
-no longer enough.
-Nothing written against the local stack has to be rewritten, so work done
-locally carries straight over.
+no longer enough. Nothing written against the local stack has to be rewritten,
+so work done locally carries straight over.
 
 <Reference kind="guide" href="repo:docs/LOCAL_STACK.md" title="Local stack guide">
   Starting, stopping and understanding the one-machine composition.

@@ -5,49 +5,49 @@ summary: >-
   The first deployment is the computer in front of you. Prove the application there, then move it to a cloud account when it needs more.
 ---
 
-The laptop is usually treated as a developer convenience, a
-smaller and vaguer copy of the real system. That is backwards. If an
-application cannot run on your own computer, it is hard to trust, hard to
-debug and hard to hand to anyone else. So the first deployment of anything
-built on digithings is the computer in front of you.
+The laptop is usually treated as a developer convenience, a vaguer copy of the
+real thing. That is backwards. If an application cannot run on your own
+computer, it is hard to trust or to hand on. So the first deployment of
+anything built on digithings is the computer in front of you.
 
 ## The first hour
 
-Choose the model first: a hosted provider's key, or the one setting that
-keeps every call on the machine with Ollama. That choice decides where your
-passages go, so make it before you load anything of your own. Then start the
-local stack with the chat and trace profiles, load the sample documents with
-one command and ask the chat a question about them. The first thing you see is
-the whole loop working: the interface, the hub, retrieval, a model and a trace
-of what happened.
+Choose the model first: a hosted provider's key, or the setting that keeps
+every call on Ollama. Decide before you load anything of your own. Then start
+the stack, load the sample documents and ask about them. The first thing you
+see is the whole loop: interface, hub, retrieval, a model, a trace.
 
 ## The first week
 
-Pick the one use case closest to your work and switch on only what it needs.
-For research, that is the research vertical and retrieval over your own
-notes. For documents, retrieval and the vault. For an agent, the tools you
-already have, described over MCP so the hub can call them. Keep the trace on
-and read it. It shows how the system reached each answer, which is the
-fastest way to learn where to change it.
+Pick the use case closest to your work and switch on what it needs. For
+research, the research vertical and retrieval over your notes. For documents,
+retrieval and the vault. For an agent, the tools you already have, over MCP.
+Keep the trace on. It shows how the system reached each answer.
 
 ## When it outgrows the machine
 
-You will know, because the trace and the machine both tell you: a pipeline
-that needs more memory, an index that has grown past the disk, more people
-than one machine should serve. At that point, move the module that is under pressure, not the
-whole stack. Put it on a server you own or in a cloud account, point its neighbours at
-the new address (one setting per neighbour) and carry on. Its tools,
-its settings and its credentials work there unchanged.
+You will know: a pipeline needing more memory, an index past the disk, more
+people than one machine should serve. Then move only the module under pressure.
+Put it on a server you own or in a cloud account, point its neighbours there
+and carry on.
 
-## Where it goes
+## Who runs it
 
-The design decisions behind each module, with references into the code, are at
-digithings.ai/book. The code is open under the MIT licence, and every module
-carries its own architecture notes.
+Most teams would rather not run Docker, which is what digithings the company is
+for. We set the stack up on your machines or in your cloud account, run and
+host it, and build the workflows on top. Write to contact@digithings.ai if that
+is the help you need.
 
-That is also the answer to who keeps it running. Nothing here depends on one
-person staying interested: the code and the documentation are public, the
-work of improving it is legible to an agent as well as to a person, and the
-stack carries the skills, tools and review loops it is maintained with. The
-next maintainer can be a person or an agent, and neither starts from a blank
-page.
+## If we disappear
+
+The code does not need us. Everything you build keeps running under the MIT
+licence, and every module ships with architecture notes. Whoever picks it up
+next, person or agent, will not start from a blank page. The design notes are
+at digithings.ai/book.
+
+## A note on the writing
+
+I decided what this book says. An assistant helped me draft and tighten it, and
+every claim was checked against the code. Where the two disagreed, the code
+won, which is the same rule the stack follows: show the working. The
+judgements that remain are mine, including the ones you disagree with.
