@@ -1576,10 +1576,14 @@ def run_step_pool(specs, out, limit=STEP_POOL):
             return name, [name], buf
         if stall_rcs:
             scan_step(name, cmd, timeout=timeout, out=buf, fails=bad,
-                      cwd=cwd, env=env, stall_rcs=stall_rcs)
+                      cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
         else:
             buf.write(f"\n===== {name}\n")
-            rc, _ = sh(cmd, cwd=cwd, timeout=timeout, out=buf, name=name, env=env)
+            # `cwd or WT`, exactly as the serial `step()` does. Passing the raw
+            # `cwd` (None for most specs) let the child inherit the runner's own
+            # working directory -- "/" under launchd -- so every check looked
+            # for `//scripts/...` and failed for a reason that was not its own.
+            rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=buf, name=name, env=env)
             if rc != 0:
                 bad.append(name)
         return name, bad, buf

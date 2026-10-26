@@ -3426,3 +3426,18 @@ class WorktreeRootGuardTest(unittest.TestCase):
             _mod.sh = saved_sh
         self.assertIn("probe", fails)
         self.assertEqual(ran, [], "the pool must not execute a step with no cwd")
+
+    def test_pool_step_without_an_explicit_cwd_runs_in_the_worktree_root(self):
+        """The regression: the pool passed cwd=None, so the child inherited
+        launchd's "/" and every check looked for `//scripts/...`."""
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        seen = []
+        saved = _mod.sh
+        _mod.sh = lambda cmd, cwd=None, **kw: (seen.append(cwd), (0, ""))[1]
+        try:
+            _mod.run_step_pool([("probe", ["true"], 5, None, None, ())], io.StringIO())
+        finally:
+            _mod.sh = saved
+        self.assertEqual(seen, [tmp], "a step with no cwd must run in the worktree root")
