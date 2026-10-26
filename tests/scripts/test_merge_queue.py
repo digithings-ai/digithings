@@ -1510,6 +1510,7 @@ def _seat_verdict_comment(
     comment_id: str = "",
     scope_sha: str = "",
     provenance_head: str = "",
+    withdraws: str = "",
 ) -> dict[str, Any]:
     """A verdict comment as the fleet posts it: both markers and a prose line.
 
@@ -1521,6 +1522,9 @@ def _seat_verdict_comment(
     provenance marker's `head=`. Both default to `head_sha`, which is what the
     fleet writes; they are separate arguments so a comment whose marker names a
     different head than its provenance marker can be built.
+
+    `withdraws` is the target of a `Withdraws:` line in the same comment
+    (DIG-5246). Empty means the comment carries no withdrawal line.
     """
     scope = scope_sha or head_sha
     provenance = provenance_head or head_sha
@@ -1530,6 +1534,8 @@ def _seat_verdict_comment(
         f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{scope} -->\n\n"
         f"Review verdict: {verdict.replace('_', ' ')}\n"
     )
+    if withdraws:
+        body += f"Withdraws: changes requested on {withdraws}\n"
     return {
         "id": comment_id or f"IC_kwDO{seat[:8]}_{created}",
         "author": {"login": "chrizefan"},
@@ -1671,8 +1677,15 @@ def test_a_block_from_one_seat_is_not_cleared_by_another_seats_approve() -> None
     assert any(SECURITY_SEAT in r and "changes_requested" in r for r in verdict.reasons)
 
 
-def test_a_seat_clears_its_own_block_with_an_approve_naming_the_head() -> None:
-    """The seat that blocked can clear it — by approving the head."""
+def test_a_same_head_approve_does_not_clear_the_seats_block_by_itself() -> None:
+    """DIG-5246, the #6280 timeline: an approve is not a withdrawal.
+
+    The code reviewer posted `changes_requested` on `b1c5fde73ef8` at 10:21 and
+    then approved the same, unchanged head at 12:04 with the two blockers still
+    open. The queue merged at 12:08. An approve says the code is good; it does
+    not say the finding was dealt with, so the block stands until the seat says
+    so on the record — a `Withdraws:` line, or a new head with a fresh approve.
+    """
     head = "c" * 40
     pr = _pr(
         6170,
@@ -1682,6 +1695,149 @@ def test_a_seat_clears_its_own_block_with_an_approve_naming_the_head() -> None:
                 seat=SECURITY_SEAT,
                 verdict="changes_requested",
                 head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        SECURITY_SEAT in reason
+        and "does not clear the block" in reason
+        and "`Withdraws:`" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_same_head_approve_withdrawing_the_block_clears_it() -> None:
+    """The way out: the approving comment says it withdraws the block.
+
+    The line names the head the block named, so the queue can tie the
+    withdrawal to the finding it spends — an approve with no such line is not
+    read as one (DIG-5246).
+    """
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws=head,
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_withdrawal_naming_another_head_does_not_clear_the_block() -> None:
+    """A withdrawal is read against the head the block names, not as a password.
+
+    Naming some other commit says the seat withdrew something else. The block on
+    this head stands, so a copied `Withdraws:` line cannot spend it.
+    """
+    head = "c" * 40
+    other = "d" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws=other,
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_naming_no_head_does_not_clear_a_scoped_block() -> None:
+    """A bare line withdraws only blocks that name no head.
+
+    Saying "I withdraw it" without naming the commit the block was about is not
+    enough to spend a block that names one; otherwise the line would be a
+    password rather than a statement about a finding (DIG-5246).
+    """
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws="the finding",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_an_approve_on_a_new_head_clears_the_seats_earlier_block() -> None:
+    """The other way out: the PR moved, and the seat approved the new head.
+
+    The block named a commit the PR has left, so it is spent by the branch
+    moving and the fresh approve on the current head needs no withdrawal.
+    """
+    old = "d" * 40
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=old,
                 created="2026-10-21T12:28:36Z",
             ),
             _seat_verdict_comment(

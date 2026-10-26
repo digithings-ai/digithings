@@ -95,7 +95,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. An in-session review counts only when the reviewer-independence gate accepts its marker as another seat's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
 | Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
-| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. **An approve on the same, unchanged head the block names clears it only when it also carries a `Withdraws:` line naming that block (DIG-5246)**: an approve says the code is good, not that the finding was dealt with. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Three of these are deliberate choices worth stating plainly.
@@ -172,13 +172,20 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
 1. **A seat's own block stands until that seat clears it.** A blocking verdict on the
    current head belongs to the seat that posted it. That seat's later approve clears it,
    and only when the approve names the head the PR stands at. An approve naming another
-   head clears nothing, and **another seat's approve clears nothing either**. `#6170`
-   (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's `changes
-   requested` still on the branch: the code reviewer's later approve on the head was the
-   newest readable verdict, and nothing had ever asked the queue to wait for the second
-   sign-off. (The block in that timeline named `fb309e6458`, a commit the merged head had
-   left, so under the rule above it no longer holds a later head — the seat rule is
-   unchanged for a block that names the head.)
+   head clears nothing, and **another seat's approve clears nothing either**. **When the
+   approve names the same, unchanged head the block names, it must also carry a
+   `Withdraws:` line naming that block** (DIG-5246): an approve is a statement about the
+   code, and the queue does not read it as a statement that the finding was withdrawn.
+   `#6280` merged on 2026-10-22 because the code reviewer's 12:04 approve on the same
+   head `b1c5fde73ef8` silently cleared its own 10:21 `changes requested`; the two
+   blockers were still open and landed in `develop` (fix routed as DIG-5245). Going the
+   other way needs no line: **a new head with a fresh approve** clears, because the old
+   block named a commit the PR has left. `#6170` (DIG-4911) merged into `develop` on
+   2026-10-21 with the security desk's `changes requested` still on the branch: the code
+   reviewer's later approve on the head was the newest readable verdict, and nothing had
+   ever asked the queue to wait for the second sign-off. (The block in that timeline named
+   `fb309e6458`, a commit the merged head had left, so under the rule above it no longer
+   holds a later head — the seat rule is unchanged for a block that names the head.)
 2. **Everything else is judged by the newest readable verdict.** The newest readable
    verdict is the one that counts: a blocking verdict blocks when it names the head the PR
    stands at (or names no head at all, which cannot be stale); an approve clears only when
@@ -214,11 +221,45 @@ written once:
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.
 
+**The withdrawal line.** A block on the current head is cleared by the same seat's
+approve on that head only when the approving comment carries a line that opens with
+`Withdraws:`. The line is read beside the verdict, in the same comment, and only the
+token at the start of a line counts — a "withdraw" somewhere in prose is not a
+withdrawal.
+
+```
+Review verdict: approved
+Withdraws: changes requested on 3f2a9c1d4b5e
+```
+
+- The line names the block by **a sha the block names**, at 7 characters or more
+  (`3f2a9c1d4b5e` above, or the full 40). The block's own `scope=`, a sha in its prose,
+  or its provenance `head=` all count, because all three are how a block names a head.
+- A line naming **no sha** withdraws only the seat's blocks that name no head. It never
+  spends a block scoped to a commit: the reviewer names what they are withdrawing.
+- A line naming **another head** spends nothing. The line is a statement about the block
+  it names, not a password that unlocks the seat.
+- The withdrawal is **part of the approve**: a `Withdraws:` line on its own, in a comment
+  with no approving verdict, still leaves the block standing.
+- Do not paste the line into a comment to show someone the syntax: the queue reads the
+  raw comment, so a quoted `Withdraws:` beside an approve is a live withdrawal.
+
+The line is what `#6280` was missing: two blocking findings were still open when the same
+seat approved the same head 1h43m later, and the queue read the later verdict as a
+clearance. The rule now asks the seat to say that it withdraws the finding, or to approve
+a new head (DIG-5246).
+
+**A verdict whose seat cannot be read is judged by clause 2**, so this line is the seat
+rule's business only: without the provenance marker the queue cannot tell a same-seat
+approve from another seat's, and the newest readable verdict decides. Post the marker.
+
 Three consequences worth stating plainly.
 
-- **A withdrawal is not a clearance.** The queue reads verdicts, not announcements: the
-  only thing that clears a block is a later approve naming the head. A seat that
-  withdraws a block by comment still has to post the approve.
+- **A withdrawal is not a clearance on its own.** The queue reads verdicts, not
+  announcements: a block is cleared by a later approve naming the head, and — when the
+  head has not moved — by that approve also carrying the withdrawal line. A `Withdraws:`
+  comment with no approving verdict, or a withdrawal line in a different comment from the
+  approve, leaves the block standing (DIG-5246).
 - **The queue has no notion of a required second sign-off.** It reads verdicts, not
   requests. A seat that needs two signatures asks for them itself — a hold file, a
   label — and the merge captain is the decider for that, not this gate.
@@ -229,7 +270,9 @@ Three consequences worth stating plainly.
   variant is not shipped because the marker only appeared on 2026-10-21: it would hold
   a PR whose blocking seat's earlier verdict carries no marker and whose later clearance
   does, and there is no way for that seat to clear it. The hole this closes is the
-  future one.
+  future one. The measurement predates the withdrawal clause (DIG-5246, 2026-10-26),
+  which was not re-measured: it changes only the same-head path, and `#6280` is the
+  one PR it is known to have taken.
 
 ### The `local-ci` provenance gate (DIG-4794)
 
