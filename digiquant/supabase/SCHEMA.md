@@ -1280,13 +1280,26 @@ explicit allowlist in the ingest Worker (DIG-2656), never a blanket OTLP copy.
 | `digitrace_traces` | `(workspace_id, trace_id)` | one row per trace: source, name, service, start/end, duration, status, session, run, span count |
 | `digitrace_spans_index` | `(workspace_id, trace_id, span_id)` | one row per span: kind, parent, model, provider, tokens, `cost_usd`, hash + length of input and output |
 | `digitrace_scores` | `(workspace_id, trace_id, span_id, name)` | MLflow scores written back; `span_id = ''` is a trace-level score |
-| `digitrace_sessions` | `(workspace_id, session_id)` | one row per session: window, `last_activity_at`, rolled-up trace/span/token/cost totals |
+| `digitrace_sessions` | `(workspace_id, session_id)` | one row per session: window, `last_activity_at`, rolled-up trace/span/token/cost totals, written by `refresh_digitrace_session` |
 
 - **Tenancy is the house column**, `workspace_id uuid NOT NULL REFERENCES
-  public.workspaces(id)`. A tenant slug is never the key: the ingest path resolves the
-  claimed slug to a `workspaces` row server-side and stamps the id. `tenant_slug` and
-  `tenant_slug_verified` sit beside it for diagnostics only, so an unresolved claim is
-  visible rather than trusted.
+  public.workspaces(id)`. A tenant slug is never the key: the consumer resolves the
+  claimed slug to a `workspaces` row server-side and stamps the id. The slug and its
+  verification flag are **edge values, not columns here** (ADR-0036 §5): the archive
+  object carries `tenant_slug` and `tenant_slug_verified` beside the raw spans, and the
+  index has exactly one tenancy column. A column the writer never populates would read
+  `NULL`/`false` on every row — "unverified" even for a resolved claim — so the index
+  stores only what it can keep true.
+- **`digitrace_sessions` is an aggregate, written by a function.** PostgREST's
+  `merge-duplicates` upsert replaces a row, so it cannot maintain running counts;
+  `public.refresh_digitrace_session(workspace_id, session_id)` recomputes the row from
+  `digitrace_spans_index` and upserts it. It recomputes rather than accumulates because
+  the consumer's Queue is at-least-once: a redelivered batch must refresh the totals,
+  not double them. It is `SECURITY INVOKER` (the only grantee, `service_role`, already
+  holds the DML and the SELECT), `search_path = ''`, EXECUTE to `service_role` only.
+  The consumer (DIG-2657) calls it over PostgREST `rpc` once per (workspace, session)
+  after writing that batch's spans. There is no `title` column: nothing in the ingest
+  contract carries one, and the dashboard derives a label from the trace names.
 - **RLS is enabled on all four, and it is not the tenant boundary on the paths that
   matter.** `service_role` holds BYPASSRLS and both the consumer Worker and
   `dashboard-api` use it over PostgREST/REST; their boundary is the application-layer

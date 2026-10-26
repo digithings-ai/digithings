@@ -13,10 +13,12 @@
 --   public.digitrace_traces       one row per trace
 --   public.digitrace_spans_index  one row per span (index only - no bodies)
 --   public.digitrace_scores       MLflow scores written back per trace/span
---   public.digitrace_sessions     one row per session
+--   public.digitrace_sessions     one row per session, an aggregate over the spans
 --
--- Plus the retention job `public.prune_digitrace_index(integer, integer)` and
--- its pg_cron schedule (daily prune + daily plain VACUUM ANALYZE).
+-- Plus the sessions rollup writer
+-- `public.refresh_digitrace_session(uuid, text)`, the retention job
+-- `public.prune_digitrace_index(integer, integer)` and its pg_cron schedule
+-- (daily prune + daily plain VACUUM ANALYZE).
 --
 -- ============================================================================
 -- ADR-0021 conformance (the M2 must-fix of DIG-2664)
@@ -52,11 +54,23 @@
 -- ============================================================================
 -- The tenancy column is `workspace_id uuid NOT NULL REFERENCES
 -- public.workspaces(id)` - the house column, and the same one the ingest path
--- resolves server-side: the Worker maps the claimed tenant slug to a
+-- resolves server-side: the consumer maps the claimed tenant slug to a
 -- `public.workspaces` row by slug and stamps that id. A slug is never stored
--- as the key. `tenant_slug` is kept beside it only for diagnostics, together
--- with `tenant_slug_verified` - the flag saying whether the ingest path did
--- resolve that slug, so an unverified claim is visible rather than trusted.
+-- as the key, and it is NOT stored on the index row at all.
+--
+-- ADR-0036 section 5, read literally: `tenant_slug` and `tenant_slug_verified`
+-- are EDGE VALUES AND "ARE NOT COLUMNS ON THE INDEX ROWS". The ingest Worker
+-- decides the verdict and passes it on the payload; the consumer stamps both
+-- into the archived batch object next to the raw spans, and the R2 key
+-- `tenant=<slug>/...` carries the slug. The index has exactly one tenancy
+-- column, `workspace_id`, and DIG-2661's tenant-filter test therefore has
+-- exactly one target.
+--
+-- Why that is the right shape and not just the literal one: a column the
+-- writer never populates reads `NULL` / `false` on every row, so it would
+-- report "unverified" even for a claim that resolved - a wrong value wearing a
+-- diagnostic's label. The evidence for a claim lives where the claim was made
+-- (the archive), and the index stores only what it can keep true.
 --
 -- RLS IS NOT THE TENANT BOUNDARY on the paths that matter.
 --   - `service_role` bypasses RLS entirely (it holds BYPASSRLS), and both the
@@ -132,8 +146,6 @@
 CREATE TABLE IF NOT EXISTS public.digitrace_traces (
     id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id          uuid NOT NULL REFERENCES public.workspaces(id),
-    tenant_slug           text,
-    tenant_slug_verified  boolean NOT NULL DEFAULT false,
     trace_id              text NOT NULL,
     source                text NOT NULL,
     name                  text,
@@ -155,8 +167,6 @@ CREATE TABLE IF NOT EXISTS public.digitrace_traces (
 CREATE TABLE IF NOT EXISTS public.digitrace_spans_index (
     id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id          uuid NOT NULL REFERENCES public.workspaces(id),
-    tenant_slug           text,
-    tenant_slug_verified  boolean NOT NULL DEFAULT false,
     trace_id              text NOT NULL,
     span_id               text NOT NULL,
     parent_span_id        text,
@@ -206,10 +216,7 @@ CREATE TABLE IF NOT EXISTS public.digitrace_scores (
 CREATE TABLE IF NOT EXISTS public.digitrace_sessions (
     id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id          uuid NOT NULL REFERENCES public.workspaces(id),
-    tenant_slug           text,
-    tenant_slug_verified  boolean NOT NULL DEFAULT false,
     session_id            text NOT NULL,
-    title                 text,
     started_at            timestamptz,
     last_activity_at      timestamptz,
     ended_at              timestamptz,
@@ -229,6 +236,17 @@ CREATE TABLE IF NOT EXISTS public.digitrace_sessions (
 -- (workspace_id, trace_id) would be dead weight: the spans and scores unique
 -- keys already lead with those two columns, and a btree serves them as a
 -- prefix scan.
+--
+-- The nightly prune is deliberately NOT indexed. Its predicate
+-- (`started_at < cutoff`, `created_at < cutoff`) has no workspace_id, so none
+-- of these workspace-leading indexes can serve it and each DELETE scans its
+-- table. That is accepted rather than fixed: the same migration schedules a
+-- nightly `VACUUM (ANALYZE)` over all four tables, which reads every page
+-- anyway, so a dedicated (started_at) or (created_at) btree would add
+-- write amplification on every span insert to save a second read of pages
+-- already being read. If the volume ever makes one scan materially slower
+-- than the vacuum beside it, add the bare-timestamp btree then - and price the
+-- insert cost with it.
 
 CREATE INDEX IF NOT EXISTS digitrace_traces_workspace_started_at_idx
     ON public.digitrace_traces (workspace_id, started_at DESC);
@@ -252,9 +270,16 @@ CREATE INDEX IF NOT EXISTS digitrace_sessions_workspace_activity_idx
 --   in the header; the application-layer filter is the boundary on that path).
 -- authenticated: SELECT only, own workspace only.
 -- anon / PUBLIC: nothing. These are tenant rows.
+--
+-- Every privilege is revoked from PUBLIC, anon AND authenticated first, then
+-- the two SELECT/DML grants are added back. Revoking authenticated explicitly
+-- (rather than leaning on migration 060's default-ACL narrowing) is what makes
+-- the claim in this file true on its own: a default ACL is a property of the
+-- creating role and the schema, and a reader should not have to go and check
+-- 060 to know that `authenticated` cannot write here.
 
 ALTER TABLE public.digitrace_traces ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.digitrace_traces FROM PUBLIC, anon;
+REVOKE ALL ON public.digitrace_traces FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.digitrace_traces TO service_role;
 GRANT SELECT ON public.digitrace_traces TO authenticated;
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.digitrace_traces;
@@ -265,7 +290,7 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_traces
     );
 
 ALTER TABLE public.digitrace_spans_index ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.digitrace_spans_index FROM PUBLIC, anon;
+REVOKE ALL ON public.digitrace_spans_index FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.digitrace_spans_index TO service_role;
 GRANT SELECT ON public.digitrace_spans_index TO authenticated;
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.digitrace_spans_index;
@@ -276,7 +301,7 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_spans_ind
     );
 
 ALTER TABLE public.digitrace_scores ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.digitrace_scores FROM PUBLIC, anon;
+REVOKE ALL ON public.digitrace_scores FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.digitrace_scores TO service_role;
 GRANT SELECT ON public.digitrace_scores TO authenticated;
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.digitrace_scores;
@@ -287,7 +312,7 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_scores
     );
 
 ALTER TABLE public.digitrace_sessions ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.digitrace_sessions FROM PUBLIC, anon;
+REVOKE ALL ON public.digitrace_sessions FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.digitrace_sessions TO service_role;
 GRANT SELECT ON public.digitrace_sessions TO authenticated;
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.digitrace_sessions;
@@ -298,7 +323,107 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_sessions
     );
 
 -- ---------------------------------------------------------------------------
--- 4. The retention job
+-- 4. The sessions rollup writer
+-- ---------------------------------------------------------------------------
+-- `digitrace_sessions` is an aggregate row, and PostgREST cannot aggregate:
+-- `resolution=merge-duplicates` REPLACES a row, so a second batch of the same
+-- session would overwrite a larger count with a smaller one and the row would
+-- silently shrink. ADR-0036 section 3 still names the consumer as this table's
+-- writer, so the writer is a function, and this is it.
+--
+-- RECOMPUTE, not accumulate. The consumer's path is a Cloudflare Queue, which
+-- is at-least-once: a redelivered batch runs this twice. Adding a batch's
+-- deltas (`trace_count + excluded.trace_count`) would double-count on the
+-- retry; recomputing from `digitrace_spans_index` twice lands on the same
+-- numbers, so a redelivery is a no-op rather than an inflation. It is also why
+-- the function needs no batch id, no dedupe table and no ordering assumption.
+--
+-- The cost is one aggregate over one session's spans per call, served by
+-- `digitrace_spans_index_workspace_session_idx`. The consumer calls it once per
+-- (workspace, session) after writing that batch's spans.
+--
+-- Two limits, stated rather than hidden:
+--   - a trace with no spans is not counted in `trace_count` (the session id
+--     lives on the spans, so there is nothing else to count them from);
+--   - a session that spans the 90-day cutoff loses its older spans with the
+--     index, so its totals shrink with them. The session row itself is pruned
+--     on `last_activity_at` (section 5), so a live session is never cut.
+--
+-- SECURITY INVOKER on purpose: the only grantee is `service_role`, which
+-- already holds INSERT/UPDATE on this table and SELECT on the spans, so
+-- DEFINER rights would add an escalation surface and buy no capability. The
+-- `search_path` is pinned anyway and every name is schema-qualified.
+CREATE OR REPLACE FUNCTION public.refresh_digitrace_session(
+    p_workspace_id uuid,
+    p_session_id text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+    v_started timestamptz;
+    v_last    timestamptz;
+    v_ended   timestamptz;
+    v_traces  integer;
+    v_spans   integer;
+    v_tokens  bigint;
+    v_cost    numeric(18, 8);
+BEGIN
+    IF p_workspace_id IS NULL OR p_session_id IS NULL OR p_session_id = '' THEN
+        RAISE EXCEPTION
+            'refresh_digitrace_session: a workspace_id and a non-empty session_id are required';
+    END IF;
+
+    SELECT min(s.started_at),
+           max(COALESCE(s.ended_at, s.started_at)),
+           max(s.ended_at),
+           count(DISTINCT s.trace_id)::integer,
+           count(*)::integer,
+           COALESCE(sum(s.total_tokens), 0),
+           COALESCE(sum(s.cost_usd), 0)
+      INTO v_started, v_last, v_ended, v_traces, v_spans, v_tokens, v_cost
+      FROM public.digitrace_spans_index s
+     WHERE s.workspace_id = p_workspace_id
+       AND s.session_id = p_session_id;
+
+    -- Nothing written for this session yet, or its spans are already pruned.
+    -- Do not invent an empty rollup row for it.
+    IF v_spans = 0 THEN
+        RETURN;
+    END IF;
+
+    INSERT INTO public.digitrace_sessions
+        (workspace_id, session_id, started_at, last_activity_at, ended_at,
+         trace_count, span_count, total_tokens, total_cost_usd, updated_at)
+    VALUES
+        (p_workspace_id, p_session_id, v_started, v_last, v_ended,
+         v_traces, v_spans, v_tokens, v_cost, now())
+    ON CONFLICT (workspace_id, session_id) DO UPDATE
+       SET started_at      = EXCLUDED.started_at,
+           last_activity_at = EXCLUDED.last_activity_at,
+           ended_at        = EXCLUDED.ended_at,
+           trace_count     = EXCLUDED.trace_count,
+           span_count      = EXCLUDED.span_count,
+           total_tokens    = EXCLUDED.total_tokens,
+           total_cost_usd  = EXCLUDED.total_cost_usd,
+           updated_at      = EXCLUDED.updated_at;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.refresh_digitrace_session(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.refresh_digitrace_session(uuid, text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_digitrace_session(uuid, text) TO service_role;
+
+COMMENT ON FUNCTION public.refresh_digitrace_session(uuid, text) IS
+    'Recomputes one digitrace_sessions row from public.digitrace_spans_index: trace and '
+    'span counts, token and cost totals, the activity window. Idempotent, so an '
+    'at-least-once Queue redelivery refreshes rather than double-counts. Called by the '
+    'ingest consumer (DIG-2657) over PostgREST rpc; service_role only.';
+
+-- ---------------------------------------------------------------------------
+-- 5. The retention job
 -- ---------------------------------------------------------------------------
 -- SECURITY DEFINER so the DELETEs are correct whatever role the cron job ends
 -- up owned by (a wrong-role install would otherwise be a silent 0-row prune).
@@ -409,12 +534,14 @@ COMMENT ON TABLE public.digitrace_scores IS
     'write its scores; pg_cron job digitrace-index-prune (migration 144, DIG-2658).';
 
 COMMENT ON TABLE public.digitrace_sessions IS
-    'One row per session (ADR-0036). Retention 90 days, pruned on last_activity_at so a session in '
-    'flight is never pruned under the consumer; pg_cron job digitrace-index-prune (migration 144, '
-    'DIG-2658).';
+    'One row per session (ADR-0036), an aggregate over public.digitrace_spans_index. Written only by '
+    'public.refresh_digitrace_session(workspace_id, session_id); a PostgREST upsert would replace '
+    'the counters instead of adding to them, so it is not the writer. Retention 90 days, pruned on '
+    'last_activity_at so a session in flight is never pruned under the consumer; pg_cron job '
+    'digitrace-index-prune (migration 144, DIG-2658).';
 
 -- ---------------------------------------------------------------------------
--- 5. The schedule
+-- 6. The schedule
 -- ---------------------------------------------------------------------------
 -- pg_cron absent would otherwise error and roll back the whole migration;
 -- prod has pg_cron. Dynamic EXECUTE so the cron.schedule reference is never
