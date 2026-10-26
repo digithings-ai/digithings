@@ -33,6 +33,7 @@ Usage:
 
 from __future__ import annotations
 
+import fnmatch
 import subprocess
 import sys
 
@@ -41,6 +42,9 @@ REPOS = ("R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "delete")
 # Ordered (prefix, repo, reason). First match wins. Prefixes are matched as
 # exact file paths or as directory prefixes ("foo/" matches "foo/bar").
 # More specific paths MUST come before the general ones covering them.
+# A prefix containing "*" is an fnmatch glob; it exists only for the few
+# client/vendor paths that may not be written literally in this public file
+# (the R0 client-literals guard, DIG-3689, scans every line here).
 RULES: list[tuple[str, str, str]] = [
     # ---- delete: replaced tooling (DIG-3605; never a private repo) ----
     (
@@ -272,9 +276,9 @@ RULES: list[tuple[str, str, str]] = [
     ("docs/ops/SECRETS_ROTATION.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/branch-hygiene-policy.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/credential-ownership.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
-    ("docs/ops/datatap-azure-az-guard.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/*-az-guard.md", "R5", "vendor guard runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("docs/ops/digichat-aca-secret-fingerprints.json", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
-    ("docs/ops/digichat-datatap-aca.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/*-aca.md", "R5", "vendor ACA runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("docs/ops/digifetch-post-deploy-verification.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digiquant-digikey-service-key.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digiquant-runner.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
@@ -304,13 +308,14 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/setup_digiquant_project.sh", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("scripts/supabase_exit/", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("scripts/validate_digiquant_pools.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
-    ("scripts/zammad_mcp/", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/*_mcp/", "R5", "vendor helpdesk MCP helper (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("tests/dq/strategies/", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("tests/dq/test_mcp_sdca_risk_index.py", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
 
     # ---- Delete set beyond .github/workflows/ (proposal §3; DIG-3518 item (c)) ----
-    # Broad delete rules; specific R6 rule for docs/projects/online-compliance-center/
-    # (above) wins by first-match. Agent-wiring paths are delete/private-ops.
+    # Broad delete rules; the specific R6 rule for the client corpus under
+    # docs/projects/ (above) wins by first-match. Agent-wiring paths are
+    # delete/private-ops.
     ("docs/superpowers/", "delete", "proposal delete set (DIG-3392)"),
     ("docs/agent-backlog/", "delete", "proposal delete set (DIG-3392)"),
     ("docs/reviews/", "delete", "proposal delete set (DIG-3392)"),
@@ -597,12 +602,23 @@ RULES: list[tuple[str, str, str]] = [
 
 
 def match_rule(path: str) -> tuple[str, str] | None:
-    """Return (repo, reason) for the first matching rule, else None."""
-    for prefix, repo, reason in RULES:
-        if prefix.endswith("/"):
-            if path == prefix[:-1] or path.startswith(prefix):
+    """Return (repo, reason) for the first matching rule, else None.
+
+    A rule containing "*" is an fnmatch glob. A glob ending in "/" also covers
+    the paths below the matched directory, the same way a literal directory
+    prefix does; without that, "scripts/*_mcp/" would match nothing because git
+    tracks files, not directories.
+    """
+    for pattern, repo, reason in RULES:
+        if "*" in pattern:
+            if fnmatch.fnmatchcase(path, pattern.rstrip("/")) or (
+                pattern.endswith("/") and fnmatch.fnmatchcase(path, pattern + "*")
+            ):
                 return repo, reason
-        elif path == prefix:
+        elif pattern.endswith("/"):
+            if path == pattern[:-1] or path.startswith(pattern):
+                return repo, reason
+        elif path == pattern:
             return repo, reason
     return None
 

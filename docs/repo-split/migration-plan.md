@@ -251,15 +251,19 @@ unassigned paths with no CI invocation. Repair status as of this update:
 - (e) `scripts/split/manifest.py --check` wired into the local-ci scan list.
 - (a) done: 51 move-list entries that fell into the six broad catch-alls now have specific
   rules (mirroring `scripts/repo-split/move-lists/rN.paths`); manifest and extraction agree on
-  0 paths within those catch-alls. The remaining R0->private disagreements (digiquant/scripts,
+  0 paths within those catch-alls. Three of those rules are globs rather than literal paths,
+  because the exact names carry a client or vendor literal and this tree is public: the R0
+  client-literals guard (DIG-3689) scans every line of `scripts/split/manifest.py`, and the
+  allowance may only shrink. The remaining R0->private disagreements (digiquant/scripts,
   digiquant/docs, digiquant/config, infra/, tests/) are outside the defect report's six
   catch-alls and are tracked separately; they need the file:line plan table.
 - (c) done: the proposal's delete set beyond `.github/workflows/` is now in the manifest as
   delete rules (docs/{superpowers,agent-backlog,reviews,plans,projects,dig-2041,backlog,scoring},
   review-5061-*.md, .claude/, .cursor/, agents/, agents.yml, opencode.json, projects/). The
-  R6-specific `docs/projects/online-compliance-center/` rule precedes the broad delete rule, so
-  OCC keeps its destination. P3's `r0.paths` allowlist is still provisional until the remaining
-  disagreements above are resolved; re-derive with `python3 scripts/split/manifest.py --emit-r0`.
+  R6-specific rule for the client corpus under `docs/projects/` precedes the broad delete rule,
+  so that corpus keeps its destination. P3's `r0.paths` allowlist is still provisional until the
+  remaining disagreements above are resolved; re-derive with
+  `python3 scripts/split/manifest.py --emit-r0`.
 
 Rollback: each PR reverts on its own.
 
