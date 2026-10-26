@@ -17,6 +17,10 @@ export const REPO = "digithings-ai/twelve-x";
 export const SESSION_OWNER = "chrizefan";
 /** Maximum characters of the container log tail carried in an alert body. */
 export const LOG_TAIL_LIMIT = 2000;
+/** The machine-readable line the pinned twelve-x prints on every failed exit. */
+export const VERDICT_TOKEN = "MARKET_CONTEXT_VERDICT=";
+/** The log marker the ingest writes its reason behind. */
+export const LOG_MARKER = "market_context:";
 
 export type Route = "ingest" | "heartbeat" | "session";
 
@@ -60,10 +64,33 @@ export function lastMeaningfulLine(logTail: string): string {
   return lines[lines.length - 1].replace(/\s+/g, " ").slice(0, 400);
 }
 
+/**
+ * The reason the ingest failed, read off the container log.
+ *
+ * The pinned twelve-x prints one machine-readable line per non-zero exit
+ * (`MARKET_CONTEXT_VERDICT=<class>: <reason>`) on stdout. An older pin has
+ * no such line, so the log marker the script writes is the fallback and the
+ * last meaningful line is the last resort. The reason is never a placeholder:
+ * an alert that says "nothing was recorded" names no cause at all.
+ */
 export function verdictLine(logTail: string): string {
-  const line = logTail.split("\n").find((row) => row.startsWith("MARKET_CONTEXT_VERDICT="));
-  if (!line) return "no verdict line was recorded";
-  return line.slice("MARKET_CONTEXT_VERDICT=".length).replace(/\s+/g, " ").slice(0, 400);
+  const at = logTail.lastIndexOf(VERDICT_TOKEN);
+  if (at !== -1) {
+    const rest = logTail.slice(at + VERDICT_TOKEN.length);
+    const line = rest.split("\n")[0].replace(/\s+/g, " ").trim();
+    if (line) return line.slice(0, 400);
+  }
+  // The script logs `market_context: <class>: <reason>`. The logger prefix
+  // (`ERROR twelve_x.scripts.ingest_market_context:`) ends with the same
+  // marker, so the last one in the line is the real one.
+  const rows = logTail.split("\n");
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const marker = rows[index].lastIndexOf(LOG_MARKER);
+    if (marker === -1) continue;
+    const rest = rows[index].slice(marker + LOG_MARKER.length).replace(/\s+/g, " ").trim();
+    if (rest) return rest.slice(0, 400);
+  }
+  return lastMeaningfulLine(logTail);
 }
 
 export function decideAlert(input: {
