@@ -46,53 +46,62 @@ test("the CLI refuses an unknown flag, a missing value and a stray word", () => 
   expect(() => parseArgs(["extra"])).toThrow(/(unexpected argument|unknown flag)/);
 });
 
-test("the CLI records the chat pane of the real client", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "digichat-tui-frame-"));
-  const out = join(dir, "frame.json");
-  const child = Bun.spawn(["bun", "src/export-frame.ts", "--out", out], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  expect(exitCode).toBe(0);
-  expect(stdout).toContain("wrote");
-  expect(stderr).not.toContain("error:");
-  expect(stderr).not.toContain("the digichat thread did not load");
+test(
+  "the CLI records the chat pane of the real client",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "digichat-tui-frame-"));
+    const out = join(dir, "frame.json");
+    const child = Bun.spawn(["bun", "src/export-frame.ts", "--out", out], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    // The child's own output is the only way to see why it failed, so it goes in
+    // the message rather than a bare exit code.
+    if (exitCode !== 0) {
+      throw new Error(`the exporter exited ${exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+    }
+    expect(stdout).toContain("wrote");
+    expect(stderr).not.toContain("error:");
+    expect(stderr).not.toContain("the digichat thread did not load");
 
-  const record = JSON.parse(await readFile(out, "utf8")) as {
-    source: string;
-    path: string;
-    capturedAt: string;
-    width: number;
-    height: number;
-    frame: string;
-  };
-  expect(record.source).toBe("digichat-tui");
-  expect(record.path).toBe("/thread");
-  expect(record.capturedAt.length).toBeGreaterThan(0);
+    const record = JSON.parse(await readFile(out, "utf8")) as {
+      source: string;
+      path: string;
+      capturedAt: string;
+      width: number;
+      height: number;
+      frame: string;
+    };
+    expect(record.source).toBe("digichat-tui");
+    expect(record.path).toBe("/thread");
+    expect(record.capturedAt.length).toBeGreaterThan(0);
 
-  expect(record.frame).toContain("what is a recorded frame");
-  expect(record.frame).toContain("a recorded captureCharFrame() frame");
-  expect(record.frame).toContain("Ask digichat");
-  expect(record.frame).not.toContain("the official API could not be reached");
+    expect(record.frame).toContain("what is a recorded frame");
+    expect(record.frame).toContain("a recorded captureCharFrame() frame");
+    expect(record.frame).toContain("Ask digichat");
+    expect(record.frame).not.toContain("the official API could not be reached");
 
-  expect(record.frame).not.toContain("book");
-  for (const row of record.frame.split("\n")) {
-    if (row.trim() === "") continue;
-    expect(row.startsWith("  ")).toBe(true);
-  }
+    expect(record.frame).not.toContain("book");
+    for (const row of record.frame.split("\n")) {
+      if (row.trim() === "") continue;
+      expect(row.startsWith("  ")).toBe(true);
+    }
 
-  expect(record.width).toBeGreaterThan(0);
-  expect(record.height).toBe(record.frame.split("\n").length);
-  expect(record.width).toBe(
-    Math.max(...record.frame.split("\n").map((row) => row.length)),
-  );
-});
-
+    expect(record.width).toBeGreaterThan(0);
+    expect(record.height).toBe(record.frame.split("\n").length);
+    expect(record.width).toBe(
+      Math.max(...record.frame.split("\n").map((row) => row.length)),
+    );
+  },
+  // A cold `bun` child under the local-ci pool is routinely slower than bun's
+  // 5 s default, and a timeout there is a flake, not a finding.
+  60_000,
+);
 test("the committed fixture is what the exporter writes today", async () => {
   const committed = JSON.parse(await readFile(ARTIFACT, "utf8"));
   const record = await captureChatThread({ capturedAt: committed.capturedAt });
