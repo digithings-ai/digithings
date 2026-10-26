@@ -120,11 +120,11 @@ export function BrandStudio() {
                 <span>Layout</span>
               </label>
               <select className="bs-select" id="bs-layout" defaultValue="logo-left">
-                <option value="logo-left">Logo left + wordmark</option>
+                <option value="logo-left">Logo + wordmark</option>
                 <option value="stacked">Stacked</option>
                 <option value="logo-only">Logo only</option>
                 <option value="word-only">Wordmark only</option>
-                <option value="logo-right">Wordmark + logo right</option>
+                <option value="logo-right">Wordmark + logo</option>
               </select>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function BrandStudio() {
           <div className="bs-section" id="bs-logoSection">
             <div className="bs-section-head">
               <h2>Logo</h2>
-              <label className="bs-switch bs-switch-sm" title="Show logo">
+              <label className="bs-switch" title="Show logo">
                 <input type="checkbox" id="bs-logoOn" defaultChecked />
                 <span className="bs-track" />
                 <span className="bs-sr-only">Show logo</span>
@@ -182,7 +182,7 @@ export function BrandStudio() {
           <div className="bs-section" id="bs-wordSection">
             <div className="bs-section-head">
               <h2>Hero wordmark</h2>
-              <label className="bs-switch bs-switch-sm" title="Show hero wordmark">
+              <label className="bs-switch" title="Show hero wordmark">
                 <input type="checkbox" id="bs-wordOn" defaultChecked />
                 <span className="bs-track" />
                 <span className="bs-sr-only">Show hero wordmark</span>
@@ -239,7 +239,7 @@ export function BrandStudio() {
           <div className="bs-section">
             <div className="bs-section-head">
               <h2>Motion</h2>
-              <label className="bs-switch bs-switch-sm" title="Animate logo and wordmark">
+              <label className="bs-switch" title="Animate logo and wordmark">
                 <input type="checkbox" id="bs-animOn" defaultChecked />
                 <span className="bs-track" />
                 <span className="bs-sr-only">Animate logo and wordmark</span>
@@ -276,7 +276,7 @@ export function BrandStudio() {
                 <div className="bs-canvas-sub">
                   <span id="bs-canvasDims">1500 × 500 px</span>
                   <span className="bs-dot" />
-                  <span id="bs-canvasTheme">Default · Dark</span>
+                  <span id="bs-canvasTheme">default · dark</span>
                 </div>
               </div>
               <div className="bs-canvas-actions">

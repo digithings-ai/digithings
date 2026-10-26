@@ -17,7 +17,7 @@
 .fd-group-head h3 {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -27,14 +27,14 @@
 .fd-group-head p {
   margin: 0;
   color: var(--ink-mute);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .fd-table {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .fd-table th,
@@ -59,11 +59,6 @@
   color: var(--ink-soft);
 }
 
-.fd-table td {
-  display: table-cell;
-  white-space: nowrap;
-}
-
 .fd-swatch {
   display: inline-block;
   width: 12px;
@@ -85,7 +80,7 @@
   padding: 0;
   list-style: none;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
 }
 
 .fd-liveries li {
@@ -117,7 +112,7 @@
 
 .fd-type-token {
   color: var(--ink-mute);
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
 }
 
 .fd-type-row p {
@@ -146,7 +141,7 @@
   .fd-table {
     width: 100%;
     table-layout: fixed;
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
   }
 
   .fd-table th,
@@ -164,6 +159,6 @@
   }
 
   .fd-table code {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
   }
 }

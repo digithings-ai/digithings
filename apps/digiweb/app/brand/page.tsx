@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { BrandStudio } from "@/components/brand/studio/brand-studio";
 import { ModuleBanners } from "@/components/brand/studio/module-banners";
 import "./studio.css";
@@ -29,9 +28,6 @@ export default function BrandStudioPage() {
           embedding field, and every upload preset. Compose a header, card, story or icon,
           then export a still PNG or a self-contained SVG. The wordmark carries headers, web
           and docs; the logo carries icons and favicons — one or the other, never both.
-        </p>
-        <p className="bs-hero-links">
-          <Link href="/components">The kit index →</Link>
         </p>
       </header>
 

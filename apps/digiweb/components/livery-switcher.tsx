@@ -79,8 +79,8 @@ export function LiverySwitcher() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
-          <span className="font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute">{activeLivery.label} / accent</span>
-          <span className="font-mono text-[0.9rem] text-accent">{activeHex}</span>
+          <span className="font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-ink-mute">{activeLivery.label} / accent</span>
+          <span className="font-mono text-sm text-accent">{activeHex}</span>
           <div className="flex w-full items-center gap-[0.6rem]">
             <Button type="button">Primary action</Button>
             <Button type="button" variant="ghost">

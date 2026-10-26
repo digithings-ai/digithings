@@ -20,7 +20,7 @@ export function ModuleBanners() {
         Every module, already animated.
       </h2>
       <p className="section-copy">
-        The 15 wordmark banners render live from{" "}
+        The {BANNER_LIST.length} wordmark banners render live from{" "}
         <code>packages/hero-banner/src/definitions/index.ts</code> — the same
         definitions the sites and terminals use. Nothing is copied here, so a
         definition change reaches every surface. The <code>digivoice</code> baseline and

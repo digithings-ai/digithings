@@ -99,7 +99,7 @@ html {
   background: var(--ink);
   color: var(--bg);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-decoration: none;
   transform: translateY(-200%);
 }
@@ -133,7 +133,7 @@ html {
 .site-nav-mark {
   font-family: var(--font-mono);
   font-weight: 500;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   color: var(--ink);
   text-decoration: none;
 }
@@ -154,7 +154,7 @@ html {
 
 .site-nav-links a {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
   color: var(--ink-mute);
   text-decoration: none;
@@ -197,15 +197,15 @@ html {
   border-radius: 0;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   line-height: 1;
   color: var(--ink-soft);
   vertical-align: middle;
 }
 
 /* Livery (color) + type (font) selectors — persistent, app-wide choosers in
-   the bar. Hidden until the >=1600px row (they crowd the family map below
-   that); the sheet carries them while hidden. At >=1600px the livery starts
+   the bar. Hidden until the >=1280px row (they crowd the family map below
+   that); the sheet carries them while hidden. At >=1280px the livery starts
    the right-aligned control group. */
 
 .site-nav-lab-sep {
@@ -352,8 +352,8 @@ html {
    the backdrop, focus trap, and document scroll lock. */
 
 /* The old `is-collapsed` JS state is gone (SiteNav): the row's composition is
-   now the 1024px/1600px breakpoint pair defined next to `.site-nav` above.
-   Below 1024px `.site-nav-links` stays `display:none` (its base rule) and the
+   the 1080/1280/1600 breakpoint set defined next to `.site-nav` above. Below
+   1080px `.site-nav-links` stays `display:none` (its base rule) and the
    hamburger — the only way back into the sheet — is always visible, so the
    bar can never clip its own escape hatch. At >=1600px the hamburger retires
    because every surface is already on the row. */
@@ -412,7 +412,7 @@ html {
 .kicker {
   font-family: var(--font-mono);
   color: color-mix(in srgb, var(--accent) 70%, var(--ink));
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }

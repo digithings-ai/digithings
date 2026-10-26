@@ -152,7 +152,7 @@ export function RtlReference() {
           >
             RTL
           </Button>
-          <span className="text-ink-mute text-[0.8rem]">
+          <span className="text-ink-mute text-sm">
             direction: <code>dir=&quot;{dir}&quot;</code>
           </span>
         </div>
@@ -185,7 +185,7 @@ export function RtlReference() {
                     <DropdownMenuLabel>Run</DropdownMenuLabel>
                     <DropdownMenuItem>
                       Backtest
-                      <span className="ms-auto text-ink-mute text-[0.7rem]">⌘B</span>
+                      <span className="ms-auto text-ink-mute text-[0.6875rem]">⌘B</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem>Optimize</DropdownMenuItem>
                   </DropdownMenuGroup>
@@ -205,7 +205,7 @@ export function RtlReference() {
           <div className="rtl-proof" style={{ gap: "0.75rem" }}>
             {BUTTON_VARIANTS.map((variant) => (
               <div key={variant} className="rtl-row">
-                <span className="text-ink-mute w-[5.5rem] font-mono text-[0.7rem]">{variant}</span>
+                <span className="text-ink-mute w-[5.5rem] font-mono text-[0.6875rem]">{variant}</span>
                 {BUTTON_SIZES.map((size) => (
                   <Button key={size} variant={variant} size={size}>
                     {size.startsWith("icon") ? "→" : size}
@@ -214,7 +214,7 @@ export function RtlReference() {
               </div>
             ))}
             <div className="rtl-row" data-specimen="button-disabled">
-              <span className="text-ink-mute w-[5.5rem] font-mono text-[0.7rem]">disabled</span>
+              <span className="text-ink-mute w-[5.5rem] font-mono text-[0.6875rem]">disabled</span>
               <Button variant="default" disabled>
                 default
               </Button>
@@ -292,7 +292,7 @@ export function RtlReference() {
 
             <div>
               <TabStrip tabs={TABS} active={tab} onChange={setTab} label="RTL proof tabs" />
-              <p className="mt-3 text-ink-mute text-[0.8rem]">
+              <p className="mt-3 text-ink-mute text-sm">
                 active: <code>{TABS[tab].id}</code> — the ink should sit under this tab in both
                 directions.
               </p>

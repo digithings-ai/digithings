@@ -219,8 +219,7 @@ export function initBrandStudio(root: HTMLElement): () => void {
   };
 
   const syncThemeLabel = () => {
-    const name = themeSel.value === "default" ? "Default" : themeSel.value;
-    canvasTheme.textContent = `${name} · ${pol.value === "dark" ? "Dark" : "Light"}`;
+    canvasTheme.textContent = `${themeSel.value} · ${pol.value}`;
   };
 
   const syncLayerSections = () => {
@@ -356,7 +355,7 @@ export function initBrandStudio(root: HTMLElement): () => void {
   const fitStage = () => {
     const { w, h } = dims();
     if (window.innerWidth <= 980) {
-      stage.style.width = "100%";
+      stage.style.width = `min(100%, calc(70svh * ${w / h}))`;
       stage.style.height = "auto";
       stage.style.aspectRatio = `${w} / ${h}`;
       return;
@@ -397,11 +396,11 @@ export function initBrandStudio(root: HTMLElement): () => void {
     themeSel.innerHTML = "";
     const core = document.createElement("option");
     core.value = "default";
-    core.textContent = "Default · mono";
+    core.textContent = "default";
     themeSel.appendChild(core);
     const group = document.createElement("optgroup");
     group.label = "Palettes";
-    for (const name of Object.keys(palettes)) {
+    for (const name of Object.keys(palettes).sort()) {
       if (name === "default") continue;
       const option = document.createElement("option");
       option.value = name;
@@ -739,7 +738,7 @@ export function initBrandStudio(root: HTMLElement): () => void {
     const scale = Math.max(1, Number(pngScale.value) || 1);
     const { w, h } = dims();
     if (w * scale * h * scale > 16_000_000) {
-      toast("PNG too large — use 1× or a smaller canvas");
+      toast("PNG too large: use 1× or a smaller canvas");
       return;
     }
     setExporting(true);

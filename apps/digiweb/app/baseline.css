@@ -26,7 +26,7 @@
   gap: 1.4rem;
   margin-top: 1.3rem;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .dw-links a {
@@ -95,7 +95,7 @@
 .bl-surfaces dt {
   margin: 0 0 0.3rem;
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
   color: var(--ink);
 }
@@ -103,13 +103,13 @@
 .bl-surfaces dd {
   margin: 0 0 0.5rem;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .bl-surfaces code {
   color: var(--ink-mute);
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
 }
 
 /* The tile */
@@ -160,7 +160,7 @@
 
 .bl-tile-title {
   color: var(--ink);
-  font-size: 0.69rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -169,7 +169,7 @@
 .bl-chrome {
   margin-left: auto;
   color: var(--ink-mute);
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   letter-spacing: 0.04em;
 }
 
@@ -188,7 +188,7 @@
 
 .bl-metric-value {
   font-family: var(--font-mono);
-  font-size: 1.5rem;
+  font-size: var(--type-section);
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
@@ -196,7 +196,7 @@
 .bl-metric-label {
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.625rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -222,7 +222,7 @@
   padding: 0.45rem 1.1rem;
   border-top: 1px solid var(--hair);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .bl-list li:first-child {
@@ -242,15 +242,16 @@
 .bl-empty {
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
 }
 
 .bl-evidence {
   margin: 0.7rem 0 0;
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.64rem;
+  font-size: 0.6875rem;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .bl-evidence code {
@@ -277,14 +278,14 @@
 .bl-num {
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
 }
 
 .bl-rule-head h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1.125rem;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -293,13 +294,13 @@
   max-width: 62ch;
   margin: 0.55rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.88rem;
+  font-size: 0.875rem;
   line-height: 1.6;
 }
 
 .bl-rule-copy code {
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .bl-demo {
@@ -321,7 +322,7 @@
   padding: 0.8rem 0.9rem;
   background: var(--surface);
   border-left: 1px solid var(--hair);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .bl-demo-cell:first-child {
@@ -366,7 +367,7 @@
   padding: 0.6rem 0.7rem;
   border-top: 1px solid var(--hair);
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
 }
 
@@ -378,7 +379,7 @@
 
 .bl-mono {
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.75rem;
 }
 
 .bl-table {
@@ -386,7 +387,7 @@
   margin-top: 1rem;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -400,7 +401,7 @@
 .bl-table thead th {
   border-top: 0;
   color: var(--ink-mute);
-  font-size: 0.6rem;
+  font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -428,14 +429,14 @@
 
 .bl-band-title {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1.125rem;
   font-weight: 500;
 }
 
 .bl-meta {
   color: var(--ink-mute);
   font-family: var(--font-mono);
-  font-size: 0.64rem;
+  font-size: 0.625rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -454,7 +455,7 @@
   padding: 0.45rem 0.6rem;
   border-top: 1px solid var(--hair);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
 }
 
 .bl-ladder code {

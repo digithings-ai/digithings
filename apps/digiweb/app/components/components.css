@@ -27,7 +27,7 @@
   padding: 0;
   list-style: none;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .cp-list--wide {
@@ -50,7 +50,7 @@
 .cp-path {
   overflow: hidden;
   color: var(--ink-mute);
-  font-size: 0.66rem;
+  font-size: 0.6875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

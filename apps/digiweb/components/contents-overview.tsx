@@ -34,11 +34,11 @@ function FamilyCard({ item, index }: { item: NavItem; index: number }) {
     >
       <Card className="h-full group-aria-[current=page]:ring-accent">
         <CardContent className="flex flex-col gap-[0.25rem]">
-          <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">
+          <span className="font-mono text-[0.625rem] tracking-[0.1em] text-ink-mute">
             {String(index).padStart(2, "0")}
           </span>
-          <span className="font-mono text-[0.95rem] text-ink">{item.label}</span>
-          <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{item.blurb}</span>
+          <span className="font-mono text-base text-ink">{item.label}</span>
+          <span className="text-sm leading-[1.4] text-ink-soft">{item.blurb}</span>
         </CardContent>
       </Card>
     </Link>
@@ -53,7 +53,7 @@ export function ContentsOverview() {
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
         motion laws. The top bar carries the same map; <code>/rtl</code> proves the whole canon
-        mirrors, and the reference-only surfaces below stay out of the shipped set.
+        mirrors, and the lab surfaces below stay out of the shipped set.
       </p>
 
       <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
@@ -62,8 +62,8 @@ export function ContentsOverview() {
         ))}
       </div>
 
-      <p className="mb-0 mt-[1.6rem] font-mono text-[0.58rem] uppercase tracking-[0.14em] text-ink-mute">
-        reference-only
+      <p className="mb-0 mt-[1.6rem] font-mono text-[0.625rem] uppercase tracking-[0.14em] text-ink-mute">
+        lab
       </p>
       <div className="mt-[0.6rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
         {LAB_NAV.map((item, i) => (

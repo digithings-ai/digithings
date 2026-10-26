@@ -25,6 +25,11 @@
   overflow-x: auto;
 }
 
+.rtl-row nav {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 /* two-column / pinned layout proof — a sticky row-header column that pins to
    the inline-start edge (left in LTR, right in RTL) over a scrollable body. */
 .rtl-pinned {
