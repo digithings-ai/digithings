@@ -62,6 +62,25 @@ def test_rules_have_no_exact_duplicates():
     assert len(seen) == len(set(seen)), "duplicate rule prefixes"
 
 
+def test_glob_rules_claim_at_least_one_tracked_path():
+    """A glob rule must win at least one path, or it is dead weight.
+
+    Globs exist for move-list entries whose literal path may not appear in the
+    public manifest (the R0 client-literals guard scans it), so this test can
+    only prove the rule still reaches its path, not name the path itself.
+    """
+    mod = load_manifest()
+    globs = [(p, r, why) for p, r, why in mod.RULES if "*" in p]
+    assert globs, "expected glob rules for the vendor-named move-list entries"
+    out = subprocess.run(
+        ["git", "ls-files"], capture_output=True, text=True, check=True, cwd=REPO_ROOT
+    )
+    paths = [p for p in out.stdout.splitlines() if p]
+    for pattern, repo, why in globs:
+        winners = [p for p in paths if mod.match_rule(p) == (repo, why)]
+        assert winners, f"glob rule {pattern!r} claims no tracked path"
+
+
 def test_chris_calls_pin_to_the_manifest():
     mod = load_manifest()
     for path, want in CHRIS_CALLS.items():

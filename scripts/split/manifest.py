@@ -33,6 +33,7 @@ Usage:
 
 from __future__ import annotations
 
+import fnmatch
 import subprocess
 import sys
 
@@ -41,6 +42,9 @@ REPOS = ("R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "delete")
 # Ordered (prefix, repo, reason). First match wins. Prefixes are matched as
 # exact file paths or as directory prefixes ("foo/" matches "foo/bar").
 # More specific paths MUST come before the general ones covering them.
+# A prefix containing "*" is an fnmatch glob; it exists only for the few
+# client/vendor paths that may not be written literally in this public file
+# (the R0 client-literals guard, DIG-3689, scans every line here).
 RULES: list[tuple[str, str, str]] = [
     # ---- delete: replaced tooling (DIG-3605; never a private repo) ----
     (
@@ -155,6 +159,7 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("apps/dashboard/", "R3", "Brief desk /app (private per Chris 01:26)"),
     ("apps/digiquant-web/", "R3", "digiquant.io"),
+    ("apps/digiquant-app/", "R3", "digiquant operator app (provisional; confirm in file:line plan table)"),
     # ---- R4: digithings.ai, digibook, brand ----
     ("apps/digithings-web/", "R4", "digithings.ai + digibook"),
     ("packages/brand/", "R4", "brand assets"),
@@ -168,6 +173,7 @@ RULES: list[tuple[str, str, str]] = [
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
     ("apps/digitrace-langfuse/", "R5", "langfuse"),
     ("apps/digithings-cron/", "R5", "cron"),
+    ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
     ("infra/digichat-release/", "R5", "release infra"),
     ("config/litellm.yaml", "R5", "litellm config"),
     ("config/litellm.cheaperinference.yaml", "R5", "litellm config"),
@@ -190,6 +196,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/check_tenant_corpus_map.py", "R6", "tenant corpus map check"),
     # ---- R7: client desk + digidata-api ----
     ("apps/digidata-api/", "R7", "digidata-api (D1 twelvex)"),
+    ("apps/twelvex-runner/", "R7", "twelve-x runner container (R7)"),
     # ---- R0: repo root files (open) ----
     (".coderabbit.yaml", "R0", "root config (open)"),
     (".cursorrules", "R0", "root config (open)"),
@@ -200,6 +207,8 @@ RULES: list[tuple[str, str, str]] = [
     (".gitignore", "R0", "root config (open)"),
     (".gitleaks.toml", "R0", "root config (open)"),
     (".gitleaksignore", "R0", "root config (open)"),
+    (".python-version", "R0", "root config (open)"),
+    (".sctl.yml", "R0", "root config (open)"),
     (".mcp.json", "R0", "root config (open)"),
     (".opencode/", "R0", "agent wiring (open)"),
     (".prettierignore", "R0", "root config (open)"),
@@ -223,13 +232,11 @@ RULES: list[tuple[str, str, str]] = [
     ("ROADMAP.md", "R0", "root docs (open)"),
     ("SECURITY.md", "R0", "root docs (open)"),
     ("TRADEMARKS.md", "R0", "root docs (open)"),
-    ("agents.yml", "R0", "agent wiring (open)"),
     ("conftest.py", "R0", "root test config (open)"),
     ("docker-compose.yml", "R0", "local stack (open)"),
     ("eslint.base.mjs", "R0", "root config (open)"),
     ("mypy.ini", "R0", "root config (open)"),
     ("npm-audit-ignore.txt", "R0", "root config (open)"),
-    ("opencode.json", "R0", "agent wiring (open)"),
     ("package.json", "R0", "npm workspace root (open)"),
     ("package-lock.json", "R0", "npm workspace root (open)"),
     ("pip-audit-ignore.txt", "R0", "root config (open)"),
@@ -249,6 +256,82 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/Dockerfile.sandbox", "R0", "digiquant engine image (open)"),
     ("digiquant/pyproject.toml", "R0", "digiquant package config (open)"),
     ("digiquant/requirements.sandbox.txt", "R0", "digiquant package config (open)"),
+    # ---- Specific rules for move-list entries (DIG-3518 item (a)) ----
+    # These were previously absorbed by the broad catch-alls (docs/, config/, scripts/,
+    # tests/dq/, apps/digichat/, digiquant/src/digiquant/) and made the manifest disagree
+    # with extraction on 294 paths. Each entry mirrors scripts/repo-split/move-lists/rN.paths.
+    ("apps/digichat/src/lib/embed-suggestion-pools.test.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("apps/digichat/src/lib/embed-suggestion-pools.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("config/byok-providers.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("config/digiquant-model-prices.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("config/digiquant_models.yaml", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("config/dogfood-digiproject.yaml", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("config/model-policy.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("digiquant/src/digiquant/research/config/", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/2026-10-06-stranded-branch-triage.tsv", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/2026-10-06-stranded-work-and-backup-report.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/2026-10-06-t2-branch-decisions.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/CLIENT_PIPELINES.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/SECRETS_INVENTORY.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/SECRETS_ROTATION.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/branch-hygiene-policy.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/credential-ownership.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/*-az-guard.md", "R5", "vendor guard runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
+    ("docs/ops/digichat-aca-secret-fingerprints.json", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/*-aca.md", "R5", "vendor ACA runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
+    ("docs/ops/digifetch-post-deploy-verification.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/digiquant-digikey-service-key.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/digiquant-runner.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/digithings-cron.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/digitrace-langfuse.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/gloomberb-session-cookie.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/local-deploy-parity.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/paperclip-routine-watch.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/policy-check-credential.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/supabase-exit-twelve-x-cutover-runbook.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/vectorize-cutover.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/research/equity-valuation-for-sdca.md", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/research/equity_valuation_sdca_check.py", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/research/sdca-btc-onchain-valuation.md", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/research/sdca-indicator-pool.md", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/backfill_market_data_r2.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/bench_market_data.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/build-digiquant.sh", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/build-digithings.sh", "R4", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/export_research_snapshot_schema.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/index_occ_tickets.py", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/merge_litellm_cheaperinference.py", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/production_deploy_gate_latency.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/record_market_data_goldens.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/rls_proof/", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/seed_digiquant_demo.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/setup_digiquant_project.sh", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/supabase_exit/", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/validate_digiquant_pools.py", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("scripts/*_mcp/", "R5", "vendor helpdesk MCP helper (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
+    ("tests/dq/strategies/", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("tests/dq/test_mcp_sdca_risk_index.py", "R1", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+
+    # ---- Delete set beyond .github/workflows/ (proposal §3; DIG-3518 item (c)) ----
+    # Broad delete rules; the specific R6 rule for the client corpus under
+    # docs/projects/ (above) wins by first-match. Agent-wiring paths are
+    # delete/private-ops.
+    ("docs/superpowers/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/agent-backlog/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/reviews/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/plans/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/projects/", "delete", "proposal delete set (DIG-3392); R6 OCC path ruled above"),
+    ("docs/dig-2041/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/backlog/", "delete", "proposal delete set (DIG-3392)"),
+    ("docs/scoring/", "delete", "proposal delete set (DIG-3392)"),
+    ("review-5061-digichat-mcp-tool-allowlist.md", "delete", "proposal delete set"),
+    (".claude/", "delete", "agent wiring (delete/private ops)"),
+    (".cursor/", "delete", "agent wiring (delete/private ops)"),
+    ("agents/", "delete", "agent wiring (delete/private ops)"),
+    ("agents.yml", "delete", "agent wiring (delete/private ops)"),
+    ("opencode.json", "delete", "agent wiring (delete/private ops)"),
+    ("projects/", "delete", "agent wiring (delete/private ops)"),
+
     # ---- R0: public OSS (default for everything below) ----
     ("digiquant/src/digiquant/", "R0", "digiquant engine core (open)"),
     ("digiquant/scripts/research/", "R0", "research engine (open)"),
@@ -265,6 +348,9 @@ RULES: list[tuple[str, str, str]] = [
     ("packages/hero-banner/", "R0", "hero banner (open)"),
     ("packages/surface-config/", "R0", "surface config (open)"),
     ("packages/contract/", "R0", "shared contract (open)"),
+    ("packages/catalog/", "R0", "shared catalog package (open)"),
+    ("packages/durable-object-reconnect/", "R0", "shared reconnect package (open)"),
+    ("packages/tui-frame/", "R0", "shared TUI frame package (open)"),
     ("clients/", "R0", "TUI clients (open)"),
     ("digibase/", "R0", "OSS module"),
     ("digikey/", "R0", "OSS module"),
@@ -511,21 +597,28 @@ RULES: list[tuple[str, str, str]] = [
     ("infra/", "R0", "infra (open)"),
     (".github/", "R0", "repo automation (open; workflows/ deleted above)"),
     ("openspec/", "R0", "openspec (open)"),
-    ("agents/", "R0", "agent wiring (open)"),
-    (".claude/", "R0", "agent wiring (open)"),
-    (".cursor/", "R0", "agent wiring (open)"),
-    ("projects/", "R0", "projects (open)"),
     ("infra/docker/Dockerfile.digillm", "R0", "open image"),
 ]
 
 
 def match_rule(path: str) -> tuple[str, str] | None:
-    """Return (repo, reason) for the first matching rule, else None."""
-    for prefix, repo, reason in RULES:
-        if prefix.endswith("/"):
-            if path == prefix[:-1] or path.startswith(prefix):
+    """Return (repo, reason) for the first matching rule, else None.
+
+    A rule containing "*" is an fnmatch glob. A glob ending in "/" also covers
+    the paths below the matched directory, the same way a literal directory
+    prefix does; without that, "scripts/*_mcp/" would match nothing because git
+    tracks files, not directories.
+    """
+    for pattern, repo, reason in RULES:
+        if "*" in pattern:
+            if fnmatch.fnmatchcase(path, pattern.rstrip("/")) or (
+                pattern.endswith("/") and fnmatch.fnmatchcase(path, pattern + "*")
+            ):
                 return repo, reason
-        elif path == prefix:
+        elif pattern.endswith("/"):
+            if path == pattern[:-1] or path.startswith(pattern):
+                return repo, reason
+        elif path == pattern:
             return repo, reason
     return None
 
@@ -568,6 +661,7 @@ def main(argv: list[str]) -> int:
     repo: str | None = None
     check = False
     stat = False
+    emit_r0: str | None = None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -575,6 +669,9 @@ def main(argv: list[str]) -> int:
             check = True
         elif a == "--stat":
             stat = True
+        elif a == "--emit-r0" and i + 1 < len(argv):
+            emit_r0 = argv[i + 1]
+            i += 1
         elif a == "--ref" and i + 1 < len(argv):
             ref = argv[i + 1]
             i += 1
@@ -584,18 +681,24 @@ def main(argv: list[str]) -> int:
         i += 1
     paths = tracked_paths(ref, repo)
     mapping, unassigned = build_manifest(paths)
+    if emit_r0 is not None:
+        r0_paths = sorted(p for p, r in mapping.items() if r == "R0")
+        with open(emit_r0, "w", encoding="utf-8") as f:
+            for pp in r0_paths:
+                f.write(pp + "\n")
+        print(f"emit-r0: wrote {len(r0_paths)} R0 paths to {emit_r0}")
     if stat or check:
         counts: dict[str, int] = {r: 0 for r in REPOS}
-        for repo in mapping.values():
-            counts[repo] += 1
-        for repo in REPOS:
-            print(f"{repo}: {counts[repo]}")
+        for r in mapping.values():
+            counts[r] += 1
+        for r in REPOS:
+            print(f"{r}: {counts[r]}")
         print(f"unassigned: {len(unassigned)}")
-        for p in unassigned[:50]:
-            print(f"  UNASSIGNED {p}")
-    else:
-        for p in paths:
-            print(f"{mapping.get(p, 'UNASSIGNED')}\t{p}")
+        for pp in unassigned[:50]:
+            print(f"  UNASSIGNED {pp}")
+    elif emit_r0 is None:
+        for pp in paths:
+            print(f"{mapping.get(pp, 'UNASSIGNED')}\t{pp}")
     if check and unassigned:
         print(f"FAIL: {len(unassigned)} unassigned paths", file=sys.stderr)
         return 1
