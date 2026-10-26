@@ -5563,6 +5563,10 @@ class _FakePaperclip:
         #: never ask about a value that cannot be a run id: the API has no
         #: answer for one, and the failed read reads as a broken API.
         self.asked_runs: list[str] = []
+        #: Every ticket whose runs the gate asked for, with the freshness the
+        #: gate asked them to be good to. A run list may stand in for a read
+        #: only for the commits written before it was read.
+        self.fresh_advice: list[tuple[str, float]] = []
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         return self._tickets.get(key)
@@ -5571,7 +5575,10 @@ class _FakePaperclip:
         self.asked_runs.append(run_id)
         return self._runs.get(run_id)
 
-    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+    def issue_runs(
+        self, issue_id: str, *, fresh_after: float = 0.0
+    ) -> list[dict[str, Any]]:
+        self.fresh_advice.append((issue_id, fresh_after))
         return list(self._issue_runs.get(issue_id, []))
 
 
@@ -6830,7 +6837,9 @@ def test_an_api_that_cannot_be_read_defers_the_pr_and_publishes_no_gate(
         def run(self, run_id: str) -> dict[str, Any] | None:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     prov = _BrokenPaperclip(
@@ -6858,7 +6867,9 @@ def test_a_transient_read_failure_does_not_change_the_gate_set(
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
     class _BrokenPaperclip(_FakePaperclip):
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
@@ -6887,7 +6898,9 @@ def test_a_deferred_pr_beside_a_real_gate_publishes_only_the_gate(
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
     class _BrokenPaperclip(_FakePaperclip):
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
@@ -6921,7 +6934,9 @@ def test_a_deferred_row_is_listed_apart_from_the_blocked_gates(
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
     class _BrokenPaperclip(_FakePaperclip):
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
@@ -6952,7 +6967,9 @@ def test_a_deferred_read_does_not_make_a_behind_branch_updatable(
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
     class _BrokenPaperclip(_FakePaperclip):
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
@@ -7295,6 +7312,225 @@ def test_a_server_error_is_asked_for_again(
     )
     assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
     assert len(timeouts) == 2
+
+
+def _cached_reader(
+    path: Path, now: list[float], **cfg: Any
+) -> Any:
+    """A reader whose answers outlive the tick, over a cache file in `path`."""
+    return mq.ReviewerProvenance(
+        mq.ReviewIndependence(
+            mode="enforce",
+            api_url="http://127.0.0.1:3100",
+            cache_path=str(path),
+            **cfg,
+        ),
+        now=lambda: now[0],
+    )
+
+
+def test_a_provenance_answer_outlives_the_tick_that_read_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fact about a run does not change, so the second tick must not re-ask.
+
+    The driver fires every 180 s and reads every open pull request of both
+    repos. The reader lived for one tick, so every tick asked for every ticket,
+    every ticket's run list and every named run again — at 12 s a ticket and
+    28-144 s a run list, a tick that outran its own interval by an order of
+    magnitude and wrote nothing to its log until it was over (DIG-5632).
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse(
+            {"id": "issue-0000"} if "/api/issues/" in str(request.full_url) else {
+                "id": "run-0000",
+                "agentId": "seat-0000",
+            }
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    assert first.ticket("DIG-4795")["id"] == "issue-0000"
+    assert first.run("run-0000")["agentId"] == "seat-0000"
+    first._store.flush()
+    assert asked == [
+        "http://127.0.0.1:3100/api/issues/DIG-4795",
+        "http://127.0.0.1:3100/api/heartbeat-runs/run-0000",
+    ]
+
+    asked.clear()
+    now[0] += mq.PROVENANCE_CACHE_MISS_TTL
+    second = _cached_reader(cache, now)
+    assert second.ticket("DIG-4795")["id"] == "issue-0000"
+    assert second.run("run-0000")["agentId"] == "seat-0000"
+    assert asked == []
+
+
+def test_the_cache_keeps_the_facts_the_gate_reads_and_not_the_whole_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A ticket answer carries the ticket's body; the cache must not keep it.
+
+    The file sits beside the queue's log on this Mac, so it is cut down to the
+    fields the gate reads before it is written.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(
+        mq.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse(
+            {
+                "id": "issue-0000",
+                "identifier": "DIG-4795",
+                "description": "a confidential brief",
+                "comments": [{"body": "a confidential comment"}],
+            }
+        ),
+    )
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+    reader = _cached_reader(cache, now)
+    assert reader.ticket("DIG-4795") == {
+        "id": "issue-0000",
+        "identifier": "DIG-4795",
+        "description": "a confidential brief",
+        "comments": [{"body": "a confidential comment"}],
+    }
+    reader._store.flush()
+    written = cache.read_text(encoding="utf-8")
+    assert "confidential" not in written
+    assert "issue-0000" in written
+
+
+def test_a_run_list_is_read_again_for_a_commit_written_after_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The cache may not hide a run that would make the reviewer the author.
+
+    A run that covered a commit existed before that commit was written, so a
+    run list read afterwards already names it and is as good as a fresh read
+    for that commit. A commit written after the read is not covered by that
+    promise: a run may have started in between, and that run is the one that
+    would make the reviewing seat the authoring seat. So it forces a read.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse([])
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    first.issue_runs("issue-0000", fresh_after=now[0] - 60)
+    first._store.flush()
+    assert len(asked) == 1
+
+    asked.clear()
+    now[0] += 180
+    second = _cached_reader(cache, now)
+    # A commit older than the read is covered by the answer.
+    second.issue_runs("issue-0000", fresh_after=now[0] - 300)
+    assert asked == []
+    # A commit newer than the read is not, and asks again.
+    second.issue_runs("issue-0000", fresh_after=now[0] + 1)
+    assert asked == ["http://127.0.0.1:3100/api/issues/issue-0000/runs"]
+
+
+def test_a_record_the_api_does_not_have_is_remembered_and_then_forgotten(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A 404 is a fact, and a key that does not exist yet can start existing.
+
+    Every tick re-asking for the same missing ticket is the read the cache
+    exists to remove, and believing "no such ticket" forever would hide a
+    ticket filed a minute later. So the negative answer is kept for a minute.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        raise urllib.error.HTTPError(
+            str(request.full_url), 404, "Not Found", {}, None
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    assert first.ticket("DIG-9999") is None
+    first._store.flush()
+    assert len(asked) == 1
+
+    asked.clear()
+    now[0] += 1
+    second = _cached_reader(cache, now)
+    assert second.ticket("DIG-9999") is None
+    assert asked == []
+
+    asked.clear()
+    now[0] += mq.PROVENANCE_CACHE_MISS_TTL + 1
+    third = _cached_reader(cache, now)
+    assert third.ticket("DIG-9999") is None
+    assert len(asked) == 1
+
+
+def test_a_read_is_not_started_after_the_tick_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A spent tick budget stops the read, and the gate defers instead of refusing.
+
+    The cache fixes the steady state; this bounds the worst one. One PR was
+    measured at 313.6 s of reads against a 180 s interval, and no budget between
+    PRs can bound that because the cost is inside one PR. What the deadline must
+    *not* do is cut a read in half: a read that never finishes is a fact the cache
+    never keeps, so the PR costs the same on every later tick and the queue never
+    converges.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse({"id": "issue-0000"})
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, str(mq.time.time() - 1))
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable):
+        reader.ticket("DIG-4795")
+    assert asked == []
+
+
+def test_a_deadline_that_cannot_be_read_is_no_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed deadline must not stop the queue reading anything."""
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(
+        mq.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse({"id": "issue-0000"}),
+    )
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, "later, please")
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
 
 
 def test_the_read_numbers_are_the_measured_ones() -> None:
