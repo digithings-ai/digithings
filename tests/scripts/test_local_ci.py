@@ -2888,6 +2888,41 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
                          "a revision the gates have not judged is worth a look")
 
+    def test_the_revision_covers_the_body_and_the_title(self):
+        """The digest must tell a corrected title or body from the same one.
+
+        This is the part the rule turns on: a digest that ignores the body does
+        not re-queue the `pr-template` fix, and a constant digest never re-queues
+        anything after the first verdict. Both are asserted here directly, so a
+        later edit to `metadata_revision` cannot quietly take either shape.
+        """
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "body one"),
+                            _mod.metadata_revision("fix(x): a", "body two"),
+                            "the digest must change with the body")
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "same"),
+                            _mod.metadata_revision("fix(y): b", "same"),
+                            "the digest must change with the title")
+
+    def test_a_body_only_correction_re_queues_a_judged_head(self):
+        """The body is the remedy for `pr-template` (PR #6513): it must re-queue."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template (1m)", age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.bodies[str(pr["number"])] = (
+            self.body + "\n## Testing Evidence\n```\nfixed\n```\n")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a body-only correction must re-check the same head")
+
+    def test_a_title_only_correction_re_queues_a_judged_head(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        pr["title"] = "fix(x): the corrected title"
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a title-only correction must re-check the same head")
+
     def test_a_metadata_failure_the_pull_request_has_not_outlived_is_left_alone(self):
         """No recorded revision and no edit after the row: nothing to re-check."""
         pr = self._pr(updated=self._stamp(-600))
@@ -2905,6 +2940,15 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
             self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
             self.assertEqual(_mod.pending([pr], False), [],
                              f"a code failure must stay terminal: {desc!r}")
+
+    def test_a_missing_pr_template_checker_is_not_a_metadata_failure(self):
+        """A runner defect must not buy a lane on every metadata edit."""
+        pr = self._pr(updated=self._stamp(-60))
+        desc = "local-ci failed: pr-template:checker-missing (0m)"
+        self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+        self.assertIsNone(_mod.metadata_failure_gates(desc))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a missing checker module is not author metadata")
 
     def test_a_stalled_metadata_gate_is_not_re_queued(self):
         """A stall names no plain gate: it is a code verdict about the runner."""

@@ -1863,7 +1863,11 @@ def run_checks(pr, out, summary=None):
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
     # its workflow removal rides on DIG-3845)
     if pr_template is None:
-        fails.append("pr-template"); out.write("pr-template FAIL: checker module missing\n")
+        # A missing checker is a runner defect, not author metadata: the name
+        # keeps it out of METADATA_GATES, so the row stays terminal instead of
+        # buying a full lane on every title or body edit (DIG-5695 review).
+        fails.append("pr-template:checker-missing")
+        out.write("pr-template:checker-missing FAIL: checker module missing\n")
     else:
         body = pr_body(pr)
         if summary is not None and body is not None:
