@@ -45,7 +45,7 @@ Emptying the box needs all four remaining programs to leave: `digigraph`,
 nine steps**. The last two steps are a rewrite of the chat and search product, not
 a port.
 
-Removing the seven cheap programs first saves **$0**, because the four that stay
+Removing the seven other programs first saves **$0**, because the four that stay
 keep the one instance awake. The saving is only realised by the 61k-LOC step that
 deletes the class.
 
