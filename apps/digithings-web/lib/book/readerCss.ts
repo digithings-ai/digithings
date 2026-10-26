@@ -76,25 +76,28 @@ export const BOOK_READER_CSS = `
   text-transform: uppercase;
   color: var(--accent);
 }
+/* Two cells, one row, small: a reader knows what PDF and HTML mean, so the
+   buttons do not need to shout or stack. */
 .book-export__row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
 }
+.book-export__row > * { flex: 1 1 0; min-width: 0; }
 .book-export__btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  min-height: 3.5rem;
-  padding: 0.55rem 0.2rem;
+  gap: 0.25rem;
+  min-height: 2.4rem;
+  padding: 0.3rem 0.2rem;
   border: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
   background: transparent;
   color: var(--ink-soft);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
@@ -112,15 +115,8 @@ export const BOOK_READER_CSS = `
 }
 .book-export__btn[data-state="error"] { border-style: dashed; }
 .book-export__btn[disabled] { opacity: 0.55; cursor: progress; }
-.book-export__mark svg { display: block; width: 1.15rem; height: 1.15rem; }
+.book-export__mark svg { display: block; width: 0.95rem; height: 0.95rem; }
 .book-export__label { line-height: 1; }
-.book-export__status {
-  margin: 0.6rem 0 0;
-  min-height: 1rem;
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-}
 .book-nav__toggle { display: none; }
 
 /* The book takes a couple of seconds to paginate. Page-shaped placeholders hold
@@ -142,14 +138,7 @@ export const BOOK_READER_CSS = `
 }
 /* A shimmer alone reads as a page that never loads. Say what is happening, and
    say how far along it is. */
-.book-live__skeleton-status {
-  margin: 0 0 -0.75rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
-  text-transform: lowercase;
-}
+
 .book-live__skeleton-page {
   position: relative;
   width: ${BOOK_PAGE_WIDTH}px;
@@ -163,11 +152,14 @@ export const BOOK_READER_CSS = `
   content: "";
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(currentColor 1.4px, transparent 1.4px);
-  background-size: 6px 6px;
+  /* The same pixel as the landing field and the printed cover: large squares,
+     and only on every other cell, so it reads as a field being written rather
+     than as a grey wash. */
+  background-image: repeating-conic-gradient(currentColor 0% 25%, transparent 0% 50%);
+  background-size: 20px 20px;
   color: var(--ink-mute);
-  opacity: 0.18;
-  animation: book-shimmer 1.6s var(--ease) infinite;
+  opacity: 0.22;
+  animation: book-shimmer 1.8s var(--ease) infinite;
 }
 @keyframes book-shimmer {
   0%, 100% { opacity: 0.12; }
@@ -319,14 +311,12 @@ html:has(.book-live) { scrollbar-gutter: stable; }
   .book-nav__title { display: none; }
   /* The export stays in the bar: two compact cells, no heading. */
   .book-nav .book-export { grid-area: export; margin: 0; min-width: 0; }
-  /* The bar is a control strip, not a place for progress prose. */
-  .book-nav .book-export__status { display: none; }
   .book-nav .book-export__title { display: none; }
   .book-nav .book-export__row { display: flex; gap: 0.4rem; }
   .book-nav .book-export__btn {
-    min-height: 2.5rem;
-    padding: 0 0.7rem;
-    font-size: 0.72rem;
+    min-height: 2.4rem;
+    padding: 0 0.6rem;
+    font-size: 0.68rem;
   }
   .book-nav .book-export__mark { display: none; }
   .book-nav .book-export__row { gap: 0.3rem; }

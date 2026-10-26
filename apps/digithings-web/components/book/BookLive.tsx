@@ -57,7 +57,6 @@ export default function BookLive({
   // real thing arrives.
   const [ready, setReady] = useState(false);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [built, setBuilt] = useState(0);
 
   // The document is paginated outside the reader's own markup. pagedjs reflows
   // what it is handed, and a document nested in the shell was reflowed with its
@@ -120,7 +119,6 @@ export default function BookLive({
       // keeps a reader from watching one page become nineteen; the map's count
       // is a hint, not a fact, because a narrow window paginates one page short.
       if (pages && stage.current?.contains(pages)) {
-        setBuilt(stage.current.querySelectorAll(".pagedjs_page").length);
         if (settle.current) clearTimeout(settle.current);
         settle.current = setTimeout(() => setReady(true), 320);
       }
@@ -260,9 +258,6 @@ export default function BookLive({
             style={{ width: PAGE_WIDTH, transform: `scale(${scale})` }}
           >
             <div className="book-live__skeleton" data-ready={ready ? "true" : undefined}>
-              <p className="book-live__skeleton-status" role="status">
-                {built > 0 ? `setting the pages \u00b7 ${built} of ${pageCount}` : "setting the pages"}
-              </p>
               {Array.from({ length: pageCount }, (_, index) => (
                 <div className="book-live__skeleton-page" key={index} />
               ))}

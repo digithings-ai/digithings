@@ -77,23 +77,23 @@ describe("BookExportBar", () => {
       // One press, one builder: a format that quietly built two files is a bug.
       const after = cases.reduce((total, entry) => total + entry.builder.mock.calls.length, 0);
       expect(after - before).toBe(1);
+      // The cell reports completion itself; there is no status line to read.
       await waitFor(() =>
-        expect(screen.getByRole("status").textContent).toBe(
-          `saved the-digithings-book-light.${extension}`,
-        ),
+        expect(
+          screen.getByRole("button", { name: new RegExp(`as ${label} `) }).getAttribute("data-state"),
+        ).toBe("done"),
       );
     }
   });
 
-  it("tells the reader when a format could not be built", async () => {
+  it("marks a format that could not be built, without a line of prose", async () => {
     mocked.html.mockRejectedValueOnce(new Error("no pagination"));
     render(<BookExportBar />);
 
-    screen.getByRole("button", { name: /as HTML / }).click();
+    const html = screen.getByRole("button", { name: /as HTML / });
+    html.click();
 
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("couldn't build the html — try again"),
-    );
+    await waitFor(() => expect(html.getAttribute("data-state")).toBe("error"));
     expect(mocked.saved).not.toHaveBeenCalled();
   });
 });

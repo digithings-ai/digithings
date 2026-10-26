@@ -84,8 +84,6 @@ const staticNames: Record<Format, string> = {
 export default function BookExportBar() {
   const [state, setState] = useState<Record<Format, State>>({ pdf: "idle", html: "idle" });
   const [names, setNames] = useState<Record<Format, string>>(staticNames);
-  const [status, setStatus] = useState("");
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   // The name says which theme and palette the file was built in. It is read
   // after mount, because the theme lives on <html> and not in this render.
@@ -116,28 +114,20 @@ export default function BookExportBar() {
     throw new Error(`no builder for ${format}`);
   }
 
+  // The cell itself carries the progress: it says "working" and comes back when
+  // the file is written. A line of prose under the buttons was noise.
   async function run(format: Format) {
     if (state[format] === "working") return;
     setState((current) => ({ ...current, [format]: "working" }));
-    setStatus(format === "pdf" ? "preparing the pdf…" : `preparing the ${format}…`);
-    setProgress({ done: 0, total: 0 });
     try {
       const { blob, filename } = await build(format);
       saveBlob(blob, filename);
       setState((current) => ({ ...current, [format]: "done" }));
-      setStatus(`saved ${filename}`);
     } catch (error) {
       console.error(`book: could not build the ${format}`, error);
       setState((current) => ({ ...current, [format]: "error" }));
-      setStatus(`couldn't build the ${format} — try again`);
     }
   }
-
-  // A PDF is nineteen renders; the reader gets to see it moving.
-  const busyMessage =
-    state.pdf === "working" && progress.total > 0
-      ? `preparing the pdf ${progress.done}/${progress.total}…`
-      : status;
 
   return (
     <div className="book-export" role="group" aria-label="export the book">
@@ -168,9 +158,6 @@ export default function BookExportBar() {
           );
         })}
       </div>
-      <p className="book-export__status" role="status" aria-live="polite">
-        {busyMessage}
-      </p>
     </div>
   );
 }
