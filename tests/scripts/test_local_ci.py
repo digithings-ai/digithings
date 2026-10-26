@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -3686,3 +3687,140 @@ class WorktreeRootGuardTest(unittest.TestCase):
         finally:
             _mod.sh = saved
         self.assertEqual(seen, [tmp], "a step with no cwd must run in the worktree root")
+
+class StepBudgetTest(unittest.TestCase):
+    """Every gate step has a wall-clock ceiling of its own (2026-10-26).
+
+    The evidence was in the runner's own logs: a check that measures 10 s alone
+    had the tick recorded at 32 m and 44 m, while every step idle together took
+    99.6 s. The cost was a step hanging and the runner waiting on it, so the
+    ceiling is per step and the kill takes the whole process group. A red check
+    keeps its plain name: only an overrun is reported as an overrun.
+    """
+
+    def setUp(self):
+        self.out = io.StringIO()
+        self.fails = []
+
+    def _step_seconds(self, text):
+        """The duration the runner measured, read back from the log line."""
+        m = re.search(r"^step=(\S+) seconds=([\d.]+) rc=(-?\d+)", text, re.M)
+        self.assertIsNotNone(m, f"no `step=... seconds=... rc=...` line in:\n{text}")
+        return m.group(1), float(m.group(2)), int(m.group(3))
+
+    def test_a_step_that_overruns_its_budget_is_killed_and_named(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1)
+        took = time.monotonic() - started
+        self.assertFalse(ok)
+        self.assertLess(took, 20, "the step must be killed at its budget, not waited on")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        text = self.out.getvalue()
+        self.assertIn("scripts/check_slow.py exceeded 1s and was killed", text)
+        self.assertIn("[rc=124]", text, "the existing [rc=...] block must stay")
+        name, seconds, rc = self._step_seconds(text)
+        self.assertEqual((name, rc), ("scripts/check_slow.py", 124))
+        self.assertLess(seconds, 20, "the duration must be the measured one, not the budget")
+
+    def test_the_tick_moves_on_to_the_next_step(self):
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        ok = _mod.run_step("quick", ["/usr/bin/true"], 60, self.out, self.fails, budget=60)
+        self.assertTrue(ok)
+        self.assertEqual(self.fails, ["hung exceeded 1s and was killed"],
+                         "the next step must run and must not inherit the failure")
+        self.assertIn("step=quick seconds=", self.out.getvalue())
+
+    def test_a_step_under_its_budget_is_untouched(self):
+        ok = _mod.run_step("quick", ["/bin/sh", "-c", "sleep 0.2; exit 0"], 60,
+                           self.out, self.fails)
+        self.assertTrue(ok, "a healthy step must not be touched by the watchdog")
+        self.assertEqual(self.fails, [])
+        name, seconds, rc = self._step_seconds(self.out.getvalue())
+        self.assertEqual((name, rc), ("quick", 0))
+        self.assertGreaterEqual(seconds, 0.2, "the measured time must be reported")
+        self.assertNotIn("exceeded", self.out.getvalue())
+
+    def test_a_genuine_failure_still_reads_as_a_failure(self):
+        ok = _mod.run_step("ruff", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        self.assertFalse(ok)
+        self.assertEqual(self.fails, ["ruff"],
+                         "a red check is still named plainly, not called a stall")
+        self.assertNotIn("exceeded", self.out.getvalue())
+        self.assertNotIn("was killed", self.out.getvalue())
+
+    def test_a_stalled_step_is_not_retried_into_a_second_window(self):
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_slow.py"), 1,
+                         "a step killed for overrunning must not get a second window")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        self.assertIn("step=scripts/check_slow.py seconds=", text)
+
+    def test_the_retry_cap_is_enforced(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_guard.py", ["/bin/sh", "-c", "exit 3"], 60,
+                           self.out, self.fails, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_guard.py"), _mod.RETRY_CAP,
+                         "the attempt cap must be the only bound on the retry loop")
+        self.assertIn(f"attempts={_mod.RETRY_CAP}/{_mod.RETRY_CAP}", text,
+                      "the log must say how many attempts ran")
+        self.assertEqual(self.fails, ["scripts/check_guard.py:stall"])
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_the_duration_line_is_emitted_for_every_step_including_failures(self):
+        _mod.run_step("green", ["/usr/bin/true"], 60, self.out, self.fails)
+        _mod.run_step("red", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        lines = [ln for ln in self.out.getvalue().splitlines() if ln.startswith("step=")]
+        self.assertEqual([ln.split()[0] for ln in lines],
+                         ["step=green", "step=red", "step=hung"],
+                         "one duration line per step, in the order the steps ran")
+        self.assertEqual([ln.rsplit("rc=", 1)[1] for ln in lines], ["0", "1", "124"])
+
+    def test_the_kill_takes_the_whole_process_group_down(self):
+        """A hung step is a tree: the shell that hung and the grandchild it left."""
+        tmp = tempfile.mkdtemp(prefix="local-ci-kill-")
+        pidfile = os.path.join(tmp, "grandchild.pid")
+        try:
+            cmd = ["/bin/sh", "-c", f"sleep 60 & echo $! > {pidfile}; wait"]
+            _mod.run_step("hung-tree", cmd, 60, self.out, self.fails, budget=1)
+            with open(pidfile) as f:
+                grandchild = int(f.read().strip())
+            deadline = time.monotonic() + 2
+            while _mod.pid_alive(grandchild) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(_mod.pid_alive(grandchild),
+                             "a grandchild must not survive the step's budget")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_default_budget_and_the_per_step_overrides(self):
+        self.assertEqual(_mod.STEP_BUDGET, 180)
+        for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
+            self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
+                               f"{heavy} legitimately needs more than the default")
+        for light in ("scripts/check_doc_links.py", "actionlint"):
+            self.assertNotIn(light, _mod.STEP_BUDGETS,
+                             f"{light} is measured in seconds; it takes the default")
+
+    def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
+        self.assertEqual(_mod.step_budget("scripts/check_doc_links.py", 600), 180)
+        self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
+        self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
+        self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
+                         "a tighter caller ceiling still wins")
+        self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+
+    def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
+        """A step that bypasses run_step has no budget, so the gate cannot
+        prevent the next 44 m tick."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertIn("return run_step(", src)
+        self.assertEqual(src.count("sh("), 0,
+                         "run_checks must not call sh directly: every step takes a budget")

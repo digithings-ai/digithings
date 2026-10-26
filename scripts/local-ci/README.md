@@ -397,6 +397,15 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   directories the clean step protects; a rebuild moves them aside and puts them
   back, so a repaired worktree does not turn into an hour of `uv sync` and
   `npm ci` (DIG-5285).
+- **No step is waited on past its budget.** Every gate step has a wall-clock
+  ceiling of `STEP_BUDGET` (180 s) and the ones that legitimately need longer
+  name themselves in `STEP_BUDGETS` (gitleaks, `uv sync`, mypy, the worker
+  dry-runs, the bun suites); an explicit `budget=` wins, and
+  `LOCAL_CI_STEP_BUDGET` raises the default for the whole host. A step that
+  overruns is killed by process group, recorded as `<step> exceeded <N>s and was
+  killed`, and the tick moves on to the next step. Every step also writes
+  `step=<name> seconds=<n> rc=<n>` to its log, so the next investigation reads
+  the duration table instead of re-measuring by hand (2026-10-26).
 - **Static gates, plus two path-gated lanes.** The worker dry-run build and the
   bun suites run only for the paths that need them. Per-package pytest suites,
   compose validation, npm and pip audit, token canary, secret staleness,
