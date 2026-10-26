@@ -250,6 +250,24 @@ class Dig4990QuotedMarkerTest(unittest.TestCase):
         body = "<!-- opencode-power-pack:code-review verdict=approve scope=@6aab1cea -->\n"
         self.assertEqual(_mod.marker_state(body), "APPROVED")
 
+    def test_a_quoted_verdict_line_does_not_clear_a_real_change_request(self):
+        # The posted marker is real, so this *is* a review comment. The template
+        # it copies into a fence must not outrank the line the reviewer wrote.
+        body = ("%s\n\n```\nReview verdict: approve\n```\n\n"
+                "Review verdict: changes requested\n" % self.MARKER)
+        self.assertEqual(_mod.comment_state(body), "CHANGES_REQUESTED")
+        self.assertEqual(
+            len(_mod.blocking_verdicts([], [
+                {"id": 1, "user": {"login": "seat-b"}, "body": body,
+                 "created_at": "2026-10-26T07:21:21Z"}])),
+            1,
+        )
+
+    def test_a_quoted_verdict_line_creates_no_block(self):
+        body = ("%s\n\n```\nReview verdict: changes requested\n```\n\n"
+                "Review verdict: approve\n" % self.MARKER)
+        self.assertEqual(_mod.comment_state(body), "APPROVED")
+
 
 class Dig4990StaleHeadPassTest(unittest.TestCase):
     """DIG-4990: a pass that names another head is not a pass for this head.

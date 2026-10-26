@@ -344,6 +344,59 @@ def test_prose_about_a_verdict_is_not_a_verdict():
     assert rpf.in_session_verdict_state("The verdict: changes look fine to me.") == "COMMENTED"
 
 
+# --------------------------------------------------------------------------
+# A verdict line inside code is a quote, not a claim (DIG-4990)
+# --------------------------------------------------------------------------
+
+#: The #6197 shape, one clause later: a posted review that copies the reviewer
+#: template into a fence *before* its own verdict. The template's line is an
+#: example, so the reviewer's own verdict still decides the comment.
+QUOTED_APPROVE_THEN_CHANGES = (
+    "<!-- in-session-review -->\n"
+    "\n"
+    "The template below is not my verdict:\n"
+    "\n"
+    "```\n"
+    "Review verdict: approve\n"
+    "```\n"
+    "\n"
+    "Review verdict: changes requested - the migration drops the index.\n"
+)
+
+QUOTED_CHANGES_THEN_APPROVE = (
+    "<!-- in-session-review -->\n"
+    "\n"
+    "```\n"
+    "Review verdict: changes requested\n"
+    "```\n"
+    "\n"
+    "Review verdict: approve\n"
+)
+
+
+def test_a_quoted_approve_does_not_clear_a_real_change_request():
+    assert rpf.in_session_verdict_state(QUOTED_APPROVE_THEN_CHANGES) == "CHANGES_REQUESTED"
+
+
+def test_a_quoted_change_request_does_not_create_a_block():
+    assert rpf.in_session_verdict_state(QUOTED_CHANGES_THEN_APPROVE) == "APPROVED"
+
+
+def test_a_tilde_fence_is_a_quote_too():
+    body = "~~~\nReview verdict: changes requested\n~~~\n\nReview verdict: approve\n"
+    assert rpf.in_session_verdict_state(body) == "APPROVED"
+
+
+def test_an_unterminated_fence_is_a_quote_too():
+    body = "<!-- in-session-review -->\n\n```\nReview verdict: approve\n"
+    assert rpf.in_session_verdict_state(body) == "COMMENTED"
+
+
+def test_a_real_verdict_after_a_fence_is_still_read():
+    body = "```\nsome code\n```\n\nReview verdict: approve\n"
+    assert rpf.in_session_verdict_state(body) == "APPROVED"
+
+
 def test_a_verdict_identity_is_the_seat_it_names():
     assert rpf.verdict_identity("<!-- dt-seat agent=seat-a -->") == ("seat", "seat-a")
 

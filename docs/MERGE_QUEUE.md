@@ -211,7 +211,9 @@ inline code span: what a reader sees as code is being shown, not claimed, and a 
 must neither block nor clear anything. `#6197` merged on the author's own write-up, which
 quoted the reviewer template inside a fence; #6196 had taught the reader about sentences
 and blockquotes, and a fence is neither (#4990). A fence nobody closed swallows the rest
-of the comment, because that is how Markdown renders it.
+of the comment, because that is how Markdown renders it. The `review-applied` producer
+reads the same rule: its verdict line comes from the shared parser in
+`scripts/review_pass_filter.py`, which takes fenced blocks out before it reads a line.
 
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
