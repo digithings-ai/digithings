@@ -27,15 +27,16 @@ whose merges it gates, at the same version as the code it gates.
 |---|---|
 | `local_ci.py` | the tick: picks queued PRs, runs the static gates, posts the status |
 | `launch_guard.py` | refuses a run that no trusted launcher started (DIG-4796) |
+| `import_preflight.py` | refuses a tick when a module the runner imports is missing from the install (DIG-5585) |
 | `check_required_context_producers.py` | asserts every required context has exactly one producer (DIG-4507) |
 | `review_applied.py` | decides `review-applied`: a review pass left findings and every thread is resolved or answered |
 | `pr_template.py` | checks a PR body against the required sections and the Human Gate question |
   (`pr_template.py` is byte-identical; the runner and the review check carry the small
 
 Tests are `tests/scripts/test_local_ci.py`, `test_review_applied.py`,
-`test_pr_template.py`, `test_launch_guard.py` and
-`test_check_required_context_producers.py`, so the repository's own `pytest` run
-covers the gate that gates the repository.
+`test_pr_template.py`, `test_launch_guard.py`,
+`test_check_required_context_producers.py` and `test_import_preflight.py`, so
+the repository's own `pytest` run covers the gate that gates the repository.
 
 ## The review context has one producer (DIG-4507)
 
