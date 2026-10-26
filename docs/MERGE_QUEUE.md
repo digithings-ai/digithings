@@ -180,7 +180,10 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    head `b1c5fde73ef8` silently cleared its own 10:21 `changes requested`; the two
    blockers were still open and landed in `develop` (fix routed as DIG-5245). Going the
    other way needs no line: **a new head with a fresh approve** clears, because the old
-   block named a commit the PR has left. `#6170` (DIG-4911) merged into `develop` on
+   block named a commit the PR has left. That is not true of a block that names no head
+   (its `scope=` did not parse, DIG-5630): it is spent only by the seat's approve naming
+   the current head plus a `Withdraws:` line with no sha on it, and the queue's handback
+   for it says so. `#6170` (DIG-4911) merged into `develop` on
    2026-10-21 with the security desk's `changes requested` still on the branch: the code
    reviewer's later approve on the head was the newest readable verdict, and nothing had
    ever asked the queue to wait for the second sign-off. (The block in that timeline named
