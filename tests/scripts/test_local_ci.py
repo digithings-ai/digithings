@@ -3376,3 +3376,53 @@ class LockHeartbeatTest(unittest.TestCase):
         self.assertEqual(_mod.lock_holder_alive(), os.getpid())
         _mod.release_lock()
 
+
+
+class WorktreeRootGuardTest(unittest.TestCase):
+    """A gate must not run in a directory that is not there.
+
+    2026-10-26: the runner ran a tick with its worktree root resolved to "/"
+    and posted sixteen failures -- every check ran from `/` and none of them
+    was a finding. The tick has to refuse instead of producing that verdict.
+    """
+
+    PR = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+          "title": "fix(x): y"}
+
+    def setUp(self):
+        self._saved = (_mod.WT, _mod._guard)
+        _mod._guard = lambda: None
+
+    def tearDown(self):
+        _mod.WT, _mod._guard = self._saved
+
+    def test_run_checks_refuses_a_root_that_is_not_our_worktree(self):
+        # The observed failure: the root resolved to "/", which IS a directory,
+        # so an isdir check would have passed it and run every gate from root.
+        _mod.WT = "/"
+        with self.assertRaises(SystemExit) as ctx:
+            _mod.run_checks(self.PR, io.StringIO())
+        self.assertIn("is not this runner's worktree", str(ctx.exception))
+        self.assertIn("refusing to run gates", str(ctx.exception))
+
+    def test_run_checks_refuses_a_missing_root(self):
+        _mod.WT = "/nonexistent-worktree-root-for-test"
+        with self.assertRaises(SystemExit):
+            _mod.run_checks(self.PR, io.StringIO())
+
+    def test_pool_step_with_a_missing_directory_fails_without_executing(self):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        ran = []
+        saved_sh = _mod.sh
+        _mod.sh = lambda *a, **kw: (ran.append(a), (0, ""))[1]
+        try:
+            fails = _mod.run_step_pool(
+                [("probe", ["true"], 5, "/nonexistent-worktree-root-for-test", None, ())],
+                io.StringIO(),
+            )
+        finally:
+            _mod.sh = saved_sh
+        self.assertIn("probe", fails)
+        self.assertEqual(ran, [], "the pool must not execute a step with no cwd")

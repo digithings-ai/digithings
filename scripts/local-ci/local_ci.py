@@ -1566,6 +1566,14 @@ def run_step_pool(specs, out, limit=STEP_POOL):
         name, cmd, timeout, cwd, env, stall_rcs = spec
         buf = io.StringIO()
         bad = []
+        # Same refusal as the serial path: a step whose directory is missing
+        # fails by name and never runs, so a broken runner state cannot post a
+        # dozen plausible-looking failures.
+        if not os.path.isdir(cwd or WT):
+            buf.write(
+                f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n"
+            )
+            return name, [name], buf
         if stall_rcs:
             scan_step(name, cmd, timeout=timeout, out=buf, fails=bad,
                       cwd=cwd, env=env, stall_rcs=stall_rcs)
@@ -1604,9 +1612,24 @@ def run_checks(pr, out, summary=None):
     in-process and reads a plain list of failures.
     """
     _guard()
+    # A gate must never start in a directory that is not there. When the
+    # worktree root resolves wrong (empty, "/", a stale path) every check
+    # still runs, from the wrong cwd, and reports a real-looking failure for
+    # each one -- sixteen at once, none of them true. Refuse the tick instead
+    # of producing that verdict: the cause is the runner's own state, and
+    # naming it is the only useful thing to say about it.
+    if not (os.path.isdir(WT) and wt_is_ours(WT)):
+        raise SystemExit(
+            f"local-ci: worktree root {WT!r} is not this runner's worktree; "
+            "refusing to run gates"
+        )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
     def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=()):
+        if not os.path.isdir(cwd or WT):
+            fails.append(name)
+            out.write(f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n")
+            return False
         if stall_rcs:
             # A scanner that does not answer is a stall, not a finding.
             return scan_step(name, cmd, timeout=timeout, out=out, fails=fails,
