@@ -1,176 +1,127 @@
 {
-  "generatedAt": "2026-10-19T06:10:40Z",
+  "generatedAt": "2026-10-26T06:10:46Z",
   "windowDays": 30,
-  "commits": 566,
+  "commits": 1795,
   "features": [
     {
-      "scope": "digithings-stack-cloudflare",
-      "summary": "seed the two OCC manuals into occ_help for production how-to answers (DIG-3089)",
-      "pr": 5507,
-      "date": "2026-10-12T23:02:05Z"
+      "scope": "root",
+      "summary": "add a dispatch-only live drift check for the policy gate (DIG-5536)",
+      "pr": 6456,
+      "date": "2026-10-25T23:39:01Z"
     },
     {
-      "scope": "occ",
-      "summary": "carve multilingual ticket search out to main",
-      "pr": 4987,
-      "date": "2026-10-02T14:55:30Z"
+      "scope": "ci",
+      "summary": "one report for the whole stack deploy lane, and a bounded timeout retry",
+      "pr": 6454,
+      "date": "2026-10-25T22:55:43Z"
     },
     {
-      "scope": "digigraph",
-      "summary": "raise /v1/chat/completions rate limit to 60/min",
-      "pr": 4778,
-      "date": "2026-09-29T16:32:30Z"
+      "scope": "digivault",
+      "summary": "report truncation on tag and backlink lookups (DIG-5314)",
+      "pr": 6450,
+      "date": "2026-10-25T22:00:26Z"
+    },
+    {
+      "scope": "chat",
+      "summary": "one hero-banner boot everywhere, four cycling suggestions",
+      "pr": 6428,
+      "date": "2026-10-25T01:30:12Z"
+    },
+    {
+      "scope": "scripts",
+      "summary": "take the answer check's target as an input (DIG-5145)",
+      "pr": 6272,
+      "date": "2026-10-24T18:04:08Z"
     },
     {
       "scope": "digichat",
-      "summary": "searchEngine pref with tenant default and header forward",
-      "pr": 4737,
-      "date": "2026-09-28T23:40:48Z"
-    },
-    {
-      "scope": "digigraph",
-      "summary": "enforce hosted license scopes at edge",
-      "pr": 4736,
-      "date": "2026-09-28T23:34:37Z"
-    },
-    {
-      "scope": "digikey",
-      "summary": "license heartbeat receiver + edge scope checks (slice 3)",
-      "pr": 4720,
-      "date": "2026-09-28T22:22:48Z"
+      "summary": "express the MCP identity in the deployment document",
+      "pr": 6408,
+      "date": "2026-10-24T17:14:09Z"
     }
   ],
-  "pullsMerged": 821,
-  "issuesClosed": 174,
-  "pullsOpen": 24,
-  "issuesOpen": 217,
+  "pullsMerged": 994,
+  "issuesClosed": 170,
+  "pullsOpen": 22,
+  "issuesOpen": 303,
   "mergedPulls": [
     {
-      "number": 5911,
-      "title": "fix(digiquant): confine CodeQL py/path-injection path sinks at each sink (DIG-4057)",
-      "url": "https://github.com/digithings-ai/digithings/pull/5911",
-      "mergedAt": "2026-10-19T05:22:34Z"
+      "number": 6461,
+      "title": "fix(local-ci): one producer for main's review context, and publish its guard (DIG-4674)",
+      "url": "https://github.com/digithings-ai/digithings/pull/6461",
+      "mergedAt": "2026-10-26T05:59:29Z"
     },
     {
-      "number": 5902,
-      "title": "fix(root): close in-scope CodeQL alerts on develop",
-      "url": "https://github.com/digithings-ai/digithings/pull/5902",
-      "mergedAt": "2026-10-19T05:14:13Z"
+      "number": 6476,
+      "title": "chore: promote develop to main",
+      "url": "https://github.com/digithings-ai/digithings/pull/6476",
+      "mergedAt": "2026-10-26T05:25:45Z"
     },
     {
-      "number": 5899,
-      "title": "docs(root): retire the OCC client chat plan and repair inbound links",
-      "url": "https://github.com/digithings-ai/digithings/pull/5899",
-      "mergedAt": "2026-10-19T05:01:47Z"
+      "number": 6475,
+      "title": "fix(stack): present a loopback Host to the in-container MCP servers",
+      "url": "https://github.com/digithings-ai/digithings/pull/6475",
+      "mergedAt": "2026-10-26T05:20:21Z"
     },
     {
-      "number": 5894,
-      "title": "test(root): neutralize test fixtures in the answer-check report-line pin",
-      "url": "https://github.com/digithings-ai/digithings/pull/5894",
-      "mergedAt": "2026-10-19T04:57:38Z"
+      "number": 6469,
+      "title": "fix(merge-queue): a same-head approve must withdraw its own block (DIG-5246)",
+      "url": "https://github.com/digithings-ai/digithings/pull/6469",
+      "mergedAt": "2026-10-26T04:45:16Z"
     },
     {
-      "number": 5881,
-      "title": "refactor(digigraph): delete the superseded research_spike_subgraph stub",
-      "url": "https://github.com/digithings-ai/digithings/pull/5881",
-      "mergedAt": "2026-10-19T04:53:27Z"
+      "number": 6473,
+      "title": "chore: promote develop to main",
+      "url": "https://github.com/digithings-ai/digithings/pull/6473",
+      "mergedAt": "2026-10-26T04:37:27Z"
     },
     {
-      "number": 5870,
-      "title": "feat(stack): fold the digichat container id from the deploying commit",
-      "url": "https://github.com/digithings-ai/digithings/pull/5870",
-      "mergedAt": "2026-10-19T04:49:16Z"
+      "number": 6472,
+      "title": "fix(stack): verify MCP JWTs through the service binding and a KV cache",
+      "url": "https://github.com/digithings-ai/digithings/pull/6472",
+      "mergedAt": "2026-10-26T04:28:15Z"
     }
   ],
   "openIssues": [
     {
-      "number": 5890,
-      "title": "docs(root): remove confidential vendor docs from the repository",
-      "url": "https://github.com/digithings-ai/digithings/issues/5890",
-      "updatedAt": "2026-10-18T09:23:58Z"
+      "number": 6459,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6459",
+      "updatedAt": "2026-10-25T23:22:47Z"
     },
     {
-      "number": 5897,
-      "title": "[provider-review] mistral: Mistral probe hit 429 rate limit",
-      "url": "https://github.com/digithings-ai/digithings/issues/5897",
-      "updatedAt": "2026-10-18T09:23:56Z"
+      "number": 6455,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6455",
+      "updatedAt": "2026-10-25T22:22:48Z"
     },
     {
-      "number": 5898,
-      "title": "[provider-review] gemini: Gemini 2.5 Flash free limits possibly lower than recorded",
-      "url": "https://github.com/digithings-ai/digithings/issues/5898",
-      "updatedAt": "2026-10-18T09:23:55Z"
+      "number": 6452,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6452",
+      "updatedAt": "2026-10-25T21:22:48Z"
     },
     {
-      "number": 5901,
-      "title": "[housekeeping] scheduled-workflow credential expired \u2014 2026-10-18",
-      "url": "https://github.com/digithings-ai/digithings/issues/5901",
-      "updatedAt": "2026-10-18T06:41:21Z"
+      "number": 6449,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6449",
+      "updatedAt": "2026-10-25T20:27:26Z"
     },
     {
-      "number": 5524,
-      "title": "In-session review: direct-push tool-refusal commits 8f0aaf42 9eaabaae 47f02626",
-      "url": "https://github.com/digithings-ai/digithings/issues/5524",
-      "updatedAt": "2026-10-13T09:24:46Z"
+      "number": 6448,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6448",
+      "updatedAt": "2026-10-25T19:22:49Z"
     },
     {
-      "number": 643,
-      "title": "[housekeeping-auto] label coverage drift",
-      "url": "https://github.com/digithings-ai/digithings/issues/643",
-      "updatedAt": "2026-10-12T08:08:58Z"
+      "number": 6447,
+      "title": "digiquant house-run for 2026-10-19 never landed",
+      "url": "https://github.com/digithings-ai/digithings/issues/6447",
+      "updatedAt": "2026-10-25T18:22:50Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
-    {
-      "date": "2025-10-14",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-15",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-16",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-17",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-18",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-19",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
-    {
-      "date": "2025-10-20",
-      "count": 0,
-      "commits": 0,
-      "pulls": 0,
-      "issues": 0
-    },
     {
       "date": "2025-10-21",
       "count": 0,
@@ -2553,8 +2504,8 @@
     },
     {
       "date": "2026-09-26",
-      "count": 33,
-      "commits": 17,
+      "count": 34,
+      "commits": 18,
       "pulls": 9,
       "issues": 7
     },
@@ -2574,134 +2525,134 @@
     },
     {
       "date": "2026-09-29",
-      "count": 100,
-      "commits": 51,
+      "count": 114,
+      "commits": 65,
       "pulls": 38,
       "issues": 11
     },
     {
       "date": "2026-09-30",
-      "count": 87,
-      "commits": 0,
+      "count": 215,
+      "commits": 128,
       "pulls": 61,
       "issues": 26
     },
     {
       "date": "2026-10-01",
-      "count": 56,
-      "commits": 0,
+      "count": 117,
+      "commits": 61,
       "pulls": 40,
       "issues": 16
     },
     {
       "date": "2026-10-02",
-      "count": 13,
-      "commits": 3,
+      "count": 18,
+      "commits": 8,
       "pulls": 9,
       "issues": 1
     },
     {
       "date": "2026-10-03",
-      "count": 16,
-      "commits": 0,
+      "count": 58,
+      "commits": 42,
       "pulls": 14,
       "issues": 2
     },
     {
       "date": "2026-10-04",
-      "count": 28,
-      "commits": 2,
+      "count": 65,
+      "commits": 39,
       "pulls": 23,
       "issues": 3
     },
     {
       "date": "2026-10-05",
-      "count": 37,
-      "commits": 1,
+      "count": 83,
+      "commits": 47,
       "pulls": 34,
       "issues": 2
     },
     {
       "date": "2026-10-06",
-      "count": 38,
-      "commits": 5,
+      "count": 77,
+      "commits": 44,
       "pulls": 33,
       "issues": 0
     },
     {
       "date": "2026-10-07",
-      "count": 17,
-      "commits": 1,
+      "count": 78,
+      "commits": 62,
       "pulls": 16,
       "issues": 0
     },
     {
       "date": "2026-10-08",
-      "count": 16,
-      "commits": 1,
+      "count": 32,
+      "commits": 17,
       "pulls": 15,
       "issues": 0
     },
     {
       "date": "2026-10-09",
-      "count": 13,
-      "commits": 0,
+      "count": 20,
+      "commits": 7,
       "pulls": 11,
       "issues": 2
     },
     {
       "date": "2026-10-10",
-      "count": 67,
-      "commits": 0,
+      "count": 303,
+      "commits": 236,
       "pulls": 63,
       "issues": 4
     },
     {
       "date": "2026-10-11",
-      "count": 65,
-      "commits": 14,
+      "count": 238,
+      "commits": 187,
       "pulls": 51,
       "issues": 0
     },
     {
       "date": "2026-10-12",
-      "count": 55,
-      "commits": 21,
+      "count": 99,
+      "commits": 65,
       "pulls": 34,
       "issues": 0
     },
     {
       "date": "2026-10-13",
-      "count": 47,
-      "commits": 2,
+      "count": 103,
+      "commits": 58,
       "pulls": 44,
       "issues": 1
     },
     {
       "date": "2026-10-14",
-      "count": 33,
-      "commits": 0,
+      "count": 64,
+      "commits": 31,
       "pulls": 32,
       "issues": 1
     },
     {
       "date": "2026-10-15",
-      "count": 22,
-      "commits": 0,
+      "count": 44,
+      "commits": 22,
       "pulls": 22,
       "issues": 0
     },
     {
       "date": "2026-10-16",
-      "count": 42,
-      "commits": 0,
+      "count": 83,
+      "commits": 41,
       "pulls": 41,
       "issues": 1
     },
     {
       "date": "2026-10-17",
-      "count": 1,
-      "commits": 0,
+      "count": 2,
+      "commits": 1,
       "pulls": 1,
       "issues": 0
     },
@@ -2714,72 +2665,121 @@
     },
     {
       "date": "2026-10-19",
-      "count": 18,
-      "commits": 0,
-      "pulls": 16,
-      "issues": 2
+      "count": 109,
+      "commits": 52,
+      "pulls": 54,
+      "issues": 3
+    },
+    {
+      "date": "2026-10-20",
+      "count": 219,
+      "commits": 93,
+      "pulls": 93,
+      "issues": 33
+    },
+    {
+      "date": "2026-10-21",
+      "count": 208,
+      "commits": 91,
+      "pulls": 91,
+      "issues": 26
+    },
+    {
+      "date": "2026-10-22",
+      "count": 159,
+      "commits": 75,
+      "pulls": 70,
+      "issues": 14
+    },
+    {
+      "date": "2026-10-23",
+      "count": 142,
+      "commits": 114,
+      "pulls": 27,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-24",
+      "count": 119,
+      "commits": 85,
+      "pulls": 33,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-25",
+      "count": 27,
+      "commits": 17,
+      "pulls": 7,
+      "issues": 3
+    },
+    {
+      "date": "2026-10-26",
+      "count": 28,
+      "commits": 18,
+      "pulls": 9,
+      "issues": 1
     }
   ],
   "latestRelease": {
-    "tag": "digichat-v2.3.2",
-    "name": "digichat v2.3.2",
-    "publishedAt": "2026-09-21T12:38:12Z",
-    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.2"
+    "tag": "digichat-v2.7.0",
+    "name": "digichat: v2.7.0",
+    "publishedAt": "2026-10-25T23:59:46Z",
+    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.7.0"
   },
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-10-12T22:42:51Z",
-      "files": 161,
-      "lines": 25931
+      "lastCommit": "2026-10-25T00:19:27Z",
+      "files": 160,
+      "lines": 26933
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-10-06T13:11:04Z",
-      "files": 1005,
-      "lines": 238267
+      "lastCommit": "2026-10-23T04:23:35Z",
+      "files": 1007,
+      "lines": 238246
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-10-12T23:46:37Z",
-      "files": 183,
-      "lines": 33343
+      "lastCommit": "2026-10-23T03:18:13Z",
+      "files": 185,
+      "lines": 33514
     },
     "digichat": {
       "path": "apps/digichat",
-      "lastCommit": "2026-10-13T00:08:30Z",
-      "files": 708,
-      "lines": 118304
+      "lastCommit": "2026-10-25T20:19:29Z",
+      "files": 784,
+      "lines": 147813
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-10-08T11:48:18Z",
+      "lastCommit": "2026-10-20T18:35:15Z",
       "files": 30,
       "lines": 4164
     },
     "digitrace": {
       "path": "digitrace",
-      "lastCommit": null,
+      "lastCommit": "2026-10-23T10:38:32Z",
       "files": 10,
-      "lines": 1199
+      "lines": 1249
     },
     "digibot": {
       "path": "digibot",
-      "lastCommit": "2026-09-15T19:05:55Z",
-      "files": 20,
-      "lines": 2091
+      "lastCommit": "2026-10-23T10:38:32Z",
+      "files": 21,
+      "lines": 2110
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-09-15T14:21:42Z",
+      "lastCommit": "2026-10-23T03:54:13Z",
       "files": 19,
       "lines": 3942
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-10-12T23:46:37Z",
-      "files": 24,
-      "lines": 5302
+      "lastCommit": "2026-10-25T22:00:26Z",
+      "files": 25,
+      "lines": 5715
     }
   }
 }
