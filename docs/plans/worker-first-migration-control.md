@@ -1,81 +1,97 @@
-# Worker-first migration — control plan
+# Container reduction — control plan
 
-Status: **of record once merged**. Supersedes `DIG-2914` / PR #6497 ("keep the
-box and clean it") for the Cloudflare runtime.
+Status: **of record once merged**. Executes
+[`2026-10-26-digistackcontainer-replan.md`](./2026-10-26-digistackcontainer-replan.md)
+(the merged memo for `DIG-2914`) as a step-controlled programme.
 
-Owner: Chris. Executed step by step; one step in flight at a time.
+Owner: Chris. One step in flight at a time.
 
-## Why this is a programme, not a series of merges
+## Scope, corrected against the evidence
 
-The decision of record said keep the containers. This reverses it. A reversal
-carries two extra obligations that an ordinary feature does not:
+The ask was "turn off the containers and migrate all to the Workers". The
+merged replan evaluated exactly that and **rejected the whole-box version on
+size, not on taste**:
 
-1. **It needs a baseline before it starts.** Every later claim ("faster",
-   "cheaper", "no worse") is meaningless without the number taken while the
-   containers still ran.
-2. **It deletes things.** A container that is removed cannot be un-removed by
-   reverting a commit if a client is mid-session. Deletions go last, and each
-   one needs a rollback that is not "revert the merge".
+| Program | LOC | Verdict |
+|---|---:|---|
+| `digigraph` (LangGraph, SSE, matplotlib) | 23.9k | stays — porting is a product change |
+| `digisearch` (ONNX embeddings, Chroma, thread-bound SQLite) | 29.0k | stays |
+| `digisearch-mcp` | 0.7k | stays with its backend |
+| `digivault` + `digivault-mcp` | 5.0k | **candidate for a Worker on its own merits** |
+| `digikey` | 3.2k | Worker built, **parked** — the cut moves the JWT issuer and saves $0 while the box stays |
+| `redis`, `seed_chroma`, `searxng` | ~0 | delete (searxng only with a product reason) |
 
-## The case, stated honestly
+So this programme is **container reduction**, not container elimination. It
+removes what can leave without a product change, and it says plainly what
+cannot. A full migration remains possible, but it is a re-scoping decision with
+a multi-month price, and it is not smuggled in here.
 
-The money does not carry this. `DIG-2904` measures the whole bill at **$77/mo**;
-`DIG-5549` prices emptying the box at **$15–27/mo** against roughly **61k LOC**.
-Containers already scale to zero (`sleepAfter` 1 m chat, 5 m stack), so the bill
-is wake time, not idle time.
+## Why it is worth doing at all
 
-What carries it is **latency and operability**: a Worker wakes in milliseconds; a
-container cold start has been measured at **42.9 s**, which is longer than the
-shell's own 30 s patience. That is the number to beat, and the baseline file
-records the current one.
+Not the money: the whole bill is $77/mo and emptying the box is worth $15–27/mo
+against ~61k LOC. The case is **latency and operability** — a container cold
+start measured at **42.9 s** against a shell that waits 30 s, and a per-surface
+blast radius that a Worker does not have for stateless work.
 
 ## Control rules
 
-1. **One step in flight.** No step begins until the previous one has met its
-   exit criteria in production, not merely merged.
-2. **Entry criteria are measured, not assumed.** Each step names what must be
-   true before it starts.
-3. **Exit criteria are production measurements.** Merged is not done; a step is
-   done when the live surface meets its number.
-4. **Rollback is written before the step starts**, and must be executable
-   without a new commit (a flag, a config value, a re-dispatch of the previous
-   image).
-5. **Client surfaces are named per step.** OCC and every DataTap tenant are
+1. **One step in flight.** The next step does not begin until this one meets
+   its exit criteria in production.
+2. **Exit criteria are production numbers**, not merged PRs. "Merged" is how the
+   last incident happened.
+3. **Rollback is written before the step starts** and must not need a new
+   commit.
+4. **Client surfaces are named per step.** OCC and every DataTap tenant are
    users; a step that cannot be validated on them does not ship.
-6. **Deletions are last**, and only after a full week with the replacement
-   serving alone.
+5. **Deletions last**, after a full week with the replacement serving alone.
+6. **Nothing irreversible without Chris.** Deleting a Cloudflare container app
+   or a registry image cannot be undone by a redeploy.
 
 ## Ledger
 
-| # | Step | Entry | Exit (production) | Rollback | Status |
+| # | Step | Entry | Exit (production) | Rollback | Reversible? |
 |---|---|---|---|---|---|
-| 0 | Baseline + decision of record | — | numbers recorded; `DIG-2914` superseded | n/a | in progress |
-| 1 | Per-tenant KV config documents | slice 1 merged | adding a tenant is one KV write, no deploy | re-read previous KV value | not started |
-| 2 | Chat container → Worker (`DIG-2912`) | step 1 exit | `/chat` p95 TTFB within the baseline's warm figure; no cold start | dispatch previous image tag | not started |
-| 3 | MCP edge completion (`DIG-5629`) | step 2 exit | every tenant's servers callable; scope enforced per server | static key path unchanged | partly done |
-| 4 | digikey → Worker (`DIG-5548`) | step 3 exit | token issue/verify with no container in the path | previous container stays warm one release | parked |
-| 5 | Runners, dead weight (`DIG-2915`, `DIG-2916`, `DIG-5558`, `#3854`) | step 4 exit | each name gone, nothing references it | re-create from the release ledger | not started |
-| 6 | Retire `DigiStackContainer` | step 5 exit + 1 week Worker-only | container deleted, bill reflects it | restore previous image | not started |
+| 0 | Baseline + this plan | — | numbers recorded; plan merged | n/a | yes |
+| 1 | `DIG-2915` runner cutover | launchd job installed and running | digiquant jobs run from the host; container declared but unused | re-enable the container trigger | yes |
+| 2 | Cheap deletions (`redis`, `seed_chroma`) | step 1 exit | names gone; digikey's JTI blocklist and the SearXNG limiter re-homed | redeploy previous image | yes |
+| 3 | `digivault` → Worker | step 2 exit; the four baked-seed tools read D1 | vault tools answer from D1 with no container in the path | previous image, dispatched | yes |
+| 4 | Chat container → Worker | step 3 exit; the four blockers below are retired | `/chat` p95 TTFB at the warm baseline, no cold start | dispatch the previous image tag | yes |
+| 5 | `digikey` cut | step 4 exit **and** a stated reason to move it | tokens issued/verified with no container in the path | previous container stays warm one release | yes |
+| 6 | Retire `DigiStackContainer` | steps 2–5 leave it with no programs | app deleted, bill reflects it | restore from the release ledger | **no — Chris only** |
 
-## What "in flight" means for this repo
+> Step 6 may legitimately never happen. If `digigraph` and `digisearch` stay,
+> the box stays, and the ledger ends at step 5.
 
-The gate queue is shared. This programme does not jump it, and it does not hold
-it either: each step is one branch, one PR, one deploy, and the queue is left
-to its own ordering. What it does not accept is a step landing without its
-measurement.
+## Step 4 is not a port — it is four blockers
 
-## Out of scope
+Verified in code, not inferred from issue titles:
 
-- The UI, chat product behaviour, and tool naming work of the last sessions.
-  Those are correctness fixes and stand on their own.
-- Moving data storage. KV, R2 and D1 stay as they are.
-- Any client migration. No DataTap tenant changes as part of a step.
+| Blocker | Evidence | Consequence |
+|---|---|---|
+| A listening socket | `trusted-proxy-server.mjs:277` `http.createServer`, `:201` `net.connect` | a request-scoped Worker cannot hold it; the proxy must move to the Worker edge or a Durable Object |
+| An in-process Python MCP | `:233` spawns `python3 -m scripts.zammad_mcp.server`; `server.py:414` serves streamable-http on `127.0.0.1:8770`; `Dockerfile.digichat-cloudflare:111` installs Python | must become a Worker-native MCP or a remote service |
+| Raw TCP Postgres | `src/db/index.ts:12` `postgres()` | needs Hyperdrive or an HTTP driver |
+| Boot-time filesystem | `license/state.ts:98`, `artifact-blobs.ts:127` (`/var/tmp`) | needs KV/R2 |
+
+Not blockers, despite the assumption: SSE streaming works on Workers
+(`app/api/chat/route.ts:978`), the MCP client is plain `fetch` JSON-RPC
+(`lib/mcp/schema-proxy.ts:321`), and there is **no** PDF, upload,
+websocket, redis or SQLite code in the chat image at all.
+
+## What is already done, so we do not rebuild it
+
+- MCP auth at the edge: digikey JWTs verified by the Worker, JWKS cached in KV,
+  loopback Host rewritten (`mcp-edge-auth.ts`, `mcp-edge-target.ts`).
+- Config externalised to KV with a 30 s re-read.
+- The 5.1 kB text-binding limit hit and solved by splitting the corpus map.
+- One tool expansion and a naming contract that fails CI on an id that does not
+  exist.
 
 ## Risks
 
 | Risk | Why it is dangerous | Mitigation |
 |---|---|---|
-| A client is mid-session when a container is deleted | Sessions are not portable | Deletions last; drain window; keep the previous image dispatchable |
-| Streaming changes shape when the chat leaves the container | SSE/stream semantics differ | Step 2 measures a full turn, not a health check |
-| The Worker's text-binding limit (5.1 kB) bites again | Config grows as tenants are added | Already hit once; split by tenant, tested |
-| A step is declared done on "merged" | The original failure mode | Exit criteria are production numbers only |
+| `digikey` cut | moves the JWT issuer for digisearch, digigraph, digiquant and digivault; a wrong `kid`/JWKS invalidates every existing token, DataTap and OCC included | last cut, with a token-compatibility test before it |
+| Chat cut | replaces the container behind invite-gated OCC with 1-minute `sleepAfter` proxy semantics | step 4 measures a full turn on OCC, not a health check |
+| Deleting a container app or image | cannot be undone by redeploy | Chris-only, after a verified deploy and a week |
+| Declaring a step done on "merged" | the failure mode already observed | exit criteria are production numbers |
