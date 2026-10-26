@@ -10,13 +10,16 @@ compromise. Owner: Security & Risk (or Chris in solo mode).
    Admins must be exactly `sctl` and (via team `admins`) `chris`.
 3. Teams: `admins` = {sctl, chris}; `agent-writers` = the four agents;
    `ci-runners` = {ci-runner}; `reviewers` = {chris, paperclip-bot}; `Owners` = {sctl}.
-   Remove any seat that has been offboarded.
+   Remove any seat that has been offboarded. The `admins` team currently has no
+   repo grants; that is a known hardening gap, not a user-membership problem.
 4. 2FA: `sctl` and `chris` must show 2FA=true; agents/bots must be false.
 5. Tokens: every `*.expires` sidecar must be in the future. Rotate any that are
    expired or expiring within 14 days (scripts/forgejo-token-rotate.sh).
 6. Branch protection: run `scripts/forgejo-branch-protection-verify.sh` (must exit 0).
-7. Gitleaks: confirm the Woodpecker `gitleaks` step is present in each repo's
-   `.woodpecker.yml` on `develop` (spot-check one repo).
+7. Gitleaks: `scripts/forgejo-gitleaks-woodpecker-step.yml` is a **template**;
+   no `.woodpecker.yml` exists yet. The local guard is the gitleaks check in
+   `scripts/hooks/pre-push.sh` (installed by `make hooks-install`); confirm it
+   is present. Server-side scanning arrives with the Woodpecker pipeline.
 8. Audit log: review `access.log` for 401/403 spikes and non-2xx mutations
    (docs/ops/forgejo-audit-log.md).
 9. Record the review outcome (pass / findings) in the report file and file

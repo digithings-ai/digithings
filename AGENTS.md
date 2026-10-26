@@ -24,14 +24,16 @@ curl -s -m 2 -o /dev/null -w "%{http_code}" http://localhost:3000/api/healthz
 When Forgejo is up:
 
 ```bash
-sctl change new --id DIG-1234-fix-thing --owner <seat> --base github/develop
+sctl change new --id DIG-1234-fix-thing --owner <seat> --base local/develop
 git checkout change/DIG-1234-fix-thing   # edit, commit
 sctl forge open --change DIG-1234-fix-thing --base develop
 sctl review record --change DIG-1234-fix-thing --from-forge --pr 7
+sctl doctor --base local/develop
 sctl publish --change DIG-1234-fix-thing --remote github --target develop
 ```
 
 - GitHub is the **publication surface**, not the working surface. `sctl publish` is the only path to it.
+- The forge's `github-develop` branch mirrors GitHub `develop`. It reaches `develop` only through a `chore/sync-develop` PR; never use it as a change base and never push to it.
 - Never push directly to `develop` or `main`. Never `git stash` (banned repo-wide; commit or `sctl durable snapshot`).
 - Never approve your own change; tier 2 (auth, crypto, brokers, migrations, workflows, the gate, new deps, ≥400 lines) needs a human.
 - Run local CI (Woodpecker) and Docker before publishing; GitHub Actions minutes are reserved for quality tooling.

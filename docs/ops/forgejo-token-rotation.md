@@ -14,12 +14,18 @@ Baseline: 90 days for every PAT an agent or human uses against Forgejo
 | ci-runner | ci-runner.token | all | 90 days | CI owner |
 
 ## Procedure
-1. Mint a new token (CLI, does not invalidate the old one).
-2. Write it to the token file (mode 600) and record expiry (today + 90 days).
-3. Update every consumer (env files, CI secrets, agent configs) to the new token.
-4. Verify the new token works (`GET /api/v1/user`).
-5. Revoke the old token by name (`DELETE /api/v1/users/{u}/tokens/{name}`).
-6. Log the rotation in the table at the bottom of this file.
+1. Mint and write the new token: `scripts/forgejo-token-rotate.sh <identity> [scope]`.
+   It does **not** revoke anything; it writes `~/.config/digithings/forgejo-tokens/<identity>.token`
+   and the `.expires` sidecar at mode 600.
+2. Update every consumer (env files, CI secrets, agent configs) to the new token.
+3. Verify the new token works against a repo endpoint.
+4. Revoke the old token **by name** only after the consumers are updated:
+   `scripts/forgejo-token-rotate.sh --revoke <identity> <old-name>`.
+5. Log the rotation in the table at the bottom of this file.
+
+The `sctl` admin token is stored in `local-forge.env`, not in the token
+directory. The script refuses to rotate it automatically; update that file
+deliberately and revoke the old admin token after the new one is verified.
 
 ## Revocation triggers (immediate, not on cadence)
 - Suspected leak, lost device, offboarding of a seat, or a token appearing in

@@ -15,7 +15,7 @@
   digiforge/internal/forge forge.go note).
 
 ## Review procedure
-1. `docker exec -u git local-forge-forgejo-1 tail -n 200 /data/gitea/log/access.log`
+1. `docker exec -u git "${FORGEJO_CONTAINER:-local-forge-forgejo-1}" tail -n 200 /data/gitea/log/access.log`
 2. Filter for admin actions: `grep -E "POST|PUT|DELETE|PATCH" access.log | grep -v " 200 \| 201 \| 204 "` (non-2xx mutations).
 3. Check for failed auth: `grep " 401 \| 403 " access.log`.
 4. Archive monthly: copy the volume's log dir to a dated backup before rotation

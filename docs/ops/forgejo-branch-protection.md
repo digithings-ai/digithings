@@ -1,12 +1,60 @@
 # Forgejo branch protection (localhost:3000)
 
-Expected matrix (5 repos x 2 branches):
+Verified against the live forge on **2026-10-26**. The forge carries **9 rules
+across 5 repos**, and they are deliberately not uniform: `main` is the strict
+branch, while the integration branch (`develop`, or `master` on paperclip) is
+lighter because agents merge into it continuously.
 
-| Branch | enable_push | required_approvals | enable_status_check | require_signed_commits | apply_to_admins | block_on_rejected_reviews | dismiss_stale_approvals | block_on_outdated_branch |
-|---|---|---|---|---|---|---|---|---|
-| develop | false | 1 | false | false | true | true | true | true |
-| main | false | 1 | true | false | true | true | true | true |
+## Current matrix
 
-Verifier: `scripts/forgejo-branch-protection-verify.sh` (exit 0 only if all match).
+| Repo | Branch | push | approvals | status | signed | admins | rejected | stale | outdated |
+|---|---|---|---|---|---|---|---|---|---|
+| digithings | `main` | off | 1 | on | off | on | on | on | on |
+| digithings | `develop` | off | 1 | off | off | on | on | off | off |
+| twelve-x | `main` | off | 1 | on | off | on | on | on | on |
+| twelve-x | `develop` | off | 1 | off | off | on | on | off | off |
+| datatap-web | `main` | off | 1 | off | off | on | on | off | off |
+| paperclip | `main` | off | 1 | on | off | on | on | on | on |
+| paperclip | `master` | off | 1 | off | off | on | on | off | off |
+| digiforge | `main` | off | 1 | on | off | on | on | on | on |
+| digiforge | `develop` | off | 1 | off | off | on | on | off | off |
 
-Signed commits: left `false` (optional follow-up). Enabling requires each committer to register a GPG key (`/user/gpg_keys`) and set `require_signed_commits = true` on both branches; all agents must sign. Track as follow-up.
+`enable_status_check` is on for the four `main` rules, but **their
+`status_check_contexts` lists are empty** — the setting exists without naming a
+required context. That is a gap, not a pass.
+
+The verifier asserts this **current** state:
+
+```bash
+scripts/forgejo-branch-protection-verify.sh
+```
+
+It exits non-zero for a missing rule or any flag mismatch, and prints the
+mismatch with the repo/branch/field.
+
+## Known gaps (hardening follow-up)
+
+The target is stricter than the current state:
+
+- `datatap-web/main` has status checks, stale dismissal and outdated blocking
+  all off; the other `main` rules have them on.
+- The four `main` rules that enable status checks name no required context.
+- The `admins` team has access to **0 repos**; `agent-writers`, `ci-runners`,
+  `reviewers` and `Owners` each have all five.
+- Signed commits are off everywhere (left as an optional follow-up).
+
+The live rules are intentionally left unchanged by this documentation change.
+Follow-up: local forge issue #7 tracks applying the target matrix and the team
+grant, with its own review and rollback.
+
+## Branch-protection consequence
+
+With `enable_push: false`, the `/git/refs` endpoint returns 405. Create
+branches with:
+
+```bash
+POST /api/v1/repos/{owner}/{repo}/branches
+{"new_branch_name":"<new>","old_branch_name":"develop"}   # 201
+```
+
+Use the repo's actual integration branch (`develop` or `master`).

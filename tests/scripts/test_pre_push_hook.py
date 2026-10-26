@@ -22,8 +22,11 @@ the property the whole arm rests on: no input makes it block.
 from __future__ import annotations
 
 import importlib.util
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -746,3 +749,62 @@ def test_the_tier_counts_unmerged_patches_not_commits(tmp_path: Path) -> None:
     assert commits == "2", commits
 
     assert age.unmerged_patch_count(repo, "feature") == 1
+
+
+@pytest.mark.unit
+def test_gitleaks_guard_blocks_a_secret_and_allows_a_clean_tip() -> None:
+    """The local secret scan is wired into the installed hook, not just a template."""
+    if shutil.which("gitleaks") is None:
+        pytest.skip("gitleaks is not installed")
+
+    hook = Path(__file__).resolve().parents[2] / "scripts" / "hooks" / "pre-push.sh"
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+
+        def run(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(args, cwd=repo, check=True, text=True, capture_output=True)
+
+        run("git", "init", "-q")
+        run("git", "config", "user.email", "pre-push-test@example.com")
+        run("git", "config", "user.name", "pre-push-test")
+        (repo / ".gitleaks.toml").write_text(
+            'title = "test"\n'
+            '[[rules]]\n'
+            'id = "unit-test-token"\n'
+            'description = "unit test token"\n'
+            "regex = '''UNIT_TEST_TOKEN_[A-Z0-9]{8}'''\n",
+            encoding="utf-8",
+        )
+        (repo / "clean.txt").write_text("clean\n", encoding="utf-8")
+        run("git", "add", "-A")
+        run("git", "commit", "-qm", "seed")
+        run("git", "branch", "-M", "develop")
+        develop = run("git", "rev-parse", "HEAD").stdout.strip()
+
+        def push(branch: str, sha: str) -> subprocess.CompletedProcess[str]:
+            line = f"refs/heads/{branch} {sha} refs/heads/{branch} {develop}\n"
+            return subprocess.run(
+                ["bash", str(hook), "origin", "https://github.com/digithings-ai/digithings.git"],
+                cwd=repo,
+                input=line,
+                text=True,
+                capture_output=True,
+                env={**os.environ, "PRE_PUSH_SKIP_GITLEAKS": "0"},
+            )
+
+        run("git", "checkout", "-qb", "feat/secret")
+        (repo / "token.txt").write_text("UNIT_TEST_TOKEN_ABCDEFGH\n", encoding="utf-8")
+        run("git", "add", "token.txt")
+        run("git", "commit", "-qm", "secret")
+        secret = run("git", "rev-parse", "HEAD").stdout.strip()
+        blocked = push("feat/secret", secret)
+        assert blocked.returncode == 1
+        assert "gitleaks found a secret" in blocked.stderr
+
+        run("git", "checkout", "-qb", "feat/clean", "develop")
+        (repo / "clean.txt").write_text("still clean\n", encoding="utf-8")
+        run("git", "add", "clean.txt")
+        run("git", "commit", "-qm", "clean")
+        clean = run("git", "rev-parse", "HEAD").stdout.strip()
+        allowed = push("feat/clean", clean)
+        assert allowed.returncode == 0, allowed.stderr

@@ -5,7 +5,7 @@
 - Recovery codes: stored in password manager under
   "forgejo-<user>-2fa-recovery". Use one if the authenticator is lost.
 - Admin reset (loses 2FA, user must re-enroll):
-  `docker exec -u git local-forge-forgejo-1 forgejo admin user reset-mfa -u <username>`
+  `docker exec -u git "${FORGEJO_CONTAINER:-local-forge-forgejo-1}" forgejo admin user reset-mfa -u <username>`
 - If SECRET_KEY is lost, ALL 2FA secrets are unrecoverable; restore from backup.
 - Never disable 2FA globally except during a documented incident; re-enable
   immediately after.
