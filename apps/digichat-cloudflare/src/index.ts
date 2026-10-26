@@ -47,6 +47,17 @@ const workerVars = env as unknown as Env;
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
 
 /**
+ * How long a resolved tenant registry + deployment document is reused before
+ * KV is read again. The bound exists because a Container instance outlives a
+ * Worker deploy: the container id is derived from the deploying commit, so a
+ * redeploy of the same commit reuses the instance, its boot env, and a
+ * "resolved once per boot" config — a KV edit then never reaches the container
+ * at all. Short by design: it bounds how stale an edit can be, not how often an
+ * operator edits.
+ */
+export const BOOT_CONFIG_TTL_MS = 30_000;
+
+/**
  * True when a thrown value is an Error, asked in a way that cannot throw.
  *
  * `instanceof` walks the prototype chain, and a value that cannot be
@@ -115,47 +126,95 @@ export class DigiChatContainer extends Container {
     DIGICHAT_MCP_EDGE_KEY: workerVars.DIGICHAT_MCP_EDGE_KEY ?? "",
   };
 
-  /** One boot = one KV read of both the tenant registry and the config document. */
-  private bootConfigResolved = false;
+  /** When the current KV resolution was applied; null means "read again now". */
+  private configResolvedAt: number | null = null;
 
   /**
-   * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
-   * tenant config (secret refs resolved from Worker secrets), falling back to
-   * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   * The KV resolution in flight. Requests that arrive while one is running
+   * await it instead of starting their own, so a burst costs one read per key
+   * rather than one read per request.
+   */
+  private configResolution: Promise<void> | null = null;
+
+  /**
+   * Bumped by `onStop()`. A resolution that straddles a stop is discarded
+   * rather than marking itself fresh against the boot that just ended.
+   */
+  private configEpoch = 0;
+
+  /**
+   * Resolve the tenant registry and the deployment document from KV and apply
+   * them to the container's env. Never throws: both failures have a documented
+   * fail-soft value, and this runs on the request path.
    *
-   * Then read the deployment document itself from the same namespace's
-   * `config-yaml` key and forward it as DIGICHAT_CONFIG_YAML, so the container's
-   * config lives outside both the image and the Worker. Both reads happen once
-   * per boot; `onStop()` re-arms them, so a KV edit plus the container's idle
-   * sleep is all a config change needs — no redeploy.
+   * Precedence is unchanged — `resolveEmbedTenants(kv, legacySecret, env)` then
+   * `resolveConfigYaml(kv)`, with KV winning over the `[vars]` seam.
+   */
+  private async resolveBootConfig(epoch: number): Promise<void> {
+    let tenants = "";
+    try {
+      const resolved = await resolveEmbedTenants(
+        workerVars.DIGICHAT_TENANTS_KV,
+        workerVars.DIGICHAT_EMBED_TENANTS,
+        workerVars as unknown as Record<string, unknown>,
+      );
+      tenants = resolved.json;
+      console.log(`[tenants-kv] embed tenants source=${resolved.source}`);
+    } catch (e) {
+      // A tenant-config failure must not 500 every proxied request (embed,
+      // chat, assets, /healthz). Fail closed to no tenants for this window;
+      // the next window retries, and onStop() re-arms immediately.
+      console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
+    }
+    // `resolveConfigYaml` never throws: a missing key or failed read is logged
+    // there and leaves the container on its own file/defaults, which is the
+    // documented precedence.
+    const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
+    console.log(`[config-kv] digichat config source=${source}`);
+    // A stop overtook this read. Applying it would hand the next request a
+    // value resolved against the boot that just ended, and would extend the
+    // stale window by another TTL.
+    if (epoch !== this.configEpoch) return;
+    this.envVars = {
+      ...this.envVars,
+      DIGICHAT_EMBED_TENANTS: tenants,
+      // KV wins over the `[vars]` seam; `none` leaves that seam in charge.
+      ...(source === "kv" ? { DIGICHAT_CONFIG_YAML: yaml } : {}),
+    };
+    this.configResolvedAt = Date.now();
+  }
+
+  /**
+   * One KV resolution per {@link BOOT_CONFIG_TTL_MS} window, shared by every
+   * request inside it. `bootConfigResolved` used to be a one-shot latch, which
+   * made a KV edit invisible until the container itself was recycled.
+   */
+  private async ensureBootConfig(): Promise<void> {
+    if (this.configResolvedAt !== null && Date.now() - this.configResolvedAt < BOOT_CONFIG_TTL_MS) {
+      return;
+    }
+    if (this.configResolution) return this.configResolution;
+    const resolution = this.resolveBootConfig(this.configEpoch);
+    this.configResolution = resolution;
+    try {
+      await resolution;
+    } finally {
+      // Only the resolution that owns the slot clears it: onStop() may already
+      // have replaced it with a fresh one.
+      if (this.configResolution === resolution) this.configResolution = null;
+    }
+  }
+
+  /**
+   * Before the container is asked for anything, make sure this window's
+   * tenant registry and deployment document are resolved, then proxy.
+   *
+   * The config lives in KV, outside both the image and the Worker, so an
+   * operator edit needs no redeploy of either half — it is picked up when the
+   * window expires (or on the next request after `onStop()`).
    */
   override async fetch(request: Request): Promise<Response> {
-    if (!this.bootConfigResolved) {
-      try {
-        const { json, source } = await resolveEmbedTenants(
-          workerVars.DIGICHAT_TENANTS_KV,
-          workerVars.DIGICHAT_EMBED_TENANTS,
-          workerVars as unknown as Record<string, unknown>,
-        );
-        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
-        console.log(`[tenants-kv] embed tenants source=${source}`);
-      } catch (e) {
-        // A tenant-config failure must not 500 every proxied request (embed,
-        // chat, assets, /healthz). Fail closed to no tenants for this boot;
-        // onStop() re-arms the resolution for the next boot.
-        console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
-        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
-      }
-      // KV wins over the `[vars]` seam. `resolveConfigYaml` never throws: a
-      // missing key or failed read is logged there and leaves the container on
-      // its own file/defaults, which is the documented precedence.
-      const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
-      if (source === "kv") {
-        this.envVars = { ...this.envVars, DIGICHAT_CONFIG_YAML: yaml };
-      }
-      console.log(`[config-kv] digichat config source=${source}`);
-      this.bootConfigResolved = true;
-    }
+    await this.ensureBootConfig();
     try {
       return await super.fetch(request);
     } catch (cause) {
@@ -182,9 +241,15 @@ export class DigiChatContainer extends Container {
     }
   }
 
-  /** Re-read KV tenant + config on the next boot (the DO outlives container sleeps). */
+  /**
+   * Re-arm on stop: the DO outlives container sleeps, so the next request after
+   * a stop re-reads KV even inside the TTL window. The epoch makes a read that
+   * was already in flight when the stop landed discard itself.
+   */
   override onStop(): void {
-    this.bootConfigResolved = false;
+    this.configEpoch += 1;
+    this.configResolvedAt = null;
+    this.configResolution = null;
   }
 }
 
