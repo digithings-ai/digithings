@@ -193,6 +193,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The lane's whole contract in ONE report (DIG-4785): the secret names it
+      # reads (leg A), the generated image inputs its Dockerfile COPYs (leg B)
+      # and the lockfile its npm 10 installer accepts (leg C). It runs first
+      # because it costs seconds: a lane that is broken must be red before the
+      # install, not after it. Three defects used to surface one per run, each
+      # hiding the next; this reports all three at once.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # PyYAML, because the check parses a workflow instead of scanning it as
+      # text - the same reason scripts/secrets_audit.py needs it, installed the
+      # same way.
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: "Deploy lane contract"
+        run: python3 scripts/check_deploy_lane_contract.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -218,6 +234,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+      # This is the last job before Chris's production approval, so the whole
+      # contract is checked HERE as well as in `check`: a defect that reaches
+      # main must make the gate red, not a deploy that is already approved.
+      # DIG-4785 - one report, every leg, in seconds.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # PyYAML, because the check parses a workflow instead of scanning it as
+      # text - the same reason scripts/secrets_audit.py needs it.
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: "Deploy lane contract"
+        run: python3 scripts/check_deploy_lane_contract.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -285,7 +314,75 @@ jobs:
           fi
           echo "CLOUDFLARE_API_TOKEN is present (value not shown)."
       - name: "Deploy stack container"
-        run: npm run deploy --workspace digithings-stack-cloudflare
+        # A Cloudflare API `Request timeout` is not a contract error. Run
+        # 39488465235 (main, 2026-10-20 20:01Z) failed here AFTER the image had
+        # built and pushed (sha256:6aea6c5e...), and the next promotion 14
+        # minutes later was green: the API had a bad minute, the lane did not.
+        #
+        # So this step retries, bounded and narrow: 3 attempts, 20s then 60s
+        # between them, and ONLY on a Cloudflare API timeout signature. An auth
+        # failure (empty token, wrangler code 10000), a config error or a build
+        # failure exits on the FIRST attempt with its own log - those are not
+        # transient, and retrying them only delays the diagnosis.
+        #
+        # A retry is safe here because the job already sits behind the
+        # `production` environment gate: it finishes the deploy Chris approved,
+        # it does not start a new one and does not re-enter the gate. The
+        # operation is a declarative PUT of the container application and the
+        # container id is derived from the deploying commit (DIG-3229 /
+        # DIG-3814), so a retry converges on the same state instead of creating
+        # a second container.
+        #
+        # `set -o pipefail` stays on, so `tee` cannot mask a failing `npm run
+        # deploy`, and the log is captured to a file so the signature is matched
+        # without re-running anything. When every attempt fails, the step fails
+        # with the LAST log and says it was a timeout after N attempts.
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/deploy-stack-container.log"
+          attempts=3
+          pauses=(20 60)
+          # Signatures that mean "the Cloudflare API did not answer in time".
+          # Wrangler reports a request timeout; undici reports the timeout
+          # spellings, and ETIMEDOUT is the socket-level one. Nothing else is
+          # here: a ticket that says "retry ONLY a timeout signature" is worth
+          # exactly the narrowness of this line.
+          timeout_re='request timeout|request timed out|timeout exceeded|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT'
+          # Never retried, whatever else the log says: not authenticated, bad
+          # token, or the account/zone the token cannot reach.
+          fatal_re='code: ?10000|authentication error|not authenticated|invalid api token|empty token'
+
+          attempt=1
+          while :; do
+            echo "::group::deploy attempt ${attempt} of ${attempts}"
+            status=0
+            npm run deploy --workspace digithings-stack-cloudflare 2>&1 | tee "$log" || status=$?
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+
+            if grep -qiE "$fatal_re" "$log"; then
+              echo "::error::deploy failed on attempt ${attempt} with an authentication error. Not retrying: an auth failure is not transient."
+              exit "$status"
+            fi
+
+            if ! grep -qiE "$timeout_re" "$log"; then
+              echo "::error::deploy failed on attempt ${attempt} with a non-timeout error. Not retrying: only a transient Cloudflare API timeout is retried."
+              exit "$status"
+            fi
+
+            if [ "$attempt" -ge "$attempts" ]; then
+              echo "::error::deploy failed with a Cloudflare API timeout on all ${attempts} attempts. The log above is the last attempt."
+              exit "$status"
+            fi
+
+            pause="${pauses[$((attempt - 1))]}"
+            echo "::warning::deploy attempt ${attempt} hit a Cloudflare API timeout; retrying in ${pause}s. The image build and push already succeeded, so this is an API timeout, not a contract error."
+            sleep "$pause"
+            attempt=$((attempt + 1))
+          done
         env:
           # The repo secret that EXISTS, and that wrangler deploys this stack
           # with: run 39490394661 uploaded and deployed the Worker with it

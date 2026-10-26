@@ -34,6 +34,11 @@ import {
   type BootLabVariant,
 } from "@digithings/ui/chat/boot-lab";
 import {
+  SuggestionCycleProvider,
+  useSuggestionCycle,
+  useThreadActivity,
+} from "@digithings/ui/chat/suggestions";
+import {
   DIGI_CHAT_READY_EVENT,
   getDigichatWarmupPhase,
   hasDigichatReady,
@@ -346,6 +351,24 @@ export function ProductStockShell({
     ],
   );
 
+  // Starter chips: the tenant defines the list, the screen shows four at a
+  // time and cycles the rest (see @digithings/ui/chat/suggestions). One
+  // boundary for every surface — the embedding, the standalone app, the OCC
+  // panels — because every skin reads the capped group from here: the stock
+  // skin through `auiConfig.suggestions`, the gallery and base skins through
+  // `skinChrome.suggestions`.
+  const definedChips = useMemo<readonly string[]>(
+    () => (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [],
+    [suggestions, cfg.chrome.suggestions],
+  );
+  // The cycle holds still once the visitor has left the fresh empty state, so
+  // the prompts never move under the cursor or under someone composing.
+  const activity = useThreadActivity(runtime);
+  const suggestionCycle = useSuggestionCycle(definedChips, {
+    stopped: activity.started || activity.typed,
+  });
+  const chips = suggestionCycle.visible;
+
   const skinChrome = useMemo<SkinChromeValue>(
     () => ({
       skin: cfg.chrome.skin,
@@ -355,7 +378,7 @@ export function ProductStockShell({
       welcome: welcome?.trim() || cfg.chrome.welcome,
       welcomeBody: cfg.chrome.welcomeBody ?? [],
       placeholder: placeholder?.trim() || cfg.chrome.placeholder,
-      suggestions: (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [],
+      suggestions: chips,
       accent: cfg.chrome.accent,
       modelPicker: features.modelPicker || cfg.models.allowPicker,
       pageContext: features.pageContext,
@@ -369,7 +392,6 @@ export function ProductStockShell({
       cfg.chrome.welcome,
       cfg.chrome.welcomeBody,
       cfg.chrome.placeholder,
-      cfg.chrome.suggestions,
       cfg.chrome.accent,
       cfg.chrome.attribution,
       features.modelPicker,
@@ -377,7 +399,7 @@ export function ProductStockShell({
       cfg.models.allowPicker,
       welcome,
       placeholder,
-      suggestions,
+      chips,
     ],
   );
 
@@ -386,7 +408,6 @@ export function ProductStockShell({
     cfg.chrome.welcome?.trim() ||
     cfg.chrome.title?.trim() ||
     "Ask the stack.";
-  const chips = (suggestions?.length ? suggestions : cfg.chrome.suggestions) ?? [];
   const inputPlaceholder =
     placeholder?.trim() || cfg.chrome.placeholder || "Send a message...";
 
@@ -440,43 +461,45 @@ export function ProductStockShell({
   };
 
   return (
-    <DigiChatHost
-      runtime={runtime}
-      auiConfig={auiConfig}
-      adapters={adapters}
-      sendGate={sendGate}
-      clientConfig={cfg}
-      features={features}
-      deployUi={deployUi}
-      skinChrome={skinChrome}
-      reasoningMode={reasoningMode}
-      toolCallsMode={toolCallsMode}
-      view={view}
-      thinking={thinking}
-      mode={mode}
-      headline={headline}
-      chips={chips}
-      inputPlaceholder={inputPlaceholder}
-      bootVisible={bootVisible}
-      bootHidden={bootHidden}
-      bootDone={bootDone}
-      bootReady={bootReady}
-      bootVariant={bootVariant}
-      handoff={handoff}
-      handoffLive={handoffLive}
-      bootRevealed={bootRevealed}
-      bootFacts={bootFacts}
-      onBootSettled={onBootSettled}
-      accentStyle={accentStyle}
-      ownsPage={ownsPage}
-      sideSlot={sideSlot}
-      headerSlot={headerSlot}
-      footerSlot={footerSlot}
-      sessionKey={sessionKey}
-      webSearchScope={webSearchScope}
-      onWebSearchChange={onWebSearchChange}
-      className={className}
-      composerLayout={composerLayout}
-    />
+    <SuggestionCycleProvider value={suggestionCycle}>
+      <DigiChatHost
+        runtime={runtime}
+        auiConfig={auiConfig}
+        adapters={adapters}
+        sendGate={sendGate}
+        clientConfig={cfg}
+        features={features}
+        deployUi={deployUi}
+        skinChrome={skinChrome}
+        reasoningMode={reasoningMode}
+        toolCallsMode={toolCallsMode}
+        view={view}
+        thinking={thinking}
+        mode={mode}
+        headline={headline}
+        chips={chips}
+        inputPlaceholder={inputPlaceholder}
+        bootVisible={bootVisible}
+        bootHidden={bootHidden}
+        bootDone={bootDone}
+        bootReady={bootReady}
+        bootVariant={bootVariant}
+        handoff={handoff}
+        handoffLive={handoffLive}
+        bootRevealed={bootRevealed}
+        bootFacts={bootFacts}
+        onBootSettled={onBootSettled}
+        accentStyle={accentStyle}
+        ownsPage={ownsPage}
+        sideSlot={sideSlot}
+        headerSlot={headerSlot}
+        footerSlot={footerSlot}
+        sessionKey={sessionKey}
+        webSearchScope={webSearchScope}
+        onWebSearchChange={onWebSearchChange}
+        className={className}
+        composerLayout={composerLayout}
+      />
+    </SuggestionCycleProvider>
   );
 }

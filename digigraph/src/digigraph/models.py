@@ -208,6 +208,22 @@ class WorkflowRequest(BaseModel):
             "Overwritten server-side from the tenant map, never trusted from the client."
         ),
     )
+    skill_pack: str | None = Field(
+        None,
+        description=(
+            "Tenant skill pack (DIG-2637): the tenant slug whose directory under "
+            "skill_library/ holds this tenant's skill documents. Overwritten "
+            "server-side, never trusted from the client."
+        ),
+    )
+    skills: list[str] | None = Field(
+        None,
+        description=(
+            "Tenant skill document ids (DIG-2637) this request may read. Resolved "
+            "server-side from the tenant's corpus-map entry (and its own pack), "
+            "never trusted from the client. None means no skills."
+        ),
+    )
     lock_session_controls: bool = Field(
         False,
         description=(

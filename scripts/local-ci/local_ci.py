@@ -24,6 +24,7 @@ A run that no trusted launcher started is refused before anything happens:
 the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
+import concurrent.futures
 import io
 import json
 import os
@@ -217,6 +218,16 @@ BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digi
 BUN_PIN = "1.4.2"
 BUN_INSTALL_TIMEOUT = 600
 BUN_TEST_TIMEOUT = 300
+# --- how many independent gates run at once --------------------------------
+# Every gate below is its own process with its own temp paths, its own cwd and
+# its own report file, so nothing about them needs the others to have finished.
+# They ran one after another until this pool existed, and the tick paid every
+# step's full latency in series: on 2026-10-25 the same 25 steps measured 100 s
+# on an idle Mac and 51 min while the agent fleet was building (local-ci.log
+# 17:23:05 -> 18:14:09), because each step queued behind the others for a slot.
+# The pool is bounded well under the host's core count so one tick cannot crowd
+# out the rest of the machine - the failure mode the serial version had.
+STEP_POOL = 6
 os.makedirs(LOGD, exist_ok=True)
 # --- VPN proxy (DIG-4453) ------------------------------------------------------
 # Measured 2026-10-19: `npm exec -- wrangler deploy --dry-run` never returns when
@@ -318,7 +329,7 @@ def sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
         rc = 124
         if out: out.write(f"TIMEOUT {timeout}s {cmd}\n")
     finally:
-        _clear_child_state()
+        _clear_child_state(p.pid)
     if out: out.write(f"$ {cmd if isinstance(cmd,str) else ' '.join(cmd)}\n{stdout[-20000:]}{stderr[-20000:]}\n[rc={rc}]\n")
     return rc, stdout
 
@@ -1095,26 +1106,38 @@ def run_bun_suites(wt, step, out, fails):
     return ran
 
 
-def worker_build(wt, step):
+def worker_build(wt, step, out=None):
     """Run the ci.yml worker-build dry-run over all WORKER_APPS. Failures record via step.
+
+    Each app gets its own ``--outdir``: the dry-run writes the bundle it just
+    built into that directory, so one shared directory would have the apps
+    overwriting each other once they run at the same time (STEP_POOL).
+
+    ``out`` is the tick's log. When it is given the apps are built in the pool;
+    without it they run one at a time through ``step``, which is the shape the
+    unit tests drive.
 
     Returns the failed step names (for tests/observability); run_checks discards it.
     """
-    failed = []
-    outdir = tempfile.mkdtemp(prefix="wrangler-dry-run-")
+    if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
+        return ["worker-build:npm-ci"]
+    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in WORKER_APPS}
     try:
-        if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
-            return ["worker-build:npm-ci"]
-        for app in WORKER_APPS:
-            ok = step(f"worker-build:{app}",
-                      ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
-                       "--containers-rollout=none", "--outdir", outdir],
-                      WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app))
-            if not ok:
-                failed.append(f"worker-build:{app}")
-        return failed
+        specs = [(f"worker-build:{app}",
+                  ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
+                   "--containers-rollout=none", "--outdir", outdirs[app]],
+                  WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
+                 for app in WORKER_APPS]
+        if out is None:
+            failed = []
+            for name, cmd, timeout, cwd, _env, _stall in specs:
+                if not step(name, cmd, timeout, cwd):
+                    failed.append(name)
+            return failed
+        return run_step_pool(specs, out)
     finally:
-        shutil.rmtree(outdir, ignore_errors=True)
+        for d in outdirs.values():
+            shutil.rmtree(d, ignore_errors=True)
 
 
 # The checks worktree checkout (DIG-5285). A healthy checkout of this tree
@@ -1522,6 +1545,68 @@ def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, e
     return False
 
 
+def run_step_pool(specs, out, limit=STEP_POOL):
+    """Run independent gate steps concurrently; return (fails, ran) per step name.
+
+    `specs` is a list of (name, cmd, timeout, cwd, env, stall_rcs) in the order
+    the log should print them. Each step gets its own StringIO, so the log still
+    reads as one block per gate in the declared order no matter which one
+    finished first, and a step's output is never interleaved with another's.
+
+    Nothing here decides a gate: the same `sh`/`scan_step` calls run, with the
+    same timeout, the same cwd, the same environment and the same ``fails``
+    names, and a blocked step is still killed by its own timeout (sh() breaks
+    the whole process tree) and still recorded by the watchdog. Only the order
+    in which the steps wait changed.
+    """
+    bufs: dict[str, io.StringIO] = {}
+    step_fails: dict[str, list] = {}
+
+    def one(spec):
+        name, cmd, timeout, cwd, env, stall_rcs = spec
+        buf = io.StringIO()
+        bad = []
+        # Same refusal as the serial path: a step whose directory is missing
+        # fails by name and never runs, so a broken runner state cannot post a
+        # dozen plausible-looking failures.
+        if not os.path.isdir(cwd or WT):
+            buf.write(
+                f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n"
+            )
+            return name, [name], buf
+        if stall_rcs:
+            scan_step(name, cmd, timeout=timeout, out=buf, fails=bad,
+                      cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
+        else:
+            buf.write(f"\n===== {name}\n")
+            # `cwd or WT`, exactly as the serial `step()` does. Passing the raw
+            # `cwd` (None for most specs) let the child inherit the runner's own
+            # working directory -- "/" under launchd -- so every check looked
+            # for `//scripts/...` and failed for a reason that was not its own.
+            rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=buf, name=name, env=env)
+            if rc != 0:
+                bad.append(name)
+        return name, bad, buf
+
+    workers = max(1, min(int(limit), len(specs) or 1))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers,
+                                               thread_name_prefix="local-ci-step") as pool:
+        futures = {pool.submit(one, spec): spec[0] for spec in specs}
+        for fut in concurrent.futures.as_completed(futures):
+            name = futures[fut]
+            try:
+                _n, bad, buf = fut.result()
+            except Exception as exc:  # a crashed worker is a failed gate, never silence
+                bad, buf = [name], io.StringIO(f"\n===== {name}\nstep crashed: {exc}\n")
+            bufs[name], step_fails[name] = buf, bad
+    fails = []
+    for spec in specs:
+        name = spec[0]
+        out.write(bufs[name].getvalue())
+        fails.extend(step_fails.get(name, [name]))
+    return fails
+
+
 def run_checks(pr, out, summary=None):
     """Run every gate on the PR. Returns the list of failed gate names.
 
@@ -1531,9 +1616,24 @@ def run_checks(pr, out, summary=None):
     in-process and reads a plain list of failures.
     """
     _guard()
+    # A gate must never start in a directory that is not there. When the
+    # worktree root resolves wrong (empty, "/", a stale path) every check
+    # still runs, from the wrong cwd, and reports a real-looking failure for
+    # each one -- sixteen at once, none of them true. Refuse the tick instead
+    # of producing that verdict: the cause is the runner's own state, and
+    # naming it is the only useful thing to say about it.
+    if not (os.path.isdir(WT) and wt_is_ours(WT)):
+        raise SystemExit(
+            f"local-ci: worktree root {WT!r} is not this runner's worktree; "
+            "refusing to run gates"
+        )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
     def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=()):
+        if not os.path.isdir(cwd or WT):
+            fails.append(name)
+            out.write(f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n")
+            return False
         if stall_rcs:
             # A scanner that does not answer is a stall, not a finding.
             return scan_step(name, cmd, timeout=timeout, out=out, fails=fails,
@@ -1561,9 +1661,12 @@ def run_checks(pr, out, summary=None):
     opts = gitleaks_log_opts(base, sha, out)
     if opts is None:
         fails.append("gitleaks")
-    else:
-        step("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml", "--redact", "--no-banner",
-                          "--report-format", "json", "--report-path", rep, f"--log-opts={opts}"])
+    # One wave for everything that only reads the tree. The npm install is NOT
+    # in this wave: it rewrites node_modules while the scanners walk the tree,
+    # and a scanner that rglobs a dependency directory then reads a directory
+    # being repopulated (check_doc_links measured 58 s pooled against npm ci
+    # versus 3 s alone). The install stays with the builds that need it.
+    scan_specs = []
     # 2026-10-18 (Board, DIG-4056/DIG-1415): check_vendor_content.py runs with --warn here.
     # Its 28 blocking hits are all in apps/twelvex-runner + the twelvex jobs in apps/digithings-cron;
     # they read as NEW only because the check baselines on merge-base(HEAD, origin/main) (2026-10-13)
@@ -1575,8 +1678,13 @@ def run_checks(pr, out, summary=None):
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
               "scripts/check_r0_no_client_literals.py"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
-            step(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, env=SCAN_ENV, stall_rcs=(124, 3))
-    step("actionlint", ["actionlint"], 300)
+            scan_specs.append((s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
+    scan_specs.append(("actionlint", ["actionlint"], 300, None, None, ()))
+    if opts is not None:
+        scan_specs.append(("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
+                                        "--redact", "--no-banner", "--report-format", "json",
+                                        "--report-path", rep, f"--log-opts={opts}"], 1800, None, None, ()))
+    fails.extend(run_step_pool(scan_specs, out))
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
     if "uv-sync" not in fails:
         U = "uv run --frozen --no-sync "
@@ -1592,19 +1700,23 @@ def run_checks(pr, out, summary=None):
                 log("ruff: path list from ci.yml unavailable (%s); using the fallback list" % rnote)
         else:
             out.write("\nruff-paths: %s: %s\n" % (rnote, " ".join(rpaths)))
+        # Second wave: everything that needs the venv uv-sync just prepared.
+        uv_specs = []
         if rpaths:
-            step("ruff", U + "ruff check " + " ".join(rpaths), 600)
-        step("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200)
+            uv_specs.append(("ruff", U + "ruff check " + " ".join(rpaths), 600, None, None, ()))
+        uv_specs.append(("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200, None, None, ()))
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
-            if os.path.exists(f"{WT}/scripts/{s.split()[0]}"): step(s.split()[0], U + f"python scripts/{s}", 600)
+            if os.path.exists(f"{WT}/scripts/{s.split()[0]}"):
+                uv_specs.append((s.split()[0], U + f"python scripts/{s}", 600, None, None, ()))
+        fails.extend(run_step_pool(uv_specs, out))
     n_files, hit = worker_gate(pr, WT)
     if hit is None and n_files is None:
         out.write("\n===== worker-build\nchanged-files fetch failed; failing closed\n")
         fails.append("worker-build: changed-files fetch failed")
     elif hit is not None:
         out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
-        worker_build(WT, step)
+        fails.extend(worker_build(WT, step, out=out))
     # Bun suites (DIG-5203): the required check has to prove a clients/** or
     # packages/** change, not report green over a suite nobody ran. The paths
     # come from the same `bun_suites` block the retired lane used, and a hit
@@ -2427,35 +2539,69 @@ def process_applied(pr, dry):
 CHILD_STATE = os.path.join(HOME, ".config/digithings/state/local-ci.child.json")
 WATCHDOG_GRACE_SECS = 120   # slack on top of a step's own budget
 KILL_GRACE_SECS = 3.0
+# pid -> {"pid", "name", "started", "budget"} for every step running right now.
+# Guarded by _CHILD_LOCK: the pool runs steps on worker threads.
+_LIVE_CHILDREN: dict[int, dict] = {}
+_CHILD_LOCK = threading.Lock()
 
 
 def _write_child_state(pid, name, budget):
-    """Record the running child so the next tick can spot a step that overran its budget."""
+    """Record the running child so the next tick can spot a step that overran its budget.
+
+    Steps now run in a pool (STEP_POOL), so the record has to hold every child
+    that is running at once: a single-slot file would forget all but the last
+    one and the watchdog could not reap the tick's other half.
+    """
+    with _CHILD_LOCK:
+        _LIVE_CHILDREN[int(pid)] = {"pid": int(pid), "name": str(name)[:120],
+                                    "started": time.time(), "budget": int(budget)}
+        _flush_child_state()
+
+
+def _clear_child_state(pid=None):
+    """Forget one finished child (pid) or every child (no argument)."""
+    with _CHILD_LOCK:
+        if pid is None:
+            _LIVE_CHILDREN.clear()
+        else:
+            _LIVE_CHILDREN.pop(int(pid), None)
+        _flush_child_state()
+
+
+def _flush_child_state():
+    """Write the live-child list; unlink it when nothing is running. Holds _CHILD_LOCK."""
     tmp = CHILD_STATE + ".tmp"
     try:
+        if not _LIVE_CHILDREN:
+            try:
+                os.unlink(CHILD_STATE)
+            except OSError:
+                pass
+            return
         os.makedirs(os.path.dirname(CHILD_STATE), exist_ok=True)
         with open(tmp, "w") as f:
-            json.dump({"pid": int(pid), "name": str(name)[:120], "started": time.time(),
-                       "budget": int(budget)}, f)
+            json.dump({"children": list(_LIVE_CHILDREN.values())}, f)
         os.replace(tmp, CHILD_STATE)
     except (OSError, ValueError):
         pass
 
 
-def _clear_child_state():
-    try:
-        os.unlink(CHILD_STATE)
-    except OSError:
-        pass
-
-
 def read_child_state():
+    """The recorded children, as {"children": [...]}.
+
+    A state file written before the pool holds one flat child; it is returned in
+    the same shape so a watchdog started after an upgrade reads both.
+    """
     try:
         with open(CHILD_STATE) as f:
             st = json.load(f)
-        return st if isinstance(st, dict) else None
     except (OSError, ValueError):
         return None
+    if not isinstance(st, dict):
+        return None
+    if isinstance(st.get("children"), list):
+        return {"children": [c for c in st["children"] if isinstance(c, dict)]}
+    return {"children": [st]}
 
 
 def _ppid_map():
@@ -2589,6 +2735,9 @@ def watchdog():
     version of this watchdog killed a healthy tick because it trusted the
     recorded start. The recorded age now only proves that the pid is still the
     process we spawned; the kill decision is the OS age.
+
+    Every child in the record is judged, not just one: a tick runs several gates
+    at once (STEP_POOL), so a wedged step can be any of them.
     """
     holder = lock_holder_alive()
     if holder is None:
@@ -2597,43 +2746,75 @@ def watchdog():
     st = read_child_state()
     if not st:
         return False
+    acted = False
+    keep = []
+    for child in st.get("children") or []:
+        killed, alive = _judge_child(holder, child)
+        acted = killed or acted
+        if alive:
+            keep.append(child)
+    # The record is this tick's input, not its own bookkeeping: a child that was
+    # reaped or is already gone is dropped, and one that is still inside its
+    # budget stays on the record for the next watchdog.
+    _rewrite_child_state(keep)
+    return acted
+
+
+def _rewrite_child_state(children):
+    """Replace the record with exactly `children`; unlink it when there are none."""
+    tmp = CHILD_STATE + ".tmp"
     try:
-        started = float(st.get("started") or 0)
-        budget = float(st.get("budget") or 0)
-        child = int(st.get("pid") or 0)
+        if not children:
+            try:
+                os.unlink(CHILD_STATE)
+            except OSError:
+                pass
+            return
+        os.makedirs(os.path.dirname(CHILD_STATE), exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump({"children": children}, f)
+        os.replace(tmp, CHILD_STATE)
+    except (OSError, ValueError):
+        pass
+
+
+def _judge_child(holder, child):
+    """Judge one recorded child: (killed, keep).
+
+    ``keep`` is True only for a child that is still running inside its budget;
+    everything else has been dealt with and leaves the record.
+    """
+    try:
+        started = float(child.get("started") or 0)
+        budget = float(child.get("budget") or 0)
+        pid = int(child.get("pid") or 0)
     except (TypeError, ValueError):
-        _clear_child_state()
-        return False
-    if child <= 0:
-        _clear_child_state()
-        return False
+        return False, False
+    if pid <= 0:
+        return False, False
     age_recorded = time.time() - started
-    age_os = _ps_etime(child)
+    age_os = _ps_etime(pid)
     if age_os is None:
         # the step leader is gone; only its process group can still leak
-        members = [(p, c) for p, c in _group_members(child)
+        members = [(p, c) for p, c in _group_members(pid)
                    if any(m in c for m in GATE_CMD_MARKERS)]
         if not members:
-            _clear_child_state()
-            return False
+            return False, False
         if age_recorded <= budget + WATCHDOG_GRACE_SECS:
-            return False
-        log(f"watchdog: tick {holder} group {child} ({st.get('name')}) age {age_recorded:.0f}s over budget {budget:.0f}s; killing {len(members)} leaked process(es)")
+            return False, False
+        log(f"watchdog: tick {holder} group {pid} ({child.get('name')}) age {age_recorded:.0f}s over budget {budget:.0f}s; killing {len(members)} leaked process(es)")
         for p, _c in members:
             kill_tree(p)
-        _clear_child_state()
-        return True
+        return True, False
     if abs(age_recorded - age_os) > WATCHDOG_PID_REUSE_TOLERANCE:
         # the pid is no longer the process we spawned: stale state, not an overrun
-        _clear_child_state()
-        return False
+        return False, False
     if age_os <= budget + WATCHDOG_GRACE_SECS:
-        return False
-    log(f"watchdog: tick {holder} child {child} ({st.get('name')}) age {age_os:.0f}s over budget {budget:.0f}s; killing child tree")
-    kill_tree(child)
-    _kill_group(child)
-    _clear_child_state()
-    return True
+        return False, True
+    log(f"watchdog: tick {holder} child {pid} ({child.get('name')}) age {age_os:.0f}s over budget {budget:.0f}s; killing child tree")
+    kill_tree(pid)
+    _kill_group(pid)
+    return True, False
 
 def wt_is_ours(path):
     """True only for a linked worktree this runner created from MAIN.

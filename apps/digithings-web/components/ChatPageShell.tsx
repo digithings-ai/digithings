@@ -32,7 +32,6 @@ export function ChatPageShell({
           embedOrigin={embedOrigin}
           embedHost={embedHost}
           acceptsInviteToken={acceptsInviteToken}
-          warmupLoader="banner"
         />
       </main>
     </>

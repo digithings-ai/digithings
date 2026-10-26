@@ -62,6 +62,6 @@ describe("house chat /tools", () => {
       mcpCustom: [],
     });
     expect(rows.map((r) => r.slash)).toEqual(["digisearch", "digivault", "websearch"]);
-    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault", "Web search"]);
+    expect(rows.map((r) => r.label)).toEqual(["digisearch", "digivault", "web_search"]);
   });
 });

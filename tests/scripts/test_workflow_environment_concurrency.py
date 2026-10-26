@@ -126,6 +126,10 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     "sync-digiquant-runner-digikey-secret.yml": {"sync-runner-house"},
     "sync-digiquant-runner-mail-secrets.yml": {"sync-runner-mail"},
     "token-canary.yml": {"canary"},
+    # DIG-5536: the live branch-protection read. The PAT is `cron`-environment
+    # scoped, so losing this line resolves it to empty and the run reports a
+    # skip rather than a credential failure.
+    "policy-gate-live.yml": {"live"},
     # `production` — the environment that *can* make a run wait, and therefore the one the
     # queueing assertions actually bite on. Its reviewer gate is intentional and its
     # concurrency group has to keep superseding.

@@ -1461,16 +1461,27 @@ refused by the server. The model-facing `session_set_view` tool can therefore
 only ever effect `balanced`. That half is the digigraph module's own contract,
 and it is not fixed here.
 
-**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
+**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, authScheme?, allowedTools?, mutatingTools? }` is
 forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
 operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the
 model's tool args. **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`setup`/`allowedTools`/`mutatingTools`, keeping only
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`authScheme`/`setup`/`allowedTools`/`mutatingTools`, keeping only
 `id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
 deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
 header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
 `#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
 set or override it — only the operator/token pairing on the same YAML row can.
+**`authScheme: jwt` is the chat's own identity.** Instead of a static token the BFF mints a digikey JWT, scoped
+`mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — `DIGICHAT_MCP_IDENTITY_KEY`
+(a `dgk_live_…` key) when configured, else the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`) — and reuses it
+until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The token is set as the row's `token` with
+`authHeader` removed, so digigraph's default applies: `Authorization: Bearer <token>` (`mcp_client.py`,
+`mcp_http_headers`). The scheme itself is never forwarded — digigraph does not know about it. Precedence is not a
+fallback chain: `jwt` wins over `token`/`tokenEnv` on the same row, and a failed mint leaves the row with **no**
+credential rather than the static one, so a scoped tenant never silently inherits the shared key. The Worker edge
+(`apps/digithings-stack-cloudflare/src/mcp-edge-auth.ts`) verifies the signature against `DIGIKEY_JWKS_URL`, checks
+`exp`/`iss`/`aud`, and requires `mcp:<server>`: a digisearch token gets 403 on digivault. Rows without `authScheme`
+are the static/compose shape, unchanged.
 A server row may also carry an **operator tool allowlist**: `allowedTools` (the exact remote tool names the model may
 call on that server) and `mutatingTools` (the subset of those that write). Both are bounded to
 `MAX_MCP_TOOL_ENTRIES` (256) entries of at most `MAX_MCP_TOOL_NAME_LENGTH` (64) characters — the same width as
@@ -1496,7 +1507,7 @@ about: configuring the field today grants no protection, and a server row that *
 rather than dropping to zero. Absence is deny-by-default from leaf 284.1 onward, not before — do not read the
 digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
-`mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
+`mcp.servers` entry (`token`/`tokenEnv`/`authHeader`/`authScheme`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
 connected catalog + MCP tool. Where the host allows it, each row is On/Off.
 A Foundry host shows the same rows on and locked: the agent owns them, so each row reads On

@@ -279,6 +279,11 @@ def _register_skills() -> None:
     register_skill(
         SKILL_LIBRARY_SKILL_ID,
         sorted(SKILL_LIBRARY_TOOL_NAMES),
+        # Tenant-scoped (DIG-2637): a tenant with no skill documents gets no
+        # list_skills/get_skill at all, rather than two tools that can only
+        # answer "none" — and no other tenant's documents are reachable through
+        # them, because the handlers read only this tenant's pack.
+        when=lambda ctx: ctx.has_skills,
     )
 
 
