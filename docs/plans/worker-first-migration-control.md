@@ -8,6 +8,30 @@ This supersedes the "stays" verdicts in
 [`2026-10-26-digistackcontainer-replan.md`](./2026-10-26-digistackcontainer-replan.md);
 that memo's sizing is kept because it is the price list for this decision.
 
+## Baseline, measured before any change
+
+Taken on 2026-10-26 against production, 42 requests, zero failures:
+
+| Measurement | Result |
+|---|---|
+| `/chat` first byte after 300 s idle (5 trials) | p50 **0.238 s**, max 0.385 s |
+| `/chat` first byte after 600 s idle | 0.241 s |
+| `/chat` total after idle | p50 0.593 s, max 1.335 s |
+| Time to a usable composer after 300 s idle (Playwright) | **2.69 s**, **3.12 s** |
+| Worker-only endpoints for contrast | `/_digichat/meta` 0.162 s, `/build-info.json` 0.212 s |
+
+**No idle cold start was observed at all.** The **42.9 s** figure that motivated
+this programme was a *deploy-time* cold start — image pull plus boot — which is
+paid on releases, not by a user returning after a coffee. It is not reproducible
+without deploying and remains unmeasured.
+
+**What this does to the case.** Elimination cannot be justified on latency: the
+idle wake is within 0.4 s of warm, and the shell's 30 s patience was never the
+binding constraint. The money case was never there ($15–27/mo against ~61k LOC).
+So the programme rests on **operability** alone — one runtime, no image
+pipeline, no container lifecycle, smaller surface to secure — or it should not
+run. That is Chris's call, reopened with this number in hand.
+
 ## What was accepted, stated plainly
 
 The replan rejected elimination because two ports are product changes, not
