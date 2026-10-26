@@ -2,6 +2,7 @@
 """Unit tests for the local-ci memory gate parsers (DIG-3783). Stdlib only:
 `/usr/bin/python3 -m unittest test_local_ci -v`."""
 import ast
+import contextlib
 import importlib.util
 import io
 import json
@@ -150,6 +151,86 @@ class GateParserTest(unittest.TestCase):
         self.assertEqual(_mod.SKIP_PREFIX, "local-ci skipped:")
 
 
+class InstallPreflightTest(unittest.TestCase):
+    """DIG-5585: a tick never starts on an install that is missing a module.
+
+    The runner's helpers are optional imports bound to None and fail closed,
+    so a helper that was never copied in produced a false verdict on every PR
+    (eight red `review-applied` rows on 24 Oct) instead of stopping the tick.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._saved_log = _mod.log
+        self.log_lines = []
+        _mod.log = self.log_lines.append
+        self.checkout = os.path.join(self.tmp, "checkout")
+        runner_dir = os.path.join(self.checkout, "scripts", "local-ci")
+        os.makedirs(runner_dir)
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name), os.path.join(runner_dir, name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        self.runner = os.path.join(runner_dir, "local_ci.py")
+
+    def tearDown(self):
+        _mod.log = self._saved_log
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _refuse(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as caught:
+                _mod._require_install(self.runner)
+        return caught.exception.code, err.getvalue()
+
+    def test_a_checkout_missing_a_shared_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78, "an incomplete install is EX_CONFIG, like a refused run")
+        self.assertIn("review_pass_filter", err)
+        self.assertIn("refusing to tick", err)
+        self.assertTrue(
+            any("review_pass_filter" in line for line in self.log_lines),
+            "the refusal must reach the runner's log, not only stderr")
+
+    def test_a_checkout_missing_a_runner_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "local-ci", "review_applied.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78)
+        self.assertIn("review_applied", err)
+
+    def test_a_complete_checkout_starts(self):
+        _mod._require_install(self.runner)  # no SystemExit
+
+    def test_every_entry_point_that_asks_the_guard_asks_the_install_check(self):
+        """The post-merge driver never goes through main(); it still gets checked."""
+
+        class _Broken:
+            @staticmethod
+            def check(runner_path):
+                return [{"module": "review_pass_filter",
+                         "importer": "review_applied.py", "why": "not there"}]
+
+            @staticmethod
+            def report(problems, runner_path):
+                return ["local-ci: missing module review_pass_filter"]
+
+        saved_module = _mod.import_preflight
+        saved_checked = _mod._INSTALL_CHECKED
+        _mod.import_preflight = _Broken
+        _mod._INSTALL_CHECKED = False
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as caught:
+                    _mod._guard()
+        finally:
+            _mod.import_preflight = saved_module
+            _mod._INSTALL_CHECKED = saved_checked
+        self.assertEqual(caught.exception.code, 78)
+        self.assertIn("review_pass_filter", err.getvalue())
 
 
 class WorkerGateTest(unittest.TestCase):
