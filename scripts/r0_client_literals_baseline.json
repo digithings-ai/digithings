@@ -105,6 +105,10 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
+    "apps/digichat/config/occ.yaml": {
+      "count": 13,
+      "ticket": "DIG-3689"
+    },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
       "count": 18,
       "ticket": "DIG-2912"
@@ -242,6 +246,10 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/deploy-config/schema.test.ts": {
+      "count": 20,
+      "ticket": "DIG-3689"
+    },
+    "apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts": {
       "count": 20,
       "ticket": "DIG-3689"
     },
