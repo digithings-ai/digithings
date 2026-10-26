@@ -487,6 +487,12 @@ export function containerBootingResponse(
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
   MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
+  /**
+   * Service binding to this same Worker, used only for the digikey JWKS:
+   * `key.digithings.ai` is this Worker's own route, so a plain fetch cannot
+   * reach it from inside (see mcp-edge-auth).
+   */
+  DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
