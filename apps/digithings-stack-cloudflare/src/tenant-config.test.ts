@@ -19,6 +19,7 @@ import {
   readTenantConfig,
   resetTenantConfigCache,
   type TenantConfigStore,
+  withHouseSlugAlias,
 } from "./tenant-config";
 
 function store(value: string | null | Error, calls: string[] = []): TenantConfigStore {
@@ -54,14 +55,50 @@ const KV_DOCUMENT = JSON.stringify({
 });
 
 describe("projectEmbedTenantsToCorpusMap", () => {
-  it("rekeys the host-keyed embed document by slug", () => {
+  it("rekeys the host-keyed embed document by slug and adds the house alias", () => {
     expect(projectEmbedTenantsToCorpusMap(JSON.parse(KV_DOCUMENT))).toEqual({
       digithings: { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+      "digithings-ai": {
+        digisearchIndex: "digithings_docs",
+        vaultPathPrefix: "clients/digithings",
+      },
       occ: {
         digisearchIndex: "occ_help",
         vaultPathPrefix: "clients/online-compliance-center",
       },
     });
+  });
+
+  it("resolves the live house slug digithings-ai to the same corpus as digithings", () => {
+    // The production KV document names the house tenant `digithings-ai`; the
+    // map has historically been read as `digithings`. Both must answer, and
+    // with the same index and prefix, or digivault refuses the live chat (403).
+    const document = {
+      "digithings.ai": {
+        ...FIRST_PARTY_ENTRY,
+        slug: "digithings-ai",
+        backend: { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+      },
+    };
+    const projected = projectEmbedTenantsToCorpusMap(document);
+    expect(projected.digithings).toEqual({
+      digisearchIndex: "digithings_docs",
+      vaultPathPrefix: "clients/digithings",
+    });
+    expect(projected["digithings-ai"]).toEqual(projected.digithings);
+    expect(Object.keys(projected)).toEqual(["digithings", "digithings-ai"]);
+  });
+
+  it("does not invent a house entry for an unknown tenant", () => {
+    const projected = projectEmbedTenantsToCorpusMap({
+      "x.example": {
+        slug: "x",
+        backend: { digisearchIndex: "x_docs", vaultPathPrefix: "clients/x" },
+      },
+    });
+    expect(Object.keys(projected)).toEqual(["x"]);
+    expect(projected).not.toHaveProperty("digithings");
+    expect(projected).not.toHaveProperty("digithings-ai");
   });
 
   it("drops a tenant with no backend", () => {
@@ -114,6 +151,36 @@ describe("projectEmbedTenantsToCorpusMap", () => {
       digisearchIndex: "idx",
       vaultPathPrefix: "",
     });
+  });
+});
+
+describe("withHouseSlugAlias", () => {
+  it("keeps the canonical digithings entry when both house keys are present", () => {
+    const aliased = withHouseSlugAlias({
+      digithings: { digisearchIndex: "canonical", vaultPathPrefix: "clients/digithings" },
+      "digithings-ai": { digisearchIndex: "stale", vaultPathPrefix: "clients/stale" },
+      occ: { digisearchIndex: "occ_help" },
+    });
+    expect(aliased.digithings).toEqual({
+      digisearchIndex: "canonical",
+      vaultPathPrefix: "clients/digithings",
+    });
+    expect(aliased["digithings-ai"]).toEqual(aliased.digithings);
+    expect(aliased.occ).toEqual({ digisearchIndex: "occ_help" });
+    expect(Object.keys(aliased)).toEqual(["digithings", "digithings-ai", "occ"]);
+  });
+
+  it("adds the canonical key for a map that only has the live slug", () => {
+    const aliased = withHouseSlugAlias({
+      "digithings-ai": { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+    });
+    expect(Object.keys(aliased)).toEqual(["digithings", "digithings-ai"]);
+    expect(aliased.digithings).toEqual(aliased["digithings-ai"]);
+  });
+
+  it("returns a map with no house slug unchanged and invents nothing", () => {
+    const input = { occ: { digisearchIndex: "occ_help" } };
+    expect(withHouseSlugAlias(input)).toBe(input);
   });
 });
 
@@ -182,7 +249,34 @@ describe("readTenantConfig", () => {
     expect(resolved.source).toBe("fallback");
     expect(resolved.map).toEqual(DIGITHINGS_ONLY_CORPUS_MAP);
     expect(resolved.json).toBe(DIGITHINGS_ONLY_CORPUS_JSON);
-    expect(Object.keys(resolved.map)).toEqual(["digithings"]);
+    expect(Object.keys(resolved.map)).toEqual(["digithings", "digithings-ai"]);
+    expect(resolved.map["digithings-ai"]).toEqual(resolved.map.digithings);
+  });
+
+  it("adds the house alias to the legacy [vars] arm", async () => {
+    const resolved = await readTenantConfig({
+      legacyJson: JSON.stringify({
+        digithings: { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+      }),
+    });
+    expect(resolved.source).toBe("legacy-vars");
+    expect(resolved.map["digithings-ai"]).toEqual(resolved.map.digithings);
+  });
+
+  it("keeps the canonical house key for a KV document keyed by the live slug", async () => {
+    const document = JSON.stringify({
+      "digithings.ai": {
+        slug: "digithings-ai",
+        backend: { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+      },
+    });
+    const resolved = await readTenantConfig({ store: store(document) });
+    expect(resolved.source).toBe("kv");
+    expect(resolved.map.digithings).toEqual({
+      digisearchIndex: "digithings_docs",
+      vaultPathPrefix: "clients/digithings",
+    });
+    expect(resolved.map["digithings-ai"]).toEqual(resolved.map.digithings);
   });
 
   it("never throws, whatever the store does", async () => {
