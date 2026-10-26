@@ -21,10 +21,6 @@ export const BOOK_READER_CSS = `
   align-items: start;
 }
 
-/* The print sheet hides every nav element on the route so printed paper carries no
-   site chrome; the contents here is a nav too. Same importance, higher
-   specificity, so the reader keeps its contents and paper still loses it. */
-.book-shell .book-nav { display: block !important; }
 .book-nav {
   position: sticky;
   top: calc(var(--dq-nav-h) + 1.5rem);
@@ -159,16 +155,29 @@ export const BOOK_READER_CSS = `
 .book-live .pagedjs_page:last-child { margin-bottom: 0; }
 
 @media (max-width: 1023px) {
-  .book-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .book-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    /* room for the bar that stays at the foot of the screen */
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+  /* Contents and export live in a bar at the bottom, not at the top. The top
+     bar retracts as you scroll, and a sticky header pinned to its height left a
+     stripe of nothing above the contents. A bar that never moves cannot. */
   .book-nav {
-    position: sticky;
-    top: var(--dq-nav-h);
-    z-index: 2;
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
     max-height: none;
     overflow: visible;
+    padding: 0.5rem var(--gutter) calc(0.5rem + env(safe-area-inset-bottom));
     background: var(--bg, #fbfbf9);
-    border-bottom: 1px solid var(--color-hair, #e5e0d8);
-    padding-bottom: 0.5rem;
+    border-top: 1px solid var(--hair, #e5e0d8);
+    border-bottom: 0;
   }
   .book-nav__toggle {
     display: inline-flex;
@@ -179,11 +188,35 @@ export const BOOK_READER_CSS = `
     color: var(--accent);
     cursor: pointer;
   }
-  .book-nav ol,
-  .book-nav .book-export { display: none; }
+  /* The list opens upward from the bar, over the page. */
+  .book-nav ol {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: 0;
+    right: 0;
+    max-height: 60vh;
+    overflow: auto;
+    margin: 0;
+    padding: 0.5rem var(--gutter) 0.75rem;
+    background: var(--bg, #fbfbf9);
+    border-top: 1px solid var(--hair, #e5e0d8);
+  }
   .book-nav[data-open="true"] ol { display: block; }
-  .book-nav[data-open="true"] .book-export { display: block; }
   .book-nav__title { display: none; }
+  /* The export stays in the bar: two compact cells, no heading. */
+  .book-nav__toggle { grid-column: 1; }
+  .book-nav .book-export { margin: 0; grid-column: 3; }
+  /* The bar is a control strip, not a place for progress prose. */
+  .book-nav .book-export__status { display: none; }
+  .book-nav .book-export__title { display: none; }
+  .book-nav .book-export__row { display: flex; gap: 0.4rem; }
+  .book-nav .book-export__btn {
+    min-height: 2.5rem;
+    padding: 0 0.7rem;
+    font-size: 0.72rem;
+  }
+  .book-nav .book-export__mark { display: none; }
 }
 
 /* Printing this page gives the book, not the site around it. The pages are
