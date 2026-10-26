@@ -746,6 +746,43 @@ bytes) and the deadline is checked between them, so a server that answers the
 headers and then trickles the body cannot hold the tick open. A slow tick is the
 accepted price; a false handback re-posts itself every other tick, which is not.
 
+**The cache, and why a slow tick stopped being an acceptable price.** The budget
+above was chosen so a slow answer would not read as a refusal, and that is still
+right. What it did not account for is that the reader lived for exactly one tick:
+every tick asked for every ticket, every ticket's run list and every named run
+again, over every open pull request of both repos. At the measured cost — 12 s
+for a ticket, 28-144 s for a ticket's run list — a tick took 3 to 13 minutes
+against a 180 s interval, and it wrote nothing to its log until every PR had been
+judged. So the job read as alive and silent, `develop` moved about once every
+quarter of an hour instead of once every three minutes, and the liveness check
+paged for a queue that was working (DIG-5632, 26 Oct 2026).
+
+The answers are now kept between ticks in
+`~/.config/digithings/merge-queue/provenance-cache.json`, and the rule that makes
+that safe is narrow: **an answer may stand in for a read only for the commits that
+were already written when the answer was taken.** A run that covered such a commit
+existed by then, so the answer names it; a run that started after the answer was
+taken cannot have covered an older commit; and a commit written after the answer
+forces the fresh read that would see it. A run's seat and a ticket's id never
+change, so those answers do not expire at all. "The API has no such record" is
+believed for 60 s only, because a ticket can be filed and a run can start. Only
+the fields the gate reads are written down — a ticket's body and its comments are
+not — and a cache the queue cannot write is a slower queue, not a stopped one.
+
+The cache is the steady state; it is not the worst case. A cold cache, or a batch
+of branches that all moved at once, still asks for facts the cache cannot answer,
+and one pull request was measured at **313.6 s** of reads on its own — longer than
+the whole interval, and inside one PR, where a budget between PRs cannot reach. So
+the driver states a deadline (`MQ_PAPERCLIP_DEADLINE`, epoch seconds, one tick's
+budget) and the reader **does not start** a Paperclip read after it passes. It does
+not cut a read in half: a read that never finishes is a fact the cache never keeps,
+so the PR would cost the same on every later tick and the queue would never
+converge. A read refused at the deadline is `_PaperclipUnavailable`, which the gate
+already treats as `transient` — nothing concluded, nothing published as a gate, the
+PR judged again next tick (DIG-5573). Measured over five consecutive ticks against
+the live queue: 261 s, 151 s, 64 s, 21 s, 23 s. It converges, and every tick in
+between made progress and merged.
+
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
 provenance against the Paperclip record — it cannot check the keystroke. Per-seat

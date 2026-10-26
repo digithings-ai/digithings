@@ -12,6 +12,10 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    # Outer ceiling for the whole job (DIG-5633). GitHub caps a hosted job at 6h
+    # and the cap cancels every step, including the two that preserve partial
+    # output. 330 leaves the step below room to fail first and still run those.
+    timeout-minutes: 330
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -32,6 +36,23 @@ jobs:
 
       - name: Run OpenWiki
         id: openwiki
+        # Time out a stalled run (DIG-5633). Without this the step inherits the
+        # job step budget and a gateway call that never returns holds the runner
+        # until the 6h cap.
+        #
+        # 300 min is measured, not guessed: the step is the whole run, and the
+        # three successful runs on this workflow took 73 min (36242796750,
+        # 2026-09-26), 2h42m (35866885606, 2026-09-23) and 4h29m (35442523084,
+        # 2026-09-19). A tighter ceiling (the 45 min first proposed on DIG-5633)
+        # would have failed two of those three healthy runs; 300 clears the
+        # 4h29m maximum with 31 min of headroom. The job timeout above is 30 min
+        # higher so this step fails first and the cleanup/PR steps below still
+        # run under `!cancelled()`.
+        #
+        # Revisit once OpenWiki bounds a single model call itself: only the
+        # bedrock provider honours OPENWIKI_STREAM_IDLE_TIMEOUT, so on the
+        # openai-compatible provider there is no per-request ceiling to lean on.
+        timeout-minutes: 300
         # No continue-on-error: a non-zero exit must fail the run here. The steps
         # below use `!cancelled()`, so a failed run still opens the partial PR.
         run: openwiki code --update --print
