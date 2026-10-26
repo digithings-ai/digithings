@@ -1156,7 +1156,7 @@
   padding: 9px 14px;
   border: 1px solid var(--bs-line-strong);
   border-radius: 0;
-  background: var(--bs-panel-2);
+  background: var(--bs-bg);
   color: var(--bs-text);
   font-size: 0.75rem;
   max-width: calc(100vw - 2rem);
