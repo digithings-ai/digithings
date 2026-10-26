@@ -208,10 +208,10 @@ PROVENANCE_RETRY_BACKOFF = 0.5
 #: The whole cost of one URL, attempts and pauses together. The pause before
 #: an attempt and the attempt itself both happen inside it, so one path costs
 #: the budget once and not once per attempt. It is a deadline and not only a
-#: sum of timeouts: the body is read in chunks and the read gives up when the
-#: deadline has passed, so a server that answers the headers and then trickles
-#: the body cannot hold the read open past the budget. It is the budget of ONE
-#: URL read, not of the tick.
+#: sum of timeouts: the body is read one socket read at a time and the read
+#: gives up when the deadline has passed, so a server that answers the headers
+#: and then trickles the body cannot hold the read open past the budget. It is
+#: the budget of ONE URL read, not of the tick.
 PROVENANCE_READ_BUDGET = 20.0
 
 #: How long a host that could not be read is remembered, in seconds. The queue
@@ -493,6 +493,13 @@ class Verdict:
     #: `reasons` so the update step can act on a stale branch without also acting on
     #: one that is merely broken — an update spends a full CI run either way.
     stale_base_only: bool = False
+    #: A fact the queue could not read, so it could not judge — not a gate the PR
+    #: failed. It is deliberately not in `reasons`: a gate is a statement about the
+    #: branch, and this is a statement about the API. The handback poster keys its
+    #: comment on `reasons`, so a transient that appeared there re-armed the poster
+    #: every other tick (DIG-5573, 42 handbacks on #6418 in 29 h). Such a PR is not
+    #: eligible — an unread gate is not a cleared gate — it is skipped this tick.
+    deferred: str = ""
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -1301,6 +1308,35 @@ def _woodpecker_read_attempts(
     return (0, reason, True) if attempts else (0, "the read was not attempted", True)
 
 
+def _read_response_body(response: Any, deadline: float | None) -> bytes:
+    """The whole body, given up on when the deadline has passed.
+
+    The pieces have to be the size of one socket read, or the deadline between
+    them is never reached. `read(n)` on an `http.client.HTTPResponse` returns
+    only when it has `n` bytes or the body has ended, so a server that answers
+    the headers at once and then trickles the body holds one `read(65536)` open
+    for as long as it likes — the socket timeout bounds one operation on the
+    socket, not the body (measured by the Code Reviewer on DIG-5573: a
+    2 001-byte body in twenty pieces was read in a single call). `read1(n)`
+    returns as soon as one underlying read has something to give, so the loop
+    below is a loop the deadline can interrupt.
+
+    `read1` is what `urlopen` and the Woodpecker opener return in production.
+    The `read` fallback is for a response-shaped object that does not have it
+    (a test double, or a file wrapper): those keep the loop but not the
+    per-chunk guarantee.
+    """
+    read = getattr(response, "read1", None) or response.read
+    chunks: list[bytes] = []
+    while True:
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("the read exceeded its budget")
+        chunk = read(65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
 def _woodpecker_read_once(
     url: str, token: str, timeout: float, deadline: float | None = None
 ) -> tuple[int, Any, bool]:
@@ -1309,25 +1345,18 @@ def _woodpecker_read_once(
     The third value says whether the API could not be reached, so that the
     caller can tell a dropped connection from an answer the API gave.
 
-    The body is read in chunks and the deadline is checked between them. The
-    timeout of a socket is the timeout of one operation on it, so a server
-    that answers the headers and then trickles the body would hold the read
-    open for as long as it liked.
+    The body is read one socket read at a time and the deadline is checked
+    between them. The timeout of a socket is the timeout of one operation on
+    it, so a server that answers the headers and then trickles the body would
+    hold the read open for as long as it liked unless the read gives up at the
+    deadline.
     """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            chunks: list[bytes] = []
-            while True:
-                if deadline is not None and time.monotonic() > deadline:
-                    raise TimeoutError("the read exceeded its budget")
-                chunk = response.read(65536)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            body = b"".join(chunks).decode("utf-8", "replace")
+            body = _read_response_body(response, deadline).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
@@ -3247,6 +3276,12 @@ class Independence:
     #: A failure to judge at all — the facts could not be read, or the author's
     #: seat could not be identified. Nothing was concluded about any marker.
     unverifiable: str = ""
+    #: Whether that failure was the API not answering rather than a fact about
+    #: the PR. The two are not the same: "the authoring seat could not be
+    #: identified" is a statement about the commits on this branch and stays a
+    #: gate; "Paperclip could not be read" says nothing about the branch and is
+    #: skipped for the tick (DIG-5573).
+    transient: bool = False
 
 
 #: How long one read of the Paperclip API may take, and how many times it may
@@ -3270,17 +3305,39 @@ class Independence:
 #: that does not answer costs that much again for each of them.
 #:
 #: The timeout is the socket timeout of one request. That is what covers the
-#: case that was measured: a control plane that thinks for half a minute
-#: before it answers. A server that answers slowly instead of late is a
-#: different shape, and a socket timeout does not bound it.
+#: case that was measured: a control plane that thinks for minutes before it
+#: answers. A server that answers slowly instead of late is a different shape,
+#: and a socket timeout does not bound it — the budget does, because the body
+#: is read one socket read at a time (`read1`) and the deadline is checked
+#: between the pieces.
+#:
+#: The budget was raised on 2026-10-26 (DIG-5573). The slowest answer measured
+#: that day was `GET /api/issues/{id}/runs` at **119.9 s** — 41 296 bytes,
+#: HTTP 200, same endpoint, same body — while the same read on two other
+#: tickets in the same minute took 34.6 s and 38.9 s. The read is
+#: load-dependent, not PR-dependent, and at 45 s / 60 s a 120-second answer
+#: could never fit and a 35-second one left no room for the second attempt.
+#:
+#: The bounded window that 2026-10-26 also proposed is not available: the
+#: server ignores `?limit=` on `/api/issues/{id}/runs` (identical payload at
+#: `?limit=5`, measured twice), so there is no cheaper form of the same read to
+#: switch to. Raising the numbers is the fix; the URL read and the facts it
+#: feeds are unchanged, so the gate judges exactly what it judged before.
+#:
+#: A slow tick is the price. A false handback is not a neutral cost either: the
+#: live driver keys its handback comment on the reasons it is given, so a
+#: transient read failure that appears as a reason re-posts the comment every
+#: other tick (42 handbacks on #6418 in 29 h), and the same transient can hold
+#: a PR after its review has landed. A tick that waits minutes for a true
+#: answer is cheaper than a tick that publishes a false one.
 #:
 #: The four numbers are the fix, and the suite pins them: a timeout below the
 #: slowest answer measured turns a slow API back into a refusal, a budget
-#: below the timeout leaves no room for the second attempt, and a backoff that
-#: hammers a struggling control plane makes the second attempt likelier to
-#: fail than the first.
-PAPERCLIP_READ_TIMEOUT = 45
-PAPERCLIP_READ_BUDGET = 60.0
+#: below two timeouts plus the backoff leaves no room for the second attempt
+#: after a slow first one, and a backoff that hammers a struggling control
+#: plane makes the second attempt likelier to fail than the first.
+PAPERCLIP_READ_TIMEOUT = 150.0
+PAPERCLIP_READ_BUDGET = 310.0
 PAPERCLIP_READ_ATTEMPTS = 2
 PAPERCLIP_RETRY_BACKOFF = 3.0
 
@@ -3376,7 +3433,15 @@ class ReviewerProvenance:
                 with urllib.request.urlopen(
                     request, timeout=min(PAPERCLIP_READ_TIMEOUT, remaining)
                 ) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
+                    # The socket timeout is the timeout of one operation on the
+                    # socket, so a server that answers the headers and then
+                    # trickles the body would hold the read open past the
+                    # budget. `_read_response_body` reads one socket read at a
+                    # time and checks the deadline between them, so the budget
+                    # is the promise it says it is.
+                    payload = json.loads(
+                        _read_response_body(response, deadline).decode("utf-8")
+                    )
             except urllib.error.HTTPError as exc:
                 if exc.code in (400, 404):
                     # A fact, not a failure: the API answered, and the answer is
@@ -3914,6 +3979,7 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+            transient=True,
         )
     except _AuthorUnidentified as exc:
         # The commit names an author the gate cannot resolve. The seat that
@@ -3949,6 +4015,7 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+            transient=True,
         )
     if found:
         return Independence(
@@ -4077,7 +4144,7 @@ def _review_coverage(
     repo: str | None,
     cfg: ReviewIndependence | None = None,
     prov: ReviewerProvenance | None = None,
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str, str]:
     """The promotion gate's evidence, enforced at merge time.
 
     `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
@@ -4109,6 +4176,12 @@ def _review_coverage(
       below survives only as a defence for callers that hand in a raw row. An
       unreadable comments read fails closed, for the same reason an absent
       check fails closed: the alternative reads "no evidence" as "approved".
+
+    Returns `(reasons, evidence, deferred)`. The third value is a fact the gate
+    could not read — the Paperclip API did not answer — and it is kept apart
+    from `reasons` on purpose: a reason is a statement about the branch and is
+    published as a gate, while a failed read says nothing about the branch at
+    all. The caller records it and skips the PR for this tick (DIG-5573).
     """
     crc = _coverage_module()
     labels = _label_names(pr)
@@ -4118,7 +4191,7 @@ def _review_coverage(
             return [
                 "review coverage: `reviewed:agent` is set but the findings "
                 "comment cannot be verified without a repo to read it from"
-            ], ""
+            ], "", ""
         try:
             data = _gh_json(
                 "pr",
@@ -4133,7 +4206,7 @@ def _review_coverage(
             return [
                 "review coverage: `reviewed:agent` is set but its findings "
                 "comment could not be read"
-            ], ""
+            ], "", ""
         comments = (data or {}).get("comments") or []
     counted = list(comments) if isinstance(comments, list) else []
 
@@ -4194,10 +4267,19 @@ def _review_coverage(
                 f"{evidence}; {len(independence.disqualified)} review marker(s) did "
                 "not count"
             )
-        return [], evidence
+        return [], evidence, ""
 
     if independence.unverifiable:
-        return [f"reviewer independence: {independence.unverifiable}"], ""
+        if independence.transient:
+            # Not a reason: the queue could not read the facts, so it concluded
+            # nothing about the review. It says so to the log and skips this PR
+            # for the tick; publishing it would state a gate the branch never
+            # failed (DIG-5573).
+            return [], "", f"reviewer independence: {independence.unverifiable}"
+        # A fact about this PR, not about the API: the commits do not name the
+        # seat that wrote them, so no review can be shown to come from another
+        # seat. The remedy is on the branch, so it is a gate.
+        return [f"reviewer independence: {independence.unverifiable}"], "", ""
     if independence.problems:
         head = str(pr.get("headRefOid") or "")[:12]
         return [
@@ -4205,14 +4287,14 @@ def _review_coverage(
             + "; ".join(independence.problems[:3])
             + " — the queue needs a review from a different seat, on the head "
             f"this PR stands at (`{head}`)"
-        ], ""
+        ], "", ""
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
         "enforces at promotion (completed Bot run, a reviewer bot such as "
         "CodeRabbit or Copilot, an in-session review with its findings comment, "
         "an approval, or reviewed:owner)"
-    ], ""
+    ], "", ""
 
 
 def evaluate(
@@ -4261,7 +4343,7 @@ def evaluate(
     if unreadable:
         reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
-    coverage_reasons, review_evidence = _review_coverage(
+    coverage_reasons, review_evidence, deferred = _review_coverage(
         pr, repo, policy.review_independence, prov
     )
     reasons.extend(coverage_reasons)
@@ -4274,9 +4356,11 @@ def evaluate(
     # reason: the checks passed, just against the base this merge would land on top of.
     # Every other reason — a conflict, a red check, missing review evidence — would
     # still be there after the update, so paying for a full CI run to clear nothing is
-    # how a queue burns its own capacity. Read off the finished `reasons` rather than
-    # re-testing each gate, so a gate added later cannot silently become updatable.
-    stale_base_only = state == "BEHIND" and reasons == [stale_reason]
+    # how a queue burns its own capacity. A deferred fact is in the same class: the
+    # queue could not judge that gate, so it must not spend a run as if the branch
+    # were merely behind. Read off the finished `reasons` rather than re-testing each
+    # gate, so a gate added later cannot silently become updatable.
+    stale_base_only = state == "BEHIND" and reasons == [stale_reason] and not deferred
 
     rollup = _rollup(pr)
     return Verdict(
@@ -4285,13 +4369,16 @@ def evaluate(
         head_ref=str(pr.get("headRefName") or ""),
         created_at=str(pr.get("createdAt") or ""),
         head_sha=str(pr.get("headRefOid") or ""),
-        eligible=not reasons,
+        # An unread gate is not a cleared gate: a PR the queue could not judge is
+        # never eligible, whether or not it also failed a gate it could judge.
+        eligible=not reasons and not deferred,
         reasons=tuple(reasons),
         review_evidence=review_evidence,
         checks=tuple(
             f"{_check_name(e)}={e.get('conclusion') or e.get('state') or '?'}" for e in rollup
         ),
         stale_base_only=stale_base_only,
+        deferred=deferred,
     )
 
 
@@ -4454,7 +4541,10 @@ def comment_audit(repo: str, verdict: Verdict, body: str) -> None:
 
 def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
     eligible = [v for v in verdicts if v.eligible]
-    blocked = [v for v in verdicts if not v.eligible]
+    deferred = [v for v in verdicts if v.deferred]
+    # A row with a reason is published whatever else is wrong with the read: the
+    # reason is a gate the branch failed, and only the read failure is held back.
+    blocked = [v for v in verdicts if not v.eligible and v.reasons]
     if eligible:
         print(f"queued ({len(eligible)}), oldest first:")
         for i, v in enumerate(eligible, start=1):
@@ -4479,6 +4569,19 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
             print(f"  #{v.number} {v.head_ref} — {v.title}")
             for reason in v.reasons:
                 print(f"       · {reason}")
+    # Deferred, not blocked: the queue could not read a fact it needs, so it
+    # concluded nothing and nobody has to act. Kept out of `reasons` on purpose —
+    # that list is what the handback comment publishes as gates, and a transport
+    # failure is not a statement about the branch (DIG-5573).
+    if deferred and not queued_only:
+        print(
+            f"\ndeferred ({len(deferred)}) — the queue could not read a fact it "
+            "needs, which says nothing about these branches; nothing is published "
+            "for them and the next tick asks again:"
+        )
+        for v in deferred:
+            print(f"  #{v.number} {v.head_ref} — {v.title}")
+            print(f"       · {v.deferred}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -4595,9 +4698,15 @@ def main(argv: list[str] | None = None) -> int:
             remaining = eligible[args.max_merges :]
             if remaining:
                 print(f"  … {len(remaining)} more eligible, not reached under --max-merges")
-            blocked = [v for v in verdicts if not v.eligible]
+            blocked = [v for v in verdicts if not v.eligible and v.reasons]
+            deferred = [v for v in verdicts if v.deferred]
             if blocked:
                 print(f"\nblocked ({len(blocked)}) — see `list` for reasons")
+            if deferred:
+                print(
+                    f"\ndeferred ({len(deferred)}) — a fact the queue could not read; "
+                    "not a gate, nothing published, retried next tick"
+                )
             return EXIT_OK
 
         updated: list[Verdict] = []
