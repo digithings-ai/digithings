@@ -223,3 +223,14 @@ workers:
     note: Daily corpus index. Job URLs and index names live in KV, not in this
       file. Registry entry is the build surface only. No production deploy
       workflow is added here.
+  - name: digitrace-ingest
+    file: apps/digitrace-ingest/wrangler.toml
+    workers_dev: false
+    durable_objects: []
+    r2_buckets: [ARCHIVE]
+    contract_vars: false # [vars] is the Supabase project URL; no generated DT_* block.
+    note: OTLP/HTTP ingest Worker (DIG-2657, ADR-0036). Receiver in `fetch`, Queue
+      consumer in `queue`. Registered here as a build surface; the deploy workflow
+      is .github/workflows/deploy-digitrace-ingest.yml, behind the `production`
+      environment. The public route for trace.digithings.ai is a human step and
+      stays commented in wrangler.toml.
