@@ -38,18 +38,13 @@ export const PRIMARY_NAV: readonly NavItem[] = [
 ] as const;
 
 /**
- * Reference-only surfaces: kept so the brand work keeps compiling and stays
- * reachable, but deliberately not peers of the language pages — `/brand` is
- * the download kit and `/brand/studio` is the composer.
+ * Reference-only surfaces: kept so the brand work stays reachable, but
+ * deliberately not peers of the language pages — `/brand` is the brand studio
+ * (compose, preview, export), and the kit lives on `/components`.
  */
 export const LAB_NAV: readonly NavItem[] = [
   {
     href: "/brand",
-    label: "Brand kit",
-    blurb: "Avatars, social headers, OG card, mail sign-off — local files only.",
-  },
-  {
-    href: "/brand/studio",
     label: "Brand studio",
     blurb: "Compose the logo and 4×4 wordmark, preview every format, export PNG/SVG.",
   },

@@ -10,6 +10,8 @@ const monorepoRoot = join(here, "..", "..");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: { agentUpgrade: "security" },
+  // The repo has a root AGENTS.md; a generated app-local copy is noise.
+  agentRules: false,
   output: "export",
   images: { unoptimized: true },
   // One root layout now, so `app/not-found.tsx` is a page body under the

@@ -10,12 +10,12 @@ need a file that lives elsewhere, take it from the path given.
 
 ## Start here: the brand studio
 
-Compose and export the logo + hero wordmark at **`/brand/studio`** in the
+Compose and export the logo + hero wordmark at **`/brand`** in the
 digiweb app:
 
 ```bash
 npm run dev --workspace @digithings/digiweb -- --port 4013
-# http://127.0.0.1:4013/brand/studio/
+# http://127.0.0.1:4013/brand/
 ```
 
 The studio is the working surface for marketing, social, docs and any new brand
@@ -41,10 +41,10 @@ icons and favicons. One or the other, never both in the same view.
 | vector / print / resize | `avatar/digithings-avatar-{dark,light}.svg` | the source both PNGs are rendered from |
 | **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
 
-The same bytes are previewed on the local digiweb app at `/brand`
-(`npm run dev --workspace @digithings/digiweb` → http://127.0.0.1:4013/brand/).
-That page is a `--check` mirror and the upload kit; the **composer and exporter**
-is `/brand/studio` on the same app. Neither is shipped on digithings.ai.
+The studio is the preview and composition surface. The files in this folder are
+still the canonical upload copies; `build-header.py` no longer mirrors them into
+digiweb — only the two live `og.png` unfurls are copied. Neither the studio nor
+these files are shipped on digithings.ai.
 
 The avatar is the compact `d` + block cursor — the terminal identity's reduction,
 not the full `digi` lockup, which closes up below about 64px.

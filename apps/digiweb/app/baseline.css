@@ -5,17 +5,19 @@
 }
 
 .dw-banner {
-  --ink: #eceef0;
-  --bg: #0a0e0c;
-  margin-top: 1.8rem;
-  border: 1px solid var(--hair);
-  background: #0a0e0c;
-  padding: 1.4rem 1.2rem;
+  margin-top: 2rem;
+  padding: 1.2rem 0;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
 }
 
-.dw-banner-canvas {
+.brand-wordmark {
   display: block;
-  width: 100%;
+  height: clamp(2.4rem, 8vw, 4.4rem);
+  aspect-ratio: 88 / 10;
+  background: var(--ink);
+  -webkit-mask: url("/brand/studio/wordmark-mask.svg") center / contain no-repeat;
+  mask: url("/brand/studio/wordmark-mask.svg") center / contain no-repeat;
 }
 
 .dw-links {

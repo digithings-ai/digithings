@@ -35,7 +35,6 @@ BRAND = Path(__file__).resolve().parent
 REPO_ROOT = BRAND.parents[1]
 OUT_DIR = BRAND / "headers"
 EMAIL_DIR = BRAND / "email"
-PUBLIC_BRAND = REPO_ROOT / "apps" / "digiweb" / "public" / "brand"
 PUBLIC_OG_PNG = REPO_ROOT / "apps" / "digithings-web" / "public" / "og.png"
 PUBLIC_DQ_OG_PNG = REPO_ROOT / "apps" / "digiquant-web" / "public" / "og.png"
 
@@ -297,23 +296,11 @@ def signoff_html(copy: dict[str, str]) -> str:
 
 
 def kit_copies() -> list[tuple[Path, Path]]:
-    """Canonical kit file → digiweb public/brand (plus live og.png)."""
-    pairs: list[tuple[Path, Path]] = []
-    for spec in FORMATS:
-        for ext in (".svg", ".png"):
-            src = OUT_DIR / f"{spec.filename}{ext}"
-            pairs.append((src, PUBLIC_BRAND / "headers" / f"{spec.filename}{ext}"))
-    for name in ("dark", "light"):
-        for suffix in (".svg", ".png", "-500.png"):
-            src = BRAND / "avatar" / f"digithings-avatar-{name}{suffix}"
-            pairs.append((src, PUBLIC_BRAND / "avatar" / src.name))
-    pairs.append((BRAND / "og" / "digithings-og.svg", PUBLIC_BRAND / "og" / "digithings-og.svg"))
-    pairs.append((BRAND / "og" / "digithings-og.png", PUBLIC_BRAND / "og" / "digithings-og.png"))
-    pairs.append((BRAND / "og" / "digithings-og.png", PUBLIC_OG_PNG))
-    pairs.append((BRAND / "og" / "digiquant-og.png", PUBLIC_DQ_OG_PNG))
-    pairs.append((EMAIL_DIR / "signoff.txt", PUBLIC_BRAND / "email" / "signoff.txt"))
-    pairs.append((EMAIL_DIR / "signoff.html", PUBLIC_BRAND / "email" / "signoff.html"))
-    return pairs
+    """Canonical OG cards → the two live unfurl paths."""
+    return [
+        (BRAND / "og" / "digithings-og.png", PUBLIC_OG_PNG),
+        (BRAND / "og" / "digiquant-og.png", PUBLIC_DQ_OG_PNG),
+    ]
 
 
 def _reject_forbidden(text: str, where: str) -> None:

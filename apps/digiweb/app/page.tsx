@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, Button } from "@digithings/ui/ui";
 import { ContentsOverview } from "@/components/contents-overview";
-import { HomeBanner } from "@/components/home-banner";
+import { BrandWordmark } from "@/components/brand/wordmark";
 import { LiverySwitcher } from "@/components/livery-switcher";
 
 /**
@@ -30,7 +30,7 @@ export default function BaselinePage() {
         </p>
 
         <div className="dw-banner" aria-label="digithings wordmark banner">
-          <HomeBanner />
+          <BrandWordmark />
         </div>
 
         <p className="dw-links">

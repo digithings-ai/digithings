@@ -275,7 +275,7 @@ Not in `BANNERS`, deliberately: `DIGIVOICE_BASELINE` (parity reference, `:119-13
 `DIGIVOICE_VARIANTS` (review previews, `:493-496`), `DIGICHAT_SCRAMBLE` (timing table,
 `:82-91`).
 
-The live visual index is the **brand studio** at `/brand/studio` (in
+The live visual index is the **brand studio** at `/brand` (in
 `apps/digiweb`). It renders every registered definition from `BANNERS`, so the
 gallery cannot drift from the source.
 

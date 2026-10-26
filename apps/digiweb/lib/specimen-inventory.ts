@@ -22,5 +22,4 @@ export const ROUTES: readonly RouteEntry[] = [
   { route: "/components", group: "components", page: "app/components/page.tsx" },
   { route: "/rtl", group: "rtl", page: "app/rtl/page.tsx" },
   { route: "/brand", group: "brand", page: "app/brand/page.tsx" },
-  { route: "/brand/studio", group: "brand", page: "app/brand/studio/page.tsx" },
 ] as const;

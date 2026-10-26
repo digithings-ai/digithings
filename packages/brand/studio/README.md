@@ -1,6 +1,6 @@
 # brand studio assets
 
-Source assets for the **brand studio** at `/brand/studio` in `apps/digiweb`.
+Source assets for the **brand studio** at `/brand` in `apps/digiweb`.
 
 The studio composes the digithings 60×60 logo with the 4×4 hero wordmark over
 the embedding field, previews every upload format, and exports PNG/SVG. The
