@@ -38,7 +38,11 @@ from digikey.license_heartbeat import (
 from digikey.license_verify import LicenseVerificationError, verify_license_token
 from digikey.profile_pointer import get_profile_pointer
 from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
-from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
+from digikey.scopes import (
+    BFF_SESSION_GRANTABLE_SCOPES,
+    DEFAULT_BFF_SESSION_SCOPES,
+    scope_grants_required,
+)
 from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys, bff_token
 
 logger = logging.getLogger(__name__)
@@ -265,7 +269,11 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         scopes = list(DEFAULT_BFF_SESSION_SCOPES)
         if body.requested_scopes:
-            if not scope_grants_required(scopes, body.requested_scopes):
+            # DIG-5635: the settable set is wider than the inherited one. The
+            # MCP edge scopes may be requested but are never handed out by
+            # default, so a token minted without requested_scopes stays off the
+            # edge.
+            if not scope_grants_required(BFF_SESSION_GRANTABLE_SCOPES, body.requested_scopes):
                 raise HTTPException(
                     status_code=400, detail="requested_scopes not allowed for bff session"
                 )
