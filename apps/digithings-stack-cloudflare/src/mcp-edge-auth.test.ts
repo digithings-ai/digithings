@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MCP_EDGE_JWKS_KV_KEY,
   MCP_EDGE_JWKS_TTL_MS,
   _resetMcpEdgeJwksCacheForTests,
   authorizeMcpEdge,
@@ -500,5 +501,62 @@ describe("no secret in the log", () => {
     // No prefix of the token either: the first 16 characters are not logged.
     expect(joined).not.toContain(token.slice(0, 16));
     expect(joined).not.toContain(STATIC_KEY);
+  });
+});
+
+describe("JWKS sources", () => {
+  const body = (k: Keypair): string =>
+    JSON.stringify({ keys: [{ ...k.jwk, kid: k.kid, use: "sig", alg: "RS256" }] });
+
+  it("reads the JWKS from KV and never touches the network", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    const fetchStub = vi.fn(async () => {
+      throw new Error("network must not be used when KV has the keys");
+    });
+    vi.stubGlobal("fetch", fetchStub);
+    const env = {
+      ...ENV,
+      TENANT_CONFIG: { get: async () => body(primary), put: async () => {} },
+    };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it("fetches through the DIGIKEY_SELF binding, not the global fetch", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    // key.digithings.ai is this Worker's own route: a global fetch cannot reach
+    // it from inside, so the binding is the only working path.
+    const fetchStub = vi.fn(async () => {
+      throw new Error("global fetch must not be used when the binding is bound");
+    });
+    vi.stubGlobal("fetch", fetchStub);
+    const bound = vi.fn(async () => new Response(body(primary), { status: 200 }));
+    const env = { ...ENV, DIGIKEY_SELF: { fetch: bound } };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(bound).toHaveBeenCalledTimes(1);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it("caches a fetched JWKS back to KV for the next cold isolate", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    const put = vi.fn(async () => {});
+    const bound = vi.fn(async () => new Response(body(primary), { status: 200 }));
+    const env = {
+      ...ENV,
+      DIGIKEY_SELF: { fetch: bound },
+      TENANT_CONFIG: { get: async () => null, put },
+    };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(put).toHaveBeenCalledWith(MCP_EDGE_JWKS_KV_KEY, expect.stringContaining("kid-1"));
+  });
+
+  it("refuses when neither KV nor the network yields keys", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    const env = {
+      ...ENV,
+      TENANT_CONFIG: { get: async () => null, put: async () => {} },
+    };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(false);
   });
 });

@@ -58,6 +58,7 @@ import { connectionStatusText } from "../connection-status";
 import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
 import { cn } from "./cn";
+import { useSuggestionGroup } from "../suggestion-cycle";
 import { SkinCredit } from "../stock/skin-credit";
 import {
   ActionBarMorePrimitive,
@@ -780,8 +781,15 @@ const SUGGESTION_BUTTON_CLASS =
 
 const ThreadSuggestions: FC = () => {
   const { suggestions } = useContext(ThreadChromeContext);
+  // Keyed by the cycle's group offset so a new group remounts and re-runs the
+  // chips' entrance fade; hover/focus handlers hold the cycle while it is read.
+  const { groupKey, handlers } = useSuggestionGroup();
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5">
+    <div
+      key={groupKey}
+      className="aui-thread-welcome-suggestions flex w-full flex-col items-stretch gap-0.5"
+      {...handlers}
+    >
       {suggestions.length > 0 ? (
         suggestions.map((prompt, index) => (
           <StaticSuggestionItem key={`${index}:${prompt}`} prompt={prompt} />

@@ -57,7 +57,6 @@ describe("ChatEmbedShell retry", () => {
         embedOrigin: window.location.origin,
         embedHost: OCC_CHAT_EMBED_HOST,
         acceptsInviteToken: true,
-        warmupLoader: "banner",
       }),
     );
     await flush();
@@ -90,7 +89,6 @@ describe("ChatEmbedShell retry", () => {
         embedOrigin: window.location.origin,
         embedHost: OCC_CHAT_EMBED_HOST,
         acceptsInviteToken: true,
-        warmupLoader: "banner",
       }),
     );
     await flush();
@@ -115,7 +113,6 @@ describe("ChatEmbedShell retry", () => {
         embedOrigin: window.location.origin,
         embedHost: OCC_CHAT_EMBED_HOST,
         acceptsInviteToken: true,
-        warmupLoader: "banner",
       }),
     );
     await flush();

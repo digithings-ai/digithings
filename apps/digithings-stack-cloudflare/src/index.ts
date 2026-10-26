@@ -53,6 +53,7 @@ import {
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
 import { authorizeMcpEdge } from "./mcp-edge-auth";
+import { mcpEdgeTarget } from "./mcp-edge-target";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 import { composeCorpusMap } from "./tenant-config";
@@ -487,6 +488,12 @@ export function containerBootingResponse(
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
   MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
+  /**
+   * Service binding to this same Worker, used only for the digikey JWKS:
+   * `key.digithings.ai` is this Worker's own route, so a plain fetch cannot
+   * reach it from inside (see mcp-edge-auth).
+   */
+  DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -768,8 +775,7 @@ export default {
           // 307s `/mcp/`, and a rewritten path breaks clients that do not
           // replay the body on the redirect.
           const stripped = slash === -1 ? "/" : rest.slice(slash);
-          const target = new URL(url.toString());
-          target.pathname = stripped;
+          const target = mcpEdgeTarget(url, stripped, port);
           const container = stackContainer(workerEnv);
           // DIG-4477: retry once on a recycled container (see
           // ./container-retry.ts); the clone per attempt is what makes the

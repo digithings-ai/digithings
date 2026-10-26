@@ -540,6 +540,13 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
 
     def test_static_list_drives_single_step_call(self):
+        """Each entry becomes exactly one spec, and the specs are what runs.
+
+        The list used to drive one `step(...)` call per entry. It now drives one
+        `scan_specs.append(...)` per entry, because the independent gates run in
+        a bounded pool (STEP_POOL); the property this pins is unchanged - every
+        entry in the list is executed exactly once, with its own command.
+        """
         tree = self._tree()
         found = self._static_lists(tree)
         self.assertEqual(len(found), 1)
@@ -548,16 +555,102 @@ class StaticGateWiringTest(unittest.TestCase):
             if isinstance(node, ast.For) and node.iter is found[0]
         ]
         self.assertEqual(len(loops), 1)
-        steps = [
+        appends = [
             node for node in ast.walk(loops[0])
             if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "step"
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "append"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "scan_specs"
         ]
-        self.assertEqual(len(steps), 1)
+        self.assertEqual(len(appends), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("fails.extend(run_step_pool(scan_specs, out))", src)
 
     def test_docstring_names_r0_scan(self):
         self.assertIn("R0 client-literal scan", ast.get_docstring(self._tree()))
+
+
+class StepPoolTest(unittest.TestCase):
+    """The independent gates run in a bounded pool (STEP_POOL)."""
+
+    def test_pool_runs_specs_concurrently_and_reports_in_declared_order(self):
+        import threading
+        barrier = threading.Barrier(2, timeout=5)
+        seen = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            seen.append(name)
+            barrier.wait()          # deadlocks (BrokenBarrierError) if serialised
+            if name == "second":
+                if out:
+                    out.write("boom\n")
+                return 1, ""
+            return 0, ""
+
+        specs = [("first", ["true"], 30, None, None, ()),
+                 ("second", ["false"], 30, None, None, ())]
+        log = io.StringIO()
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool(specs, log, limit=2)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(sorted(seen), ["first", "second"], "both specs must run")
+        self.assertEqual(fails, ["second"], "only the failing step is reported")
+        text = log.getvalue()
+        self.assertLess(text.index("===== first"), text.index("===== second"),
+                        "the log keeps the declared order, not the finish order")
+
+    def test_pool_stops_at_the_specs_it_was_given(self):
+        calls = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            calls.append(name)
+            return 0, ""
+
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool([("only", ["true"], 30, None, None, ())],
+                                       io.StringIO(), limit=6)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(fails, [])
+        self.assertEqual(calls, ["only"])
+
+    def test_child_state_holds_every_live_step(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            _mod._write_child_state(111, "one", 30)
+            _mod._write_child_state(222, "two", 30)
+            self.assertEqual(len(_mod.read_child_state()["children"]), 2)
+            _mod._clear_child_state(111)
+            left = _mod.read_child_state()["children"]
+            self.assertEqual([c["pid"] for c in left], [222])
+            _mod._clear_child_state()
+            self.assertIsNone(_mod.read_child_state())
+        finally:
+            _mod._clear_child_state()
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_watchdog_reads_a_state_file_written_before_the_pool(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            with open(_mod.CHILD_STATE, "w") as f:
+                json.dump({"pid": 999999, "name": "old", "started": time.time(),
+                           "budget": 300}, f)
+            st = _mod.read_child_state()
+            self.assertEqual(st["children"][0]["pid"], 999999)
+        finally:
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class PrepareWorktreeTest(unittest.TestCase):
@@ -968,7 +1061,7 @@ class WorktreeSelfHealTest(unittest.TestCase):
         self.assertEqual(ran, [], "run_checks must not be called when the worktree failed")
         self.assertEqual(st, "failure")
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
-        self.assertIn("fails = run_checks(pr, out) if ok_wt else", src)
+        self.assertIn("fails = run_checks(pr, out, summary) if ok_wt else", src)
         self.assertIn('f"worktree checkout ({why})"', src)
 
     def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
@@ -1129,8 +1222,11 @@ class InstallMarkerTest(unittest.TestCase):
         git_env = _git_env(env)
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
-        shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
-                    os.path.join(checkout, "scripts", "local-ci", "local_ci.py"))
+        # The install refuses a checkout that carries the runner without the
+        # guard (DIG-4796): the two files are installed together.
+        for name in ("local_ci.py", "launch_guard.py"):
+            shutil.copy(os.path.join(_SCRIPTS, name),
+                        os.path.join(checkout, "scripts", "local-ci", name))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1156,6 +1252,19 @@ class InstallMarkerTest(unittest.TestCase):
                          "the marker must name the checkout the runner was installed from")
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
+
+    def test_a_checkout_without_the_guard_is_refused(self):
+        """An installer must not point the daemon at a pre-guard checkout.
+
+        The runner refuses to run without `launch_guard.py` next to it (exit
+        78), so installing that checkout would stop the only pre-merge
+        producer. The install refuses it up front instead (DIG-4796).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
+        self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""
@@ -1826,6 +1935,154 @@ class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
         self._run(pr["number"])
         self.assertIn("process_review", self.calls)
         self.assertNotIn("process", self.calls)
+
+
+class ReviewCoverageEvidenceTest(unittest.TestCase):
+    """DIG-4507: the promotion judgement is evidence, not a second producer.
+
+    The runner used to post `Every commit reaching main was reviewed` as a
+    commit status with a user token while `ci-review-coverage.yml` posted the
+    same context as an app-owned check run. Two implementations of one required
+    context disagree, and the user-token row can never satisfy an app pin. The
+    workflow is the single producer; the runner keeps its per-PR log only.
+    """
+
+    SHA = "b84c114e0000000000000000000000000000000"
+
+    def setUp(self):
+        self._logd = _mod.LOGD
+        self._prepare_wt = _mod.prepare_wt
+        self._run_review_coverage = _mod.run_review_coverage
+        self._gh = _mod.gh
+        self.tmp = tempfile.mkdtemp()
+        _mod.LOGD = self.tmp
+        self.gh_calls = []
+        _mod.gh = lambda *a: self.gh_calls.append(list(a)) or "{}"
+
+    def tearDown(self):
+        _mod.LOGD = self._logd
+        _mod.prepare_wt = self._prepare_wt
+        _mod.run_review_coverage = self._run_review_coverage
+        _mod.gh = self._gh
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _pr(self, number=6400, updated="2026-10-25T10:00:00Z"):
+        return {"number": number, "headRefOid": self.SHA, "baseRefName": "main",
+                "title": "chore: promote develop to main", "isCrossRepository": False,
+                "updatedAt": updated}
+
+    def _log(self, number=6400, age_secs=0):
+        p = os.path.join(self.tmp, f"pr{number}-review-{self.SHA[:12]}.log")
+        with open(p, "w") as f:
+            f.write("judged\n")
+        old = time.time() - age_secs
+        os.utime(p, (old, old))
+        return p
+
+    def test_the_queue_keys_on_the_judgement_log_not_a_status_row(self):
+        pr = self._pr()
+        self.assertEqual(_mod.pending_reviews([pr]), [pr],
+                         "a head with no judgement log has not been judged")
+        self._log()
+        self.assertEqual(_mod.pending_reviews([pr]), [],
+                         "a fresh judgement is evidence and satisfies the hourly re-check")
+
+    def test_a_judgement_older_than_an_hour_is_rechecked(self):
+        pr = self._pr()
+        self._log(age_secs=_mod.REVIEW_RECHECK_SECS + 60)
+        self.assertEqual(_mod.pending_reviews([pr]), [pr])
+
+    def test_judging_a_promotion_posts_no_status(self):
+        pr = self._pr()
+        _mod.prepare_wt = lambda n, sha, base, out: (True, "ok")
+        _mod.run_review_coverage = lambda p, out: (True, 3, 0)
+        self.assertEqual(_mod.process_review(pr, dry=False), "success")
+        self.assertEqual(self.gh_calls, [],
+                         "the judgement is evidence: it must not publish a status row")
+        self.assertTrue(os.path.exists(
+            os.path.join(self.tmp, f"pr{pr['number']}-review-{self.SHA[:12]}.log")))
+
+    def test_the_runner_names_no_second_producer(self):
+        with open(os.path.join(_SCRIPTS, "local_ci.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn("Every commit reaching main was reviewed", src,
+                         "the workflow is the single producer of main's review context (DIG-4507)")
+        self.assertNotIn("def review_status(", src)
+        self.assertNotIn("def review_ci_status(", src)
+
+
+class ProducerGuardTickTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4507: the tick asks the producer guard once, and survives its report.
+
+    The guard's own `main()` prints UNREADABLE, but the daemon calls `run()`,
+    so the per-tick call site owns the reporting. A tick that logged `ok` while
+    the protection could not be read would be a silent pass: healthy-looking
+    logs over a guard that cannot see. These tests pin the call itself, because
+    deleting it would otherwise leave the suite green.
+    """
+
+    def setUp(self):
+        self._isolate()
+        self._saved = {}
+        self.logs = []
+        self._saved_env = dict(os.environ)
+        os.environ["LOCAL_CI_MAIN"] = os.path.abspath(os.path.join(_HERE, "..", ".."))
+        os.environ.pop("LOCAL_CI_WT", None)
+        self._saved_argv = list(sys.argv)
+
+    def tearDown(self):
+        for name, value in self._saved.items():
+            setattr(_mod, name, value)
+        sys.argv = self._saved_argv
+        self._unisolate()
+
+    def _stub(self, name, value):
+        if name not in self._saved:
+            self._saved[name] = getattr(_mod, name)
+        setattr(_mod, name, value)
+
+    def _run_tick(self):
+        """main() with every side effect stubbed: only the guard stays real."""
+        self._stub("_guard", lambda *a, **kw: None)
+        self._stub("watchdog", lambda: None)
+        self._stub("acquire_lock", lambda: True)
+        self._stub("release_lock", lambda: None)
+        self._stub("prune_claims", lambda: None)
+        self._stub("refresh_checkout", lambda: None)
+        self._stub("list_prs", lambda base: [])
+        self._stub("skip_reason", lambda: None)
+        self._stub("pending", lambda prs, applied, dry=False: [])
+        self._stub("pending_applied", lambda prs: [])
+        self._stub("pending_reviews", lambda prs: [])
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", lambda *a: None)          # protection unreadable
+        sys.argv = ["local_ci.py"]
+        stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            _mod.main()
+        finally:
+            sys.stdout = stdout
+
+    def test_the_tick_asks_the_guard_once(self):
+        calls = []
+        self._stub("check_required_context_producers", lambda: calls.append(1))
+        self._run_tick()
+        self.assertEqual(calls, [1], "the tick must ask the guard exactly once")
+
+    def test_an_unreadable_protection_is_reported_and_never_logged_ok(self):
+        self._run_tick()
+        self.assertTrue(any("UNREADABLE (not failed)" in m for m in self.logs), self.logs)
+        self.assertFalse(any(m.startswith("required-context producers: ok") for m in self.logs),
+                         self.logs)
+
+    def test_a_guard_error_is_logged_and_never_raised(self):
+        def boom(*a):
+            raise RuntimeError("boom")
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", boom)
+        _mod.check_required_context_producers()   # must not raise
+        self.assertTrue(any("guard error" in m for m in self.logs), self.logs)
 
 
 class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
@@ -3283,3 +3540,68 @@ class LockHeartbeatTest(unittest.TestCase):
         self.assertEqual(_mod.lock_holder_alive(), os.getpid())
         _mod.release_lock()
 
+
+
+class WorktreeRootGuardTest(unittest.TestCase):
+    """A gate must not run in a directory that is not there.
+
+    2026-10-26: the runner ran a tick with its worktree root resolved to "/"
+    and posted sixteen failures -- every check ran from `/` and none of them
+    was a finding. The tick has to refuse instead of producing that verdict.
+    """
+
+    PR = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+          "title": "fix(x): y"}
+
+    def setUp(self):
+        self._saved = (_mod.WT, _mod._guard)
+        _mod._guard = lambda: None
+
+    def tearDown(self):
+        _mod.WT, _mod._guard = self._saved
+
+    def test_run_checks_refuses_a_root_that_is_not_our_worktree(self):
+        # The observed failure: the root resolved to "/", which IS a directory,
+        # so an isdir check would have passed it and run every gate from root.
+        _mod.WT = "/"
+        with self.assertRaises(SystemExit) as ctx:
+            _mod.run_checks(self.PR, io.StringIO())
+        self.assertIn("is not this runner's worktree", str(ctx.exception))
+        self.assertIn("refusing to run gates", str(ctx.exception))
+
+    def test_run_checks_refuses_a_missing_root(self):
+        _mod.WT = "/nonexistent-worktree-root-for-test"
+        with self.assertRaises(SystemExit):
+            _mod.run_checks(self.PR, io.StringIO())
+
+    def test_pool_step_with_a_missing_directory_fails_without_executing(self):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        ran = []
+        saved_sh = _mod.sh
+        _mod.sh = lambda *a, **kw: (ran.append(a), (0, ""))[1]
+        try:
+            fails = _mod.run_step_pool(
+                [("probe", ["true"], 5, "/nonexistent-worktree-root-for-test", None, ())],
+                io.StringIO(),
+            )
+        finally:
+            _mod.sh = saved_sh
+        self.assertIn("probe", fails)
+        self.assertEqual(ran, [], "the pool must not execute a step with no cwd")
+
+    def test_pool_step_without_an_explicit_cwd_runs_in_the_worktree_root(self):
+        """The regression: the pool passed cwd=None, so the child inherited
+        launchd's "/" and every check looked for `//scripts/...`."""
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        seen = []
+        saved = _mod.sh
+        _mod.sh = lambda cmd, cwd=None, **kw: (seen.append(cwd), (0, ""))[1]
+        try:
+            _mod.run_step_pool([("probe", ["true"], 5, None, None, ())], io.StringIO())
+        finally:
+            _mod.sh = saved
+        self.assertEqual(seen, [tmp], "a step with no cwd must run in the worktree root")

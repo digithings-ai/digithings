@@ -90,18 +90,23 @@ def _pr(
     }
 
 
-def _seat_verdict(*, seat: str, verdict: str, head_sha: str, created: str) -> dict[str, Any]:
+def _seat_verdict(
+    *, seat: str, verdict: str, head_sha: str, created: str, withdraws: str = ""
+) -> dict[str, Any]:
     """A fleet verdict comment: provenance marker names the seat, scope names the head."""
+    body = (
+        f"<!-- digithings-review agent={seat} "
+        f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
+        f"Review verdict: {verdict.replace('_', ' ')}\n"
+    )
+    if withdraws:
+        body += f"Withdraws: changes requested on {withdraws}\n"
     return {
         "id": f"IC_kwDO{seat[:8]}_{created}",
         "author": {"login": "chrizefan"},
         "authorAssociation": "MEMBER",
-        "body": (
-            f"<!-- digithings-review agent={seat} "
-            f"run=00000000-0000-0000-0000-000000000000 head={head_sha} -->\n"
-            f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
-            f"Review verdict: {verdict.replace('_', ' ')}\n"
-        ),
+        "body": body,
         "createdAt": created,
     }
 
@@ -278,11 +283,17 @@ def test_a_native_block_on_the_current_head_still_holds() -> None:
     assert any("review has outstanding change requests" in r for r in verdict.reasons)
 
 
-# 4. An `approve` on the current head clears a standing block.
+# 4. An `approve` on the current head, withdrawing the block, clears it.
 
 
-def test_an_approve_on_the_current_head_clears_the_seats_block() -> None:
-    """The seat that blocked the head is the seat that can clear it."""
+def test_an_approve_on_the_current_head_withdrawing_the_block_clears_it() -> None:
+    """The seat that blocked the head is the seat that can clear it — by naming it.
+
+    Since DIG-5246 the approve on an unchanged head also has to say it
+    withdraws the block; that rule is tested on its own in
+    `test_merge_queue.py`, and this fixture carries the `Withdraws:` line so
+    this test keeps testing the head-scope rule.
+    """
     pr = _pr(
         6263,
         comments=[
@@ -297,6 +308,7 @@ def test_an_approve_on_the_current_head_clears_the_seats_block() -> None:
                 verdict="approve",
                 head_sha=HEAD_6263,
                 created="2026-10-23T01:01:00Z",
+                withdraws=HEAD_6263,
             ),
             _in_session_review(HEAD_6263),
         ],

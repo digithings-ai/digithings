@@ -208,10 +208,10 @@ PROVENANCE_RETRY_BACKOFF = 0.5
 #: The whole cost of one URL, attempts and pauses together. The pause before
 #: an attempt and the attempt itself both happen inside it, so one path costs
 #: the budget once and not once per attempt. It is a deadline and not only a
-#: sum of timeouts: the body is read in chunks and the read gives up when the
-#: deadline has passed, so a server that answers the headers and then trickles
-#: the body cannot hold the read open past the budget. It is the budget of ONE
-#: URL read, not of the tick.
+#: sum of timeouts: the body is read one socket read at a time and the read
+#: gives up when the deadline has passed, so a server that answers the headers
+#: and then trickles the body cannot hold the read open past the budget. It is
+#: the budget of ONE URL read, not of the tick.
 PROVENANCE_READ_BUDGET = 20.0
 
 #: How long a host that could not be read is remembered, in seconds. The queue
@@ -493,6 +493,13 @@ class Verdict:
     #: `reasons` so the update step can act on a stale branch without also acting on
     #: one that is merely broken — an update spends a full CI run either way.
     stale_base_only: bool = False
+    #: A fact the queue could not read, so it could not judge — not a gate the PR
+    #: failed. It is deliberately not in `reasons`: a gate is a statement about the
+    #: branch, and this is a statement about the API. The handback poster keys its
+    #: comment on `reasons`, so a transient that appeared there re-armed the poster
+    #: every other tick (DIG-5573, 42 handbacks on #6418 in 29 h). Such a PR is not
+    #: eligible — an unread gate is not a cleared gate — it is skipped this tick.
+    deferred: str = ""
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -1301,6 +1308,35 @@ def _woodpecker_read_attempts(
     return (0, reason, True) if attempts else (0, "the read was not attempted", True)
 
 
+def _read_response_body(response: Any, deadline: float | None) -> bytes:
+    """The whole body, given up on when the deadline has passed.
+
+    The pieces have to be the size of one socket read, or the deadline between
+    them is never reached. `read(n)` on an `http.client.HTTPResponse` returns
+    only when it has `n` bytes or the body has ended, so a server that answers
+    the headers at once and then trickles the body holds one `read(65536)` open
+    for as long as it likes — the socket timeout bounds one operation on the
+    socket, not the body (measured by the Code Reviewer on DIG-5573: a
+    2 001-byte body in twenty pieces was read in a single call). `read1(n)`
+    returns as soon as one underlying read has something to give, so the loop
+    below is a loop the deadline can interrupt.
+
+    `read1` is what `urlopen` and the Woodpecker opener return in production.
+    The `read` fallback is for a response-shaped object that does not have it
+    (a test double, or a file wrapper): those keep the loop but not the
+    per-chunk guarantee.
+    """
+    read = getattr(response, "read1", None) or response.read
+    chunks: list[bytes] = []
+    while True:
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("the read exceeded its budget")
+        chunk = read(65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
 def _woodpecker_read_once(
     url: str, token: str, timeout: float, deadline: float | None = None
 ) -> tuple[int, Any, bool]:
@@ -1309,25 +1345,18 @@ def _woodpecker_read_once(
     The third value says whether the API could not be reached, so that the
     caller can tell a dropped connection from an answer the API gave.
 
-    The body is read in chunks and the deadline is checked between them. The
-    timeout of a socket is the timeout of one operation on it, so a server
-    that answers the headers and then trickles the body would hold the read
-    open for as long as it liked.
+    The body is read one socket read at a time and the deadline is checked
+    between them. The timeout of a socket is the timeout of one operation on
+    it, so a server that answers the headers and then trickles the body would
+    hold the read open for as long as it liked unless the read gives up at the
+    deadline.
     """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            chunks: list[bytes] = []
-            while True:
-                if deadline is not None and time.monotonic() > deadline:
-                    raise TimeoutError("the read exceeded its budget")
-                chunk = response.read(65536)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            body = b"".join(chunks).decode("utf-8", "replace")
+            body = _read_response_body(response, deadline).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
@@ -2371,6 +2400,16 @@ _PROSE_VERDICT_RE = re.compile(
 # to another by a dash is a uuid group, not a commit.
 _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA-Z-])")
 
+# The line with which a seat says it withdraws the block it posted earlier. It
+# is read beside the verdict, in the same comment, and only a line that opens
+# with the token counts — a "withdraw" somewhere in prose is not a withdrawal
+# (DIG-5246). The heads it names are read with `_PROSE_SHA_RE`; a line naming
+# none is a withdrawal of the seat's blocks that name no head at all.
+_WITHDRAWAL_LINE_RE = re.compile(
+    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*withdraws?[*_`]*[ \t]*:[ \t]*(?P<refs>[^\n]*)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 # The markers are read from the raw comment; the prose is what is left. A hex run
 # inside a marker is not prose: `agent=54a431af-501a-47d9-...` is a seat uuid,
 # and reading its first group as a commit would name a head nobody reviewed.
@@ -2455,6 +2494,28 @@ def _prose_verdict(body: str) -> tuple[str, str] | None:
     return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
 
 
+def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
+    """`(declared, heads named)` from a `Withdraws:` line, or `(False, ())`.
+
+    `declared` is True when the comment carries the line at all: it is what says
+    the seat means to withdraw a block, and it is deliberately explicit, because
+    the line lets a later approve clear a block the same seat posted on an
+    unchanged head (DIG-5246). `heads` is every sha named on the line, oldest
+    occurrence first, deduplicated. A line naming no sha withdraws only blocks
+    that name no head, so it can never spend a block scoped to a commit the
+    reviewer did not name.
+    """
+    declared = False
+    heads: list[str] = []
+    for match in _WITHDRAWAL_LINE_RE.finditer(body):
+        declared = True
+        for found in _PROSE_SHA_RE.finditer(match.group("refs")):
+            sha = found.group("sha").lower()
+            if sha not in heads:
+                heads.append(sha)
+    return declared, tuple(heads)
+
+
 @dataclass(frozen=True)
 class PostedVerdict:
     """The verdict the queue reads on a PR, and the head it names."""
@@ -2470,6 +2531,10 @@ class PostedVerdict:
     # comment carries no readable seat: every seat shares one GitHub login, so
     # there is nothing else to tell them apart by.
     seat: str = ""
+    # A `Withdraws:` line in this comment, and the heads it names. Read only on
+    # an approve, and only against the seat's own standing block (DIG-5246).
+    withdrawal: bool = False
+    withdrawn_heads: tuple[str, ...] = ()
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
@@ -2532,6 +2597,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     for binding in claims:
         if binding and binding not in bindings:
             bindings.append(binding)
+    withdrawal, withdrawn_heads = _withdrawal(text)
     author = comment.get("author")
     login = "?"
     if isinstance(author, Mapping):
@@ -2545,6 +2611,8 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         author=login,
         at=str(comment.get("createdAt") or ""),
         seat=_comment_seat(provenance),
+        withdrawal=withdrawal,
+        withdrawn_heads=withdrawn_heads,
     )
 
 
@@ -2605,6 +2673,37 @@ def verdict_applies_to_head(verdict: PostedVerdict, head: str) -> bool:
     return _covers_head(verdict, head)
 
 
+def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
+    """True when `approve` explicitly withdraws the block it would clear.
+
+    DIG-5246. `#6280` merged at 12:08 on 2026-10-22 because the code reviewer's
+    12:04 approve on the same head `b1c5fde73ef8` silently cleared its own
+    10:21 `changes_requested`; the two blockers were still open and landed in
+    `develop`. A later approve is a statement about the code, not about the
+    finding, so clearing a block the same seat posted on the same, unchanged
+    head needs the seat to say so on a `Withdraws:` line in that same comment.
+
+    The line names the block by the head it names, or — for a block that names
+    no head — by naming none itself. A line naming a head that is not the
+    block's spends nothing. A block on a head the PR has left is already spent
+    by the branch moving (`verdict_applies_to_head`), so "a new head and a fresh
+    approve" needs no withdrawal.
+    """
+    if block is None:
+        return True
+    if not approve.withdrawal:
+        return False
+    if not approve.withdrawn_heads:
+        # There is no head to name on the block, and a bare line must not spend
+        # a block that names one.
+        return not block.bindings
+    return any(
+        _binds_head(ref, binding) or _binds_head(binding, ref)
+        for ref in approve.withdrawn_heads
+        for binding in block.bindings
+    )
+
+
 def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocks the seats who posted them have not cleared, oldest first.
 
@@ -2616,12 +2715,12 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     security desk's `changes requested` on the branch, because the code
     reviewer's later approve on the head was the newest readable verdict.
 
-    Every verdict is first scoped to the head it names (`verdict_applies_to_head`).
-    A seat that blocked a commit the PR has left has not asked for changes to
-    the head it stands at now: that block is spent by the branch moving, and it
-    does not hold the PR. It is not spent on a promise — a fresh block on the
-    current head blocks exactly as before, and an old approve still clears
-    nothing, because clearing needs the head.
+    An approve on the same, unchanged head as the seat's own block clears it
+    only when the approve carries a `Withdraws:` line naming that block
+    (`_withdraws`, DIG-5246). The head moving does the clearing on its own:
+    every verdict is first scoped to the head it names
+    (`verdict_applies_to_head`), and a seat that blocked a commit the PR has
+    left has not asked for changes to the head it stands at now.
 
     A verdict whose seat cannot be read is not judged here: the seat is
     unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
@@ -2637,9 +2736,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
         block: PostedVerdict | None = None
         for verdict in verdicts:
             if verdict.verdict in APPROVE_VERDICTS:
-                # Only an approve naming this head clears a block. One naming
-                # another head says nothing about it and leaves the block alone.
-                if _covers_head(verdict, head):
+                # Only an approve naming this head clears a block, and on an
+                # unchanged head only one that withdraws it. An approve naming
+                # another head says nothing about this one and leaves the block
+                # alone.
+                if _covers_head(verdict, head) and _withdraws(verdict, block):
                     block = None
             elif verdict_applies_to_head(verdict, head):
                 block = verdict
@@ -2697,11 +2798,15 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
     1. **A seat's own block stands until that seat clears it.** A blocking
        verdict belongs to the seat that posted it. That seat's later approve
        naming the head the PR stands at clears it; an approve naming another
-       head does not, and no other seat's approve does either. `#6170`
-       (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's
-       `changes requested` still on the branch, because the code reviewer's
-       later approve on the head was the newest readable verdict — a second
-       sign-off was never asked for, so the queue never held the PR for it.
+       head does not, and no other seat's approve does either. When the approve
+       names the same, unchanged head the block names, it clears the block only
+       when it carries a `Withdraws:` line naming it (DIG-5246, `#6280`): an
+       approve is a statement about the code, and the queue does not read it as
+       a statement that the finding is withdrawn. `#6170` (DIG-4911) merged into
+       `develop` on 2026-10-21 with the security desk's `changes requested` still
+       on the branch, because the code reviewer's later approve on the head was
+       the newest readable verdict — a second sign-off was never asked for, so
+       the queue never held the PR for it.
     2. **Everything else is judged by the newest readable verdict.** The newest
        readable verdict is the one that counts: a blocking verdict blocks when
        it names the head the PR stands at (or names no head at all, which
@@ -2770,6 +2875,33 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         scope_text = f", naming `{block.bindings[0][:12]}`"
     else:
         scope_text = ""
+    later = [
+        verdict
+        for verdict in _readable_verdicts(pr)
+        if verdict.seat == block.seat and verdict.at > block.at
+    ]
+    approve = later[-1] if later else None
+    if (
+        approve is not None
+        and approve.verdict in APPROVE_VERDICTS
+        and _covers_head(approve, head)
+        and not _withdraws(approve, block)
+    ):
+        # DIG-5246: the handback for the #6280 timeline. The seat did come back
+        # and approve the same head; what it did not do is say it withdraws the
+        # finding, so the queue cannot read the approve as clearing it.
+        if block.bindings:
+            withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
+        else:
+            withdraw = "`Withdraws:` line"
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text} and then approved the same "
+            f"head {head_text} (comment {approve.comment_id or 'a comment'}); an "
+            "approve on an unchanged head does not clear the block it left behind. "
+            f"Add a {withdraw} to the approving comment, or move the PR to a new "
+            "head and approve that head"
+        )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
         f"({block.source}, in {where}){scope_text}, and the PR now stands at "
@@ -3203,6 +3335,12 @@ class Independence:
     #: A failure to judge at all — the facts could not be read, or the author's
     #: seat could not be identified. Nothing was concluded about any marker.
     unverifiable: str = ""
+    #: Whether that failure was the API not answering rather than a fact about
+    #: the PR. The two are not the same: "the authoring seat could not be
+    #: identified" is a statement about the commits on this branch and stays a
+    #: gate; "Paperclip could not be read" says nothing about the branch and is
+    #: skipped for the tick (DIG-5573).
+    transient: bool = False
 
 
 #: How long one read of the Paperclip API may take, and how many times it may
@@ -3226,17 +3364,39 @@ class Independence:
 #: that does not answer costs that much again for each of them.
 #:
 #: The timeout is the socket timeout of one request. That is what covers the
-#: case that was measured: a control plane that thinks for half a minute
-#: before it answers. A server that answers slowly instead of late is a
-#: different shape, and a socket timeout does not bound it.
+#: case that was measured: a control plane that thinks for minutes before it
+#: answers. A server that answers slowly instead of late is a different shape,
+#: and a socket timeout does not bound it — the budget does, because the body
+#: is read one socket read at a time (`read1`) and the deadline is checked
+#: between the pieces.
+#:
+#: The budget was raised on 2026-10-26 (DIG-5573). The slowest answer measured
+#: that day was `GET /api/issues/{id}/runs` at **119.9 s** — 41 296 bytes,
+#: HTTP 200, same endpoint, same body — while the same read on two other
+#: tickets in the same minute took 34.6 s and 38.9 s. The read is
+#: load-dependent, not PR-dependent, and at 45 s / 60 s a 120-second answer
+#: could never fit and a 35-second one left no room for the second attempt.
+#:
+#: The bounded window that 2026-10-26 also proposed is not available: the
+#: server ignores `?limit=` on `/api/issues/{id}/runs` (identical payload at
+#: `?limit=5`, measured twice), so there is no cheaper form of the same read to
+#: switch to. Raising the numbers is the fix; the URL read and the facts it
+#: feeds are unchanged, so the gate judges exactly what it judged before.
+#:
+#: A slow tick is the price. A false handback is not a neutral cost either: the
+#: live driver keys its handback comment on the reasons it is given, so a
+#: transient read failure that appears as a reason re-posts the comment every
+#: other tick (42 handbacks on #6418 in 29 h), and the same transient can hold
+#: a PR after its review has landed. A tick that waits minutes for a true
+#: answer is cheaper than a tick that publishes a false one.
 #:
 #: The four numbers are the fix, and the suite pins them: a timeout below the
 #: slowest answer measured turns a slow API back into a refusal, a budget
-#: below the timeout leaves no room for the second attempt, and a backoff that
-#: hammers a struggling control plane makes the second attempt likelier to
-#: fail than the first.
-PAPERCLIP_READ_TIMEOUT = 45
-PAPERCLIP_READ_BUDGET = 60.0
+#: below two timeouts plus the backoff leaves no room for the second attempt
+#: after a slow first one, and a backoff that hammers a struggling control
+#: plane makes the second attempt likelier to fail than the first.
+PAPERCLIP_READ_TIMEOUT = 150.0
+PAPERCLIP_READ_BUDGET = 310.0
 PAPERCLIP_READ_ATTEMPTS = 2
 PAPERCLIP_RETRY_BACKOFF = 3.0
 
@@ -3332,7 +3492,15 @@ class ReviewerProvenance:
                 with urllib.request.urlopen(
                     request, timeout=min(PAPERCLIP_READ_TIMEOUT, remaining)
                 ) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
+                    # The socket timeout is the timeout of one operation on the
+                    # socket, so a server that answers the headers and then
+                    # trickles the body would hold the read open past the
+                    # budget. `_read_response_body` reads one socket read at a
+                    # time and checks the deadline between them, so the budget
+                    # is the promise it says it is.
+                    payload = json.loads(
+                        _read_response_body(response, deadline).decode("utf-8")
+                    )
             except urllib.error.HTTPError as exc:
                 if exc.code in (400, 404):
                     # A fact, not a failure: the API answered, and the answer is
@@ -3878,6 +4046,7 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+            transient=True,
         )
     except _AuthorUnidentified as exc:
         # The commit names an author the gate cannot resolve. The seat that
@@ -3913,6 +4082,7 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=f"the review seats could not be checked: {exc}",
+            transient=True,
         )
     if found:
         return Independence(
@@ -4041,7 +4211,7 @@ def _review_coverage(
     repo: str | None,
     cfg: ReviewIndependence | None = None,
     prov: ReviewerProvenance | None = None,
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str, str]:
     """The promotion gate's evidence, enforced at merge time.
 
     `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
@@ -4073,6 +4243,12 @@ def _review_coverage(
       below survives only as a defence for callers that hand in a raw row. An
       unreadable comments read fails closed, for the same reason an absent
       check fails closed: the alternative reads "no evidence" as "approved".
+
+    Returns `(reasons, evidence, deferred)`. The third value is a fact the gate
+    could not read — the Paperclip API did not answer — and it is kept apart
+    from `reasons` on purpose: a reason is a statement about the branch and is
+    published as a gate, while a failed read says nothing about the branch at
+    all. The caller records it and skips the PR for this tick (DIG-5573).
     """
     crc = _coverage_module()
     labels = _label_names(pr)
@@ -4082,7 +4258,7 @@ def _review_coverage(
             return [
                 "review coverage: `reviewed:agent` is set but the findings "
                 "comment cannot be verified without a repo to read it from"
-            ], ""
+            ], "", ""
         try:
             data = _gh_json(
                 "pr",
@@ -4097,7 +4273,7 @@ def _review_coverage(
             return [
                 "review coverage: `reviewed:agent` is set but its findings "
                 "comment could not be read"
-            ], ""
+            ], "", ""
         comments = (data or {}).get("comments") or []
     counted = list(comments) if isinstance(comments, list) else []
 
@@ -4158,10 +4334,19 @@ def _review_coverage(
                 f"{evidence}; {len(independence.disqualified)} review marker(s) did "
                 "not count"
             )
-        return [], evidence
+        return [], evidence, ""
 
     if independence.unverifiable:
-        return [f"reviewer independence: {independence.unverifiable}"], ""
+        if independence.transient:
+            # Not a reason: the queue could not read the facts, so it concluded
+            # nothing about the review. It says so to the log and skips this PR
+            # for the tick; publishing it would state a gate the branch never
+            # failed (DIG-5573).
+            return [], "", f"reviewer independence: {independence.unverifiable}"
+        # A fact about this PR, not about the API: the commits do not name the
+        # seat that wrote them, so no review can be shown to come from another
+        # seat. The remedy is on the branch, so it is a gate.
+        return [f"reviewer independence: {independence.unverifiable}"], "", ""
     if independence.problems:
         head = str(pr.get("headRefOid") or "")[:12]
         return [
@@ -4169,14 +4354,14 @@ def _review_coverage(
             + "; ".join(independence.problems[:3])
             + " — the queue needs a review from a different seat, on the head "
             f"this PR stands at (`{head}`)"
-        ], ""
+        ], "", ""
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
         "enforces at promotion (completed Bot run, a reviewer bot such as "
         "CodeRabbit or Copilot, an in-session review with its findings comment, "
         "an approval, or reviewed:owner)"
-    ], ""
+    ], "", ""
 
 
 def evaluate(
@@ -4225,7 +4410,7 @@ def evaluate(
     if unreadable:
         reasons.append(unreadable)
     reasons.extend(_gate_review(pr))
-    coverage_reasons, review_evidence = _review_coverage(
+    coverage_reasons, review_evidence, deferred = _review_coverage(
         pr, repo, policy.review_independence, prov
     )
     reasons.extend(coverage_reasons)
@@ -4238,9 +4423,11 @@ def evaluate(
     # reason: the checks passed, just against the base this merge would land on top of.
     # Every other reason — a conflict, a red check, missing review evidence — would
     # still be there after the update, so paying for a full CI run to clear nothing is
-    # how a queue burns its own capacity. Read off the finished `reasons` rather than
-    # re-testing each gate, so a gate added later cannot silently become updatable.
-    stale_base_only = state == "BEHIND" and reasons == [stale_reason]
+    # how a queue burns its own capacity. A deferred fact is in the same class: the
+    # queue could not judge that gate, so it must not spend a run as if the branch
+    # were merely behind. Read off the finished `reasons` rather than re-testing each
+    # gate, so a gate added later cannot silently become updatable.
+    stale_base_only = state == "BEHIND" and reasons == [stale_reason] and not deferred
 
     rollup = _rollup(pr)
     return Verdict(
@@ -4249,13 +4436,16 @@ def evaluate(
         head_ref=str(pr.get("headRefName") or ""),
         created_at=str(pr.get("createdAt") or ""),
         head_sha=str(pr.get("headRefOid") or ""),
-        eligible=not reasons,
+        # An unread gate is not a cleared gate: a PR the queue could not judge is
+        # never eligible, whether or not it also failed a gate it could judge.
+        eligible=not reasons and not deferred,
         reasons=tuple(reasons),
         review_evidence=review_evidence,
         checks=tuple(
             f"{_check_name(e)}={e.get('conclusion') or e.get('state') or '?'}" for e in rollup
         ),
         stale_base_only=stale_base_only,
+        deferred=deferred,
     )
 
 
@@ -4418,7 +4608,10 @@ def comment_audit(repo: str, verdict: Verdict, body: str) -> None:
 
 def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
     eligible = [v for v in verdicts if v.eligible]
-    blocked = [v for v in verdicts if not v.eligible]
+    deferred = [v for v in verdicts if v.deferred]
+    # A row with a reason is published whatever else is wrong with the read: the
+    # reason is a gate the branch failed, and only the read failure is held back.
+    blocked = [v for v in verdicts if not v.eligible and v.reasons]
     if eligible:
         print(f"queued ({len(eligible)}), oldest first:")
         for i, v in enumerate(eligible, start=1):
@@ -4443,6 +4636,19 @@ def print_queue(verdicts: list[Verdict], *, queued_only: bool) -> None:
             print(f"  #{v.number} {v.head_ref} — {v.title}")
             for reason in v.reasons:
                 print(f"       · {reason}")
+    # Deferred, not blocked: the queue could not read a fact it needs, so it
+    # concluded nothing and nobody has to act. Kept out of `reasons` on purpose —
+    # that list is what the handback comment publishes as gates, and a transport
+    # failure is not a statement about the branch (DIG-5573).
+    if deferred and not queued_only:
+        print(
+            f"\ndeferred ({len(deferred)}) — the queue could not read a fact it "
+            "needs, which says nothing about these branches; nothing is published "
+            "for them and the next tick asks again:"
+        )
+        for v in deferred:
+            print(f"  #{v.number} {v.head_ref} — {v.title}")
+            print(f"       · {v.deferred}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -4559,9 +4765,15 @@ def main(argv: list[str] | None = None) -> int:
             remaining = eligible[args.max_merges :]
             if remaining:
                 print(f"  … {len(remaining)} more eligible, not reached under --max-merges")
-            blocked = [v for v in verdicts if not v.eligible]
+            blocked = [v for v in verdicts if not v.eligible and v.reasons]
+            deferred = [v for v in verdicts if v.deferred]
             if blocked:
                 print(f"\nblocked ({len(blocked)}) — see `list` for reasons")
+            if deferred:
+                print(
+                    f"\ndeferred ({len(deferred)}) — a fact the queue could not read; "
+                    "not a gate, nothing published, retried next tick"
+                )
             return EXIT_OK
 
         updated: list[Verdict] = []

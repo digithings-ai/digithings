@@ -65,6 +65,22 @@ export type McpEdgeAuthEnv = {
   DIGIKEY_ISSUER?: string;
   /** Expected `aud`. Defaults to the deployment's digikey audience. */
   DIGIKEY_AUDIENCE?: string;
+  /**
+   * Service binding to this same Worker. The JWKS lives on `key.digithings.ai`,
+   * which is served by this Worker, so a plain `fetch` re-enters its own public
+   * route and fails — the verification then fails closed and every MCP call
+   * 401s. Through the binding the subrequest never leaves the Worker.
+   */
+  DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /**
+   * Read-through cache for the public JWKS. Keys survive a cold digikey, whose
+   * first response took 43 s against a 5 s fetch cap — long enough that the
+   * verifier gave up before the container answered.
+   */
+  TENANT_CONFIG?: {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  };
 };
 
 export type McpEdgeAuthResult =
@@ -180,25 +196,81 @@ async function importJwk(raw: unknown): Promise<[string, CryptoKey] | null> {
 /** Cap on one JWKS fetch, ms. A hung digikey must not hang the MCP request. */
 export const MCP_EDGE_JWKS_TIMEOUT_MS = 5_000;
 
-async function fetchJwks(url: string): Promise<JwksState | null> {
+/**
+ * KV key holding the last good JWKS. Public keys only — no secret is cached
+ * here. Written on every successful fetch and read before any network call, so
+ * a cold digikey cannot take MCP down.
+ *
+ * Rotation: digikey publishes a new key under a new `kid`; the unknown-`kid`
+ * path forces one refetch, which overwrites this key. If digikey is
+ * unreachable at that moment the call fails closed, and the next successful
+ * fetch repairs the cache. There is deliberately no TTL: expiring the key on a
+ * timer would re-break every MCP call while digikey sleeps.
+ */
+export const MCP_EDGE_JWKS_KV_KEY = "digikey-jwks";
+
+type JwksBody = { keys?: unknown };
+
+/** Read the cached JWKS body, or null when absent/unusable. */
+async function readCachedJwks(env: McpEdgeAuthEnv): Promise<JwksBody | null> {
+  const kv = env.TENANT_CONFIG;
+  if (!kv) return null;
   try {
-    const res = await fetch(url, {
+    const raw = await kv.get(MCP_EDGE_JWKS_KV_KEY);
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    const parsed = JSON.parse(raw) as JwksBody | null;
+    return parsed && Array.isArray(parsed.keys) && parsed.keys.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort cache write. A failure here must not fail verification. */
+async function writeCachedJwks(env: McpEdgeAuthEnv, body: JwksBody): Promise<void> {
+  const kv = env.TENANT_CONFIG;
+  if (!kv) return;
+  try {
+    await kv.put(MCP_EDGE_JWKS_KV_KEY, JSON.stringify(body));
+  } catch {
+    // the caller already has usable keys; caching is an optimisation
+  }
+}
+
+async function fetchJwks(url: string, env: McpEdgeAuthEnv): Promise<JwksState | null> {
+  const cached = await readCachedJwks(env);
+  const body = cached ?? (await fetchJwksBody(url, env));
+  if (!body) return null;
+  if (!cached) await writeCachedJwks(env, body);
+  const list = body.keys;
+  if (!Array.isArray(list)) return null;
+  const keys = new Map<string, CryptoKey>();
+  for (const entry of list) {
+    const imported = await importJwk(entry);
+    if (imported) keys.set(imported[0], imported[1]);
+  }
+  // An empty key set is not a usable JWKS: refuse rather than cache nothing
+  // and retry on every request.
+  if (!keys.size) return null;
+  return { keys, fetchedAtMs: Date.now() };
+}
+
+/**
+ * One network read of the JWKS. Goes through the service binding when bound:
+ * `key.digithings.ai` is this Worker's own route, and fetching it from inside
+ * the Worker does not complete.
+ */
+async function fetchJwksBody(url: string, env: McpEdgeAuthEnv): Promise<JwksBody | null> {
+  try {
+    const init: RequestInit = {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(MCP_EDGE_JWKS_TIMEOUT_MS),
-    });
+    };
+    const res = env.DIGIKEY_SELF ? await env.DIGIKEY_SELF.fetch(url, init) : await fetch(url, init);
     if (!res.ok) return null;
-    const body: unknown = await res.json();
-    const list = (body as { keys?: unknown } | null)?.keys;
-    if (!Array.isArray(list)) return null;
-    const keys = new Map<string, CryptoKey>();
-    for (const entry of list) {
-      const imported = await importJwk(entry);
-      if (imported) keys.set(imported[0], imported[1]);
-    }
-    // An empty key set is not a usable JWKS: refuse rather than cache nothing
-    // and retry on every request.
-    if (!keys.size) return null;
-    return { keys, fetchedAtMs: Date.now() };
+    const body = (await res.json()) as JwksBody | null;
+    const list = body?.keys;
+    if (!Array.isArray(list) || !list.length) return null;
+    return body;
   } catch {
     // Network error, timeout, non-JSON body. Caller treats null as "no keys".
     return null;
@@ -213,12 +285,12 @@ async function fetchJwks(url: string): Promise<JwksState | null> {
  * Concurrent callers join one in-flight fetch: a burst of requests after a cold
  * start must not produce a burst of JWKS calls.
  */
-function getJwks(url: string, force: boolean): Promise<JwksState | null> {
+function getJwks(url: string, force: boolean, env: McpEdgeAuthEnv): Promise<JwksState | null> {
   if (!force && jwksCache && Date.now() - jwksCache.fetchedAtMs < MCP_EDGE_JWKS_TTL_MS) {
     return Promise.resolve(jwksCache);
   }
   if (jwksInflight) return jwksInflight;
-  const fetchPromise = fetchJwks(url)
+  const fetchPromise = fetchJwks(url, env)
     .then((state) => {
       if (state) jwksCache = state;
       jwksInflight = null;
@@ -323,7 +395,7 @@ export async function verifyDigikeyJwt(
     return { ok: false, reason: "jwks_not_configured" };
   }
 
-  let state = await getJwks(jwksUrl, false);
+  let state = await getJwks(jwksUrl, false, env);
   if (!state) return { ok: false, reason: "jwks_unavailable" };
 
   let key = state.keys.get(header.kid);
@@ -331,7 +403,7 @@ export async function verifyDigikeyJwt(
     // Unknown kid: the one refetch that makes rotation work without waiting
     // out the TTL. If the refetch cannot run, the key stays unknown and the
     // request is refused — never allowed on the strength of a failed fetch.
-    const refreshed = await getJwks(jwksUrl, true);
+    const refreshed = await getJwks(jwksUrl, true, env);
     if (!refreshed) return { ok: false, reason: "jwks_unavailable" };
     state = refreshed;
     key = state.keys.get(header.kid);
