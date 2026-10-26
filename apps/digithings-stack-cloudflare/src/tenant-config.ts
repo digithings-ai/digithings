@@ -44,8 +44,9 @@
  * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant, today just `occ`), and
  * {@link composeCorpusMap} joins them into the one string the container reads.
  * The house entry keeps the unsuffixed name because digigraph reads that name
- * directly; splitting is a binding-size workaround, not a shape change, so the
- * composed value is byte-identical to the map that used to sit in one var.
+ * directly; splitting is a binding-size workaround, not a shape change. The
+ * composed value is the old map plus the house-slug alias (`digithings-ai`,
+ * DIG-5638); every other byte is unchanged.
  *
  * FAIL CLOSED, EVERYWHERE
  * An unbound namespace, a KV read that throws, malformed JSON, a non-object
@@ -72,17 +73,68 @@ export interface TenantCorpusEntry {
 export type TenantCorpusMap = Record<string, TenantCorpusEntry>;
 
 /**
+ * The house (first-party) tenant slug and the live embed slug.
+ *
+ * `digithings` is the key the corpus map has always used and old callers still
+ * read. The live digichat deployment resolves its house tenant as
+ * `digithings-ai` (GET https://digithings.ai/api/embed/tenant-config returns
+ * `"slug":"digithings-ai"`), and both digigraph's corpus routing and digivault's
+ * `tenant_scope` look a slug up verbatim. A map carrying only one of the two
+ * leaves the live chat on an unknown tenant: digivault answers 403. So every
+ * arm of the map carries BOTH keys with the SAME entry (DIG-5638).
+ */
+export const HOUSE_TENANT_SLUG = "digithings";
+export const LIVE_HOUSE_TENANT_SLUG = "digithings-ai";
+
+/** The first-party corpus routing, shared by both house slug keys. */
+const DIGITHINGS_CORPUS_ENTRY: TenantCorpusEntry = {
+  digisearchIndex: "digithings_docs",
+  vaultPathPrefix: "clients/digithings",
+};
+
+/**
+ * Give both house slugs the same corpus entry; leave every other key alone.
+ *
+ * The canonical {@link HOUSE_TENANT_SLUG} entry wins when a map carries both
+ * keys, so a stale alias can never widen or narrow the house corpus. When a map
+ * carries only the live {@link LIVE_HOUSE_TENANT_SLUG} slug -- the shape the
+ * live KV document uses today -- the canonical key is added for old callers.
+ * The two keys are emitted together, canonical first, so the serialised map is
+ * deterministic whichever slug the source happened to carry.
+ *
+ * A map with neither house slug is returned unchanged: this adds an alias, it
+ * never invents a tenant.
+ */
+export function withHouseSlugAlias(map: TenantCorpusMap): TenantCorpusMap {
+  const house = map[HOUSE_TENANT_SLUG] ?? map[LIVE_HOUSE_TENANT_SLUG];
+  if (house === undefined) return map;
+
+  const aliased: TenantCorpusMap = {};
+  for (const [slug, entry] of Object.entries(map)) {
+    if (slug === HOUSE_TENANT_SLUG || slug === LIVE_HOUSE_TENANT_SLUG) {
+      if (!(HOUSE_TENANT_SLUG in aliased)) {
+        aliased[HOUSE_TENANT_SLUG] = house;
+        aliased[LIVE_HOUSE_TENANT_SLUG] = house;
+      }
+      continue;
+    }
+    aliased[slug] = entry;
+  }
+  return aliased;
+}
+
+/**
  * The first-party tenant only, used when neither KV nor `[vars]` yields
  * anything. Digithings must keep a corpus whether or not a client tenant is
  * configured, so this is the floor rather than an empty map: an empty map makes
  * every tenant unknown, which the container reads as a refusal.
+ *
+ * It carries both house slugs, because a fallback that answered only
+ * `digithings` would still refuse the live `digithings-ai` chat.
  */
-export const DIGITHINGS_ONLY_CORPUS_MAP: TenantCorpusMap = {
-  digithings: {
-    digisearchIndex: "digithings_docs",
-    vaultPathPrefix: "clients/digithings",
-  },
-};
+export const DIGITHINGS_ONLY_CORPUS_MAP: TenantCorpusMap = withHouseSlugAlias({
+  [HOUSE_TENANT_SLUG]: DIGITHINGS_CORPUS_ENTRY,
+});
 
 /** `DIGITHINGS_ONLY_CORPUS_MAP` pre-serialised for the container env var. */
 export const DIGITHINGS_ONLY_CORPUS_JSON = JSON.stringify(DIGITHINGS_ONLY_CORPUS_MAP);
@@ -136,6 +188,10 @@ function parseJson(raw: string | null | undefined): unknown {
  * `vaultPathPrefix` becomes `""` here, where `str(value)` would yield e.g.
  * `"None"` or `"123"`. A stringified sentinel can be mistaken downstream for a
  * configured prefix; an empty string cannot.
+ *
+ * The projected map carries both house slugs (see {@link withHouseSlugAlias}):
+ * the live KV document names the house tenant `digithings-ai`, while the map has
+ * historically been read as `digithings`. Unknown tenants are never added.
  */
 export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusMap {
   if (!isPlainObject(document)) return {};
@@ -166,7 +222,7 @@ export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusM
     }
     projected[slug.trim()] = corpus;
   }
-  return projected;
+  return withHouseSlugAlias(projected);
 }
 
 /** Wrangler `[vars]` name for the second half of the split corpus map. */
@@ -216,8 +272,10 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
  * first-party corpus must survive a missing `[vars]` and an empty map would make
  * every tenant unknown, which the container reads as a refusal.
  *
- * Byte-for-byte the pre-split value for the current pair: primary keys keep
- * their order, then the non-colliding extra keys, serialised compact.
+ * Byte-for-byte the pre-split value for the current pair, plus the house alias:
+ * primary keys keep their order (with `digithings-ai` emitted next to the
+ * canonical `digithings` entry), then the non-colliding extra keys, serialised
+ * compact. See {@link withHouseSlugAlias}.
  */
 export function composeCorpusMap(primary?: string, extra?: string): string {
   const house = parseCorpusMapArm(primary, "DIGI_TENANT_CORPUS_MAP");
@@ -229,7 +287,7 @@ export function composeCorpusMap(primary?: string, extra?: string): string {
     if (slug in merged) continue;
     merged[slug] = entry;
   }
-  return JSON.stringify(merged);
+  return JSON.stringify(withHouseSlugAlias(merged));
 }
 
 function nonEmpty(map: TenantCorpusMap | undefined): map is TenantCorpusMap {
@@ -244,7 +302,8 @@ export async function readTenantConfig(env: {
   store?: TenantConfigStore;
   legacyJson?: string;
 }): Promise<ResolvedTenantConfig> {
-  const legacy = parseCorpusMapJson(env.legacyJson);
+  const legacyRaw = parseCorpusMapJson(env.legacyJson);
+  const legacy = legacyRaw === undefined ? undefined : withHouseSlugAlias(legacyRaw);
 
   if (env.store) {
     try {
