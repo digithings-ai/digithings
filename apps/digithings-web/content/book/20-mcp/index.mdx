@@ -9,14 +9,13 @@ An AI model on its own can only write text. To do anything else, search an
 index, run a backtest, open a ticket, it needs tools: named functions with
 described inputs that it may ask to call. The Model Context Protocol (MCP),
 published by Anthropic in 2024 and since adopted by many AI clients, is the
-open standard for offering those tools: each one has a name, a schema for its
+open standard for offering those tools. Each one has a name, a schema for its
 inputs and a description a model can read.
 
 MCP is not a module, and you do not run it. It is a layer on the edge of each
 module that has something to offer. digigraph, digisearch, digiquant and
 digivault each run an MCP server beside their HTTP API, and the digillm library
-ships an optional one. digikey, digitrace and digibase have no tools to give,
-so they have no MCP server.
+ships an optional one.
 
 ## Two directions
 
@@ -29,14 +28,19 @@ can search your index the day it ships.
 team's tracker or someone else's product, and the hub offers their tools to the
 model on the next request, with no change to the hub.
 
+The hub reaches its own verticals over a plainer HTTP manifest, because it
+treats their results specially: citations, vault notes, backtest results. The
+trade is that a new first-party tool needs a change in the hub, while a tool on
+an MCP server needs none.
+
 ## The gate
 
 Each server the operator adds says which of its tools are allowed and which of
 them change something. Allowed read-only tools run unattended. A tool that
-changes something stops the turn and shows the exact call in the chat until a
-person approves or declines it.
+changes something stops the turn and shows the exact call in the chat until
+whoever is at the keyboard approves or declines it.
 
-```mermaid offered and executed are checked separately: a model only sees tools it may call
+```mermaid offered and executed are checked separately, so a model only sees tools it may call
 flowchart LR
   SRV[tool server] --> LIST[allow-list]
   LIST --> GATE{may it run?}
@@ -47,11 +51,6 @@ flowchart LR
 
 The gate is checked where the tool executes, not only where it is offered, so
 a prompt that talks a model into a forbidden tool still fails at the gate.
-
-The hub's own verticals reach it over a plainer HTTP manifest instead, because
-the hub treats their results specially: citations, vault notes, backtest
-results. The trade is that a new first-party tool needs a change in the hub,
-while a tool on an MCP server needs none.
 
 <Reference kind="architecture" href="repo:digigraph/ARCHITECTURE.md" title="digigraph architecture">
   The hub side: the MCP client, the per-server gate and the execution check.

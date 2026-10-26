@@ -1,5 +1,5 @@
 ---
-title: One environment for an AI application
+title: The scaffolding, built once
 order: 6
 summary: >-
   Model access, orchestration, retrieval, identity, chat, data and tracing in one open stack. Start with one module and add the rest as the work grows.
@@ -8,7 +8,8 @@ summary: >-
 An AI application is more than a model call. It needs a way to reach models,
 route work between them, find the right context, call tools, identify who is
 asking, show an interface and record afterwards what happened. Most projects
-build that scaffolding themselves before they reach the part that is theirs.
+build that scaffolding themselves before they reach the part that is theirs. A
+two-person team can spend its first month on it.
 
 digithings is that scaffolding, built once. Each module has one job and a
 published contract, so you can run one of them, a few, or all of them.
@@ -24,21 +25,30 @@ published contract, so you can run one of them, a few, or all of them.
 | digichat | The interface. Where people ask, read answers and see artifacts. |
 | digikey | Identity. Short-lived credentials every service checks itself. |
 | digitrace | Tracing. A record of what every request did. |
-| digibase | The shared base. Error shapes, request ids, audit redaction. |
+| digibase | The shared base. Shared plumbing every service uses. |
+
+digivault, digivoice and digibase have no chapter here; the reference docs
+cover them.
+
+A vertical, in these chapters, is a capability service: search, research, voice.
+The word says what the service does, not which industry it serves.
 
 The Model Context Protocol is the layer underneath, not a module: it is the
 open standard for telling an AI model which tools it may call. digigraph,
 digisearch, digiquant, digivault and digillm each publish their tools over it,
 so Claude Desktop, a code editor or an agent you wrote can use them directly.
-In the other direction, digigraph can call any MCP server you add. That is why
-the table is not a closed list.
+In the other direction, digigraph can call any MCP server you add. That's why
+the table isn't a closed list.
 
 ## How the parts fit
 
-Requests come in through the chat or an outside caller and go to the hub. The
-hub asks the verticals which tools they offer, runs the ones the request needs
-and reaches models through the model layer. digikey signs the credentials and
-each service checks them itself; with tracing on, every step is recorded. Each
-seam is a standard: the OpenAI chat format into the hub, MCP for tools, signed
-tokens for identity. Replace a part with your own that keeps its seam and the
-rest carry on. After the use cases, the chapters take the main parts one at a time.
+A request arrives in digichat, or from an outside caller speaking the same
+interface, and goes to the hub, digigraph. The hub asks each vertical which
+tools it offers and runs the ones this request needs. Model calls go through
+digillm. digikey sits beside the flow rather than in it. It issues a
+short-lived credential, and each service verifies that credential itself.
+digitrace runs underneath, recording every step when tracing is on. Every seam
+is one of the standards named earlier in the book. Replace a part with your own
+that keeps its seam, and the rest carry on.
+
+After the use cases, the chapters take the main parts one at a time.

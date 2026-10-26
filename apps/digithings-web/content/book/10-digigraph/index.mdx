@@ -13,20 +13,19 @@ drift apart. digigraph owns it once, so every interface shares one routing
 behaviour, one tool contract and one streaming format.
 
 The hub is kept deliberately small. It routes, dispatches and streams, and
-leaves the real work to the verticals that own it. The price of a hub is one
-more hop on every request and one place where a routing mistake affects
-every caller.
+leaves the real work to the verticals that own it. A hub adds one more hop on
+every request, and one place where a routing mistake affects every caller.
 
 ## How it works
 
-digigraph runs each request through a state machine built on LangGraph, with
-stages for research, validation, backtesting and optional optimisation.
-Conditional edges decide which stages a request needs: a question about
-documents ends after the first stage, where the tools run, and only a trading
-strategy goes on to the rest. Around the
-machine sits a registry of tools. A few live inside the hub. The verticals
-own the rest and publish their descriptions, the name, the inputs and what
-the tool does, which the hub fetches when it first needs them.
+digigraph runs each request through a state machine built on LangGraph. The
+first stage runs the tools the request needs. Later stages are optional and
+vary by use case. A question about documents ends after the first, while a
+trading strategy goes on through validation, backtesting and optional
+optimisation. Around the machine sits a registry of tools. A few live inside
+the hub. The verticals own the rest and publish their descriptions, the name,
+the inputs and what the tool does, which the hub fetches when it first needs
+them.
 
 ```mermaid the hub asks each vertical what it offers instead of assuming it
 flowchart LR
@@ -36,13 +35,10 @@ flowchart LR
   RUN --> OUT[streamed answer]
 ```
 
-So the description a model reads is the one the vertical ships, and a
-vertical can change it without a hub release. Adding a new first-party tool
-still means adding its handler to the hub; a tool server the operator adds
-over MCP needs nothing, because its tools are listed when it connects. A
-question about a company's filings reaches retrieval because retrieval
-described a document search, not because the hub was told where documents
-live.
+Each service writes its own tool descriptions, so it can improve them without
+a hub release. A question about a company's filings reaches retrieval because
+retrieval described a document search, not because the hub was told where
+documents live.
 
 ## Where it fits
 
@@ -53,8 +49,8 @@ model layer. Identity arrives as a short-lived signed credential that the hub
 verifies itself rather than trusting the caller. With tracing on, every step is recorded, so a routing
 choice can be questioned after the fact.
 
-The hub holds no list of where its neighbours live, so moving a vertical to
-another machine changes the hub's configuration and nothing else.
+No address is written into the hub's code, so moving a vertical to another
+machine changes one line of its configuration.
 
 <Reference kind="architecture" href="repo:digigraph/ARCHITECTURE.md" title="digigraph architecture">
   The hub internals: the state machine, the registry and the discovery protocol.
