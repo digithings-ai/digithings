@@ -208,10 +208,10 @@ PROVENANCE_RETRY_BACKOFF = 0.5
 #: The whole cost of one URL, attempts and pauses together. The pause before
 #: an attempt and the attempt itself both happen inside it, so one path costs
 #: the budget once and not once per attempt. It is a deadline and not only a
-#: sum of timeouts: the body is read in chunks and the read gives up when the
-#: deadline has passed, so a server that answers the headers and then trickles
-#: the body cannot hold the read open past the budget. It is the budget of ONE
-#: URL read, not of the tick.
+#: sum of timeouts: the body is read one socket read at a time and the read
+#: gives up when the deadline has passed, so a server that answers the headers
+#: and then trickles the body cannot hold the read open past the budget. It is
+#: the budget of ONE URL read, not of the tick.
 PROVENANCE_READ_BUDGET = 20.0
 
 #: How long a host that could not be read is remembered, in seconds. The queue
@@ -1308,6 +1308,35 @@ def _woodpecker_read_attempts(
     return (0, reason, True) if attempts else (0, "the read was not attempted", True)
 
 
+def _read_response_body(response: Any, deadline: float | None) -> bytes:
+    """The whole body, given up on when the deadline has passed.
+
+    The pieces have to be the size of one socket read, or the deadline between
+    them is never reached. `read(n)` on an `http.client.HTTPResponse` returns
+    only when it has `n` bytes or the body has ended, so a server that answers
+    the headers at once and then trickles the body holds one `read(65536)` open
+    for as long as it likes — the socket timeout bounds one operation on the
+    socket, not the body (measured by the Code Reviewer on DIG-5573: a
+    2 001-byte body in twenty pieces was read in a single call). `read1(n)`
+    returns as soon as one underlying read has something to give, so the loop
+    below is a loop the deadline can interrupt.
+
+    `read1` is what `urlopen` and the Woodpecker opener return in production.
+    The `read` fallback is for a response-shaped object that does not have it
+    (a test double, or a file wrapper): those keep the loop but not the
+    per-chunk guarantee.
+    """
+    read = getattr(response, "read1", None) or response.read
+    chunks: list[bytes] = []
+    while True:
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("the read exceeded its budget")
+        chunk = read(65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
 def _woodpecker_read_once(
     url: str, token: str, timeout: float, deadline: float | None = None
 ) -> tuple[int, Any, bool]:
@@ -1316,25 +1345,18 @@ def _woodpecker_read_once(
     The third value says whether the API could not be reached, so that the
     caller can tell a dropped connection from an answer the API gave.
 
-    The body is read in chunks and the deadline is checked between them. The
-    timeout of a socket is the timeout of one operation on it, so a server
-    that answers the headers and then trickles the body would hold the read
-    open for as long as it liked.
+    The body is read one socket read at a time and the deadline is checked
+    between them. The timeout of a socket is the timeout of one operation on
+    it, so a server that answers the headers and then trickles the body would
+    hold the read open for as long as it liked unless the read gives up at the
+    deadline.
     """
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
     try:
         with _WOODPECKER_OPENER.open(request, timeout=timeout) as response:
-            chunks: list[bytes] = []
-            while True:
-                if deadline is not None and time.monotonic() > deadline:
-                    raise TimeoutError("the read exceeded its budget")
-                chunk = response.read(65536)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            body = b"".join(chunks).decode("utf-8", "replace")
+            body = _read_response_body(response, deadline).decode("utf-8", "replace")
             status = int(response.status)
             final_url = response.geturl()
     except urllib.error.HTTPError as exc:
@@ -3183,7 +3205,8 @@ class Independence:
 #: case that was measured: a control plane that thinks for minutes before it
 #: answers. A server that answers slowly instead of late is a different shape,
 #: and a socket timeout does not bound it — the budget does, because the body
-#: is read in chunks and the deadline is checked between them.
+#: is read one socket read at a time (`read1`) and the deadline is checked
+#: between the pieces.
 #:
 #: The budget was raised on 2026-10-26 (DIG-5573). The slowest answer measured
 #: that day was `GET /api/issues/{id}/runs` at **119.9 s** — 41 296 bytes,
@@ -3310,17 +3333,12 @@ class ReviewerProvenance:
                     # The socket timeout is the timeout of one operation on the
                     # socket, so a server that answers the headers and then
                     # trickles the body would hold the read open past the
-                    # budget. The deadline is checked between chunks, so the
-                    # budget is the promise it says it is.
-                    chunks: list[bytes] = []
-                    while True:
-                        if time.monotonic() > deadline:
-                            raise TimeoutError("the read exceeded its budget")
-                        chunk = response.read(65536)
-                        if not chunk:
-                            break
-                        chunks.append(chunk)
-                    payload = json.loads(b"".join(chunks).decode("utf-8"))
+                    # budget. `_read_response_body` reads one socket read at a
+                    # time and checks the deadline between them, so the budget
+                    # is the promise it says it is.
+                    payload = json.loads(
+                        _read_response_body(response, deadline).decode("utf-8")
+                    )
             except urllib.error.HTTPError as exc:
                 if exc.code in (400, 404):
                     # A fact, not a failure: the API answered, and the answer is
@@ -4235,9 +4253,11 @@ def evaluate(
     # reason: the checks passed, just against the base this merge would land on top of.
     # Every other reason — a conflict, a red check, missing review evidence — would
     # still be there after the update, so paying for a full CI run to clear nothing is
-    # how a queue burns its own capacity. Read off the finished `reasons` rather than
-    # re-testing each gate, so a gate added later cannot silently become updatable.
-    stale_base_only = state == "BEHIND" and reasons == [stale_reason]
+    # how a queue burns its own capacity. A deferred fact is in the same class: the
+    # queue could not judge that gate, so it must not spend a run as if the branch
+    # were merely behind. Read off the finished `reasons` rather than re-testing each
+    # gate, so a gate added later cannot silently become updatable.
+    stale_base_only = state == "BEHIND" and reasons == [stale_reason] and not deferred
 
     rollup = _rollup(pr)
     return Verdict(

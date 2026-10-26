@@ -311,9 +311,10 @@ short timeouts.
 **A dropped connection is not an answer about the build.** A read that never reached the
 API is tried again before it is believed — three attempts, a short pause between them,
 inside one budget, so a single path cannot cost the budget once per attempt. The budget is
-a deadline and not a sum of timeouts: the body is read in chunks and the read gives up
-when the deadline has passed, so a server that answers the headers and then trickles the
-body cannot hold the read open past it. A read the API *answered* — any status code, and a
+a deadline and not a sum of timeouts: the body is read one socket read at a time
+(`read1`, so one trickled byte gives the loop control back) and the read gives up when the
+deadline has passed, so a server that answers the headers and then trickles the body
+cannot hold the read open past it. A read the API *answered* — any status code, and a
 refused redirect — is an answer, and it is cached for the life of the process like every
 other answer: the API answered, and its answer is the same until the next tick. And a host
 that could not be read is asked once more, briefly, before the tick falls back on the
@@ -666,10 +667,11 @@ leaves room for the second. A bounded window is not available: the server
 ignores `?limit=` on that endpoint and returns the identical payload (measured
 at `?limit=5` twice), so there is no cheaper form of the same read to switch to
 — and the URL, the facts and the judgement are unchanged. The budget is a
-deadline, not a sum of timeouts: the body is read in chunks and the deadline is
-checked between them, so a server that answers the headers and then trickles the
-body cannot hold the tick open. A slow tick is the accepted price; a false
-handback re-posts itself every other tick, which is not.
+deadline, not a sum of timeouts: the body is read one socket read at a time
+(`read1`, so a body sent one byte at a time still returns to the loop between
+bytes) and the deadline is checked between them, so a server that answers the
+headers and then trickles the body cannot hold the tick open. A slow tick is the
+accepted price; a false handback re-posts itself every other tick, which is not.
 
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*

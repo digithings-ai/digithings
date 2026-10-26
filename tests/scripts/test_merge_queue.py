@@ -4275,6 +4275,10 @@ class _FakeWoodpeckerResponse:
         chunk, self._body = self._body[:size], self._body[size:]
         return chunk
 
+    def read1(self, size: int | None = None) -> bytes:
+        """One socket read: the production loop reads through `read1`."""
+        return self.read(size)
+
     def geturl(self) -> str:
         return self._url
 
@@ -4358,6 +4362,15 @@ class _TriclingResponse:
         self._sent = 0
 
     def read(self, size: int | None = None) -> bytes:
+        """Not called: `read(n)` blocks until `n` bytes or EOF, which is the bug.
+
+        A body that trickles can only be given up on if the loop reads one
+        socket read at a time, and `read1` is the method that does that. This
+        raises so the test fails if the production read goes back to `read`.
+        """
+        raise AssertionError("the read must use read1, not read(n)")
+
+    def read1(self, size: int | None = None) -> bytes:
         self._clock.now += 0.02
         self._sent += 1
         if self._sent > 50:
@@ -6633,6 +6646,37 @@ def test_a_deferred_row_is_listed_apart_from_the_blocked_gates(
     assert "queued: none" in out
 
 
+def test_a_deferred_read_does_not_make_a_behind_branch_updatable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A branch update spends a CI run, so it needs every gate to be read.
+
+    `BEHIND` alone is the one stale state an update can clear. A gate the queue
+    could not read is not "every other gate passed": an update would spend a
+    full CI run while leaving the PR unjudged, and it would do it again next
+    tick. So the deferred fact keeps the row out of the update path.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    pr["mergeStateStatus"] = "BEHIND"
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert verdict.reasons == (
+        "mergeStateStatus=BEHIND (base moved since the checks ran)",
+    )
+    assert verdict.deferred
+    assert not verdict.stale_base_only
+
+
 def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -6805,6 +6849,10 @@ class _FakeResponse:
             return self._payload
         chunk, self._payload = self._payload[:size], self._payload[size:]
         return chunk
+
+    def read1(self, size: int | None = None) -> bytes:
+        """One socket read: the production loop reads through `read1`."""
+        return self.read(size)
 
 
 def test_a_slow_read_that_times_out_once_is_asked_again(
@@ -6986,8 +7034,10 @@ def test_a_paperclip_body_that_trickles_cannot_outlast_the_budget(
 
     A server can answer the headers immediately and then send the body a byte
     at a time: every single read is inside the socket timeout, and the read
-    still never ends. The budget is checked between chunks, so the read gives
-    up at the deadline instead of holding the tick open.
+    still never ends. That is why the loop reads through `read1` — `read(n)`
+    waits for `n` bytes or the end of the body — and checks the budget between
+    the pieces, so the read gives up at the deadline instead of holding the
+    tick open.
     """
     monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
     clock = {"now": 1_000.0}
@@ -7001,6 +7051,14 @@ def test_a_paperclip_body_that_trickles_cannot_outlast_the_budget(
             return False
 
         def read(self, size: int | None = None) -> bytes:
+            """Not called: `read(n)` blocks until `n` bytes or EOF.
+
+            A fake whose `read` returned one chunk per call hid that, so this
+            one refuses and the test fails if the read goes back to `read`.
+            """
+            raise AssertionError("the read must use read1, not read(n)")
+
+        def read1(self, size: int | None = None) -> bytes:
             clock["now"] += trickle
             return b" " * 8
 
