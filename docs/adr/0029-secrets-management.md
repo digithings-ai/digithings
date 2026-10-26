@@ -52,7 +52,7 @@ digichat autostarts via `container.fetch(request)`
 (`apps/digichat-cloudflare/src/index.ts:126`, the Container's own fetch; the `container.fetch` call is at
 `:340`) and the stack's
 `startAndWaitForPorts` calls pass no `startOptions.envVars`
-(`apps/digithings-stack-cloudflare/src/index.ts:158`), so both rely on the
+(`apps/digithings-stack-cloudflare/src/index.ts:223`, `:378`), so both rely on the
 static field. Secrets Store *can* reach a container only through the async
 per-instance path; adopting it means changing the start call, not just the
 wrangler config.
