@@ -1,5 +1,7 @@
 # Phase 6: Security & Access — Forgejo Implementation Plan
 
+> **Superseded 2026-10-26:** the `.githooks` design, the 5x2 protection claim and the hardcoded paths in this historical plan were corrected in the phase-6 docs and scripts. See `docs/ops/forgejo-branch-protection.md`, `docs/ops/forgejo-token-rotation.md` and `scripts/hooks/pre-push.sh`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Harden the local Forgejo instance (localhost:3000) so that human accounts are protected by 2FA, credentials rotate on a 90-day cadence, every admin/repo action is auditable, branch protection is verified and consistent across all five repos, gitleaks scans every push and PR, and access is reviewed on a documented cadence.

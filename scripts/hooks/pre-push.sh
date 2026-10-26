@@ -175,7 +175,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # Determine the diff range: against the remote sha if present, else against origin/develop.
   if is_zero_sha "$remote_sha" || [ -z "$remote_sha" ]; then
-    base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    if [ "$is_local_forge" -eq 1 ]; then
+      base="$(git merge-base "$local_sha" local/develop 2>/dev/null \
+        || git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    else
+      base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    fi
   else
     base="$remote_sha"
   fi
@@ -185,7 +190,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # the one guard standing between a live-trading edit and origin.
   if [ -z "$base" ]; then
     echo "pre-push: cannot determine a diff base for '$local_ref' — refusing to push unscanned." >&2
-    echo "         Usually origin/develop is just missing locally: run 'git fetch origin' and retry." >&2
+    echo "         Usually origin/develop (or local/develop for the local forge) is missing locally:" >&2
+    echo "         run 'git fetch origin' or 'git fetch local' and retry." >&2
     echo "         A ref whose history is unrelated to develop — an imported tag, a grafted" >&2
     echo "         branch — has no base by nature and cannot be scanned at all; that is the" >&2
     echo "         emergency the --no-verify escape at the top of this file exists for." >&2
