@@ -164,3 +164,40 @@ non-interactive), so **option A is assumed** and the board reflects it:
 
 If the owner prefers B or C, say so on DIG-2914: B adds digigraph scope with a
 feature-cut sign-off, C cancels the two children before code starts.
+
+## 9. Children delivered, and what the gate answered (2026-10-26)
+
+Both children finished, so §8's "held until the gate answers" is now resolved.
+
+**DIG-5548 — digikey on a Worker: delivered, not deployed.** Commit
+`6357088d06` on `DIG-5548-digikey-move-the-9-route-jwt-service-from-fastapi-to-a-worker-on-d1-kv`
+adds `apps/digikey-worker`: the nine routes, D1 DDL for the four tables plus
+blocklist and rate-limit rows, RS256 and JWKS through WebCrypto from the same
+PKCS#8 PEM and `kid`, PBKDF2 for new admin keys, and golden-token fixtures the
+Python service itself produced. The route-parity script now compares Python
+source to the Worker's `routes.json`. Nothing is deployed: no `[[routes]]`,
+`workers_dev = false`, no deploy job. `key.digithings.ai` is unchanged. The
+Chris-only cut (dual-run hostname, D1 database, `wrangler secret put`, delete
+`[program:digikey]`) is still open work.
+
+**DIG-5549 — gate spike: answered "no".** The decision record is
+`docs/plans/2026-10-26-dig5549-can-digistackcontainer-be-emptied.md` (PR #6462).
+The gate record counts 11 supervisord programs in the current tree, not 12:
+`zammad-mcp` moved to the digichat image in #5926. (This branch's base predates
+that commit, so its `supervisord.conf` still shows 12 blocks.) Seven of the 11
+can leave cheaply (redis, searxng,
+digikey, seed_chroma, digivault, litellm, zammad-mcp), but `digigraph`,
+`digigraph-mcp`, `digisearch` and `digisearch-mcp` (52.8k LOC) still need the
+container. Emptying the box costs about 61k LOC — the 56k of DIG-2914 plus
+digivault's 4.9k — for about $15–27/month, and the last two steps are a rewrite
+of the chat and search product, not a port.
+
+**Consequence for this document.** Steps 3–4 of §5 are not funded by DIG-2914.
+Removing digikey, digigraph and digisearch alone does not empty the box, so the
+stated outcome stays unreachable. The gate's recommendation is **Re-scope**: keep
+the independently valuable Stage 0 work (digikey cut, digivault on D1, searxng
+replaced by a paid API, litellm removed, redis and seed_chroma deleted) and put
+the digigraph/digisearch port behind a product decision.
+
+The scope choice is Chris's ([scope]); it is raised as one question card on
+DIG-2914. Until it is answered, no further port work starts.
