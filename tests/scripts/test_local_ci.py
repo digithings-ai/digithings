@@ -2736,6 +2736,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         os.makedirs(_mod.LOGD, exist_ok=True)
         self.rows = {}      # sha -> list of status rows
         self.posts = []     # (sha, state, description)
+        self.body = "Fixes DIG-5695\n<!-- test body -->\n"
+        self.bodies = {}    # pr number -> body, when a test needs its own
         _mod.gh = self._fake_gh
 
     def tearDown(self):
@@ -2756,6 +2758,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         if url:
             sha = url[0].split("/commits/")[1].split("/statuses")[0]
             return json.dumps(self.rows.get(sha, []))
+        if argv[:2] == ["pr", "view"]:
+            return self.bodies.get(argv[2], self.body)
         return "[]"
 
     def _row(self, state, desc, age_secs=0):
@@ -2769,6 +2773,11 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 "baseRefName": "develop", "title": "fix(x): something",
                 "isCrossRepository": False, "updatedAt": updated,
                 "createdAt": created or updated}
+
+    def _stamp(self, offset_secs=0):
+        """An ISO timestamp `offset_secs` from now, the shape GitHub returns."""
+        ts = datetime.now(timezone.utc) + timedelta(seconds=offset_secs)
+        return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _dead_pid(self):
         """A pid that is certainly gone: a process we started and reaped."""
@@ -2840,7 +2849,87 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         pr = self._pr()
         self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)")]
         self.assertEqual(_mod.pending([pr], False), [],
-                         "a red verdict is the head's own answer")
+                         "a red verdict the pull request has not outlived is the head's own answer")
+
+    # --- metadata-only failures (DIG-5695) ---------------------------------
+
+    def _judge(self, sha, revision):
+        """Record a metadata revision the way a verdict does."""
+        with open(os.path.join(_mod.LOGD, f"metadata-recheck-{sha}"), "w") as f:
+            f.write(revision + "\n")
+
+    def test_a_metadata_failure_re_queues_when_the_title_or_body_was_fixed(self):
+        """The remedy for a metadata gate does not touch the tree (PR #6513).
+
+        The author corrected the title and the body after the row went out, so
+        the same head is worth one more look. No commit, and no review becomes
+        stale for it.
+        """
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-title, pr-template (1m)", age_secs=300)]
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a corrected title or body must re-check the same head")
+
+    def test_the_judged_metadata_is_not_re_queued_again(self):
+        """One re-check per change, not one per tick."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "the metadata already judged must not queue the head again")
+
+    def test_a_metadata_edit_after_the_judged_revision_re_queues(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-template (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], "0000000000000000")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a revision the gates have not judged is worth a look")
+
+    def test_a_metadata_failure_the_pull_request_has_not_outlived_is_left_alone(self):
+        """No recorded revision and no edit after the row: nothing to re-check."""
+        pr = self._pr(updated=self._stamp(-600))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=60)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a row younger than every edit is the head's own answer")
+
+    def test_a_code_failure_is_never_re_queued(self):
+        """A code gate's remedy is a commit, so its row stays terminal."""
+        pr = self._pr(updated=self._stamp(-60))
+        for desc in ("local-ci failed: ruff (1m)",
+                     "local-ci failed: pr-title, ruff (1m)",
+                     "local-ci failed: pr-template, bun:digichat-tui (1m)"):
+            self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+            self.assertEqual(_mod.pending([pr], False), [],
+                             f"a code failure must stay terminal: {desc!r}")
+
+    def test_a_stalled_metadata_gate_is_not_re_queued(self):
+        """A stall names no plain gate: it is a code verdict about the runner."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template exceeded 1800s and was killed (30m)",
+                      age_secs=300)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a stall must not be mistaken for a metadata failure")
+
+    def test_a_metadata_verdict_records_the_revision_the_gates_judged(self):
+        """The queue must be able to tell a fixed title or body from the same one."""
+        pr = self._pr()
+        self._run_process(pr, fails=["pr-title"], revision="0123456789abcdef")
+        path = os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")
+        with open(path) as f:
+            self.assertEqual(f.read().strip(), "0123456789abcdef",
+                             "the verdict must record the metadata it judged")
+
+    def test_a_code_verdict_records_no_metadata_revision(self):
+        pr = self._pr()
+        self._run_process(pr, fails=["ruff"], revision="0123456789abcdef")
+        self.assertFalse(os.path.exists(
+            os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")),
+            "a code verdict is terminal and must record no metadata revision")
 
     def test_a_head_with_no_row_at_all_is_queued(self):
         pr = self._pr()
@@ -2867,7 +2956,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
 
     # --- the runner takes and releases the claim ----------------------------
 
-    def _run_process(self, pr, verdict_posts=True):
+    def _run_process(self, pr, verdict_posts=True, fails=(), revision=None):
         """Run process() with the gates stubbed out; record what was posted."""
         self.posts = []
         seen = {}
@@ -2880,9 +2969,14 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 return False
             return True
 
+        def fake_run_checks(pr, out, summary=None):
+            if summary is not None and revision is not None:
+                summary["metadata_revision"] = revision
+            return list(fails)
+
         _mod.status = fake_status
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out, summary=None: []
+        _mod.run_checks = fake_run_checks
         _mod.process(pr, False)
         return seen
 
