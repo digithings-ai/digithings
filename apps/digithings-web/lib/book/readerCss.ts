@@ -47,10 +47,11 @@ export const BOOK_READER_CSS = `
   color: var(--color-ink-soft, #6b6560);
   text-decoration: none;
 }
+/* Where you are is said by the title going bright, and by nothing else: the
+   swatch behind the number read as a selection control in a list that is not
+   selectable. */
 .book-nav a[aria-current="true"] { color: var(--color-ink, #1a1815); }
-.book-nav a[aria-current="true"] .book-nav__num {
-  background: color-mix(in srgb, var(--color-hair, #e5e0d8) 45%, transparent);
-}
+.book-nav a[aria-current="true"] .book-nav__page { color: var(--color-ink, #1a1815); }
 .book-nav__num { flex: none; width: 1.5rem; color: var(--accent); }
 .book-nav__page { margin-left: auto; color: var(--color-ink-soft, #6b6560); }
 
