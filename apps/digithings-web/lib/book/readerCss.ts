@@ -119,58 +119,26 @@ export const BOOK_READER_CSS = `
 .book-export__label { line-height: 1; }
 .book-nav__toggle { display: none; }
 
-/* The book takes a couple of seconds to paginate. Page-shaped placeholders hold
-   the exact space in the meantime — same width, same height, same gutter as the
-   real page boxes — so nothing moves when the pages arrive. The squares are the
-   reader's own pixel field, breathing rather than scrolling. */
+/* The book takes a couple of seconds to paginate. One page-shaped slot holds
+   the place where page one will land, and the brand's mark bounces inside it;
+   the rest of the book arrives behind that slot, so it needs no placeholder of
+   its own. */
 .book-live { position: relative; }
-/* Overlaid on the pages, never in the flow: a placeholder that keeps its space
-   after the real pages arrive leaves them nineteen thousand pixels below the
-   fold, which reads as a blank page. */
 .book-live__skeleton {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2.25rem;
   pointer-events: none;
+  transition: opacity 320ms var(--ease), visibility 0s linear 320ms;
 }
-/* A shimmer alone reads as a page that never loads. Say what is happening, and
-   say how far along it is. */
-
-.book-live__skeleton-page {
-  position: relative;
+.book-live__skeleton[data-ready="true"] { opacity: 0; visibility: hidden; }
+.book-live__mark {
+  display: block;
   width: ${BOOK_PAGE_WIDTH}px;
   height: ${BOOK_PAGE_HEIGHT}px;
-  overflow: hidden;
   background: var(--surface);
   border-top: 1px solid var(--hair);
   border-bottom: 1px solid var(--hair);
-}
-.book-live__skeleton-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* The same pixel as the landing field and the printed cover: large squares,
-     and only on every other cell, so it reads as a field being written rather
-     than as a grey wash. */
-  background-image: repeating-conic-gradient(currentColor 0% 25%, transparent 0% 50%);
-  background-size: 20px 20px;
-  color: var(--ink-mute);
-  opacity: 0.22;
-  animation: book-shimmer 1.8s var(--ease) infinite;
-}
-@keyframes book-shimmer {
-  0%, 100% { opacity: 0.12; }
-  50% { opacity: 0.3; }
-}
-/* Fade rather than vanish, and only then take the placeholders out of the way:
-   the pages are underneath, already painted. */
-.book-live__skeleton { transition: opacity 320ms var(--ease), visibility 0s linear 320ms; }
-.book-live__skeleton[data-ready="true"] { opacity: 0; visibility: hidden; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) {
-  .book-live__skeleton-page::before { animation: none; opacity: 0.28; }
 }
 
 /* A tall page arriving mid-load grows the document and summons a scrollbar,

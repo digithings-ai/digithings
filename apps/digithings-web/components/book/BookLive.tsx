@@ -14,6 +14,8 @@
  * 1280 and 1440 px), which is why the numbers here can be the printed numbers.
  */
 import { useEffect, useRef, useState } from "react";
+
+import { startBouncingMark } from "@/lib/book/bounce-mark";
 import { createPortal } from "react-dom";
 
 import BookExportBar from "@/components/book/BookExportBar";
@@ -41,6 +43,7 @@ export default function BookLive({
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
+  const mark = useRef<HTMLCanvasElement>(null);
   const [active, setActive] = useState(chapters[0]?.page ?? 0);
   const [open, setOpen] = useState(false);
   const [scale, setScale] = useState(1);
@@ -73,6 +76,21 @@ export default function BookLive({
       element.remove();
     };
   }, []);
+
+  // The breathing mark that fills the wait: one page, one logo, bouncing. It
+  // stops as soon as the pages are in, and holds still for a reader who asked
+  // for reduced motion.
+  useEffect(() => {
+    if (!mark.current || ready) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return startBouncingMark(mark.current, {
+      width: PAGE_WIDTH,
+      height: PAGE_HEIGHT,
+      size: 240,
+      speed: 105,
+      still: reduced,
+    });
+  }, [ready]);
 
   // The layout sets the page light before paint; this only puts the reader's
   // own choice back when they leave the book.
@@ -258,9 +276,15 @@ export default function BookLive({
             style={{ width: PAGE_WIDTH, transform: `scale(${scale})` }}
           >
             <div className="book-live__skeleton" data-ready={ready ? "true" : undefined}>
-              {Array.from({ length: pageCount }, (_, index) => (
-                <div className="book-live__skeleton-page" key={index} />
-              ))}
+              {/* One placeholder, where page one will land. The rest of the book
+                  arrives behind it; there is nothing to mark further down. */}
+              <canvas
+                ref={mark}
+                className="book-live__mark"
+                aria-hidden
+                width={PAGE_WIDTH}
+                height={PAGE_HEIGHT}
+              />
             </div>
           </div>
           {/* The document paginates in the body-level host and the finished
