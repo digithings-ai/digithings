@@ -2,14 +2,42 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
+_GUARD = Path(__file__).resolve().parent / "paid_llm_guard.py"
+_GUARD_MODULE = "digithings_paid_llm_guard"
 
+
+def _load_paid_llm_guard():
+    """Load the guard by path.
+
+    A package rootdir whose tests live under ``tests/`` does not load the
+    repo-root conftest, and the package ``conftest.py`` is not an ancestor of
+    those files. This file is. See ``tests/paid_llm_guard.py``.
+    """
+    loaded = sys.modules.get(_GUARD_MODULE)
+    if loaded is not None:
+        return loaded
+    spec = importlib.util.spec_from_file_location(_GUARD_MODULE, _GUARD)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"paid LLM guard missing at {_GUARD}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_GUARD_MODULE] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Fail-closed services need JWT settings; unit tests mint tokens locally (no digikey process)."""
+    """Install the paid-LLM guard, then mint local JWT settings for fail-closed services."""
+    message = _load_paid_llm_guard().install()
+    if message:
+        pytest.exit(message, returncode=4)
     if os.environ.get("DIGI_STRICT_BACKEND_TESTS") == "1":
         os.environ.pop("DIGISEARCH_ALLOW_STUB", None)
     else:
