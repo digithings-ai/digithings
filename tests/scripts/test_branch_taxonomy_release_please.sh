@@ -107,6 +107,46 @@ else
   fail=$((fail + 1))
 fi
 
+echo "== rescue/ prefix: the branch kit/bin/dt-worktree-rescue pushes (DIG-4898) =="
+# The helper pushes `rescue/<issue>-<date>` before it retires a worktree that
+# still holds work. With no rescue/ arm the push is refused, the helper exits 2
+# and keeps the worktree — the leak DIG-4874 was about. The issue key is
+# UPPERCASE, so an arm written like the other agent arms
+# (`rescue/[a-z0-9-]+`) would refuse exactly the conventional name: the allow
+# case below is the one that measures it.
+assert_match "conventional rescue name, uppercase issue key" \
+  "rescue/DIG-1234-2026-10-21" 0
+assert_match "suffixed rescue name when the first is taken" \
+  "rescue/DIG-1234-2026-10-21-2" 0
+assert_match "rescue/ needs a name" "rescue/" 1
+assert_match "rescue/ takes no second slash" "rescue/DIG-1234/2026-10-21" 1
+assert_match "underscore in a rescue name rejected" "rescue/DIG_1234" 1
+ruleset_has_rescue="$(python3 -c '
+import json, sys
+print("rescue/[A-Za-z0-9-]+" in json.load(open(sys.argv[1], encoding="utf-8"))["rules"][0]["parameters"]["pattern"])
+' "$RULESET")"
+if [[ "$ruleset_has_rescue" == "True" ]]; then
+  echo "PASS: ruleset pattern admits rescue/[A-Za-z0-9-]+"
+  pass=$((pass + 1))
+else
+  echo "FAIL: ruleset pattern missing the rescue/ arm" >&2
+  fail=$((fail + 1))
+fi
+if grep -qF 'rescue/<issue>-<date>' "$HOOK"; then
+  echo "PASS: pre-push help text documents rescue/<issue>-<date>"
+  pass=$((pass + 1))
+else
+  echo "FAIL: pre-push help text missing rescue/" >&2
+  fail=$((fail + 1))
+fi
+if grep -qF 'rescue/<issue>-<date>' "$REPO_ROOT/BRANCHING.md"; then
+  echo "PASS: BRANCHING.md documents rescue/<issue>-<date>"
+  pass=$((pass + 1))
+else
+  echo "FAIL: BRANCHING.md missing the rescue/ row" >&2
+  fail=$((fail + 1))
+fi
+
 echo "== sync: github-rulesets pattern carries the same release-please arm =="
 ruleset_pattern="$(
   python3 -c '

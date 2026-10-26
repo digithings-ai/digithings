@@ -1,7 +1,9 @@
 # Host CI runner
 
-The script that posts the `local-ci` commit status for this repository, and the
-`Every commit reaching main was reviewed` status for develop-to-main promotions.
+The script that posts the `local-ci` commit status for this repository. It also
+judges develop-to-main promotions with the repository's own review-coverage
+logic, but it publishes no row for main's required review context: that context
+has one producer, the `ci-review-coverage.yml` workflow (DIG-4507).
 
 It posts the same verdict twice: once as `local-ci`, with the repository token,
 and once as `local-ci/app`, with the GitHub App's own installation token, so the
@@ -25,13 +27,35 @@ whose merges it gates, at the same version as the code it gates.
 |---|---|
 | `local_ci.py` | the tick: picks queued PRs, runs the static gates, posts the status |
 | `launch_guard.py` | refuses a run that no trusted launcher started (DIG-4796) |
+| `check_required_context_producers.py` | asserts every required context has exactly one producer (DIG-4507) |
 | `review_applied.py` | decides `review-applied`: a review pass left findings and every thread is resolved or answered |
 | `pr_template.py` | checks a PR body against the required sections and the Human Gate question |
   (`pr_template.py` is byte-identical; the runner and the review check carry the small
 
 Tests are `tests/scripts/test_local_ci.py`, `test_review_applied.py`,
-`test_pr_template.py` and `test_launch_guard.py`, so the repository's own `pytest` run
+`test_pr_template.py`, `test_launch_guard.py` and
+`test_check_required_context_producers.py`, so the repository's own `pytest` run
 covers the gate that gates the repository.
+
+## The review context has one producer (DIG-4507)
+
+Main requires `Every commit reaching main was reviewed`, pinned to the Actions
+app. That verdict is produced by `.github/workflows/ci-review-coverage.yml`,
+whose job name is the context name and whose check run carries the app.
+
+The runner still walks the promotion range with the same
+`scripts/check_review_coverage.py`, and keeps `pr<N>-review-<sha>.log` as
+evidence, but it posts nothing under that name. Two implementations of one
+required context disagree, and a commit status posted with a user token carries
+no app id, so it could never satisfy the pin anyway. The judgement log's mtime
+is what the hourly re-check keys on.
+
+`check_required_context_producers.py` guards the invariant: for every required
+context it can read from main's protection it counts the producers (workflow
+job names and host python sources) and requires exactly one, and for an
+app-pinned context it requires the survivor to be the workflow. The runner runs
+it once per tick and logs the result; a violation is loud in the log and never
+fatal to the tick. An unreadable protection is reported, not failed.
 
 ## Who may run it
 
@@ -106,7 +130,9 @@ only when it comes from the pipeline.
 
 The guard fails closed: a runner without `launch_guard.py` next to it refuses to
 run at all (exit 78, before any side effect). So the two files have to land
-together, and the order matters.
+together, and the order matters. `install.sh` refuses a checkout that carries
+the runner but not the guard for the same reason: an installer must not be able
+to point the daemon at a pre-guard checkout and reopen the hole.
 
 1. the guard lands in the repository (this change),
 2. a trusted launcher is live - the launchd daemon has to be running under the

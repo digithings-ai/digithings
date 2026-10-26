@@ -33,12 +33,13 @@ describe("the stack Worker imports the retry helper", () => {
 describe("every container-backed route retries once", () => {
   it("wraps every container.fetch call site", () => {
     const source = stackSource();
-    // Four container-backed routes: the digikey proxy, the in-container MCP
-    // edge proxy, the hostname proxy (graph./key./search.) and the reserved
-    // digiquant-mcp container.
+    // Three container-backed routes: the digikey proxy, the in-container MCP
+    // edge proxy and the hostname proxy (graph./key./search.). The reserved
+    // digiquant-mcp hostname is Worker-native since DIG-2913 (a Durable
+    // Object, no container.fetch), so it is deliberately not counted.
     const fetches = source.match(/container\.fetch\(/g) ?? [];
     const wrapped = source.match(/fetchWithContainerRetry\(/g) ?? [];
-    expect(fetches).toHaveLength(4);
+    expect(fetches).toHaveLength(3);
     // One wrapper per fetch: a new unwrapped call site would make the counts
     // diverge, and a wrapper without a fetch would make them diverge too.
     expect(wrapped).toHaveLength(fetches.length);
@@ -48,8 +49,8 @@ describe("every container-backed route retries once", () => {
     // The body of a consumed Request cannot be replayed, so each attempt
     // needs its own clone. One per container-backed route.
     const source = stackSource();
-    expect(source.match(/request\.clone\(\)/g) ?? []).toHaveLength(4);
-    // A clone hoisted ABOVE the retry closure would keep the count at 4 and
+    expect(source.match(/request\.clone\(\)/g) ?? []).toHaveLength(3);
+    // A clone hoisted ABOVE the retry closure would keep the count at 3 and
     // this test green, while attempt 2 then tries to re-send a consumed body
     // (TypeError) and the replay silently stops working. Every clone must be
     // an inline argument of the attempt.
@@ -58,7 +59,7 @@ describe("every container-backed route retries once", () => {
 
   it("wraps every container fetch in a closure", () => {
     const source = stackSource();
-    expect(source.match(/fetchWithContainerRetry\(\(\) =>/g) ?? []).toHaveLength(4);
+    expect(source.match(/fetchWithContainerRetry\(\(\) =>/g) ?? []).toHaveLength(3);
   });
 
   it("converts the containers package's 500 into the failed-container answer", () => {

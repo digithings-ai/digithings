@@ -14,9 +14,11 @@ and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-
 NOT gated (DIG-3605 owns the
 rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
-Also posts `Every commit reaching main was reviewed` (main's required context,
-same logic ci-review-coverage.yml runs via scripts/check_review_coverage.py) for
-same-repo develop->main promotion PRs (DIG-3743). Nothing else posts that name.
+Also judges same-repo develop->main promotion PRs with the same logic
+ci-review-coverage.yml runs via scripts/check_review_coverage.py (DIG-3743),
+and keeps the per-PR log as evidence only. It publishes no row for main's
+required review context: that verdict has one producer, the workflow
+(DIG-4507), and this runner asserts that with the producer guard.
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
@@ -140,15 +142,11 @@ APP_CTX = "local-ci/app"
 APP_TOKEN_FILE = f"{HOME}/.config/digithings/secrets/app-token"
 # Primary memory gate (DIG-3783): skip below this system-wide free percentage,
 # the same signal the board driver uses. vm_stat reclaimable MB is the fallback.
-# Exact context name required by main's branch protection (ci-review-coverage.yml
-# job `review-coverage`). Posted by local-ci for develop->main promotion PRs while
-# GitHub Actions minutes are exhausted (DIG-3743). Never rename: protection matches
-# this string.
-REVIEW_CTX = "Every commit reaching main was reviewed"
 # One promotion review per tick: the range is ~1000 commits and takes minutes.
 REVIEW_MAX_PER_TICK = 1
-# A posted failure is re-checked at most hourly: reviews/approvals/labels may land
-# after the verdict, but re-running every 3 min tick would burn the Mac for nothing.
+# A judgement is repeated at most hourly: reviews, approvals and labels may land
+# after it, but re-walking a ~1000-commit range every 3 min tick would burn the
+# Mac for nothing.
 REVIEW_RECHECK_SECS = 3600
 SKIP_PREFIX = "local-ci skipped:"
 # Memory gate (DIG-3706, fixed DIG-3783): vm.swapusage "free" is headroom inside
@@ -592,21 +590,18 @@ def status(sha, state, desc, app=True):
     return True
 
 
-def review_status(sha, state, desc):
-    """Post under REVIEW_CTX: the exact context main's protection requires."""
-    gh("api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}", "-f", f"context={REVIEW_CTX}", "-f", f"description={desc[:139]}")
+def review_judged_at(pr):
+    """When local-ci last judged this promotion head: the mtime of its per-PR log.
 
-
-def review_ci_status(sha):
-    """Latest (state, description, created_at) posted under REVIEW_CTX, or (None, None, None)."""
-    o = gh("api", f"repos/{REPO}/commits/{sha}/statuses", "--paginate")
-    try: rows = json.loads(o or "[]")
-    except ValueError: return None, None, None
-    rows = [r for r in rows if isinstance(r, dict) and r.get("context") == REVIEW_CTX]
-    if not rows: return None, None, None
-    rows.sort(key=lambda r: r.get("createdAt", r.get("created_at", "")))
-    last = rows[-1]
-    return last.get("state"), last.get("description") or "", last.get("createdAt", last.get("created_at", "")) or ""
+    Since DIG-4507 the runner publishes no verdict for main's required review
+    context, so there is no status row of ours to read back. The per-PR log is
+    the record of the judgement, and its mtime is the timestamp the hourly
+    re-check keys on.
+    """
+    n = pr.get("number"); sha = pr.get("headRefOid") or ""
+    if not n or not sha: return None
+    try: return os.path.getmtime(f"{LOGD}/pr{n}-review-{sha[:12]}.log")
+    except OSError: return None
 
 
 def _status_age_secs_or_none(created_at):
@@ -634,20 +629,23 @@ def is_promotion_pr(pr):
 
 
 def pending_reviews(prs):
-    """Promotion PRs still needing a review-coverage verdict: none posted yet, or
-    the last verdict is old enough to re-check (reviews may have landed since)."""
+    """Promotion PRs local-ci has not judged in the last hour.
+
+    The judgement is evidence only (see review_judged_at): the verdict that
+    gates main comes from the ci-review-coverage workflow, which is the single
+    producer of that required context since DIG-4507.
+
+    A judged head is re-walked once an hour on purpose, success included: the
+    walk is capped at REVIEW_MAX_PER_TICK per tick, so an open promotion costs
+    at most one extra walk per hour and the evidence stays fresh while reviews,
+    approvals and labels land on the head.
+    """
     out = []
     for p in prs:
         if not is_promotion_pr(p):
             continue
-        st, desc, ts = review_ci_status(p["headRefOid"])
-        if st == "success":
-            continue
-        if st in ("pending", "failure") and desc.startswith(SKIP_PREFIX):
-            out.append(p)  # gate cleared since the skip; re-check
-        elif st is None:
-            out.append(p)
-        elif st in ("pending", "failure") and _status_age_secs(ts) >= REVIEW_RECHECK_SECS:
+        t = review_judged_at(p)
+        if t is None or (time.time() - t) >= REVIEW_RECHECK_SECS:
             out.append(p)
     out.sort(key=lambda p: p["updatedAt"], reverse=True)
     return out
@@ -740,7 +738,6 @@ def process_review(pr, dry):
     sha = pr["headRefOid"]; n = pr["number"]
     logf = f"{LOGD}/pr{n}-review-{sha[:12]}.log"
     log(f"PR #{n} review-coverage {sha[:12]} start")
-    if not dry: review_status(sha, "pending", "local-ci: checking review coverage")
     t0 = time.time()
     with open(logf, "w") as out:
         ok_wt, why = prepare_wt(n, sha, pr["baseRefName"], out)
@@ -749,7 +746,6 @@ def process_review(pr, dry):
     if ok: st, desc = "success", f"review coverage: all {total} commits reviewed ({mins:.0f}m)"
     else: st, desc = "failure", f"review coverage: {unreviewed} unreviewed of {total} (see log) ({mins:.0f}m)"
     log(f"PR #{n} review-coverage {sha[:12]} {st}: {desc} log={logf}")
-    if not dry: review_status(sha, st, desc)
     return st
 
 def gitleaks_log_opts(base, sha, out):
@@ -1676,7 +1672,7 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py"]:
+              "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
             scan_specs.append((s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
     scan_specs.append(("actionlint", ["actionlint"], 300, None, None, ()))
@@ -2929,6 +2925,55 @@ def explicit_run(only, dry):
     return st
 
 
+def check_required_context_producers():
+    """DIG-4507: one required context, one producer (recurrence guard).
+
+    A required context with two implementations has no single meaning: the
+    verdict then depends on which row a reader happens to look at. The guard
+    reads main's protection live and checks that every required context has
+    exactly one producer. A failure here is logged and is never fatal to the
+    tick: an unreadable protection is reported, not failed.
+
+    The report is logged per repo, because this is the only automated path:
+    the guard's own `main()` prints UNREADABLE, but the tick calls `run()`.
+    Printing `ok` for a repo whose protection could not be read would be a
+    silent pass - a tick that looks healthy while the guard is blind - so
+    `ok` is written only for the repos that were actually checked.
+    """
+    try:
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            "rcp_guard", os.path.join(here, "check_required_context_producers.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        def reader(repo):
+            # gh() returns raw stdout, not parsed JSON (see def gh): parse it here.
+            out = gh("api", f"repos/{repo}/branches/main/protection")
+            if out is None:
+                return False, None
+            try:
+                return True, json.loads(out)
+            except ValueError:
+                return False, None
+
+        rep = mod.run(host_dir=here, reader=reader)
+        readable = [r["repo"] for r in rep["repos"] if r.get("readable")]
+        for r in rep["repos"]:
+            if not r.get("readable"):
+                log("required-context producers: %s protection UNREADABLE (not failed)"
+                    % r["repo"])
+        if rep["violations"]:
+            log("required-context producers: VIOLATION " + json.dumps(rep["violations"]))
+        elif readable:
+            log("required-context producers: ok " + json.dumps(readable))
+        else:
+            log("required-context producers: nothing checked: no readable protection")
+    except Exception as e:
+        log(f"required-context producers: guard error {type(e).__name__}: {e}")
+
+
 def main():
     # The launch guard runs first, before any side effect: a run that no trusted
     # launcher started (a hand-run from any shell, a seat's shell, a detached
@@ -2970,8 +3015,6 @@ def main():
                     status(p["headRefOid"], "failure", FORK_DESC, app=False)
                 for p in pending_applied(prs)[:MAX_PER_TICK]:
                     applied_status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
-                for p in pending_reviews(main_prs)[:REVIEW_MAX_PER_TICK]:
-                    review_status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
             return
         if not dry:
             for p in pending(prs, True)[:MAX_PER_TICK]:
@@ -2988,6 +3031,7 @@ def main():
         for p in pending_reviews(main_prs):
             if reviewed >= REVIEW_MAX_PER_TICK: break
             process_review(p, dry); reviewed += 1
+        check_required_context_producers()
     finally:
         release_lock()
 

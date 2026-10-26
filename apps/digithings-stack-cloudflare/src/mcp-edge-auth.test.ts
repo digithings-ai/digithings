@@ -124,6 +124,7 @@ describe("scope strings", () => {
   it("maps each edge server to its own mcp:<id> scope", () => {
     expect(mcpScopeForServer("digisearch")).toBe("mcp:digisearch");
     expect(mcpScopeForServer("digivault")).toBe("mcp:digivault");
+    expect(mcpScopeForServer("digiquant")).toBe("digiquant:backtest");
     expect(mcpScopeForServer("unknown")).toBe("");
   });
 

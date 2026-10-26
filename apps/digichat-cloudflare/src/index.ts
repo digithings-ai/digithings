@@ -94,6 +94,12 @@ export class DigiChatContainer extends Container {
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
+    // The chat's own MCP identity (digikey API key). Without this the container
+    // falls back to the BFF session, which is tenant-scoped: the house tenant
+    // mints, and any other tenant (OCC, trials) gets no token, so every
+    // `authScheme: jwt` server is dropped for it. Forwarding it is what makes
+    // the identity tenant-independent.
+    DIGICHAT_MCP_IDENTITY_KEY: workerVars.DIGICHAT_MCP_IDENTITY_KEY ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
@@ -216,6 +222,8 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
+  /** Dedicated digikey API key for MCP `authScheme: jwt` rows (server-only). */
+  DIGICHAT_MCP_IDENTITY_KEY?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;

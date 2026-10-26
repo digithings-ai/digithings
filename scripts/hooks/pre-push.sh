@@ -46,10 +46,20 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # not a branch name. Such a branch accumulates commits from unrelated issues and
 # must not be blanket pushed — see the execution-workspace rule in BRANCHING.md.
 #
+# `rescue/<issue>-<date>` is the branch `kit/bin/dt-worktree-rescue` pushes work
+# onto when a worktree is being retired. It is not a human-created name: the
+# helper produces it, so the taxonomy has to admit it or the rescue push is
+# refused and the worktree is kept forever — the leak DIG-4874 was about
+# (DIG-4898, DIG-4218). The arm allows UPPERCASE on purpose: the conventional
+# name carries an uppercase issue key, `rescue/DIG-1234-2026-10-21`, and a
+# lowercase-only arm refuses exactly the name the helper tries first. The `-2`/
+# `-3` suffix the helper adds when the name is taken is why this is a character
+# class rather than `rescue/DIG-[0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}`.
+#
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|rescue/[A-Za-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -123,6 +133,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {feat,fix,docs,chore,revert}/<slug>" >&2
       echo "           bot/<slug>  (pushed by agent-backlog-snapshot.yml" >&2
       echo "                        and pipeline-provider-review.yml)" >&2
+      echo "           rescue/<issue>-<date>  (kit/bin/dt-worktree-rescue;" >&2
+      echo "                        e.g. rescue/DIG-1234-2026-10-21)" >&2
       echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
       echo "                        per-issue, never blanket — BRANCHING.md)" >&2
       failed=1
