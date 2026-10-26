@@ -15,7 +15,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import { startBouncingMark } from "@/lib/book/bounce-mark";
+import { startLoadingMark } from "@/lib/book/loading-mark";
 import { createPortal } from "react-dom";
 
 import BookExportBar from "@/components/book/BookExportBar";
@@ -77,17 +77,16 @@ export default function BookLive({
     };
   }, []);
 
-  // The breathing mark that fills the wait: one page, one logo, bouncing. It
-  // stops as soon as the pages are in, and holds still for a reader who asked
-  // for reduced motion.
+  // The mark that fills the wait: one page, one logo, centred, its accent
+  // walking down the rows. It stops as soon as the pages are in, and holds a
+  // single frame for a reader who asked for reduced motion.
   useEffect(() => {
     if (!mark.current || ready) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return startBouncingMark(mark.current, {
+    return startLoadingMark(mark.current, {
       width: PAGE_WIDTH,
       height: PAGE_HEIGHT,
       size: 240,
-      speed: 105,
       still: reduced,
     });
   }, [ready]);

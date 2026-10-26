@@ -1,16 +1,16 @@
 /**
  * The loading mark: the brand's Jenga logo, drawn from its own 60x60 artwork and
- * bounced around the page the way a DVD screensaver does, changing accent on
- * every edge hit.
+ * held in the middle of the page while the book paginates.
  *
- * The artwork is duplicated here as rectangles rather than fetched as an SVG so
- * the first paint has it without a request: the point of the mark is to fill the
- * wait, and a logo that arrives late fills nothing. One rectangle per row of
- * pixels, with the cube row it belongs to (0 = top, which carries the accent)
- * and the opacity the brand file gives that face.
+ * It is animated, but only in colour: the accent walks down the four rows of
+ * cubes, one per beat, then all four light together and it starts again. Nothing
+ * moves. A bouncing logo was too much for a wait this short — the page is ready
+ * in a second or two on a normal connection, and a mark crossing the sheet drew
+ * more attention than the book arriving.
  *
- * Source: packages/brand/studio/logo-mark.svg on the brand-studio branch of
- * digithings. Twelve paths, four rows of cubes, three faces each.
+ * The artwork travels as rectangles in the bundle rather than as an SVG request:
+ * a mark that arrives late fills nothing. Source: packages/brand/studio/
+ * logo-mark.svg on the brand-studio branch.
  */
 
 /** [x, y, width, row, opacity] in the mark's 60x60 space. */
@@ -323,39 +323,41 @@ const MARK: readonly (readonly [number, number, number, number, number])[] = [
   [41, 50, 1, 3, 0.15]
 ];
 
-/** The accents it cycles through, one per edge hit. */
-const ACCENTS = ["#3DD6C4", "#AE81FF", "#2EFF6A", "#268BD2", "#E0B341"] as const;
+const ACCENT = "#3DD6C4";
 const INK = "20, 24, 27";
+/** One beat per row, then a beat with every row lit. */
+const BEAT_MS = 320;
+const STEPS = 5;
 
-export type BounceOptions = {
+export type LoadingMarkOptions = {
   /** Logical page, in the same units as the reader's stage. */
   width: number;
   height: number;
   /** Mark width in those units. */
   size?: number;
-  /** Pixels per second along each axis. */
-  speed?: number;
   /** Draw one frame and stop — for readers who asked for reduced motion. */
   still?: boolean;
 };
 
 /**
- * Start the mark on a canvas and return a stop function. The canvas keeps its own
- * coordinate space and is scaled by CSS, so the mark stays the same size relative
- * to the page at every width.
+ * Draw the mark, centred, and step the accent down its rows. Returns a stop
+ * function.
  */
-export function startBouncingMark(canvas: HTMLCanvasElement, options: BounceOptions): () => void {
+export function startLoadingMark(
+  canvas: HTMLCanvasElement,
+  options: LoadingMarkOptions,
+): () => void {
   const context = canvas.getContext("2d");
   if (!context) return () => {};
   const ctx: CanvasRenderingContext2D = context;
-  const { width, height, size = 240, speed = 105, still = false } = options;
+  const { width, height, size = 240, still = false } = options;
 
   const dpr = Math.min(2, typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // A field sparse enough to say "page" and not much else; the mark carries it.
+  // A field sparse enough to say "page" and no more; the mark carries it.
   const pitch = 12;
   const dot = 8;
   const cols = Math.ceil(width / pitch);
@@ -363,12 +365,9 @@ export function startBouncingMark(canvas: HTMLCanvasElement, options: BounceOpti
   const rand = new Float32Array(cols * rows);
   for (let i = 0; i < rand.length; i += 1) rand[i] = Math.random();
 
-  let x = (width - size) / 2;
-  let y = (height - size) / 2;
-  let vx = 1;
-  let vy = 1;
-  let accent = 0;
-  let frame = 0;
+  const originX = (width - size) / 2;
+  const originY = (height - size) / 2;
+  const unit = size / 60;
 
   function drawField() {
     const pad = (pitch - dot) / 2;
@@ -382,44 +381,31 @@ export function startBouncingMark(canvas: HTMLCanvasElement, options: BounceOpti
     }
   }
 
-  function drawMark() {
-    const unit = size / 60;
+  function drawMark(lit: number) {
     for (const [mx, my, mw, row, opacity] of MARK) {
-      ctx.fillStyle = row === 0 ? ACCENTS[accent] : `rgba(${INK}, ${opacity})`;
-      ctx.fillRect(x + mx * unit, y + my * unit, mw * unit, unit + 0.4);
+      // `lit` is the row carrying the accent; STEPS - 1 lights every row.
+      const accented = lit === STEPS - 1 || row === lit;
+      ctx.fillStyle = accented ? ACCENT : `rgba(${INK}, ${opacity})`;
+      ctx.fillRect(originX + mx * unit, originY + my * unit, mw * unit, unit + 0.4);
     }
   }
 
-  function step() {
-    x += vx * speed / 60;
-    y += vy * speed / 60;
-    let hit = false;
-    if (x <= 0) { x = 0; vx = 1; hit = true; }
-    if (x >= width - size) { x = width - size; vx = -1; hit = true; }
-    if (y <= 0) { y = 0; vy = 1; hit = true; }
-    if (y >= height - size) { y = height - size; vy = -1; hit = true; }
-    if (hit) accent = (accent + 1) % ACCENTS.length;
-  }
-
-  function render() {
+  function render(lit: number) {
     ctx.clearRect(0, 0, width, height);
     drawField();
-    drawMark();
+    drawMark(lit);
   }
 
-  render();
+  render(0);
   if (still) return () => {};
 
   let raf = 0;
-  const loop = () => {
-    frame += 1;
-    step();
-    render();
+  const t0 = performance.now();
+  const loop = (now: number) => {
+    const step = Math.floor((now - t0) / BEAT_MS) % STEPS;
+    render(step);
     raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
-  return () => {
-    cancelAnimationFrame(raf);
-    void frame;
-  };
+  return () => cancelAnimationFrame(raf);
 }
