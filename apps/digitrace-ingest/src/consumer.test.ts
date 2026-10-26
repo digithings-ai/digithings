@@ -176,28 +176,31 @@ describe("storeMessage", () => {
     expect(recorded.resolved).toEqual(["digithings"]);
   });
 
-  it("upserts traces, spans and sessions with the natural key of each table", async () => {
+  it("upserts traces and spans with the natural key of each table", async () => {
     const { deps, recorded } = recordingDeps();
     await storeMessage(testEnv(), message(), { ...deps } as ConsumerDeps);
 
     expect(recorded.upserts.map((entry) => entry.table)).toEqual([
       "digitrace_traces",
       "digitrace_spans_index",
-      "digitrace_sessions",
     ]);
     expect(recorded.upserts.map((entry) => entry.onConflict)).toEqual([
       "workspace_id,trace_id",
       "workspace_id,trace_id,span_id",
-      "workspace_id,session_id",
     ]);
     expect(recorded.upserts[0].rows[0]).toMatchObject({
       workspace_id: WORKSPACE,
       trace_id: TRACE,
-      received_at: RECEIVED,
+      source: "digitrace-digichat",
+      started_at: "2023-11-14T22:13:20.000Z",
     });
     expect(recorded.upserts[1].rows[0]).toMatchObject({ span_id: SPAN });
-    // No session id attribute on this span, so no session row is sent.
-    expect(recorded.upserts[2].rows).toEqual([]);
+  });
+
+  it("does not write digitrace_sessions: its counters are cross-batch aggregates", async () => {
+    const { deps, recorded } = recordingDeps();
+    await storeMessage(testEnv(), message(), { ...deps } as ConsumerDeps);
+    expect(recorded.upserts.map((entry) => entry.table)).not.toContain("digitrace_sessions");
   });
 
   it("writes one metric point per span", async () => {

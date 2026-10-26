@@ -136,11 +136,13 @@ export async function storeMessage(
 
   const records = recordsFromNdjson(message.ndjson);
   const workspaceId = await deps.resolveWorkspaceId(env, message.tenant);
-  const rows = indexRows(records, workspaceId, message.receivedAt);
+  const rows = indexRows(records, workspaceId, message.receivedAt, message.source);
 
+  // Two tables, not four. `digitrace_scores` is MLflow's write-back, and
+  // `digitrace_sessions` carries cross-batch counters that a REST upsert can
+  // only overwrite — see the header of `index-rows.ts`.
   await deps.upsertRows(env, "digitrace_traces", rows.traces, CONFLICT_TARGETS.traces);
   await deps.upsertRows(env, "digitrace_spans_index", rows.spans, CONFLICT_TARGETS.spans);
-  await deps.upsertRows(env, "digitrace_sessions", rows.sessions, CONFLICT_TARGETS.sessions);
 
   for (const record of records) {
     deps.writeSpanMetric(env.ANALYTICS, spanMetrics(record, message.tenant, message.source));

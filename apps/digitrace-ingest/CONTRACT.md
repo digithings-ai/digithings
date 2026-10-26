@@ -108,74 +108,86 @@ a per-message back-off of `min(15s × 2^(attempts−1), 300s)`.
 ## 5. The index rows (Supabase `core`, schema `public`)
 
 The consumer resolves `workspaces.id` from the verified tenant slug over PostgREST
-and stamps `workspace_id` on every row. **`tenant_slug` is not an index column**
-(ADR-0036 §5): the index has one tenancy column and it is `workspace_id`.
+and stamps `workspace_id` on every row. **`tenant_slug` is not written** (ADR-0036
+§5): the index has one tenancy column and it is `workspace_id`. The two tenant
+columns the migration declares stay nullable and unset.
+
+The consumer writes **two** tables. The column names below are those of
+`digiquant/supabase/migrations/prod/144_digitrace_index.sql` (DIG-2658), not an
+independent guess — a name that does not exist there is a runtime 400 on the first
+real batch.
 
 Every row is a pure function of the queue message plus the resolved
-`workspace_id`, so a retried message writes identical rows. Upserts use the
-natural key below.
+`workspace_id`, so a retried message writes identical rows.
 
 ### `digitrace_spans_index` — one row per span
 
 Conflict target: `workspace_id,trace_id,span_id`.
 
-| Column           | Type               | Source                                                       |
-| ---------------- | ------------------ | ------------------------------------------------------------ |
-| `workspace_id`   | `uuid`             | resolved from `workspaces.slug`                              |
-| `trace_id`       | `text`             | hex, 32 chars                                                |
-| `span_id`        | `text`             | hex, 16 chars                                                |
-| `parent_span_id` | `text` null        | hex, or null for a root                                      |
-| `name`           | `text`             | `span.name`                                                  |
-| `kind`           | `text`             | enum name, e.g. `SPAN_KIND_SERVER`                           |
-| `status_code`    | `text`             | `STATUS_CODE_UNSET` / `STATUS_CODE_OK` / `STATUS_CODE_ERROR` |
-| `status_message` | `text` null        | `span.status.message`                                        |
-| `started_at`     | `timestamptz` null | from `startTimeUnixNano`                                     |
-| `ended_at`       | `timestamptz` null | from `endTimeUnixNano`                                       |
-| `duration_ms`    | `integer` null     | end − start                                                  |
-| `service_name`   | `text` null        | resource `service.name`                                      |
-| `scope_name`     | `text` null        | `scope.name`                                                 |
-| `model`          | `text` null        | `gen_ai.*.model`, `llm.model_name`                           |
-| `input_tokens`   | `integer` null     | `gen_ai.usage.input_tokens`, `llm.token_count.prompt`        |
-| `output_tokens`  | `integer` null     | `gen_ai.usage.output_tokens`, `llm.token_count.completion`   |
-| `attributes`     | `jsonb`            | the span's attributes as a flat object                       |
-| `events`         | `jsonb`            | the span's events, unchanged                                 |
-| `received_at`    | `timestamptz`      | the queue message's receive time                             |
+| Column                                                       | Source                                                                                             |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `workspace_id`                                               | resolved from `workspaces.slug`                                                                    |
+| `trace_id`, `span_id`, `parent_span_id`                      | hex ids; `parent_span_id` null for a root                                                          |
+| `name`                                                       | `span.name`                                                                                        |
+| `kind`                                                       | enum name, e.g. `SPAN_KIND_SERVER`                                                                 |
+| `started_at`                                                 | `startTimeUnixNano`; **receive time when the span carries none**, because the column is `NOT NULL` |
+| `ended_at`                                                   | `endTimeUnixNano`                                                                                  |
+| `duration_ms`                                                | end − start, null when either is missing                                                           |
+| `status`, `status_message`                                   | the status enum name and message                                                                   |
+| `session_id`                                                 | `session.id`, `digi.session_id`                                                                    |
+| `run_id`                                                     | `pipeline.run_id`, `digi.workflow_id`, `digi.run_name`                                             |
+| `model`                                                      | `gen_ai.response.model`, `gen_ai.request.model`, `llm.model_name`                                  |
+| `provider`                                                   | `gen_ai.provider.name`, `gen_ai.system`, `llm.provider`                                            |
+| `input_tokens`, `output_tokens`                              | `gen_ai.usage.*`, `llm.token_count.*`                                                              |
+| `total_tokens`                                               | `gen_ai.usage.total_tokens`, `llm.token_count.total`, else input + output                          |
+| `cost_usd`                                                   | `digitrace.cost_usd`, `llm.cost.total`, `gen_ai.usage.cost` (never computed here)                  |
+| `input_hash`, `input_length`, `output_hash`, `output_length` | `digi.*.sha256` / `digi.*.length` (DIG-2656)                                                       |
+| `attributes`                                                 | the **allowlisted** span attributes as a flat JSON object                                          |
+
+Span **events** stay in the archive only: the index has no column for them.
 
 ### `digitrace_traces` — one row per trace id in the batch
 
 Conflict target: `workspace_id,trace_id`.
 
-| Column                           | Type               | Source                                                      |
-| -------------------------------- | ------------------ | ----------------------------------------------------------- |
-| `workspace_id`                   | `uuid`             | resolved                                                    |
-| `trace_id`                       | `text`             | hex                                                         |
-| `root_span_name`                 | `text`             | the span with no parent, else the first in the batch        |
-| `root_service_name`              | `text` null        | that span's resource `service.name`                         |
-| `started_at` / `ended_at`        | `timestamptz` null | min start / max end across the batch                        |
-| `duration_ms`                    | `integer` null     | end − start                                                 |
-| `span_count`                     | `integer`          | spans of this trace in the batch                            |
-| `error_count`                    | `integer`          | spans with an error status or an exception event            |
-| `status_code`                    | `text`             | `STATUS_CODE_ERROR` when `error_count > 0`, else the root's |
-| `session_id`                     | `text` null        | first session id found on the trace                         |
-| `model`                          | `text` null        | first model found on the trace                              |
-| `input_tokens` / `output_tokens` | `integer`          | summed across the trace's spans                             |
-| `received_at`                    | `timestamptz`      | receive time                                                |
+| Column                 | Source                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `workspace_id`         | resolved                                                                           |
+| `source`               | the token's source — never the client's word                                       |
+| `trace_id`             | hex                                                                                |
+| `name`                 | the span with no parent, else the first in the batch                               |
+| `service_name`         | that span's resource `service.name`                                                |
+| `started_at`           | min start across the batch, **receive time when nothing carries one** (`NOT NULL`) |
+| `ended_at`             | max end across the batch                                                           |
+| `duration_ms`          | end − start                                                                        |
+| `status`               | `STATUS_CODE_ERROR` when any span failed, else the root's                          |
+| `status_message`       | the first failed span's message (the root's when nothing failed)                   |
+| `session_id`, `run_id` | first correlation id found on the trace                                            |
+| `attributes`           | the root span's allowlisted attributes                                             |
+| `resource`             | the root resource's allowlisted attributes                                         |
+| `span_count`           | spans of this trace in the batch                                                   |
 
-### `digitrace_sessions` — one row per session id in the batch
+### `digitrace_sessions` — not written by this consumer
 
-Conflict target: `workspace_id,session_id`.
+The table's `trace_count`, `span_count`, `total_tokens` and `total_cost_usd` are
+**cross-batch** aggregates, and a PostgREST upsert can only replace them: the
+second batch of a session would overwrite a larger count with a smaller one. There
+is no increment-through-REST, so the ingest path leaves the table alone rather
+than write numbers that silently shrink. Materialising it needs an RPC (an
+`ON CONFLICT DO UPDATE ... + excluded.count` function) or a derived job; that is
+the schema owner's and the dashboard leaf's call, and it is raised on DIG-2657.
 
-| Column                           | Type               | Source                                                   |
-| -------------------------------- | ------------------ | -------------------------------------------------------- |
-| `workspace_id`                   | `uuid`             | resolved                                                 |
-| `session_id`                     | `text`             | `session.id`, `gen_ai.conversation.id`, `llm.session_id` |
-| `first_seen_at` / `last_seen_at` | `timestamptz` null | min start / max end of the spans that carry it           |
-| `received_at`                    | `timestamptz`      | receive time                                             |
+### `digitrace_scores` — not written by this consumer
 
-### `digitrace_scores`
+ADR-0036 §4 and §8 put the score write-back in MLflow: it writes to
+`public.digitrace_scores` through the service role.
 
-**Not written by this Worker.** ADR-0036 §4 and §8 put the score write-back in
-MLflow: it writes to `public.digitrace_scores` through the service role.
+### What may reach `attributes`
+
+An explicit allowlist (`INDEX_ATTRIBUTE_ALLOWLIST` in `src/attributes.ts`), which
+is DIG-2656's emitter allowlist minus the two `digi.*.preview` keys. A preview is
+content, it is opt-in at the source, and the index is not where content goes
+(ADR-0036 §7). Everything else the source sent still reaches the archive untouched.
 
 ## 6. The Analytics Engine point
 

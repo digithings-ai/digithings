@@ -68,6 +68,11 @@ export function pickNumber(attributes: Record<string, string>, keys: string[]): 
   return undefined;
 }
 
+// The key families below are the ones the emitters actually send. The first
+// four come from the OTel GenAI semantic conventions, the `llm.*` mirrors from
+// OpenInference, and the `digi.*` / `pipeline.*` names from DIG-2656's
+// allowlist (`digitrace/src/digitrace/trace.py`), so a column is filled from the
+// attribute the emitter really writes instead of from a similar-looking guess.
 export const SERVICE_NAME_KEYS = ["service.name", "service_name"];
 export const MODEL_KEYS = [
   "gen_ai.response.model",
@@ -75,6 +80,7 @@ export const MODEL_KEYS = [
   "llm.model_name",
   "ai.model.id",
 ];
+export const PROVIDER_KEYS = ["gen_ai.provider.name", "gen_ai.system", "llm.provider"];
 export const INPUT_TOKEN_KEYS = [
   "gen_ai.usage.input_tokens",
   "llm.token_count.prompt",
@@ -85,8 +91,14 @@ export const OUTPUT_TOKEN_KEYS = [
   "llm.token_count.completion",
   "llm.usage.completion_tokens",
 ];
+export const OUTPUT_TOTAL_KEYS = ["gen_ai.usage.total_tokens", "llm.token_count.total"];
 export const COST_KEYS = ["digitrace.cost_usd", "llm.cost.total", "gen_ai.usage.cost"];
-export const SESSION_KEYS = ["session.id", "gen_ai.conversation.id", "llm.session_id"];
+export const SESSION_KEYS = ["session.id", "digi.session_id", "gen_ai.conversation.id"];
+export const RUN_KEYS = ["pipeline.run_id", "digi.workflow_id", "digi.run_name"];
+export const INPUT_HASH_KEYS = ["digi.input.sha256"];
+export const INPUT_LENGTH_KEYS = ["digi.input.length"];
+export const OUTPUT_HASH_KEYS = ["digi.output.sha256"];
+export const OUTPUT_LENGTH_KEYS = ["digi.output.length"];
 export const ENVIRONMENT_KEYS = ["deployment.environment", "deployment.environment.name"];
 
 /** Nanoseconds since the epoch from an OTLP timestamp, or undefined. */
@@ -153,4 +165,60 @@ export function isErrorSpan(span: OtlpSpan): boolean {
     const attributes = attributesToObject(event?.attributes);
     return attributes["exception.type"] !== undefined;
   });
+}
+
+/**
+ * The attribute keys this Worker puts in the index's `jsonb` columns.
+ *
+ * Migration 144 says it plainly: "the attribute keys that reach `attributes
+ * jsonb` come from an explicit allowlist in the ingest Worker, not from a
+ * blanket copy of the OTLP payload". The list is DIG-2656's emitter allowlist
+ * (`digitrace/src/digitrace/trace.py`) **minus the two preview keys**: a preview
+ * is content, it is opt-in at the source, and the index is not where content
+ * goes (ADR-0036 §7). Everything else the source sent still reaches the archive
+ * untouched; this list decides only what is searchable.
+ */
+export const INDEX_ATTRIBUTE_ALLOWLIST: ReadonlySet<string> = new Set([
+  "service.name",
+  "digi.run_name",
+  "digi.workflow_id",
+  "digi.request_id",
+  "digi.session_id",
+  "tenant.id",
+  "pipeline.run_id",
+  "session.id",
+  "gen_ai.operation.name",
+  "gen_ai.provider.name",
+  "gen_ai.system",
+  "gen_ai.request.model",
+  "gen_ai.response.model",
+  "gen_ai.usage.input_tokens",
+  "gen_ai.usage.output_tokens",
+  "gen_ai.usage.total_tokens",
+  "openinference.span.kind",
+  "llm.provider",
+  "llm.model_name",
+  "llm.token_count.prompt",
+  "llm.token_count.completion",
+  "llm.token_count.total",
+  "digi.input.sha256",
+  "digi.input.length",
+  "digi.output.sha256",
+  "digi.output.length",
+  "error.type",
+]);
+
+/** The allowlisted, scalar-only attributes of a list, as a flat object. */
+export function indexableAttributes(
+  attributes: OtlpKeyValue[] | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of attributes ?? []) {
+    if (!pair || typeof pair.key !== "string") continue;
+    if (!INDEX_ATTRIBUTE_ALLOWLIST.has(pair.key)) continue;
+    if (pair.key in out) continue;
+    const value = stringValue(pair.value);
+    if (value !== undefined) out[pair.key] = value;
+  }
+  return out;
 }
