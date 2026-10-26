@@ -9,6 +9,11 @@
  *
  * Nothing here sets a colour. Paper, ink, accent and rules come from the theme.
  */
+/** A4 at 96dpi. pagedjs lays the page boxes out at exactly this, and the
+ *  reader's stage is set to it before being scaled to the column. */
+export const BOOK_PAGE_WIDTH = 794;
+export const BOOK_PAGE_HEIGHT = 1123;
+
 export const BOOK_READER_CSS = `
 .book-shell {
   display: grid;
@@ -27,7 +32,7 @@ export const BOOK_READER_CSS = `
   align-self: start;
   max-height: calc(100dvh - var(--dq-nav-h) - 3rem);
   overflow: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 0.78rem;
 }
 .book-nav__title {
@@ -38,13 +43,13 @@ export const BOOK_READER_CSS = `
   color: var(--accent);
 }
 .book-nav ol { margin: 0; padding: 0; list-style: none; }
-.book-nav li { border-bottom: 1px solid var(--color-hair, #e5e0d8); }
+.book-nav li { border-bottom: 1px solid var(--hair); }
 .book-nav a {
   display: flex;
   gap: 0.6rem;
   align-items: baseline;
   padding: 0.45rem 0;
-  color: var(--color-ink-soft, #6b6560);
+  color: var(--ink-soft);
   text-decoration: none;
 }
 /* Where you are is said by the title going bright, and by nothing else: the
@@ -53,7 +58,7 @@ export const BOOK_READER_CSS = `
 .book-nav a[aria-current="true"] { color: var(--color-ink, #1a1815); }
 .book-nav a[aria-current="true"] .book-nav__page { color: var(--color-ink, #1a1815); }
 .book-nav__num { flex: none; width: 1.5rem; color: var(--accent); }
-.book-nav__page { margin-left: auto; color: var(--color-ink-soft, #6b6560); }
+.book-nav__page { margin-left: auto; color: var(--ink-soft); }
 
 /* Export: one boxed cell per format, under the contents. The cells are drawn
    only with hairlines and ink, so they read as part of the contents list
@@ -73,7 +78,7 @@ export const BOOK_READER_CSS = `
 }
 .book-export__row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
   gap: 0.4rem;
 }
 .book-export__btn {
@@ -86,20 +91,21 @@ export const BOOK_READER_CSS = `
   padding: 0.55rem 0.2rem;
   border: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
   background: transparent;
-  color: var(--color-ink-soft, #6b6560);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 .book-export__btn:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
-  color: var(--ink, #1a1815);
+  color: var(--ink);
 }
 .book-export__btn:active { transform: translateY(1px); }
-.book-export__btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.book-export__btn:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 .book-export__btn[data-state="done"] {
   border-color: var(--accent);
   color: var(--accent);
@@ -113,11 +119,11 @@ export const BOOK_READER_CSS = `
   min-height: 1rem;
   font-size: 0.66rem;
   letter-spacing: 0.04em;
-  color: var(--color-ink-soft, #6b6560);
+  color: var(--ink-soft);
 }
 .book-nav__toggle { display: none; }
 
-/* The document is laid out at A4 (794px), then scaled to the column. The
+/* The document is laid out at A4 (BOOK_PAGE_WIDTH), then scaled to the column. The
    wrapper carries the scaled height so the page scrolls to the right length;
    the stage keeps its real width so the pagination never depends on the
    window. */
@@ -181,7 +187,7 @@ export const BOOK_READER_CSS = `
     max-height: none;
     overflow: visible;
     padding: 0.5rem var(--gutter) calc(0.5rem + env(safe-area-inset-bottom));
-    background: var(--bg, #fbfbf9);
+    background: var(--bg);
     border-top: 1px solid var(--hair, #e5e0d8);
     border-bottom: 0;
   }
@@ -197,9 +203,9 @@ export const BOOK_READER_CSS = `
     min-height: 2.5rem;
     padding: 0 0.6rem;
     border: 1px solid var(--hair, #e5e0d8);
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: var(--surface, transparent);
-    font-family: var(--font-mono, ui-monospace, monospace);
+    font-family: var(--font-mono);
     font-size: 0.72rem;
     color: var(--ink);
     cursor: pointer;
@@ -216,7 +222,7 @@ export const BOOK_READER_CSS = `
     width: 0.7rem;
     height: 0.7rem;
     color: var(--ink-soft);
-    transition: transform 150ms ease;
+    transition: transform var(--dur-fast) var(--ease);
   }
   .book-nav[data-open="true"] .book-nav__chevron { transform: rotate(180deg); }
   /* The list opens upward from the bar, over the page. */
@@ -230,7 +236,7 @@ export const BOOK_READER_CSS = `
     overflow: auto;
     margin: 0;
     padding: 0.5rem var(--gutter) 0.75rem;
-    background: var(--bg, #fbfbf9);
+    background: var(--bg);
     border-top: 1px solid var(--hair, #e5e0d8);
   }
   .book-nav[data-open="true"] ol { display: block; }
@@ -285,10 +291,10 @@ export const BOOK_READER_CSS = `
   /* Undo the reader's fit-to-column: the page boxes are already A4, and a
      scaled box prints cropped because the sheet is measured before the
      transform. */
-  .book-live__stage { transform: none !important; width: 794px !important; height: auto !important; }
+  .book-live__stage { transform: none !important; width: ${BOOK_PAGE_WIDTH}px !important; height: auto !important; }
   .book-live .pagedjs_page {
-    width: 794px !important;
-    height: 1123px !important;
+    width: ${BOOK_PAGE_WIDTH}px !important;
+    height: ${BOOK_PAGE_HEIGHT}px !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;

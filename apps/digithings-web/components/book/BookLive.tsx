@@ -17,11 +17,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import BookExportBar from "@/components/book/BookExportBar";
-import { BOOK_READER_CSS } from "@/lib/book/readerCss";
+import { BOOK_PAGE_HEIGHT as PAGE_HEIGHT, BOOK_PAGE_WIDTH as PAGE_WIDTH, BOOK_READER_CSS } from "@/lib/book/readerCss";
 
 /** A4 at 96dpi — the width the page boxes are laid out at. */
-const PAGE_WIDTH = 794;
-const PAGE_HEIGHT = 1123;
 
 export type ReaderChapter = {
   slug: string;
