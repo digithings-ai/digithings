@@ -2368,6 +2368,16 @@ _PROSE_VERDICT_RE = re.compile(
 # to another by a dash is a uuid group, not a commit.
 _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA-Z-])")
 
+# The line with which a seat says it withdraws the block it posted earlier. It
+# is read beside the verdict, in the same comment, and only a line that opens
+# with the token counts — a "withdraw" somewhere in prose is not a withdrawal
+# (DIG-5246). The heads it names are read with `_PROSE_SHA_RE`; a line naming
+# none is a withdrawal of the seat's blocks that name no head at all.
+_WITHDRAWAL_LINE_RE = re.compile(
+    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*withdraws?[*_`]*[ \t]*:[ \t]*(?P<refs>[^\n]*)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 # The markers are read from the raw comment; the prose is what is left. A hex run
 # inside a marker is not prose: `agent=54a431af-501a-47d9-...` is a seat uuid,
 # and reading its first group as a commit would name a head nobody reviewed.
@@ -2401,6 +2411,28 @@ def _prose_verdict(body: str) -> tuple[str, str] | None:
     return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
 
 
+def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
+    """`(declared, heads named)` from a `Withdraws:` line, or `(False, ())`.
+
+    `declared` is True when the comment carries the line at all: it is what says
+    the seat means to withdraw a block, and it is deliberately explicit, because
+    the line lets a later approve clear a block the same seat posted on an
+    unchanged head (DIG-5246). `heads` is every sha named on the line, oldest
+    occurrence first, deduplicated. A line naming no sha withdraws only blocks
+    that name no head, so it can never spend a block scoped to a commit the
+    reviewer did not name.
+    """
+    declared = False
+    heads: list[str] = []
+    for match in _WITHDRAWAL_LINE_RE.finditer(body):
+        declared = True
+        for found in _PROSE_SHA_RE.finditer(match.group("refs")):
+            sha = found.group("sha").lower()
+            if sha not in heads:
+                heads.append(sha)
+    return declared, tuple(heads)
+
+
 @dataclass(frozen=True)
 class PostedVerdict:
     """The verdict the queue reads on a PR, and the head it names."""
@@ -2416,6 +2448,10 @@ class PostedVerdict:
     # comment carries no readable seat: every seat shares one GitHub login, so
     # there is nothing else to tell them apart by.
     seat: str = ""
+    # A `Withdraws:` line in this comment, and the heads it names. Read only on
+    # an approve, and only against the seat's own standing block (DIG-5246).
+    withdrawal: bool = False
+    withdrawn_heads: tuple[str, ...] = ()
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
@@ -2473,6 +2509,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     for binding in claims:
         if binding and binding not in bindings:
             bindings.append(binding)
+    withdrawal, withdrawn_heads = _withdrawal(text)
     author = comment.get("author")
     login = "?"
     if isinstance(author, Mapping):
@@ -2486,6 +2523,8 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         author=login,
         at=str(comment.get("createdAt") or ""),
         seat=_comment_seat(provenance),
+        withdrawal=withdrawal,
+        withdrawn_heads=withdrawn_heads,
     )
 
 
@@ -2546,6 +2585,37 @@ def verdict_applies_to_head(verdict: PostedVerdict, head: str) -> bool:
     return _covers_head(verdict, head)
 
 
+def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
+    """True when `approve` explicitly withdraws the block it would clear.
+
+    DIG-5246. `#6280` merged at 12:08 on 2026-10-22 because the code reviewer's
+    12:04 approve on the same head `b1c5fde73ef8` silently cleared its own
+    10:21 `changes_requested`; the two blockers were still open and landed in
+    `develop`. A later approve is a statement about the code, not about the
+    finding, so clearing a block the same seat posted on the same, unchanged
+    head needs the seat to say so on a `Withdraws:` line in that same comment.
+
+    The line names the block by the head it names, or — for a block that names
+    no head — by naming none itself. A line naming a head that is not the
+    block's spends nothing. A block on a head the PR has left is already spent
+    by the branch moving (`verdict_applies_to_head`), so "a new head and a fresh
+    approve" needs no withdrawal.
+    """
+    if block is None:
+        return True
+    if not approve.withdrawal:
+        return False
+    if not approve.withdrawn_heads:
+        # There is no head to name on the block, and a bare line must not spend
+        # a block that names one.
+        return not block.bindings
+    return any(
+        _binds_head(ref, binding) or _binds_head(binding, ref)
+        for ref in approve.withdrawn_heads
+        for binding in block.bindings
+    )
+
+
 def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocks the seats who posted them have not cleared, oldest first.
 
@@ -2557,12 +2627,12 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     security desk's `changes requested` on the branch, because the code
     reviewer's later approve on the head was the newest readable verdict.
 
-    Every verdict is first scoped to the head it names (`verdict_applies_to_head`).
-    A seat that blocked a commit the PR has left has not asked for changes to
-    the head it stands at now: that block is spent by the branch moving, and it
-    does not hold the PR. It is not spent on a promise — a fresh block on the
-    current head blocks exactly as before, and an old approve still clears
-    nothing, because clearing needs the head.
+    An approve on the same, unchanged head as the seat's own block clears it
+    only when the approve carries a `Withdraws:` line naming that block
+    (`_withdraws`, DIG-5246). The head moving does the clearing on its own:
+    every verdict is first scoped to the head it names
+    (`verdict_applies_to_head`), and a seat that blocked a commit the PR has
+    left has not asked for changes to the head it stands at now.
 
     A verdict whose seat cannot be read is not judged here: the seat is
     unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
@@ -2578,9 +2648,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
         block: PostedVerdict | None = None
         for verdict in verdicts:
             if verdict.verdict in APPROVE_VERDICTS:
-                # Only an approve naming this head clears a block. One naming
-                # another head says nothing about it and leaves the block alone.
-                if _covers_head(verdict, head):
+                # Only an approve naming this head clears a block, and on an
+                # unchanged head only one that withdraws it. An approve naming
+                # another head says nothing about this one and leaves the block
+                # alone.
+                if _covers_head(verdict, head) and _withdraws(verdict, block):
                     block = None
             elif verdict_applies_to_head(verdict, head):
                 block = verdict
@@ -2638,11 +2710,15 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
     1. **A seat's own block stands until that seat clears it.** A blocking
        verdict belongs to the seat that posted it. That seat's later approve
        naming the head the PR stands at clears it; an approve naming another
-       head does not, and no other seat's approve does either. `#6170`
-       (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's
-       `changes requested` still on the branch, because the code reviewer's
-       later approve on the head was the newest readable verdict — a second
-       sign-off was never asked for, so the queue never held the PR for it.
+       head does not, and no other seat's approve does either. When the approve
+       names the same, unchanged head the block names, it clears the block only
+       when it carries a `Withdraws:` line naming it (DIG-5246, `#6280`): an
+       approve is a statement about the code, and the queue does not read it as
+       a statement that the finding is withdrawn. `#6170` (DIG-4911) merged into
+       `develop` on 2026-10-21 with the security desk's `changes requested` still
+       on the branch, because the code reviewer's later approve on the head was
+       the newest readable verdict — a second sign-off was never asked for, so
+       the queue never held the PR for it.
     2. **Everything else is judged by the newest readable verdict.** The newest
        readable verdict is the one that counts: a blocking verdict blocks when
        it names the head the PR stands at (or names no head at all, which
@@ -2711,6 +2787,33 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         scope_text = f", naming `{block.bindings[0][:12]}`"
     else:
         scope_text = ""
+    later = [
+        verdict
+        for verdict in _readable_verdicts(pr)
+        if verdict.seat == block.seat and verdict.at > block.at
+    ]
+    approve = later[-1] if later else None
+    if (
+        approve is not None
+        and approve.verdict in APPROVE_VERDICTS
+        and _covers_head(approve, head)
+        and not _withdraws(approve, block)
+    ):
+        # DIG-5246: the handback for the #6280 timeline. The seat did come back
+        # and approve the same head; what it did not do is say it withdraws the
+        # finding, so the queue cannot read the approve as clearing it.
+        if block.bindings:
+            withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
+        else:
+            withdraw = "`Withdraws:` line"
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text} and then approved the same "
+            f"head {head_text} (comment {approve.comment_id or 'a comment'}); an "
+            "approve on an unchanged head does not clear the block it left behind. "
+            f"Add a {withdraw} to the approving comment, or move the PR to a new "
+            "head and approve that head"
+        )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
         f"({block.source}, in {where}){scope_text}, and the PR now stands at "
