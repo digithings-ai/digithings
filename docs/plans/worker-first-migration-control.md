@@ -1,97 +1,112 @@
-# Container reduction — control plan
+# Container elimination — control plan
 
-Status: **of record once merged**. Executes
-[`2026-10-26-digistackcontainer-replan.md`](./2026-10-26-digistackcontainer-replan.md)
-(the merged memo for `DIG-2914`) as a step-controlled programme.
+Status: **of record once merged**. Owner: Chris.
 
-Owner: Chris. One step in flight at a time.
+Decision: **full elimination**. Both containers (`DigiChatContainer`,
+`DigiStackContainer`) are removed, and every program they run is replaced.
+This supersedes the "stays" verdicts in
+[`2026-10-26-digistackcontainer-replan.md`](./2026-10-26-digistackcontainer-replan.md);
+that memo's sizing is kept because it is the price list for this decision.
 
-## Scope, corrected against the evidence
+## What was accepted, stated plainly
 
-The ask was "turn off the containers and migrate all to the Workers". The
-merged replan evaluated exactly that and **rejected the whole-box version on
-size, not on taste**:
+The replan rejected elimination because two ports are product changes, not
+runtime swaps:
 
-| Program | LOC | Verdict |
+| Program | LOC | Why it is a product change |
 |---|---:|---|
-| `digigraph` (LangGraph, SSE, matplotlib) | 23.9k | stays — porting is a product change |
-| `digisearch` (ONNX embeddings, Chroma, thread-bound SQLite) | 29.0k | stays |
-| `digisearch-mcp` | 0.7k | stays with its backend |
-| `digivault` + `digivault-mcp` | 5.0k | **candidate for a Worker on its own merits** |
-| `digikey` | 3.2k | Worker built, **parked** — the cut moves the JWT issuer and saves $0 while the box stays |
-| `redis`, `seed_chroma`, `searxng` | ~0 | delete (searxng only with a product reason) |
+| `digisearch` | 29.0k | local ONNX embeddings, Chroma, parser stack, monitors/websets in thread-bound SQLite |
+| `digigraph` | 23.9k | LangGraph execution, SSE, multi-minute runs, matplotlib/kaleido analytics |
 
-So this programme is **container reduction**, not container elimination. It
-removes what can leave without a product change, and it says plainly what
-cannot. A full migration remains possible, but it is a re-scoping decision with
-a multi-month price, and it is not smuggled in here.
+Accepting full elimination means accepting that search retrieval and graph
+execution are re-decided, not re-hosted. If either cannot be rebuilt to the
+same product quality, the programme stops at that program rather than shipping
+a worse product to hit a topology target. That is the one place where "full
+elimination" yields to evidence.
 
-## Why it is worth doing at all
+## Rule zero: two spikes before any port
 
-Not the money: the whole bill is $77/mo and emptying the box is worth $15–27/mo
-against ~61k LOC. The case is **latency and operability** — a container cold
-start measured at **42.9 s** against a shell that waits 30 s, and a per-surface
-blast radius that a Worker does not have for stateless work.
+No port work starts until these two answer, because they can invalidate the
+programme:
+
+1. **Search spike** — embeddings on Workers AI (`@cf/baai/bge-m3`) and vector
+   store on Vectorize, measured against the current Chroma index on a fixed
+   query set: recall@10 and rank-1 agreement. Exit: a number, not an opinion.
+   If recall drops materially, digisearch does not move as specified.
+2. **Graph spike** — one real digigraph graph executed on Workflows + Durable
+   Objects, with SSE to the client and a >5 minute run. Exit: it completes
+   within the platform's CPU/duration limits, or it does not.
+
+Both are time-boxed and produce a written finding. They are the only work that
+runs in parallel with Phase A.
+
+## Phases
+
+Each phase is a set of steps; **one step in flight at a time**. Exit criteria
+are production measurements, never merges.
+
+### Phase A — surfaces that leave without a product decision
+| Step | What | Exit | Reversible |
+|---|---|---|---|
+| A1 | `DIG-2915` runner → host launchd | digiquant jobs run from the host; container unused | yes |
+| A2 | `redis`, `seed_chroma` delete | no consumer remains; digikey blocklist re-homed | yes |
+| A3 | `searxng` → provider swap | search answers with no self-hosted dependency; per-query cost recorded | yes |
+| A4 | langfuse retirement decision | decision recorded; images kept until Chris approves deletion | **no** at deletion |
+
+### Phase B — MCP servers become Worker-native
+| Step | What | Exit |
+|---|---|---|
+| B1 | `digivault-mcp` + `digisearch-mcp` as Worker MCP | every tool answers from the edge with no container in the path |
+| B2 | `digigraph-mcp` as Worker MCP | same, once Phase E lands |
+
+### Phase C — `digivault` service → Worker
+D1 is already the production store. Exit: all vault routes and the four
+baked-seed MCP tools read D1; the seed is deleted.
+
+### Phase D — `digikey` cut
+The Worker exists (`DIG-5548`, green, parked). Exit: tokens issued and verified
+with no container in the path, and a token-compatibility test proves an
+existing token issued by the container still verifies after the cut.
+
+### Phase E — `digisearch` → Worker (gated by spike 1)
+Embeddings and vectors move to Workers AI + Vectorize; parsers and monitors
+move to Workers + Queues + D1. Exit: recall@10 within the agreed tolerance of
+the baseline, measured on the same fixed query set.
+
+### Phase F — `digigraph` → Workers (gated by spike 2)
+Execution moves to Workflows/DO; SSE from the Worker. Exit: a full research
+turn completes with the same tool trace shape, within platform limits.
+
+### Phase G — chat container → Worker
+Four verified blockers, each its own step:
+| Blocker | Evidence | Replacement |
+|---|---|---|
+| listening socket | `trusted-proxy-server.mjs:277`, `:201` | proxy moves to the Worker edge |
+| in-process Python MCP | `:233`, `server.py:414`, `Dockerfile.digichat-cloudflare:111` | Worker-native MCP (Phase B) |
+| raw TCP Postgres | `src/db/index.ts:12` | Hyperdrive or an HTTP driver |
+| boot-time filesystem | `license/state.ts:98`, `artifact-blobs.ts:127` | KV / R2 |
+
+Exit: `/chat` p95 TTFB at the warm baseline, one full turn on **OCC** and on
+the house surface, no cold start.
+
+### Phase H — delete
+`DigiChatContainer`, `DigiStackContainer`, their images. **Chris-only**, after a
+verified week with no routing to either. Not reversible by redeploy.
 
 ## Control rules
 
-1. **One step in flight.** The next step does not begin until this one meets
-   its exit criteria in production.
-2. **Exit criteria are production numbers**, not merged PRs. "Merged" is how the
-   last incident happened.
-3. **Rollback is written before the step starts** and must not need a new
-   commit.
-4. **Client surfaces are named per step.** OCC and every DataTap tenant are
-   users; a step that cannot be validated on them does not ship.
-5. **Deletions last**, after a full week with the replacement serving alone.
-6. **Nothing irreversible without Chris.** Deleting a Cloudflare container app
-   or a registry image cannot be undone by a redeploy.
+1. One step in flight; the next does not begin until this one is measured in
+   production.
+2. Exit criteria are numbers. "Merged" is how the last incident happened.
+3. Rollback written before the step starts, executable without a new commit.
+4. Client surfaces named per step. OCC and every DataTap tenant are users.
+5. Irreversible actions only with Chris, after the replacement has served alone.
+6. A spike that fails stops its phase. It does not get argued past.
 
-## Ledger
+## What is already built (do not rebuild)
 
-| # | Step | Entry | Exit (production) | Rollback | Reversible? |
-|---|---|---|---|---|---|
-| 0 | Baseline + this plan | — | numbers recorded; plan merged | n/a | yes |
-| 1 | `DIG-2915` runner cutover | launchd job installed and running | digiquant jobs run from the host; container declared but unused | re-enable the container trigger | yes |
-| 2 | Cheap deletions (`redis`, `seed_chroma`) | step 1 exit | names gone; digikey's JTI blocklist and the SearXNG limiter re-homed | redeploy previous image | yes |
-| 3 | `digivault` → Worker | step 2 exit; the four baked-seed tools read D1 | vault tools answer from D1 with no container in the path | previous image, dispatched | yes |
-| 4 | Chat container → Worker | step 3 exit; the four blockers below are retired | `/chat` p95 TTFB at the warm baseline, no cold start | dispatch the previous image tag | yes |
-| 5 | `digikey` cut | step 4 exit **and** a stated reason to move it | tokens issued/verified with no container in the path | previous container stays warm one release | yes |
-| 6 | Retire `DigiStackContainer` | steps 2–5 leave it with no programs | app deleted, bill reflects it | restore from the release ledger | **no — Chris only** |
-
-> Step 6 may legitimately never happen. If `digigraph` and `digisearch` stay,
-> the box stays, and the ledger ends at step 5.
-
-## Step 4 is not a port — it is four blockers
-
-Verified in code, not inferred from issue titles:
-
-| Blocker | Evidence | Consequence |
-|---|---|---|
-| A listening socket | `trusted-proxy-server.mjs:277` `http.createServer`, `:201` `net.connect` | a request-scoped Worker cannot hold it; the proxy must move to the Worker edge or a Durable Object |
-| An in-process Python MCP | `:233` spawns `python3 -m scripts.zammad_mcp.server`; `server.py:414` serves streamable-http on `127.0.0.1:8770`; `Dockerfile.digichat-cloudflare:111` installs Python | must become a Worker-native MCP or a remote service |
-| Raw TCP Postgres | `src/db/index.ts:12` `postgres()` | needs Hyperdrive or an HTTP driver |
-| Boot-time filesystem | `license/state.ts:98`, `artifact-blobs.ts:127` (`/var/tmp`) | needs KV/R2 |
-
-Not blockers, despite the assumption: SSE streaming works on Workers
-(`app/api/chat/route.ts:978`), the MCP client is plain `fetch` JSON-RPC
-(`lib/mcp/schema-proxy.ts:321`), and there is **no** PDF, upload,
-websocket, redis or SQLite code in the chat image at all.
-
-## What is already done, so we do not rebuild it
-
-- MCP auth at the edge: digikey JWTs verified by the Worker, JWKS cached in KV,
-  loopback Host rewritten (`mcp-edge-auth.ts`, `mcp-edge-target.ts`).
-- Config externalised to KV with a 30 s re-read.
-- The 5.1 kB text-binding limit hit and solved by splitting the corpus map.
-- One tool expansion and a naming contract that fails CI on an id that does not
-  exist.
-
-## Risks
-
-| Risk | Why it is dangerous | Mitigation |
-|---|---|---|
-| `digikey` cut | moves the JWT issuer for digisearch, digigraph, digiquant and digivault; a wrong `kid`/JWKS invalidates every existing token, DataTap and OCC included | last cut, with a token-compatibility test before it |
-| Chat cut | replaces the container behind invite-gated OCC with 1-minute `sleepAfter` proxy semantics | step 4 measures a full turn on OCC, not a health check |
-| Deleting a container app or image | cannot be undone by redeploy | Chris-only, after a verified deploy and a week |
-| Declaring a step done on "merged" | the failure mode already observed | exit criteria are production numbers |
+MCP JWT verification at the edge with a KV JWKS cache and loopback-Host
+rewrite; config externalised to KV with a 30 s re-read; the 5.1 kB binding
+limit hit and solved by splitting the corpus map; one tool expansion plus a
+naming contract that fails CI on an id that does not exist; tenant-scoped
+skills; a digikey Worker (`DIG-5548`) already green and parked.
