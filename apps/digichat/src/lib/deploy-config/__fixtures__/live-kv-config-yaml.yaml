@@ -1,0 +1,173 @@
+version: 1
+# House is the digichat default. OCC, the Foundry trial, local, and Docker
+# are overlays (`extends: defaults`). A container with no config file loads
+# this document, so a deployment with no overrides looks like digithings.ai.
+#
+# Tokens are env var names only. `tokenEnv` is resolved at load and is never
+# projected to the browser. `prompt` is the digithings corpus prompt; it is
+# server-only.
+embedHosts:
+  - digithings.ai
+  - www.digithings.ai
+  - occ.digithings.ai
+  - digiquant.io
+  - www.digiquant.io
+graphTools:
+  - digisearch
+  - digivault_search_notes
+  - digivault_get_note
+deployment: &house
+  slug: digithings-ai
+  aliases:
+    - www.digithings.ai
+  chrome:
+    # The house tenant is the digithings.ai product surface, not an embeddable
+    # widget: `mode: app` keeps `/chat` on the product chat instead of
+    # redirecting it to `/embed` (the thread templates keep `embed`).
+    mode: app
+    theme: dark
+    skin: digichat
+    title: ask digichat
+    welcome:
+      title: Ask about digithings
+      body: Explore the documentation, dig into the stack, or search the vault.
+    placeholder: Ask a question
+    suggestions:
+      - What is digigraph?
+      - How do embeds work?
+      - What components are in the stack?
+      - How do I run the stack locally?
+      - What models does digichat support?
+      - How does digiquant handle backtests?
+      - What is digivault?
+      - How do I create an embed?
+    attribution: true
+    launcher:
+      mode: bar
+      label: ask digichat
+      closeLabel: close
+      mobileFullscreen: true
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: false
+    dictation: false
+    speech: false
+    reasoning: true
+    toolCalls: true
+    sources: true
+    branchPicker: true
+    modelPicker: true
+  models:
+    # Catalog picker: presets, then every tool-capable model under the
+    # output cap. The list is config/model-picker-catalog.json, not a
+    # hand-written allowlist. OpenRouter appears only as the Router
+    # preset, and only when OPENROUTER_API_KEY is set at load.
+    allowPicker: true
+    catalog: true
+    # The house default is the 1017 checkpoint on the CheaperInference API
+    # (Chris, 23 Oct 2026). The bare id stays in the catalog and in the
+    # litellm routes; it is not what house chats run.
+    default: deepseek/deepseek-v4.1-flash-1017
+    priceCapUsdPerMillion: 2
+    # Premium sits above that cap and at or under $2.50 (GLM 5.3, Gemini
+    # 3.8 Flash). Manual picks only. costPerWindow is three typical turns
+    # of the pricier one, GLM 5.3, per rolling day ($0.0125565).
+    costPerWindow:
+      usd: 0.0125565
+      windowSeconds: 86400
+    presets: [auto, reasoning, fast, light]
+    showFullList: true
+  backend:
+    type: digigraph
+    digisearchIndex: digithings_docs
+    vaultPathPrefix: clients/digithings
+  # Stability on every deployment, including overlays that clear the
+  # spend limits below. 5 matches digillm's tool-round limit. answerAt asks
+  # the model to finish; pauseAt waits out the window. Both are the
+  # guardrail defaults.
+  # The 80000-token minute is per visitor, and it belongs to house because
+  # house is public. OCC clears it. The Foundry trial replaces it with one
+  # shared allowance. Anonymous traffic is keyed by the server-derived
+  # client IP.
+  # rateLimit is the chat request limiter (per visitor, and per IP for an
+  # anonymous embed). A visitor's own key skips this limiter and the
+  # per-visitor minute. The tool-call cap, the answer guard, and a shared
+  # deployment minute stay on.
+  guardrails:
+    maxToolCallsPerTurn: 5
+    answerAt: 0.7
+    pauseAt: 0.9
+    rateLimit: true
+    tokensPerMinute:
+      user: 80000
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: digisearch
+      - id: digivault
+        default: true
+        label: digivault
+  mcp:
+    allowUserServers: false
+    allowAddForm: false
+    # Per-row MCP credentials. Two shapes, and the precedence is not a fallback
+    # chain:
+    #
+    #   authScheme: jwt   the chat mints its own digikey token, scoped
+    #                     `mcp:<server id>`, server-side, once per scope set and
+    #                     reused until 60s before exp. Sent as
+    #                     `Authorization: Bearer <token>` and verified at the
+    #                     MCP edge (apps/digithings-stack-cloudflare/src/
+    #                     mcp-edge-auth.ts), which refuses a token that does not
+    #                     carry this server's scope. Wins over token/tokenEnv on
+    #                     the same row; if minting fails the row gets NO
+    #                     credential — never the static one.
+    #   token / tokenEnv  the static shape: `tokenEnv` names an env var resolved
+    #                     at load, sent under `authHeader` (or as
+    #                     `Authorization: Bearer` when authHeader is absent).
+    #                     This is what compose and self-host use, and what a row
+    #                     with no authScheme means. Unchanged by this document.
+    #
+    # Neither shape ever reaches the browser: only id/url/label/setup reach the
+    # client projection.
+    servers:
+      # The shipped default is the compose/self-host topology: these hostnames
+      # resolve on the compose network and nowhere else. A deployment that is
+      # not compose (the Cloudflare container included) overrides this document
+      # from its own config source — the KV `config-yaml` key — with that
+      # environment's endpoints. Keeping the edge URLs here instead would send
+      # every self-hosted install at our Worker, where it has no key.
+      - id: digisearch
+        url: https://search.digithings.ai/_stack/mcp/digisearch/mcp
+        label: digisearch
+        default: true
+        authScheme: jwt
+        setup:
+          index_name: digithings_docs
+      - id: digivault
+        url: https://graph.digithings.ai/_stack/mcp/digivault/mcp
+        label: digivault
+        default: true
+        authScheme: jwt
+        setup:
+          path_prefix: clients/digithings
+  gate:
+    mode: ungated
+    activityDetail: full
+    llmAccess: free_then_byok
+    showByok: true
+    showLanguageSelector: true
+    # The existing composer context meter. On for house even when a published
+    # tenant sends an empty model list. Does not open the model picker.
+    showContextMeter: true
+    # On, matching live digithings.ai. If the digigraph license has no
+    # hosted-web-search scope the turn 403s and the stream adapter retries
+    # once as plain inference.
+    webSearch: true
+  tokenEnv: DIGICHAT_HOST_DIGITHINGS_AI_TOKEN
+  prompt: "You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings."
+hosts:
+  digithings.ai: *house

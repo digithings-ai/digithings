@@ -53,7 +53,32 @@ const ThreadSkinInputSchema = z.preprocess(
   (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
   ThreadSkinSchema,
 );
-export const GateModeSchema = z.enum(["turn_limited", "ungated", "trial_form"]);
+/**
+ * How a deployment lets a visitor in.
+ *
+ * - `turn_limited` — a free-turn quota in the app, then a BYOK handoff.
+ * - `ungated` — no gate; every request is served.
+ * - `trial_form` — a trial embed: per-IP quota plus an unlock handshake.
+ * - `invite` — an invite credential is required before the surface renders,
+ *   and it is enforced at the EDGE (the Worker/Pages gate in front of the
+ *   container), not in the app. So inside the app it accounts turns exactly
+ *   like `ungated`: nothing is counted, because an unauthenticated request
+ *   never reaches a route handler. See `gateMetersTurns`.
+ */
+export const GateModeSchema = z.enum(["turn_limited", "ungated", "trial_form", "invite"]);
+export type GateMode = z.infer<typeof GateModeSchema>;
+
+/**
+ * Whether the app itself meters turns for this mode. `invite` does not: the
+ * credential was checked at the edge before the request got here. This is the
+ * single place the `invite` ≈ `ungated` turn-accounting decision is written
+ * down — a new gate mode has to be classified here or it silently inherits the
+ * unmetered branch (and `tsc` reports it as a missing case if it is ever a
+ * `switch`).
+ */
+export function gateMetersTurns(mode: GateMode): boolean {
+  return mode === "turn_limited" || mode === "trial_form";
+}
 export const ActivityDetailSchema = z.enum(["off", "labels", "full"]);
 /**
  * Host-page context injection from the popup widget (`digichat:page-context`):
