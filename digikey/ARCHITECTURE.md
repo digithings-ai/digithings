@@ -55,7 +55,7 @@ This architecture means digikey sits on the hot path for key exchange but is com
 | `key_crypto.py` | API key generation (`secrets`), bcrypt hash/verify |
 | `db.py` | SQLAlchemy engine and session factory |
 | `db_schema.py` | `ApiKeyRow` (`digikey_api_keys`), `LicenseRow` (`digikey_licenses`) |
-| `scopes.py` | Scope matching logic, `DEFAULT_BFF_SESSION_SCOPES` |
+| `scopes.py` | Scope matching logic, `DEFAULT_BFF_SESSION_SCOPES`, `BFF_SESSION_GRANTABLE_SCOPES` |
 | `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
 | `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
 | `integrations/service_middleware.py` | `DigiAuthMiddleware`, per-service path-scope tables |
@@ -334,7 +334,9 @@ Scopes follow a `service:action` namespace. Defined (implicitly) in `scopes.py` 
 | `digivault:write` | digivault | Mutating note routes; `digivault_create_note` is additionally handler-enforced on the shared `/v1/orchestrator_invoke` |
 | `*` | all | Wildcard — all scopes |
 
-Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`, `digivault:read`.
+Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`, `digisearch:screen`, `digivault:read`.
+
+Grantable BFF session scopes (`BFF_SESSION_GRANTABLE_SCOPES`, DIG-5635): the default set **plus** `mcp:digisearch` and `mcp:digivault`. A `bff_session` caller may request those two, and only those two beyond the defaults; the exchange answers 400 for anything else (`mcp:*` included). They are intentionally absent from the default set: a token minted with no `requested_scopes` carries no `mcp:` scope, so digichat's MCP-edge mint is the one caller that opts in (`apps/digichat/src/lib/mcp-edge-token.ts`).
 
 ### LiteLLM proxy key funnel
 

@@ -1474,7 +1474,12 @@ set or override it — only the operator/token pairing on the same YAML row can.
 **`authScheme: jwt` is the chat's own identity.** Instead of a static token the BFF mints a digikey JWT, scoped
 `mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — `DIGICHAT_MCP_IDENTITY_KEY`
 (a `dgk_live_…` key) when configured, else the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`) — and reuses it
-until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The token is set as the row's `token` with
+until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The BFF credential path sends
+`requested_scopes: ["mcp:digisearch", "mcp:digivault"]`, which digikey answers from
+`BFF_SESSION_GRANTABLE_SCOPES` (`digikey/src/digikey/scopes.py`): the default session scopes **plus** those two
+`mcp:` scopes, and nothing else. The `mcp:` scopes are not in `DEFAULT_BFF_SESSION_SCOPES`, so a BFF session minted
+without `requested_scopes` (the digigraph upstream call, `lib/digigraph-upstream.ts`) carries no edge access; the
+edge mint is the only caller that opts in. The token is set as the row's `token` with
 `authHeader` removed, so digigraph's default applies: `Authorization: Bearer <token>` (`mcp_client.py`,
 `mcp_http_headers`). The scheme itself is never forwarded — digigraph does not know about it. Precedence is not a
 fallback chain: `jwt` wins over `token`/`tokenEnv` on the same row, and a failed mint leaves the row with **no**

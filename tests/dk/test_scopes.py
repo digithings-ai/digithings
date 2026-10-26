@@ -11,17 +11,23 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
+from digikey.scopes import (
+    BFF_SESSION_GRANTABLE_SCOPES,
+    DEFAULT_BFF_SESSION_SCOPES,
+    scope_grants_required,
+)
 from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 
 SCREEN_SCOPE = "digisearch:screen"
 SCREEN_PATH = "/internal/art9/screen"
+MCP_EDGE_SCOPES = ["mcp:digisearch", "mcp:digivault"]
 
 #: The digichat BFF exchange that inherits DEFAULT_BFF_SESSION_SCOPES.
 _DIGICHAT_LIB = Path(__file__).resolve().parents[2] / "apps/digichat/src/lib"
-DIGICHAT_EXCHANGE_SOURCE = _DIGICHAT_LIB / "digikey-exchange.ts"
+#: The digigraph upstream exchange: the caller that relies on the inheritance.
+DIGIGRAPH_UPSTREAM_SOURCE = _DIGICHAT_LIB / "digigraph-upstream.ts"
 
 
 def test_star_grants_all():
@@ -226,19 +232,31 @@ def test_digichat_caller_inherits_screen_scope_without_requesting_it(bff_client)
     assert SCREEN_SCOPE in claims["scopes"]
 
 
-def test_digichat_exchange_source_sends_no_requested_scopes():
-    """Guard the inheritance: digichat must keep sending no requested_scopes.
+def test_digigraph_upstream_exchange_sends_no_requested_scopes():
+    """Guard the inheritance: the digigraph exchange keeps inheriting the defaults.
 
-    If digichat ever sends ``requested_scopes``, it replaces the default list and
-    loses digisearch:screen. This test fails loudly so the coupling is visible.
+    ``resolveDigigraphUpstreamAuth`` calls ``exchangeDigikeyBffSession`` with
+    tenant and subject only. If it ever passes a scope list, digikey narrows the
+    token to that list and the call loses ``digisearch:screen`` (and, after
+    DIG-5635, every other default). The MCP-edge mint is a different caller and
+    requests its scopes explicitly on purpose (``lib/mcp-edge-token.ts``). This
+    test fails loudly so the coupling is visible.
     """
-    text = DIGICHAT_EXCHANGE_SOURCE.read_text(encoding="utf-8")
-    start = text.index("export async function exchangeDigikeyBffSession")
-    body = text[start : text.index("\n}", start)]
+    text = DIGIGRAPH_UPSTREAM_SOURCE.read_text(encoding="utf-8")
+    start = text.index("export async function resolveDigigraphUpstreamAuth")
+    body = text[start:]
+    call_start = body.index("exchangeDigikeyBffSession(")
+    call = body[call_start:][: body[call_start:].index(");") + 2]
+    args = call[len("exchangeDigikeyBffSession(") : -2]
 
-    assert "requested_scopes" not in body, (
-        "digichat now sends requested_scopes; it will drop digisearch:screen "
-        "from the BFF session and needs the scope listed explicitly"
+    assert [a.strip() for a in args.split(",")] == [
+        "digikeyUrl",
+        "bffTok",
+        "tenantSlug",
+        "ownerUserSub",
+    ], (
+        "digigraph-upstream now narrows the BFF session; it drops digisearch:screen "
+        "and the other inherited defaults"
     )
 
 
@@ -255,4 +273,73 @@ def test_screen_scope_is_not_requestable_on_its_own_via_bff_session(bff_client):
         },
     )
     assert r.status_code == 400
+    assert "requested_scopes not allowed" in r.text
+
+
+# --- MCP edge scopes (DIG-5635) ---------------------------------------------------
+
+
+def test_grantable_set_is_the_defaults_plus_the_edge_scopes():
+    """The edge scopes are grantable but never inherited.
+
+    A token minted without ``requested_scopes`` must not silently gain edge
+    access, so the two sets have to stay distinct.
+    """
+    assert set(BFF_SESSION_GRANTABLE_SCOPES) == {
+        *DEFAULT_BFF_SESSION_SCOPES,
+        *MCP_EDGE_SCOPES,
+    }
+    assert not [s for s in DEFAULT_BFF_SESSION_SCOPES if s.startswith("mcp:")]
+
+
+def _bff_exchange(bff_client, **body_extra):
+    body = {"grant_type": "bff_session", "tenant_slug": "acme", "subject": "alice"}
+    body.update(body_extra)
+    return bff_client.post(
+        "/v1/oauth/token",
+        headers={"Authorization": f"Bearer {BFF_TOKEN}"},
+        json=body,
+    )
+
+
+def test_bff_session_grants_both_mcp_edge_scopes_when_requested(bff_client):
+    """digichat's MCP-edge mint asks for both scopes and must get exactly them."""
+    jwt = pytest.importorskip("jwt")
+
+    r = _bff_exchange(bff_client, requested_scopes=list(MCP_EDGE_SCOPES))
+
+    assert r.status_code == 200, r.text
+    claims = jwt.decode(r.json()["access_token"], options={"verify_signature": False})
+    assert claims["scopes"] == MCP_EDGE_SCOPES
+    assert claims["scope"] == " ".join(MCP_EDGE_SCOPES)
+    assert claims["principal_kind"] == "bff_session"
+    assert claims["sub"] == "bff:alice"
+    assert claims["tenant_slug"] == "acme"
+
+
+def test_bff_session_defaults_carry_no_mcp_edge_scope(bff_client):
+    """No requested_scopes means the default set, and the default set is edge-free."""
+    jwt = pytest.importorskip("jwt")
+
+    r = _bff_exchange(bff_client)
+
+    assert r.status_code == 200, r.text
+    claims = jwt.decode(r.json()["access_token"], options={"verify_signature": False})
+    assert claims["scopes"] == DEFAULT_BFF_SESSION_SCOPES
+    assert [s for s in claims["scopes"] if s.startswith("mcp:")] == []
+
+
+@pytest.mark.parametrize(
+    "requested",
+    [
+        ["mcp:*"],
+        ["digivault:write"],
+        [*MCP_EDGE_SCOPES, "digivault:write"],
+    ],
+)
+def test_bff_session_refuses_scopes_outside_the_grantable_set(bff_client, requested):
+    """A requested wildcard, a write scope and a mixed over-ask are all refused."""
+    r = _bff_exchange(bff_client, requested_scopes=requested)
+
+    assert r.status_code == 400, r.text
     assert "requested_scopes not allowed" in r.text

@@ -45,3 +45,17 @@ DEFAULT_BFF_SESSION_SCOPES: list[str] = [
     "digisearch:screen",
     "digivault:read",
 ]
+
+#: Scopes a ``bff_session`` caller may *request*: the default set plus the MCP
+#: edge scopes (DIG-5635). digichat mints its MCP-edge token with
+#: ``requested_scopes: ["mcp:digisearch", "mcp:digivault"]``, so the exchange has
+#: to grant them.
+#:
+#: They are deliberately NOT in :data:`DEFAULT_BFF_SESSION_SCOPES`: a token
+#: minted with no ``requested_scopes`` inherits the defaults, and it must not
+#: silently gain edge access. Requesting is the only way in.
+BFF_SESSION_GRANTABLE_SCOPES: list[str] = [
+    *DEFAULT_BFF_SESSION_SCOPES,
+    "mcp:digisearch",
+    "mcp:digivault",
+]
