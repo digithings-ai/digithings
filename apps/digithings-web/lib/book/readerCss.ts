@@ -129,6 +129,16 @@ export const BOOK_READER_CSS = `
    reader's own pixel field, breathing rather than scrolling. */
 .book-live { position: relative; }
 .book-live__skeleton { display: flex; flex-direction: column; gap: 2.25rem; }
+/* A shimmer alone reads as a page that never loads. Say what is happening, and
+   say how far along it is. */
+.book-live__skeleton-status {
+  margin: 0 0 -0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+}
 .book-live__skeleton-page {
   position: relative;
   width: ${BOOK_PAGE_WIDTH}px;
@@ -186,7 +196,7 @@ html:has(.book-live) { scrollbar-gutter: stable; }
      happens; a narrower source fitted the use-cases chapter onto one page
      where the printed book gives it two. */
   width: 1280px;
-  /* The print route paginates inside `.book-root`, which swaps the mono stack
+  /* The print route paginates inside the book root, which swaps the mono stack
      for the book's own face (printCss.ts). The reader's source is a body-level
      host and was therefore measured in a different font — close enough to look
      right, different enough to break the pages elsewhere: twenty sheets on
