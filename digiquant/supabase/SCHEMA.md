@@ -1277,7 +1277,7 @@ explicit allowlist in the ingest Worker (DIG-2656), never a blanket OTLP copy.
 
 | table | natural key | what it is |
 |---|---|---|
-| `digitrace_traces` | `(workspace_id, trace_id)` | one row per trace: source, name, service, start/end, duration, status, session, run, span count |
+| `digitrace_traces` | `(workspace_id, trace_id)` | one row per trace: source, name, service, start/end, duration, status, session, run, span count; the span-derived columns are repaired by `refresh_digitrace_trace` |
 | `digitrace_spans_index` | `(workspace_id, trace_id, span_id)` | one row per span: kind, parent, model, provider, tokens, `cost_usd`, hash + length of input and output |
 | `digitrace_scores` | `(workspace_id, trace_id, span_id, name)` | MLflow scores written back; `span_id = ''` is a trace-level score |
 | `digitrace_sessions` | `(workspace_id, session_id)` | one row per session: window, `last_activity_at`, rolled-up trace/span/token/cost totals, written by `refresh_digitrace_session` |
@@ -1290,6 +1290,21 @@ explicit allowlist in the ingest Worker (DIG-2656), never a blanket OTLP copy.
   index has exactly one tenancy column. A column the writer never populates would read
   `NULL`/`false` on every row — "unverified" even for a resolved claim — so the index
   stores only what it can keep true.
+- **`digitrace_traces` is an aggregate too, repaired by a function.** One trace can
+  arrive in several OTLP requests (an SDK timer flushing mid-trace), and the consumer's
+  per-request upsert replaces the earlier slice — the span count shrinks, the start moves
+  later, the name can come from a non-root span, and an error status flips back to OK.
+  `public.refresh_digitrace_trace(workspace_id, trace_id)` recomputes the span-derived
+  columns from `digitrace_spans_index` after a batch's spans are written: `span_count`,
+  the activity window and duration, the root span's name, and a status that never
+  downgrades once it is `STATUS_CODE_ERROR`. It is **UPDATE-only** — the consumer owns
+  the insert and the request-level columns (`source`, `service_name`, `attributes`,
+  `resource`), which are not derivable from the index — and a trace with no spans in the
+  index is left alone. Like the sessions writer it is `SECURITY INVOKER`,
+  `search_path = ''`, `service_role`-only, and serialised on a transaction-scoped
+  advisory lock, here keyed `trace:` + `(workspace_id, trace_id)` so it never collides
+  with the sessions lock. `ended_at` and `duration_ms` stay `NULL` while any span of the
+  trace is still open: a trace has ended only when all of its spans have.
 - **`digitrace_sessions` is an aggregate, written by a function.** PostgREST's
   `merge-duplicates` upsert replaces a row, so it cannot maintain running counts;
   `public.refresh_digitrace_session(workspace_id, session_id)` recomputes the row from

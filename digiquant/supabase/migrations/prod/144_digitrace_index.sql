@@ -15,7 +15,7 @@
 --   public.digitrace_scores       MLflow scores written back per trace/span
 --   public.digitrace_sessions     one row per session, an aggregate over the spans
 --
--- Plus the sessions rollup writer
+-- Plus the two rollup writers `public.refresh_digitrace_trace(uuid, text)` and
 -- `public.refresh_digitrace_session(uuid, text)`, the retention job
 -- `public.prune_digitrace_index(integer, integer)` and its pg_cron schedule
 -- (daily prune + daily plain VACUUM ANALYZE).
@@ -332,7 +332,186 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.digitrace_sessions
     );
 
 -- ---------------------------------------------------------------------------
--- 4. The sessions rollup writer
+-- 4. The rollup writers
+-- ---------------------------------------------------------------------------
+-- Two tables hold a CROSS-MESSAGE aggregate: `digitrace_sessions` (over a
+-- conversation) and `digitrace_traces` (over a trace's spans). A PostgREST
+-- upsert cannot maintain either - `resolution=merge-duplicates` REPLACES a row,
+-- so the second message of a session, or the second OTLP request of a trace,
+-- overwrites a larger aggregate with a smaller one. There is no
+-- increment-through-REST. Both are therefore written by a function that
+-- RECOMPUTES the aggregate from `digitrace_spans_index`.
+--
+-- Recompute rather than accumulate, for the same reason in both places: the
+-- consumer reads from a Cloudflare Queue, which is at-least-once. Adding a
+-- batch's deltas (`count + excluded.count`) double-counts on a redelivery;
+-- recomputing from the spans lands on the same numbers however many times the
+-- message is delivered, so it needs no batch id, no dedupe table and no
+-- ordering assumption.
+--
+-- ---------------------------------------------------------------------------
+-- 4a. The trace rollup writer
+-- ---------------------------------------------------------------------------
+-- `digitrace_traces` is an aggregate over the trace's spans, and one trace can
+-- arrive in SEVERAL OTLP requests (an SDK timer that flushes mid-trace). The
+-- consumer's per-request upsert replaces the earlier slice, so without this
+-- function the container line shrinks, `started_at` moves later, a duration is
+-- reported that never happened, the name comes from a span that is not the
+-- root, and an error status flips back to OK. Those are wrong values, not
+-- partial ones, which is why the consumer currently suppresses the row for a
+-- trace it could not keep whole.
+--
+-- This function is UPDATE-ONLY, and deliberately so: the row's identity and
+-- its request-level columns (`source`, `service_name`, `attributes`,
+-- `resource`) come from the OTLP message and are not derivable from the index,
+-- so the consumer remains the row's INSERT writer and this function only
+-- repairs the span-derived columns after a batch's spans are written:
+--
+--   span_count    count of the trace's spans in the index
+--   started_at    min span start (the consumer falls back to receive time,
+--                 which is never earlier than the real start)
+--   ended_at      max span end, and NULL while any span is still open - a
+--                 trace is ended only when all of its spans have ended
+--   duration_ms   ended_at - started_at, NULL while the trace is open
+--   status        'STATUS_CODE_ERROR' if any span failed OR the row already
+--                 records an error, else the root span's status. Sticky on
+--                 purpose: the consumer also treats a span with an
+--                 `exception.type` event as failed, and span events are not in
+--                 the index, so the index alone cannot see that failure. An
+--                 error, once recorded, is never downgraded.
+--   status_message the first failed span's message, else the root's, else the
+--                 existing value
+--   name          the ROOT span's name when a root has arrived, else the
+--                 existing value (the consumer's first-in-batch fallback)
+--   session_id / run_id  filled from the spans only when the row has none, so
+--                 the consumer's first-found value is never overwritten
+--
+-- A trace with no spans in the index (nothing written yet, or already pruned)
+-- is left alone: there is nothing to recompute from, and the existing row is
+-- not wrong merely because the spans aged out.
+--
+-- SECURITY INVOKER on purpose, as below: the only grantee is `service_role`,
+-- which already holds UPDATE on this table and SELECT on the spans, so DEFINER
+-- rights would add an escalation surface and buy no capability. `search_path`
+-- is pinned empty and every name is schema-qualified.
+--
+-- Concurrency: recompute is idempotent, not automatically concurrent-safe -
+-- two overlapping calls each read the spans before either writes, and the
+-- later writer can store the older aggregate. The transaction-scoped advisory
+-- lock below serialises refreshes for one (workspace, trace), and its key is
+-- prefixed `trace:` so it never collides with the sessions writer's key space.
+-- PostgREST runs one request per transaction, so the lock is released at
+-- commit.
+CREATE OR REPLACE FUNCTION public.refresh_digitrace_trace(
+    p_workspace_id uuid,
+    p_trace_id text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+    v_started        timestamptz;
+    v_ended          timestamptz;
+    v_spans          integer;
+    v_root_name      text;
+    v_root_status    text;
+    v_root_message   text;
+    v_failed_message text;
+    v_any_error      boolean;
+    v_session        text;
+    v_run            text;
+BEGIN
+    IF p_workspace_id IS NULL OR p_trace_id IS NULL OR p_trace_id = '' THEN
+        RAISE EXCEPTION
+            'refresh_digitrace_trace: a workspace_id and a non-empty trace_id are required';
+    END IF;
+
+    -- SERIALISE the refreshes for one trace, before the aggregate is read.
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended('trace:' || p_workspace_id::text || ':' || p_trace_id, 0)
+    );
+
+    SELECT min(s.started_at),
+           CASE WHEN count(*) FILTER (WHERE s.ended_at IS NULL) > 0
+                THEN NULL
+                ELSE max(s.ended_at)
+           END,
+           count(*)::integer,
+           (array_agg(s.name ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.parent_span_id IS NULL))[1],
+           (array_agg(s.status ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.parent_span_id IS NULL))[1],
+           (array_agg(s.status_message ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.parent_span_id IS NULL
+                          AND s.status_message IS NOT NULL))[1],
+           (array_agg(s.status_message ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.status = 'STATUS_CODE_ERROR'
+                          AND s.status_message IS NOT NULL))[1],
+           COALESCE(bool_or(s.status = 'STATUS_CODE_ERROR'), false),
+           (array_agg(s.session_id ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.session_id IS NOT NULL))[1],
+           (array_agg(s.run_id ORDER BY s.started_at, s.span_id)
+                FILTER (WHERE s.run_id IS NOT NULL))[1]
+      INTO v_started, v_ended, v_spans, v_root_name, v_root_status, v_root_message,
+           v_failed_message, v_any_error, v_session, v_run
+      FROM public.digitrace_spans_index s
+     WHERE s.workspace_id = p_workspace_id
+       AND s.trace_id = p_trace_id;
+
+    -- No spans to recompute from: nothing written yet, or already pruned.
+    -- Do not touch a row that is not wrong.
+    IF v_spans = 0 THEN
+        RETURN;
+    END IF;
+
+    -- UPDATE-only: without the consumer's row there is no request-level data
+    -- (source, attributes, resource) to insert with, so an absent row is a
+    -- deliberate no-op. The statement is naturally zero-row in that case.
+    UPDATE public.digitrace_traces t
+       SET span_count     = v_spans,
+           started_at     = v_started,
+           ended_at       = v_ended,
+           duration_ms    = CASE
+                                WHEN v_ended IS NULL THEN NULL
+                                ELSE greatest(
+                                     extract(epoch FROM (v_ended - v_started)) * 1000,
+                                     0)
+                            END,
+           status         = CASE
+                                WHEN v_any_error
+                                     OR t.status = 'STATUS_CODE_ERROR'
+                                    THEN 'STATUS_CODE_ERROR'
+                                ELSE COALESCE(v_root_status, t.status)
+                            END,
+           status_message = CASE
+                                WHEN v_any_error
+                                     OR t.status = 'STATUS_CODE_ERROR'
+                                    THEN COALESCE(v_failed_message, t.status_message)
+                                ELSE COALESCE(v_root_message, t.status_message)
+                            END,
+           name           = COALESCE(v_root_name, t.name),
+           session_id     = COALESCE(t.session_id, v_session),
+           run_id         = COALESCE(t.run_id, v_run)
+     WHERE t.workspace_id = p_workspace_id
+       AND t.trace_id = p_trace_id;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.refresh_digitrace_trace(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.refresh_digitrace_trace(uuid, text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_digitrace_trace(uuid, text) TO service_role;
+
+COMMENT ON FUNCTION public.refresh_digitrace_trace(uuid, text) IS
+    'Recomputes the span-derived columns of one digitrace_traces row from public.digitrace_spans_index: '
+    'span_count, the activity window and duration, the root name, and an error status that never '
+    'downgrades. Idempotent, so an at-least-once Queue redelivery and a trace delivered across several '
+    'OTLP requests both converge on the same row. UPDATE-only - the consumer owns the insert and the '
+    'request-level columns. Called by the ingest consumer (DIG-2657) over PostgREST rpc; service_role only.';
+
+-- ---------------------------------------------------------------------------
+-- 4b. The sessions rollup writer
 -- ---------------------------------------------------------------------------
 -- `digitrace_sessions` is an aggregate row, and PostgREST cannot aggregate:
 -- `resolution=merge-duplicates` REPLACES a row, so a second batch of the same
@@ -547,6 +726,9 @@ COMMENT ON FUNCTION public.prune_digitrace_index(integer, integer) IS
 
 COMMENT ON TABLE public.digitrace_traces IS
     'One row per trace (ADR-0036). Index only - span bodies live in R2 digitrace-archive, never here. '
+    'The consumer inserts the row per OTLP request; the span-derived aggregate columns are recomputed '
+    'by public.refresh_digitrace_trace(workspace_id, trace_id), because a trace can arrive across '
+    'several requests and a PostgREST upsert replaces rather than merges. '
     'Retention 90 days by started_at, pg_cron job digitrace-index-prune (migration 144, DIG-2658). '
     'Tenant column workspace_id; RLS is the direct-client defence, the service-role boundary is the '
     'application-layer workspace_id filter.';
