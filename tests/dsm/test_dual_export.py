@@ -46,6 +46,9 @@ def _install_fake_otel(monkeypatch: pytest.MonkeyPatch, spans: list[dict[str, An
             self.attributes = dict(attributes or {})
             self.status: str = _StatusCode.UNSET
 
+        def set_attribute(self, key: str, value: Any) -> None:
+            self.attributes[key] = value
+
         def set_status(self, status: str) -> None:
             self.status = status
 
