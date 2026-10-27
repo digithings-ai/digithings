@@ -128,12 +128,42 @@ def test_loaders_agree_on_tmp_blobs(ccm: Any, tmp_path: Path) -> None:
     compose, wrangler, index_ts = _write_blobs(
         tmp_path, _tenants(), {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     )
-    expected = {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
+    # The alias is part of the compared map: that is what the container receives
+    # (DIG-5638), so a gate that stopped at the two raw keys would miss it.
+    expected = {
+        "digithings": dict(_CORPUS_A),
+        "digithings-ai": dict(_CORPUS_A),
+        "occ": dict(_CORPUS_B),
+    }
     assert ccm.load_embed_map(compose) == expected
     # The pair is joined, not just the first half: a loader that read only
     # DIGI_TENANT_CORPUS_MAP would answer with the house tenant alone.
     assert ccm.load_wrangler_map(wrangler) == expected
     assert ccm.check_index_ts_wiring(index_ts) == []
+
+
+def test_with_house_slug_alias_gives_both_slugs_the_same_entry(ccm: Any) -> None:
+    aliased = ccm.with_house_slug_alias({"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)})
+    assert aliased["digithings"] == aliased["digithings-ai"] == _CORPUS_A
+    assert set(aliased) == {"digithings", "digithings-ai", "occ"}
+
+
+def test_with_house_slug_alias_accepts_the_live_slug_alone(ccm: Any) -> None:
+    """A KV document keyed by the live slug still reaches the canonical key."""
+    aliased = ccm.with_house_slug_alias({"digithings-ai": dict(_CORPUS_A)})
+    assert aliased["digithings"] == aliased["digithings-ai"] == _CORPUS_A
+
+
+def test_with_house_slug_alias_never_lets_an_empty_entry_shadow_a_usable_one(ccm: Any) -> None:
+    """An empty canonical value must not narrow the corpus the alias already had."""
+    aliased = ccm.with_house_slug_alias({"digithings": {}, "digithings-ai": dict(_CORPUS_A)})
+    assert aliased["digithings"] == aliased["digithings-ai"] == _CORPUS_A
+
+
+def test_with_house_slug_alias_invents_no_tenant(ccm: Any) -> None:
+    input_map = {"occ": dict(_CORPUS_B)}
+    assert ccm.with_house_slug_alias(input_map) is input_map
+    assert "digithings-ai" not in input_map
 
 
 def test_compose_corpus_vars_lets_the_primary_half_win(ccm: Any) -> None:
