@@ -2,9 +2,9 @@
 
 ## Purpose
 
-digitrace provides the observability layer for the digithings stack. As a **library** (`digitrace.trace`, `digitrace.config`), it wraps tracing backends for every service via a single decorator (LangSmith is the Phase 0 backend; `LANGSMITH_*` env still drives it). As an **HTTP microservice** (port 8003), it exposes read-only status endpoints that tell orchestrators whether tracing is active — without ever surfacing a secret.
+digitrace provides the observability layer for the digithings stack. As a **library** (`digitrace.trace`, `digitrace.config`), it wraps tracing backends for every service via a single decorator. **In-house digitrace over OTLP is the default export; LangSmith and Langfuse-OTLP are supported, optional integrations** selected only by their own env vars and never implicitly. As an **HTTP microservice** (port 8003), it exposes read-only status endpoints that tell orchestrators which backend resolved — without ever surfacing a secret.
 
-> Phase 0 rename (#4929): this component was `digismith` (model `SmithStatus`). Temporary aliases (`SmithStatus`, the `langsmith` extra, `DIGISMITH_*` env reads) remain until Phase 3 — prefer the `digitrace` / `TraceStatus` / `[tracing]` names in new code.
+> Phase 0 rename (#4929): this component was `digismith` (model `SmithStatus`). Temporary aliases (`SmithStatus`, `DIGISMITH_*` env reads) remain until Phase 3 — prefer the `digitrace` / `TraceStatus` names in new code. The `langsmith` extra is a real optional integration (`digitrace[langsmith]`), not an alias.
 
 ---
 
@@ -26,9 +26,9 @@ Before making any change to `digitrace/`:
 - [ ] Read `ARCHITECTURE.md` Section 2 (Implementation State) and Section 4 (Security Analysis)
 - [ ] Run `pytest tests/ -m unit -k "digitrace" -v` — passes before and after
 - [ ] Run `ruff check digitrace/ && ruff format --check digitrace/` — zero errors
-- [ ] Confirm `GET /v1/status` response contains **no secrets** — no API keys, no full `LANGSMITH_ENDPOINT` URL, no credentials
+- [ ] Confirm `GET /v1/status` response contains **no secrets** — no API keys, no full vendor URL, no credentials
 - [ ] Confirm any new span attribute does not carry raw prompt text, full document bodies, or bearer tokens
-- [ ] Confirm `traceable()` decorator gracefully no-ops when `LANGSMITH_API_KEY` is absent
+- [ ] Confirm `traceable()` decorator gracefully no-ops when no export leg is configured
 - [ ] Confirm the library remains importable with zero mandatory non-stdlib deps beyond `pydantic` and `fastapi`
 
 ---
@@ -38,10 +38,11 @@ Before making any change to `digitrace/`:
 Beyond root `AGENTS.md`:
 
 - **No PII in spans**: Span attributes must never carry raw prompts, API keys, full document bodies, or bearer tokens. Permitted: `workflow_id`, `request_id`, `session_id`, model names, counts, latency, error codes.
-- **Status endpoint stays secret-free**: `GET /v1/status` exposes only boolean flags and the hostname of `LANGSMITH_ENDPOINT` (no path, no credentials). Any change must preserve this contract.
+- **Status endpoint stays secret-free**: `GET /v1/status` exposes only boolean flags and, for a configured optional integration, the sanitized hostname of `LANGSMITH_ENDPOINT` or the Langfuse endpoint (no path, no credentials). Any change must preserve this contract.
 - **Library is side-effect-free on import**: `digitrace.trace` and `digitrace.config` must not start threads, open sockets, or write files at import time.
-- **No-op fallback is not optional**: `traceable()` must return the unmodified function when LangSmith is not configured. Tests that run without `LANGSMITH_API_KEY` must still pass.
-- **LangSmith SDK is a soft optional**: Do not move `langsmith` from the `[tracing]` (alias: `[langsmith]`) extras to a hard dependency. Services that don't need tracing must not pay the install cost.
+- **No-op fallback is not optional**: `traceable()` must return the unmodified function when no export leg is configured. Tests that run without any tracing env must still pass.
+- **The vendor SDK is a soft optional**: Do not move `langsmith` from the `[langsmith]` extra to a hard dependency. The default OTLP leg is `digitrace[tracing]`; services that do not export to a vendor must not pay its install cost.
+- **The default stays in-house**: with no vendor env set, `export_backend()` must resolve to `otel` or `none`. A test pins that; do not let a vendor become the implicit default.
 - **Do not add a database or background worker**: digitrace is stateless by design. Phase 2 observability platform additions belong in a separate scoped task.
 - **`/v1/status/detailed` is deferred**: Do not implement this endpoint — it is a placeholder listed in `ARCHITECTURE.md` Section 11. Leave it until Phase 2 is explicitly scoped.
 

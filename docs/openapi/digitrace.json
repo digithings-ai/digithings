@@ -4,11 +4,52 @@
       "TraceStatus": {
         "description": "Public status for GET /v1/status.",
         "properties": {
+          "dual_export": {
+            "default": false,
+            "description": "Both a vendor SDK leg and an OTLP leg are configured",
+            "title": "Dual Export",
+            "type": "boolean"
+          },
           "export_backend": {
             "default": "none",
-            "description": "One of otel|none",
+            "description": "One of dual|langsmith|langfuse-otlp|otel|none (in-house otel is the default)",
             "title": "Export Backend",
             "type": "string"
+          },
+          "langfuse_configured": {
+            "default": false,
+            "description": "A Langfuse-specific endpoint/host env var is set",
+            "title": "Langfuse Configured",
+            "type": "boolean"
+          },
+          "langfuse_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized Langfuse host (no secrets); null unless configured",
+            "title": "Langfuse Host"
+          },
+          "langsmith_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized API host from LANGSMITH_ENDPOINT (no secrets); null unless configured",
+            "title": "Langsmith Host"
+          },
+          "langsmith_sdk_installed": {
+            "description": "langsmith Python package is importable",
+            "title": "Langsmith Sdk Installed",
+            "type": "boolean"
           },
           "otel_export_configured": {
             "default": false,
@@ -29,7 +70,7 @@
             "title": "Request Id"
           },
           "tracing_configured": {
-            "description": "An OTLP endpoint is set, so spans would be exported",
+            "description": "At least one export leg is configured",
             "title": "Tracing Configured",
             "type": "boolean"
           },
@@ -41,7 +82,8 @@
         },
         "required": [
           "version",
-          "tracing_configured"
+          "tracing_configured",
+          "langsmith_sdk_installed"
         ],
         "title": "TraceStatus",
         "type": "object"
@@ -83,7 +125,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. For richer diagnostics (tracing\nconfiguration, OTLP export state), see ``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. For richer diagnostics (resolved\nexport backend, optional vendor integration state), see ``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {

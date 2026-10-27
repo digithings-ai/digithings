@@ -17,7 +17,7 @@ digithings (digithings.ai) is an open-core modular agentic stack for building co
 | **digigraph** | 8000 | LangGraph orchestration hub; OpenAI-compatible API; delegates to verticals | JWT (digikey) — 503 if not configured | core (always on) | Yes — `python -m digigraph.mcp_server` | Shipped |
 | **digiquant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
 | **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up`; stack loopback :8765 via supervisord | Shipped |
-| **digitrace** | 8003 | Backend-neutral tracing helpers (library; LangSmith backend); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
+| **digitrace** | 8003 | Tracing helpers + status API (library; in-house OTLP default, LangSmith/Langfuse-OTLP optional); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
 | **digivault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `docker compose --profile digivault-mcp up`; stack loopback :8769 via supervisord | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
 | **digikey** | 8005 | API key issuance; JWT exchange (RS256); JWKS endpoint | Admin token for key issuance | core | No | Shipped |
@@ -343,15 +343,15 @@ Observability in digithings operates across three layers. Metrics are scraped by
 
 ### Layer 1: Distributed Tracing
 
-**LangSmith (conditional):** digigraph wraps LLM calls with `digitrace.trace.traceable`. When `LANGSMITH_API_KEY` is set and the `langsmith` package is installed, traces are sent directly from digigraph to LangSmith (or a custom `LANGSMITH_ENDPOINT`). The `digitrace` library is a thin no-op wrapper when LangSmith is not configured — no crash, no implicit data leakage.
+**In-house digitrace (default):** digigraph wraps LLM calls with `digitrace.trace.traceable`, which exports OTel spans to the in-house digitrace ingest when an OTLP endpoint is set. **LangSmith and Langfuse-OTLP are supported, optional integrations** — LangSmith activates only when `LANGSMITH_API_KEY` is set and the `langsmith` package is installed, and a vendor is never the default. The `digitrace` library is a thin no-op wrapper when no export leg is configured — no crash, no implicit data leakage.
 
 Required span attributes: `workflow_id`, `request_id` (mirrors `X-Request-ID`), `session_id`. Optional: `job_id` (digiquant backtest job), `tool` name, `run_name`.
 
 Prohibited in spans: raw prompts, API keys, bearer tokens, file paths outside approved workspace roots, full document bodies.
 
-**OpenTelemetry (optional per service):** Install `digibase[otel]` on any service and set `OTEL_EXPORTER_OTLP_ENDPOINT` to export infra-level traces. This complements LangSmith; it does not replace it. Same PII rules apply on span attributes.
+**OpenTelemetry (optional per service):** Install `digibase[otel]` on any service and set `OTEL_EXPORTER_OTLP_ENDPOINT` to export infra-level traces. This is the same transport the in-house digitrace default uses; the optional vendor integrations ride on it rather than replacing it. Same PII rules apply on span attributes.
 
-**digitrace status endpoint:** `GET /v1/status` (port 8003) returns version flags and sanitized LangSmith host only. It is intentionally public — never add secrets or keys to this payload.
+**digitrace status endpoint:** `GET /v1/status` (port 8003) returns the resolved backend, boolean flags, and — only for a configured optional integration — the sanitized vendor host. It is intentionally public — never add secrets or keys to this payload.
 
 ### Layer 2: Audit Logs
 
@@ -375,7 +375,7 @@ digichat's ecosystem side panel displays health badges for digigraph, digiquant,
 |-----|--------|---------|
 | Metrics collection is opt-in | `/metrics` is mounted on every FastAPI service, but Prometheus only runs under the `observability` profile, so nothing is scraped in the default stack | Run `make up-observability`; make it the default in production |
 | Metrics dashboard not part of core | Grafana and its provisioned dashboards require the `observability` profile; there is no default single pane of glass | `make up-observability`; fold into the Kubernetes target |
-| Span PII not enforced | Operators must configure LangSmith data masking manually | Policy gap; no automated check today |
+| Span PII not enforced | Operators exporting to a vendor must configure that vendor's data masking manually | Policy gap; no automated check today |
 | Audit sink not wired in digisearch | digisearch audit events may be missed by remote collectors | Phase 2 |
 | No distributed trace correlation across services | `X-Request-ID` propagates but is not auto-injected into OTel spans | Requires digibase[otel] instrumentation per service |
 
@@ -508,7 +508,7 @@ make seed-digisearch-edgar-dev                # ingest into edgar_dev index
 | `AUTH_URL` | Full public URL of digichat (must match browser origin) | Required for digichat |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password for digichat-DB | Required for `digichat` profile |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (no default; fails fast if unset) | Required for `observability` profile |
-| `LANGSMITH_API_KEY` | Enables LangSmith trace export from digigraph | Optional |
+| `LANGSMITH_API_KEY` | Optional LangSmith integration key (not the default; unset in the stack) | Optional |
 | `DIGI_LLM_MODE` | `test` / `medium` / `best` — model selection tier | Optional (default: `test`) |
 | `DIGI_HUB_MODE` | `legacy` / `federated` — vertical delegate tool exposure | Optional (default: `legacy`) |
 | `DIGI_ALLOW_CODE_EXEC` | `true` enables sandboxed Python in digigraph | Optional (default: off) |

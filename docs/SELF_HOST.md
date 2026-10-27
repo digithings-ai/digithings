@@ -384,7 +384,9 @@ Cron triggers run under `wrangler dev --test-scheduled`, and service bindings re
 
 The `digitrace-langfuse` Containers Worker and its Compose file were retired
 (never deployed) and removed; see
-[`docs/ops/digitrace-langfuse.md`](ops/digitrace-langfuse.md).
+[`docs/ops/digitrace-langfuse.md`](ops/digitrace-langfuse.md). In-house digitrace
+over OTLP is the default export; LangSmith and Langfuse-OTLP remain supported,
+optional integrations and are never the default.
 
 ---
 

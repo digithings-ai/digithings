@@ -668,3 +668,27 @@ would otherwise have built from and gotten wrong. The mechanism text is amended 
 for that reason, the way ADR-0018 amends its own decision body with a dated note; the
 amendment is recorded here so the change is visible in the record rather than silent.
 Round 4 of the review lives on DIG-2655.
+
+## Amendment (2026-10-27) — the deployment was retired, not the integrations
+
+This ADR ordered the **deployment** removed: the self-hosted Langfuse Worker, its
+containers, its store and its stack resources. It never decided that a tracing vendor is
+unsupported, and it did not make anything other than in-house digitrace the default.
+
+That distinction is recorded here because the removal leaf (DIG-5136) was read more
+widely than the decision: the vendor backends were taken out of the **digitrace service
+itself** as well as out of the stack. That was too much. LangSmith and Langfuse-OTLP
+remain **supported, optional integrations** — a service may point its export at either
+one by setting that vendor's own environment variables, and an operator who does so gets
+a vendor leg (or a `dual` fan-out alongside the OTLP leg). They are **never the default**:
+with no vendor variable set the resolved backend is `otel` (the in-house ingest) or
+`none` when there is no OTLP endpoint at all. No vendor is chosen implicitly.
+
+What stays removed is unchanged and is the actual subject of this ADR: no Langfuse app,
+no containers for it, no KV/R2 bucket for it, no catalogue row presenting a vendor as a
+stack component, and no vendor variables or secrets provisioning in
+`apps/digiquant-runner`. The application keeps a single export destination — the generic
+OTLP endpoint, which in the stack is in-house digitrace.
+
+No decision above changes. This note only records the scope of the removal so the record
+is not read as "the integrations are gone".
