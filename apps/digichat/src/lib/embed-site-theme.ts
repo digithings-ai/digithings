@@ -19,8 +19,8 @@ export function embedDocumentFollowsSiteTheme(topLevel: boolean, search: string)
 }
 
 const CANVAS: Record<"light" | "dark", string> = {
-  light: "#f1f0eb",
-  dark: "#121417",
+  light: "#f1f0eb", // canon-allow: browser theme-color meta for the pinned embed canvas, same pair as embed-theme-messages.ts
+  dark: "#121417", // canon-allow: browser theme-color meta for the pinned embed canvas, same pair as embed-theme-messages.ts
 };
 
 /** Pin script for one mode. The other branch leaves the site paint alone. */
