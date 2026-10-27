@@ -365,12 +365,34 @@ describe("client-container YAML install", () => {
     expect(allowed.tenantSlug).toBe("client-chatgpt");
   });
 
+  it("requires the install token on a non-embed call when the operator set one (DIG-3585)", () => {
+    // A call with no X-Embed-Host and no /embed Referer (the CLI without
+    // DIGICHAT_EMBED_HOST, or a direct POST) used to skip the install token.
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TOKEN", "install-secret");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    expect(resolveAnonymousInstallChat(embedRequest({}))).toBeNull();
+    expect(resolveAnonymousInstallChat(embedRequest({ "x-embed-token": "wrong" }))).toBeNull();
+    const ok = resolveAnonymousInstallChat(embedRequest({ "x-embed-token": "install-secret" }));
+    expect(ok?.tenantSlug).toBe("client-chatgpt");
+  });
+
+  it("keeps a tokenless install open on a non-embed call (a dedicated container)", () => {
+    vi.stubEnv("DIGICHAT_CONFIG_PATH", CHATGPT_YAML);
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
+    resetDigichatConfigForTests();
+    resetEmbedTenantRegistryForTests();
+    expect(resolveAnonymousInstallChat(embedRequest({}))?.tenantSlug).toBe("client-chatgpt");
+  });
+
   it("unlocks anonymous app chat for layout templates on /", () => {
     vi.stubEnv("DIGICHAT_CONFIG_PATH", WEBPAGE_YAML);
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
     resetDigichatConfigForTests();
     resetEmbedTenantRegistryForTests();
-    const ctx = resolveAnonymousInstallChat();
+    const ctx = resolveAnonymousInstallChat(embedRequest({}));
     expect(ctx?.tenantSlug).toBe("client-webpage-assistant");
     expect(ctx?.embedConfig?.skin).toBe("webpage-assistant");
     expect(ctx?.embedConfig?.layout).toBe("page");
@@ -505,7 +527,7 @@ describe("resolveAnonymousDeploymentChat", () => {
     setDigichatConfigForTests(
       hostedConfig({ "digithings.ai": { slug: "digithings-ai", auth: "anonymous" } }),
     );
-    expect(resolveAnonymousInstallChat()).toBeNull();
+    expect(resolveAnonymousInstallChat(embedRequest({}))).toBeNull();
     const ctx = resolveAnonymousDeploymentChat(
       productRequest({ origin: "https://digithings.ai" }),
     );

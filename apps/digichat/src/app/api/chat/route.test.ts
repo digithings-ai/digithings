@@ -284,6 +284,30 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(await res.json()).toMatchObject({ error: "embed_disabled" });
     });
 
+    it("needs the install token on a non-embed call to a tokened single install (DIG-3585)", async () => {
+      // A single-install client container: a YAML `deployment`, no hosts map.
+      // A call without X-Embed-Host and without an /embed Referer used to be
+      // served anonymously whatever the install token said.
+      process.env.DIGICHAT_CONFIG_YAML = "version: 1\n";
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "client-install",
+            backend: { type: "digigraph" },
+            token: "install-secret",
+          },
+        }),
+      );
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+
+      expect((await POST(chatRequest({}))).status).toBe(401);
+      expect((await POST(chatRequest({ "x-embed-token": "wrong" }))).status).toBe(401);
+      expect(vi.mocked(streamText)).not.toHaveBeenCalled();
+      const ok = await POST(chatRequest({ "x-embed-token": "install-secret" }));
+      expect(ok.status).toBe(200);
+    });
+
     it("leaves the authenticated branch on the session tenant", async () => {
       setDigichatConfigForTests(configFor("digithings.ai", "anonymous", "ungated"));
       vi.mocked(resolveChatTenantContext).mockClear();

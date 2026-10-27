@@ -254,14 +254,27 @@ export function resolveAnonymousDeploymentChat(req: Request): EmbedChatTenantCon
   }
 }
 
-/** Anonymous `chrome.mode: app` product on `/` (layout templates). */
-export function resolveAnonymousInstallChat(): EmbedChatTenantContext | null {
+/**
+ * Anonymous `chrome.mode: app` product on `/` (layout templates), and any
+ * other `/api/chat` call to a single-install client container that is not an
+ * embed request (no `X-Embed-Host`, no `/embed` Referer), such as the CLI
+ * without `DIGICHAT_EMBED_HOST`.
+ *
+ * When the operator set an install token (`deployment.token`, e.g. from
+ * `DIGICHAT_EMBED_TOKEN`), the call must carry it as `X-Embed-Token`, exactly
+ * like the embed path (`installAuthorized`). Before DIG-3585 this path
+ * ignored the token, so leaving out `X-Embed-Host` skipped the install gate.
+ * An install with no token stays open by design (a dedicated container).
+ */
+export function resolveAnonymousInstallChat(req: Request): EmbedChatTenantContext | null {
   const install = getAnonymousClientInstall();
   if (!install) return null;
+  const embedConfig = deploymentToEmbedTenant(install);
+  if (!installAuthorized(embedConfig, req.headers.get("x-embed-token"))) return null;
   return {
     tenantSlug: install.slug,
     ownerUserSub: "embed:anonymous",
-    embedConfig: deploymentToEmbedTenant(install),
+    embedConfig,
   };
 }
 

@@ -6,7 +6,8 @@
  * Env:
  *   DIGICHAT_URL          BFF origin (required unless --demo)
  *   DIGICHAT_EMBED_TOKEN  X-Embed-Token (embed installs)
- *   DIGICHAT_EMBED_HOST   X-Embed-Host (optional)
+ *   DIGICHAT_EMBED_HOST   X-Embed-Host: required on a multi-tenant deployment
+ *                         (it picks the tenant); a single install needs only the token
  *   DIGICHAT_API_KEY      Bearer API key (session installs)
  *   DIGICHAT_CONFIG       Path to digichat.yaml — when set, requires cli.enabled: true
  *   DIGICHAT_MODEL        Optional X-Digi-Model
