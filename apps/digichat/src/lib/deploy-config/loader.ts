@@ -36,6 +36,7 @@ import {
   type DigichatDeployment,
 } from "./schema";
 import { BASELINE_EMBED_WELCOME } from "@/lib/baseline-embed";
+import { FIRST_PARTY_EMBED_HOSTS } from "@/lib/embed-first-party";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
@@ -180,7 +181,10 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       transcript: { userAlign: "right" },
     },
     persistence: "none",
-    auth: "anonymous",
+    // A registry tenant with a token is reachable only with that token, so it
+    // is never an anonymous deployment (DIG-3585): `resolveAnonymousDeploymentChat`
+    // refuses it and the chrome route asks for the token.
+    auth: cfg.token?.trim() ? "session" : "anonymous",
     features: {
       attachments: cfg.attachments === true,
       // Feature parity (#4532): carry the tenant's flags instead of dropping
@@ -568,11 +572,26 @@ function mergeEmbedTenantsOverlay(
     // normalised key before it scans the entries.
     const existingKey = hosts[host] ? host : configKeyByHost.get(normalized);
     if (!existingKey) {
-      hosts[host] = embedTenantToDeployment(cfg);
+      const dep = embedTenantToDeployment(cfg);
+      // A first-party house row keeps its anonymous chat: its token is for
+      // third-party embeds of the house chat, not an invite (DIG-3585).
+      hosts[host] = FIRST_PARTY_EMBED_HOSTS.has(normalized)
+        ? { ...dep, auth: "anonymous" }
+        : dep;
       configKeyByHost.set(normalized, host);
       continue;
     }
     hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    // A YAML row for a non-first-party host that the registry gives a token is
+    // a token tenant: it is never anonymous, whatever the YAML row defaulted
+    // to (DIG-3585). A first-party house row keeps the YAML's own `auth`.
+    if (
+      cfg.token?.trim() &&
+      !FIRST_PARTY_EMBED_HOSTS.has(normalized) &&
+      hosts[existingKey].auth === "anonymous"
+    ) {
+      hosts[existingKey] = { ...hosts[existingKey], auth: "session" };
+    }
     if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
       hosts[existingKey] = {
         ...hosts[existingKey],

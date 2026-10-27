@@ -1,3 +1,4 @@
+import { constantTimeEqual } from "@/lib/constant-time-equal";
 import { mcpSubTools } from "@/lib/deploy-config/client-projection";
 /**
  * The client-safe projection of an embed tenant, and the two ways to obtain it.
@@ -248,7 +249,7 @@ export function resolveEmbedClientConfigFromParams(
   const registered = resolveEmbedTenantByHost(host);
   if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
   const trimmedToken = token?.trim();
-  if (trimmedToken && trimmedToken === registered.token) {
+  if (trimmedToken && registered.token && constantTimeEqual(trimmedToken, registered.token)) {
     return toEmbedClientConfig(registered);
   }
   // First-party tokenless paint requires a first-party browser-attested origin

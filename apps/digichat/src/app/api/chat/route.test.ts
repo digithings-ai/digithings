@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
-import { bindOccApiCall } from "../../../../../digichat-cloudflare/src/occ-gate";
+import {
+  bindOccApiCall,
+  occInviteCookieValue,
+} from "../../../../../digichat-cloudflare/src/occ-gate";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 
 vi.mock("@/lib/request-auth", () => ({
@@ -279,6 +282,31 @@ vi.mocked(createFoundryStreamResponse).mockClear();
 
       expect(res.status).toBe(503);
       expect(await res.json()).toMatchObject({ error: "embed_disabled" });
+    });
+
+    it("needs the install token on a non-embed call to a tokened single install (DIG-3585)", async () => {
+      // A single-install client container: a YAML `deployment`, no hosts map.
+      // A call without X-Embed-Host and without an /embed Referer used to be
+      // served anonymously whatever the install token said.
+      process.env.DIGICHAT_CONFIG_YAML = "version: 1\n";
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "client-install",
+            backend: { type: "digigraph" },
+            token: "install-secret",
+          },
+        }),
+      );
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(streamText).mockClear();
+
+      expect((await POST(chatRequest({}))).status).toBe(401);
+      expect((await POST(chatRequest({ "x-embed-token": "wrong" }))).status).toBe(401);
+      expect(vi.mocked(streamText)).not.toHaveBeenCalled();
+      const ok = await POST(chatRequest({ "x-embed-token": "install-secret" }));
+      expect(ok.status).toBe(200);
     });
 
     it("leaves the authenticated branch on the session tenant", async () => {
@@ -3394,10 +3422,13 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
 
     /** The same turn after the Worker's edge binding. */
-    function throughEdge(req: Request): Request {
-      bindOccApiCall(req, INVITE);
+    async function throughEdge(req: Request): Promise<Request> {
+      await bindOccApiCall(req, INVITE);
       return req;
     }
+
+    /** The cookie the edge set when the invite link was opened. */
+    let COOKIE = "";
 
     function lastUpstreamHeaders(): Record<string, string> | undefined {
       const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as
@@ -3419,10 +3450,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(h["X-Digi-Vault-Prefix"] ?? "").not.toMatch(/occ/);
     }
 
-    beforeEach(() => {
+    beforeEach(async () => {
       vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
       vi.mocked(streamText).mockClear();
       installOcc();
+      COOKIE = await occInviteCookieValue(INVITE);
     });
 
     afterEach(() => {
@@ -3430,7 +3462,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("resolves a cookie-only turn from /chat/occ to the OCC tenant", async () => {
-      const res = await POST(throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${INVITE}` })));
+      const res = await POST(await throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${COOKIE}` })));
       expect(res.status).toBe(200);
       const h = lastUpstreamHeaders();
       expect(h?.["X-Digi-Tenant"]).toBe("occ");
@@ -3439,13 +3471,13 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("never resolves OCC from /chat/occ without the cookie", async () => {
-      await expectNotOcc(await POST(throughEdge(browserTurn(OCC_PAGE))));
+      await expectNotOcc(await POST(await throughEdge(browserTurn(OCC_PAGE))));
     });
 
     it("never resolves OCC from /chat/occ with a wrong cookie and forged headers", async () => {
       await expectNotOcc(
         await POST(
-          throughEdge(
+          await throughEdge(
             browserTurn(OCC_PAGE, {
               cookie: "occ_invite=guess",
               "x-embed-token": "guess",
@@ -3460,14 +3492,56 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     it("never upgrades a house turn that carries the cookie", async () => {
       await expectNotOcc(
         await POST(
-          throughEdge(
+          await throughEdge(
             browserTurn("https://digithings.ai/chat", {
-              cookie: `occ_invite=${INVITE}`,
+              cookie: `occ_invite=${COOKIE}`,
               "x-digi-tenant": "occ",
             }),
           ),
         ),
       );
+    });
+
+    describe("a tokenless turn never selects the invite-only deployment", () => {
+      // The blocker the review found: with no token and no embed marker, the
+      // turn fell to resolveAnonymousDeploymentChat, which picked the
+      // deployment from Origin / X-Forwarded-Host and only checked
+      // `auth: anonymous`. Both the app path and the legacy alias are covered.
+      const PATHS = ["https://digithings.ai/chat/api/chat", "https://digithings.ai/api/chat"];
+      const FORMS: Array<[string, Record<string, string>]> = [
+        ["Origin", { origin: `https://${OCC_HOST}` }],
+        ["Referer", { referer: `https://${OCC_HOST}/` }],
+        ["X-Forwarded-Host", { "x-forwarded-host": OCC_HOST }],
+        ["Host", { host: OCC_HOST }],
+        [
+          "X-Forwarded-Host with a house Origin",
+          { origin: "https://digithings.ai", "x-forwarded-host": OCC_HOST },
+        ],
+      ];
+
+      function directTurn(url: string, headers: Record<string, string>): Request {
+        return new Request(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        });
+      }
+
+      for (const url of PATHS) {
+        for (const [name, headers] of FORMS) {
+          it(`refuses ${new URL(url).pathname} with only ${name}`, async () => {
+            const res = await POST(directTurn(url, headers));
+            await expectNotOcc(res);
+            expect(res.status).toBe(401);
+          });
+
+          it(`refuses ${new URL(url).pathname} with only ${name} after the edge`, async () => {
+            await expectNotOcc(await POST(await throughEdge(directTurn(url, headers))));
+          });
+        }
+      }
     });
   });
 

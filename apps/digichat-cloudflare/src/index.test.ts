@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTAINER_UNAVAILABLE_BODY, RETRY_AFTER_SECONDS } from "./container-retry";
 import worker, { BOOT_CONFIG_TTL_MS, DigiChatContainer, type Env } from "./index";
 import { env as stubEnv } from "../test/cloudflare-workers-stub";
+import { occInviteCookieValue } from "./occ-gate";
 
 /**
  * The Container base class is not constructible outside the Workers runtime
@@ -371,6 +372,12 @@ describe("boot config re-read window", () => {
 
 describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
   const KEY = "fixture-invite-key";
+  /** The cookie the edge sets for KEY: a derived value, never the key. */
+  let COOKIE = "";
+
+  beforeEach(async () => {
+    COOKIE = await occInviteCookieValue(KEY);
+  });
 
   function envWithInvite(): Env {
     return { ...workerEnv(), OCC_INVITE_KEY: KEY } as Env;
@@ -389,7 +396,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     const seen = await containerSees({
       method: "POST",
       body: "{}",
-      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${COOKIE}` },
     });
     expect(seen.headers.get("x-embed-token")).toBe(KEY);
     expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
@@ -399,7 +406,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
   it("binds the tenant-config read the same way", async () => {
     const seen = await containerSees({
       path: "/chat/api/embed/tenant-config",
-      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${COOKIE}` },
     });
     expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
   });
@@ -410,7 +417,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
       body: "{}",
       headers: {
         referer: "https://digithings.ai/chat",
-        cookie: `occ_invite=${KEY}`,
+        cookie: `occ_invite=${COOKIE}`,
         "x-digi-tenant": "occ",
       },
     });
@@ -432,6 +439,58 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     });
     expect(seen.headers.get("x-embed-token")).toBeNull();
     expect(seen.headers.get("x-embed-host")).toBeNull();
+  });
+
+  it("honours OCC_INVITE_MAX_AGE_DAYS: an older cookie is not bound", async () => {
+    const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
+    const old = await occInviteCookieValue(KEY, twoDaysAgo);
+    const headers = { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${old}` };
+    hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
+    hooks.containerFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+
+    await worker.fetch(
+      new Request("https://digithings.ai/chat/api/chat", { method: "POST", body: "{}", headers }),
+      { ...envWithInvite(), OCC_INVITE_MAX_AGE_DAYS: "1" } as Env,
+    );
+    const short = hooks.containerFetch.mock.calls.at(-1)![0];
+    expect(short.headers.get("x-embed-token")).toBeNull();
+    expect(short.headers.get("x-embed-host")).toBeNull();
+
+    // Same cookie under the default (30 days): still bound.
+    await worker.fetch(
+      new Request("https://digithings.ai/chat/api/chat", { method: "POST", body: "{}", headers }),
+      envWithInvite(),
+    );
+    const dflt = hooks.containerFetch.mock.calls.at(-1)![0];
+    expect(dflt.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+  });
+
+  it("answers an invite link with a 302 before anything logs it or the container sees it", async () => {
+    // The token may only ever sit in the first request's URL. The Worker
+    // must not log that URL, and the container must not receive it: the edge
+    // swaps it for the cookie and redirects to the clean address. (The
+    // platform's own invocation log is covered by redact_query_string in
+    // wrangler.toml, pinned in occ-route.contract.test.ts.)
+    const quiet: string[] = [];
+    for (const level of ["warn", "info", "debug"] as const) {
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        quiet.push(args.map((arg) => String(arg)).join(" "));
+      });
+    }
+    hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
+
+    const res = await worker.fetch(
+      new Request(`https://digithings.ai/chat/occ?token=${encodeURIComponent(KEY)}`),
+      envWithInvite(),
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).not.toContain(KEY);
+    expect(res.headers.get("location")).not.toContain("token=");
+    // The bare link lands on the canonical page address, trailing slash included.
+    expect(res.headers.get("location")).toBe("https://digithings.ai/chat/occ/");
+    expect(hooks.containerFetch).not.toHaveBeenCalled();
+    expect([...logged, ...quiet]).toEqual([]);
   });
 
   it("strips a client-sent X-Digi-Tenant on the legacy /api alias too", async () => {
