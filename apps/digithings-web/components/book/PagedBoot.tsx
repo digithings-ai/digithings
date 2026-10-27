@@ -163,6 +163,12 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         });
 
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
+        // The reader needs the marker too, and it cannot read it off the source:
+        // pagedjs replaces the node it paginates (a page box carries
+        // data-split-from), so the attribute above lands on a detached copy and
+        // the reader saw pagination never finish — it kept the stage unscaled.
+        // <html> is the one node pagination cannot replace.
+        document.documentElement.dataset.bookPaginated = content.dataset.bookPaginated;
         // Paged.js leaves the source document in place beside the page boxes.
         // In print that would emit the source as extra pages before the book —
         // measured as two blank pages, one carrying the running header. The
