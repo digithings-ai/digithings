@@ -202,8 +202,7 @@ export type ThreadProps = {
   /**
    * Private session. Reasoning text and tool-call payloads are user data, so
    * the parts switch drops them entirely — while streaming as well as at
-   * rest — and the composer carries a small "private" chip. Default off;
-   * other hosts are unaffected.
+   * rest. Default off; other hosts are unaffected.
    */
   privateMode?: boolean | undefined;
   /**
@@ -574,7 +573,6 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
-  const privateMode = useContext(ThreadPrivateModeContext);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLElement | null>(null);
   const attachViewport = useCallback((node: HTMLElement | null) => {
@@ -660,19 +658,6 @@ const ThreadRoot: FC<{
                 <ThreadSuggestions />
               </div>
             </AuiIf>
-            {/* Sits immediately above the composer: a label, not a control,
-                so it carries no `cursor-pointer` and no button semantics.
-                Phone widths have no hover, and the chip is the way to see
-                that private mode is on without opening the palette. */}
-            {privateMode ? (
-              <div
-                data-slot="aui_private-mode-badge"
-                data-private="on"
-                className="border-hair text-ink inline-flex w-fit items-center self-start border px-1.5 py-0.5 text-[11px] leading-none"
-              >
-                private
-              </div>
-            ) : null}
             <Composer
               autoFocus={autoFocus}
               placeholder={placeholder}
