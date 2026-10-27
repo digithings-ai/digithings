@@ -19,7 +19,7 @@ import {
   uiMessagesForUpstream,
   writeStandardActivity,
 } from "@/lib/ui-stream-parts";
-import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
+import { BYOK_MODEL_REMEDIABLE_CODES, isInternalReasonCode } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
 import type { TurnGuard } from "@/lib/guardrails/turn";
 
@@ -41,15 +41,27 @@ export type DigigraphErrorPayload = {
   detail?: string;
 };
 
-/** Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`. */
+/**
+ * Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`.
+ *
+ * Internal reason codes (`art9:genetic:rs_id`, `art9_refused`) are operator
+ * detail — `art9-screen` says so explicitly — and one reached a live chat as the
+ * visible message (DIG-5715). A user gets copy, not a code. The shape lives in
+ * `isInternalReasonCode` so this path and `formatEmbedChatError` cannot drift.
+ */
 export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
   const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
   const payload: { error: string; message?: string; detail?: string } = { error: code };
+  // Judged per field, not once for the pair: a human message with a machine reason
+  // code in `detail` must still lose the code (a live transcript rendered one).
+  const messageIsCode = typeof err.message === "string" && isInternalReasonCode(err.message);
+  const detailIsCode = typeof err.detail === "string" && isInternalReasonCode(err.detail);
   // BYOK remediable codes carry trusted copy in embed-chat-error — never relay
   // digigraph's message (it can echo caller headers or other upstream detail).
   if (
     typeof err.message === "string" &&
     err.message.length &&
+    !messageIsCode &&
     !BYOK_MODEL_REMEDIABLE_CODES.has(code)
   ) {
     payload.message = err.message;
@@ -57,6 +69,7 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
   if (
     typeof err.detail === "string" &&
     err.detail.length &&
+    !detailIsCode &&
     !BYOK_MODEL_REMEDIABLE_CODES.has(code)
   ) {
     payload.detail = err.detail;
