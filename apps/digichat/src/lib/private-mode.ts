@@ -70,7 +70,13 @@ export function withPrivateModeUiPrompt(messages: UIMessage[]): UIMessage[] {
 
   const patched: UIMessage = {
     ...target,
-    parts: [...target.parts, { type: "text", text: PRIVATE_MODE_INSTRUCTION }],
+    // The digigraph prompt builder joins a turn's text blocks with `""`, so a
+    // bare instruction would be glued to the user's question. The separator
+    // belongs here, not in the shared joiner, which every message uses.
+    parts: [
+      ...target.parts,
+      { type: "text", text: `\n\n${PRIVATE_MODE_INSTRUCTION}` },
+    ],
   };
 
   return messages.map((message, index) =>

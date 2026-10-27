@@ -22,7 +22,7 @@ const textOf = (message: UIMessage | undefined): string =>
   (message?.parts ?? [])
     .filter((part) => part.type === "text")
     .map((part) => (part as { text: string }).text)
-    .join("\n");
+    .join("");
 
 describe("isPrivateMode", () => {
   it("accepts only an exact 1, trimmed", () => {
@@ -47,7 +47,7 @@ describe("withPrivateModeUiPrompt", () => {
     expect(out).toHaveLength(3);
     expect(textOf(out[0])).toBe("first");
     expect(textOf(out[1])).toBe("ok");
-    expect(textOf(out[2])).toBe(`John Smith\n${PRIVATE_MODE_INSTRUCTION}`);
+    expect(textOf(out[2])).toBe(`John Smith\n\n${PRIVATE_MODE_INSTRUCTION}`);
   });
 
   it("does not mutate the input", () => {
