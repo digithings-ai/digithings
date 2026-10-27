@@ -47,6 +47,13 @@ const MESSAGES = {
 export type FixtureApi = ServerFixtureApi & {
   /** How many requests the client made to this server. */
   served: () => number;
+  /**
+   * Forget the requests served so far, so the next read of `served()` counts
+   * only what happened after this call. The exporter resets right before it
+   * renders: the server is process-wide, so the running total proves only that
+   * some capture read it, not that this frame did.
+   */
+  resetServed: () => void;
 };
 
 /** Start the fixture API on a free loopback port. */
@@ -73,5 +80,8 @@ export async function startFixtureApi(options?: {
   return {
     ...server,
     served: () => served,
+    resetServed: () => {
+      served = 0;
+    },
   };
 }

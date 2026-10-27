@@ -36,6 +36,12 @@ export const DEFAULT_FRAME_HEIGHT = 40;
  * Crop a captured frame to the chat pane: drop the wordmark rows, drop the
  * rail columns, strip the trailing spaces each row leaves behind and drop the
  * trailing empty rows.
+ *
+ * Every row is sliced at `railCols`, including one shorter than the rail. The
+ * client pads each row to the terminal width, but a crop must not depend on
+ * that: an unpadded rail row (a session title, say) emitted whole would put
+ * the rail's text into the recorded frame. A row shorter than the rail has no
+ * chat columns, so slicing it yields "" and its content is dropped.
  */
 export function cropChatPane(
   captured: string,
@@ -46,10 +52,7 @@ export function cropChatPane(
   const kept = captured
     .split("\n")
     .slice(headerRows)
-    .map((row) => {
-      const sliced = row.length >= railCols ? row.slice(railCols) : row;
-      return sliced.replace(/\s+$/, "");
-    });
+    .map((row) => row.slice(railCols).replace(/\s+$/, ""));
   while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
   const width = kept.reduce((widest, row) => Math.max(widest, row.length), 0);
   if (kept.length === 0 || width === 0) {
