@@ -158,9 +158,6 @@ jobs:
               - 'apps/digiweb/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
-              - 'apps/digitrace-langfuse/**'
-              - 'infra/docker/Dockerfile.digitrace-langfuse-web'
-              - 'infra/docker/Dockerfile.digitrace-langfuse-worker'
               - 'apps/dashboard-api/**'
               - 'apps/digidata-api/**'
               - 'apps/corpus-index/**'
@@ -269,7 +266,6 @@ jobs:
               - 'apps/dashboard-api/**'
               - 'apps/digidata-api/**'
               - 'apps/digiquant-runner/**'
-              - 'apps/digitrace-langfuse/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/twelvex-runner/**'
@@ -762,7 +758,6 @@ jobs:
           - dashboard-api
           - digidata-api
           - digiquant-runner
-          - digitrace-langfuse
           - digitrace-ingest
           # corpus-index ships a wrangler.toml and pins wrangler, so
           # tests/scripts/test_worker_build_matrix.py derives it as a Worker the

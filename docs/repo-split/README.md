@@ -22,7 +22,7 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 | R2 | `digiquant-stack` | private (Origin) | production backend (runner, desk API, schema, pipeline) |
 | R3 | `digiquant-web` | private (Origin) | Brief desk + digiquant.io |
 | R4 | `digithings-web` | private (Origin) | digithings.ai, digibook, brand |
-| R5 | `digithings-stack` | private (Origin) | shared production platform (stack, digichat Worker, Langfuse, cron) |
+| R5 | `digithings-stack` | private (Origin) | shared production platform (stack, digichat Worker, cron) |
 | R6 | `digichat-tenants` | private (Origin) | client tenant corpora + rollout tooling (writes KV/R2) |
 | R7 | `twelve-x` (exists) | private (Origin) | client desk + digidata-api |
 

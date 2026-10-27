@@ -20,8 +20,8 @@ compose interpolation without a contract entry is now a **CI failure**.
 
 > every wrangler binding/var and compose env maps to the contract
 
-`check_contract.py` reads the live repo — the 7 `apps/*/wrangler.toml`, the 2
-compose files and the 2 `.env.example` files — and fails if any input has no
+`check_contract.py` reads the live repo — the `apps/*/wrangler.toml` set, the compose file
+and the 2 `.env.example` files — and fails if any input has no
 contract entry. It also fails if a contract env entry is claimed by no live
 source, so the contract cannot rot in either direction.
 
@@ -53,10 +53,9 @@ not evidence.
 
 `wrangler.toml` does **not** declare secrets; Cloudflare holds them out of
 band. The `secrets:` section is transcribed from the documented per-worker
-checklists (`docs/ops/SECRETS_INVENTORY.md`, `docs/ops/digitrace-langfuse.md`,
-and each `wrangler.toml` header) and is **not** machine-verified. Anything the
-check covers, it covers mechanically; anything it does not, it says so rather
-than implying coverage.
+checklists (`docs/ops/SECRETS_INVENTORY.md` and each `wrangler.toml` header)
+and is **not** machine-verified. Anything the check covers, it covers
+mechanically; anything it does not, it says so rather than implying coverage.
 
 ## Regenerating
 

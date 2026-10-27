@@ -113,8 +113,9 @@ cookie in an untracked ``.env``, not to commit it. Local development keeps the
 family reachable; only deployed cookie *slots* are policed:
   * ``.env``, ``.env.*`` (except ``.env.example``, which is documentation)
   * ``docker-compose.override.yml``, ``compose/**``, ``dev/**``, ``scripts/**``
-  * ``docker-compose.local.yml`` — the Langfuse bring-up compose, which its own
-    header marks LOCAL DEV ONLY.
+  * ``docker-compose.local.yml`` — the naming convention for a local-only
+    bring-up compose. No tracked file uses it today; the exemption stays so a
+    future one is not policed as a deploy artifact.
   * ``tests/**`` and ``docs/**`` are never scanned at all -- they hold prose and
     fixtures, not deploy artifacts.
 
@@ -195,7 +196,7 @@ DEPLOYED_PATTERNS: tuple[str, ...] = (
 # naming defeats path globs on both axes:
 #
 #   * depth — the deploy images live under `infra/docker/` as
-#     `Dockerfile.digithings-stack-cloudflare`, `Dockerfile.digitrace-langfuse-web`, ...,
+#     `Dockerfile.digithings-stack-cloudflare`, `Dockerfile.digichat-cloudflare`, ...,
 #     so a glob anchored at the repo root (`*/Dockerfile`) cannot reach them, and
 #     `*/*/Dockerfile` is pinned to exactly one depth;
 #   * name  — this repo does not call a build recipe `Dockerfile`. Of the 20
@@ -236,8 +237,9 @@ LOCAL_PATTERNS: tuple[str, ...] = (
 LOCAL_BASENAMES: tuple[str, ...] = (
     "docker-compose.override.yml",
     "docker-compose.override.yaml",
-    # apps/digitrace-langfuse/docker-compose.local.yml — its own header says
-    # "LOCAL DEV ONLY ... NOT for production".
+    # The naming convention for a local-only bring-up compose ("LOCAL DEV ONLY
+    # ... NOT for production"). Nothing tracked uses it since the digitrace
+    # Langfuse stack was retired; kept so the convention stays local if reused.
     "docker-compose.local.yml",
     "docker-compose.local.yaml",
 )

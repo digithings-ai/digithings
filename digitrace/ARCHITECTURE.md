@@ -48,10 +48,10 @@ Cloudflare Container.
 ```
 
 Decision record: [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md).
-The Langfuse operator runbook ([`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md))
-and the app ([`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/)) are retired **by** that
-ADR. The runbook is superseded here; the code removal is a separate mechanical leaf (DIG-5136,
-owner: Repo, CI & Release Engineer), so the app is still in the tree until that leaf lands.
+Self-hosted Langfuse is retired **by** that ADR. It was **never deployed** — the Worker
+`digitrace-langfuse` was never created on the Cloudflare account — and the app, its
+Dockerfiles, its deploy job and its runbook steps were removed by DIG-5136. The tombstone is
+[`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md).
 
 Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
 Do not point `LANGSMITH_ENDPOINT` at Langfuse.

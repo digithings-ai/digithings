@@ -28,7 +28,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 CONTRACT = HERE / "contract.yaml"
 
-COMPOSE_FILES = ["docker-compose.yml", "apps/digitrace-langfuse/docker-compose.local.yml"]
+COMPOSE_FILES = ["docker-compose.yml"]
 ENV_EXAMPLE_FILES = [".env.example", "apps/digichat/.env.example"]
 SENTINEL = "DIGI_CONTRACT_SENTINEL_MISSING"
 BINDING_SENTINEL = "DIGI_CONTRACT_SENTINEL_BINDING"

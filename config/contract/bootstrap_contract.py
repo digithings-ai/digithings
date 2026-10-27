@@ -18,7 +18,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = pathlib.Path(__file__).resolve().parent / "contract.yaml"
 
-COMPOSE_FILES = ["docker-compose.yml", "apps/digitrace-langfuse/docker-compose.local.yml"]
+COMPOSE_FILES = ["docker-compose.yml"]
 ENV_EXAMPLE_FILES = [".env.example", "apps/digichat/.env.example"]
 # Files under docs/templates are project scaffolding, not this stack.
 DOCS_TEMPLATE_PREFIX = "docs/templates/"
@@ -322,17 +322,6 @@ META: dict[str, tuple[str, bool]] = {
     "DIGI_CHECKPOINTER": ("Checkpoint backend for agent graphs.", PLAIN),
     "DIGI_CHECKPOINTER_DATABASE_URL": ("Checkpoint store DSN.", SECRET),
     "DIGISEARCH_INGEST_ROOT": ("Directory digisearch ingests from.", PLAIN),
-    "CLICKHOUSE_CLUSTER_ENABLED": (
-        "`false` runs single-node ClickHouse without ON CLUSTER.",
-        PLAIN,
-    ),
-    "LANGFUSE_S3_EVENT_UPLOAD_BUCKET": ("R2 bucket receiving Langfuse events.", PLAIN),
-    "LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE": ("R2 path-style addressing.", PLAIN),
-    "LANGFUSE_S3_EVENT_UPLOAD_PREFIX": ("Key prefix for Langfuse event objects.", PLAIN),
-    "LANGFUSE_S3_EVENT_UPLOAD_REGION": ("`auto` is the R2 region convention.", PLAIN),
-    "CLICKHOUSE_DB": ("ClickHouse database name.", PLAIN),
-    "CLICKHOUSE_USER": ("ClickHouse user.", PLAIN),
-    "CLICKHOUSE_PASSWORD": ("ClickHouse password.", SECRET),
     # --- compose literal env (no ${} interpolation) -------------------------
     "AUDIT_LOG_PATH": ("Where the audit log is written.", PLAIN),
     "DIGIBOT_AGENTS_DIR": ("Directory holding digibot agent definitions.", PLAIN),
@@ -453,19 +442,6 @@ def service_rows() -> list[dict]:
                 "build_context": spec.get("build"),
                 "ports": [str(p) for p in ports],
                 "profiles": spec.get("profiles") or [],
-            }
-        )
-    local = _yaml.safe_load((ROOT / "apps/digitrace-langfuse/docker-compose.local.yml").read_text())
-    for name, spec in (local.get("services") or {}).items():
-        rows.append(
-            {
-                "name": name,
-                "compose_file": "apps/digitrace-langfuse/docker-compose.local.yml",
-                "image": spec.get("image"),
-                "build_context": spec.get("build"),
-                "ports": [str(p) for p in (spec.get("ports") or [])],
-                "profiles": spec.get("profiles") or [],
-                "note": "local dev only",
             }
         )
     return rows
@@ -665,36 +641,6 @@ def secret_rows() -> list[dict]:
             "required": True,
         },
         {"name": "DIGICHAT_MONITOR_TOKENS", "worker": "digithings-digichat", "required": False},
-        {"name": "DATABASE_URL", "worker": "digitrace-langfuse", "required": True},
-        {"name": "NEXTAUTH_SECRET", "worker": "digitrace-langfuse", "required": True},
-        {"name": "SALT", "worker": "digitrace-langfuse", "required": True},
-        {
-            "name": "ENCRYPTION_KEY",
-            "worker": "digitrace-langfuse",
-            "required": True,
-            "note": "openssl rand -hex 32",
-        },
-        {"name": "NEXTAUTH_URL", "worker": "digitrace-langfuse", "required": True},
-        {"name": "CLICKHOUSE_URL", "worker": "digitrace-langfuse", "required": True},
-        {"name": "CLICKHOUSE_MIGRATION_URL", "worker": "digitrace-langfuse", "required": True},
-        {"name": "CLICKHOUSE_USER", "worker": "digitrace-langfuse", "required": True},
-        {"name": "CLICKHOUSE_PASSWORD", "worker": "digitrace-langfuse", "required": True},
-        {
-            "name": "REDIS_CONNECTION_STRING",
-            "worker": "digitrace-langfuse",
-            "required": False,
-            "note": "preferred over REDIS_HOST/PORT/AUTH",
-        },
-        {
-            "name": "LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID",
-            "worker": "digitrace-langfuse",
-            "required": True,
-        },
-        {
-            "name": "LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY",
-            "worker": "digitrace-langfuse",
-            "required": True,
-        },
     ]
 
 

@@ -145,7 +145,6 @@ shown in digiweb, 45 live but unshown, 37 with no live consumer**.
 | trace empty states | `PipelineTraceLedger.tsx:137` | add |
 | latency badge / status badges | `PipelineTraceLedger.tsx:211,204` | add |
 | call-trace table | `apps/digiquant-app/components/blocks-pipeline.tsx:132` | add |
-| Langfuse trace UI | `apps/digitrace-langfuse` | skip — third-party screen |
 
 ## TUI clients
 

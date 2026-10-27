@@ -159,13 +159,13 @@ With venv: `pytest -v` or `pytest -m unit -v`.
 
 ```
 digithings/
-├── apps/         # 15 apps. digithings-web (marketing + digibook),
+├── apps/         # 14 apps. digithings-web (marketing + digibook),
 │                 # digiquant-web (the desk at /app), digichat, dashboard,
 │                 # reference (pattern gallery), plus the API, runner and
 │                 # worker apps: dashboard-api, digidata-api, corpus-index,
 │                 # digiquant-runner, twelvex-runner, digithings-cron,
 │                 # digichat-cloudflare, digithings-stack-cloudflare,
-│                 # digitrace-langfuse, and digiquant-app (parked).
+│                 # and digiquant-app (parked).
 ├── packages/     # 10 shared npm packages: ui, design, brand, catalog,
 │                 # contract, digichat-ui, hero-banner, surface-config,
 │                 # tui-frame, durable-object-reconnect.

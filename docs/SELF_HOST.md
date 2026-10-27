@@ -155,7 +155,7 @@ flowchart TB
 
 **LLM and proxy funnel.** When **`DIGIKEY_LITELLM_PROXY_KEY`** matches LiteLLM's admission secret, digikey's token response can include **`litellm_proxy_api_key`**, and digichat forwards **`X-LiteLLM-Proxy-Key`** to digigraph. See [Security notes](#16-security-notes) and [SECURITY.md](../SECURITY.md).
 
-**Where the Workers fit.** In production, the edge is Cloudflare: `digithings-stack` (the hub Worker, with Durable Objects and R2), `digithings-digichat`, `dashboard-api`, `digithings-cron`, and `digiquant-runner`, plus `digitrace-langfuse` and `digithings-web` which are in the repository but not live. Self-hosted, those run under `wrangler dev`, and the container classes they call are proxied to the Compose services above. **That mapping is a target of S3** — today you run the backend services directly, as described in the next section, and the Workers locally only where you need them.
+**Where the Workers fit.** In production, the edge is Cloudflare: `digithings-stack` (the hub Worker, with Durable Objects and R2), `digithings-digichat`, `dashboard-api`, `digithings-cron`, and `digiquant-runner`, plus `digithings-web` which is in the repository but not live. Self-hosted, those run under `wrangler dev`, and the container classes they call are proxied to the Compose services above. **That mapping is a target of S3** — today you run the backend services directly, as described in the next section, and the Workers locally only where you need them.
 
 ---
 
@@ -382,7 +382,9 @@ To run the edge locally under `wrangler dev`, Miniflare supplies R2, KV, D1, Que
 
 Cron triggers run under `wrangler dev --test-scheduled`, and service bindings resolve only inside one multi-configuration session (`wrangler dev -c a -c b …`). The plan runs every Worker in one such session so bindings resolve, with fixed ports and `--persist-to .wrangler/state`.
 
-`digitrace-langfuse` has its own Compose file today: [`apps/digitrace-langfuse/docker-compose.local.yml`](../apps/digitrace-langfuse/docker-compose.local.yml).
+The `digitrace-langfuse` Containers Worker and its Compose file were retired
+(never deployed) and removed; see
+[`docs/ops/digitrace-langfuse.md`](ops/digitrace-langfuse.md).
 
 ---
 

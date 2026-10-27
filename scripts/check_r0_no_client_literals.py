@@ -71,7 +71,6 @@ NON_R0_PREFIXES: tuple[str, ...] = (
     "packages/brand/",
     "apps/digithings-stack-cloudflare/",
     "apps/digichat-cloudflare/",
-    "apps/digitrace-langfuse/",
     "apps/digithings-cron/",
     "infra/digichat-release/",
     "infra/digichat-digithings/",
