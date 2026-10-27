@@ -813,12 +813,25 @@ def _pr_subcommand(argv: list[str]) -> int | None:
     where the subcommand sits. `--repo` and `-R` are the flags of `gh pr`
     itself, so they are valid in front of the subcommand and their value is
     skipped whatever it looks like; the other flag tables are there so a
-    known flag is still placed correctly. A flag the shim does not know
-    raises rather than is skipped: a flag the shim cannot place is a value
-    it cannot place, and whatever sits behind it -- the subcommand
-    included -- is a position the wall does not read. Verified against gh
-    2.102.0: every shape gh runs in front of the subcommand is in these
-    tables, so the refusal is not stricter than gh is.
+    known flag is still placed correctly.
+
+    An argument Cobra's command search drops is dropped here too. Cobra
+    takes a subcommand only from an argument that is non-empty and does not
+    begin with `-`, so an empty argument and a bare `-` are skipped
+    silently and gh still runs the subcommand behind them: `gh pr - create`
+    and `gh pr '' create` both run `create` (DIG-5842). Reading either as
+    the subcommand put the wall behind a one- or zero-character argument
+    that gh steps over.
+
+    A flag the shim cannot place raises when it takes its value in the next
+    argument: the shim cannot tell where that value ends, and whatever sits
+    behind it -- the subcommand included -- is a position the wall does not
+    read. An unknown long flag that carries its value inside the argument
+    (`--x=v`) is skipped instead, exactly as `_repo_from_flag` does, because
+    the value is not the next argument and the next argument is still in
+    flag position. Verified against gh 2.102.0: every shape gh runs in
+    front of the subcommand is in these tables, so the refusal is not
+    stricter than gh is.
 
     The answer is the index, not the subcommand: `create` has the alias
     `new`, and the caller decides what it does with the name it finds.
@@ -868,6 +881,11 @@ def _pr_subcommand(argv: list[str]) -> int | None:
                 argument, value_flags, boolean_flags, argv, index
             )
             index += consumed
+            continue
+        if argument in ("", "-"):
+            # Cobra's command search drops an empty argument and a bare `-`
+            # silently, so the subcommand can still sit behind them.
+            index += 1
             continue
         return index
     return None

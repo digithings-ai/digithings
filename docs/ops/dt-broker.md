@@ -126,7 +126,10 @@ outside it, and the GraphQL `createPullRequest` mutation are all refused, with t
 reason on stderr. The subcommand is found by walking the arguments with the flag
 tables, not by reading the second argument: Cobra skips a flag and its value while
 it searches for the subcommand, so `gh pr --repo someone-else/their-project create`
-runs `create`, and that call is refused as well (DIG-5420). The flag list is the
+runs `create`, and that call is refused as well (DIG-5420). gh's own command
+search also drops an empty argument and a bare `-`, so the walk continues past
+them: `gh pr - create` and `gh pr '' create` run `create`, and are refused against
+a repository outside the organization (DIG-5842). The flag list is the
 one gh 2.102.0 runs, and a flag the shim cannot place is refused rather than
 skipped. The endpoint is looked for in **every** argument, not only the
 first one, so `gh api -X POST repos/someone-else/their-project/pulls` is refused

@@ -752,6 +752,76 @@ def test_a_call_without_a_subcommand_is_left_alone() -> None:
     assert notes == []
 
 
+# ---------------------------------------------------------------------------
+# the rules the review of DIG-5842 found: the arguments Cobra drops
+# ---------------------------------------------------------------------------
+
+
+def test_a_bare_dash_in_front_of_the_subcommand_is_skipped() -> None:
+    """Cobra's command search drops a bare `-`, so `create` still runs.
+
+    `gh pr - create` runs `create` on gh 2.102.0: `-` is neither a flag the
+    walk places nor a bare argument it reads, so a walk that answered its
+    index put the wall behind an argument gh steps over (DIG-5842).
+    """
+    assert ghshim._pr_subcommand(["pr", "-", "create"]) == 2
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "-", "create", "--repo", "someone-else/their-project", "--title", "x"],
+            {},
+        )
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "-", "create", "--title", "x"],
+            {"GH_REPO": "someone-else/their-project"},
+        )
+    notes = ghshim.check_pull_request_target(
+        ["pr", "-", "create", "--repo", REPO, "--title", "x"], {}
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_an_empty_argument_in_front_of_the_subcommand_is_skipped() -> None:
+    """Cobra's command search drops an empty argument for the same reason."""
+    assert ghshim._pr_subcommand(["pr", "", "create"]) == 2
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "", "create", "--repo", "someone-else/their-project", "--title", "x"],
+            {},
+        )
+    with pytest.raises(ghshim.Refusal):
+        ghshim.check_pull_request_target(
+            ["pr", "", "create", "--title", "x"],
+            {"GH_REPO": "someone-else/their-project"},
+        )
+    notes = ghshim.check_pull_request_target(
+        ["pr", "", "create", "--repo", REPO, "--title", "x"], {}
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_an_unknown_long_flag_with_an_inline_value_is_skipped() -> None:
+    """`--x=v` carries its value inside the argument, so the next one is a flag.
+
+    gh's own command search drops the argument and reads the subcommand
+    behind it; a walk that refused it would be stricter than gh is. This is
+    the wording the docstring now gives: only a value-carrying flag the shim
+    does not know is refused.
+    """
+    assert ghshim._pr_subcommand(["pr", "--frobnicate=1", "create"]) == 2
+    notes = ghshim.check_pull_request_target(
+        ["pr", "--frobnicate=1", "create", "--repo", REPO], {}
+    )
+    assert notes == [f"pull request against {REPO}"]
+
+
+def test_the_pull_request_is_read_behind_a_dropped_argument() -> None:
+    """The review token also needs the pull request gh runs behind a dropped one."""
+    assert ghshim.pr_number(["pr", "-", "review", "42"]) == 42
+    assert ghshim.pr_number(["pr", "", "review", "42"]) == 42
+    assert ghshim.pr_number(["pr", "-", "view", "42"]) == 42
+
+
 def test_the_pull_request_is_read_out_of_a_call_with_a_hoisted_flag() -> None:
     """The review token also needs to know which pull request it is for."""
     assert ghshim.pr_number(["pr", "-R", "o/r", "review", "42"]) == 42
