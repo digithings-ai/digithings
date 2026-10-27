@@ -286,6 +286,14 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     category: "session",
   },
   {
+    id: "private",
+    names: ["/private"],
+    needsArg: false,
+    hint: "Private session: stand-in names, tool output hidden",
+    kind: "toggle",
+    category: "session",
+  },
+  {
     id: "sessions",
     names: ["/sessions", "/resume", "/continue"],
     needsArg: false,

@@ -261,6 +261,12 @@ type UseEmbedDigiChatOptions = {
   /** Send-time web-search engine: auto | internal | exa | tavily | parallel | firecrawl | tinyfish. */
   getSearchEngine?: () => string | undefined;
   /**
+   * Send-time accessor for private mode (`/private`, `?private=1`). The mode is
+   * resolved once at mount, but read here — a boolean closed over by the frozen
+   * transport (#1339) would stay at its mount value after a `/private` toggle.
+   */
+  getPrivateMode?: () => boolean;
+  /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
@@ -286,6 +292,7 @@ export function useEmbedDigiChat({
   getMcpSession,
   getEffort,
   getSearchEngine,
+  getPrivateMode,
   planProof,
   getPlanProof,
   getTrialProof,
@@ -397,6 +404,12 @@ export function useEmbedDigiChat({
           ) {
             headers["X-Digi-Search-Engine"] = searchEngine;
           }
+          // Private mode: the chat route owns the substitution instruction and
+          // validates the value. The mode is a session setting, so it rides
+          // every request while on and disappears when `/private` turns it off.
+          if (getPrivateMode?.()) {
+            headers["x-digi-private"] = "1";
+          }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;
@@ -471,6 +484,7 @@ export function useEmbedDigiChat({
         getMcpSession,
         getEffort,
         getSearchEngine,
+        getPrivateMode,
         getPlanProof,
         getTrialProof,
         allowClientTurnMutation,

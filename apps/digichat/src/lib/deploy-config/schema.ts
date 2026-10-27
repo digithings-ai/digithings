@@ -305,6 +305,13 @@ export const FeaturesSchema = z.preprocess(
       modelPicker: z.boolean().default(false),
       branchPicker: z.boolean().default(true),
       pageContext: PageContextModeSchema.default("visible"),
+      /**
+       * Private demo mode (`/private`, `?private=1`): the session asks the
+       * model to use stand-ins for real names and identifiers in its replies.
+       * Off by default — a tenant opts in. Display-side only: stored text and
+       * tool results are untouched, so this is a demo aid, not anonymisation.
+       */
+      privateMode: z.boolean().default(false),
     })
     .strict(),
 );
@@ -918,6 +925,7 @@ export const DeploymentSchema = z
       modelPicker: false,
       branchPicker: true,
       pageContext: "visible",
+      privateMode: false,
     }),
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),

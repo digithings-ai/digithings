@@ -58,17 +58,32 @@ describe("embed tenant app/embed config parity (#4532)", () => {
 
   it("projects the new fields through toEmbedClientConfig", () => {
     const projected = toEmbedClientConfig(
-      resolve({ dictation: true, sources: false, branchPicker: false, defaultLanguage: "fr" }),
+      resolve({
+        dictation: true,
+        sources: false,
+        branchPicker: false,
+        privateMode: true,
+        defaultLanguage: "fr",
+      }),
     );
     expect(projected.dictation).toBe(true);
     expect(projected.sources).toBe(false);
     expect(projected.branchPicker).toBe(false);
+    expect(projected.privateMode).toBe(true);
     expect(projected.defaultLanguage).toBe("fr");
+  });
+
+  it("keeps private mode off unless the tenant opted in", () => {
+    // Omit and an explicit false both project to undefined: the client reads
+    // `=== true`, so anything but an opt-in must stay inert.
+    expect(toEmbedClientConfig(resolve({})).privateMode).toBeUndefined();
+    expect(toEmbedClientConfig(resolve({ privateMode: false })).privateMode).toBeUndefined();
   });
 
   it("rejects a non-boolean feature flag", () => {
     expect(() => parseEmbedTenants(entry({ dictation: "yes" }))).toThrow(/dictation/);
     expect(() => parseEmbedTenants(entry({ sources: 1 }))).toThrow(/sources/);
+    expect(() => parseEmbedTenants(entry({ privateMode: "yes" }))).toThrow(/privateMode/);
   });
 
   it("rejects an unknown defaultLanguage", () => {

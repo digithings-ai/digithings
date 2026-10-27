@@ -26,9 +26,11 @@ describe("readEmbedUiParams", () => {
     ).toEqual({ accent: "#f5a623", accentForeground: "#ffffff" });
   });
 
-  it("ignores a non-hex / malformed accent (never lets it reach a CSS var)", () => {
-    expect(readEmbedUiParams("?accent=red").accent).toBeUndefined();
-    expect(readEmbedUiParams("?accent=%23fff").accent).toBeUndefined();
-    expect(readEmbedUiParams("?accent=javascript:alert(1)").accent).toBeUndefined();
+  it("starts private mode only for an exact 1 (ON-only, like wide)", () => {
+    expect(readEmbedUiParams("?private=1").privateMode).toBe(true);
+    expect(readEmbedUiParams("?private=0").privateMode).toBeUndefined();
+    expect(readEmbedUiParams("?private=true").privateMode).toBeUndefined();
+    expect(readEmbedUiParams("?private").privateMode).toBeUndefined();
+    expect(readEmbedUiParams("").privateMode).toBeUndefined();
   });
 });

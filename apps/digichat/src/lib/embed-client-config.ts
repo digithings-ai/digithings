@@ -56,6 +56,11 @@ export type EmbedTenantClientConfig = {
   speech?: boolean;
   sources?: boolean;
   branchPicker?: boolean;
+  /**
+   * Tenant opt-in to session private mode (`/private`, `?private=1`). Omit =
+   * off: a tenant that never opted in cannot enter the mode from either path.
+   */
+  privateMode?: boolean;
   /** Seed language for the embed session. Omit = client default (English). */
   defaultLanguage?: string;
   /**
@@ -178,6 +183,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     speech: cfg.speech === true ? true : undefined,
     sources: typeof cfg.sources === "boolean" ? cfg.sources : undefined,
     branchPicker: typeof cfg.branchPicker === "boolean" ? cfg.branchPicker : undefined,
+    privateMode: cfg.privateMode === true ? true : undefined,
     defaultLanguage: cfg.defaultLanguage,
     pageContext: cfg.pageContext ?? "visible",
     showByok: cfg.showByok ?? false,

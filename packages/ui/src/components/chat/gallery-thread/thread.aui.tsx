@@ -200,6 +200,13 @@ export type ThreadProps = {
    */
   workVisibility?: WorkVisibility | undefined;
   /**
+   * Private session. Reasoning text and tool-call payloads are user data, so
+   * the parts switch drops them entirely — while streaming as well as at
+   * rest — and the composer carries a quiet "Private session" badge. Default
+   * off; other hosts are unaffected.
+   */
+  privateMode?: boolean | undefined;
+  /**
    * Rendered as a row inside the composer border, under the input. The
    * digichat skin passes its model / tools / search / view / context chips;
    * other hosts leave it unset.
@@ -298,6 +305,17 @@ const DEFAULT_GROUP_DISCLOSURE: ThreadGroupDisclosure = {
 const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
   DEFAULT_GROUP_DISCLOSURE,
 );
+
+/**
+ * Private session. Hides the work surfaces that can carry user data —
+ * reasoning text and tool-call payloads, including the JSON a tool result
+ * renders — at the parts switch, so they never mount. A hard override rather
+ * than a disclosure preference: `reasoningMode` / `toolCallsMode` /
+ * `workVisibility` decide how much of the work is *disclosed*, and none of
+ * them switches the chain off while it is still running. Default false, so
+ * every skin that does not pass `privateMode` renders exactly as before.
+ */
+const ThreadPrivateModeContext = createContext(false);
 
 type ThreadChrome = {
   welcome: string;
@@ -468,6 +486,7 @@ export const Thread: FC<ThreadProps> = ({
   reasoningMode = "collapsed",
   toolCallsMode = "collapsed",
   workVisibility = "balanced",
+  privateMode = false,
   composerToolbar,
   scrollbars = "always",
   density = "default",
@@ -499,15 +518,17 @@ export const Thread: FC<ThreadProps> = ({
               }}
             >
               <ComposerEditProvider>
-                <ThreadRoot
-                  autoFocus={autoFocus}
-                  placeholder={placeholder}
-                  composerLayout={composerLayout}
-                  composerToolbar={composerToolbar}
-                  scrollbars={scrollbars}
-                  density={density}
-                  scrollMode={scrollMode}
-                />
+                <ThreadPrivateModeContext.Provider value={privateMode}>
+                  <ThreadRoot
+                    autoFocus={autoFocus}
+                    placeholder={placeholder}
+                    composerLayout={composerLayout}
+                    composerToolbar={composerToolbar}
+                    scrollbars={scrollbars}
+                    density={density}
+                    scrollMode={scrollMode}
+                  />
+                </ThreadPrivateModeContext.Provider>
               </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
           </ThreadComponentsContext.Provider>
@@ -553,6 +574,7 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
+  const privateMode = useContext(ThreadPrivateModeContext);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLElement | null>(null);
   const attachViewport = useCallback((node: HTMLElement | null) => {
@@ -638,6 +660,21 @@ const ThreadRoot: FC<{
                 <ThreadSuggestions />
               </div>
             </AuiIf>
+            {/* Sits immediately above the composer: it names the mode the
+                current session is in, and is a label — not a control, so it
+                carries no `cursor-pointer` and no button semantics. */}
+            {privateMode ? (
+              <div
+                data-slot="aui_private-mode-badge"
+                className="text-ink-mute flex items-center gap-1.5 self-start text-xs leading-none"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 rounded-full bg-current"
+                />
+                Private session
+              </div>
+            ) : null}
             <Composer
               autoFocus={autoFocus}
               placeholder={placeholder}
@@ -1205,6 +1242,7 @@ const AssistantMessage: FC = () => {
     toolCalls: toolCallsMode,
     visibility,
   } = useContext(ThreadGroupDisclosureContext);
+  const privateMode = useContext(ThreadPrivateModeContext);
   const disclosure = resolveWorkDisclosure(visibility);
   // The whole turn, not just the group: the tools answer faster than the
   // chain can fold, and a group that closes between two of them flickers.
@@ -1252,6 +1290,13 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought": {
+                // Private session: the work parts inside render null, so the
+                // chain wrapper must not mount either — a turn would otherwise
+                // show a folded "Worked" header that expands to nothing, which
+                // also hints that the work happens to be visible elsewhere.
+                // Children still render, so a notice or status part that the
+                // grouping placed inside the chain is not swallowed.
+                if (privateMode) return <>{children}</>;
                 // A status part is not work. The grouping puts the
                 // connection state into the chain, so without this guard the
                 // chain header appears before the model has said anything —
@@ -1301,6 +1346,7 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-tool": {
+                if (privateMode) return null;
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
@@ -1337,6 +1383,7 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-reasoning": {
+                if (privateMode) return null;
                 if (reasoningMode === "off") return null;
                 if (ReasoningGroup) {
                   return (
@@ -1369,10 +1416,12 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning": {
+                if (privateMode) return null;
                 if (reasoningMode === "off") return null;
                 return <Reasoning {...part} />;
               }
               case "tool-call":
+                if (privateMode) return null;
                 if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":

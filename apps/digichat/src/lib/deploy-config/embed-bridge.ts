@@ -107,6 +107,7 @@ export function clientConfigFromEmbedTenant(
       speech: embed.speech ?? base.features.speech,
       sources: embed.sources ?? base.features.sources,
       branchPicker: embed.branchPicker ?? base.features.branchPicker,
+      privateMode: embed.privateMode ?? base.features.privateMode,
       modelPicker: allowPicker,
     },
     // A Foundry tenant is answered by its own agent: the model is the

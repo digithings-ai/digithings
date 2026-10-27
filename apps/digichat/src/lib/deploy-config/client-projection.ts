@@ -70,6 +70,8 @@ export type DigichatClientFeatures = {
   modelPicker: boolean;
   branchPicker: boolean;
   pageContext: PageContextMode;
+  /** Private demo mode: opt-in per tenant, refused for every other tenant. */
+  privateMode: boolean;
 };
 
 export type DigichatClientChrome = {
@@ -218,6 +220,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     modelPicker: true,
     branchPicker: true,
     pageContext: "visible",
+    privateMode: false,
   },
   models: {
     default: HOUSE_CATALOG.default,

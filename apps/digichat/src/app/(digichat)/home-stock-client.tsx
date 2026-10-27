@@ -36,6 +36,7 @@ import {
   takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
+import { isPrivateMode } from "@/lib/product-slash-commands";
 import {
   SessionMemoryThreadListAdapter,
   memoryThreadStorageKey,
@@ -121,6 +122,9 @@ function useShellThreadRuntime(
           const forceTool = takePendingForceTool(sessionKey);
           if (forceTool && !turnMode) h.set("X-Digi-Force-Tool", forceTool);
           h.set("X-Digi-Run-Id", crypto.randomUUID());
+          // Read at send time, not captured at mount: the transport is frozen on
+          // first render (#1339) and `/private` may flip the flag afterwards.
+          if (isPrivateMode()) h.set("X-Digi-Private", "1");
           const lang = getLanguage().trim();
           if (lang && lang !== "en") h.set("X-Digi-Language", lang);
           const model = getModel()?.trim();

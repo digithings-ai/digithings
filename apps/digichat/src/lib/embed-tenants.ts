@@ -295,6 +295,8 @@ export type EmbedTenantConfig = {
   speech?: boolean;
   sources?: boolean;
   branchPicker?: boolean;
+  /** Tenant opt-in to session private mode (`/private`, `?private=1`). */
+  privateMode?: boolean;
   /**
    * Popup widget page-context injection. `off` ignores `digichat:page-context`
    * messages; `silent` still sends the snapshot to the model but renders no
@@ -762,7 +764,13 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
   // Feature parity with the YAML `features:` block (#4532).
-  for (const key of ["dictation", "speech", "sources", "branchPicker"] as const) {
+  for (const key of [
+    "dictation",
+    "speech",
+    "sources",
+    "branchPicker",
+    "privateMode",
+  ] as const) {
     if (v[key] !== undefined && typeof v[key] !== "boolean") {
       throw new Error(`${ctx}: ${key} must be a boolean`);
     }
@@ -1029,6 +1037,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     speech: typeof v.speech === "boolean" ? v.speech : undefined,
     sources: typeof v.sources === "boolean" ? v.sources : undefined,
     branchPicker: typeof v.branchPicker === "boolean" ? v.branchPicker : undefined,
+    privateMode: typeof v.privateMode === "boolean" ? v.privateMode : undefined,
     defaultLanguage:
       typeof v.defaultLanguage === "string" && LANGUAGE_CODES.has(v.defaultLanguage)
         ? v.defaultLanguage

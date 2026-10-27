@@ -23,6 +23,7 @@ import {
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
+import { isPrivateMode, withPrivateModePrompt } from "@/lib/private-mode";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -577,6 +578,11 @@ export async function POST(req: Request) {
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
 
+  // Private demo mode: the client sends x-digi-private: 1 when the transcript
+  // may be shown to the party it names, so every turn is told to substitute the
+  // real names and identifiers it is given.
+  const privateMode = isPrivateMode(req.headers);
+
   // models.costPerWindow stays on the premium budget above. The limits block
   // is the other gates (tokens, turns, sessions, tool calls, model tiers).
   const clientIp = clientIpForRateLimit(req);
@@ -686,6 +692,14 @@ export async function POST(req: Request) {
     runLock.release();
     throw err;
   }
+
+  // Private mode has to ride the last user turn, not a system message: the
+  // digigraph backend drops every non-user/assistant turn before it reaches the
+  // model. See `withPrivateModePrompt`. Both streamText calls below share this
+  // array, so the instruction is applied exactly once.
+  const modelMessages = privateMode
+    ? withPrivateModePrompt(coreMessages)
+    : coreMessages;
 
   // Opt-in web search (#3420): client must ask AND tenant/env must allow.
   // Never forward on a silent default — corpus-only unless both gates pass.
@@ -978,7 +992,7 @@ export async function POST(req: Request) {
           }
           const result = streamText({
             model,
-            messages: coreMessages,
+            messages: modelMessages,
             headers: upstreamHeaders,
             abortSignal: req.signal,
             experimental_transform: smoothStream({ chunking: "word" }),
@@ -1024,7 +1038,7 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    messages: coreMessages,
+    messages: modelMessages,
     headers: upstreamHeaders,
     abortSignal: req.signal,
     experimental_transform: smoothStream({ chunking: "word" }),
