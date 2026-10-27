@@ -83,7 +83,6 @@ export const PROVIDER_LAYERS: Layer[] = [
     label: "Telemetry",
     options: [
       { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
-      { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
       { id: "helicone", label: "Helicone", vendor: "Helicone" },
       { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
       { id: "arize", label: "Arize AX", vendor: "Arize" },
@@ -163,7 +162,6 @@ export const DIGI_LAYERS: Layer[] = [
     options: [
       { id: "digitrace", label: "digitrace", vendor: "digithings" },
       { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
-      { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
       { id: "helicone", label: "Helicone", vendor: "Helicone" },
       { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
       { id: "arize", label: "Arize AX", vendor: "Arize" },
@@ -246,14 +244,13 @@ const HOURS_PER_MONTH = 730;
  *   (the $5 credit does not cover that footprint; bill is the usage)
  *
  * Traces, first paid plan that covers one event per query:
- * - Langfuse Core $29, 100k units (langfuse.com/pricing)
  * - Helicone Pro $79 floor; requests above the included 10k are
  *   usage-priced and the per-request rate is not published (helicone.ai/pricing)
  * - Braintrust Pro $249, 50k scores and 5GB included (braintrust.dev/pricing)
  * - Arize AX Pro $50, 50k spans (arize.com/pricing). Phoenix OSS stays the
  *   self-hosted traces row.
  * - Datadog Agent Observability Pro $200 month-to-month for the first 100k
- *   LLM spans (public list, via langfuse.com/compare/datadog, Sep 2026)
+ *   LLM spans (public list, Sep 2026)
  *
  * Mail, cheapest published tier that includes the month's sends:
  * - SendGrid Essentials $19.95 / 50k, $34.95 / 100k; extra $0.00133
@@ -356,11 +353,6 @@ export function traceBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD):
   if (id === "langsmith") {
     const over = Math.max(0, queries - p.langsmithIncludedTraces);
     return { amount: p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, estimate: false };
-  }
-  if (id === "langfuse") {
-    const included = 100_000;
-    const extra = Math.max(0, queries - included);
-    return { amount: 29 + (extra / 100_000) * 8, estimate: false };
   }
   if (id === "helicone") return { amount: 79, estimate: true };
   if (id === "braintrust") return { amount: 249, estimate: false };
@@ -582,7 +574,6 @@ const VECTOR_BOX: Record<string, string> = {
 
 const TELEMETRY_BOX: Record<string, string> = {
   langsmith: "LangSmith",
-  langfuse: "Langfuse",
   helicone: "Helicone",
   braintrust: "Braintrust",
   arize: "Arize AX",

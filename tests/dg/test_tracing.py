@@ -10,8 +10,7 @@ _TRACING_ENVS = (
     "LANGSMITH_API_KEY",
     "LANGSMITH_TRACING",
     "LANGCHAIN_TRACING_V2",
-    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-    "LANGFUSE_OTLP_ENDPOINT",
+    "DIGITRACE_OTLP_ENDPOINT",
     "DIGI_OTEL_ENDPOINT",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
 )
@@ -73,9 +72,7 @@ def test_configure_noop_without_key() -> None:
 
 @pytest.mark.unit
 def test_configure_reports_otel_when_endpoint_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "DIGITRACE_LANGFUSE_OTLP_ENDPOINT", "https://trace.example.com/api/public/otel"
-    )
+    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
     status = tracing_mod.configure_langgraph_tracing()
     assert status["otel"] is True
 

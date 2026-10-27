@@ -29,13 +29,14 @@ design review is
 ## What deliberately stayed
 
 - The digitrace tracing code itself (`digitrace/src/digitrace/trace.py`,
-  `digitrace/src/digitrace/config.py`) — Langfuse is only one optional OTLP
-  backend there, it is fail-soft, and it still feeds LangSmith.
-  `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` and its aliases stay recorded as
-  **retired (DIG-5136)** in
-  [`digitrace/ARCHITECTURE.md`](../../digitrace/ARCHITECTURE.md), not deleted:
-  removing an env name from the config would break a deployment that still
-  exports it.
+  `digitrace/src/digitrace/config.py`) — the OTLP leg and the LangSmith leg are
+  both still there and fail-soft. What went with this app is the *Langfuse
+  naming*: `DIGITRACE_LANGFUSE_OTLP_ENDPOINT`, `LANGFUSE_OTLP_ENDPOINT`,
+  `LANGFUSE_HOST` / `LANGFUSE_URL` and the `langfuse-otlp` export backend were
+  removed, not merely marked retired. The OTLP leg exports to the in-house
+  digitrace ingest via `DIGI_OTEL_ENDPOINT` / `DIGITRACE_OTLP_ENDPOINT` /
+  `OTEL_EXPORTER_OTLP_ENDPOINT`; see
+  [`digitrace/ARCHITECTURE.md`](../../digitrace/ARCHITECTURE.md).
 - `digigraph/src/digigraph/tracing.py` — it imports `digitrace.trace.traceable`,
   is a no-op with no endpoint configured, and also feeds LangSmith.
 - `infra/local-proxy/Caddyfile` — see the note below.
@@ -47,6 +48,7 @@ design review is
   human decides whether it is empty before removing it.
 - **`infra/local-proxy/Caddyfile`** still carries a `trace.digithings.localhost`
   route (documented in [`docs/LOCAL_STACK.md`](../LOCAL_STACK.md)) that proxies
-  `/_langfuse/*` and `/api/public/otel` to `digitrace:8003`. That is the live
-  digitrace service, not the retired Langfuse Worker, so the route is left
-  alone; only its path prefix is a leftover of the old naming.
+  to `digitrace:8003`. That is the live digitrace service, not the retired
+  Langfuse Worker. The `/_langfuse/*` path prefixes in its comment were a
+  leftover of the old naming and have been corrected to the routes digitrace
+  actually serves (`/health`, `/healthz`, `/v1/status`).

@@ -108,7 +108,6 @@ PINNED_CENSUS = {
     "hosts.digithings.ai": 1,
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
-    "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 55,
     "occ.digithings.ai": 143,
     "search.digithings.ai": 54,

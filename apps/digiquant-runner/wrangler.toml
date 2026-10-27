@@ -19,12 +19,10 @@
 #
 # Not on this Worker: broker credentials, Alpaca keys, FRED_API_KEY, GH_ISSUE_TOKEN.
 # Phase 3 Task 7 puts these via .github/workflows/sync-digiquant-runner-digikey-secret.yml
-# (workflow_dispatch; logs name + length only): DIGIQUANT_DIGIKEY_API_KEY,
-# LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL,
-# DIGITRACE_LANGFUSE_OTLP_ENDPOINT, DIGI_OTEL_HEADERS. wrangler.toml has no
-# env blocks — one script (develop/prod not split). Cloudflare tracing is
-# Langfuse only. allocation-shadow command allowlist stays empty. Do not
-# commit values.
+# (workflow_dispatch; logs name + length only): DIGIQUANT_DIGIKEY_API_KEY.
+# wrangler.toml has no env blocks — one script (develop/prod not split).
+# Tracing is in-house digitrace plus LangSmith; allocation-shadow command
+# allowlist stays empty. Do not commit values.
 # One container class. instance_type standard-1 (was standard-2, 6 GiB -> 4 GiB):
 # the runner is idle most of the day and memory is billed per GiB-s. Revert to
 # standard-2 if a house run OOMs (watch the runner's exit code and log).

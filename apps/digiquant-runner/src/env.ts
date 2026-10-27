@@ -22,10 +22,6 @@ export interface Env {
   CHEAPERINFERENCE_API_KEY?: string;
   CHEAPERINFERENCE_API_BASE?: string;
   LANGSMITH_API_KEY?: string;
-  LANGFUSE_SECRET_KEY?: string;
-  LANGFUSE_PUBLIC_KEY?: string;
-  LANGFUSE_BASE_URL?: string;
-  DIGITRACE_LANGFUSE_OTLP_ENDPOINT?: string;
   DIGI_OTEL_HEADERS?: string;
   /** Skip ledger on digithings-archive. Not forwarded into the container. */
   ARCHIVE?: HouseLedger;
@@ -66,10 +62,6 @@ const FORWARDED_ENV_NAMES = [
   "CHEAPERINFERENCE_API_KEY",
   "CHEAPERINFERENCE_API_BASE",
   "LANGSMITH_API_KEY",
-  "LANGFUSE_SECRET_KEY",
-  "LANGFUSE_PUBLIC_KEY",
-  "LANGFUSE_BASE_URL",
-  "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
   "DIGI_OTEL_HEADERS",
 ] as const;
 

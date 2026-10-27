@@ -178,8 +178,7 @@ Phase 2 adds `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
 `NOTIFY_FROM` for `execution-cron-check`. Missing names fail that probe
 closed (exit 2). Research-metrics and tearsheets do not need LLM or
 digikey keys. House-run web grounding does: Task 7 puts
-`DIGIQUANT_DIGIKEY_API_KEY` plus Langfuse OTLP names via the ops workflow
-below.
+`DIGIQUANT_DIGIKEY_API_KEY` via the ops workflow below.
 
 `FRED_API_KEY` is gone from this path and must stay unset. #4794 PR3
 (#4817) removed the last FRED callers, including tearsheet
@@ -201,8 +200,8 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
 ## Phase 3 Task 7 — house secret sync
 
-Put house `DIGIQUANT_DIGIKEY_API_KEY` and Langfuse OTLP names on Worker
-`digiquant-runner` from existing GitHub Actions secrets without printing
+Put the house `DIGIQUANT_DIGIKEY_API_KEY` on Worker
+`digiquant-runner` from an existing GitHub Actions secret without printing
 values. Prefer `.github/workflows/sync-digiquant-runner-digikey-secret.yml`
 (`workflow_dispatch`) over a workstation `wrangler secret put`.
 
@@ -215,9 +214,6 @@ gh workflow run "Ops: sync digiquant-runner house secrets"
 The job PUTs `secret_text` at `workers/scripts/digiquant-runner/secrets`:
 
 - `DIGIQUANT_DIGIKEY_API_KEY`
-- `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_BASE_URL`
-- `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` = `${LANGFUSE_BASE_URL%/}/api/public/otel`
-- `DIGI_OTEL_HEADERS` = `Authorization=Basic` plus base64(`public:secret`)
 
 It logs the name and length only (`putting NAME on digiquant-runner (len=N)`).
 An empty Actions secret fails closed (`FAIL empty NAME`).

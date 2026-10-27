@@ -1,12 +1,11 @@
 """Optional LangSmith + OTLP dual-export trace wrappers with PII redaction.
 
-Phase 2 (#4931): ``traceable(name)`` fans out to two legs — the LangSmith SDK
-leg (as before, when ``LANGSMITH_API_KEY`` is set) **and** an OpenTelemetry
-leg (when an OTLP endpoint env var is set, e.g. Langfuse
-``/api/public/otel`` with Basic-auth headers via ``DIGI_OTEL_HEADERS`` /
-``OTEL_EXPORTER_OTLP_HEADERS``). Either leg missing degrades to the other;
-both missing returns the original function unmodified (zero per-call
-overhead).
+``traceable(name)`` fans out to two legs — the LangSmith SDK leg (as before,
+when ``LANGSMITH_API_KEY`` is set) **and** an OpenTelemetry leg (when an OTLP
+endpoint env var is set, pointing at the in-house digitrace OTLP ingest, with
+headers via ``DIGI_OTEL_HEADERS`` / ``OTEL_EXPORTER_OTLP_HEADERS``). Either leg
+missing degrades to the other; both missing returns the original function
+unmodified (zero per-call overhead).
 
 The OTel leg sets only safe attributes (run name + short correlation ids);
 it never carries prompts, completions, or secrets. PII redaction for the
@@ -111,11 +110,11 @@ def _maybe_wrap_otel(fn: F, name: str) -> F:
 def traceable(name: str, *, redactor: PiiRedactor | None = None) -> Callable[[F], F]:
     """Wrap *fn* with LangSmith ``traceable`` + OTel fan-out when enabled.
 
-    Phase 2 dual-export (#4931): the LangSmith leg applies PII redaction via
-    the SDK's ``process_inputs`` / ``process_outputs`` callbacks; the OTel leg
-    (e.g. Langfuse ``/api/public/otel``) opens one span per call carrying only
-    the run name plus short correlation ids. A no-op returning the original
-    function when neither leg is active.
+    The LangSmith leg applies PII redaction via the SDK's ``process_inputs`` /
+    ``process_outputs`` callbacks; the OTel leg (exporting to the in-house
+    digitrace ingest) opens one span per call carrying only the run name plus
+    short correlation ids. A no-op returning the original function when neither
+    leg is active.
     """
 
     def decorator(fn: F) -> F:

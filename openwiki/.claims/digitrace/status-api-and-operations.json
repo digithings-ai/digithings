@@ -18,7 +18,7 @@
     },
     {
       "id": "claim_851958a0730547ad9c1e313d04c37c35",
-      "statement": "GET /v1/status returns a TraceStatus (SmithStatus is a compat alias) where tracing_configured requires both a non-empty LANGSMITH_API_KEY and an importable langsmith SDK, langsmith_host is only the sanitized hostname of LANGSMITH_ENDPOINT, and dual-export fields (langfuse_configured, otel_export_configured, dual_export, export_backend, langfuse_host) are booleans or a sanitized host with no secrets.",
+      "statement": "GET /v1/status returns a TraceStatus (SmithStatus is a compat alias) where tracing_configured requires both a non-empty LANGSMITH_API_KEY and an importable langsmith SDK, langsmith_host is only the sanitized hostname of LANGSMITH_ENDPOINT, and the dual-export fields (otel_export_configured, dual_export, export_backend) are booleans or a backend name with no secrets.",
       "evidence": [
         {
           "resource": "repo://digitrace/src/digitrace/config.py#L43-L80",

@@ -54,7 +54,7 @@ Dockerfiles, its deploy job and its runbook steps were removed by DIG-5136. The 
 [`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md).
 
 Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
-Do not point `LANGSMITH_ENDPOINT` at Langfuse.
+Do not point `LANGSMITH_ENDPOINT` at a trace store.
 
 ### Phase 2 dual-export (shipped, #4931)
 
@@ -63,17 +63,17 @@ Do not point `LANGSMITH_ENDPOINT` at Langfuse.
 - **LangSmith leg** — as before, when `LANGSMITH_API_KEY` is set (PII
   redaction via `process_inputs` / `process_outputs`).
 - **OTel leg** — when an OTLP endpoint env var is set
-  (`DIGITRACE_LANGFUSE_OTLP_ENDPOINT`, `LANGFUSE_OTLP_ENDPOINT`,
-  `DIGI_OTEL_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`). Opens one span per
-  call named `digitrace.<name>` carrying only the run name plus short
-  correlation ids (`digi.workflow_id`, `digi.request_id`, `digi.session_id`).
-  Against Langfuse, point the endpoint at `/api/public/otel` and pass the
-  public:secret Basic auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`
+  (`DIGI_OTEL_ENDPOINT`, `DIGITRACE_OTLP_ENDPOINT`, or
+  `OTEL_EXPORTER_OTLP_ENDPOINT`). Opens one span per call named
+  `digitrace.<name>` carrying only the run name plus short correlation ids
+  (`digi.workflow_id`, `digi.request_id`, `digi.session_id`). The endpoint
+  points at the in-house digitrace OTLP ingest; auth headers, when the ingest
+  needs them, go via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`
   (parsed by `digibase.otel`, #4934).
 
 Either leg degrades to the other; both missing is a pure no-op. Backend
 summary helpers live in `digitrace.config` (`export_backend()` →
-`dual|langsmith|langfuse-otlp|otel|none`) and are surfaced secret-free on
+`dual|langsmith|otel|none`) and are surfaced secret-free on
 `GET /v1/status`. digigraph wraps its three workflow entry points in a shared
 `digigraph_workflow_run` span plus per-node spans for the plain-function
 nodes (supervisor / validate / backtest / optimize); the compiled research
@@ -429,11 +429,8 @@ Unlike digigraph, digitrace does not depend on any other service in Compose. It 
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. Removed from the code at the LangSmith cut (DIG-2663). |
-| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at Langfuse. Cut with the LangSmith leg (DIG-2663). |
-| `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** The Langfuse OTLP ingest URL. Langfuse is dropped by ADR-0036; the env name goes with the app. |
-| `LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** Alias for the Langfuse OTLP ingest URL. |
-| `LANGFUSE_HOST` / `LANGFUSE_URL` | No | **Retired (DIG-5136).** Langfuse host (status display only). |
-| `DIGI_OTEL_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint. Under ADR-0036 it is the ingest endpoint `https://<ingest-host>/v1/traces`. Parsed by `digibase.otel`; `digitrace.config` keeps no second copy. |
+| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at a trace store. Cut with the LangSmith leg (DIG-2663). |
+| `DIGI_OTEL_ENDPOINT` / `DIGITRACE_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint. Under ADR-0036 it is the in-house digitrace ingest endpoint `https://<ingest-host>/v1/traces`. Parsed by `digibase.otel`; `digitrace.config` keeps no second copy. |
 | `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` | No | OTLP headers. Under ADR-0036 they carry `x-digitrace-token` and `x-digitrace-tenant`. Parsed by `digibase.otel`. |
 
 The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digitrace container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.

@@ -52,13 +52,9 @@ describe("pricePick", () => {
   });
 
   it("bills sourced hosts, tracers and mail instead of a dash", () => {
-    const base = pricePick(PROVIDER_LAYERS, DEFAULT_PROVIDER_PICK);
     const aws = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, hosting: "aws" });
-    const langfuse = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langfuse" });
     expect(aws.lines.find((line) => line.layer === "hosting")?.amount).toBeCloseTo(hostBill("aws").amount, 4);
     expect(aws.lines.find((line) => line.layer === "hosting")?.unpriced).toBeUndefined();
-    expect(langfuse.lines.find((line) => line.layer === "telemetry")?.amount).toBe(traceBill("langfuse").amount);
-    expect(langfuse.monthly).toBeCloseTo(base.monthly - traceBill("langsmith").amount + 29, 4);
     expect(traceBill("helicone").estimate).toBe(true);
     expect(traceBill("braintrust").amount).toBe(249);
     expect(traceBill("arize").amount).toBe(50);
@@ -85,6 +81,25 @@ describe("pricePick", () => {
     expect(() => pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, models: "nope" })).toThrow(
       /unknown pick/,
     );
+  });
+
+  it("offers no Langfuse option in either telemetry menu", () => {
+    for (const layers of [PROVIDER_LAYERS, DIGI_LAYERS]) {
+      const telemetry = layers.find((layer) => layer.id === "telemetry");
+      expect(telemetry, "telemetry layer").toBeDefined();
+      const ids = telemetry?.options.map((option) => option.id) ?? [];
+      const labels = telemetry?.options.map((option) => option.label) ?? [];
+      expect(ids).not.toContain("langfuse");
+      expect(labels).not.toContain("Langfuse");
+      expect(labels.join(" ")).not.toMatch(/langfuse/i);
+    }
+    // The in-house digitrace option is what the stack accounts for.
+    const digiTelemetry = DIGI_LAYERS.find((layer) => layer.id === "telemetry");
+    expect(digiTelemetry?.options.map((option) => option.id)).toContain("digitrace");
+    // A stale pick fails loudly instead of silently billing a retired vendor.
+    expect(() =>
+      pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langfuse" }),
+    ).toThrow(/unknown pick/);
   });
 });
 

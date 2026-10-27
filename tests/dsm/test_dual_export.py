@@ -1,4 +1,4 @@
-"""Unit tests for Phase 2 dual-export (#4931): LangSmith + OTLP (Langfuse) fan-out."""
+"""Unit tests for dual-export (#4931): LangSmith + in-house digitrace OTLP fan-out."""
 
 from __future__ import annotations
 
@@ -14,11 +14,8 @@ from digitrace import trace as trace_mod
 _DUAL_ENVS = (
     "LANGSMITH_API_KEY",
     "LANGSMITH_ENDPOINT",
-    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-    "LANGFUSE_OTLP_ENDPOINT",
-    "LANGFUSE_HOST",
-    "LANGFUSE_URL",
     "DIGI_OTEL_ENDPOINT",
+    "DIGITRACE_OTLP_ENDPOINT",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "DIGI_OTEL_HEADERS",
     "OTEL_EXPORTER_OTLP_HEADERS",
@@ -120,7 +117,6 @@ def test_default_backend_none_and_noop_identity() -> None:
     assert config_mod.export_backend() == "none"
     assert config_mod.dual_export_enabled() is False
     assert config_mod.otel_export_configured() is False
-    assert config_mod.langfuse_configured() is False
 
     def fn() -> int:
         return 1
@@ -171,9 +167,7 @@ def test_otlp_only_backend_opens_span(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_dual_export_parity(monkeypatch: pytest.MonkeyPatch) -> None:
     """One call reaches both legs with the same correlation context."""
     _enable_fake_langsmith(monkeypatch)
-    monkeypatch.setenv(
-        "DIGITRACE_LANGFUSE_OTLP_ENDPOINT", "https://trace.example.com/api/public/otel"
-    )
+    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
     spans: list[dict[str, Any]] = []
     _install_fake_otel(monkeypatch, spans)
     assert config_mod.export_backend() == "dual"
@@ -242,25 +236,18 @@ def test_otel_noop_without_packages(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_langfuse_specific_backend_name(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_otlp_backend_name_and_no_langfuse_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The OTLP leg is the in-house digitrace ingest; Langfuse is not an option."""
     monkeypatch.setenv("LANGFUSE_OTLP_ENDPOINT", "https://trace.example.com/api/public/otel")
-    assert config_mod.langfuse_configured() is True
-    assert config_mod.export_backend() == "langfuse-otlp"
-    assert config_mod.langfuse_host_sanitized() == "trace.example.com"
-
-
-@pytest.mark.unit
-def test_langfuse_host_sanitized_strips_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-        "https://user:pass123@trace.example.com:443/api/public/otel?tok=abc",
-    )
-    host = config_mod.langfuse_host_sanitized()
-    assert host == "trace.example.com"
-    assert "pass123" not in (host or "")
-    monkeypatch.delenv("DIGITRACE_LANGFUSE_OTLP_ENDPOINT", raising=False)
     monkeypatch.setenv("LANGFUSE_HOST", "trace.example.com")
-    assert config_mod.langfuse_host_sanitized() == "trace.example.com"
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-fake")
+    assert config_mod.export_backend() == "none"
+    assert config_mod.otel_export_configured() is False
+    assert not hasattr(config_mod, "langfuse_configured")
+    assert not hasattr(config_mod, "langfuse_host_sanitized")
+
+    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
+    assert config_mod.export_backend() == "otel"
 
 
 @pytest.mark.unit
@@ -272,19 +259,17 @@ def test_status_dual_fields_secret_free(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(server_mod, "tracing_enabled", lambda: True)
     monkeypatch.setattr(server_mod, "langsmith_sdk_importable", lambda: True)
     monkeypatch.setattr(server_mod, "langsmith_host_sanitized", lambda: "api.smith.langchain.com")
-    monkeypatch.setattr(server_mod, "langfuse_configured", lambda: True)
     monkeypatch.setattr(server_mod, "otel_export_configured", lambda: True)
     monkeypatch.setattr(server_mod, "dual_export_enabled", lambda: True)
     monkeypatch.setattr(server_mod, "export_backend", lambda: "dual")
-    monkeypatch.setattr(server_mod, "langfuse_host_sanitized", lambda: "trace.example.com")
     client = TestClient(server_mod.app)
     r = client.get("/v1/status")
     assert r.status_code == 200
     body = r.json()
     assert body["dual_export"] is True
     assert body["export_backend"] == "dual"
-    assert body["langfuse_configured"] is True
     assert body["otel_export_configured"] is True
-    assert body["langfuse_host"] == "trace.example.com"
+    assert "langfuse_configured" not in body
+    assert "langfuse_host" not in body
     assert "lsv2_" not in r.text
     assert "pass123" not in r.text

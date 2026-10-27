@@ -25,7 +25,7 @@ repo for `<host>.digithings.ai/<path>` — nothing is invented.
 | `key.digithings.localhost` | `digikey:8005` | `/v1/admin/keys`, `/v1/oauth/token`, `/healthz` | always-on |
 | `search.digithings.localhost` | `digisearch:8002` | `/health`, `/healthz`, `/v1/orchestrator_invoke` | always-on |
 | `chat.digithings.localhost` | `digichat:3000` | `/api/health`, `/embed` | `chat` |
-| `trace.digithings.localhost` | `digitrace:8003` | `/_langfuse/*`, `/api/public/otel` | `trace` |
+| `trace.digithings.localhost` | `digitrace:8003` | `/health`, `/healthz`, `/v1/status` | `trace` |
 | `mcp.digithings.localhost` | — | reserved in prod, route **not enabled** (HUMAN GATE) | returns 404 on purpose |
 
 The three MCP routes use `handle_path`, which strips `/_stack/mcp/<service>` and leaves the

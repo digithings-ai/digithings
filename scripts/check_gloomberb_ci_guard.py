@@ -238,8 +238,8 @@ LOCAL_BASENAMES: tuple[str, ...] = (
     "docker-compose.override.yml",
     "docker-compose.override.yaml",
     # The naming convention for a local-only bring-up compose ("LOCAL DEV ONLY
-    # ... NOT for production"). Nothing tracked uses it since the digitrace
-    # Langfuse stack was retired; kept so the convention stays local if reused.
+    # ... NOT for production"). Nothing tracked uses it since the retired
+    # digitrace stack was removed; kept so the convention stays local if reused.
     "docker-compose.local.yml",
     "docker-compose.local.yaml",
 )
