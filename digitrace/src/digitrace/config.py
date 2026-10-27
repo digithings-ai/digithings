@@ -103,18 +103,22 @@ class TraceStatus(BaseModel):
 SmithStatus = TraceStatus
 
 
-# The in-house digitrace OTLP ingest and the standard OTel alias are the only
-# endpoint names this leaf keeps. LANGSMITH_ENDPOINT always stays the real
-# LangSmith API.
-_OTLP_ENDPOINT_ENVS = (
-    "DIGI_OTEL_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-)
-
-
 def otel_export_configured() -> bool:
-    """True when any OTLP endpoint env var is set (the OTel fan-out leg is active)."""
-    return any((os.environ.get(key) or "").strip() for key in _OTLP_ENDPOINT_ENVS)
+    """True when any OTLP endpoint env var is set (the OTel fan-out leg is active).
+
+    The ``DIGI_OTEL_ENDPOINT`` / ``OTEL_EXPORTER_OTLP_ENDPOINT`` pair is resolved
+    by :func:`digibase.otel.resolve_otel_endpoint`, the same resolver the
+    exporter is configured from — ``digitrace`` keeps no copy of that chain. The
+    Langfuse-only aliases this function used to fall back to are gone with the
+    app (DIG-5136); there is no vendor endpoint name left to resolve.
+    """
+    try:
+        from digibase.otel import resolve_otel_endpoint
+    except ImportError:  # pragma: no cover - digibase is a hard dependency
+        endpoint = ""
+    else:
+        endpoint = resolve_otel_endpoint()
+    return bool(endpoint)
 
 
 def dual_export_enabled() -> bool:

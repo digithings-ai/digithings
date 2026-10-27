@@ -111,3 +111,63 @@ def test_default_redactor_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGI_PII_PATTERNS", r"ZZ_\d+")
     r = default_redactor()
     assert r.redact_text("ZZ_9 hidden") == "[REDACTED] hidden"
+
+
+def test_sensitive_key_names_are_redacted_whole() -> None:
+    r = PiiRedactor()
+    out = r.redact(
+        {
+            "api_key": "sk-abcdefghij1234567",
+            "openai_api_key": "opaque",
+            "openaiApiKey": "camel",
+            "authorization": "Bearer abc",
+            "password": "hunter2",
+            "nested": {"db_password": "swordfish"},
+        }
+    )
+    assert out["api_key"] == "[REDACTED]"
+    assert out["openai_api_key"] == "[REDACTED]"
+    assert out["openaiApiKey"] == "[REDACTED]"
+    assert out["authorization"] == "[REDACTED]"
+    assert out["password"] == "[REDACTED]"
+    assert out["nested"]["db_password"] == "[REDACTED]"
+
+
+def test_token_counts_are_not_treated_as_secrets() -> None:
+    r = PiiRedactor()
+    out = r.redact(
+        {
+            "total_tokens": 18,
+            "max_tokens": 512,
+            "prompt_tokens": 11,
+            "completion_tokens": 7,
+            "token_count": 3,
+        }
+    )
+    assert out == {
+        "total_tokens": 18,
+        "max_tokens": 512,
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "token_count": 3,
+    }
+
+
+def test_long_document_is_summarised_to_hash_and_length() -> None:
+    r = PiiRedactor(max_document_chars=10)
+    out = r.redact("x" * 50)
+    assert out.startswith("[DOCUMENT sha256:")
+    assert out.endswith("chars:50]")
+    assert "x" * 11 not in out
+
+
+def test_document_summarisation_can_be_disabled() -> None:
+    r = PiiRedactor(max_document_chars=None)
+    assert r.redact("y" * 50) == "y" * 50
+
+
+def test_document_threshold_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGI_PII_MAX_DOCUMENT_CHARS", "8")
+    assert "[DOCUMENT" in default_redactor().redact("z" * 9)
+    monkeypatch.setenv("DIGI_PII_MAX_DOCUMENT_CHARS", "0")
+    assert default_redactor().max_document_chars is None
