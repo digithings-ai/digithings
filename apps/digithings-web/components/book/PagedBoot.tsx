@@ -162,6 +162,27 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
           node.remove();
         });
 
+        // The engine clones the whole ancestor chain of the node it paginates,
+        // and this document's chain starts at <html>: every page box carries an
+        // empty <html> and <body> clone above its own content. They hold no
+        // words, so they were invisible on screen — but the book's sheet gives
+        // body a height of 100%, and on paper that resolves against the page's
+        // content box, so each empty clone is a whole page tall and claims a
+        // whole column of the page's multi-column flow. Two of them on page one
+        // pushed the cover into a column parked beyond the sheet: the printed
+        // first sheet held the field and nothing else, at x = 1862 on a sheet
+        // 794 wide. Dropping them puts the cover back in the first column.
+        document.querySelectorAll<HTMLElement>(".pagedjs_page html, .pagedjs_page body").forEach((node) => {
+          if (!node.isConnected) return;
+          if (!(node.textContent ?? "").trim()) {
+            node.remove();
+            return;
+          }
+          const parent = node.parentNode;
+          while (node.firstChild) parent?.insertBefore(node.firstChild, node);
+          node.remove();
+        });
+
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
         // The reader needs the marker too, and it cannot read it off the source:
         // pagedjs replaces the node it paginates (a page box carries

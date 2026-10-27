@@ -340,5 +340,17 @@ html:has(.book-live) { scrollbar-gutter: stable; }
     break-inside: avoid;
   }
   .book-live .pagedjs_page:last-child { break-after: auto; }
+  /* The engine clones the document's wrappers into every page box, so a page
+     carries an empty <html> and <body> above its content. The pagination step
+     drops them; this makes a stray one harmless. The book's own sheet gives body
+     a height of 100%, which on paper resolves against the page's content box: an
+     empty clone then measures a full page tall and claims a whole column of the
+     page flow, which is how the cover ended up in a column parked beyond the
+     sheet and sheet one printed as a bare field. */
+  .pagedjs_page html, .pagedjs_page body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
 }
 `;
