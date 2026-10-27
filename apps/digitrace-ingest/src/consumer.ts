@@ -15,6 +15,7 @@
 import { writeSpanMetric, spanMetrics } from "./analytics";
 import { CONFLICT_TARGETS, indexRows, type IndexRows } from "./index-rows";
 import {
+  refreshTraceRow as defaultRefreshTraceRow,
   resolveWorkspaceId as defaultResolveWorkspaceId,
   upsertRows as defaultUpsertRows,
 } from "./supabase";
@@ -39,6 +40,7 @@ export interface ConsumerDeps {
     rows: Array<Record<string, unknown>>,
     onConflict: string,
   ) => Promise<void>;
+  refreshTraceRow: (env: Env, workspaceId: string, traceId: string) => Promise<void>;
   writeSpanMetric: typeof writeSpanMetric;
 }
 
@@ -51,6 +53,7 @@ const defaultDeps: ConsumerDeps = {
   },
   resolveWorkspaceId: (env, slug) => defaultResolveWorkspaceId(env, slug),
   upsertRows: (env, table, rows, onConflict) => defaultUpsertRows(env, table, rows, onConflict),
+  refreshTraceRow: (env, workspaceId, traceId) => defaultRefreshTraceRow(env, workspaceId, traceId),
   writeSpanMetric,
 };
 
@@ -152,17 +155,18 @@ export async function storeMessage(
   // `digitrace_sessions` carries cross-batch counters that a REST upsert can
   // only overwrite — see the header of `index-rows.ts`.
   //
-  // A trace split across messages has no complete aggregate in any one of them,
-  // so it gets no row: a partial row would be replaced by the next slice (a
-  // smaller `span_count`, a duration that never happened, a `name` from a
-  // non-root span). The spans and the archive still hold every record.
-  const incomplete = new Set(message.incompleteTraces ?? []);
-  const traces =
-    incomplete.size === 0
-      ? rows.traces
-      : rows.traces.filter((row) => !incomplete.has(String(row.trace_id)));
-  await deps.upsertRows(env, "digitrace_traces", traces, CONFLICT_TARGETS.traces);
+  // The trace row is inserted from this message and then **recomputed from the
+  // spans index**, because this message may not hold the whole trace: a trace
+  // over the message budget has its slice named in `incompleteTraces`, and a
+  // trace exported across several OTLP requests has earlier slices already in
+  // the table. `refresh_digitrace_trace` is UPDATE-only, so the insert is
+  // required; the recompute is what makes `span_count`, the time range, the
+  // root name and the sticky error true over all spans, not this slice.
+  await deps.upsertRows(env, "digitrace_traces", rows.traces, CONFLICT_TARGETS.traces);
   await deps.upsertRows(env, "digitrace_spans_index", rows.spans, CONFLICT_TARGETS.spans);
+
+  const traceIds = [...new Set(rows.traces.map((row) => String(row.trace_id)))];
+  await Promise.all(traceIds.map((traceId) => deps.refreshTraceRow(env, workspaceId, traceId)));
 
   for (const record of records) {
     deps.writeSpanMetric(env.ANALYTICS, spanMetrics(record, message.tenant, message.source));

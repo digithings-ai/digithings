@@ -37,9 +37,10 @@ export interface IngestMessage {
    *
    * `digitrace_traces` holds cross-span aggregates (`span_count`, the time
    * range, `name`, `status`), and a PostgREST upsert replaces a row rather than
-   * merging into it. A partial slice would therefore be written as if it were
-   * the whole trace, so the consumer writes **no** trace row for these ids; the
-   * spans and the archive object are still complete.
+   * merging into it. The consumer therefore inserts the row and immediately
+   * recomputes it from `digitrace_spans_index`; this list marks the traces whose
+   * aggregate cannot be complete from this message alone, so a reader (and a
+   * future consumer without the recompute) can tell a slice from a whole.
    */
   incompleteTraces?: string[];
   /** One span record per line (see `archiveLine` in archive.ts). */
