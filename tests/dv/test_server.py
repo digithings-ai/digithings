@@ -2287,3 +2287,60 @@ def test_orchestrator_invoke_search_notes_omitted_prefix_still_searches(
     )
     assert resp.ok is True
     assert resp.data["hits"]
+
+
+# ── no tenant from the unsigned header (DIG-3585, #2303) ─────────────────────
+# DigiAuthMiddleware used to fill an empty tenant claim from X-Digi-Tenant /
+# X-Digichat-Tenant, so any token without a tenant claim could name a tenant
+# and pass enforce_tenant_path_prefix. The header is no longer read: such a
+# token has no tenant, and a mapped prefix is refused.
+
+_NEUTRAL_TENANT_MAP = (
+    '{"tenant-a": {"vaultPathPrefix": "clients/tenant-a"},'
+    ' "tenant-b": {"vaultPathPrefix": "clients/tenant-b"}}'
+)
+
+
+@pytest.mark.parametrize("header", ["X-Digi-Tenant", "X-Digichat-Tenant"])
+def test_by_path_refuses_a_claimless_token_naming_a_tenant_by_header(
+    monkeypatch: pytest.MonkeyPatch, header: str
+) -> None:
+    class _RefusingD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("a claimless token must not reach the store")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _NEUTRAL_TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _RefusingD1())
+    client = TestClient(server.app)
+
+    resp = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/tenant-a/x", "path_prefix": "clients/tenant-a"},
+        headers={**auth_headers(scopes=[SCOPE_READ], tenant_slug=""), header: "tenant-a"},
+    )
+    assert resp.status_code == 403
+
+
+def test_by_path_keeps_the_signed_tenant_against_a_header_naming_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    note = NoteDetail(vault_path="clients/tenant-a/x", title="x", body_markdown="hi")
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _NEUTRAL_TENANT_MAP)
+    monkeypatch.setattr(
+        server, "_open_d1_store", lambda prefix: SimpleNamespace(get_note=lambda p: note)
+    )
+    client = TestClient(server.app)
+    signed_a = auth_headers(scopes=[SCOPE_READ], tenant_slug="tenant-a")
+
+    other = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/tenant-b/x", "path_prefix": "clients/tenant-b"},
+        headers={**signed_a, "X-Digi-Tenant": "tenant-b"},
+    )
+    assert other.status_code == 403
+    own = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/tenant-a/x", "path_prefix": "clients/tenant-a"},
+        headers={**signed_a, "X-Digi-Tenant": "tenant-b"},
+    )
+    assert own.status_code == 200

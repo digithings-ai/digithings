@@ -154,16 +154,18 @@ Middleware behaviour on each request:
 7. Check `scope_grants_required`. If insufficient: 403 `insufficient_scope`.
 8. Attach `DigiAuthContext` to `request.state.digi_auth`. Downstream handlers read tenant, scopes, and project context from there.
 
-**`tenant_slug` provenance (#2303).** If the verified JWT's own `tenant_slug` claim is
-empty, `jwt_context` falls back to the unsigned `X-Digi-Tenant` / `X-Digichat-Tenant`
-request header — this keeps routing/logging usable for legacy callers that predate
-per-tenant tokens, but it means `tenant_slug` alone does not prove the caller is
-authorized for that tenant. `DigiAuthContext.tenant_slug_verified` disambiguates: `True`
-only when `tenant_slug` came from the decoded JWT claim, `False` when it is empty or was
-filled from the header. **Any consumer using `tenant_slug` for real authorization (not
-just routing/logging) must check `tenant_slug_verified is True` first** — trusting
-`tenant_slug` alone lets a caller with an empty-tenant token pick any tenant via the
-header. Issuance refuses blank tenants after strip: CLI `--tenant`, `POST /v1/admin/keys`
+**`tenant_slug` provenance (#2303, DIG-3585).** `tenant_slug` comes from the verified
+JWT's own `tenant_slug` claim and nowhere else. `jwt_context` does **not** read the
+unsigned `X-Digi-Tenant` / `X-Digichat-Tenant` request headers: a token with no tenant
+claim has no tenant (`tenant_slug == ""`), whatever the caller sends, and a token with a
+claim keeps it against a header naming another tenant. (Until DIG-3585 an empty claim
+was filled from the header, which let any claimless token pick a tenant.) Services that
+scope tenant data therefore fail closed for a claimless token: digigraph routes no tenant
+corpus, prompt, lock, tools or skills; digivault refuses mapped prefixes; digisearch
+refuses tenant-scoped indexes. `DigiAuthContext.tenant_slug_verified` is `True` only when
+`tenant_slug` came from the decoded JWT claim; **a consumer using `tenant_slug` for real
+authorization (not just routing/logging) still checks it**, so a context built any other
+way is never trusted by accident. Every token digikey issues carries a tenant. Issuance refuses blank tenants after strip: CLI `--tenant`, `POST /v1/admin/keys`
 (Pydantic validator), `bff_session` token exchange, and `api_key` exchange of a row whose
 stored `tenant_slug` is blank. Whitespace-only strings are rejected the same way — they
 previously passed `min_length=1` then became `""` after `.strip()`.
