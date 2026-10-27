@@ -181,13 +181,15 @@ function expectedPage(service: string, groups: readonly string[]): string {
   return lines.join("\n");
 }
 
-/** The /tools page as text: headings, tree rows and each row's value. */
+/** The /tools page as text: headings, tree rows and each row's value.
+ *  Each command row is wrapped so its one-line description can sit under it,
+ *  so the list is the wrapper's parent, not the button's.
+ */
 function toolsPage(): string {
-  const menu = document.querySelector("button[id^='dc-menu-']")?.parentElement;
+  const menu = document.querySelector("button[id^='dc-menu-']")?.parentElement?.parentElement;
   if (!menu) return "";
-  return Array.from(menu.children)
-    .map((node) => {
-      const el = node as HTMLElement;
+  return Array.from(menu.querySelectorAll<HTMLElement>("[role='presentation'], button[id^='dc-menu-']"))
+    .map((el) => {
       if (el.getAttribute("role") === "presentation") return `  # ${el.textContent ?? ""}`;
       if (!el.id.startsWith("dc-menu-")) return null;
       const glyph = el.querySelector("[data-slot='tools-tree-branch']")?.textContent ?? "";
