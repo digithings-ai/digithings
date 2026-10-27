@@ -431,7 +431,7 @@ deployment:
     expect(cfg.deployment?.gate.showByok).toBe(true);
     expect(cfg.deployment?.gate.showContextMeter).toBe(true);
     expect(cfg.deployment?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: true,

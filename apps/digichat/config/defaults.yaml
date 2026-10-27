@@ -95,7 +95,7 @@ deployment: &house
   # per-visitor minute. The tool-call cap, the answer guard, and a shared
   # deployment minute stay on.
   guardrails:
-    maxToolCallsPerTurn: 5
+    maxToolCallsPerTurn: 20
     answerAt: 0.7
     pauseAt: 0.9
     rateLimit: true
