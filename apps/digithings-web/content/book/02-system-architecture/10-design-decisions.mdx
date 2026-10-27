@@ -12,7 +12,7 @@ when the decision ought to change.
 
 | Decision | Reason |
 | --- | --- |
-| Cloudflare is production only; self-hosting is the gate before it. | A second hosted stack doubles cost without catching more, and a local stack that runs the real interface is a better test. |
+| The cloud home is for production only; self-hosting is the gate before it. | A second hosted stack doubles cost without catching more, and a local stack that runs the real interface is a better test. |
 | One configuration contract for both homes. | If either home could invent its own settings, "it works locally" would stop meaning anything in production. |
 | The hub discovers vertical tools at run time. | A vertical should be able to ship a new tool without waiting for a hub release. |
 | Model access is a library; routing is a separate layer. | Calling a model is code; choosing a model is operations. Keeping them apart makes switching providers a configuration change. |
