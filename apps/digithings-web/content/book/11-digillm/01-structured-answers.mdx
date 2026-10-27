@@ -8,19 +8,20 @@ summary: >-
 
 A model that answers in free prose leaves the caller parsing sentences.
 A model that answers in a declared shape hands over data. The shared layer
-makes the second the easy default: a caller declares the shape it needs,
-the library enforces it, and the result arrives ready to store, display or
-pass along.
+makes the second the easy default: a caller passes a Pydantic model, digillm
+asks the model for JSON matching its schema and validates the reply, so a
+malformed answer is an error the caller can handle, not a string it has to
+guess at.
 
-The shapes stay small on purpose — a judgement with its reasons, a list
-with its counts, a record with its fields. Small shapes survive model
-changes; elaborate ones shatter on the first new vendor. Services that need
-more compose small shapes rather than inventing large ones.
+The shapes stay small on purpose: a judgement with its reasons, a list with
+its counts, a record with its fields. Small shapes are easier for a new model
+to fill correctly, and services that need more compose small shapes rather
+than inventing large ones.
 
 <Reference kind="architecture" href="repo:digillm/ARCHITECTURE.md" title="digillm architecture">
   The shared shapes and how callers declare them.
 </Reference>
 
-> **Why digithings.** Structured answers over an open format mean results
-> flow between services without translation layers — and without the
-> proprietary function-calling dialects that tie callers to one vendor.
+> **Why digithings.** Structured answers over a format nearly every provider
+> accepts mean results flow between services without translation layers, and
+> a caller is not tied to the one vendor whose dialect it was written in.

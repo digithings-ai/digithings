@@ -16,9 +16,9 @@ digiquant, digikey, digivault, digitrace and the digichat back end. You deploy
 a service, you scale a service, and you can put another implementation behind
 the same interface.
 
-**Libraries** have no address at all. digillm, digibase, digifetch and digibot
-are packages that services import. They never listen for traffic, so there is
-nothing to deploy and nothing to secure at the network level; they travel
+**Libraries** are imported rather than dialled. digillm, digibase, digifetch and digibot
+are packages that services import. There is nothing to deploy and nothing to
+secure at the network level, because they travel
 inside the services that use them. When a library improves, every service that
 imports it improves on its next release.
 

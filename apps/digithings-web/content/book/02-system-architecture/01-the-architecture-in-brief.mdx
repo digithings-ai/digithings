@@ -20,11 +20,12 @@ retrieval and **digiquant** for market research, with **digivault** as a
 long-lived knowledge vault. Around them sit libraries that every service shares,
 for model access (**digillm**), tracing (**digitrace**), common service
 plumbing (**digibase**) and web fetching (**digifetch**). People meet all of
-this through **digichat**, a chat interface that only ever talks to the hub.
+this through **digichat**, a chat interface whose backend is a setting: the
+hub by default, or any of several hosted model APIs.
 
 Three principles decide most of the questions that follow. The system is
-**MCP-first**: every capability is exposed as a tool through the Model Context
-Protocol, so agents built elsewhere can use it. It is a **federated hub**: the
+**MCP-first**: every module with tools publishes them through the Model Context
+Protocol, so agents built elsewhere can use them. It is a **federated hub**: the
 hub coordinates but does not own the verticals, which ship on their own
 schedule. And it is **private by default**: every service listens only on the
 machine it runs on until someone deliberately exposes it.

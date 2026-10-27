@@ -1,75 +1,55 @@
 ---
-title: digillm, one model layer for every service
+title: digillm, one model layer
 order: 11
 summary: >-
   Every service calls language models through one library. No service depends on which provider answers.
 ---
 
-Left alone, every service grows its own model client. Each one picks a
-favourite vendor, hard-codes the retry behaviour its author liked, and
-handles failures a little differently. Six months later, switching models
-means six refactors, and nobody can answer what a model call costs. digillm
-exists so that never happens: one library, every service, no vendor
-preference.
+Left alone, every service grows its own model client. Each picks a favourite
+vendor, retries in its own way and fails in its own way. A year later,
+switching models means touching every service, and nobody can say what a
+model call costs. digillm exists so that never happens: one library, used by
+every service, with no preference for any vendor.
 
-## What it is for
-
-The audience question is practical: what does it take to change models? With
-a shared layer, the answer is a configuration choice, not a rewrite. digillm
-speaks to any endpoint that follows the widely adopted chat format, so local
-runners, hosted vendors and routing proxies all look identical to the
-calling service. A team trying a new model changes where the traffic goes,
-not how the code asks.
+With a shared layer, changing models is a configuration choice. digillm
+speaks the OpenAI chat format, which most providers, local runners such as
+Ollama and routing proxies such as LiteLLM accept, so they all look the same
+to the calling code. Trying a new model changes where the traffic goes, not
+how the code asks for it. The catch is that a feature only one
+provider offers waits until the format can carry it.
 
 ## How it works
 
-digillm is a library, not a service: it ships inside the services that use
-it rather than running on its own. It defines the shared shapes every model
-call uses: the request, the tool call, the tool definition, and structured
-answers in schema form. On top of those shapes it layers the behaviours every
-caller needs but nobody wants to write twice: retries, timeouts, usage
-accounting, and optional tracing hooks. A routing proxy can sit underneath
-for provider choice, caching and rate limits, and the library never knows or
-cares.
+digillm is a library first. It ships inside the services that use it
+and defines the shapes every model call shares: the request, the tool call,
+the tool definition and structured answers checked against a schema. On top
+of those shapes it adds what every caller needs and nobody wants to write
+twice: retries, timeouts, usage accounting and optional tracing.
 
-```mermaid
+```mermaid any service reaches any model through one layer; the provider is a setting
 flowchart LR
-  SVC[any service] --> LIB[digillm shapes and retries]
-  LIB --> DIRECT[a model endpoint]
-  LIB --> PROXY[a routing proxy]
-  PROXY --> M1[provider one]
-  PROXY --> M2[provider two]
-  PROXY --> LOCAL[a local runner]
+  SVC[any service] --> LIB[digillm]
+  LIB --> LOCAL[local model]
+  LIB --> PROXY[routing proxy]
+  PROXY --> HOSTED[hosted models]
 ```
 
-The dependency discipline is part of the design: the library holds almost no
-dependencies of its own and never imports web frameworks, so it can live
-inside a chat interface, an orchestration hub and a research pipeline
-without dragging their worlds along.
+The library has two hard dependencies, the OpenAI client and Pydantic, and
+never imports a web framework. So the same code can live inside an
+orchestration hub, a retrieval service and a research pipeline without
+dragging their worlds along.
 
-## Where it meets the rest
+## Where it fits
 
-digillm is consumed, not called. The orchestration hub uses it for
-routing-adjacent model calls, the search vertical for judging and rewriting,
-and the research tooling for structured extraction. Tracing flows through
-digitrace hooks when tracing is configured, and silently costs nothing when
-it is not. Because the shapes are shared, a structured answer produced in one
-service can be read in another without translation.
+The hub, retrieval and research all make their model calls through it.
+Because the shapes are shared, a structured answer produced in one service can
+be read in another without translation. When tracing is configured, usage flows into the trail;
+when it is not, the hooks cost nothing.
+
+A library has no home of its own. In the local stack it points at LiteLLM,
+which routes each model name to Ollama on the same machine or to a hosted
+provider. Where models run stays an operator decision, never a code change.
 
 <Reference kind="architecture" href="repo:digillm/ARCHITECTURE.md" title="digillm architecture">
   The module map, the shape definitions and the dependency rules.
 </Reference>
-
-## Running it in each home
-
-A library has no deployment of its own, so the three homes change nothing
-about digillm itself, they change what sits underneath it. Locally it points
-at a model runner on the same machine. In the cloud it points at whatever
-inference the deployment chose. Self-hosted, the operator picks the endpoint
-and the library behaves identically. That indifference is the point: the
-decision of where models run stays an operator decision, never a code change.
-
-> **Why digithings.** Swapping a model vendor is usually a migration project.
-> Here it is a routing decision, because no service code names a vendor. Open
-> interfaces plus one shared layer is what makes pay-as-you-go models
-> genuinely interchangeable instead of merely available.

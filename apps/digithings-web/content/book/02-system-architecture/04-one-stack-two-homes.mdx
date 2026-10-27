@@ -2,22 +2,22 @@
 title: One stack, two homes
 order: 4
 summary: >-
-  digithings runs self-hosted for development and review, and on Cloudflare in
+  The stack runs self-hosted for development and review, and on a cloud host in
   production. Both read the same configuration contract.
 ---
 
-digithings has two first-class ways to run. The **self-hosted** stack runs on
-your own machine or server with Docker Compose. The **hosted** stack runs on
-Cloudflare, with the services packaged into containers behind Cloudflare
-Workers. They are not two products. They are the same modules, reading the same
-configuration contract, under two different process supervisors.
+the stack has two first-class ways to run. The **self-hosted** home runs on your
+own machine or server with Docker Compose. The **hosted** home runs on a cloud
+provider, with the services packaged into containers behind its edge. They are
+not two products. They are the same modules, reading the same configuration
+contract, under two different process supervisors.
 
 The self-hosted stack is not a lesser copy. It is the **pre-production gate**:
 every interface, tool server and API is verified fully connected locally before
 anything is deployed. There is deliberately no hosted development environment,
 because a second hosted stack would double the infrastructure bill without
-catching anything the local stack does not. Cloudflare is where production
-lives; your machine is where everything is proven first.
+catching anything the local stack does not. The cloud home is where a production
+deployment lives; your machine is where everything is proven first.
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,7 @@ flowchart LR
     PG["Postgres"]
   end
 
-  subgraph cf["Cloudflare · production"]
+  subgraph cf["cloud host · production"]
     PAGES["static sites"]
     STACK["stack worker + container · hub, identity, search, vault, routing"]
     CHATW["chat worker + container"]

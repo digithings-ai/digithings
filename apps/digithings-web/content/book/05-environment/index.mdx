@@ -1,26 +1,45 @@
 ---
-title: One environment for an AI application
+title: The scaffolding, built once
 order: 6
 summary: >-
   Model access, orchestration, retrieval, identity, chat, data and tracing in one open stack. Start with one module and add the rest as the work grows.
 ---
 
 An AI application is more than a model call. It needs a way to reach models,
-route work between them, retrieve context, remember what happened, identify
-who is asking, expose tools, show an interface and explain the result. Most
-projects spend their first months rebuilding that surrounding environment.
+route work between them, find the right context, call tools, identify who is
+asking, show an interface and record what happened. Most projects build that
+themselves before they reach the part that is theirs.
 
-digithings is that environment. It is built from small modules with one job
-each, tied together by open protocols. Model access, orchestration, retrieval,
-memory, identity, chat, data, tracing and tool discovery are separate pieces,
-so you can run one, a few, or all of them.
+digithings is that scaffolding, built once. Each module has one job and a
+published contract, so you can run one of them, a few, or all.
 
-The stack is open source and open core. You can read the code, replace a module
-and keep the parts that work. Nothing at the boundary is proprietary, and no
-module requires the others to be bought as a bundle.
+| Module | Its one job |
+| --- | --- |
+| digigraph | The hub. Routes each request to the right tools and streams the answer. |
+| digillm | The model layer. One way for every service to call any model. |
+| digisearch | Retrieval. Indexes your documents and finds the passages that matter. |
+| digivault | Documents. Linked markdown notes, readable by people and tools. |
+| digiquant | Research. Data, strategies, backtests and optimisation, in order. |
+| digivoice | Voice. Dictation, rewriting and speech, able to run on your own machine. |
+| digichat | The interface. Where people ask, read answers and see artifacts. |
+| digikey | Identity. Short-lived credentials every service checks itself. |
+| digitrace | Tracing. A record of what every request did. |
+| digibase | The shared base. Plumbing every service uses. |
 
-Capability and cost move together. A single person can run the core on a
-laptop. A research team can add retrieval and a vertical service. An
-organisation can add identity, tracing, data and more hardware without
-changing the contracts underneath. The same environment scales from a
-workstation to a fleet, and the bill follows the parts you actually run.
+The reference docs cover digivault, digivoice and digibase, which have no
+chapter here. A vertical, in these chapters, is a capability service — search,
+research, voice — not an industry.
+
+The Model Context Protocol is the layer underneath, not a module: an open
+standard for telling a model which tools it may call. Five modules publish their
+tools over it, so Claude Desktop or an agent you wrote can call them, and
+digigraph can call any MCP server you add. That is why the table is not closed.
+
+## How the parts fit
+
+A request arrives in digichat or from a caller speaking the same interface, and
+goes to digigraph, which asks each vertical which tools it offers and runs the
+ones this request needs. digillm makes the model calls. digikey sits beside the
+flow, issuing the credential each service verifies for itself, and digitrace
+records the steps. Replace a part with your own that keeps its seam, and the
+rest carry on.
