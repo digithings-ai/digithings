@@ -323,11 +323,52 @@ const MARK: readonly (readonly [number, number, number, number, number])[] = [
   [41, 50, 1, 3, 0.15]
 ];
 
-const ACCENT = "#3DD6C4";
-const INK = "20, 24, 27";
-/** One beat per row, then a beat with every row lit. */
-const BEAT_MS = 320;
-const STEPS = 5;
+/**
+ * One beat per seam. The mark has four rows of cubes and three seams between
+ * them; the accent sits on a seam and steps down one at a time, which is the
+ * whole animation.
+ */
+const BEAT_MS = 620;
+const SEAMS = 4;
+
+/**
+ * How much ink each band of the mark takes, by height: faint at the top, solid at
+ * the foot. One ladder for both themes, because the ink is what changes — in a
+ * light theme that reads as a stack dark at the base and light above it, and in
+ * a dark theme as a stack whose foot glows and whose top recedes into the page.
+ * That is the brand's own shading, not an inversion of it.
+ */
+const TOP_INK = 0.34;
+const FOOT_INK = 1;
+
+/**
+ * The artwork carries its own face shading in each path's opacity, and the rows
+ * are lit very differently from one another. Using that number directly would
+ * double-shade the mark — a light row at the foot came out almost invisible.
+ * So each face is taken relative to the proudest face in its own row.
+ */
+const ROW_MAX = MARK.reduce<number[]>((max, [, , , row, opacity]) => {
+  max[row] = Math.max(max[row] ?? 0, opacity);
+  return max;
+}, []);
+
+type Tokens = { ink: string; accent: string; dark: boolean };
+
+/** The mark takes its ink and accent from the page it sits on. */
+function readTokens(): Tokens {
+  const root = document.documentElement;
+  const style = getComputedStyle(root);
+  const probe = document.createElement("span");
+  probe.style.color = style.getPropertyValue("--ink").trim() || "#14181b";
+  document.body.appendChild(probe);
+  const ink = getComputedStyle(probe).color;
+  probe.remove();
+  return {
+    ink,
+    accent: style.getPropertyValue("--accent").trim() || ink,
+    dark: root.getAttribute("data-theme") === "dark",
+  };
+}
 
 export type LoadingMarkOptions = {
   /** Logical page, in the same units as the reader's stage. */
@@ -371,7 +412,7 @@ export function startLoadingMark(
 
   function drawField() {
     const pad = (pitch - dot) / 2;
-    ctx.fillStyle = `rgba(${INK}, 0.16)`;
+    ctx.fillStyle = `color-mix(in srgb, ${tokens.ink} 16%, transparent)`;
     for (let r = 0; r < rows; r += 1) {
       for (let c = 0; c < cols; c += 1) {
         if (rand[r * cols + c] < 0.028) {
@@ -381,31 +422,51 @@ export function startLoadingMark(
     }
   }
 
-  function drawMark(lit: number) {
+  function drawMark(seam: number, tokens: Tokens) {
     for (const [mx, my, mw, row, opacity] of MARK) {
-      // `lit` is the row carrying the accent; STEPS - 1 lights every row.
-      const accented = lit === STEPS - 1 || row === lit;
-      ctx.fillStyle = accented ? ACCENT : `rgba(${INK}, ${opacity})`;
+      // Height in the mark, 0 at the top of the artwork and 1 at its foot.
+      const depth = Math.min(1, Math.max(0, (my + 0.5) / 60));
+      const ink = TOP_INK + (FOOT_INK - TOP_INK) * depth;
+      const face = 0.55 + 0.45 * (opacity / (ROW_MAX[row] || 1));
+      // The accent marks the seam: the band the seam opens onto.
+      const accented = row === seam;
+      ctx.fillStyle = accented
+        ? tokens.accent
+        : `color-mix(in srgb, ${tokens.ink} ${Math.round(ink * face * 100)}%, transparent)`;
       ctx.fillRect(originX + mx * unit, originY + my * unit, mw * unit, unit + 0.4);
     }
   }
 
-  function render(lit: number) {
+  function render(seam: number) {
     ctx.clearRect(0, 0, width, height);
     drawField();
-    drawMark(lit);
+    drawMark(seam, tokens);
   }
 
+  let tokens = readTokens();
+  let observer: MutationObserver | null = null;
+  const onTheme = () => {
+    tokens = readTokens();
+  };
+  observer = new MutationObserver(onTheme);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme", "data-palette"],
+  });
+
   render(0);
-  if (still) return () => {};
+  if (still) return () => observer?.disconnect();
 
   let raf = 0;
   const t0 = performance.now();
   const loop = (now: number) => {
-    const step = Math.floor((now - t0) / BEAT_MS) % STEPS;
-    render(step);
+    const seam = Math.floor((now - t0) / BEAT_MS) % SEAMS;
+    render(seam);
     raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
-  return () => cancelAnimationFrame(raf);
+  return () => {
+    cancelAnimationFrame(raf);
+    observer?.disconnect();
+  };
 }
