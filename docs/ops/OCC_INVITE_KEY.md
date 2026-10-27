@@ -463,10 +463,17 @@ and live customer PII anyway.
   the browser's address bar and history never keep it. The follow-up request is authenticated by
   the cookie; the Worker then removes the query token, moves the key to `x-embed-token` and drops
   it before proxying, so it does not reach the app's render or its HTML.
-  Two limits remain, both real: the Worker reads the key out of its own request URL, and the
-  digichat Worker has `[observability] enabled = true`
-  (`apps/digichat-cloudflare/wrangler.toml:12-13`), so the first hop **can appear in Workers log
-  metadata** — the same exposure the Pages gate never had. And the `Referrer-Policy: no-referrer`
+  The Worker reads the key out of its own request URL, and it answers the 302 before any app code
+  runs: nothing in the Worker logs the URL (`index.test.ts` pins that a token hit produces no
+  console output and never reaches the container). The platform's own **invocation log** does
+  record the request URL, and the digichat Worker keeps Workers Logs on
+  (`[observability] enabled = true` in `apps/digichat-cloudflare/wrangler.toml`), so the Worker
+  also sets `redact_query_string = true` there: query strings are dropped from its logs and
+  traces, for `/chat/occ?token=` and the legacy `/embed?...&token=` door alike (pinned by
+  `occ-route.contract.test.ts`). This takes effect on the next Worker deploy; invocation logs
+  written before it may still hold a first-hop URL until Workers Logs retention (7 days) ages
+  them out. The legacy `/embed` door still passes its URL to the container, whose app does not
+  log request URLs. One limit remains: the `Referrer-Policy: no-referrer`
   rule on `/chat/occ*` (`apps/digithings-web/public/_headers:27-29`) no longer applies: the
   response is now the container's, whose baked policy is `strict-origin-when-cross-origin`
   (`apps/digichat/src/lib/security-headers-bake.ts:40`), which strips the query for cross-origin

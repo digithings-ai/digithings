@@ -54,4 +54,14 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
     // The key is read from the environment only and never put on a turn.
     expect(script).not.toMatch(/x-embed-token/i);
   });
+
+  it(`${OCC_ROUTE_OWNER} keeps query strings out of Workers Logs and traces`, () => {
+    // The invite link carries the key as ?token= on its first hit, and the
+    // legacy /embed door carries it the same way. The invocation log records
+    // the request URL, so the query string is redacted for this Worker.
+    const toml = readFileSync(join(repoRoot, OCC_ROUTE_OWNER), "utf8");
+    const section = toml.match(/^\[observability\]\n([\s\S]*?)(?=^\[)/m);
+    expect(section, "[observability] section").not.toBeNull();
+    expect(section![1]).toMatch(/^redact_query_string\s*=\s*true\s*$/m);
+  });
 });

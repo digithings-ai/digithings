@@ -17,6 +17,14 @@ workers_dev = false
 # ~4.6k requests/week.
 [observability]
 enabled = true
+# The OCC invite link carries its key as ?token= on its first hit. On
+# /chat/occ the edge swaps it for a cookie and 302s to the clean address
+# before any app code logs or proxies it; the legacy /embed?host=...&token=
+# door still hands the URL on, and the app does not log request URLs. The
+# platform's invocation log, however, records the request URL itself, so
+# query strings are dropped from this Worker's logs and traces (the repo's
+# wrangler 4.133 pin validates the key). Pinned in occ-route.contract.test.ts.
+redact_query_string = true
 
 # ROUTE OWNERSHIP (this file owns the digichat surface; the 2026-10-18
 # "ROUTE HOLD" note is retired — DIG-5121, 2026-10-22).

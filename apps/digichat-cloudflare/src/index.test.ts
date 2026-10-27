@@ -465,6 +465,32 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     expect(dflt.headers.get("x-embed-host")).toBe("occ.digithings.ai");
   });
 
+  it("answers an invite link with a 302 before anything logs it or the container sees it", async () => {
+    // The token may only ever sit in the first request's URL. The Worker
+    // must not log that URL, and the container must not receive it: the edge
+    // swaps it for the cookie and redirects to the clean address. (The
+    // platform's own invocation log is covered by redact_query_string in
+    // wrangler.toml, pinned in occ-route.contract.test.ts.)
+    const quiet: string[] = [];
+    for (const level of ["warn", "info", "debug"] as const) {
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        quiet.push(args.map((arg) => String(arg)).join(" "));
+      });
+    }
+    hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
+
+    const res = await worker.fetch(
+      new Request(`https://digithings.ai/chat/occ?token=${encodeURIComponent(KEY)}`),
+      envWithInvite(),
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).not.toContain(KEY);
+    expect(res.headers.get("location")).not.toContain("token=");
+    expect(hooks.containerFetch).not.toHaveBeenCalled();
+    expect([...logged, ...quiet]).toEqual([]);
+  });
+
   it("strips a client-sent X-Digi-Tenant on the legacy /api alias too", async () => {
     const seen = await containerSees({
       path: "/api/chat",
