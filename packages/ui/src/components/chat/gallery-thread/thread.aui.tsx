@@ -254,7 +254,7 @@ const chainGroupBy = (() => {
         : part.type.startsWith("data-")
           ? part.type.slice("data-".length)
           : undefined;
-    // A data-notice (tool-call limit, and any other status notice) stays
+    // A data-notice (a rate-limit wait, and any other status notice) stays
     // outside the chain. The chain folds once the answer arrives, which would
     // hide the notice inside the collapsed work block.
     if (dataName === "notice") return base(part as never, context as never);

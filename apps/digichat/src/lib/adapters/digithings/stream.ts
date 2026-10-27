@@ -701,7 +701,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
             // Notice only. beforeRound may ask for an answer-band follow-up;
             // this loop has no second request to attach it to, so the result
-            // is discarded. The tool-cap notice still fires from noteToolCap.
+            // is discarded. The cap itself is enforced upstream, silently.
             if (opts.guard?.active) {
               await opts.guard.beforeRound({
                 writer,
@@ -718,12 +718,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
             closeText();
           }
           for (const span of spans) {
-            if (span.operation === "execute_tool") {
-              toolCallsSoFar += 1;
-              // noteToolCap no-ops under the cap and after the notice is sent,
-              // including when one event carries two execute_tool spans.
-              if (opts.guard?.active) opts.guard.noteToolCap(writer, toolCallsSoFar);
-            }
+            // The cap is silent: digigraph/digillm enforce it upstream, so this
+            // counter only feeds beforeRound's own bookkeeping.
+            if (span.operation === "execute_tool") toolCallsSoFar += 1;
             const next =
               opts.guard?.active && span.toolResult !== undefined
                 ? {

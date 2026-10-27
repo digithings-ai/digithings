@@ -808,6 +808,16 @@ export async function POST(req: Request) {
   if (reasoningEffort) {
     upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
   }
+  // Hard tool-call cap for the upstream loop. The chat-side turn guard can only
+  // *ask* the model to stop — digigraph ran 52 calls past it in one turn — so
+  // forward the deployment's cap and let digillm stop the loop structurally at
+  // that many executed calls and answer tool-free. Silent by design: the answer
+  // from the results gathered so far is the only thing the user sees.
+  // Foundry and the AI SDK backends enforce the cap in-process and do not need it.
+  const upstreamToolCap = limitGuardrails?.maxToolCallsPerTurn;
+  if (upstreamToolCap != null) {
+    upstreamHeaders["X-Digi-Max-Tool-Calls"] = String(upstreamToolCap);
+  }
   // Search engine choice for digisearch web_search (#4724): allowlisted names
   // only, unknown/blank dropped. "auto" is the hub default, so it is omitted
   // rather than forwarded. Effective engine is the browser choice, else the
