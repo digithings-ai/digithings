@@ -640,6 +640,60 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
         self.assertIn('r0_base = "origin/" + base', src)
 
+    def test_run_checks_executes_the_allowance_gate(self):
+        """Functionally: a grown baseline makes `run_checks` return the gate.
+
+        The source pins above prove the command is written down; this proves the
+        static pool actually executes it and reports its non-zero exit as a
+        failed gate. That is the property #6500 merged without: the gate was
+        absent from run_checks, so a grown baseline changed nothing.
+        """
+        tmp = tempfile.mkdtemp()
+        gate = "scripts/check_r0_client_literals_baseline_growth.py"
+        os.makedirs(os.path.join(tmp, "scripts"))
+        with open(os.path.join(tmp, gate), "w") as f:
+            f.write("# fixture: existence is all run_checks tests\n")
+
+        saved = {name: getattr(_mod, name) for name in (
+            "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
+            "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate",
+            "bun_gate")}
+        commands: list[str] = []
+
+        def fake_sh(cmd, cwd=None, timeout=None, out=None, name=None, env=None):
+            text = cmd if isinstance(cmd, str) else " ".join(str(p) for p in cmd)
+            commands.append(text)
+            if gate in text:
+                if out is not None:
+                    out.write("r0-client-literal-baseline-growth: 1 finding(s)\n")
+                return 1, ""
+            return 0, ""
+
+        try:
+            _mod.WT = tmp
+            _mod.sh = fake_sh
+            _mod._guard = lambda: None
+            _mod.wt_is_ours = lambda path: True
+            _mod.pr_body = lambda pr: "Fixes DIG-5762\n"
+            _mod.gitleaks_log_opts = lambda base, sha, out: None
+            _mod.ruff_paths_for_tree = lambda wt: ("", "fixture")
+            _mod.ruff_paths_fallback = lambda wt: None
+            _mod.worker_gate = lambda pr, wt: (None, None)
+            _mod.bun_gate = lambda pr, wt: (0, None)
+            pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+                  "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
+            fails = _mod.run_checks(pr, io.StringIO())
+        finally:
+            for name, value in saved.items():
+                setattr(_mod, name, value)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        self.assertIn(gate, fails)
+        self.assertTrue(
+            any(f"{gate} --base-ref {'b' * 40}" in c for c in commands),
+            "the gate must compare against the caller's base commit",
+        )
+
     def test_static_list_drives_single_step_call(self):
         """Each entry becomes exactly one spec, and the specs are what runs.
 
