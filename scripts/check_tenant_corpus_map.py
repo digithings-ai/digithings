@@ -10,6 +10,11 @@ Compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix`` values acr
 same precedence ``composeCorpusMap`` uses in ``src/index.ts`` — primary wins a
 slug collision, so a stale extra half can never shadow the house entry.
 
+Both sides then get the house-slug alias (``digithings`` and the live
+``digithings-ai`` carry the same entry), because that is the map the container
+receives. The alias rule is ``with_house_slug_alias`` here and
+``withHouseSlugAlias`` in ``src/tenant-config.ts``; they must move together.
+
 It also pins the third blob's ABSENCE. ``src/index.ts`` used to carry the whole
 map as its ``??`` fallback literal, and that literal is why the deploy broke:
 one Cloudflare text binding may not exceed 5.1 kB and the single value reached
@@ -58,6 +63,13 @@ _LITERAL_MARKERS = ("researchSystemPrompt", "digisearchIndex")
 #: The only corpus keys compared — sibling keys (research prompts, tokens) are out of scope.
 _FIELDS = ("digisearchIndex", "vaultPathPrefix")
 
+#: The house slug the corpus map has always used, and the live embed slug.
+#: `withHouseSlugAlias` in `src/tenant-config.ts` gives both the same entry, so
+#: the gate has to model the alias too: comparing only the raw two-key blobs
+#: would report agreement for a map the container never receives (DIG-5638).
+HOUSE_TENANT_SLUG = "digithings"
+LIVE_HOUSE_TENANT_SLUG = "digithings-ai"
+
 
 def default_compose_file() -> Path:
     return REPO_ROOT / _COMPOSE_REL
@@ -69,6 +81,38 @@ def default_wrangler_file() -> Path:
 
 def default_index_ts_file() -> Path:
     return REPO_ROOT / _INDEX_TS_REL
+
+
+def _has_corpus(entry: dict[str, str] | None) -> bool:
+    """True when an entry is a usable corpus, by the same rule the KV projection uses."""
+    return isinstance(entry, dict) and bool(str(entry.get("digisearchIndex", "")).strip())
+
+
+def with_house_slug_alias(mapping: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """Apply the house-slug alias exactly as ``withHouseSlugAlias`` does in TS.
+
+    `digithings` and `digithings-ai` carry the same corpus entry, so every arm of
+    the runtime map agrees. The canonical `digithings` entry wins when it is
+    usable; an empty entry never shadows a usable alias. A map with neither house
+    slug is returned unchanged: an unknown tenant is never invented.
+    """
+    canonical = mapping.get(HOUSE_TENANT_SLUG)
+    live = mapping.get(LIVE_HOUSE_TENANT_SLUG)
+    if _has_corpus(canonical):
+        house = canonical
+    elif _has_corpus(live):
+        house = live
+    else:
+        return mapping
+
+    aliased: dict[str, dict[str, str]] = {}
+    for slug, entry in mapping.items():
+        if slug in (HOUSE_TENANT_SLUG, LIVE_HOUSE_TENANT_SLUG):
+            continue
+        aliased[slug] = entry
+    aliased[HOUSE_TENANT_SLUG] = house
+    aliased[LIVE_HOUSE_TENANT_SLUG] = house
+    return aliased
 
 
 def extract_embed_corpus(tenants: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -125,7 +169,7 @@ def load_embed_map(compose_path: Path) -> dict[str, dict[str, str]]:
     tenants = json.loads(raw)
     if not isinstance(tenants, dict):
         raise ValueError("DIGICHAT_EMBED_TENANTS must be a JSON object keyed by host")
-    return extract_embed_corpus(tenants)
+    return with_house_slug_alias(extract_embed_corpus(tenants))
 
 
 def load_wrangler_vars(wrangler_path: Path) -> tuple[str | None, str | None]:
@@ -142,7 +186,7 @@ def load_wrangler_vars(wrangler_path: Path) -> tuple[str | None, str | None]:
 
 def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]]:
     primary, extra = load_wrangler_vars(wrangler_path)
-    return _reduce_corpus_map(compose_corpus_vars(primary, extra))
+    return with_house_slug_alias(_reduce_corpus_map(compose_corpus_vars(primary, extra)))
 
 
 def check_index_ts_wiring(index_ts_path: Path) -> list[str]:
@@ -224,8 +268,8 @@ def main(argv: list[str] | None = None) -> int:
     problems = list(report["problems"]) + check_index_ts_wiring(args.index_ts_file)
     if not problems:
         print(
-            f"corpus map ok: {len(named[0][1])} tenant(s) agree across compose and the "
-            f"wrangler [vars] pair, and index.ts composes it"
+            f"corpus map ok: {len(named[0][1])} slug(s) agree (house alias included) across "
+            f"compose and the wrangler [vars] pair, and index.ts composes it"
         )
         return 0
     print("corpus map DRIFT:")
