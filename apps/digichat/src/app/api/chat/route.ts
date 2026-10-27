@@ -808,11 +808,11 @@ export async function POST(req: Request) {
   if (reasoningEffort) {
     upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
   }
-  // Hard tool-call cap for the upstream loop. The chat-side turn guard's notice
-  // only *asks* the model to stop — digigraph ran 52 calls past it in one turn —
-  // so forward the deployment's cap and let digillm stop the loop structurally at
-  // that many executed calls and answer tool-free. The notice stays the visible
-  // message; it is the counterpart of this header, not a substitute for it.
+  // Hard tool-call cap for the upstream loop. The chat-side turn guard can only
+  // *ask* the model to stop — digigraph ran 52 calls past it in one turn — so
+  // forward the deployment's cap and let digillm stop the loop structurally at
+  // that many executed calls and answer tool-free. Silent by design: the answer
+  // from the results gathered so far is the only thing the user sees.
   // Foundry and the AI SDK backends enforce the cap in-process and do not need it.
   const upstreamToolCap = limitGuardrails?.maxToolCallsPerTurn;
   if (upstreamToolCap != null) {

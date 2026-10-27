@@ -2377,6 +2377,58 @@ def test_max_tool_calls_caps_executions_and_forces_the_tool_free_wrap_up() -> No
     assert not any(k == "round_limit_exhausted" for k, _ in steps)
 
 
+def test_max_tool_calls_five_refuses_the_sixth_call_and_still_answers() -> None:
+    """The deployed cap of 5: the sixth call is refused and the answer still streams.
+
+    ``guardrails.maxToolCallsPerTurn`` is 5 in ``config/defaults.yaml`` and
+    ``config/digithings.yaml``, so this pins the number digichat forwards to the
+    number the loop enforces. Two calls per round for three rounds offers six;
+    only five execute, the sixth is discarded unexecuted, and the tool-free
+    wrap-up returns the answer.
+    """
+    tc_a, tc_b = _two_call_tool("alpha", "beta")
+    responses = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),  # round 0: 2 of 5
+        _mock_response("", tool_calls=[tc_a, tc_b]),  # round 1: 4 of 5
+        _mock_response("", tool_calls=[tc_a, tc_b]),  # round 2: one fits, sixth refused
+        _mock_response("answer from the five results"),  # existing wrap-up
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    executed: list[str] = []
+
+    def execute_tool(name: str, args: dict) -> dict:
+        executed.append(name)
+        return {"content": f"{name}-result"}
+
+    steps: list[tuple[str, Any]] = []
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+            max_tool_calls=5,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    # The answer still arrives, from the five results that did run.
+    assert out == "answer from the five results"
+    assert executed == ["alpha", "beta", "alpha", "beta", "alpha"]
+    calls = fake_client.chat.completions.create.call_args_list
+    assert len(calls) == 4, "three tool rounds plus one forced wrap-up"
+    assert not calls[-1].kwargs.get("tools"), "the wrap-up is tool-free"
+    transcript = calls[-1].kwargs["messages"]
+    assert len([m for m in transcript if m.get("role") == "tool"]) == 5
+    assert [p for k, p in steps if k == "tool_call_limit_reached"] == [{"max_tool_calls": 5}]
+    assert not any(k == "round_limit_exhausted" for k, _ in steps)
+
+
 def test_max_tool_calls_zero_wraps_up_without_executing_a_tool() -> None:
     """A spent turn forwards 0: the model's calls are discarded and the wrap-up runs.
 
