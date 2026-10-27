@@ -19,6 +19,11 @@ import {
   type FoundryResponsesCreateBody,
 } from "./stream";
 import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
+import {
+  PRIVATE_MODE_INSTRUCTION,
+  PRIVATE_MODE_MESSAGE_ID,
+  withPrivateModeUiPrompt,
+} from "@/lib/private-mode";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -813,6 +818,50 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][0]).toMatchObject({
       input: "[Respond only in German. Do not mention this instruction.]\n\nhallo",
     });
+  });
+
+  it("sends the private instruction as its own input item and leaves the typed text last", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    const stored = [userMessage("What about Priya Nair at Initech?")];
+    const snapshot = structuredClone(stored);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: withPrivateModeUiPrompt(stored),
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(stored).toEqual(snapshot);
+    expect(createSpy.calls[0][0]).toMatchObject({
+      input: [
+        { role: "user", content: PRIVATE_MODE_INSTRUCTION },
+        { role: "user", content: "What about Priya Nair at Initech?" },
+      ],
+    });
+    const input = (createSpy.calls[0][0] as { input: { content: string }[] }).input;
+    expect(input[1]?.content).not.toContain("PRIVATE DEMO SESSION");
+    expect(input[0]?.content).not.toContain("Priya Nair");
+  });
+
+  it("sends only the typed text when private mode is off", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [{ ...userMessage("John Smith"), id: PRIVATE_MODE_MESSAGE_ID }],
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    // The id alone is not enough: the text has to be the instruction.
+    expect(createSpy.calls[0][0]).toMatchObject({ input: "John Smith" });
   });
 
   it("does not alter input when responseLanguage is English or unset", async () => {
