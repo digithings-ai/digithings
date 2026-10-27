@@ -11,7 +11,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
-import { bindOccApiCall } from "../../../../../../digichat-cloudflare/src/occ-gate";
+import {
+  bindOccApiCall,
+  occInviteCookieValue,
+} from "../../../../../../digichat-cloudflare/src/occ-gate";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
 
@@ -62,7 +65,7 @@ function browserRead(referer: string, headers: Record<string, string> = {}): Req
 }
 
 async function tenantSeen(req: Request): Promise<{ slug?: string; mcp?: { servers?: unknown[] } }> {
-  bindOccApiCall(req, INVITE);
+  await bindOccApiCall(req, INVITE);
   const res = await GET(req);
   expect(res.status).toBe(200);
   return (await res.json()) as { slug?: string; mcp?: { servers?: unknown[] } };
@@ -73,7 +76,11 @@ function expectNotOcc(body: { slug?: string; mcp?: { servers?: unknown[] } }): v
   expect(JSON.stringify(body)).not.toMatch(/tenant_help|tenant-tickets|tickets-mcp|occ-fixture/);
 }
 
-beforeEach(() => {
+/** The cookie the edge set when the invite link was opened. */
+let COOKIE = "";
+
+beforeEach(async () => {
+  COOKIE = await occInviteCookieValue(INVITE);
   vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
   vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
   resetEmbedTenantRegistryForTests();
@@ -88,7 +95,7 @@ afterEach(() => {
 
 describe("tenant-config from the OCC page (DIG-3585)", () => {
   it("resolves a cookie-only read from /chat/occ to the OCC tenant", async () => {
-    const body = await tenantSeen(browserRead(OCC_PAGE, { cookie: `occ_invite=${INVITE}` }));
+    const body = await tenantSeen(browserRead(OCC_PAGE, { cookie: `occ_invite=${COOKIE}` }));
     expect(body.slug).toBe("occ");
     // The OCC tools come with it (the negative cases below must never see them).
     expect(JSON.stringify(body.mcp)).toContain("tickets-mcp");
@@ -115,7 +122,7 @@ describe("tenant-config from the OCC page (DIG-3585)", () => {
   it("never upgrades a house read that carries the cookie", async () => {
     expectNotOcc(
       await tenantSeen(
-        browserRead("https://digithings.ai/chat", { cookie: `occ_invite=${INVITE}` }),
+        browserRead("https://digithings.ai/chat", { cookie: `occ_invite=${COOKIE}` }),
       ),
     );
   });

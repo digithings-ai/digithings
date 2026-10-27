@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
-import { bindOccApiCall } from "../../../../../digichat-cloudflare/src/occ-gate";
+import {
+  bindOccApiCall,
+  occInviteCookieValue,
+} from "../../../../../digichat-cloudflare/src/occ-gate";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 
 vi.mock("@/lib/request-auth", () => ({
@@ -3394,10 +3397,13 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
 
     /** The same turn after the Worker's edge binding. */
-    function throughEdge(req: Request): Request {
-      bindOccApiCall(req, INVITE);
+    async function throughEdge(req: Request): Promise<Request> {
+      await bindOccApiCall(req, INVITE);
       return req;
     }
+
+    /** The cookie the edge set when the invite link was opened. */
+    let COOKIE = "";
 
     function lastUpstreamHeaders(): Record<string, string> | undefined {
       const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as
@@ -3419,10 +3425,11 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(h["X-Digi-Vault-Prefix"] ?? "").not.toMatch(/occ/);
     }
 
-    beforeEach(() => {
+    beforeEach(async () => {
       vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
       vi.mocked(streamText).mockClear();
       installOcc();
+      COOKIE = await occInviteCookieValue(INVITE);
     });
 
     afterEach(() => {
@@ -3430,7 +3437,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("resolves a cookie-only turn from /chat/occ to the OCC tenant", async () => {
-      const res = await POST(throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${INVITE}` })));
+      const res = await POST(await throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${COOKIE}` })));
       expect(res.status).toBe(200);
       const h = lastUpstreamHeaders();
       expect(h?.["X-Digi-Tenant"]).toBe("occ");
@@ -3439,13 +3446,13 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
 
     it("never resolves OCC from /chat/occ without the cookie", async () => {
-      await expectNotOcc(await POST(throughEdge(browserTurn(OCC_PAGE))));
+      await expectNotOcc(await POST(await throughEdge(browserTurn(OCC_PAGE))));
     });
 
     it("never resolves OCC from /chat/occ with a wrong cookie and forged headers", async () => {
       await expectNotOcc(
         await POST(
-          throughEdge(
+          await throughEdge(
             browserTurn(OCC_PAGE, {
               cookie: "occ_invite=guess",
               "x-embed-token": "guess",
@@ -3460,9 +3467,9 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     it("never upgrades a house turn that carries the cookie", async () => {
       await expectNotOcc(
         await POST(
-          throughEdge(
+          await throughEdge(
             browserTurn("https://digithings.ai/chat", {
-              cookie: `occ_invite=${INVITE}`,
+              cookie: `occ_invite=${COOKIE}`,
               "x-digi-tenant": "occ",
             }),
           ),
@@ -3506,7 +3513,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
           });
 
           it(`refuses ${new URL(url).pathname} with only ${name} after the edge`, async () => {
-            await expectNotOcc(await POST(throughEdge(directTurn(url, headers))));
+            await expectNotOcc(await POST(await throughEdge(directTurn(url, headers))));
           });
         }
       }

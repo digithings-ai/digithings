@@ -440,7 +440,7 @@ export default {
     // Judged on the path the container sees, so a legacy /api/* alias is bound
     // the same way as its /chat/api/* target.
     if (isChatApiPath(new URL(containerRequest.url).pathname)) {
-      bindOccApiCall(containerRequest, workerEnv.OCC_INVITE_KEY);
+      await bindOccApiCall(containerRequest, workerEnv.OCC_INVITE_KEY);
     }
     // The invite cookie stops at the edge on every path, like the edge key.
     withoutInviteCookie(containerRequest.headers);

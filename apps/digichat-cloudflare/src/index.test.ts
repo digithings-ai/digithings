@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTAINER_UNAVAILABLE_BODY, RETRY_AFTER_SECONDS } from "./container-retry";
 import worker, { BOOT_CONFIG_TTL_MS, DigiChatContainer, type Env } from "./index";
 import { env as stubEnv } from "../test/cloudflare-workers-stub";
+import { occInviteCookieValue } from "./occ-gate";
 
 /**
  * The Container base class is not constructible outside the Workers runtime
@@ -371,6 +372,12 @@ describe("boot config re-read window", () => {
 
 describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
   const KEY = "fixture-invite-key";
+  /** The cookie the edge sets for KEY: a derived value, never the key. */
+  let COOKIE = "";
+
+  beforeEach(async () => {
+    COOKIE = await occInviteCookieValue(KEY);
+  });
 
   function envWithInvite(): Env {
     return { ...workerEnv(), OCC_INVITE_KEY: KEY } as Env;
@@ -389,7 +396,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     const seen = await containerSees({
       method: "POST",
       body: "{}",
-      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${COOKIE}` },
     });
     expect(seen.headers.get("x-embed-token")).toBe(KEY);
     expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
@@ -399,7 +406,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
   it("binds the tenant-config read the same way", async () => {
     const seen = await containerSees({
       path: "/chat/api/embed/tenant-config",
-      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${COOKIE}` },
     });
     expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
   });
@@ -410,7 +417,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
       body: "{}",
       headers: {
         referer: "https://digithings.ai/chat",
-        cookie: `occ_invite=${KEY}`,
+        cookie: `occ_invite=${COOKIE}`,
         "x-digi-tenant": "occ",
       },
     });

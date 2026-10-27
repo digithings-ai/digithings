@@ -7,9 +7,10 @@ import { CONTAINER_BASE_PATH } from "./base-path";
  * with a real 404 status.
  *
  * A valid `?token=` also sets the tab-session cookie from DIG-1437
- * (b9dd6c4b8). That cookie is the invite key itself (HttpOnly, Secure,
- * SameSite=Strict, Path=/chat, no Max-Age). A reload without `?token=` presents
- * the cookie instead of the query.
+ * (b9dd6c4b8). The cookie holds a value derived from the invite key
+ * (HMAC-SHA256, see {@link occInviteCookieValue}), never the key itself
+ * (HttpOnly, Secure, SameSite=Strict, Path=/chat, no Max-Age). A reload
+ * without `?token=` presents the cookie instead of the query.
  *
  * Path=/chat, not /chat/occ: the page is only half of the chat. Its API calls
  * (`/chat/api/embed/tenant-config`, every `/chat/api/chat` turn) need the
@@ -47,8 +48,37 @@ export const OCC_INVITE_COOKIE_PATH = CONTAINER_BASE_PATH;
 /** The scope the first edge gate used; retired, see {@link occLegacyCookieClear}. */
 export const OCC_LEGACY_COOKIE_PATH = `${CONTAINER_BASE_PATH}/occ`;
 
-export function occInviteCookieHeader(expected: string): string {
-  return `${OCC_INVITE_COOKIE}=${encodeURIComponent(expected)}; Path=${OCC_INVITE_COOKIE_PATH}; Secure; HttpOnly; SameSite=Strict`;
+/** Domain-separation label for the cookie derivation (bump to retire every cookie). */
+const OCC_COOKIE_LABEL = "digichat/occ_invite/v1";
+
+function base64Url(bytes: ArrayBuffer): string {
+  let bin = "";
+  for (const b of new Uint8Array(bytes)) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * The `occ_invite` cookie value: HMAC-SHA256 over a fixed label, keyed with
+ * the invite key, base64url. The cookie proves the browser opened a valid
+ * invite link without carrying the key: a leaked cookie (devtools, a cookie
+ * dump) is not the key, does not work as `?token=`, and dies when the key is
+ * rotated.
+ */
+export async function occInviteCookieValue(expected: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(expected),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return base64Url(await crypto.subtle.sign("HMAC", key, enc.encode(OCC_COOKIE_LABEL)));
+}
+
+/** The `Set-Cookie` value; `cookieValue` comes from {@link occInviteCookieValue}. */
+export function occInviteCookieHeader(cookieValue: string): string {
+  return `${OCC_INVITE_COOKIE}=${encodeURIComponent(cookieValue)}; Path=${OCC_INVITE_COOKIE_PATH}; Secure; HttpOnly; SameSite=Strict`;
 }
 
 /**
@@ -81,17 +111,29 @@ export function readCookie(header: string | null, name: string): string | null {
   return readCookies(header, name)[0] ?? null;
 }
 
-/** True when any `occ_invite` value in the Cookie header is the invite key. */
-export function inviteCookieValid(header: string | null, expected: string | undefined): boolean {
+/**
+ * True when any `occ_invite` value in the Cookie header is the value derived
+ * from the invite key ({@link occInviteCookieValue}), compared in constant
+ * time. A cookie holding the raw key is not accepted.
+ */
+export async function inviteCookieValid(
+  header: string | null,
+  expected: string | undefined,
+): Promise<boolean> {
+  const key = expected?.trim();
+  if (!key) return false;
+  const values = readCookies(header, OCC_INVITE_COOKIE);
+  if (!values.length) return false;
+  const want = await occInviteCookieValue(key);
   let ok = false;
   // Every value is compared, so the answer does not depend on which one matched.
-  for (const v of readCookies(header, OCC_INVITE_COOKIE)) ok = inviteTokenValid(v, expected) || ok;
+  for (const v of values) ok = inviteTokenValid(v, want) || ok;
   return ok;
 }
 
 /**
- * The Cookie header without `occ_invite`. The cookie is the invite key itself;
- * the edge is the only place that needs it, so it never reaches the container
+ * The Cookie header without `occ_invite`. The cookie is derived from the invite
+ * key; the edge is the only place that needs it, so it never reaches the container
  * (its logs, its request objects, the app's own cookie parsing).
  */
 export function withoutInviteCookie(headers: Headers): void {
@@ -113,13 +155,20 @@ export function withoutInviteCookie(headers: Headers): void {
 /** A path Pages does not have, so its ordinary 404 page comes back. */
 export const SITE_NOT_FOUND_PATH = "/__not-found__";
 
-export function inviteAccepted(
+/**
+ * Which proof this request carries. The query token and the key are trimmed
+ * the same way the container and the /embed gate trim them, so a link pasted
+ * with a trailing space or newline still opens.
+ */
+export async function inviteAccepted(
   request: Request,
   expected: string | undefined,
-): "token" | "cookie" | null {
+): Promise<"token" | "cookie" | null> {
+  const key = expected?.trim();
+  if (!key) return null;
   const url = new URL(request.url);
-  if (inviteTokenValid(url.searchParams.get("token"), expected)) return "token";
-  if (inviteCookieValid(request.headers.get("cookie"), expected)) return "cookie";
+  if (inviteTokenValid(url.searchParams.get("token")?.trim() || null, key)) return "token";
+  if (await inviteCookieValid(request.headers.get("cookie"), key)) return "cookie";
   return null;
 }
 
@@ -183,17 +232,35 @@ export function isChatApiPath(pathname: string): boolean {
 }
 
 /**
- * True when the call comes from the OCC page itself: a same-origin Referer
- * whose path is /chat/occ. Referer is a forbidden header name, so page script
- * cannot set it; a cross-site page cannot claim our origin; and the cookie is
- * SameSite=Strict, so a cross-site request never carries it anyway.
+ * True when the call says it comes from the OCC page itself: a same-origin
+ * Referer whose path is /chat/occ, plus, when the browser sends them,
+ * `Sec-Fetch-Site: same-origin` and an `Origin` equal to ours.
+ *
+ * What this does and does not prove:
+ * - A cross-site page cannot pass: its Referer and Origin name its own
+ *   origin, its Sec-Fetch-Site is `cross-site`, and the cookie is
+ *   SameSite=Strict, so it never carries the invite anyway.
+ * - Script on OUR origin can pass. Referer is a forbidden header name, but
+ *   `fetch(url, { referrer: "/chat/occ" })` may set any same-origin referrer.
+ *   So this check only tells an OCC call apart from a house call made by the
+ *   app's own code. It is not a security boundary against same-origin script.
+ *   The boundary is the HttpOnly invite cookie, which only a browser that
+ *   opened a valid invite link holds.
+ * - A non-browser caller can send any header. Without the cookie it gets
+ *   nothing from this.
  */
 export function refererIsOccPage(request: Request): boolean {
   const raw = request.headers.get("referer");
   if (!raw) return false;
   try {
+    const self = new URL(request.url).origin;
     const ref = new URL(raw);
-    return ref.origin === new URL(request.url).origin && isOccShellPath(ref.pathname);
+    if (ref.origin !== self || !isOccShellPath(ref.pathname)) return false;
+    const site = request.headers.get("sec-fetch-site");
+    if (site !== null && site.trim().toLowerCase() !== "same-origin") return false;
+    const origin = request.headers.get("origin");
+    if (origin !== null && origin.trim() !== self) return false;
+    return true;
   } catch {
     return false;
   }
@@ -217,16 +284,21 @@ export function refererIsOccPage(request: Request): boolean {
  * `request` must be the edge's own copy (its headers are mutable); the
  * Referer and Cookie are read from it before anything is removed.
  */
-export function bindOccApiCall(request: Request, expected: string | undefined): void {
+export async function bindOccApiCall(
+  request: Request,
+  expected: string | undefined,
+): Promise<void> {
+  const key = expected?.trim();
   const fromOccPage = refererIsOccPage(request);
-  const invited = Boolean(expected) && inviteCookieValid(request.headers.get("cookie"), expected);
+  const invited =
+    fromOccPage && Boolean(key) && (await inviteCookieValid(request.headers.get("cookie"), key));
   const headers = request.headers;
   headers.delete(DIGI_TENANT_HEADER);
   if (fromOccPage) {
     headers.delete(EMBED_TOKEN_HEADER);
     headers.delete(EMBED_HOST_HEADER);
-    if (invited && expected) {
-      headers.set(EMBED_TOKEN_HEADER, expected);
+    if (invited && key) {
+      headers.set(EMBED_TOKEN_HEADER, key);
       headers.set(EMBED_HOST_HEADER, OCC_EMBED_HOST);
     }
   }
@@ -240,8 +312,9 @@ export async function occGate(
   siteUpstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const accepted = inviteAccepted(request, expected);
-  if (accepted === "token" && expected) {
+  const key = expected?.trim();
+  const accepted = await inviteAccepted(request, key);
+  if (accepted === "token" && key) {
     // DIG-1437: the key must not stay in the address bar or in browser
     // history. Set the session cookie and bounce to the same URL without
     // `token`, so the browser re-requests with the cookie and the key is gone
@@ -256,19 +329,19 @@ export async function occGate(
       "cache-control": "no-store",
       "referrer-policy": OCC_REFERRER_POLICY,
     });
-    headers.append("set-cookie", occInviteCookieHeader(expected));
+    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key)));
     headers.append("set-cookie", occLegacyCookieClear());
     return new Response(null, { status: 302, headers });
   }
-  if (accepted === "cookie" && expected) {
-    const res = await containerUpstream(occContainerRequest(request, expected));
+  if (accepted === "cookie" && key) {
+    const res = await containerUpstream(occContainerRequest(request, key));
     const headers = new Headers(res.headers);
     headers.set("cache-control", "no-store");
     headers.set("referrer-policy", OCC_REFERRER_POLICY);
     // A browser that still holds a /chat/occ-scoped cookie from an earlier gate
     // gets it moved to /chat here, so its API calls carry the invite too. Same
     // value, same session lifetime: re-affirming it changes nothing else.
-    headers.append("set-cookie", occInviteCookieHeader(expected));
+    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key)));
     headers.append("set-cookie", occLegacyCookieClear());
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }

@@ -41,10 +41,12 @@ checks the invite, sets the `occ_invite` cookie, rewrites the request to
 `/chat/embed?host=occ.digithings.ai`, moves the key to `x-embed-token` and
 drops `?token=`, then proxies to the Container. There is no Pages shell and no
 iframe in the chain, and `OCC_INVITE_KEY` exists only as a Worker secret.
-The cookie is scoped to `Path=/chat` so the page's own `/chat/api/*` calls
-carry it; the Worker binds such a call to the OCC tenant (`x-embed-token` +
-`X-Embed-Host: occ.digithings.ai`) only when the cookie is valid **and** the
-Referer is `/chat/occ`, drops the client's own tenant headers from that page,
+The cookie holds an HMAC-SHA256 value derived from the key, never the key
+itself, and is checked in constant time. It is scoped to `Path=/chat` so the
+page's own `/chat/api/*` calls carry it. The Worker binds such a call to the
+OCC tenant (`x-embed-token` + `X-Embed-Host: occ.digithings.ai`) only when the
+cookie is valid **and** the Referer is `/chat/occ` (with `Sec-Fetch-Site:
+same-origin` and a matching `Origin` when the browser sends them). It drops the client's own tenant headers from that page,
 drops a client `X-Digi-Tenant` on every `/chat/api/*` call, and never lets the
 cookie reach the Container (`bindOccApiCall` in `src/occ-gate.ts`).
 

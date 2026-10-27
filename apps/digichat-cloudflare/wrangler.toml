@@ -6,6 +6,12 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
+# DIG-3585: no *.workers.dev hostname. The zone routes below are the only way
+# in, so the edge gates (OCC invite, MCP edge key) cannot be reached on a
+# second hostname. Nothing in the repo uses the workers.dev URL. Takes effect
+# on the next deploy.
+workers_dev = false
+
 # Workers Logs (free at this volume — Workers Paid includes 20M events/mo).
 # Enabled so container wake frequency is measurable; full sampling is fine at
 # ~4.6k requests/week.
@@ -118,8 +124,10 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"
 
-# DIG-3585: the invite-gated OCC Pages shell. Valid ?token= or the
-# occ_invite cookie passes through to Pages.
+# DIG-3585: the invite-gated OCC page. This Worker answers /chat/occ itself
+# (src/occ-gate.ts): a valid ?token= is traded for the occ_invite cookie, and a
+# valid cookie gets the app's own embed route from the Container. Pages is not
+# in this path; anything else gets the site's 404.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
 zone_name = "digithings.ai"
@@ -131,10 +139,10 @@ zone_name = "digithings.ai"
 # the Pages trailing-slash redirect — the same shape as the /embed* and
 # /api/chat* routes above.
 #
-# The OCC shell stays a Pages shell because THIS Worker gates it: every
-# request is matched by the /chat* pattern below, and the Worker answers
-# /chat/occ itself (src/occ-gate.ts) before anything is proxied. That in-Worker
-# gate is the guarantee — it holds whichever order the routes are matched in.
+# /chat/occ needs no route of its own for safety: every request is matched by
+# the /chat* pattern below, and the Worker answers /chat/occ itself
+# (src/occ-gate.ts) before anything is proxied. That in-Worker gate is the
+# guarantee, whichever order the routes are matched in.
 [[routes]]
 pattern = "digithings.ai/chat*"
 zone_name = "digithings.ai"

@@ -70,7 +70,15 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
 - **The page's API calls** (`/chat/api/*`) carry no key of their own: the browser sends the
   `/chat`-scoped cookie and the Worker (`bindOccApiCall` in `occ-gate.ts`) sets `X-Embed-Token`
   and `X-Embed-Host: occ.digithings.ai` only when that cookie is valid **and** the Referer is the
-  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent).
+  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent),
+  and, when the browser sends them, `Sec-Fetch-Site` is `same-origin` and `Origin` is ours.
+  The Referer check only tells an OCC call from a house one. Same-origin script can set
+  any same-origin referrer, so the HttpOnly cookie is the actual boundary.
+- **The cookie is not the key.** It holds `HMAC-SHA256(key, "digichat/occ_invite/v1")`
+  (base64url), checked in constant time. A leaked cookie does not work as `?token=`.
+  Rotating the key retires every cookie, so open browsers need the new link. A cookie
+  from before this change, which held the raw key, is refused (404), and reopening the
+  link replaces it.
   From that page the client's own `X-Embed-Token` / `X-Embed-Host` are always dropped, and a
   client-sent `X-Digi-Tenant` is dropped on every `/chat/api/*` call. A house page's calls are
   never upgraded by the cookie.
