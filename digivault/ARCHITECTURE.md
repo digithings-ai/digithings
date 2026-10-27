@@ -149,7 +149,9 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   unless `DIGIVAULT_MCP_WRITE=1`, and `digivault_get_note` stays
   orchestrator-only.
   Vault-local tools carry no JWT check, so the MCP sidecar sets no `DIGIKEY_*` —
-  treat a wider bind like a network API with gateway auth.
+  treat a wider bind like a network API with gateway auth. The gateway is the
+  scope gate: `mcp:digivault` is read-only, and the edge additionally requires
+  `mcp:digivault:write` for `create_note` (DIG-5723).
 - **Rate limiting:** per-IP sliding window (in-process `deque` + lock), mirrors
   `digisearch/server.py`. `/v1/orchestrator_invoke`: 10/min; `/v1/orchestrator_tools`:
   30/min; everything else except `/healthz`: 30/min default. Reads the IP from

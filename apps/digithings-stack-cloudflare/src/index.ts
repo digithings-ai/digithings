@@ -773,6 +773,9 @@ export default {
         if (!decision.ok) {
           // The body names neither the credential nor the reason: the status is
           // the whole answer to the caller, and the decision log has the rest.
+          if (decision.status === 400) {
+            return new Response("digithings-stack: bad request", { status: 400 });
+          }
           return new Response(
             decision.status === 403
               ? "digithings-stack: forbidden"
