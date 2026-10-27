@@ -1305,10 +1305,17 @@ class InstallMarkerTest(unittest.TestCase):
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
         # The install refuses a checkout that carries the runner without the
-        # guard (DIG-4796): the two files are installed together.
-        for name in ("local_ci.py", "launch_guard.py"):
-            shutil.copy(os.path.join(_SCRIPTS, name),
-                        os.path.join(checkout, "scripts", "local-ci", name))
+        # guard (DIG-4796), and one where a module the runner imports does not
+        # resolve (DIG-5585). The clone therefore carries every module next to
+        # the runner, plus the shared module in `scripts/`, one directory up.
+        # Copying every `.py` keeps these cases about the marker: a helper
+        # added to the runner is in the clone without editing this list.
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name),
+                            os.path.join(checkout, "scripts", "local-ci", name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(checkout, "scripts", "review_pass_filter.py"))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1335,6 +1342,25 @@ class InstallMarkerTest(unittest.TestCase):
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
 
+    def test_a_dry_run_renders_the_interpreter_the_job_will_run(self):
+        """The plist must name the same interpreter the install check used.
+
+        A `ProgramArguments` entry left as a placeholder lints cleanly and
+        fails only when launchd tries to spawn it, so a render that never
+        substituted the interpreter reads as an installed job and runs nothing
+        (DIG-5725).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                               "--dry-run", checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("__", done.stdout,
+                         "an unsubstituted placeholder is a plist launchd cannot run")
+        self.assertIn("<string>/usr/bin/python3</string>", done.stdout,
+                      "the job must run under the interpreter the install check used")
+
     def test_a_checkout_without_the_guard_is_refused(self):
         """An installer must not point the daemon at a pre-guard checkout.
 
@@ -1347,6 +1373,48 @@ class InstallMarkerTest(unittest.TestCase):
         os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
         rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
         self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
+
+    def test_a_checkout_without_the_install_check_is_refused(self):
+        """An installer must not point the daemon at a checkout with no preflight.
+
+        The runner exits 78 on every tick when `import_preflight.py` is absent
+        (`_require_install`, DIG-5585), so installing from a stale checkout
+        leaves the daemon running and the gate dark. The install refuses the
+        tree before it writes anything (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "import_preflight.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout without the install check must not be installed")
+        self.assertIn("import_preflight.py", done.stderr,
+                      "the refusal must name the module the checkout is missing")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
+
+    def test_a_checkout_missing_an_imported_module_is_refused(self):
+        """A stale checkout can look complete: refuse it by import, not by name.
+
+        The runner imports `pr_template` and fails closed when it is None, so a
+        checkout that carries the runner but not a helper it imports still
+        looks installable. The install asks the checkout's own preflight, which
+        resolves every import, and refuses with the module named (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "pr_template.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout missing an imported module must not be installed")
+        self.assertIn("pr_template", done.stderr,
+                      "the refusal must name the module that could not be resolved")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""

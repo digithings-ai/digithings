@@ -150,14 +150,22 @@ Check an install without ticking it:
 python3 scripts/local-ci/import_preflight.py scripts/local-ci/local_ci.py
 ```
 
+`install.sh` asks the same question before it renders the plist or touches the
+job: it requires `import_preflight.py` next to the runner, then runs it against
+the checkout's `local_ci.py` under `/usr/bin/python3`, the interpreter the plist
+names. A checkout with a module missing is refused, with the module named, so an
+installer cannot point the daemon at a tree that would refuse every tick
+(DIG-5725).
+
 ## Deploying it
 
 The guard fails closed: a runner without `launch_guard.py` next to it refuses to
 run at all (exit 78, before any side effect). The install check fails closed the
 same way, so the runner and every module it imports have to land together. The
 order matters. `install.sh` refuses a checkout that carries the runner but not
-the guard for the same reason: an installer must not be able to point the daemon
-at a pre-guard checkout and reopen the hole.
+the guard, and a checkout where any module the runner imports does not resolve,
+for the same reason: an installer must not be able to point the daemon at a
+pre-guard or incomplete checkout and reopen the hole (DIG-4796, DIG-5725).
 
 1. the guard lands in the repository (this change),
 2. a trusted launcher is live - the launchd daemon has to be running under the
@@ -220,6 +228,8 @@ point it at - not a working tree, not a linked worktree (see "The producer"
 below).
 
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
+It still runs the checkout's import check first, so an incomplete checkout prints
+nothing and exits non-zero.
 
 ## The producer
 
