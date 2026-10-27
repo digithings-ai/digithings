@@ -56,7 +56,7 @@ and the agent carries the search index + MCP tool server-side.
   dev MCP server (MCP tool, custom-keys connection, tenant key).
 - Reasoning summary **enabled** on the agent definition, otherwise thinking
   rows stay dropped by design.
-- `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 5`,
+- `guardrails` inherits the stability cap from defaults: `maxToolCallsPerTurn: 20`,
   `answerAt: 0.7`, `pauseAt: 0.9`. The per-visitor house minute is cleared.
   `tokensPerMinute.deployment` is the trial's one shared allowance.
   TODO: it stays unset until the Azure TPM for gpt-5.6-terra in westeurope

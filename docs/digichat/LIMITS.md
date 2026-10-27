@@ -80,7 +80,7 @@ limits:
       onExceed: block             # pause is rejected
   toolCalls:
     perTurn:                      # perQuestion is the same gate. Set only one.
-      max: 5
+      max: 20
       onExceed: pause             # fallback-auto is rejected
   models:
     standard:

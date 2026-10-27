@@ -2035,6 +2035,23 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   it("passes maxToolCalls from the foundry backend to the adapter", async () => {
+    // The shared `guardrails` key wins over this Foundry alias, so resolve a
+    // deployment that sets only the alias. House defaults set the shared key.
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        hosts: {
+          "foundry-tenant.digithings.ai": {
+            slug: "foundry-tenant",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://x/",
+              agentName: "fixture-agent",
+            },
+          },
+        },
+      }),
+    );
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "foundry-tenant",
       ownerUserSub: "embed:anonymous",
@@ -2072,6 +2089,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     };
     expect(call?.maxToolCalls).toBe(5);
     expect(call && "guard" in call).toBe(true);
+    resetDigichatConfigForTests();
   });
 
   it.each([

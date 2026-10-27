@@ -1178,7 +1178,7 @@ so config load refuses the key. The shape:
 
 ```yaml
 guardrails:                      # omit the block and every guard is off
-  maxToolCallsPerTurn: 5         # optional, 1–100
+  maxToolCallsPerTurn: 20        # optional, 1–100
   answerAt: 0.7                  # optional; default 0.7 when a TPM is set
   pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
   rateLimit: true                # optional; omit or true keeps the request limiter; false turns it off
@@ -1187,7 +1187,7 @@ guardrails:                      # omit the block and every guard is off
     user: 80000                  # optional; per user id, else server-derived IP
 ```
 
-House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
+House (`defaults.yaml`) sets `maxToolCallsPerTurn: 20`, `answerAt: 0.7`,
 `pauseAt: 0.9`, `rateLimit: true`, and a per-visitor `tokensPerMinute.user` of
 80000. OCC sets `rateLimit: false` and clears the per-visitor minute. The
 tool-call cap and the answer guard stay. The Foundry trial clears the
@@ -1198,8 +1198,8 @@ request limiter. The deployment minute, the tool-call cap, and the answer
 guard stay on for that turn.
 
 `maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
-enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
-ag-ui). `backend.maxToolCalls` on a Foundry backend is the same setting; the
+enforce it; digigraph enforces it upstream in its tool loop, and langgraph and
+ag-ui are notice/best-effort. `backend.maxToolCalls` on a Foundry backend is the same setting; the
 shared key wins when both are set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
 for example), shared by every turn on that deployment. `tokensPerMinute.user`
 is the per-person limit for a public chat. A real user id is the key.
@@ -1261,7 +1261,7 @@ one budget across the turn's main loop and its continuations, and digillm stops
 at the cap and answers tool-free. It is **silent** — no `data-notice`, nothing
 in the UI. a2a reports no tool calls, so the key is refused at config load.
 
-defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
+defaults.yaml sets the tool-call cap to 20, the answer guard to 0.7 / 0.9,
 `rateLimit: true`, and a per-visitor minute of 80000 because house is public.
 OCC sets `rateLimit: false` and clears that minute. Local clears the minute
 and keeps the request limiter, the cap, and the answer guard. The Foundry
@@ -2076,7 +2076,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
 - One config shape per tenant (epic: `docs/plans/digichat-one-config-epic.md`): `apps/digichat/config/digithings.yaml` (the house deployment as deployed, edge MCP URLs included) and `apps/digichat/config/occ.yaml` (OCC) are **full documents, same schema, no `extends`**. OCC's differences live in its own file: `gate.mode: invite` plus the `tokenEnv` ref to the invite key, its own backend index/path, MCP servers and tool lists. Nothing reads either document in production yet — KV `config-yaml` + `embed-tenants` still serve, and `src/lib/deploy-config/tenant-documents.equivalence.test.ts` resolves both documents through the real loader and pins them field for field to that live resolution (the OCC tenant row is pinned in the test).
 - `gate.mode: invite` means the surface requires an invite credential before it renders, and the **edge** enforces it (the Worker/Pages gate), not the app. Inside the app it therefore accounts turns exactly like `ungated`: no free-turn quota and no trial form, because an unauthenticated request never reaches a route handler. `gateMetersTurns()` in `src/lib/deploy-config/schema.ts` is the one place that classification is written down.
-- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
+- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 20`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates
