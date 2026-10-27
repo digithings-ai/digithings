@@ -84,6 +84,11 @@ function readEmbedUrlAuth(): { token?: string; host?: string } {
  * Same freeze reason as readEmbedUrlAuth (#1339): a `trialUnlocked` prop closed
  * over by DefaultChatTransport stays false after datatap:unlocked arrives, so
  * the client counter can show 100 while the server still returns trial_gate.
+ *
+ * The flag is the embed's own counter and nothing else: it is what the tenant
+ * page's datatap:unlocked message sets, and the server grants no relief for
+ * it — a client-asserted unlock header was deleted from the chat route
+ * (DIG-4525), so the gate's relief comes only from the server's own verdicts.
  */
 export function isEmbedTrialUnlockedAtSend(
   resolvedHost: string,
@@ -194,7 +199,6 @@ type UseEmbedDigiChatOptions = {
   byokKey?: string;
   byokProvider?: string;
   byokModel?: string;
-  trialUnlocked?: boolean;
   onGated?: () => void;
   /**
    * Called once for every turn the visitor submits, whichever way they started
@@ -273,7 +277,6 @@ export function useEmbedDigiChat({
   byokKey,
   byokProvider,
   byokModel,
-  trialUnlocked,
   onGated,
   onTurnCharge,
   getResponseLanguage,
@@ -403,11 +406,12 @@ export function useEmbedDigiChat({
             headers["X-Digi-Turn-Mode"] = "regenerate";
           }
           headers["X-Digi-Run-Id"] = crypto.randomUUID();
-          // Send-time unlock check — transport is frozen on first render (#1339),
-          // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
-          if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
-            headers["X-Embed-Trial-Unlock"] = "1";
-          }
+          // No client-asserted unlock header here. The client used to send one
+          // and the server used to believe it: a value the browser can set is
+          // not an entitlement. The gate's relief now comes only from the
+          // server's own verdicts — the tenant's quota service, a server-signed
+          // trial proof, an allowlisted monitor — never from the caller
+          // (DIG-4525).
           const chatToken = chatAccessTokenAtSend(resolvedHost);
           if (chatToken) {
             headers["X-Embed-Chat-Token"] = chatToken;
@@ -445,13 +449,13 @@ export function useEmbedDigiChat({
           };
         },
       }),
-    // trialUnlocked and getResponseLanguage both stay in the deps for the rare
-    // case useChat starts honoring transport identity; the send-time read
-    // (see the doc comment on getResponseLanguage above) is what actually
-    // keeps the outgoing language current today. Keeping getResponseLanguage
-    // here costs nothing — the caller builds it with useCallback(() => ...,
-    // []), so its identity never changes and the transport is never rebuilt
-    // on a language change — while satisfying react-hooks/exhaustive-deps.
+    // getResponseLanguage stays in the deps for the rare case useChat starts
+    // honoring transport identity; the send-time read (see the doc comment on
+    // getResponseLanguage above) is what actually keeps the outgoing language
+    // current today. Keeping getResponseLanguage here costs nothing — the
+    // caller builds it with useCallback(() => ..., []), so its identity never
+    // changes and the transport is never rebuilt on a language change — while
+    // satisfying react-hooks/exhaustive-deps.
       [
         accent,
         token,
@@ -460,7 +464,6 @@ export function useEmbedDigiChat({
         byokKey,
         byokProvider,
         byokModel,
-        trialUnlocked,
         getResponseLanguage,
         getEnableWebSearch,
         getDisabledTools,

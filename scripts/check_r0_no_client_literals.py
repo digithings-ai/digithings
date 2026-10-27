@@ -78,6 +78,13 @@ NON_R0_PREFIXES: tuple[str, ...] = (
     "apps/digichat/config/datatap-trial-foundry.yaml",
     "apps/digichat/config/datatap-trial-test.yaml",
     "apps/digichat/config/examples/occ-embed.yaml",
+    # One-config slice 1 (#6500, DIG-3689/DIG-4055): a tenant's complete
+    # deployment document and the equivalence test that pins its live KV row
+    # are client configuration, not public engine code. They move with the
+    # client corpus to R6 (scripts/split/manifest.py), exactly as the OCC
+    # example above does, so the R0 scan must not read them as public debt.
+    "apps/digichat/config/occ.yaml",
+    "apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts",
     "apps/digichat/config/examples/datatap-mcp.yaml",
     "apps/digichat/config/examples/datatap-trial-deploy.md",
     "config/datatap_azure_access_register.json",
