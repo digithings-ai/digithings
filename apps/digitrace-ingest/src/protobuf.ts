@@ -34,6 +34,16 @@ const WIRE_FIXED64 = 1;
 const WIRE_LENGTH = 2;
 const WIRE_FIXED32 = 5;
 
+/**
+ * How deep an attribute value may nest before the body is refused.
+ *
+ * `arrayValue` and `kvlistValue` recurse, and a few hundred bytes of crafted
+ * protobuf nesting is enough to exhaust the stack — a 500 rather than a parse
+ * error. The real emitters nest two levels at most; 32 is far above any real
+ * payload and far below the stack.
+ */
+const MAX_ATTRIBUTE_DEPTH = 32;
+
 interface WireField {
   number: number;
   wire: number;
@@ -136,7 +146,10 @@ function int64(value: bigint): string {
   return BigInt.asIntN(64, value).toString();
 }
 
-function anyValue(bytes: Uint8Array): OtlpAnyValue {
+function anyValue(bytes: Uint8Array, depth = 0): OtlpAnyValue {
+  if (depth > MAX_ATTRIBUTE_DEPTH) {
+    throw new OtlpParseError("attribute value nest is deeper than 32 levels");
+  }
   const value: OtlpAnyValue = {};
   for (const field of readFields(bytes)) {
     if (field.number === 1 && field.bytes) value.stringValue = text(field.bytes);
@@ -146,9 +159,9 @@ function anyValue(bytes: Uint8Array): OtlpAnyValue {
     else if (field.number === 4 && field.fixed64Bytes) {
       value.doubleValue = fixed64Double(field.fixed64Bytes);
     } else if (field.number === 5 && field.bytes) {
-      value.arrayValue = { values: repeated(field.bytes, anyValue) };
+      value.arrayValue = { values: repeated(field.bytes, anyValue, depth + 1) };
     } else if (field.number === 6 && field.bytes) {
-      value.kvlistValue = { values: repeated(field.bytes, keyValue) };
+      value.kvlistValue = { values: repeated(field.bytes, keyValue, depth + 1) };
     } else if (field.number === 7 && field.bytes) {
       value.bytesValue = base64(field.bytes);
     }
@@ -157,10 +170,14 @@ function anyValue(bytes: Uint8Array): OtlpAnyValue {
 }
 
 /** The elements of a `repeated` field that is wrapped in its own message. */
-function repeated<T>(bytes: Uint8Array, decode: (input: Uint8Array) => T): T[] {
+function repeated<T>(
+  bytes: Uint8Array,
+  decode: (input: Uint8Array, depth: number) => T,
+  depth: number,
+): T[] {
   return readFields(bytes)
     .filter((field) => field.number === 1 && field.bytes !== undefined)
-    .map((field) => decode(field.bytes as Uint8Array));
+    .map((field) => decode(field.bytes as Uint8Array, depth));
 }
 
 /**
@@ -176,12 +193,12 @@ function appendAttribute(list: OtlpKeyValue[] | undefined, bytes: Uint8Array): O
   return out;
 }
 
-function keyValue(bytes: Uint8Array): OtlpKeyValue {
+function keyValue(bytes: Uint8Array, depth = 0): OtlpKeyValue {
   let key = "";
   let value: OtlpAnyValue = {};
   for (const field of readFields(bytes)) {
     if (field.number === 1 && field.bytes) key = text(field.bytes);
-    else if (field.number === 2 && field.bytes) value = anyValue(field.bytes);
+    else if (field.number === 2 && field.bytes) value = anyValue(field.bytes, depth + 1);
   }
   return { key, value };
 }

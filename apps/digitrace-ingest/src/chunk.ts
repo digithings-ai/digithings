@@ -16,6 +16,15 @@
  * because it cannot be carried in one queue message and splitting a span across
  * messages would break the row. That is the only loss path in the receiver, and
  * its count reaches the source in the OTLP `partialSuccess` response.
+ *
+ * Records are packed **by trace id, never across one**. The `digitrace_traces`
+ * row is a cross-span aggregate (`span_count`, the time range, `name`,
+ * `status`), so a message boundary through the middle of a trace would let the
+ * later message replace the row with its own slice — a smaller `span_count`, a
+ * duration that never happened, and a `name` from a span that is not the root.
+ * One trace only crosses a boundary when it alone exceeds the budget; those
+ * trace ids are listed in `incompleteTraces`, and the consumer writes no
+ * aggregate row for them rather than a partial one.
  */
 import { archiveKey, archiveLine, messageFor } from "./archive";
 import type { ArchiveLine, IngestMessage, SpanRecord } from "./types";
@@ -42,9 +51,16 @@ export interface ChunkResult {
   droppedOversizedSpans: number;
 }
 
+interface PreparedLine {
+  line: ArchiveLine;
+  size: number;
+}
+
 interface PendingChunk {
   lines: ArchiveLine[];
   key: string;
+  /** Trace ids this chunk cannot carry in full; empty for every whole trace. */
+  incomplete: Set<string>;
 }
 
 /**
@@ -63,17 +79,23 @@ export function chunkSpans(
   let lines: ArchiveLine[] = [];
   let bytes = 0;
   let droppedOversizedSpans = 0;
+  let incomplete = new Set<string>();
 
   const flush = () => {
     if (lines.length === 0) return;
     chunks.push({
       lines,
       key: archiveKey(meta.tenant, meta.receivedAt, meta.source, newUuid()),
+      incomplete,
     });
     lines = [];
     bytes = 0;
+    incomplete = new Set<string>();
   };
 
+  // Group first, so a trace's spans can never be separated by a byte boundary.
+  // First-seen order is kept, which makes the split deterministic.
+  const groups = new Map<string, PreparedLine[]>();
   for (const record of records) {
     const line = archiveLine(record, {
       tenant_slug: meta.tenant,
@@ -90,9 +112,30 @@ export function chunkSpans(
       droppedOversizedSpans += 1;
       continue;
     }
-    if (lines.length > 0 && bytes + size > MAX_NDJSON_BYTES) flush();
-    lines.push(line);
-    bytes += size;
+    const traceId = record.span.traceId;
+    const group = groups.get(traceId);
+    if (group) group.push({ line, size });
+    else groups.set(traceId, [{ line, size }]);
+  }
+
+  for (const [traceId, group] of groups) {
+    const groupBytes = group.reduce((total, item) => total + item.size, 0);
+    if (groupBytes <= MAX_NDJSON_BYTES) {
+      if (lines.length > 0 && bytes + groupBytes > MAX_NDJSON_BYTES) flush();
+      for (const item of group) {
+        lines.push(item.line);
+        bytes += item.size;
+      }
+      continue;
+    }
+    // One trace alone exceeds a message. It has to be split, and no slice can
+    // claim the aggregate, so every chunk carrying part of it is marked.
+    for (const item of group) {
+      if (lines.length > 0 && bytes + item.size > MAX_NDJSON_BYTES) flush();
+      lines.push(item.line);
+      bytes += item.size;
+      incomplete.add(traceId);
+    }
   }
   flush();
 
@@ -113,6 +156,9 @@ export function chunkSpans(
       source: meta.source,
       receivedAt: meta.receivedAt,
       archiveKey: chunk.key,
+      ...(chunk.incomplete.size > 0
+        ? { incompleteTraces: [...chunk.incomplete].sort((a, b) => a.localeCompare(b)) }
+        : {}),
     });
   });
 

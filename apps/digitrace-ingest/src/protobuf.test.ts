@@ -68,6 +68,16 @@ function keyValueDouble(key: string, value: number): number[] {
   return [...stringField(1, key), ...bytesField(2, doubleField(4, value))];
 }
 
+/** An attribute whose value is `depth` nested `arrayValue`s around a string. */
+function keyValueNestedArray(key: string, depth: number): number[] {
+  let value = stringField(1, "leaf");
+  for (let level = 0; level < depth; level += 1) {
+    // AnyValue.array_value (field 5) -> ArrayValue{ repeated AnyValue = field 1 }
+    value = bytesField(5, bytesField(1, value));
+  }
+  return [...stringField(1, key), ...bytesField(2, value)];
+}
+
 const TRACE = "0af7651916cd43dd8448eb211c80319c";
 const SPAN = "b7ad6b7169203331";
 const PARENT = "1122334455667788";
@@ -210,6 +220,21 @@ describe("decodeTraceRequest", () => {
     expect(attributes?.[1].value.kvlistValue?.values).toEqual([
       { key: "k", value: { stringValue: "v" } },
     ]);
+  });
+
+  it("refuses attribute nesting deep enough to exhaust the stack", () => {
+    // A few hundred bytes of crafted nesting is a stack overflow (a 500) in a
+    // decoder that trusts the body's depth; it must be a parse error instead.
+    const bytes = buildRequest([buildSpan({ attributes: [keyValueNestedArray("deep", 40)] })]);
+    expect(() => decodeTraceRequest(bytes)).toThrow(OtlpParseError);
+  });
+
+  it("still decodes nesting under the depth cap", () => {
+    const bytes = buildRequest([buildSpan({ attributes: [keyValueNestedArray("shallow", 2)] })]);
+    const value =
+      decodeTraceRequest(bytes).resourceSpans?.[0].scopeSpans?.[0].spans?.[0]?.attributes?.[0]
+        ?.value;
+    expect(JSON.stringify(value)).toContain("leaf");
   });
 
   it("refuses a truncated body instead of returning half a trace", () => {

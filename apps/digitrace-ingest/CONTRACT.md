@@ -146,9 +146,26 @@ Conflict target: `workspace_id,trace_id,span_id`.
 
 Span **events** stay in the archive only: the index has no column for them.
 
-### `digitrace_traces` — one row per trace id in the batch
+### `digitrace_traces` — one row per trace id in the message
 
 Conflict target: `workspace_id,trace_id`.
+
+The row is a **cross-span aggregate**, and a PostgREST upsert replaces it: the
+later message's row wins outright. So the chunker packs whole traces and never
+splits one, except when a single trace alone exceeds the 56 KiB message budget.
+Those trace ids travel in the message's `incompleteTraces`, and the consumer
+writes **no** trace row for them: a partial row (a smaller `span_count`, a
+duration that never happened, a `name` from a span that is not the root, an error
+status that flipped back to OK) would be worse than a missing one. The spans and
+the archive object are still complete.
+
+Residual, and it is real: a trace exported across **several OTLP requests** (an
+SDK timer flushing mid-trace) still gets one row per request, and the last request
+replaces the earlier ones. The chunker cannot see across requests. Fixing it needs
+a merge RPC (`span_count + excluded`, `least(started_at)`,
+`greatest(ended_at)`, error status OR-ed, `name`/`attributes` only from a message
+that carries the root) or a derived job over `digitrace_spans_index`; both are
+core-side changes, and they are raised on DIG-2658/DIG-2661 rather than done here.
 
 | Column                 | Source                                                                             |
 | ---------------------- | ---------------------------------------------------------------------------------- |
@@ -165,7 +182,7 @@ Conflict target: `workspace_id,trace_id`.
 | `session_id`, `run_id` | first correlation id found on the trace                                            |
 | `attributes`           | the root span's allowlisted attributes                                             |
 | `resource`             | the root resource's allowlisted attributes                                         |
-| `span_count`           | spans of this trace in the batch                                                   |
+| `span_count`           | spans of this trace in the message (complete: a trace is never split)              |
 
 ### `digitrace_sessions` — not written by this consumer
 
@@ -203,6 +220,11 @@ Dataset `digitrace_ingest`, one point per span.
 (`digitrace.cost_usd`, `llm.cost.total`, `gen_ai.usage.cost`); this Worker does not
 price a model. A write failure is swallowed: the aggregates are an estimate
 (ADR-0036 §3), and the archive is the record.
+
+One known limit: Analytics Engine has no idempotency key, so a queue retry
+re-writes the same point and a retried message double-counts its tokens and cost.
+The point is per span because that is the shape the estimate needs; a batch-level
+write that a retry cannot duplicate is the WAE spike on DIG-2661.
 
 ## 7. Human steps (prepared, not performed)
 

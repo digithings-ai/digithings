@@ -25,6 +25,12 @@
  *     materialised.
  *   - `digitrace_scores` is not written here either. ADR-0036 §4/§8 put that
  *     write-back in MLflow.
+ *
+ * `digitrace_traces` is the other cross-batch aggregate, and it is safe only
+ * because `chunkSpans` never splits a trace across messages: every row here is
+ * computed from every span of its trace. A trace too large for one message is
+ * named in that message's `incompleteTraces`, and the consumer writes no trace
+ * row for it rather than a partial one that the next slice would replace.
  */
 import {
   attributesToObject,

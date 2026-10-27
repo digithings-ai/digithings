@@ -229,6 +229,33 @@ describe("POST /v1/traces, gzip", () => {
     expect(env.__queue.sent).toHaveLength(1);
   });
 
+  it("stops inflating at the cap, so a gzip bomb is a 413 and not a 1102", async () => {
+    const env = await envWithToken();
+    // 12 MiB of zeros gzips to a few KiB. The old code expanded the whole
+    // thing before checking the size, which is the isolate's memory gone.
+    const bomb = new Uint8Array(12 * 1024 * 1024);
+    const gzipped = new Uint8Array(
+      await new Response(
+        new Blob([bomb]).stream().pipeThrough(new CompressionStream("gzip")),
+      ).arrayBuffer(),
+    );
+    expect(gzipped.byteLength).toBeLessThan(MAX_BODY_BYTES);
+
+    const response = await handleRequest(request(gzipped, { "content-encoding": "gzip" }), env);
+
+    expect(response.status).toBe(413);
+    expect(env.__queue.sent).toHaveLength(0);
+  });
+
+  it("answers 400, not 500, when a gzip body does not inflate", async () => {
+    const env = await envWithToken();
+    const response = await handleRequest(
+      request("this is not gzip", { "content-encoding": "gzip" }),
+      env,
+    );
+    expect(response.status).toBe(400);
+  });
+
   it("refuses an encoding it cannot read", async () => {
     const env = await envWithToken();
     const response = await handleRequest(request("body", { "content-encoding": "br" }), env);

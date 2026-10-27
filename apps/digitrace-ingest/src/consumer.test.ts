@@ -132,6 +132,17 @@ describe("parseMessage", () => {
     expect(parseMessage("body")).toBeUndefined();
   });
 
+  it("round-trips the trace ids a message could not carry in full", () => {
+    const parsed = parseMessage(message({ incompleteTraces: [TRACE] }));
+    expect(parsed?.incompleteTraces).toEqual([TRACE]);
+  });
+
+  it("rejects an incomplete-traces list that is not a list of ids", () => {
+    expect(parseMessage({ ...message(), incompleteTraces: "not-a-list" })).toBeUndefined();
+    expect(parseMessage({ ...message(), incompleteTraces: [42] })).toBeUndefined();
+    expect(parseMessage({ ...message(), incompleteTraces: [""] })).toBeUndefined();
+  });
+
   it("never trusts a truthy non-boolean for tenant_slug_verified", () => {
     const parsed = parseMessage({ ...message(), tenantSlugVerified: "yes" });
     expect(parsed?.tenantSlugVerified).toBe(false);
@@ -197,6 +208,20 @@ describe("storeMessage", () => {
     expect(recorded.upserts[1].rows[0]).toMatchObject({ span_id: SPAN });
   });
 
+  it("writes no trace row for a trace the message could not carry in full", async () => {
+    const { deps, recorded } = recordingDeps();
+    await storeMessage(testEnv(), message({ incompleteTraces: [TRACE] }), {
+      ...deps,
+    } as ConsumerDeps);
+
+    const byTable = new Map(recorded.upserts.map((entry) => [entry.table, entry.rows]));
+    // A partial aggregate would be replaced by the next slice: smaller
+    // `span_count`, a duration that never happened, a `name` from a non-root
+    // span. No row is better than a wrong one, and the spans are still indexed.
+    expect(byTable.get("digitrace_traces")).toEqual([]);
+    expect(byTable.get("digitrace_spans_index")).toHaveLength(1);
+  });
+
   it("does not write digitrace_sessions: its counters are cross-batch aggregates", async () => {
     const { deps, recorded } = recordingDeps();
     await storeMessage(testEnv(), message(), { ...deps } as ConsumerDeps);
@@ -218,6 +243,27 @@ describe("handleQueue", () => {
 
     expect(recorded.puts).toHaveLength(1);
     expect(retries).toEqual([]);
+  });
+
+  it("resolves the workspace once for a batch of messages from one tenant", async () => {
+    const { deps, recorded } = recordingDeps();
+    const { batch, retries } = fakeBatch([
+      { id: "m1", body: message() },
+      {
+        id: "m2",
+        body: message({
+          chunk: 1,
+          chunks: 2,
+          archiveKey: "tenant=digithings/date=2026-10-26/digitrace-digichat/uuid-2.ndjson",
+        }),
+      },
+    ]);
+
+    await handleQueue(batch, testEnv(), deps);
+
+    expect(retries).toEqual([]);
+    expect(recorded.resolved).toEqual(["digithings"]);
+    expect(recorded.puts).toHaveLength(2);
   });
 
   it("retries when the archive write fails", async () => {

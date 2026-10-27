@@ -31,6 +31,17 @@ export interface IngestMessage {
   receivedAt: string;
   /** The object key under the bucket, so the consumer cannot invent a layout. */
   archiveKey: string;
+  /**
+   * Trace ids this message cannot carry in full, present only when one trace
+   * alone exceeded the message budget and had to be split across chunks.
+   *
+   * `digitrace_traces` holds cross-span aggregates (`span_count`, the time
+   * range, `name`, `status`), and a PostgREST upsert replaces a row rather than
+   * merging into it. A partial slice would therefore be written as if it were
+   * the whole trace, so the consumer writes **no** trace row for these ids; the
+   * spans and the archive object are still complete.
+   */
+  incompleteTraces?: string[];
   /** One span record per line (see `archiveLine` in archive.ts). */
   ndjson: string;
 }

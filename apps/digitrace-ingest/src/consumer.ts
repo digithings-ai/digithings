@@ -82,6 +82,13 @@ export function parseMessage(body: unknown): IngestMessage | undefined {
   if (typeof message.receivedAt !== "string") return undefined;
   if (typeof message.batchId !== "string" || message.batchId === "") return undefined;
   if (typeof message.chunk !== "number" || typeof message.chunks !== "number") return undefined;
+  if (
+    message.incompleteTraces !== undefined &&
+    (!Array.isArray(message.incompleteTraces) ||
+      message.incompleteTraces.some((id) => typeof id !== "string" || id === ""))
+  ) {
+    return undefined;
+  }
   return {
     v: 1,
     batchId: message.batchId,
@@ -92,6 +99,9 @@ export function parseMessage(body: unknown): IngestMessage | undefined {
     source: message.source,
     receivedAt: message.receivedAt,
     archiveKey: message.archiveKey,
+    ...(Array.isArray(message.incompleteTraces) && message.incompleteTraces.length > 0
+      ? { incompleteTraces: [...message.incompleteTraces] }
+      : {}),
     ndjson: message.ndjson,
   };
 }
@@ -141,7 +151,17 @@ export async function storeMessage(
   // Two tables, not four. `digitrace_scores` is MLflow's write-back, and
   // `digitrace_sessions` carries cross-batch counters that a REST upsert can
   // only overwrite — see the header of `index-rows.ts`.
-  await deps.upsertRows(env, "digitrace_traces", rows.traces, CONFLICT_TARGETS.traces);
+  //
+  // A trace split across messages has no complete aggregate in any one of them,
+  // so it gets no row: a partial row would be replaced by the next slice (a
+  // smaller `span_count`, a duration that never happened, a `name` from a
+  // non-root span). The spans and the archive still hold every record.
+  const incomplete = new Set(message.incompleteTraces ?? []);
+  const traces =
+    incomplete.size === 0
+      ? rows.traces
+      : rows.traces.filter((row) => !incomplete.has(String(row.trace_id)));
+  await deps.upsertRows(env, "digitrace_traces", traces, CONFLICT_TARGETS.traces);
   await deps.upsertRows(env, "digitrace_spans_index", rows.spans, CONFLICT_TARGETS.spans);
 
   for (const record of records) {
@@ -163,6 +183,26 @@ export async function handleQueue(
 ): Promise<void> {
   const deps: ConsumerDeps = { ...defaultDeps, ...overrides };
 
+  // One workspace lookup per tenant per batch. A batch is up to ten messages
+  // from the same source, so re-resolving the slug per message is ten identical
+  // reads of `workspaces`; a rejected lookup is evicted so one failure does not
+  // poison the rest of the batch.
+  const workspaces = new Map<string, Promise<string>>();
+  const batchDeps: ConsumerDeps = {
+    ...deps,
+    resolveWorkspaceId: (env, slug) => {
+      let pending = workspaces.get(slug);
+      if (!pending) {
+        pending = deps.resolveWorkspaceId(env, slug).catch((error: unknown) => {
+          workspaces.delete(slug);
+          throw error;
+        });
+        workspaces.set(slug, pending);
+      }
+      return pending;
+    },
+  };
+
   for (const message of batch.messages) {
     const parsed = parseMessage(message.body);
     if (!parsed) {
@@ -176,7 +216,7 @@ export async function handleQueue(
     }
 
     try {
-      await storeMessage(env, parsed, deps);
+      await storeMessage(env, parsed, batchDeps);
     } catch (error) {
       // The reason is logged without any message content or credential. The
       // queue keeps the attempt count and the DLQ keeps the body.

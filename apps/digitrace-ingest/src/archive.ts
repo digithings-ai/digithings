@@ -73,6 +73,7 @@ export function messageFor(
     | "source"
     | "receivedAt"
     | "archiveKey"
+    | "incompleteTraces"
   >,
 ): IngestMessage {
   return { v: 1, ...meta, ndjson: toNdjson(lines) };

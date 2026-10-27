@@ -66,18 +66,50 @@ async function readBody(request: Request): Promise<Uint8Array> {
   if (encoding === "" || encoding === "identity") return raw;
   if (encoding !== "gzip") throw new UnsupportedEncoding(encoding);
 
-  const decompressed = new Uint8Array(
-    await new Response(
-      new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip")),
-    ).arrayBuffer(),
-  );
-  // The cap applies to what is parsed, not only to what arrived: a gzip bomb is
-  // small on the wire and enormous after inflating.
-  if (decompressed.byteLength > MAX_BODY_BYTES) throw new BodyTooLarge();
-  return decompressed;
+  return inflate(raw);
+}
+
+/**
+ * Gunzip with the cap applied *while* inflating.
+ *
+ * The cap applies to what is parsed, not only to what arrived: a gzip bomb is
+ * small on the wire and enormous after inflating. Reading the whole expansion
+ * into an ArrayBuffer first would spend the isolate's memory before the check
+ * could refuse it, so the stream is counted chunk by chunk and abandoned the
+ * moment it passes the cap.
+ */
+async function inflate(raw: Uint8Array): Promise<Uint8Array> {
+  const reader = new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new BodyTooLarge();
+      }
+      parts.push(value);
+    }
+  } catch (error) {
+    if (error instanceof BodyTooLarge) throw error;
+    throw new InvalidBody("body is not valid gzip");
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.byteLength;
+  }
+  return out;
 }
 
 class BodyTooLarge extends Error {}
+/** A body that arrived in the declared encoding but does not decode in it. */
+class InvalidBody extends Error {}
 class UnsupportedEncoding extends Error {
   constructor(readonly encoding: string) {
     super(`unsupported content-encoding ${encoding}`);
@@ -144,6 +176,9 @@ export async function handleRequest(
     }
     if (error instanceof UnsupportedEncoding) {
       return respond.json(415, { error: "content-encoding must be gzip or absent" });
+    }
+    if (error instanceof InvalidBody) {
+      return respond.json(400, { error: error.message });
     }
     throw error;
   }
