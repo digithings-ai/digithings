@@ -50,7 +50,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digisearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
+| **digitrace** | In-house OTLP tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | **digibot** | Heartbeat, audit, MCP skill → digigraph | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |

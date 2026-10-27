@@ -21,7 +21,6 @@ const FORWARDED_NAMES = [
   "DIGIQUANT_DIGIKEY_API_KEY",
   "DIGIQUANT_RUNNER_GIT_SHA",
   "DIGI_OTEL_HEADERS",
-  "LANGSMITH_API_KEY",
   "NOTIFY_FROM",
   "OPENROUTER_API_KEY",
   "R2_ACCESS_KEY_ID",
@@ -40,6 +39,7 @@ describe("dataPlaneEnv", () => {
     expect(forwarded).not.toHaveProperty("CHEAPERINFERENCE_API_BASE");
     expect(forwarded).not.toHaveProperty("DIGIQUANT_RUNNER_GIT_SHA");
     expect(forwarded).not.toHaveProperty("LANGSMITH_API_KEY");
+    expect(Object.keys(forwarded)).not.toContain("LANGSMITH_API_KEY");
   });
 
   it("leaves only the mail names in the forwarded env when nothing is set", () => {

@@ -1,4 +1,8 @@
-"""Unit tests for dual-export (#4931): LangSmith + in-house digitrace OTLP fan-out."""
+"""Unit tests for the OTLP-only digitrace trace wrapper.
+
+The vendor SDK leg is gone (#4929): the only export path is the generic OTLP
+endpoint/headers pair, which an operator may point at any collector.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ import pytest
 from digitrace import config as config_mod
 from digitrace import trace as trace_mod
 
-_DUAL_ENVS = (
+_OTLP_ENVS = (
     "LANGSMITH_API_KEY",
     "LANGSMITH_ENDPOINT",
     "DIGI_OTEL_ENDPOINT",
@@ -23,8 +27,8 @@ _DUAL_ENVS = (
 
 
 @pytest.fixture(autouse=True)
-def _clear_dual_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in _DUAL_ENVS:
+def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in _OTLP_ENVS:
         monkeypatch.delenv(key, raising=False)
 
 
@@ -64,59 +68,33 @@ def _install_fake_otel(monkeypatch: pytest.MonkeyPatch, spans: list[dict[str, An
             return False
 
     class _FakeTracer:
-        def start_as_current_span(
-            self, name: str, attributes: dict[str, str] | None = None
-        ) -> _FakeSpanCM:
+        def start_as_current_span(self, name: str, attributes: dict[str, str]) -> _FakeSpanCM:
             return _FakeSpanCM(_FakeSpan(name, attributes))
 
-    trace_api.StatusCode = _StatusCode  # type: ignore[attr-defined]
-    trace_api.get_tracer = lambda name: _FakeTracer()  # type: ignore[attr-defined]
-    pkg.trace = trace_api  # type: ignore[attr-defined]
+    class _FakeTrace:
+        StatusCode = _StatusCode
+
+        @staticmethod
+        def get_tracer(_name: str) -> _FakeTracer:
+            return _FakeTracer()
+
+    trace_api.StatusCode = _StatusCode
+    trace_api.get_tracer = _FakeTrace.get_tracer
+    pkg.trace = trace_api
     monkeypatch.setitem(sys.modules, "opentelemetry", pkg)
     monkeypatch.setitem(sys.modules, "opentelemetry.trace", trace_api)
 
 
 def _block_otel_import(monkeypatch: pytest.MonkeyPatch) -> None:
-    import builtins
-
-    real_import = builtins.__import__
-
-    def _blocked(name: str, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
-        if name == "opentelemetry" or name.startswith("opentelemetry."):
-            raise ImportError("blocked for test")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _blocked)
-    for mod in ("opentelemetry", "opentelemetry.trace"):
-        monkeypatch.delitem(sys.modules, mod, raising=False)
-
-
-class _FakeLangSmith:
-    captured: dict[str, Any] = {}
-
-    @staticmethod
-    def traceable(**kwargs: Any):  # type: ignore[no-untyped-def]
-        _FakeLangSmith.captured.update(kwargs)
-
-        def wrap(fn):  # type: ignore[no-untyped-def]
-            return fn
-
-        return wrap
-
-
-def _enable_fake_langsmith(monkeypatch: pytest.MonkeyPatch) -> None:
-    _FakeLangSmith.captured = {}
-    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", True)
-    monkeypatch.setattr(trace_mod, "_langsmith", _FakeLangSmith)
-    monkeypatch.setattr(config_mod, "langsmith_sdk_importable", lambda: True)
-    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
+    monkeypatch.setitem(sys.modules, "opentelemetry", None)
+    monkeypatch.setitem(sys.modules, "opentelemetry.trace", None)
 
 
 @pytest.mark.unit
 def test_default_backend_none_and_noop_identity() -> None:
     assert config_mod.export_backend() == "none"
-    assert config_mod.dual_export_enabled() is False
     assert config_mod.otel_export_configured() is False
+    assert config_mod.tracing_enabled() is False
 
     def fn() -> int:
         return 1
@@ -126,29 +104,12 @@ def test_default_backend_none_and_noop_identity() -> None:
 
 
 @pytest.mark.unit
-def test_langsmith_only_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    _enable_fake_langsmith(monkeypatch)
-    _block_otel_import(monkeypatch)
-    assert config_mod.export_backend() == "langsmith"
-    assert config_mod.dual_export_enabled() is False
-
-    @trace_mod.traceable("ls_only")
-    def fn() -> int:
-        return 2
-
-    assert fn() == 2
-    assert _FakeLangSmith.captured["name"] == "ls_only"
-    assert callable(_FakeLangSmith.captured["process_inputs"])
-
-
-@pytest.mark.unit
-def test_otlp_only_backend_opens_span(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", False)
+def test_otlp_backend_opens_span(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://otel:4318")
     spans: list[dict[str, Any]] = []
     _install_fake_otel(monkeypatch, spans)
     assert config_mod.export_backend() == "otel"
-    assert config_mod.dual_export_enabled() is False
+    assert config_mod.tracing_enabled() is True
     assert trace_mod.otel_leg_enabled() is True
 
     @trace_mod.traceable("completion")
@@ -164,35 +125,9 @@ def test_otlp_only_backend_opens_span(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_dual_export_parity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """One call reaches both legs with the same correlation context."""
-    _enable_fake_langsmith(monkeypatch)
-    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
-    spans: list[dict[str, Any]] = []
-    _install_fake_otel(monkeypatch, spans)
-    assert config_mod.export_backend() == "dual"
-    assert config_mod.dual_export_enabled() is True
-
-    @trace_mod.traceable("run_tools")
-    def fn(*, request_id: str = "", session_id: str = "") -> str:
-        return f"{request_id}/{session_id}"
-
-    assert fn(request_id="r-1", session_id="s-1") == "r-1/s-1"
-    # LangSmith leg saw the call (redaction hooks attached).
-    assert _FakeLangSmith.captured["name"] == "run_tools"
-    assert callable(_FakeLangSmith.captured["process_inputs"])
-    # OTel leg saw the same call with the same correlation ids.
-    assert len(spans) == 1
-    assert spans[0]["name"] == "digitrace.run_tools"
-    assert spans[0]["attributes"]["digi.request_id"] == "r-1"
-    assert spans[0]["attributes"]["digi.session_id"] == "s-1"
-
-
-@pytest.mark.unit
 def test_otel_leg_exception_propagates_and_marks_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", False)
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
     spans: list[dict[str, Any]] = []
     _install_fake_otel(monkeypatch, spans)
@@ -224,7 +159,6 @@ def test_correlation_attrs_from_state_mapping_and_safety() -> None:
 
 @pytest.mark.unit
 def test_otel_noop_without_packages(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", False)
     monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://otel:4318")
     _block_otel_import(monkeypatch)
     assert trace_mod.otel_leg_enabled() is False
@@ -236,40 +170,46 @@ def test_otel_noop_without_packages(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_otlp_backend_name_and_no_langfuse_option(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The OTLP leg is the in-house digitrace ingest; Langfuse is not an option."""
-    monkeypatch.setenv("LANGFUSE_OTLP_ENDPOINT", "https://trace.example.com/api/public/otel")
-    monkeypatch.setenv("LANGFUSE_HOST", "trace.example.com")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-fake")
+def test_no_vendor_backend_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the generic OTLP pair selects a backend; no vendor env is read."""
+    for vendor_env, value in (
+        ("LANGSMITH_API_KEY", "lsv2_fake"),
+        ("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"),
+        ("LANGFUSE_SECRET_KEY", "sk-lf-fake"),
+        ("LANGFUSE_HOST", "trace.example.com"),
+        ("HELICONE_API_KEY", "sk-helicone-fake"),
+        ("BRAINTRUST_API_KEY", "sk-braintrust-fake"),
+        ("ARIZE_API_KEY", "sk-arize-fake"),
+        ("DATADOG_API_KEY", "dd-fake"),
+    ):
+        monkeypatch.setenv(vendor_env, value)
     assert config_mod.export_backend() == "none"
     assert config_mod.otel_export_configured() is False
-    assert not hasattr(config_mod, "langfuse_configured")
-    assert not hasattr(config_mod, "langfuse_host_sanitized")
+    for removed in ("langsmith_sdk_importable", "langsmith_host_sanitized", "dual_export_enabled"):
+        assert not hasattr(config_mod, removed)
 
     monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
     assert config_mod.export_backend() == "otel"
 
 
 @pytest.mark.unit
-def test_status_dual_fields_secret_free(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_fields_secret_free(monkeypatch: pytest.MonkeyPatch) -> None:
     from fastapi.testclient import TestClient
 
     from digitrace import server as server_mod
 
     monkeypatch.setattr(server_mod, "tracing_enabled", lambda: True)
-    monkeypatch.setattr(server_mod, "langsmith_sdk_importable", lambda: True)
-    monkeypatch.setattr(server_mod, "langsmith_host_sanitized", lambda: "api.smith.langchain.com")
     monkeypatch.setattr(server_mod, "otel_export_configured", lambda: True)
-    monkeypatch.setattr(server_mod, "dual_export_enabled", lambda: True)
-    monkeypatch.setattr(server_mod, "export_backend", lambda: "dual")
+    monkeypatch.setattr(server_mod, "export_backend", lambda: "otel")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_super_secret_token_do_not_leak")
     client = TestClient(server_mod.app)
     r = client.get("/v1/status")
     assert r.status_code == 200
     body = r.json()
-    assert body["dual_export"] is True
-    assert body["export_backend"] == "dual"
+    assert body["export_backend"] == "otel"
     assert body["otel_export_configured"] is True
-    assert "langfuse_configured" not in body
-    assert "langfuse_host" not in body
+    assert "langsmith_sdk_installed" not in body
+    assert "langsmith_host" not in body
+    assert "dual_export" not in body
     assert "lsv2_" not in r.text
     assert "pass123" not in r.text

@@ -30,9 +30,6 @@ export interface RagPricing {
   pineconeReadPerM: number;
   /** Qdrant Cloud entry footprint (single-source estimate, see sources). */
   qdrantEntryMonthly: number;
-  langsmithSeatMonthly: number;
-  langsmithIncludedTraces: number;
-  langsmithTraceOveragePerK: number;
   deepseekInPerM: number;
   deepseekOutPerM: number;
   reasoningInPerM: number;
@@ -104,9 +101,6 @@ export const RAG_PRICING: RagPricing = {
   pineconeWritePerM: 4,
   pineconeReadPerM: 16,
   qdrantEntryMonthly: 25,
-  langsmithSeatMonthly: 39,
-  langsmithIncludedTraces: 10000,
-  langsmithTraceOveragePerK: 2.5,
   deepseekInPerM: 0.78,
   deepseekOutPerM: 1.57,
   reasoningInPerM: 2,
@@ -143,7 +137,7 @@ const DAYS_PER_MONTH = 30;
 export type RagState = "provider" | "dg-self" | "dg-cheap" | "dg-flagship";
 
 export const RAG_STATES: { id: RagState; label: string; note: string }[] = [
-  { id: "provider", label: "Provider stack", note: "OpenAI large + Pinecone + Sol + LangSmith" },
+  { id: "provider", label: "Provider stack", note: "OpenAI large + Pinecone + Sol" },
   { id: "dg-self", label: "digithings · self-hosted", note: "Local models + vectors + traces, your hardware" },
   { id: "dg-cheap", label: "digithings · cheap managed", note: "Small embeddings + Qdrant + mid-tier routing" },
   { id: "dg-flagship", label: "digithings · flagship routed", note: "Same Sol + Pinecone, own traces" },
@@ -173,11 +167,6 @@ function pineconeBill(
   const ruPerQuery = Math.max(0.25, gb);
   const reads = ((queriesPerMonth * ruPerQuery * p.pineconeReadPerM) / 1e6);
   return { storage, reads, total: Math.max(p.pineconeMinMonthly, storage + reads) };
-}
-
-function langsmithBill(tracesPerMonth: number, p: RagPricing): number {
-  const over = Math.max(0, tracesPerMonth - p.langsmithIncludedTraces);
-  return p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000;
 }
 
 /**
@@ -231,11 +220,9 @@ export function ragCost(
   const outPerM = state === "dg-cheap" ? pricing.chatMidOutPerM : pricing.chatFlagshipOutPerM;
   add("Model answers", (chatIn * inPerM + chatOut * outPerM) / 1e6, true);
 
-  add(
-    state === "provider" ? "LangSmith (1 seat + traces)" : "digitrace traces",
-    state === "provider" ? langsmithBill(queriesPerMonth, pricing) : 0,
-    true,
-  );
+  // Traces are always in-house digitrace: the stack provisions no external
+  // observability vendor. A provider is an OTLP export target, not a line item.
+  add("digitrace traces", 0, true);
   return { setup, monthly, lines };
 }
 

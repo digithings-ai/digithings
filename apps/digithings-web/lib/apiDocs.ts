@@ -524,9 +524,9 @@ for hit in r.json()["results"]:
       standalone: "uvicorn digitrace.server:app",
     },
     env: [
-      { name: "LANGSMITH_API_KEY", description: "Enable LangSmith trace export; absent = no-op." },
-      { name: "LANGSMITH_ENDPOINT", def: "https://api.smith.langchain.com", description: "LangSmith API base (host shown in /v1/status)." },
-      { name: "OTEL_EXPORTER_OTLP_ENDPOINT", description: "Enable OTel HTTP export when set." },
+      { name: "OTEL_EXPORTER_OTLP_ENDPOINT", description: "Enable OTLP HTTP export when set; absent = no-op." },
+      { name: "DIGITRACE_OTLP_ENDPOINT", description: "In-house digitrace OTLP ingest (wins over the generic name)." },
+      { name: "DIGI_OTEL_HEADERS", description: "Headers sent with each OTLP export (auth for a hosted collector, if any)." },
     ],
     endpoints: [
       {
@@ -537,8 +537,8 @@ for hit in r.json()["results"]:
         responseExample: `{
   "version": "0.1.0",
   "tracing_configured": true,
-  "langsmith_sdk_installed": true,
-  "langsmith_host": "api.smith.langchain.com",
+  "otel_export_configured": true,
+  "export_backend": "otel",
   "request_id": "..."
 }`,
         examples: [{ lang: "bash", code: `curl $DIGITRACE_URL/v1/status` }],
@@ -549,11 +549,11 @@ for hit in r.json()["results"]:
       {
         signature: "from digitrace.trace import traceable",
         description:
-          "@traceable(\"name\") wraps a function with langsmith.traceable when LANGSMITH_API_KEY is set; otherwise a no-op. PII is redacted from span inputs/outputs.",
+          "@traceable(\"name\") opens one OTLP span per call when an OTLP endpoint is set; otherwise a no-op. Only the run name and short correlation ids are attached.",
       },
       {
         signature: "from digitrace.config import tracing_enabled",
-        description: "Returns True when tracing is configured (key set + SDK importable).",
+        description: "Returns True when an OTLP endpoint is configured.",
       },
     ],
     notes: [

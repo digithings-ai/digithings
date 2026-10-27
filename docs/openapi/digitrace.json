@@ -4,38 +4,15 @@
       "TraceStatus": {
         "description": "Public status for GET /v1/status.",
         "properties": {
-          "dual_export": {
-            "default": false,
-            "description": "Both LangSmith and OTLP legs are active",
-            "title": "Dual Export",
-            "type": "boolean"
-          },
           "export_backend": {
             "default": "none",
-            "description": "One of dual|langsmith|otel|none",
+            "description": "One of otel|none",
             "title": "Export Backend",
             "type": "string"
           },
-          "langsmith_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Sanitized API host from LANGSMITH_ENDPOINT (no secrets)",
-            "title": "Langsmith Host"
-          },
-          "langsmith_sdk_installed": {
-            "description": "langsmith Python package is importable",
-            "title": "Langsmith Sdk Installed",
-            "type": "boolean"
-          },
           "otel_export_configured": {
             "default": false,
-            "description": "An OTLP endpoint env var is set (OTel fan-out leg active)",
+            "description": "An OTLP endpoint env var is set (OTel export leg active)",
             "title": "Otel Export Configured",
             "type": "boolean"
           },
@@ -52,7 +29,7 @@
             "title": "Request Id"
           },
           "tracing_configured": {
-            "description": "LangSmith tracing would activate (key + langsmith installed)",
+            "description": "An OTLP endpoint is set, so spans would be exported",
             "title": "Tracing Configured",
             "type": "boolean"
           },
@@ -64,8 +41,7 @@
         },
         "required": [
           "version",
-          "tracing_configured",
-          "langsmith_sdk_installed"
+          "tracing_configured"
         ],
         "title": "TraceStatus",
         "type": "object"
@@ -107,7 +83,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. For richer diagnostics (tracing\nconfiguration, LangSmith host), see ``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. For richer diagnostics (tracing\nconfiguration, OTLP export state), see ``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {

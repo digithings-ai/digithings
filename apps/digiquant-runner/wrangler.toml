@@ -21,8 +21,8 @@
 # Phase 3 Task 7 puts these via .github/workflows/sync-digiquant-runner-digikey-secret.yml
 # (workflow_dispatch; logs name + length only): DIGIQUANT_DIGIKEY_API_KEY.
 # wrangler.toml has no env blocks — one script (develop/prod not split).
-# Tracing is in-house digitrace plus LangSmith; allocation-shadow command
-# allowlist stays empty. Do not commit values.
+# Tracing is in-house digitrace (generic DIGI_OTEL_HEADERS OTLP path);
+# allocation-shadow command allowlist stays empty. Do not commit values.
 # One container class. instance_type standard-1 (was standard-2, 6 GiB -> 4 GiB):
 # the runner is idle most of the day and memory is billed per GiB-s. Revert to
 # standard-2 if a house run OOMs (watch the runner's exit code and log).

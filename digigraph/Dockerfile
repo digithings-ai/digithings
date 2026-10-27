@@ -25,7 +25,7 @@ COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
-# digitrace (sibling package; tracing helpers + LangSmith SDK)
+# digitrace (sibling package; OTLP tracing helpers)
 COPY digitrace/pyproject.toml digitrace/ARCHITECTURE.md ./digitrace/
 COPY digitrace/src ./digitrace/src
 RUN uv pip install --system -e "./digitrace[tracing]"

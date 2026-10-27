@@ -14,10 +14,7 @@ from fastapi import FastAPI, Request
 from digitrace import __version__
 from digitrace.config import (
     TraceStatus,
-    dual_export_enabled,
     export_backend,
-    langsmith_host_sanitized,
-    langsmith_sdk_importable,
     otel_export_configured,
     tracing_enabled,
 )
@@ -59,7 +56,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, secret-free.
 
     Returns HTTP 200 with ``{"ok": true}``. For richer diagnostics (tracing
-    configuration, LangSmith host), see ``/v1/status``.
+    configuration, OTLP export state), see ``/v1/status``.
     """
     return {"ok": True}
 
@@ -69,11 +66,8 @@ def status(request: Request) -> TraceStatus:
     return TraceStatus(
         version=__version__,
         tracing_configured=tracing_enabled(),
-        langsmith_sdk_installed=langsmith_sdk_importable(),
-        langsmith_host=langsmith_host_sanitized(),
         request_id=getattr(request.state, "request_id", None),
         otel_export_configured=otel_export_configured(),
-        dual_export=dual_export_enabled(),
         export_backend=export_backend(),
     )
 

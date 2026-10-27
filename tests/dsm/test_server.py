@@ -18,14 +18,16 @@ def test_health() -> None:
 
 @pytest.mark.unit
 def test_status_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    for key in ("DIGI_OTEL_ENDPOINT", "DIGITRACE_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+        monkeypatch.delenv(key, raising=False)
     r = _client.get("/v1/status")
     assert r.status_code == 200
     body = r.json()
     assert "version" in body
-    assert body["tracing_configured"] in (True, False)
-    assert body["langsmith_sdk_installed"] in (True, False)
-    assert "langsmith_host" in body
+    assert body["tracing_configured"] is False
+    assert body["otel_export_configured"] is False
+    assert body["export_backend"] == "none"
+    assert "langsmith_host" not in body
 
 
 @pytest.mark.unit

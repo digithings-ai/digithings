@@ -405,7 +405,7 @@ def build_workflow_graph():
         builder.add_node("supervisor", trace_node("supervisor")(supervisor_node))
     # NOTE (#4931): the compiled research subgraph stays unwrapped so
     # graph.stream(..., subgraphs=True) custom events keep flowing; its spans
-    # come from LangSmith auto-instrumentation (configure_langgraph_tracing).
+    # come from the digitrace OTLP export leg (configure_langgraph_tracing).
     builder.add_node("research", research_sg)
     builder.add_node("validate_strategy", trace_node("validate_strategy")(strategy_validator_node))
     builder.add_node("backtest", trace_node("backtest")(backtest_node))

@@ -22,10 +22,9 @@ Homepage = "https://digithings.ai"
 Repository = "https://github.com/digithings-ai/digithings"
 
 [project.optional-dependencies]
-tracing = ["langsmith>=0.1"]
-# Temporary alias until Phase 3 cuts LangSmith (#4929): digitrace[langsmith] and
-# the pre-rename digitrace[langsmith] installs keep working.
-langsmith = ["langsmith>=0.1"]
+# The `tracing` extra is the OTLP leg (the vendor SDK extra was cut, #4929).
+# Kept under its old name so existing Dockerfiles keep installing correctly.
+tracing = ["digibase[otel]"]
 otel = ["digibase[otel]"]
 dev = ["httpx>=0.27"]
 

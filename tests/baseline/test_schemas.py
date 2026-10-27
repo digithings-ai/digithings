@@ -63,7 +63,7 @@ def test_smith_status_round_trip() -> None:
     data = {
         "version": "0.1.0",
         "tracing_configured": False,
-        "langsmith_sdk_installed": False,
+        "otel_export_configured": False,
     }
     obj = TraceStatus(**data)
     dumped = obj.model_dump()

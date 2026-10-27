@@ -6,8 +6,7 @@
  * of researched options. The diagrams and the invoice both render from the
  * pick, so the graph and the bill can never disagree.
  *
- * Rate honesty: model, embed, Pinecone and LangSmith rates come from
- * `RAG_PRICING`. Host, tracer and mail rates below are list prices checked
+ * Rate honesty: model, embed and Pinecone rates come from `RAG_PRICING`. Host, tracer and mail rates below are list prices checked
  * 2026-09-30 (plan fee or named SKU × 730h). `estimate: true` means the
  * monthly is a planning figure — an hourly SKU stretched to a month, or a
  * plan floor whose overage the vendor does not publish — and renders with
@@ -81,14 +80,7 @@ export const PROVIDER_LAYERS: Layer[] = [
   {
     id: "telemetry",
     label: "Telemetry",
-    options: [
-      { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
-      { id: "helicone", label: "Helicone", vendor: "Helicone" },
-      { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
-      { id: "arize", label: "Arize AX", vendor: "Arize" },
-      { id: "datadog", label: "Datadog", vendor: "Datadog" },
-      { id: "self", label: "Self-hosted traces", vendor: "you" },
-    ],
+    options: [{ id: "self", label: "Self-hosted traces", vendor: "you" }],
   },
   {
     id: "hosting",
@@ -161,11 +153,7 @@ export const DIGI_LAYERS: Layer[] = [
     label: "Telemetry",
     options: [
       { id: "digitrace", label: "digitrace", vendor: "digithings" },
-      { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
-      { id: "helicone", label: "Helicone", vendor: "Helicone" },
-      { id: "braintrust", label: "Braintrust", vendor: "Braintrust" },
-      { id: "arize", label: "Arize AX", vendor: "Arize" },
-      { id: "datadog", label: "Datadog", vendor: "Datadog" },
+      { id: "self", label: "Self-hosted traces", vendor: "you" },
     ],
   },
   {
@@ -190,7 +178,7 @@ export const DEFAULT_PROVIDER_PICK: StackPick = {
   models: "sol",
   embeddings: "large",
   vector: "pinecone",
-  telemetry: "langsmith",
+  telemetry: "self",
   hosting: "azure",
 };
 
@@ -243,14 +231,10 @@ const HOURS_PER_MONTH = 730;
  * - Railway Hobby usage: 1 vCPU × $20 + 1GB RAM × $10, volume $0.15/GB
  *   (the $5 credit does not cover that footprint; bill is the usage)
  *
- * Traces, first paid plan that covers one event per query:
- * - Helicone Pro $79 floor; requests above the included 10k are
- *   usage-priced and the per-request rate is not published (helicone.ai/pricing)
- * - Braintrust Pro $249, 50k scores and 5GB included (braintrust.dev/pricing)
- * - Arize AX Pro $50, 50k spans (arize.com/pricing). Phoenix OSS stays the
- *   self-hosted traces row.
- * - Datadog Agent Observability Pro $200 month-to-month for the first 100k
- *   LLM spans (public list, Sep 2026)
+ * Traces are in-house digitrace or self-hosted; the stack provisions no
+ * third-party observability vendor. External providers (LangSmith, Helicone,
+ * Braintrust, Arize, Datadog, …) are integrations digitrace can export to over
+ * OTLP, not components the stack accounts for.
  *
  * Mail, cheapest published tier that includes the month's sends:
  * - SendGrid Essentials $19.95 / 50k, $34.95 / 100k; extra $0.00133
@@ -347,22 +331,8 @@ export function hostBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): 
 
 /** One trace, unit, span or score per query, on the first paid plan that covers it. */
 export function traceBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): MenuRate {
-  const queries = queriesPerMonth(workload);
-  const p = RAG_PRICING;
+  void workload;
   if (id === "self" || id === "digitrace") return { amount: 0, estimate: false };
-  if (id === "langsmith") {
-    const over = Math.max(0, queries - p.langsmithIncludedTraces);
-    return { amount: p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, estimate: false };
-  }
-  if (id === "helicone") return { amount: 79, estimate: true };
-  if (id === "braintrust") return { amount: 249, estimate: false };
-  if (id === "arize") {
-    return { amount: 50, estimate: queries > 50_000 };
-  }
-  if (id === "datadog") {
-    const extra = Math.max(0, queries - 100_000);
-    return { amount: 200 + (extra / 10_000) * 5, estimate: true };
-  }
   throw new Error(`unknown tracer ${id}`);
 }
 
@@ -573,11 +543,6 @@ const VECTOR_BOX: Record<string, string> = {
 };
 
 const TELEMETRY_BOX: Record<string, string> = {
-  langsmith: "LangSmith",
-  helicone: "Helicone",
-  braintrust: "Braintrust",
-  arize: "Arize AX",
-  datadog: "Datadog",
   self: "own traces",
   digitrace: "digitrace",
 };

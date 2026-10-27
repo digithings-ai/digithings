@@ -41,7 +41,8 @@ describe("pricePick", () => {
     expect(price.setup).toBeCloseTo(invoice.setup, 4);
     // Same usage math, plus Azure B2s + 1GB Blob Hot.
     expect(price.monthly).toBeCloseTo(invoice.monthly + hostBill("azure").amount, 4);
-    expect(price.vendors).toEqual(["OpenAI", "Pinecone", "LangSmith", "Azure"]);
+    // The provider stack names no observability vendor; traces are self-hosted.
+    expect(price.vendors).toEqual(["OpenAI", "Pinecone", "Azure"]);
   });
 
   it("runs the default digithings pick at zero", () => {
@@ -55,10 +56,8 @@ describe("pricePick", () => {
     const aws = pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, hosting: "aws" });
     expect(aws.lines.find((line) => line.layer === "hosting")?.amount).toBeCloseTo(hostBill("aws").amount, 4);
     expect(aws.lines.find((line) => line.layer === "hosting")?.unpriced).toBeUndefined();
-    expect(traceBill("helicone").estimate).toBe(true);
-    expect(traceBill("braintrust").amount).toBe(249);
-    expect(traceBill("arize").amount).toBe(50);
-    expect(traceBill("datadog")).toEqual({ amount: 200, estimate: true });
+    expect(traceBill("self")).toEqual({ amount: 0, estimate: false });
+    expect(traceBill("digitrace")).toEqual({ amount: 0, estimate: false });
     expect(hostBill("cloudflare").amount).toBe(5);
     expect(hostBill("fly").amount).toBe(2.19);
     expect(hostBill("own").amount).toBe(0);
@@ -83,22 +82,38 @@ describe("pricePick", () => {
     );
   });
 
-  it("offers no Langfuse option in either telemetry menu", () => {
+  it("names no external observability vendor in either telemetry menu", () => {
+    const retired = [
+      "langfuse",
+      "langsmith",
+      "helicone",
+      "braintrust",
+      "arize",
+      "datadog",
+    ];
     for (const layers of [PROVIDER_LAYERS, DIGI_LAYERS]) {
       const telemetry = layers.find((layer) => layer.id === "telemetry");
       expect(telemetry, "telemetry layer").toBeDefined();
       const ids = telemetry?.options.map((option) => option.id) ?? [];
       const labels = telemetry?.options.map((option) => option.label) ?? [];
-      expect(ids).not.toContain("langfuse");
-      expect(labels).not.toContain("Langfuse");
-      expect(labels.join(" ")).not.toMatch(/langfuse/i);
+      for (const vendor of retired) {
+        expect(ids, `${telemetry?.id} ids`).not.toContain(vendor);
+      }
+      // Only the in-house / self-hosted rows survive: a provider is an OTLP
+      // export target digitrace can plug into, not a stack component.
+      expect(ids.length).toBeGreaterThan(0);
+      expect(ids.length + retired.length).toBeGreaterThanOrEqual(6);
+      expect(labels.join(" ")).not.toMatch(/langfuse|langsmith|helicone|braintrust|arize|datadog/i);
     }
     // The in-house digitrace option is what the stack accounts for.
     const digiTelemetry = DIGI_LAYERS.find((layer) => layer.id === "telemetry");
     expect(digiTelemetry?.options.map((option) => option.id)).toContain("digitrace");
+    // The provider menu keeps the zero-cost self-hosted traces row.
+    const providerTelemetry = PROVIDER_LAYERS.find((layer) => layer.id === "telemetry");
+    expect(providerTelemetry?.options.map((option) => option.id)).toEqual(["self"]);
     // A stale pick fails loudly instead of silently billing a retired vendor.
     expect(() =>
-      pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langfuse" }),
+      pricePick(PROVIDER_LAYERS, { ...DEFAULT_PROVIDER_PICK, telemetry: "langsmith" }),
     ).toThrow(/unknown pick/);
   });
 });

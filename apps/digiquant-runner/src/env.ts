@@ -21,7 +21,6 @@ export interface Env {
   OPENROUTER_API_KEY?: string;
   CHEAPERINFERENCE_API_KEY?: string;
   CHEAPERINFERENCE_API_BASE?: string;
-  LANGSMITH_API_KEY?: string;
   DIGI_OTEL_HEADERS?: string;
   /** Skip ledger on digithings-archive. Not forwarded into the container. */
   ARCHIVE?: HouseLedger;
@@ -61,7 +60,6 @@ const FORWARDED_ENV_NAMES = [
   "OPENROUTER_API_KEY",
   "CHEAPERINFERENCE_API_KEY",
   "CHEAPERINFERENCE_API_BASE",
-  "LANGSMITH_API_KEY",
   "DIGI_OTEL_HEADERS",
 ] as const;
 

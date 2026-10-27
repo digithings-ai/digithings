@@ -1,41 +1,32 @@
-"""Optional LangSmith + OTLP dual-export trace wrappers with PII redaction.
+"""OTLP-only trace wrapper with safe span attributes.
 
-``traceable(name)`` fans out to two legs — the LangSmith SDK leg (as before,
-when ``LANGSMITH_API_KEY`` is set) **and** an OpenTelemetry leg (when an OTLP
-endpoint env var is set, pointing at the in-house digitrace OTLP ingest, with
-headers via ``DIGI_OTEL_HEADERS`` / ``OTEL_EXPORTER_OTLP_HEADERS``). Either leg
-missing degrades to the other; both missing returns the original function
-unmodified (zero per-call overhead).
+``traceable(name)`` opens one OpenTelemetry span per call when an OTLP endpoint
+env var is set (pointing at the in-house digitrace OTLP ingest, headers via
+``DIGI_OTEL_HEADERS`` / ``OTEL_EXPORTER_OTLP_HEADERS``). With no endpoint, or no
+OpenTelemetry SDK importable, it returns the original function unmodified
+(zero per-call overhead).
 
-The OTel leg sets only safe attributes (run name + short correlation ids);
-it never carries prompts, completions, or secrets. PII redaction for the
-LangSmith leg stays on ``process_inputs`` / ``process_outputs`` as before.
+Specialising the endpoint at a third-party collector is an operator choice;
+this library never configures a vendor SDK and needs no vendor secret.
+
+The span sets only safe attributes (run name + short correlation ids); it never
+carries prompts, completions, or secrets.
 """
 
 from __future__ import annotations
 
 import functools
 import logging
-import os
 from collections.abc import Callable, Mapping
 from typing import Any, TypeVar
 
 from digitrace.config import otel_export_configured
-from digitrace.redaction import PiiRedactor, default_redactor
 
 logger = logging.getLogger(__name__)
 
-try:
-    import langsmith as _langsmith  # type: ignore[import-untyped]
-
-    LANGSMITH_SDK_AVAILABLE = True
-except ImportError:
-    _langsmith = None  # type: ignore[assignment]
-    LANGSMITH_SDK_AVAILABLE = False
-
 F = TypeVar("F", bound=Callable[..., Any])
 
-__all__ = ["LANGSMITH_SDK_AVAILABLE", "otel_leg_enabled", "traceable"]
+__all__ = ["otel_leg_enabled", "traceable"]
 
 #: Correlation keys copied onto OTel spans when present as short strings.
 _CORRELATION_KEYS = ("workflow_id", "request_id", "session_id")
@@ -46,7 +37,7 @@ _MAX_CORRELATION_CHARS = 128
 
 
 def otel_leg_enabled() -> bool:
-    """True when the OTel fan-out leg can emit (endpoint set + API importable)."""
+    """True when the OTel export leg can emit (endpoint set + API importable)."""
     if not otel_export_configured():
         return False
     try:
@@ -91,7 +82,7 @@ def _maybe_wrap_otel(fn: F, name: str) -> F:
         attrs.update(_correlation_attrs(args, kwargs))
         try:
             span_cm = tracer.start_as_current_span(f"digitrace.{name}", attributes=attrs)
-        except Exception as exc:
+        except Exception as exc:  # fail-soft: a broken tracer never breaks the call
             logger.debug("OTel span start failed for %r: %s", name, exc)
             return fn(*args, **kwargs)
         with span_cm as span:
@@ -107,29 +98,15 @@ def _maybe_wrap_otel(fn: F, name: str) -> F:
     return _wrapper  # type: ignore[return-value]
 
 
-def traceable(name: str, *, redactor: PiiRedactor | None = None) -> Callable[[F], F]:
-    """Wrap *fn* with LangSmith ``traceable`` + OTel fan-out when enabled.
+def traceable(name: str) -> Callable[[F], F]:
+    """Wrap a function in one OTel span per call when the OTLP leg is enabled.
 
-    The LangSmith leg applies PII redaction via the SDK's ``process_inputs`` /
-    ``process_outputs`` callbacks; the OTel leg (exporting to the in-house
-    digitrace ingest) opens one span per call carrying only the run name plus
-    short correlation ids. A no-op returning the original function when neither
-    leg is active.
+    The span exports to the in-house digitrace ingest and carries only the run
+    name plus short correlation ids. A no-op returning the original function
+    when no endpoint is configured.
     """
 
     def decorator(fn: F) -> F:
-        wrapped = fn
-        if LANGSMITH_SDK_AVAILABLE and os.environ.get("LANGSMITH_API_KEY"):
-            active_redactor = redactor or default_redactor()
-            try:
-                wrapped = _langsmith.traceable(  # type: ignore[assignment]
-                    name=name,
-                    process_inputs=active_redactor.process_inputs,
-                    process_outputs=active_redactor.process_outputs,
-                )(wrapped)
-            # SIMP-023: keep setup fallback for LangSmith SDK version skew; not a silent swallow.
-            except (TypeError, ValueError, RuntimeError, OSError) as exc:
-                logger.debug("LangSmith traceable setup failed for %r: %s", name, exc)
-        return _maybe_wrap_otel(wrapped, name)
+        return _maybe_wrap_otel(fn, name)
 
     return decorator
