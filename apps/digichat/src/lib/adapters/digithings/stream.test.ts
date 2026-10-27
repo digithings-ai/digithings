@@ -677,6 +677,41 @@ it("relays llm_error detail for the embed disclosure", () => {
   });
 });
 
+// One case per code shape: the colon form (the live failure), the bare
+// underscore form (`art9_refused`, same module's refusal code), and a
+// hyphenated segment (`art9:health:field-name`, what the screen tests use).
+// All three are operator detail; none of them is copy.
+it.each(["art9:genetic:rs_id", "art9_refused", "art9:health:field-name"])(
+  "never relays the internal reason code %s as the user message",
+  (reason) => {
+    const payload = digigraphErrorToEmbedPayload({
+      code: "llm_error",
+      message: reason,
+      detail: reason,
+    });
+    expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+    expect(payload).not.toContain("art9");
+  },
+);
+
+it("drops a machine reason code in detail even when the message is human", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+    detail: "art9:genetic:rs_id",
+  });
+  expect(JSON.parse(payload)).toEqual({ error: "llm_error", message: "The model timed out." });
+  expect(payload).not.toContain("art9");
+});
+
+it("still relays a human sentence from upstream", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+  });
+  expect(JSON.parse(payload).message).toBe("The model timed out.");
+});
+
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
   const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
   const payload = digigraphErrorToEmbedPayload({
