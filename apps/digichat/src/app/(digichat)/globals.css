@@ -4,6 +4,9 @@
    variant, shadcn @theme, :root, .dark, @layer base. Byte-identical to the
    blocks this file and (baseline)/baseline.css used to duplicate. */
 @import "@digithings/ui/styles/digichat-app-theme.css";
+/* Site colour, type geometry and rails. Same sheet as digithings.ai.
+   site-chat.css (imported last) keeps framed embeds on the digichat theme. */
+@import "@digithings/design/tokens.css";
 
 /* Product stock CSS — mirrors (baseline)/baseline.css (Inter + registry Thread).
  * Does NOT import assistant-ui-cli, digichat-ui session/cursor, or terminal-loaders.
@@ -15,6 +18,7 @@
 @import "@digithings/ui/styles/chat-aui.css";
 @import "@digithings/ui/styles/chat-digichat.css";
 @import "@digithings/ui/styles/digichat-launcher.css";
+@import "../../styles/site-chat.css";
 
 
 

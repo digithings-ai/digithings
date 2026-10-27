@@ -78,6 +78,7 @@ describe("ThemeProvider", () => {
     });
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-palette");
+    document.documentElement.removeAttribute("data-theme-pin");
     media = installMedia(false);
   });
 
@@ -208,6 +209,40 @@ describe("ThemeProvider", () => {
     // An explicit choice is not undone by the OS changing.
     act(() => media.dispatch(false));
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("a storage event from another tab repaints mode and palette", () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    localStorage.setItem("dt-theme", "light");
+    localStorage.setItem("dt-palette", "nord");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "dt-theme" }));
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.getAttribute("data-palette")).toBe("nord");
+    expect(screen.getByTestId("theme").textContent).toBe("light");
+    expect(screen.getByTestId("pal").textContent).toBe("nord");
+  });
+
+  it("a pinned document ignores a storage event", () => {
+    document.documentElement.setAttribute("data-theme-pin", "1");
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("dt-theme", "light");
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "dt-theme" }));
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
   });
 
   it("an OS change repaints auto without writing storage", () => {

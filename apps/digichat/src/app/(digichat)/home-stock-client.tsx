@@ -19,6 +19,7 @@ import {
   ProductStockShell,
   buildProductRuntimeAdapters,
 } from "@/components/stock/product-shell";
+import { SiteRails } from "@/components/stock/site-rails";
 import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-sidebar";
 import {
   ArtifactsPanel,
@@ -253,6 +254,7 @@ function HomeStockClientSingle({
         data-chrome-mode={mode}
         data-persistence="none"
       >
+        <SiteRails mode={mode} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}
@@ -371,6 +373,7 @@ function HomeStockClientMemory({
         data-chrome-mode={mode}
         data-persistence="memory"
       >
+        <SiteRails mode={mode} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}

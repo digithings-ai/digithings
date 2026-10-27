@@ -13,7 +13,8 @@
  * A first-party parent also shares its `[data-palette]` on the same message.
  * The palette never paints the document on its own: `resolveEmbedPalette`
  * folds it into the one palette channel the embed already owns (visitor
- * pick > parent > default), so `data-palette` keeps a single writer.
+ * pick > parent message > `?palette=` > the site document > default), so
+ * `data-palette` keeps a single writer.
  */
 
 import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
@@ -181,28 +182,56 @@ export function embedThemePrefs(opts: {
   };
 }
 
-/** The mode an embed paints: pick > parent postMessage > `?theme=` > tenant (default dark). */
+/**
+ * The mode an embed paints: pick > parent postMessage > `?theme=` > the site
+ * document (top-level chat) > tenant (default dark).
+ */
 export function resolveEmbedTheme(sources: {
   pick: EmbedUserTheme | null;
   parent: EmbedTheme | null;
   url: EmbedTheme | null;
   tenant: string | null | undefined;
+  /** Painted site theme. Null on a pinned iframe. */
+  site?: EmbedTheme | null;
 }): EmbedTheme {
   return (
-    sources.pick?.mode ?? sources.parent ?? sources.url ?? (sources.tenant === "light" ? "light" : "dark")
+    sources.pick?.mode ??
+    sources.parent ??
+    sources.url ??
+    sources.site ??
+    (sources.tenant === "light" ? "light" : "dark")
   );
 }
 
 /**
- * The palette an embed paints: a visitor `/theme` pick > the parent's
- * `digichat:theme` palette > the default look. The embed's existing theme
- * effect is the only writer of `data-palette`.
+ * The palette an embed paints. Until a parent message arrives, `parent: null`
+ * means "no message yet" (`parentSeen` false) and the URL or the site
+ * document can still paint. A message that arrived without a palette
+ * (`parentSeen`) clears back to the default look.
  */
 export function resolveEmbedPalette(sources: {
   pick: EmbedUserTheme | null;
   parent: PaletteName | null;
+  parentSeen?: boolean;
+  url?: PaletteName | null;
+  site?: PaletteName | null;
 }): PaletteName {
-  return sources.pick?.palette ?? sources.parent ?? "default";
+  if (sources.pick) return sources.pick.palette;
+  if (sources.parent) return sources.parent;
+  if (sources.parentSeen) return "default";
+  if (sources.url) return sources.url;
+  if (sources.site) return sources.site;
+  return "default";
+}
+
+/** `?palette=` when it names the default or a registry id. Anything else is ignored. */
+export function parseEmbedPaletteParam(raw: string | null | undefined): PaletteName | null {
+  if (typeof raw !== "string") return null;
+  const id = raw.trim().toLowerCase();
+  if (!id) return null;
+  if (id === "default") return "default";
+  const normalized = normalizePalette(id);
+  return normalized === id ? normalized : null;
 }
 
 /** The stored pick as written (a stable string, for useSyncExternalStore). */

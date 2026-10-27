@@ -15,6 +15,15 @@ const READY = "digichat:ready";
 const SEED = "digichat:seed";
 /** Keep in sync with digichat `THEME_MESSAGE_TYPE` (`embed-theme-messages.ts`). */
 export const THEME = "digichat:theme";
+
+/**
+ * Pre-paint: the iframe ships `theme=light` and the real mode and palette
+ * are already on this document (`themeInitScript`). Rewrite `src` before the
+ * frame commits so the first embed request carries both. No request data is
+ * interpolated; the script reads the parent document.
+ */
+export const EMBED_FRAME_THEME_SCRIPT =
+  "try{var root=document.documentElement;var theme=root.getAttribute('data-theme')==='light'?'light':'dark';var palette=root.getAttribute('data-palette');var frame=document.getElementById('dc-digichat-frame');var src=frame&&frame.getAttribute('src');if(src){var url=new URL(src,window.location.href);var changed=false;if(url.searchParams.get('theme')!==theme){url.searchParams.set('theme',theme);changed=true}if(palette){if(url.searchParams.get('palette')!==palette){url.searchParams.set('palette',palette);changed=true}}else if(url.searchParams.has('palette')){url.searchParams.delete('palette');changed=true}if(changed)frame.setAttribute('src',url.toString())}}catch(e){}";
 /** Keep in sync with digichat `PARENT_ERROR_MESSAGE_TYPE`. */
 export const PARENT_ERROR = "digichat:parent-error";
 
@@ -743,8 +752,7 @@ export function ChatEmbedShell({
           // ran). Rewrite the iframe's src before its document commits so dark
           // readers never see the light frame. Inert after hydration.
           dangerouslySetInnerHTML={{
-            __html:
-              "try{var t=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';if(t==='dark'){var f=document.getElementById('dc-digichat-frame');var s=f&&f.getAttribute('src');if(s&&s.indexOf('theme=light')>-1){f.setAttribute('src',s.replace('theme=light','theme=dark'));}}}catch(e){}",
+            __html: EMBED_FRAME_THEME_SCRIPT,
           }}
         />
       ) : null}

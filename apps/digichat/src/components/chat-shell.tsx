@@ -34,6 +34,7 @@ import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
+import { SiteRails } from "@/components/stock/site-rails";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -454,6 +455,7 @@ export function ChatShell({
   if (!ready || !activeThread) {
     return (
       <div className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground">
+        <SiteRails mode={clientConfig?.chrome.mode ?? "app"} />
         Loading…
       </div>
     );
@@ -465,6 +467,7 @@ export function ChatShell({
       data-thread-skin={clientConfig?.chrome.skin}
       data-chrome-mode={clientConfig?.chrome.mode ?? "app"}
     >
+      <SiteRails mode={clientConfig?.chrome.mode ?? "app"} />
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
           <div>

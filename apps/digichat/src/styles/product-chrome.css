@@ -409,12 +409,10 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--term-ink);
 }
 
+/* Site canvas. site-chat.css repeats this at higher specificity so a named
+   palette and the light token both stay on var(--bg), not the terminal hex. */
 body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #08090b;
-}
-
-:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #f1f0eb;
+  background: var(--bg);
 }
 
 [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,

@@ -11,8 +11,10 @@
    specificity regardless of order; tw-animate-css stays before this sheet
    so these collapsible keyframes still win ties.
    No @source here — each app keeps its own scan roots.
-   Palette sheets are imported here because the product app does not load
-   tokens.css. Selectors require data-palette, so the default look is unchanged. */
+   Palette sheets are imported here. The product globals also load tokens.css
+   for the site canvas; site-chat.css keeps that sheet off framed embeds.
+   Selectors require data-palette, so a document with no palette is unchanged
+   by this import. */
 
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

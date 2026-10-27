@@ -1633,21 +1633,36 @@ Allowlisted attributes are presentation/a11y (`class`, `id`, `role`, `aria-*`,
 `href` with query/hash stripped). Inputs, textareas, and selects are dropped
 entirely so values cannot leak.
 
-**postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
-read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
-`dt-theme` localStorage), pin first paint with `?theme=light|dark` on the iframe
-URL, then post `{ type: "digichat:theme", theme, ts }` on `digichat:ready` and
-whenever the parent theme toggles — no iframe reload. The embed accepts theme
-messages from the same first-party allowlist as seed (`parseThemeMessage` in
-`src/lib/embed-theme-messages.ts`) and applies them via the existing
-`[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
-OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
-postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
+**Site theme and rails.** `/chat` (product, `chrome.mode: app`) and `/chat/occ`
+(top-level embed document) use `packages/design/tokens.css` — the same custom
+properties as digithings.ai — and the shared `LayoutLines` rails (`--frame-w`,
+`--page-pad`, `--hair-2`). `dt-theme` and `dt-palette` are painted by
+`themeInitScript` before first paint. A top-level embed with no `?theme=` does
+not pin, so that paint stays (`data-site-theme`). An iframe, or a URL that
+names `?theme=`, still pins. `?palette=` is adopted only when the id is in the
+palette registry. `ThemeProvider` repaints on a `storage` event so another tab
+stays in sync. Framed embeds (dashboard modal, customer hosts) do not mount
+rails and `site-chat.css` puts the digichat theme back, so their canvas is
+unchanged. The website iframe shell, where it still wraps a chat, copies
+`data-theme` and `data-palette` onto the frame `src` before the frame commits.
+
+**postMessage theme.** A parent that still iframes digichat (`ChatEmbedShell`)
+reads the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
+`dt-theme` localStorage), pin first paint with `?theme=` and `?palette=` on the
+iframe URL, then post `{ type: "digichat:theme", theme, ts, palette? }` on
+`digichat:ready` and whenever the parent theme toggles — no iframe reload. The
+embed accepts theme messages from the same first-party allowlist as seed
+(`parseThemeMessage` in `src/lib/embed-theme-messages.ts`) and applies them via
+the existing `[data-theme]` + `.dark`/`.light` path (MutationObserver still
+defends against OS/`ThemeProvider` overrides on a pinned document). Priority:
+visitor `/theme` pick > parent postMessage > URL `?theme=` > site document >
+tenant registry theme (`resolveEmbedTheme`).
 
 **postMessage palette.** The same message carries an optional `palette` field
 (an older parent that sends only `theme` still works). It is a *source*, not a
 second channel: `resolveEmbedPalette` folds it into the palette the embed
-already owns — visitor `/theme` pick > parent palette > default look — and the
+already owns — visitor `/theme` pick > parent palette > `?palette=` > site
+document > default look — and the
 embed's single theme effect is the only writer of `data-palette`
 (`applyEmbedPalette`, which also keeps `theme-color` in step). Decided this way
 because the obvious alternative, painting the parent's palette straight from
