@@ -8,8 +8,8 @@ import pages from "@/lib/book/generated/pages.json";
  * through an SVG, slice them into a PDF. It took twenty-one seconds, because
  * the cost is the raster itself and no capture setting changes that, and it
  * could produce a black file when the page was not in a paint-ready state.
- * `/book` is a light, still page, so one printed edition is the whole story: the
- * download is a file.
+ * One edition is printed, in the site's default theme: the download is a file,
+ * and the page around it follows whatever theme the reader is using.
  */
 type Edition = { theme: string; palette: string; file: string };
 

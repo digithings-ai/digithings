@@ -91,24 +91,6 @@ export default function BookLive({
     });
   }, [ready]);
 
-  // The layout sets the page light before paint; this only puts the reader's
-  // own choice back when they leave the book.
-  useEffect(() => {
-    const html = document.documentElement;
-    return () => {
-      try {
-        const theme = localStorage.getItem("dt-theme");
-        const palette = localStorage.getItem("dt-palette");
-        if (theme) html.setAttribute("data-theme", theme);
-        else html.setAttribute("data-theme", "dark");
-        if (palette) html.setAttribute("data-palette", palette);
-        else html.removeAttribute("data-palette");
-      } catch {
-        /* storage blocked: leave the page as it is */
-      }
-    };
-  }, []);
-
   // Fit the fixed-width pages into the column. The stage keeps its natural A4
   // width and is scaled visually, so the layout — and therefore the pagination
   // and the page numbers — never depend on the window.
