@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SupabaseConfigError,
   SupabaseError,
+  refreshTraceRow,
   resolveWorkspaceId,
   restRequest,
   supabaseConfig,
@@ -97,6 +98,35 @@ describe("resolveWorkspaceId", () => {
     );
     await expect(resolveWorkspaceId(ENV, "digithings")).rejects.toThrow(
       "PostgREST 500: boom (XX000)",
+    );
+  });
+});
+
+describe("refreshTraceRow", () => {
+  it("posts the two function parameters to the rpc, with the service role", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshTraceRow(ENV, "workspace-uuid", "0af7651916cd43dd8448eb211c80319c");
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://core.example.supabase.co/rest/v1/rpc/refresh_digitrace_trace");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      p_workspace_id: "workspace-uuid",
+      p_trace_id: "0af7651916cd43dd8448eb211c80319c",
+    });
+    const headers = init.headers as Headers;
+    expect(headers.get("authorization")).toBe("Bearer service-role-key");
+  });
+
+  it("throws with the PostgREST status, so the message retries instead of ignoring it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(404, { message: "function not found" })),
+    );
+    await expect(refreshTraceRow(ENV, "workspace-uuid", "trace-1")).rejects.toBeInstanceOf(
+      SupabaseError,
     );
   });
 });

@@ -171,6 +171,7 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("apps/digithings-stack-cloudflare/", "R5", "stack Worker + container"),
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
+    ("apps/digitrace-ingest/", "R5", "telemetry ingest Worker (platform)"),
     ("apps/digithings-cron/", "R5", "cron"),
     ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
     ("infra/digichat-release/", "R5", "release infra"),
@@ -345,11 +346,6 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/data/", "R0", "digiquant data dir (open)"),
     ("digiquant/config/", "R0", "digiquant config (open)"),
     ("apps/digichat/", "R0", "digichat engine (open)"),
-    # DIG-5762: #6523 added this app without a manifest rule, so every
-    # `manifest.py --check` (local-ci) went red on develop while the PR lane
-    # that would have said so did not run the gate. digitrace is the open
-    # tracing module; its ingest Worker ships with it.
-    ("apps/digitrace-ingest/", "R0", "digitrace OTLP ingest Worker (open tracing module, DIG-2657)"),
     ("apps/digiweb/", "R0", "reference app (open)"),
     ("packages/design/", "R0", "design tokens (open)"),
     ("packages/ui/", "R0", "shared UI (open)"),

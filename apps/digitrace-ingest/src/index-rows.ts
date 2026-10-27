@@ -26,11 +26,13 @@
  *   - `digitrace_scores` is not written here either. ADR-0036 §4/§8 put that
  *     write-back in MLflow.
  *
- * `digitrace_traces` is the other cross-batch aggregate, and it is safe only
- * because `chunkSpans` never splits a trace across messages: every row here is
- * computed from every span of its trace. A trace too large for one message is
- * named in that message's `incompleteTraces`, and the consumer writes no trace
- * row for it rather than a partial one that the next slice would replace.
+ * `digitrace_traces` is the other cross-batch aggregate. The row these
+ * functions build is the one this message can see, and `consumer.ts` treats it
+ * as the insert payload: after the spans are written it calls
+ * `refresh_digitrace_trace`, which recomputes `span_count`, the time range, the
+ * root name and the error status over **every** span of the trace. The row is
+ * therefore correct even when `chunkSpans` had to split a trace (the ids in
+ * `incompleteTraces`) or when the trace arrived across several OTLP requests.
  */
 import {
   attributesToObject,

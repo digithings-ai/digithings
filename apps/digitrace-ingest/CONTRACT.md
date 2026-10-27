@@ -151,38 +151,41 @@ Span **events** stay in the archive only: the index has no column for them.
 Conflict target: `workspace_id,trace_id`.
 
 The row is a **cross-span aggregate**, and a PostgREST upsert replaces it: the
-later message's row wins outright. So the chunker packs whole traces and never
-splits one, except when a single trace alone exceeds the 56 KiB message budget.
-Those trace ids travel in the message's `incompleteTraces`, and the consumer
-writes **no** trace row for them: a partial row (a smaller `span_count`, a
-duration that never happened, a `name` from a span that is not the root, an error
-status that flipped back to OK) would be worse than a missing one. The spans and
-the archive object are still complete.
+later message's row wins outright. Two things keep it true:
 
-Residual, and it is real: a trace exported across **several OTLP requests** (an
-SDK timer flushing mid-trace) still gets one row per request, and the last request
-replaces the earlier ones. The chunker cannot see across requests. Fixing it needs
-a merge RPC (`span_count + excluded`, `least(started_at)`,
-`greatest(ended_at)`, error status OR-ed, `name`/`attributes` only from a message
-that carries the root) or a derived job over `digitrace_spans_index`; both are
-core-side changes, and they are raised on DIG-2658/DIG-2661 rather than done here.
+1. `chunkSpans` packs whole traces, so a message boundary does not fall inside a
+   trace; a trace that alone exceeds the 56 KiB budget still crosses one and is
+   listed in the message's `incompleteTraces`.
+2. After the spans are written, the consumer calls
+   `rpc/refresh_digitrace_trace(p_workspace_id, p_trace_id)` for every trace in
+   the message. That function (migration 144) is **UPDATE-only**, so the insert
+   from this message is what creates the row; the call then recomputes
+   `span_count`, the time window, `duration_ms`, the root `name`, a sticky error
+   status and the first `session_id`/`run_id` over **every** row of
+   `digitrace_spans_index` for that trace.
+
+The second step is what makes a split trace and a trace exported across **several
+OTLP requests** converge: each slice inserts its spans, then recomputes from all
+of them, and the advisory lock inside the function serialises two slices that are
+in flight at once. The trade is one PostgREST `rpc` call per trace in a message
+(a message usually carries one trace per OTLP request).
 
 | Column                 | Source                                                                             |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `workspace_id`         | resolved                                                                           |
 | `source`               | the token's source — never the client's word                                       |
 | `trace_id`             | hex                                                                                |
-| `name`                 | the span with no parent, else the first in the batch                               |
+| `name`                 | the root span (`refresh_digitrace_trace`); the insert falls back to the first span |
 | `service_name`         | that span's resource `service.name`                                                |
-| `started_at`           | min start across the batch, **receive time when nothing carries one** (`NOT NULL`) |
-| `ended_at`             | max end across the batch                                                           |
+| `started_at`           | min start over the trace, **receive time when nothing carries one** (`NOT NULL`)   |
+| `ended_at`             | max end over the trace, `NULL` while any span of it is still open                  |
 | `duration_ms`          | end − start                                                                        |
 | `status`               | `STATUS_CODE_ERROR` when any span failed, else the root's                          |
 | `status_message`       | the first failed span's message (the root's when nothing failed)                   |
 | `session_id`, `run_id` | first correlation id found on the trace                                            |
 | `attributes`           | the root span's allowlisted attributes                                             |
 | `resource`             | the root resource's allowlisted attributes                                         |
-| `span_count`           | spans of this trace in the message (complete: a trace is never split)              |
+| `span_count`           | spans of the trace, from the recompute (the insert writes this message's count)    |
 
 ### `digitrace_sessions` — not written by this consumer
 
@@ -190,9 +193,11 @@ The table's `trace_count`, `span_count`, `total_tokens` and `total_cost_usd` are
 **cross-batch** aggregates, and a PostgREST upsert can only replace them: the
 second batch of a session would overwrite a larger count with a smaller one. There
 is no increment-through-REST, so the ingest path leaves the table alone rather
-than write numbers that silently shrink. Materialising it needs an RPC (an
-`ON CONFLICT DO UPDATE ... + excluded.count` function) or a derived job; that is
-the schema owner's and the dashboard leaf's call, and it is raised on DIG-2657.
+than write numbers that silently shrink. Migration 144 now ships
+`refresh_digitrace_session` for the same reason `refresh_digitrace_trace` exists
+for the trace row, and calling it from this consumer is a separate change: the
+session counters need the same insert-then-recompute treatment, and this ticket
+does not write the table.
 
 ### `digitrace_scores` — not written by this consumer
 
@@ -235,6 +240,9 @@ write that a retry cannot duplicate is the WAE spike on DIG-2661.
       source under `tok:<sha256 of the token>`.
 - [ ] Create the Analytics Engine dataset `digitrace_ingest`.
 - [ ] `wrangler secret put CORE_SUPABASE_SERVICE_KEY`.
+- [ ] Apply migration 144 to the `core` project **before** the first batch: the
+      consumer calls `rpc/refresh_digitrace_trace` for every trace. This is
+      DIG-2658's Chris step; the tables the consumer writes come from the same file.
 - [ ] Create the DNS record for `trace.digithings.ai`, uncomment the route in
       `wrangler.toml`, and approve the production deploy.
 
