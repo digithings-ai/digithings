@@ -5,9 +5,20 @@
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
 #   • pushes to `develop` without ALLOW_DEVELOP_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
+#   • pushes that introduce a secret, including a push made where gitleaks or
+#     .gitleaks.toml is unavailable (DIG-5722 — "we could not look" is a refusal)
 #
 # Warns, and never blocks (DIG-1579):
 #   • the branch being pushed is older than 10 days — see the policy pointer it prints
+#
+# Escaping the secret scan, in order of preference:
+#   1. install gitleaks (`brew install gitleaks`) — the scan then runs as below;
+#   2. `PRE_PUSH_SKIP_GITLEAKS=1` — skips the local secret scan for that push and
+#      prints the ref it did not scan. It exists for synthetic hook fixtures and
+#      for a machine that cannot install the binary. Nothing else scans the push:
+#      .github/workflows/security-gitleaks.yml covers pull requests and pushes to
+#      develop/main only, and the local forge has no scan yet (DIG-5722);
+#   3. `git push --no-verify` — genuine emergencies only (see below).
 #
 # Installed by `make hooks-install` (and by `make agents-init`), which installs
 # this file **as committed on origin/develop**, not your working copy — one hook
@@ -93,7 +104,7 @@ fi
 # after the loop. `while read` runs in this shell (git feeds stdin directly, no
 # pipeline), so `failed` survives the loop.
 failed=0
-gitleaks_missing_warned=0
+gitleaks_skip_noted=0
 
 # Read refs being pushed from stdin: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -249,14 +260,44 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 
   # ── gitleaks: refuse a push that introduces a secret ───────────────────────
-  # Same diff base as the live-trading scan above. CI scans too; this is the
-  # local guard, and it must fail closed when the base is unusable (the base
-  # check above already refused that case). Synthetic hook fixtures opt out.
+  # Same diff base as the live-trading scan above. This is the only scan a
+  # topic-branch push gets: .github/workflows/security-gitleaks.yml runs on pull
+  # requests and on pushes to develop/main, and the local forge has no scan at
+  # all (scripts/forgejo-gitleaks-woodpecker-step.yml is a template with no
+  # .woodpecker.yml behind it). So an unusable scanner is a refusal, not a
+  # warning — "we could not look" must never read as "we looked and it was clean",
+  # the same reason the base check above refuses.
+  #
+  # DIG-5722. Before this, a missing binary or config printed a line claiming
+  # "CI still scans" and let the push through, which silently disarmed the guard
+  # on exactly the machines where it was the only one. PRE_PUSH_SKIP_GITLEAKS=1
+  # is the documented escape (see the header) and it is loud: it names the ref it
+  # did not scan, so the bypass is discoverable in the operator's own output.
   gitleaks_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
   gitleaks_config="${gitleaks_root:+$gitleaks_root/.gitleaks.toml}"
   if [ "${PRE_PUSH_SKIP_GITLEAKS:-0}" = "1" ]; then
-    : # test fixtures build synthetic commits; the real guard stays below
-  elif command -v gitleaks >/dev/null 2>&1 && [ -n "$gitleaks_config" ] && [ -f "$gitleaks_config" ]; then
+    if [ "$gitleaks_skip_noted" -eq 0 ]; then
+      echo "pre-push: WARNING: secret scan skipped — PRE_PUSH_SKIP_GITLEAKS=1." >&2
+      echo "         '${branch_name:-$local_ref}' is not scanned for secrets before it leaves this machine." >&2
+      echo "         No other scan covers this push: GitHub gitleaks runs on pull" >&2
+      echo "         requests and develop/main pushes only, and the local forge has none." >&2
+      echo "         Use this for synthetic fixtures, not for a push you believe is clean." >&2
+      gitleaks_skip_noted=1
+    fi
+  elif ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-push: gitleaks not found — refusing to push '${branch_name:-$local_ref}' unscanned." >&2
+    echo "         Install it ('brew install gitleaks'; see SECURITY.md \"Secrets scanning\")" >&2
+    echo "         and retry, or set PRE_PUSH_SKIP_GITLEAKS=1 to skip the scan for this" >&2
+    echo "         push — that prints what it skips." >&2
+    failed=1
+    continue
+  elif [ -z "$gitleaks_config" ] || [ ! -f "$gitleaks_config" ]; then
+    echo "pre-push: .gitleaks.toml not found in '${gitleaks_root:-this checkout}' — refusing to push '${branch_name:-$local_ref}' unscanned." >&2
+    echo "         Run this hook from a checkout of the repo and retry, or set" >&2
+    echo "         PRE_PUSH_SKIP_GITLEAKS=1 to skip the scan for this push." >&2
+    failed=1
+    continue
+  else
     if ! gitleaks detect --source "$gitleaks_root" --config "$gitleaks_config" --redact --no-banner \
          --log-opts="$base..$local_sha" >/dev/null 2>&1; then
       echo "pre-push: gitleaks found a secret in $base..$local_sha — refusing to push." >&2
@@ -264,9 +305,6 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       failed=1
       continue
     fi
-  elif [ "$gitleaks_missing_warned" -eq 0 ]; then
-    echo "pre-push: gitleaks or .gitleaks.toml unavailable; skipping the local secret scan (CI still scans)." >&2
-    gitleaks_missing_warned=1
   fi
 
   # ── DIG-1589: duplicate-work guard (resume before create) ──────────────────

@@ -118,6 +118,15 @@ Every pull request and every push to `develop`/`main` runs
 - **Local reproduction.** `make secrets-scan` runs the same config against
   the working tree. Install gitleaks via `brew install gitleaks` or
   `go install github.com/gitleaks/gitleaks/v8@latest`.
+- **Local pre-push guard.** `make hooks-install` installs
+  `scripts/hooks/pre-push.sh`, which runs the same config over the commits a
+  push would add. When `gitleaks` or `.gitleaks.toml` is unavailable the hook
+  **refuses the push** instead of skipping the scan: the GitHub workflow covers
+  pull requests and `develop`/`main` pushes only, and the local forge has no
+  scanner yet, so a topic-branch push would otherwise leave unscanned
+  (DIG-5722). `PRE_PUSH_SKIP_GITLEAKS=1` skips the scan for one push and prints
+  the ref it did not scan — for synthetic fixtures and machines that cannot
+  install the binary, not for a push you believe is clean.
 - **Secret-list drift.** `make secrets-audit` matches every `secrets.*` read under
   `.github/` against each level a name can live at — repo secret, repo variable, org
   secret, environment secret — and reports `dead` (a repo secret nothing reads),
