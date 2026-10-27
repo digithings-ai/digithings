@@ -72,6 +72,11 @@ from digisearch.orchestrator_tools import (
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index, unseeded_indexes
+from digisearch.tenant_index_scope import (
+    enforce_request_indexes,
+    parse_index_list,
+    validate_index_name,
+)
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -382,6 +387,29 @@ def _normalize_mode(value: object) -> str:
     return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
+def _checked_index_field(value: object) -> object:
+    """Request-model guard: an ``index_name`` must be a comma list of plain names.
+
+    See :func:`digisearch.tenant_index_scope.validate_index_name`. A malformed
+    value is a validation error (422) before any handler or backend runs.
+    """
+    if isinstance(value, str):
+        parse_index_list(value)
+    return value
+
+
+def _checked_single_index_field(value: object) -> object:
+    """Write-model guard: an ingest writes to exactly one plain index name.
+
+    A comma list means "search these" on the read routes; on a write it would
+    name one index called ``a,b``, so it is refused here (422) along with
+    every malformed name (:func:`digisearch.tenant_index_scope.validate_index_name`).
+    """
+    if isinstance(value, str):
+        validate_index_name(value)
+    return value
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -459,6 +487,11 @@ class QueryRequest(BaseModel):
     def _normalize_query_mode(cls, value: object) -> str:
         return _normalize_mode(value)
 
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
+
 
 class QueryResponse(BaseModel):
     """Response for POST /query."""
@@ -494,6 +527,11 @@ class IngestRequest(BaseModel):
         default=None,
         description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
     )
+
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_single_index_field(value)
 
 
 class IngestResponse(BaseModel):
@@ -558,6 +596,11 @@ class ResearchTurnRequest(BaseModel):
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
         return _normalize_mode(value)
+
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
 
 
 @app.get("/health")
@@ -771,8 +814,10 @@ def run_query(req: QueryRequest) -> QueryResponse:
 
 
 @app.post("/query", response_model=QueryResponse)
-def api_query(req: QueryRequest) -> QueryResponse:
+def api_query(req: QueryRequest, request: Request) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
+    # A tenant-scoped index answers only its own verified tenant (DIG-3585).
+    enforce_request_indexes(request, req.index_name)
     try:
         return run_query(req)
     except CorpusNotSeededError as exc:
@@ -809,6 +854,15 @@ class OrchestratorInvokeRequest(BaseModel):
         default=None,
         description="Index when arguments omit index_name (hub workflow default).",
     )
+
+    @field_validator("default_index_name")
+    @classmethod
+    def _check_default_index_name(cls, value: object) -> object:
+        # An empty default means "not set" (the env default applies), as before;
+        # anything else, including a blank comma list, must be well formed.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _checked_index_field(value)
 
 
 class OrchestratorToolsResponse(BaseModel):
@@ -929,6 +983,19 @@ def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsRe
     return OrchestratorToolsResponse(tools=tools)
 
 
+def _digisearch_arg_index(args: dict[str, Any], default_index: str) -> str:
+    """The index an orchestrator tool call names, or ``default_index`` when it names none.
+
+    A missing or empty ``index_name`` argument takes the default; a non-string
+    one is a 400. The value is checked by :func:`enforce_request_indexes` (400
+    for a malformed name, 403 for another tenant's index) before it is used.
+    """
+    raw = args.get("index_name")
+    if raw is not None and not isinstance(raw, str):
+        raise HTTPException(status_code=400, detail="index_name must be a string")
+    return (raw or default_index or "default").strip() or "default"
+
+
 def _query_request_from_digisearch_args(
     args: dict[str, Any],
     *,
@@ -940,7 +1007,7 @@ def _query_request_from_digisearch_args(
     skip_rerank: bool = False,
 ) -> QueryRequest:
     qtext = str(args.get("query") or "").strip()
-    idx = (args.get("index_name") or default_index or "default").strip() or "default"
+    idx = _digisearch_arg_index(args, default_index)
     filt_raw = args.get("filter")
     filt = str(filt_raw).strip() if filt_raw else None
     filters = args.get("filters") if isinstance(args.get("filters"), list) else None
@@ -1162,8 +1229,15 @@ def _orchestrator_run_query(qreq: QueryRequest, tool: str) -> OrchestratorInvoke
 
 
 @app.post("/v1/orchestrator_invoke")
-def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
-    """Execute one digisearch orchestrator tool by name (hub dispatch)."""
+def api_orchestrator_invoke(
+    req: OrchestratorInvokeRequest, request: Request
+) -> OrchestratorInvokeResponse:
+    """Execute one digisearch orchestrator tool by name (hub dispatch).
+
+    Every corpus tool checks its resolved index against the caller's verified
+    tenant before it runs (DIG-3585): this is the path digigraph uses for a
+    tenant chat, so the tenant's own JWT is what opens its indexes.
+    """
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     default_idx = (
@@ -1173,6 +1247,9 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
     if tool == TOOL_DIGISEARCH:
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
+        # Checked before the request model is built, so a malformed name is a
+        # 400 here rather than a model validation error.
+        enforce_request_indexes(request, _digisearch_arg_index(args, default_idx))
         qreq = _query_request_from_digisearch_args(
             args,
             default_index=default_idx,
@@ -1191,7 +1268,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
         max_results = _resolve_fetch_all_max(requested_max)
         qtext = str(args.get("query") or "").strip()
-        idx = (args.get("index_name") or default_idx or "default").strip() or "default"
+        idx = _digisearch_arg_index(args, default_idx)
         mode = str(args.get("mode") or "hybrid")
         filt_raw = args.get("filter")
         filt = str(filt_raw).strip() if filt_raw else None
@@ -1200,6 +1277,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
         if not qtext:
             return OrchestratorInvokeResponse(ok=False, error="query is required")
+        enforce_request_indexes(request, idx)
         all_results: list[dict] = []
         skip = 0
         total_so_far = 0
@@ -1292,7 +1370,8 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         msg = str(args.get("user_message") or "").strip()
         if not msg:
             return OrchestratorInvokeResponse(ok=False, error="user_message is required")
-        idx = (args.get("index_name") or default_idx or "default").strip() or "default"
+        idx = _digisearch_arg_index(args, default_idx)
+        enforce_request_indexes(request, idx)
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         filt_raw = args.get("filter")
@@ -1481,8 +1560,9 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
 
 
 @app.post("/v1/research_turn", response_model=ResearchTurnOutput)
-def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
+def api_research_turn(req: ResearchTurnRequest, request: Request) -> ResearchTurnOutput:
     """Run one digisearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
+    enforce_request_indexes(request, req.index_name)
     try:
         from digisearch.agent.pipeline import run_research_turn
     except ImportError as e:
@@ -1649,10 +1729,19 @@ class IngestUrlRequest(BaseModel):
         description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
     )
 
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_single_index_field(value)
+
 
 @app.post("/ingest", response_model=IngestResponse)
-def api_ingest(req: IngestRequest) -> IngestResponse:
+def api_ingest(req: IngestRequest, request: Request) -> IngestResponse:
     """Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`."""
+    # A tenant-scoped index takes writes only from its own verified tenant,
+    # exactly as /query serves reads (DIG-3585): a house or other-tenant
+    # caller cannot write into a tenant's corpus. Checked before any fetch.
+    enforce_request_indexes(request, req.index_name)
     try:
         result = ingest_source(
             req.source,
@@ -1671,8 +1760,10 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
 
 
 @app.post("/ingest/url", response_model=UrlIngestResult)
-def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
+def api_ingest_url(req: IngestUrlRequest, request: Request) -> UrlIngestResult:
     """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
+    # Same tenant-index check as /ingest, before the URL is fetched.
+    enforce_request_indexes(request, req.index_name)
     try:
         return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
     except ImportError as exc:

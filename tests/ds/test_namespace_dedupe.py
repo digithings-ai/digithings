@@ -202,7 +202,7 @@ def test_run_query_collapses_file_shape_twins_end_to_end(
 
     from tests.digi_test_jwt import auth_headers
 
-    idx = "__unit_test_ns_file_twins__"
+    idx = "unit_test_ns_file_twins"
     body = "Zephyrian file-shape twin body shared by both namespaces."
     add_chunks(
         idx,
@@ -255,7 +255,7 @@ def test_run_query_collapses_twins_end_to_end(monkeypatch: pytest.MonkeyPatch) -
 
     from tests.digi_test_jwt import auth_headers
 
-    idx = "__unit_test_ns_twins__"
+    idx = "unit_test_ns_twins"
     body = "Guide purpose body shared by both namespaces."
     add_chunks(
         idx,
