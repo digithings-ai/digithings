@@ -13,6 +13,7 @@ import sqlite3
 from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from pydantic import ValidationError
 
 from digisearch.client import SURFACE_MCP, require_art9_clear
@@ -23,8 +24,18 @@ from digisearch.logging import configure_logging
 from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
 from digisearch.monitors.validation import watch_config_error
+from digisearch.research_ingest import RESEARCH_INDEX_NAME
 from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
+from digisearch.tenant_index_scope import (
+    IndexNotPermitted,
+    TenantIndexMapError,
+    check_indexes,
+    load_scoped_indexes,
+    normalize_index,
+    split_indexes,
+    verified_tenant_from_bearer,
+)
 from digisearch.web_search.models import summarize_validation_error
 from digisearch.websets import service as websets_service
 from digisearch.websets.driver import webset_task_lifespan
@@ -44,6 +55,57 @@ mcp = FastMCP(
 )
 
 DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
+
+
+def _mcp_authorization_header() -> str | None:
+    """The ``Authorization`` header of the HTTP request carrying this tool call.
+
+    ``None`` outside an HTTP transport (stdio, an in-process ``call_tool``) or on
+    an SDK that does not expose the request: the caller then has no verified
+    tenant, which refuses every tenant-scoped index (fail closed).
+    """
+    try:
+        request = mcp.get_context().request_context.request
+    except Exception:
+        return None
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+    return headers.get("authorization")
+
+
+def _enforce_mcp_index(index_name: str | None) -> None:
+    """Refuse a tenant-scoped index unless the caller's verified tenant owns it (DIG-3585).
+
+    The MCP server has no auth middleware. The stack edge verifies the caller
+    (a digikey JWT with ``mcp:digisearch``, or the static edge key) and forwards
+    the request unchanged, so the tenant is read here from the signature-checked
+    bearer itself. The static key carries no tenant and never opens a
+    tenant-scoped index. The bearer is only verified when a scoped index is
+    actually named, so public-index calls cost nothing extra.
+    """
+    names = split_indexes(index_name)
+    try:
+        scoped = load_scoped_indexes()
+    except TenantIndexMapError as exc:
+        logger.error("tenant index scope unavailable: %s", exc)
+        raise ToolError("tenant index scope is misconfigured") from exc
+    if not any(normalize_index(n) in scoped for n in names):
+        return
+    tenant = verified_tenant_from_bearer(_mcp_authorization_header())
+    try:
+        check_indexes(names, tenant)
+    except IndexNotPermitted as exc:
+        logger.warning(
+            "tenant index refused on MCP",
+            extra={
+                "operation": "tenant_index_scope",
+                "outcome": "refused",
+                "index_name": exc.index_name,
+            },
+        )
+        raise ToolError(f"index {exc.index_name!r} is not available to this caller") from exc
+
 
 _digisearch_client: Any | None = None
 
@@ -76,6 +138,7 @@ def semantic(
     strategy docs, compliance docs, etc.). Supports keyword, vector, and hybrid search.
     """
     idx = index_name or DIGISEARCH_INDEX or "default"
+    _enforce_mcp_index(idx)
     q = Query(text=text, top_k=top_k, mode=mode)
     if _digisearch_client is not None:
         try:
@@ -222,6 +285,7 @@ def search_strategies(
     ``{chunk_id, doc_id, content, content_length, score, metadata}``. Empty
     list when nothing matches.
     """
+    _enforce_mcp_index(index_name or RESEARCH_INDEX_NAME or "research")
     return _search_strategies_impl(
         query=query,
         top_k=top_k,
@@ -255,9 +319,11 @@ try:
         ``source`` defaults to ``corpus``; pass ``web`` or ``auto`` to run the
         OSS web branch (``effort``: fast | thorough).
         """
+        idx = index_name or DIGISEARCH_INDEX or "default"
+        _enforce_mcp_index(idx)
         payload = {
             "user_message": user_message,
-            "index_name": index_name or DIGISEARCH_INDEX or "default",
+            "index_name": idx,
             "top_k": top_k,
             "mode": mode,
             "workspace_id": workspace_id,

@@ -72,6 +72,7 @@ from digisearch.orchestrator_tools import (
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index, unseeded_indexes
+from digisearch.tenant_index_scope import enforce_request_indexes
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -771,8 +772,10 @@ def run_query(req: QueryRequest) -> QueryResponse:
 
 
 @app.post("/query", response_model=QueryResponse)
-def api_query(req: QueryRequest) -> QueryResponse:
+def api_query(req: QueryRequest, request: Request) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
+    # A tenant-scoped index answers only its own verified tenant (DIG-3585).
+    enforce_request_indexes(request, req.index_name)
     try:
         return run_query(req)
     except CorpusNotSeededError as exc:
@@ -1162,8 +1165,15 @@ def _orchestrator_run_query(qreq: QueryRequest, tool: str) -> OrchestratorInvoke
 
 
 @app.post("/v1/orchestrator_invoke")
-def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
-    """Execute one digisearch orchestrator tool by name (hub dispatch)."""
+def api_orchestrator_invoke(
+    req: OrchestratorInvokeRequest, request: Request
+) -> OrchestratorInvokeResponse:
+    """Execute one digisearch orchestrator tool by name (hub dispatch).
+
+    Every corpus tool checks its resolved index against the caller's verified
+    tenant before it runs (DIG-3585): this is the path digigraph uses for a
+    tenant chat, so the tenant's own JWT is what opens its indexes.
+    """
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     default_idx = (
@@ -1183,6 +1193,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         )
         if not qreq.text.strip():
             return OrchestratorInvokeResponse(ok=False, error="query is required")
+        enforce_request_indexes(request, qreq.index_name)
         return _orchestrator_run_query(qreq, tool)
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
@@ -1200,6 +1211,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
         if not qtext:
             return OrchestratorInvokeResponse(ok=False, error="query is required")
+        enforce_request_indexes(request, idx)
         all_results: list[dict] = []
         skip = 0
         total_so_far = 0
@@ -1293,6 +1305,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         if not msg:
             return OrchestratorInvokeResponse(ok=False, error="user_message is required")
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
+        enforce_request_indexes(request, idx)
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         filt_raw = args.get("filter")
@@ -1481,8 +1494,9 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
 
 
 @app.post("/v1/research_turn", response_model=ResearchTurnOutput)
-def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
+def api_research_turn(req: ResearchTurnRequest, request: Request) -> ResearchTurnOutput:
     """Run one digisearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
+    enforce_request_indexes(request, req.index_name)
     try:
         from digisearch.agent.pipeline import run_research_turn
     except ImportError as e:
