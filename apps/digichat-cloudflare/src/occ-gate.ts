@@ -1,4 +1,5 @@
 import { CONTAINER_BASE_PATH } from "./base-path";
+import { constantTimeEqual } from "./constant-time";
 
 /**
  * DIG-1210 / DIG-3585: /chat/occ is invite-only. It is the app's own embed
@@ -28,15 +29,10 @@ export function isOccShellPath(pathname: string): boolean {
   return pathname === "/chat/occ" || pathname.startsWith("/chat/occ/");
 }
 
-/** Constant-time string compare (length leak only). */
+/** Constant-time string compare (length leak only); false when either side is empty. */
 export function inviteTokenValid(given: string | null, expected: string | undefined): boolean {
   if (!given || !expected) return false;
-  const a = new TextEncoder().encode(given);
-  const b = new TextEncoder().encode(expected);
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
-  return diff === 0;
+  return constantTimeEqual(given, expected);
 }
 
 /** Session cookie set once a valid invite link is opened (DIG-1437). */

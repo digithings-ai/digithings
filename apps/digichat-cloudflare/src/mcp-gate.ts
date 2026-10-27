@@ -13,6 +13,7 @@
  * the Worker's source cannot tell a fail-closed gate from a fail-open one:
  * both read the same way, and only the answer does.
  */
+import { constantTimeEqual } from "./constant-time";
 import { containerLocalMcpPath } from "./paths";
 
 /** The header the client sends the edge key in. */
@@ -30,9 +31,9 @@ export type McpGate =
  * The gate's verdict for one request.
  *
  * Fail-closed, in every direction: an unset expected key, a missing provided
- * key, and a mismatch are all "unauthorized". Only an exact match opens the
- * endpoint. An unset expected key is a configuration fault, and it closes the
- * endpoint rather than opening it.
+ * key, and a mismatch are all "unauthorized". Only an exact match, compared in
+ * constant time, opens the endpoint. An unset expected key is a configuration
+ * fault, and it closes the endpoint rather than opening it.
  */
 export function evaluateMcpGate(
   pathname: string,
@@ -42,6 +43,8 @@ export function evaluateMcpGate(
   if (containerLocalMcpPath(pathname) === null) return { kind: "not-mcp" };
   const expected = (expectedKey ?? "").trim();
   const provided = (providedKey ?? "").trim();
-  if (!expected || !provided || provided !== expected) return { kind: "unauthorized" };
+  if (!expected || !provided || !constantTimeEqual(provided, expected)) {
+    return { kind: "unauthorized" };
+  }
   return { kind: "authorized" };
 }

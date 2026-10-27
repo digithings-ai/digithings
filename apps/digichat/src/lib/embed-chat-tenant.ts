@@ -1,3 +1,4 @@
+import { constantTimeEqual } from "@/lib/constant-time-equal";
 import type { ChatTenantContext } from "@/lib/chat-route-context";
 import {
   DEFAULT_EMBED_TENANT_CONFIG,
@@ -75,7 +76,7 @@ export function isEmbedAllowed(req: Request): boolean {
   if (isLegacyEmbedEnabled()) return true;
   const token = req.headers.get("x-embed-token")?.trim();
   const expected = process.env.DIGICHAT_EMBED_TOKEN?.trim();
-  return Boolean(expected && token === expected);
+  return Boolean(expected && token && constantTimeEqual(token, expected));
 }
 
 /** True when the request targets the unauthenticated /embed chat surface. */
@@ -84,11 +85,14 @@ export function isEmbedChatRequest(req: Request): boolean {
   return Boolean(embedHost || isEmbedReferer(req));
 }
 
-/** Token match for a tenant whose registry entry carries a non-empty secret. */
+/**
+ * Token match for a tenant whose registry entry carries a non-empty secret.
+ * Constant time: the comparison never stops at the first differing byte.
+ */
 export function tokenMatches(required: string, token: string | null | undefined): boolean {
   const expected = required.trim();
   const presented = token?.trim();
-  return Boolean(expected && presented && presented === expected);
+  return Boolean(expected && presented && constantTimeEqual(presented, expected));
 }
 
 /**
