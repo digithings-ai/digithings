@@ -2,10 +2,12 @@
 """Unit tests for the local-ci memory gate parsers (DIG-3783). Stdlib only:
 `/usr/bin/python3 -m unittest test_local_ci -v`."""
 import ast
+import contextlib
 import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -150,6 +152,86 @@ class GateParserTest(unittest.TestCase):
         self.assertEqual(_mod.SKIP_PREFIX, "local-ci skipped:")
 
 
+class InstallPreflightTest(unittest.TestCase):
+    """DIG-5585: a tick never starts on an install that is missing a module.
+
+    The runner's helpers are optional imports bound to None and fail closed,
+    so a helper that was never copied in produced a false verdict on every PR
+    (eight red `review-applied` rows on 24 Oct) instead of stopping the tick.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._saved_log = _mod.log
+        self.log_lines = []
+        _mod.log = self.log_lines.append
+        self.checkout = os.path.join(self.tmp, "checkout")
+        runner_dir = os.path.join(self.checkout, "scripts", "local-ci")
+        os.makedirs(runner_dir)
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name), os.path.join(runner_dir, name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        self.runner = os.path.join(runner_dir, "local_ci.py")
+
+    def tearDown(self):
+        _mod.log = self._saved_log
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _refuse(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as caught:
+                _mod._require_install(self.runner)
+        return caught.exception.code, err.getvalue()
+
+    def test_a_checkout_missing_a_shared_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78, "an incomplete install is EX_CONFIG, like a refused run")
+        self.assertIn("review_pass_filter", err)
+        self.assertIn("refusing to tick", err)
+        self.assertTrue(
+            any("review_pass_filter" in line for line in self.log_lines),
+            "the refusal must reach the runner's log, not only stderr")
+
+    def test_a_checkout_missing_a_runner_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "local-ci", "review_applied.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78)
+        self.assertIn("review_applied", err)
+
+    def test_a_complete_checkout_starts(self):
+        _mod._require_install(self.runner)  # no SystemExit
+
+    def test_every_entry_point_that_asks_the_guard_asks_the_install_check(self):
+        """The post-merge driver never goes through main(); it still gets checked."""
+
+        class _Broken:
+            @staticmethod
+            def check(runner_path):
+                return [{"module": "review_pass_filter",
+                         "importer": "review_applied.py", "why": "not there"}]
+
+            @staticmethod
+            def report(problems, runner_path):
+                return ["local-ci: missing module review_pass_filter"]
+
+        saved_module = _mod.import_preflight
+        saved_checked = _mod._INSTALL_CHECKED
+        _mod.import_preflight = _Broken
+        _mod._INSTALL_CHECKED = False
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as caught:
+                    _mod._guard()
+        finally:
+            _mod.import_preflight = saved_module
+            _mod._INSTALL_CHECKED = saved_checked
+        self.assertEqual(caught.exception.code, 78)
+        self.assertIn("review_pass_filter", err.getvalue())
 
 
 class WorkerGateTest(unittest.TestCase):
@@ -2654,6 +2736,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         os.makedirs(_mod.LOGD, exist_ok=True)
         self.rows = {}      # sha -> list of status rows
         self.posts = []     # (sha, state, description)
+        self.body = "Fixes DIG-5695\n<!-- test body -->\n"
+        self.bodies = {}    # pr number -> body, when a test needs its own
         _mod.gh = self._fake_gh
 
     def tearDown(self):
@@ -2674,6 +2758,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         if url:
             sha = url[0].split("/commits/")[1].split("/statuses")[0]
             return json.dumps(self.rows.get(sha, []))
+        if argv[:2] == ["pr", "view"]:
+            return self.bodies.get(argv[2], self.body)
         return "[]"
 
     def _row(self, state, desc, age_secs=0):
@@ -2687,6 +2773,11 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 "baseRefName": "develop", "title": "fix(x): something",
                 "isCrossRepository": False, "updatedAt": updated,
                 "createdAt": created or updated}
+
+    def _stamp(self, offset_secs=0):
+        """An ISO timestamp `offset_secs` from now, the shape GitHub returns."""
+        ts = datetime.now(timezone.utc) + timedelta(seconds=offset_secs)
+        return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _dead_pid(self):
         """A pid that is certainly gone: a process we started and reaped."""
@@ -2758,7 +2849,131 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         pr = self._pr()
         self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)")]
         self.assertEqual(_mod.pending([pr], False), [],
-                         "a red verdict is the head's own answer")
+                         "a red verdict the pull request has not outlived is the head's own answer")
+
+    # --- metadata-only failures (DIG-5695) ---------------------------------
+
+    def _judge(self, sha, revision):
+        """Record a metadata revision the way a verdict does."""
+        with open(os.path.join(_mod.LOGD, f"metadata-recheck-{sha}"), "w") as f:
+            f.write(revision + "\n")
+
+    def test_a_metadata_failure_re_queues_when_the_title_or_body_was_fixed(self):
+        """The remedy for a metadata gate does not touch the tree (PR #6513).
+
+        The author corrected the title and the body after the row went out, so
+        the same head is worth one more look. No commit, and no review becomes
+        stale for it.
+        """
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-title, pr-template (1m)", age_secs=300)]
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a corrected title or body must re-check the same head")
+
+    def test_the_judged_metadata_is_not_re_queued_again(self):
+        """One re-check per change, not one per tick."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "the metadata already judged must not queue the head again")
+
+    def test_a_metadata_edit_after_the_judged_revision_re_queues(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-template (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], "0000000000000000")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a revision the gates have not judged is worth a look")
+
+    def test_the_revision_covers_the_body_and_the_title(self):
+        """The digest must tell a corrected title or body from the same one.
+
+        This is the part the rule turns on: a digest that ignores the body does
+        not re-queue the `pr-template` fix, and a constant digest never re-queues
+        anything after the first verdict. Both are asserted here directly, so a
+        later edit to `metadata_revision` cannot quietly take either shape.
+        """
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "body one"),
+                            _mod.metadata_revision("fix(x): a", "body two"),
+                            "the digest must change with the body")
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "same"),
+                            _mod.metadata_revision("fix(y): b", "same"),
+                            "the digest must change with the title")
+
+    def test_a_body_only_correction_re_queues_a_judged_head(self):
+        """The body is the remedy for `pr-template` (PR #6513): it must re-queue."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template (1m)", age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.bodies[str(pr["number"])] = (
+            self.body + "\n## Testing Evidence\n```\nfixed\n```\n")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a body-only correction must re-check the same head")
+
+    def test_a_title_only_correction_re_queues_a_judged_head(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        pr["title"] = "fix(x): the corrected title"
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a title-only correction must re-check the same head")
+
+    def test_a_metadata_failure_the_pull_request_has_not_outlived_is_left_alone(self):
+        """No recorded revision and no edit after the row: nothing to re-check."""
+        pr = self._pr(updated=self._stamp(-600))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=60)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a row younger than every edit is the head's own answer")
+
+    def test_a_code_failure_is_never_re_queued(self):
+        """A code gate's remedy is a commit, so its row stays terminal."""
+        pr = self._pr(updated=self._stamp(-60))
+        for desc in ("local-ci failed: ruff (1m)",
+                     "local-ci failed: pr-title, ruff (1m)",
+                     "local-ci failed: pr-template, bun:digichat-tui (1m)"):
+            self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+            self.assertEqual(_mod.pending([pr], False), [],
+                             f"a code failure must stay terminal: {desc!r}")
+
+    def test_a_missing_pr_template_checker_is_not_a_metadata_failure(self):
+        """A runner defect must not buy a lane on every metadata edit."""
+        pr = self._pr(updated=self._stamp(-60))
+        desc = "local-ci failed: pr-template:checker-missing (0m)"
+        self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+        self.assertIsNone(_mod.metadata_failure_gates(desc))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a missing checker module is not author metadata")
+
+    def test_a_stalled_metadata_gate_is_not_re_queued(self):
+        """A stall names no plain gate: it is a code verdict about the runner."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template exceeded 1800s and was killed (30m)",
+                      age_secs=300)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a stall must not be mistaken for a metadata failure")
+
+    def test_a_metadata_verdict_records_the_revision_the_gates_judged(self):
+        """The queue must be able to tell a fixed title or body from the same one."""
+        pr = self._pr()
+        self._run_process(pr, fails=["pr-title"], revision="0123456789abcdef")
+        path = os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")
+        with open(path) as f:
+            self.assertEqual(f.read().strip(), "0123456789abcdef",
+                             "the verdict must record the metadata it judged")
+
+    def test_a_code_verdict_records_no_metadata_revision(self):
+        pr = self._pr()
+        self._run_process(pr, fails=["ruff"], revision="0123456789abcdef")
+        self.assertFalse(os.path.exists(
+            os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")),
+            "a code verdict is terminal and must record no metadata revision")
 
     def test_a_head_with_no_row_at_all_is_queued(self):
         pr = self._pr()
@@ -2785,7 +3000,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
 
     # --- the runner takes and releases the claim ----------------------------
 
-    def _run_process(self, pr, verdict_posts=True):
+    def _run_process(self, pr, verdict_posts=True, fails=(), revision=None):
         """Run process() with the gates stubbed out; record what was posted."""
         self.posts = []
         seen = {}
@@ -2798,9 +3013,14 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 return False
             return True
 
+        def fake_run_checks(pr, out, summary=None):
+            if summary is not None and revision is not None:
+                summary["metadata_revision"] = revision
+            return list(fails)
+
         _mod.status = fake_status
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out, summary=None: []
+        _mod.run_checks = fake_run_checks
         _mod.process(pr, False)
         return seen
 
@@ -3605,3 +3825,140 @@ class WorktreeRootGuardTest(unittest.TestCase):
         finally:
             _mod.sh = saved
         self.assertEqual(seen, [tmp], "a step with no cwd must run in the worktree root")
+
+class StepBudgetTest(unittest.TestCase):
+    """Every gate step has a wall-clock ceiling of its own (2026-10-26).
+
+    The evidence was in the runner's own logs: a check that measures 10 s alone
+    had the tick recorded at 32 m and 44 m, while every step idle together took
+    99.6 s. The cost was a step hanging and the runner waiting on it, so the
+    ceiling is per step and the kill takes the whole process group. A red check
+    keeps its plain name: only an overrun is reported as an overrun.
+    """
+
+    def setUp(self):
+        self.out = io.StringIO()
+        self.fails = []
+
+    def _step_seconds(self, text):
+        """The duration the runner measured, read back from the log line."""
+        m = re.search(r"^step=(\S+) seconds=([\d.]+) rc=(-?\d+)", text, re.M)
+        self.assertIsNotNone(m, f"no `step=... seconds=... rc=...` line in:\n{text}")
+        return m.group(1), float(m.group(2)), int(m.group(3))
+
+    def test_a_step_that_overruns_its_budget_is_killed_and_named(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1)
+        took = time.monotonic() - started
+        self.assertFalse(ok)
+        self.assertLess(took, 20, "the step must be killed at its budget, not waited on")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        text = self.out.getvalue()
+        self.assertIn("scripts/check_slow.py exceeded 1s and was killed", text)
+        self.assertIn("[rc=124]", text, "the existing [rc=...] block must stay")
+        name, seconds, rc = self._step_seconds(text)
+        self.assertEqual((name, rc), ("scripts/check_slow.py", 124))
+        self.assertLess(seconds, 20, "the duration must be the measured one, not the budget")
+
+    def test_the_tick_moves_on_to_the_next_step(self):
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        ok = _mod.run_step("quick", ["/usr/bin/true"], 60, self.out, self.fails, budget=60)
+        self.assertTrue(ok)
+        self.assertEqual(self.fails, ["hung exceeded 1s and was killed"],
+                         "the next step must run and must not inherit the failure")
+        self.assertIn("step=quick seconds=", self.out.getvalue())
+
+    def test_a_step_under_its_budget_is_untouched(self):
+        ok = _mod.run_step("quick", ["/bin/sh", "-c", "sleep 0.2; exit 0"], 60,
+                           self.out, self.fails)
+        self.assertTrue(ok, "a healthy step must not be touched by the watchdog")
+        self.assertEqual(self.fails, [])
+        name, seconds, rc = self._step_seconds(self.out.getvalue())
+        self.assertEqual((name, rc), ("quick", 0))
+        self.assertGreaterEqual(seconds, 0.2, "the measured time must be reported")
+        self.assertNotIn("exceeded", self.out.getvalue())
+
+    def test_a_genuine_failure_still_reads_as_a_failure(self):
+        ok = _mod.run_step("ruff", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        self.assertFalse(ok)
+        self.assertEqual(self.fails, ["ruff"],
+                         "a red check is still named plainly, not called a stall")
+        self.assertNotIn("exceeded", self.out.getvalue())
+        self.assertNotIn("was killed", self.out.getvalue())
+
+    def test_a_stalled_step_is_not_retried_into_a_second_window(self):
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_slow.py"), 1,
+                         "a step killed for overrunning must not get a second window")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        self.assertIn("step=scripts/check_slow.py seconds=", text)
+
+    def test_the_retry_cap_is_enforced(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_guard.py", ["/bin/sh", "-c", "exit 3"], 60,
+                           self.out, self.fails, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_guard.py"), _mod.RETRY_CAP,
+                         "the attempt cap must be the only bound on the retry loop")
+        self.assertIn(f"attempts={_mod.RETRY_CAP}/{_mod.RETRY_CAP}", text,
+                      "the log must say how many attempts ran")
+        self.assertEqual(self.fails, ["scripts/check_guard.py:stall"])
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_the_duration_line_is_emitted_for_every_step_including_failures(self):
+        _mod.run_step("green", ["/usr/bin/true"], 60, self.out, self.fails)
+        _mod.run_step("red", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        lines = [ln for ln in self.out.getvalue().splitlines() if ln.startswith("step=")]
+        self.assertEqual([ln.split()[0] for ln in lines],
+                         ["step=green", "step=red", "step=hung"],
+                         "one duration line per step, in the order the steps ran")
+        self.assertEqual([ln.rsplit("rc=", 1)[1] for ln in lines], ["0", "1", "124"])
+
+    def test_the_kill_takes_the_whole_process_group_down(self):
+        """A hung step is a tree: the shell that hung and the grandchild it left."""
+        tmp = tempfile.mkdtemp(prefix="local-ci-kill-")
+        pidfile = os.path.join(tmp, "grandchild.pid")
+        try:
+            cmd = ["/bin/sh", "-c", f"sleep 60 & echo $! > {pidfile}; wait"]
+            _mod.run_step("hung-tree", cmd, 60, self.out, self.fails, budget=1)
+            with open(pidfile) as f:
+                grandchild = int(f.read().strip())
+            deadline = time.monotonic() + 2
+            while _mod.pid_alive(grandchild) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(_mod.pid_alive(grandchild),
+                             "a grandchild must not survive the step's budget")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_default_budget_and_the_per_step_overrides(self):
+        self.assertEqual(_mod.STEP_BUDGET, 180)
+        for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
+            self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
+                               f"{heavy} legitimately needs more than the default")
+        for light in ("scripts/check_doc_links.py", "actionlint"):
+            self.assertNotIn(light, _mod.STEP_BUDGETS,
+                             f"{light} is measured in seconds; it takes the default")
+
+    def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
+        self.assertEqual(_mod.step_budget("scripts/check_doc_links.py", 600), 180)
+        self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
+        self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
+        self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
+                         "a tighter caller ceiling still wins")
+        self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+
+    def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
+        """A step that bypasses run_step has no budget, so the gate cannot
+        prevent the next 44 m tick."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertIn("return run_step(", src)
+        self.assertEqual(src.count("sh("), 0,
+                         "run_checks must not call sh directly: every step takes a budget")

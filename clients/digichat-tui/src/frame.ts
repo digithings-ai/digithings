@@ -13,43 +13,52 @@
  * It does not re-export the record — a second export surface is how the copies
  * drifted before.
  *
- * The client paints a left rail (the session list) and the chat thread to its
- * right (src/app.tsx:397,470,484). The rail is `min(28, max(18, floor(width *
- * 0.28)))` columns wide and its right border sits in the last rail column, so
- * the thread starts at column `rail`. The app paints that width through
- * `railColumns()` below, so the crop and the paint cannot disagree.
+ * The client paints the wordmark banner at the top of the screen (full width)
+ * and below it a left rail with the session list, with the chat thread to
+ * the rail's right (src/app.tsx). The recorded frame is the chat pane: the
+ * banner rows are dropped and the rail columns are cropped away. The rail
+ * width and the banner height come from src/layout.ts, the same module the
+ * client itself uses, so the crop cannot drift from the screen.
  */
 
 import type { CroppedFrame } from "../../../packages/tui-frame/src/record.ts";
+
+import { railColumns, WORDMARK_ROWS } from "./layout";
+
+export { railColumns, WORDMARK_ROWS };
 
 export const TUI_SOURCE = "digichat-tui";
 
 export const DEFAULT_FRAME_WIDTH = 100;
 export const DEFAULT_FRAME_HEIGHT = 40;
 
-/** The rail width in columns — the same rule the app uses (src/app.tsx:397). */
-export function railColumns(width: number): number {
-  return Math.min(28, Math.max(18, Math.floor(width * 0.28)));
-}
-
 /**
- * Crop a captured frame to the main chat pane: drop the rail columns, strip
- * the trailing spaces each row leaves behind and drop the trailing empty rows.
+ * Crop a captured frame to the chat pane: drop the wordmark rows, drop the
+ * rail columns, strip the trailing spaces each row leaves behind and drop the
+ * trailing empty rows.
  */
-export function cropMainPane(
+export function cropChatPane(
   captured: string,
-  options?: { railCols?: number },
+  options?: { railCols?: number; headerRows?: number },
 ): CroppedFrame {
   const railCols = options?.railCols ?? 0;
+  const headerRows = options?.headerRows ?? 0;
   const kept = captured
     .split("\n")
-    .map((row) => row.slice(railCols).replace(/\s+$/, ""));
+    .slice(headerRows)
+    .map((row) => {
+      const sliced = row.length >= railCols ? row.slice(railCols) : row;
+      return sliced.replace(/\s+$/, "");
+    });
   while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
   const width = kept.reduce((widest, row) => Math.max(widest, row.length), 0);
   if (kept.length === 0 || width === 0) {
     throw new Error(
-      `the main chat pane crop is empty (${kept.length} rows, ${width} columns)`,
+      `the chat pane crop is empty (${kept.length} rows, ${width} columns)`,
     );
   }
   return { frame: kept.join("\n"), width, height: kept.length };
 }
+
+/** Backwards-compatible alias for the old crop name. */
+export const cropMainPane = cropChatPane;

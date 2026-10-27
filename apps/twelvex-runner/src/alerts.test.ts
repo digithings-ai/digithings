@@ -1,7 +1,55 @@
 import { describe, expect, it } from "vitest";
-import { decideAlert, labelFor } from "./alerts";
+import { decideAlert, labelFor, verdictLine } from "./alerts";
 
 const NOW = Date.parse("2026-10-20T00:00:00Z");
+
+describe("the reason a run failed", () => {
+  it("reads the verdict line the pinned ingest prints on stdout", () => {
+    const tail = [
+      "$ python -m twelve_x.scripts.ingest_market_context intraday",
+      "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview",
+      "ERROR twelve_x.scripts.ingest_market_context: source: 2 source(s) failed: dmx-overview",
+    ].join("\n");
+    expect(verdictLine(tail)).toBe("source: 2 source(s) failed: dmx-overview");
+  });
+
+  it("reads the log marker when the pin prints no verdict line", () => {
+    const tail = [
+      "ERROR twelve_x.scripts.ingest_market_context: market_context: " +
+        "source: could not establish a desk session: 401",
+    ].join("\n");
+    expect(verdictLine(tail)).toBe("source: could not establish a desk session: 401");
+  });
+
+  it("reads the verdict line of a real combined container log", () => {
+    // The container puts stdout before stderr, and the pinned script prints
+    // the verdict on stdout and everything else through the logger on
+    // stderr. This is the shape the log tail really has.
+    const tail = [
+      "$ python -m twelve_x.scripts.ingest_market_context intraday",
+      "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview, dmx-news",
+      "INFO twelve_x.scripts.ingest_market_context:   dmx-calendar           ok (12 rows)",
+      "ERROR twelve_x.scripts.ingest_market_context:   dmx-news              FAILED  upstream 500",
+      "ERROR twelve_x.scripts.ingest_market_context: market_context: source: 2 source(s) failed: dmx-overview, dmx-news",
+    ].join("\n");
+    expect(verdictLine(tail)).toBe("source: 2 source(s) failed: dmx-overview, dmx-news");
+  });
+
+  it("falls back to the last meaningful line, never to a placeholder", () => {
+    expect(verdictLine("  dmx-overview   FAILED  upstream 500")).toBe(
+      "dmx-overview FAILED upstream 500",
+    );
+    expect(verdictLine("")).toBe("no output was recorded");
+    expect(verdictLine("nothing here")).not.toBe("no verdict line was recorded");
+  });
+
+  it("keeps the reason on one line and inside the alert limit", () => {
+    const tail = `MARKET_CONTEXT_VERDICT=source: ${"x".repeat(900)}`;
+    const reason = verdictLine(tail);
+    expect(reason.length).toBe(400);
+    expect(reason).not.toContain("\n");
+  });
+});
 
 describe("alert body", () => {
   it("files an FX research failure under the label the workflow uses", () => {
@@ -25,13 +73,14 @@ describe("alert body", () => {
       route: "ingest",
       exitCode: 1,
       bucket: "intraday",
-      reason: "no verdict line was recorded",
+      reason: "source: supabase_url is required",
       logTail: "supabase_url is required",
       now: NOW,
       open: [],
     });
     expect(decision.action).toBe("create");
     if (decision.action !== "create") return;
+    expect(decision.body).toContain("Reason: source: supabase_url is required");
     expect(decision.body).toContain("Log tail");
     expect(decision.body).toContain("supabase_url is required");
   });
@@ -41,13 +90,14 @@ describe("alert body", () => {
       route: "ingest",
       exitCode: 1,
       bucket: "intraday",
-      reason: "no verdict line was recorded",
+      reason: "source: 401 Unauthorized",
       logTail: "401 Unauthorized",
       now: NOW,
       open: [{ number: 12, createdAt: NOW - 1000, acknowledged: false }],
     });
     expect(decision.action).toBe("comment");
     if (decision.action !== "comment") return;
+    expect(decision.body).toContain("Reason: source: 401 Unauthorized");
     expect(decision.body).toContain("Log tail");
     expect(decision.body).toContain("401 Unauthorized");
   });
@@ -56,7 +106,7 @@ describe("alert body", () => {
     const decision = decideAlert({
       route: "ingest",
       exitCode: 1,
-      reason: "no verdict line was recorded",
+      reason: "source: 401 Unauthorized",
       now: NOW,
       open: [],
     });

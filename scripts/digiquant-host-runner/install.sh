@@ -182,6 +182,20 @@ if [ ! -x /opt/homebrew/bin/uv ]; then
   echo "install.sh: no /opt/homebrew/bin/uv; the plists call it, nothing was changed" >&2
   exit 1
 fi
+# The plans call `uv run --frozen --no-sync`, so nothing installs when a clock fires:
+# the checkout's .venv must already carry the image's packages. The workspace root
+# has no dependencies of its own, so a plain `uv sync --frozen` leaves that .venv
+# empty and every clock fails its first step with ModuleNotFoundError.
+if [ ! -x "$CHECKOUT/.venv/bin/python" ] \
+  || ! "$CHECKOUT/.venv/bin/python" -c 'import polars, psycopg, nautilus_trader' 2> /dev/null; then
+  echo "install.sh: $CHECKOUT/.venv is missing or incomplete (polars, psycopg or nautilus_trader)." >&2
+  echo "install.sh: the clocks run 'uv run --frozen --no-sync', so nothing installs at run time." >&2
+  echo "install.sh: build the environment once, from the lock, then install again:" >&2
+  echo "install.sh:   cd $CHECKOUT" >&2
+  echo "install.sh:   /opt/homebrew/bin/uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus --no-dev" >&2
+  echo "install.sh:   /opt/homebrew/bin/uv sync --frozen --package digigraph --extra checkpoint-postgres --no-dev --inexact" >&2
+  exit 1
+fi
 
 mkdir -p "$AGENTS" "$HOME/.config/digithings/logs/digiquant-host-runner"
 STAMP=$(date +%Y%m%d-%H%M%S)

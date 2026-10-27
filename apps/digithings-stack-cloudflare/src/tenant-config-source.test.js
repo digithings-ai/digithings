@@ -84,10 +84,15 @@ describe("tenant-config: the digithings-only constant is the only copy left", ()
     expect(indexSource()).not.toContain("digisearchIndex");
   });
 
-  it("carries exactly the first-party tenant", () => {
+  it("carries exactly the first-party tenant, under both house slugs", () => {
     // A client tenant inside the first-party-only constant would keep that
-    // tenant alive after the literal is retired -- the fail-open direction.
-    expect(Object.keys(DIGITHINGS_ONLY_CORPUS_MAP)).toEqual(["digithings"]);
+    // tenant alive after the literal is retired -- the fail-open direction. The
+    // two house keys are one tenant, and both are needed: the live embed slug is
+    // `digithings-ai`, while old callers read `digithings` (DIG-5638).
+    expect(Object.keys(DIGITHINGS_ONLY_CORPUS_MAP)).toEqual(["digithings", "digithings-ai"]);
+    expect(DIGITHINGS_ONLY_CORPUS_MAP["digithings-ai"]).toEqual(
+      DIGITHINGS_ONLY_CORPUS_MAP.digithings,
+    );
   });
 
   it("agrees with the routed fields the retired literal carried", () => {

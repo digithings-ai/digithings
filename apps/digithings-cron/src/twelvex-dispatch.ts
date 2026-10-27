@@ -1,24 +1,39 @@
 /**
  * Dispatch twelve-x ingest and heartbeat to the twelvex-runner Worker.
  * GITHUB_OVERRIDE_JOBS still sends the same job id to workflow_dispatch.
- * DRY_RUN=1 logs the route and does not call. The log line has no log tail
- * and no secret.
+ * DRY_RUN=1 logs the route and does not call. The log line carries the one
+ * line reason of a failed run and no secret. It carries no log tail.
  */
 import type { Env } from "./env";
 import type { Job } from "./jobs";
 import type { DispatchResult } from "./dispatch";
 
 const TWELVEX_ORIGIN = "https://twelvex-runner";
+/** The reason the runner reports is one line; the error column is one line. */
+const REASON_LIMIT = 400;
 
 type TwelveXAccept = {
   ok?: boolean;
   exit_code?: number;
   duration_ms?: number;
   alert?: string;
+  reason?: string | null;
 };
 
 function logLine(fields: Record<string, unknown>): void {
   console.log(JSON.stringify(fields));
+}
+
+/**
+ * The reason a run failed, on one line. The runner already redacted the
+ * container log tail before it left the image, so this is a cause, never a
+ * secret. A blank reason is no reason.
+ */
+export function reasonFrom(parsed: TwelveXAccept): string | null {
+  if (typeof parsed.reason !== "string") return null;
+  const one = parsed.reason.replace(/\s+/g, " ").trim();
+  if (!one) return null;
+  return one.slice(0, REASON_LIMIT);
 }
 
 export async function dispatchTwelvex(
@@ -97,6 +112,7 @@ export async function dispatchTwelvex(
   } catch {
     parsed = {};
   }
+  const reason = reasonFrom(parsed);
   logLine({
     cron,
     repo: job.repo,
@@ -106,6 +122,7 @@ export async function dispatchTwelvex(
     runner_status: res.status,
     exit_code: typeof parsed.exit_code === "number" ? parsed.exit_code : null,
     duration_ms: typeof parsed.duration_ms === "number" ? parsed.duration_ms : null,
+    reason,
     alert: typeof parsed.alert === "string" ? parsed.alert : null,
     dry_run: false,
   });
@@ -114,7 +131,14 @@ export async function dispatchTwelvex(
   }
   const quietAuth = job.route === "ingest" && parsed.exit_code === 2;
   if (parsed.exit_code !== 0 && !quietAuth) {
-    throw new Error(`twelvex-runner ${job.id} exit ${parsed.exit_code}`);
+    // The reason travels with the error: this message is what the run watch
+    // reads from the Worker error column, and an exit code alone names no
+    // cause.
+    throw new Error(
+      reason
+        ? `twelvex-runner ${job.id} exit ${parsed.exit_code}: ${reason}`
+        : `twelvex-runner ${job.id} exit ${parsed.exit_code}`,
+    );
   }
   return { ok: true, status: res.status, dry_run: false };
 }

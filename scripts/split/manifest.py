@@ -341,7 +341,7 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/data/", "R0", "digiquant data dir (open)"),
     ("digiquant/config/", "R0", "digiquant config (open)"),
     ("apps/digichat/", "R0", "digichat engine (open)"),
-    ("apps/reference/", "R0", "reference app (open)"),
+    ("apps/digiweb/", "R0", "reference app (open)"),
     ("packages/design/", "R0", "design tokens (open)"),
     ("packages/ui/", "R0", "shared UI (open)"),
     ("packages/digichat-ui/", "R0", "digichat UI (open)"),

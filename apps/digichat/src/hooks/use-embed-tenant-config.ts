@@ -47,7 +47,8 @@ export function useEmbedTenantConfig(
           json &&
           (json.gateMode === "turn_limited" ||
             json.gateMode === "ungated" ||
-            json.gateMode === "trial_form")
+            json.gateMode === "trial_form" ||
+            json.gateMode === "invite")
         ) {
           setConfig(json);
         }

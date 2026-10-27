@@ -22,11 +22,16 @@ required review context: that verdict has one producer, the workflow
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
+A failure that names only the PR metadata gates (`pr-title`, `pr-template`) is
+re-checked on the same head once the title or the body is corrected: that
+remedy does not touch the tree, so no commit and no review is thrown away for
+it (DIG-5695). A failure that names a code gate stays terminal.
 A run that no trusted launcher started is refused before anything happens:
 the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
 import concurrent.futures
+import hashlib
 import io
 import json
 import os
@@ -52,6 +57,10 @@ try:
     import launch_guard
 except ImportError:  # fail closed everywhere: a run without the guard does not run at all
     launch_guard = None
+try:
+    import import_preflight
+except ImportError:  # the install check itself is missing: _require_install refuses
+    import_preflight = None
 
 
 def _guard(ctx="local-ci"):
@@ -62,12 +71,62 @@ def _guard(ctx="local-ci"):
     through main(), so a guard that only lived in main() would not be asked on
     the path the live job takes. A run that no trusted launcher started is
     refused with exit 78 before the lock, the worktree, the log or GitHub.
+
+    A launcher that is trusted is not enough: the install has to be complete,
+    so the same entry points then check every module the runner imports
+    (DIG-5585). A helper that was never copied in binds to None and fails
+    closed, which reads as a real verdict on every PR; the tick is refused
+    instead, naming the module.
     """
     if launch_guard is None:
         sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
                          "run rather than run unguarded (DIG-4796)\n")
         sys.exit(78)
     launch_guard.enforce(__file__, ctx)
+    _require_install()
+
+
+#: Set once the install has been checked in this process: the guard is asked at
+#: every entry point, and rescanning the same files each time buys nothing.
+_INSTALL_CHECKED = False
+
+
+def _require_install(runner_path=None):
+    """Refuse to tick when a module this runner imports is absent (DIG-5585).
+
+    The runner imports its helpers with a ``None`` fallback and each helper
+    fails closed, so a module that was never copied in does not stop the tick:
+    it makes every verdict read as a real failure. On 24 Oct a checkout
+    without ``scripts/review_pass_filter.py`` left eight PRs red on
+    ``review-applied`` while the status blamed the review (DIG-4674).
+
+    A broken install is refused before anything else happens: no lock, no
+    worktree, no GitHub write. The refusal names the missing module and the
+    module that imports it, and exits 78 (EX_CONFIG).
+    """
+    global _INSTALL_CHECKED
+    if runner_path is None:
+        if _INSTALL_CHECKED:
+            return
+        runner_path = __file__
+    if import_preflight is None:
+        lines = ["local-ci: the import_preflight module is missing; refusing to tick "
+                 "rather than tick without the install check (DIG-5585)"]
+    else:
+        missing = import_preflight.check(runner_path)
+        if not missing:
+            _INSTALL_CHECKED = True
+            return
+        lines = import_preflight.report(missing, runner_path)
+    for line in lines:
+        sys.stderr.write(line + "\n")
+        try:
+            log(line)
+        except OSError:
+            # A log directory that cannot be written must not turn a refusal
+            # into a traceback: the refusal is the message.
+            pass
+    sys.exit(78)
 
 
 HOME = os.path.expanduser("~")
@@ -88,16 +147,15 @@ CLAIMS = f"{HOME}/.config/digithings/state/local-ci-claims"
 # ledger, or by the CI container, which keeps its own state directory - is given
 # this long before it is treated as lost. The window has to be longer than the
 # longest a producer can spend on one head, because a row that is younger than
-# that may still have a producer behind it: the runner's own step timeouts sum
-# to about 17100 s (gitleaks 1800 s, uv sync 1800 s, npm ci 1800 s, mypy
-# 1200 s, eight worker dry-runs of 300 s each and the rest). Taking a head
-# away earlier puts two producers on one head and two `local-ci` rows on the
-# required check, which is worse than a head that waits.
+# that may still have a producer behind it: the runner's own step budgets sum
+# to about 15000 s (gitleaks 600 s, uv sync 900 s, npm ci 600 s, mypy 600 s,
+# eight worker dry-runs of 300 s each, eight bun suites at 900 s each and the
+# rest), so anything shorter would take a head from a run that is still going.
 CLAIM_STALE_SECS = 21600
 # A claim held for longer than this is void: a run that legitimately takes
 # longer than this is hung, and a hung run owes the head a receipt. The window
-# is longer than the worst case a living run can take (about 4.75 h of step
-# timeouts), so a slow but alive run keeps the head it is checking and no
+# is longer than the worst case a living run can take (about 4.2 h of step
+# budgets), so a slow but alive run keeps the head it is checking and no
 # second run is started on top of it.
 CLAIM_MAX_SECS = 28800
 # The life of the tick lock: a lock whose holder is gone is taken over after
@@ -109,7 +167,7 @@ LOCK_MAX_AGE = 7200
 # mtime of that directory to decide whether the holder is wedged: it kills a
 # live holder that has held the lock for 1800 s (com.digithings.daemon-liveness,
 # MAX_HOLDER_SECONDS). A tick that gates one PR runs far longer than that - the
-# runner's own step timeouts sum to about 17100 s - so the supervisor killed a
+# runner's own step budgets sum to about 15000 s - so the supervisor killed a
 # healthy runner mid-run: the receipt never landed, the head kept a `pending`
 # row and the PR lost its required check until the next tick (DIG-5135).
 # The runner renews the lock while it works. A working tick stays fresh, and a
@@ -149,6 +207,13 @@ REVIEW_MAX_PER_TICK = 1
 # Mac for nothing.
 REVIEW_RECHECK_SECS = 3600
 SKIP_PREFIX = "local-ci skipped:"
+# A failure whose gates are all PR metadata (DIG-5695). These are the only
+# gates whose remedy does not touch the tree: the author edits the title or the
+# body, the head and every review on it stay as they are, and the head is worth
+# one more look on the same sha. A failure that names any other gate stays
+# terminal: re-queueing a code failure would loop the daemon on every tick and
+# re-run a whole lane for nothing.
+METADATA_GATES = frozenset({"pr-title", "pr-template"})
 # Memory gate (DIG-3706, fixed DIG-3783): vm.swapusage "free" is headroom inside
 # already-allocated swap files, which macOS grows on demand, so it false-trips
 # while the Mac is healthy (727-855MB free vs 900MB gate, with 81% system-wide
@@ -263,9 +328,43 @@ ENV = build_env()
 # A scanner has to finish before the tree is judged, and the budget for that is
 # the machine's, not the guard's. On 2026-10-22 the post-merge run on develop
 # 8cfd404816a6 turned three scanners red on a 600 s timeout while the tree was
-# clean (DIG-5318). The budget is overridable so a slow host can be given more
-# room without a code change.
+# clean (DIG-5318). This is the scanner's own ceiling; the step budget below is
+# the one that actually stops a hung scanner, and LOCAL_CI_STEP_BUDGET raises
+# that for a slow host without a code change.
 SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
+
+# A step's own wall-clock ceiling (2026-10-26). The gate does 99.6 s of real
+# work across all 25 steps, yet two runs recorded 32 m and 44 m: a check that
+# measures 10 s alone had hung, and the runner waited out a per-call timeout of
+# 1800 s. The cost was never the work, so every step now has a ceiling of
+# STEP_BUDGET seconds. A step that overruns is killed by process group (`sh`
+# already gives the child its own session), recorded as
+# `<step> exceeded <N>s and was killed`, and the tick moves on to the next step.
+# A step that legitimately needs longer names itself in STEP_BUDGETS (`*` is a
+# prefix, for the bun and worker-build families); an explicit `budget=` argument
+# wins over both. LOCAL_CI_STEP_BUDGET raises the default for the whole host,
+# and a caller `timeout` that is tighter than the budget still wins.
+STEP_BUDGET = int(os.environ.get("LOCAL_CI_STEP_BUDGET", "180") or 180)
+STEP_BUDGETS = {
+    # A whole-history secret scan and a workspace dependency install are the
+    # slow steps; a full type-check is the other one.
+    "gitleaks": 600,
+    "uv-sync": 900,
+    "mypy": 600,
+    "ruff": 300,
+    # One npm install per worker-build run, then one dry-run per worker app.
+    "worker-build:npm-ci": 600,
+    "worker-build:*": 300,
+    # Bun suites (DIG-5203): install from the committed lockfile, then run.
+    "bun-install:*": 600,
+    "bun:*": 300,
+}
+# A step is attempted at most this many times, and the attempts share the one
+# budget: a timeout kill spends it, so a stalled step is not retried into a
+# second stall window.
+RETRY_CAP = 2
+# No new attempt starts with less than this left of the budget.
+RETRY_MIN_SECS = 5
 
 
 def no_fsmonitor_env(base):
@@ -1119,14 +1218,14 @@ def worker_build(wt, step, out=None):
         return ["worker-build:npm-ci"]
     outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in WORKER_APPS}
     try:
-        specs = [(f"worker-build:{app}",
-                  ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
-                   "--containers-rollout=none", "--outdir", outdirs[app]],
-                  WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
+        specs = [gate_spec(f"worker-build:{app}",
+                           ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
+                            "--containers-rollout=none", "--outdir", outdirs[app]],
+                           WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
                  for app in WORKER_APPS]
         if out is None:
             failed = []
-            for name, cmd, timeout, cwd, _env, _stall in specs:
+            for name, cmd, timeout, cwd in ((s[0], s[1], s[2], s[3]) for s in specs):
                 if not step(name, cmd, timeout, cwd):
                     failed.append(name)
             return failed
@@ -1501,6 +1600,47 @@ def ruff_paths_fallback(wt):
     return paths or None
 
 
+def step_budget(name, timeout=1800, budget=None):
+    """The wall-clock ceiling for one step, in seconds.
+
+    An explicit `budget` wins; then the exact name in STEP_BUDGETS, then a
+    matching `*` prefix (so `bun:digichat-tui` takes the `bun:*` budget), then
+    STEP_BUDGET. The caller's `timeout` is a ceiling too -
+    a tool that already declares it may not take more than N s is not given
+    more by this table - so the result is the smaller of the two.
+    """
+    chosen = budget
+    if chosen is None:
+        chosen = STEP_BUDGETS.get(name)
+        if chosen is None:
+            for pattern, secs in STEP_BUDGETS.items():
+                if pattern.endswith("*") and name.startswith(pattern[:-1]):
+                    chosen = secs
+                    break
+    if chosen is None:
+        chosen = STEP_BUDGET
+    return max(1, min(int(chosen), int(timeout)))
+
+
+def step_failed(fails, name):
+    """True when `name` is in the verdict, however the step was recorded.
+
+    An overrun is a sentence (`<step> exceeded <N>s and was killed`) so the
+    reader knows why, while a red check keeps its plain name. A caller that
+    gates later work on an earlier step has to match both.
+    """
+    return any(f == name or f.startswith(name + " ") for f in fails)
+
+
+def _step_duration(out, name, seconds, rc, attempts=1):
+    """The one-line duration table the next investigation reads from the log:
+    `step=<name> seconds=<n> rc=<n>` for every step, including failures."""
+    line = f"step={name} seconds={seconds:.1f} rc={rc}"
+    if attempts > 1:
+        line += f" attempts={attempts}/{RETRY_CAP}"
+    out.write(line + "\n")
+
+
 def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, env=None,
               stall_rcs=(124, 3)):
     """Run one content scanner and record how it answered.
@@ -1512,54 +1652,99 @@ def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, e
     recorded as a stall: red, because the guard has not cleared the tree, but
     named as the stall it is.
 
+    ``timeout`` is the whole step's budget and the attempts share it (2026-10-26):
+    a scanner killed at its ceiling has spent the budget, so it is reported
+    instead of being retried into a second stall window.
+
     ``fails`` collects the verdict: the step name for a finding or the guard's
-    own error, ``"<name>:stall"`` for a scanner that did not answer at all.
-    Returns True when the scanner answered and found nothing.
+    own error, ``"<name> exceeded <N>s and was killed"`` for a scanner killed at
+    its budget, ``"<name>:stall"`` for one that answered badly without
+    overrunning. Returns True when the scanner answered and found nothing.
     """
     if out is None:
         out = sys.stdout
     if fails is None:
         fails = []
-    for attempt in (1, 2):
+    started = time.monotonic()
+    deadline = started + max(1, int(timeout))
+    rc = None
+    attempts = 0
+    for attempt in range(1, RETRY_CAP + 1):
+        remaining = deadline - time.monotonic()
+        if attempt > 1 and remaining < RETRY_MIN_SECS:
+            break
+        attempts = attempt
         out.write(f"\n===== {name}\n")
-        rc, _ = sh(cmd, cwd=cwd, timeout=timeout, out=out, name=name, env=env)
+        began = time.monotonic()
+        rc, _ = sh(cmd, cwd=cwd, timeout=max(1, int(remaining)), out=out, name=name, env=env)
+        took = time.monotonic() - began
         if rc == 0:
+            _step_duration(out, name, time.monotonic() - started, rc, attempts)
             return True
         if rc not in stall_rcs:
             # rc 1 is a finding; anything else is the guard's own error.
             fails.append(name)
+            _step_duration(out, name, time.monotonic() - started, rc, attempts)
             return False
+        if rc == 124:
+            # Killed at the budget. A second attempt would be another stall
+            # window, not another sample.
+            out.write(
+                f"{name}: did not answer (rc=124, {timeout}s budget, attempt "
+                f"{attempt}/{RETRY_CAP}, {took:.1f}s); killed at its budget\n"
+            )
+            break
         out.write(
             f"{name}: did not answer (rc={rc}, {timeout}s budget, attempt "
-            f"{attempt}/2); retrying once\n"
+            f"{attempt}/{RETRY_CAP}, {took:.1f}s); retrying\n"
         )
-    fails.append(f"{name}:stall")
-    out.write(
-        f"{name}: STALL -- the guard did not answer in {timeout}s twice. The tree "
-        "was not judged: this is a slow or wedged host, not a finding.\n"
-    )
+    _step_duration(out, name, time.monotonic() - started, rc, attempts)
+    if rc == 124:
+        why = f"{name} exceeded {timeout}s and was killed"
+        fails.append(why)
+        out.write(
+            f"{name}: STALL -- {why}. The tree was not judged: this is a slow or "
+            "wedged host, not a finding.\n"
+        )
+    else:
+        fails.append(f"{name}:stall")
+        out.write(
+            f"{name}: STALL -- the guard did not answer in {timeout}s twice. The tree "
+            "was not judged: this is a slow or wedged host, not a finding.\n"
+        )
     return False
+
+
+def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=()):
+    """One pool spec: a step's arguments plus the wall-clock budget it carries.
+
+    The budget is resolved once, here, so a pooled step runs with exactly the
+    ceiling the serial `step()` would have given the same name and timeout.
+    """
+    return (name, cmd, timeout, cwd, env, stall_rcs, step_budget(name, timeout))
 
 
 def run_step_pool(specs, out, limit=STEP_POOL):
     """Run independent gate steps concurrently; return (fails, ran) per step name.
 
-    `specs` is a list of (name, cmd, timeout, cwd, env, stall_rcs) in the order
-    the log should print them. Each step gets its own StringIO, so the log still
+    `specs` is a list of (name, cmd, timeout, cwd, env, stall_rcs, budget) in the
+    order the log should print them; a spec without the trailing budget gets one
+    from its name and timeout. Each step gets its own StringIO, so the log still
     reads as one block per gate in the declared order no matter which one
     finished first, and a step's output is never interleaved with another's.
 
-    Nothing here decides a gate: the same `sh`/`scan_step` calls run, with the
-    same timeout, the same cwd, the same environment and the same ``fails``
-    names, and a blocked step is still killed by its own timeout (sh() breaks
-    the whole process tree) and still recorded by the watchdog. Only the order
-    in which the steps wait changed.
+    Nothing here decides a gate: the same budgeted `run_step` runs, with the
+    same cwd, the same environment and the same ``fails`` names, and a blocked
+    step is still killed by its own budget (sh() breaks the whole process tree)
+    and still recorded by the watchdog. Only the order in which the steps wait
+    changed.
     """
     bufs: dict[str, io.StringIO] = {}
     step_fails: dict[str, list] = {}
 
     def one(spec):
-        name, cmd, timeout, cwd, env, stall_rcs = spec
+        name, cmd, timeout, cwd, env, stall_rcs, *rest = spec
+        budget = rest[0] if rest else None
         buf = io.StringIO()
         bad = []
         # Same refusal as the serial path: a step whose directory is missing
@@ -1570,18 +1755,15 @@ def run_step_pool(specs, out, limit=STEP_POOL):
                 f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n"
             )
             return name, [name], buf
-        if stall_rcs:
-            scan_step(name, cmd, timeout=timeout, out=buf, fails=bad,
-                      cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
-        else:
-            buf.write(f"\n===== {name}\n")
-            # `cwd or WT`, exactly as the serial `step()` does. Passing the raw
-            # `cwd` (None for most specs) let the child inherit the runner's own
-            # working directory -- "/" under launchd -- so every check looked
-            # for `//scripts/...` and failed for a reason that was not its own.
-            rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=buf, name=name, env=env)
-            if rc != 0:
-                bad.append(name)
+        # One budgeted run, the same one the serial `step()` takes: the ceiling,
+        # the process-group kill, the overrun sentence that names the step and
+        # the `step=<name> seconds=<n> rc=<n>` line all come from run_step.
+        # `cwd or WT`, exactly as the serial `step()` does. Passing the raw
+        # `cwd` (None for most specs) let the child inherit the runner's own
+        # working directory -- "/" under launchd -- so every check looked
+        # for `//scripts/...` and failed for a reason that was not its own.
+        run_step(name, cmd, timeout, out=buf, fails=bad, cwd=(cwd or WT), env=env,
+                 stall_rcs=stall_rcs, budget=budget)
         return name, bad, buf
 
     workers = max(1, min(int(limit), len(specs) or 1))
@@ -1602,9 +1784,47 @@ def run_step_pool(specs, out, limit=STEP_POOL):
         fails.extend(step_fails.get(name, [name]))
     return fails
 
+def run_step(name, cmd, timeout=1800, out=None, fails=None, cwd=None, env=None,
+             stall_rcs=(), budget=None):
+    """Run one gate step inside its own wall-clock budget.
+
+    The budget is `step_budget(name, timeout, budget)`. A step that overruns is
+    killed by process group (`sh` starts the child in its own session and kills
+    the tree), the failure names the step and the seconds it took, and the
+    caller carries on with the next step. A check that genuinely fails keeps its
+    plain name in the verdict: only an overrun reads as an overrun, so failure
+    semantics are unchanged for everything except a hang.
+    """
+    if out is None:
+        out = sys.stdout
+    if fails is None:
+        fails = []
+    cap = step_budget(name, timeout, budget)
+    if stall_rcs:
+        # A scanner that does not answer is a stall, not a finding.
+        return scan_step(name, cmd, timeout=cap, out=out, fails=fails, cwd=cwd, env=env,
+                         stall_rcs=stall_rcs)
+    out.write(f"\n===== {name}\n")
+    started = time.monotonic()
+    rc, _ = sh(cmd, cwd=cwd, timeout=cap, out=out, name=name, env=env)
+    elapsed = time.monotonic() - started
+    _step_duration(out, name, elapsed, rc)
+    if rc == 124:
+        # sh's timeout path: the process group was killed, so this is a stall
+        # and not a check that returned a red verdict.
+        why = f"{name} exceeded {cap}s and was killed"
+        fails.append(why)
+        out.write(why + "\n")
+        return False
+    if rc != 0:
+        fails.append(name)
+    return rc == 0
+
 
 def run_checks(pr, out, summary=None):
-    """Run every gate on the PR. Returns the list of failed gate names.
+    """Run every gate on the PR. Returns the list of failed gates: a plain step
+    name, a `<name>:stall`, or the overrun sentence that names the step and its
+    budget.
 
     `summary` is filled with what the receipt needs but the verdict does not
     (today: which bun suites ran, DIG-5203). It is an optional dict rather than
@@ -1625,19 +1845,17 @@ def run_checks(pr, out, summary=None):
         )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     fails = []
-    def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=()):
+    def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=(), budget=None):
+        # The missing-directory refusal comes first: a step whose cwd is not
+        # there fails by name and never runs (DIG-5318's sibling, 2026-10-26).
         if not os.path.isdir(cwd or WT):
             fails.append(name)
             out.write(f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n")
             return False
-        if stall_rcs:
-            # A scanner that does not answer is a stall, not a finding.
-            return scan_step(name, cmd, timeout=timeout, out=out, fails=fails,
-                             cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
-        out.write(f"\n===== {name}\n")
-        rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=out, name=name, env=env)
-        if rc != 0: fails.append(name)
-        return rc == 0
+        # Every step takes its own wall-clock budget, and the scanner path is
+        # inside run_step so a stall spends one budget instead of two windows.
+        return run_step(name, cmd, timeout, out=out, fails=fails, cwd=(cwd or WT),
+                        env=env, stall_rcs=stall_rcs, budget=budget)
     # PR title
     if not (title == "chore: promote develop to main" or re.match(r"^chore\([^)]*\):\s*release\s|^chore\(release\):\s", title)
             or re.match(rf"^({TYPES})\([^)]+\)!?: .+", title)):
@@ -1645,9 +1863,17 @@ def run_checks(pr, out, summary=None):
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
     # its workflow removal rides on DIG-3845)
     if pr_template is None:
-        fails.append("pr-template"); out.write("pr-template FAIL: checker module missing\n")
+        # A missing checker is a runner defect, not author metadata: the name
+        # keeps it out of METADATA_GATES, so the row stays terminal instead of
+        # buying a full lane on every title or body edit (DIG-5695 review).
+        fails.append("pr-template:checker-missing")
+        out.write("pr-template:checker-missing FAIL: checker module missing\n")
     else:
-        body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+        body = pr_body(pr)
+        if summary is not None and body is not None:
+            # What this gate judges, so the queue can tell a corrected title or
+            # body from the same failed one (DIG-5695).
+            summary["metadata_revision"] = metadata_revision(title, body)
         ok, reasons = pr_template.check_template(body or "")
         if not ok:
             fails.append("pr-template")
@@ -1674,15 +1900,15 @@ def run_checks(pr, out, summary=None):
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
               "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
-            scan_specs.append((s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
-    scan_specs.append(("actionlint", ["actionlint"], 300, None, None, ()))
+            scan_specs.append(gate_spec(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
+    scan_specs.append(gate_spec("actionlint", ["actionlint"], 300, None, None, ()))
     if opts is not None:
-        scan_specs.append(("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
-                                        "--redact", "--no-banner", "--report-format", "json",
-                                        "--report-path", rep, f"--log-opts={opts}"], 1800, None, None, ()))
+        scan_specs.append(gate_spec("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
+                                                 "--redact", "--no-banner", "--report-format", "json",
+                                                 "--report-path", rep, f"--log-opts={opts}"], 1800, None, None, ()))
     fails.extend(run_step_pool(scan_specs, out))
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
-    if "uv-sync" not in fails:
+    if not step_failed(fails, "uv-sync"):
         U = "uv run --frozen --no-sync "
         rpaths, rnote = ruff_paths_for_tree(WT)
         if rpaths is None:
@@ -1699,12 +1925,12 @@ def run_checks(pr, out, summary=None):
         # Second wave: everything that needs the venv uv-sync just prepared.
         uv_specs = []
         if rpaths:
-            uv_specs.append(("ruff", U + "ruff check " + " ".join(rpaths), 600, None, None, ()))
-        uv_specs.append(("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200, None, None, ()))
+            uv_specs.append(gate_spec("ruff", U + "ruff check " + " ".join(rpaths), 600, None, None, ()))
+        uv_specs.append(gate_spec("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200, None, None, ()))
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
             if os.path.exists(f"{WT}/scripts/{s.split()[0]}"):
-                uv_specs.append((s.split()[0], U + f"python scripts/{s}", 600, None, None, ()))
+                uv_specs.append(gate_spec(s.split()[0], U + f"python scripts/{s}", 600, None, None, ()))
         fails.extend(run_step_pool(uv_specs, out))
     n_files, hit = worker_gate(pr, WT)
     if hit is None and n_files is None:
@@ -1759,11 +1985,17 @@ def process(pr, dry):
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
     else: st, desc = "success", success_desc(mins, summary.get("bun"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
-    if not dry and status(sha, st, desc):
-        # The verdict is in, so the claim is spent. When the verdict could not
-        # be posted the claim stays: the head is owed a receipt and the queue
-        # gives it one instead of waiting for a row that never came.
-        clear_claim(sha)
+    if not dry:
+        if metadata_failure_gates(desc) is not None:
+            # Remember what this verdict judged so the same failed metadata is
+            # not re-queued tick after tick (DIG-5695). A code failure records
+            # nothing: its row is terminal.
+            record_judged_metadata(pr, summary.get("metadata_revision"))
+        if status(sha, st, desc):
+            # The verdict is in, so the claim is spent. When the verdict could
+            # not be posted the claim stays: the head is owed a receipt and the
+            # queue gives it one instead of waiting for a row that never came.
+            clear_claim(sha)
     return st
 
 def skip_reason():
@@ -2190,6 +2422,105 @@ def ci_status(sha):
     return st, desc
 
 
+def metadata_failure_gates(desc):
+    """The gates a metadata-only failure names, or None.
+
+    A row names its failed gates after ``local-ci failed: `` and ends with the
+    run time in minutes. Only plain gate names count: a stall or an overrun
+    reads as a sentence, and one name outside METADATA_GATES makes the whole
+    verdict a code failure, whose row stays terminal (DIG-5695).
+    """
+    prefix = "local-ci failed: "
+    text = desc or ""
+    if not text.startswith(prefix):
+        return None
+    names = re.sub(r" \(\d+m\)$", "", text[len(prefix):])
+    gates = [g.strip() for g in names.split(",") if g.strip()]
+    if not gates or any(g not in METADATA_GATES for g in gates):
+        return None
+    return gates
+
+
+def metadata_revision(title, body):
+    """A stable digest of the metadata a metadata gate reads: title and body.
+
+    The timestamp is not the revision: GitHub moves `updatedAt` on every
+    comment and review, so a time comparison would re-run a full lane for a
+    conversation the gates never read.
+    """
+    h = hashlib.sha256()
+    h.update((title or "").encode("utf-8"))
+    h.update(b"\0")
+    h.update((body or "").encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+def pr_body(pr):
+    """The pull request's body, or None when GitHub could not be read."""
+    body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+    return None if body is None else body
+
+
+def judged_metadata_revision(sha):
+    """The metadata revision this head's last metadata verdict judged, or None.
+
+    Kept next to the gitleaks re-check sentinel, for the same reason: one
+    re-check per change, never one per tick.
+    """
+    try:
+        with open(f"{LOGD}/metadata-recheck-{sha}") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def record_judged_metadata(pr, revision=None):
+    """Remember the metadata a metadata-only verdict was judged on (DIG-5695).
+
+    `revision` is what the gates read during the run; when a run could not read
+    the body, the current body is hashed instead so the same failure cannot
+    re-queue for ever. An unreadable body records nothing: a revision nobody
+    saw is not a judgement, and the timestamp rule covers that head.
+    """
+    if revision is None:
+        body = pr_body(pr)
+        if body is None:
+            return
+        revision = metadata_revision(pr.get("title"), body)
+    try:
+        with open(f"{LOGD}/metadata-recheck-{pr['headRefOid']}", "w") as f:
+            f.write(revision + "\n")
+    except OSError:
+        pass
+
+
+def metadata_recheck_due(pr, desc, created):
+    """True when a metadata-only failure is worth one more look on the same head.
+
+    A metadata gate is the one class of failure whose remedy does not touch the
+    tree, so the head does not have to be replaced to clear it (DIG-5695, PR
+    #6513). The head is re-queued when the metadata it carries now differs from
+    the metadata its verdict judged.
+
+    A head with no record - a row from before this rule, or a run that could
+    not read the body - falls back to the row's own clock: the pull request
+    must have been updated after the row that judged it. Either way a metadata
+    failure buys at most one re-check per change.
+    """
+    if metadata_failure_gates(desc) is None:
+        return False
+    body = pr_body(pr)
+    if body is None:
+        return False  # nothing readable to judge: the row stays terminal
+    revision = metadata_revision(pr.get("title"), body)
+    judged = judged_metadata_revision(pr["headRefOid"])
+    if judged is not None:
+        return judged != revision
+    updated = _status_age_secs_or_none(pr.get("updatedAt"))
+    row = _status_age_secs_or_none(created)
+    return updated is not None and row is not None and updated < row
+
+
 def pending(prs, forks, dry=False):
     """Open PRs still needing a check, oldest first.
 
@@ -2202,9 +2533,11 @@ def pending(prs, forks, dry=False):
 
     A head is queued when it carries no `local-ci` row, when its only row is a
     re-checkable skip (DIG-3706), when its row is a gitleaks failure worth one
-    more try, when its row says the post itself failed (`error`), or when its
-    `pending` row belongs to a run that is gone: the claim ledger names the
-    holder, and a holder that is dead means the receipt is owed again.
+    more try, when its row says the post itself failed (`error`), when a
+    metadata-only failure has been overtaken by a corrected title or body
+    (DIG-5695), or when its `pending` row belongs to a run that is gone: the
+    claim ledger names the holder, and a holder that is dead means the receipt
+    is owed again.
 
     A head whose claim is held by a living run is left alone: it is not
     queued, not skipped, and its claim is not released. The run that took the
@@ -2228,6 +2561,9 @@ def pending(prs, forks, dry=False):
             # scanning commits already on the base. A second failure stays put.
             retry = (st == "failure" and (desc or "").startswith("local-ci failed: gitleaks")
                      and not os.path.exists(f"{LOGD}/gitleaks-recheck-{sha}"))
+            # A metadata-only failure is the one failure a corrected title or
+            # body can clear without touching the tree (DIG-5695).
+            meta = st == "failure" and metadata_recheck_due(p, desc, created)
             lost = st == "pending" and claim_is_lost(sha, created)
             if st in ("success", "failure", "error") and not dry:
                 # The verdict is in, or the row says the post itself failed:
@@ -2235,7 +2571,7 @@ def pending(prs, forks, dry=False):
                 # still holds is that run's to release.
                 clear_claim(sha)
             if (st is None or st == "error" or (desc or "").startswith(SKIP_PREFIX)
-                    or retry or lost):
+                    or retry or meta or lost):
                 out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))

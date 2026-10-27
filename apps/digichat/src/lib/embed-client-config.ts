@@ -35,7 +35,7 @@ import {
 
 export type EmbedTenantClientConfig = {
   slug: string;
-  gateMode: "turn_limited" | "ungated" | "trial_form";
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
   theme: "dark" | "light";
   /** assistant-ui Thread layout. See thread-skins.ts */
   skin?: ThreadSkin;

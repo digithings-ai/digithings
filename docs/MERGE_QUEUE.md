@@ -180,7 +180,10 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    head `b1c5fde73ef8` silently cleared its own 10:21 `changes requested`; the two
    blockers were still open and landed in `develop` (fix routed as DIG-5245). Going the
    other way needs no line: **a new head with a fresh approve** clears, because the old
-   block named a commit the PR has left. `#6170` (DIG-4911) merged into `develop` on
+   block named a commit the PR has left. That is not true of a block that names no head
+   (its `scope=` did not parse, DIG-5630): it is spent only by the seat's approve naming
+   the current head plus a `Withdraws:` line with no sha on it, and the queue's handback
+   for it says so. `#6170` (DIG-4911) merged into `develop` on
    2026-10-21 with the security desk's `changes requested` still on the branch: the code
    reviewer's later approve on the head was the newest readable verdict, and nothing had
    ever asked the queue to wait for the second sign-off. (The block in that timeline named
@@ -191,6 +194,29 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    stands at (or names no head at all, which cannot be stale); an approve clears only when
    it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
+
+**A clearance names a seat that did not write the PR.** When a `changes_requested` on the
+current head would be cleared by the newest approve, that approve must carry the
+provenance marker's `agent=`, and that seat must not be one of the seats that wrote the
+PR (#4990, item 3). A comment that says "approve" with no marker, or one from an
+authoring seat, clears nothing while the block stands: `#6197` merged on the author's own
+write-up, and that write-up was the newest verdict. The authoring seats are read from the
+commits and their Paperclip runs (`_author_context`), never from the ticket's assignee —
+the assignee is the seat asked to move the ticket along, and reading it as the author
+refused the ticket owner's review on `#6145` (DIG-4809). When the queue cannot read who
+wrote the PR — the API is down, or a commit names an author it cannot resolve — this
+condition adds no gate of its own: the reviewer-independence row above is where that
+failure is reported, and it defers the PR rather than clearing it.
+
+**A marker inside code is quoted, not posted.** No clause reads a marker, a provenance
+line or a `Review verdict:` line that sits inside a fenced code block (``` or ~~~) or an
+inline code span: what a reader sees as code is being shown, not claimed, and a quote
+must neither block nor clear anything. `#6197` merged on the author's own write-up, which
+quoted the reviewer template inside a fence; #6196 had taught the reader about sentences
+and blockquotes, and a fence is neither (#4990). A fence nobody closed swallows the rest
+of the comment, because that is how Markdown renders it. The `review-applied` producer
+reads the same rule: its verdict line comes from the shared parser in
+`scripts/review_pass_filter.py`, which takes fenced blocks out before it reads a line.
 
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
@@ -216,7 +242,9 @@ written once:
   marker and cleared the block through the provenance head.
 - A **prose verdict names the head** through any sha written in the comment — on the
   verdict line, in the sentence after it, or in the scope line the review opens with —
-  and through the provenance marker's `head=`.
+  and through the provenance marker's `head=`. Inline code is kept here, because a sha
+  a reviewer writes in backticks (`3f2a9c1d4b5e`) is still the sha they named; only the
+  `Review verdict:` token has to sit outside a span to count as posted (#4990).
 
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.
@@ -241,8 +269,10 @@ Withdraws: changes requested on 3f2a9c1d4b5e
   it names, not a password that unlocks the seat.
 - The withdrawal is **part of the approve**: a `Withdraws:` line on its own, in a comment
   with no approving verdict, still leaves the block standing.
-- Do not paste the line into a comment to show someone the syntax: the queue reads the
-  raw comment, so a quoted `Withdraws:` beside an approve is a live withdrawal.
+- Do not paste the line into a comment to show someone the syntax: a `Withdraws:`
+  line inside a fenced block or an inline code span is a quote, not a claim, and it
+  withdraws nothing — the same rule the verdict readers follow (#4990). Write it
+  outside code, and it is a live withdrawal.
 
 The line is what `#6280` was missing: two blocking findings were still open when the same
 seat approved the same head 1h43m later, and the queue read the later verdict as a
@@ -715,6 +745,43 @@ deadline, not a sum of timeouts: the body is read one socket read at a time
 bytes) and the deadline is checked between them, so a server that answers the
 headers and then trickles the body cannot hold the tick open. A slow tick is the
 accepted price; a false handback re-posts itself every other tick, which is not.
+
+**The cache, and why a slow tick stopped being an acceptable price.** The budget
+above was chosen so a slow answer would not read as a refusal, and that is still
+right. What it did not account for is that the reader lived for exactly one tick:
+every tick asked for every ticket, every ticket's run list and every named run
+again, over every open pull request of both repos. At the measured cost — 12 s
+for a ticket, 28-144 s for a ticket's run list — a tick took 3 to 13 minutes
+against a 180 s interval, and it wrote nothing to its log until every PR had been
+judged. So the job read as alive and silent, `develop` moved about once every
+quarter of an hour instead of once every three minutes, and the liveness check
+paged for a queue that was working (DIG-5632, 26 Oct 2026).
+
+The answers are now kept between ticks in
+`~/.config/digithings/merge-queue/provenance-cache.json`, and the rule that makes
+that safe is narrow: **an answer may stand in for a read only for the commits that
+were already written when the answer was taken.** A run that covered such a commit
+existed by then, so the answer names it; a run that started after the answer was
+taken cannot have covered an older commit; and a commit written after the answer
+forces the fresh read that would see it. A run's seat and a ticket's id never
+change, so those answers do not expire at all. "The API has no such record" is
+believed for 60 s only, because a ticket can be filed and a run can start. Only
+the fields the gate reads are written down — a ticket's body and its comments are
+not — and a cache the queue cannot write is a slower queue, not a stopped one.
+
+The cache is the steady state; it is not the worst case. A cold cache, or a batch
+of branches that all moved at once, still asks for facts the cache cannot answer,
+and one pull request was measured at **313.6 s** of reads on its own — longer than
+the whole interval, and inside one PR, where a budget between PRs cannot reach. So
+the driver states a deadline (`MQ_PAPERCLIP_DEADLINE`, epoch seconds, one tick's
+budget) and the reader **does not start** a Paperclip read after it passes. It does
+not cut a read in half: a read that never finishes is a fact the cache never keeps,
+so the PR would cost the same on every later tick and the queue would never
+converge. A read refused at the deadline is `_PaperclipUnavailable`, which the gate
+already treats as `transient` — nothing concluded, nothing published as a gate, the
+PR judged again next tick (DIG-5573). Measured over five consecutive ticks against
+the live queue: 261 s, 151 s, 64 s, 21 s, 23 s. It converges, and every tick in
+between made progress and merged.
 
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*

@@ -5,11 +5,9 @@ Theming is CSS variables. We do not rebuild markdown, reasoning, tools, or
 message layout. For the full upstream elements catalog (every slug, fetch
 command, digichat attach kind) see [`ASSISTANT_UI_ELEMENTS.md`](./ASSISTANT_UI_ELEMENTS.md).
 
-Live: design-reference [`/chatbot`](http://127.0.0.1:4013/chatbot/).
-
-`/chatbot` is its own Next root (`app/(chatbot)/`) so webpack does not compile
-the rest of the gallery. Open only that URL. Do not load `/` or other reference
-pages in the same session.
+Live: the digichat product app at `/chatbot` (port 3005). digiweb does not carry
+a second chat root; the old gallery `/chatbot` route was deleted with
+`apps/reference` in October 2026.
 
 ## Colour palette
 

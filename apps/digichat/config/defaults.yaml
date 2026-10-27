@@ -145,6 +145,13 @@ deployment: &house
         label: digisearch
         default: true
         authScheme: jwt
+        # digigraph denies every advertised tool on a row with no
+        # ``allowedTools`` (orchestration/mcp_client.py:734-753), so a row that
+        # names none is dead weight in /tools and in the tool trace. Both
+        # house rows name the read-only set; `web_search` keeps its own
+        # request opt-in gate.
+        allowedTools: [semantic, web_search]
+        mutatingTools: []
         setup:
           index_name: digithings_docs
       - id: digivault
@@ -152,6 +159,8 @@ deployment: &house
         label: digivault
         default: true
         authScheme: jwt
+        allowedTools: [search_notes, search_tag, backlinks]
+        mutatingTools: []
         setup:
           path_prefix: clients/digithings
   gate:

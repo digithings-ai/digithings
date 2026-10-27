@@ -135,10 +135,11 @@ export type DigikeyBffSessionOutcome =
  *
  * `requestedScopes` narrows the minted token to the scopes asked for. digikey
  * checks them against the scopes the BFF grant carries
- * (`DEFAULT_BFF_SESSION_SCOPES`) and rejects the request with 400 when they are
- * not covered — the `rejected` outcome, not a silent narrower token. Omitted
- * entirely when empty, so existing callers send exactly the body they always
- * did.
+ * (`BFF_SESSION_GRANTABLE_SCOPES` — the default session set plus
+ * `mcp:digisearch` and `mcp:digivault`) and rejects the request with 400 when
+ * they are not covered — the `rejected` outcome, not a silent narrower token.
+ * Omitted entirely when empty, so existing callers send exactly the body they
+ * always did and keep inheriting the full default set.
  */
 export async function exchangeDigikeyBffSession(
   digikeyBaseUrl: string,

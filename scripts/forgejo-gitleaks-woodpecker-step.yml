@@ -1,0 +1,8 @@
+# Template only: no .woodpecker.yml exists yet. Paste this under `steps:`
+# when a Woodpecker pipeline lands. The local guard is scripts/hooks/pre-push.sh.
+  gitleaks:
+    image: zricethezav/gitleaks:v8.30.1
+    commands:
+      - gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --exit-code 1
+    when:
+      - event: [push, pull_request]

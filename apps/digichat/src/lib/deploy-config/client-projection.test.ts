@@ -83,10 +83,30 @@ describe("mcp.servers client projection never leaks operator secrets (#3841)", (
     ]);
     const client = toDigichatClientConfig(dep);
     // Raw backend ids, never a humanised name: the client shows what the
-    // backend calls the server, so a label that disagrees is a bug.
+    // backend calls the server, so a label that disagrees is a bug. The house
+    // rows name their `allowedTools`, so the projection carries the per-tool
+    // ids digigraph offers (`<server>_<tool>`) and `/tools` lists them instead
+    // of substituting a built-in pair.
     expect(client.mcp.servers).toEqual([
-      { id: "digisearch", label: "digisearch", default: true },
-      { id: "digivault", label: "digivault", default: true },
+      {
+        id: "digisearch",
+        label: "digisearch",
+        default: true,
+        tools: [
+          { id: "digisearch_semantic", label: "semantic" },
+          { id: "digisearch_web_search", label: "web_search" },
+        ],
+      },
+      {
+        id: "digivault",
+        label: "digivault",
+        default: true,
+        tools: [
+          { id: "digivault_search_notes", label: "search_notes" },
+          { id: "digivault_search_tag", label: "search_tag" },
+          { id: "digivault_backlinks", label: "backlinks" },
+        ],
+      },
     ]);
     const serialized = JSON.stringify(client);
     expect(serialized).not.toContain("authScheme");

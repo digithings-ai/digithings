@@ -699,7 +699,7 @@ per-host `slug`, `backend` (`digigraph` | `foundry` + https `projectEndpoint` +
 `agentName`; digigraph may optionally set `digisearchIndex` / `vaultPathPrefix`
 for per-tenant corpus isolation — forwarded as `X-Digi-Corpus-Index` /
 `X-Digi-Vault-Prefix` on `/api/chat`), `gateMode` (`turn_limited` | `ungated` |
-`trial_form`), `theme`
+`trial_form` | `invite`), `theme`
 (`dark` | `light`), optional `accent` hex pair, `activityDetail`
 (`off` | `labels` | `full`), optional UI flags `showByok` / `showStatusBar` / `showContextMeter`
 (`showContextMeter` gates the composer bar through `contextMeterEnabled`: on for
@@ -1474,7 +1474,12 @@ set or override it — only the operator/token pairing on the same YAML row can.
 **`authScheme: jwt` is the chat's own identity.** Instead of a static token the BFF mints a digikey JWT, scoped
 `mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — `DIGICHAT_MCP_IDENTITY_KEY`
 (a `dgk_live_…` key) when configured, else the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`) — and reuses it
-until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The token is set as the row's `token` with
+until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The BFF credential path sends
+`requested_scopes: ["mcp:digisearch", "mcp:digivault"]`, which digikey answers from
+`BFF_SESSION_GRANTABLE_SCOPES` (`digikey/src/digikey/scopes.py`): the default session scopes **plus** those two
+`mcp:` scopes, and nothing else. The `mcp:` scopes are not in `DEFAULT_BFF_SESSION_SCOPES`, so a BFF session minted
+without `requested_scopes` (the digigraph upstream call, `lib/digigraph-upstream.ts`) carries no edge access; the
+edge mint is the only caller that opts in. The token is set as the row's `token` with
 `authHeader` removed, so digigraph's default applies: `Authorization: Bearer <token>` (`mcp_client.py`,
 `mcp_http_headers`). The scheme itself is never forwarded — digigraph does not know about it. Precedence is not a
 fallback chain: `jwt` wins over `token`/`tokenEnv` on the same row, and a failed mint leaves the row with **no**
@@ -2067,6 +2072,8 @@ Canonical operator config is a Zod-validated YAML file:
 - Path: `DIGICHAT_CONFIG_PATH` (default `/app/config/digichat.yaml`)
 - Loader: `src/lib/deploy-config/` (`loadDigichatConfig` / `getDigichatConfig`)
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
+- One config shape per tenant (epic: `docs/plans/digichat-one-config-epic.md`): `apps/digichat/config/digithings.yaml` (the house deployment as deployed, edge MCP URLs included) and `apps/digichat/config/occ.yaml` (OCC) are **full documents, same schema, no `extends`**. OCC's differences live in its own file: `gate.mode: invite` plus the `tokenEnv` ref to the invite key, its own backend index/path, MCP servers and tool lists. Nothing reads either document in production yet — KV `config-yaml` + `embed-tenants` still serve, and `src/lib/deploy-config/tenant-documents.equivalence.test.ts` resolves both documents through the real loader and pins them field for field to that live resolution (the OCC tenant row is pinned in the test).
+- `gate.mode: invite` means the surface requires an invite credential before it renders, and the **edge** enforces it (the Worker/Pages gate), not the app. Inside the app it therefore accounts turns exactly like `ungated`: no free-turn quota and no trial form, because an unauthenticated request never reaches a route handler. `gateMetersTurns()` in `src/lib/deploy-config/schema.ts` is the one place that classification is written down.
 - House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 

@@ -610,14 +610,129 @@ def test_a_real_squash_merge_pr_number_is_cached_and_not_re_fetched(
 
 
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────
+#
+# The gate is also dispatchable (#5934): a promotion can be re-gated on its exact
+# head without pushing a no-op commit, because a user-posted commit status does
+# not satisfy main's branch protection (the context is scoped to the Actions
+# app). That entry point is safe only while three things hold, and each is
+# asserted here rather than described in a comment:
+#
+#  - the pull_request path still gates pull requests into main, and nothing else
+#    can start the workflow;
+#  - a dispatch supplies its own head and base, so the head is required (a
+#    default would silently gate a stale commit) and the base defaults to main;
+#  - two dispatch-only guards fail closed BEFORE the gate script runs: the
+#    dispatched head must be the commit the run checks (the status attaches to
+#    github.sha, not to the input), and the base must be main (any other base can
+#    yield an empty range, which the script treats as "nothing to promote").
 
 
-def test_the_workflow_exists_and_only_guards_pull_requests_into_main() -> None:
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+def _workflow() -> dict[str, Any]:
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+def _triggers(spec: dict[str, Any]) -> dict[str, Any]:
     # PyYAML parses the bare key `on:` as the boolean True.
-    triggers = spec.get("on") or spec.get(True)
-    assert list(triggers) == ["pull_request"]
-    assert triggers["pull_request"]["branches"] == ["main"]
+    return spec.get("on") or spec.get(True)
+
+
+def _steps() -> list[dict[str, Any]]:
+    return next(iter(_workflow()["jobs"].values()))["steps"]
+
+
+def _step(name: str) -> tuple[int, dict[str, Any]]:
+    for index, step in enumerate(_steps()):
+        if step.get("name") == name:
+            assert "run" in step, f"`{name}` is no longer a script: {step}"
+            return index, step
+    raise AssertionError(f"no step named `{name}` in the gate job — update this test")
+
+
+DISPATCH_GUARD = "Refuse a dispatch that would gate the wrong range"
+COVERAGE_STEP = "Check review coverage of the promotion range"
+
+
+def test_the_pull_request_trigger_still_only_guards_pull_requests_into_main() -> None:
+    triggers = _triggers(_workflow())
+    assert triggers["pull_request"] == {"branches": ["main"]}
+    assert set(triggers) == {"pull_request", "workflow_dispatch"}, (
+        "the gate may also be dispatched on a promotion head (#5934); no other "
+        "trigger may start it, and neither of the two may be dropped"
+    )
+
+
+def test_the_dispatch_entry_point_requires_a_head_and_pins_the_base_to_main() -> None:
+    inputs = _triggers(_workflow())["workflow_dispatch"]["inputs"]
+    assert inputs["head_sha"]["required"] is True
+    assert "default" not in inputs["head_sha"], (
+        "a defaulted head would gate a stale commit on any dispatch that omits it"
+    )
+    assert inputs["base_ref"]["required"] is True
+    assert inputs["base_ref"]["default"] == "main"
+
+
+def test_the_dispatch_guard_runs_only_on_a_dispatch_and_checks_what_the_gate_reads() -> None:
+    """A guard over different variables than the script uses would check nothing."""
+    guard_index, guard = _step(DISPATCH_GUARD)
+    coverage_index, coverage = _step(COVERAGE_STEP)
+
+    assert guard["if"] == "github.event_name == 'workflow_dispatch'"
+    assert guard["env"] == {
+        "HEAD_SHA": "${{ inputs.head_sha }}",
+        "CHECKED_SHA": "${{ github.sha }}",
+        "BASE_REF": "${{ inputs.base_ref }}",
+    }
+    # On a dispatch run there is no pull_request payload, so the gate script reads
+    # exactly the two inputs the guard just checked. Pin that wiring: a guard
+    # reading one value while the script uses another is a guard on nothing.
+    assert coverage["env"]["HEAD_SHA"] == (
+        "${{ inputs.head_sha || github.event.pull_request.head.sha }}"
+    )
+    assert coverage["env"]["BASE_REF"] == "${{ inputs.base_ref || github.base_ref }}"
+    assert guard_index < coverage_index, (
+        "the guard must refuse a wrong range before the gate script grades it"
+    )
+
+
+def _run_guard(*, head: str, checked: str, base: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", "-c", _step(DISPATCH_GUARD)[1]["run"]],
+        capture_output=True,
+        text=True,
+        env={
+            "HEAD_SHA": head,
+            "CHECKED_SHA": checked,
+            "BASE_REF": base,
+            "PATH": "/usr/bin:/bin",
+        },
+        timeout=30,
+    )
+
+
+def test_the_dispatch_guard_admits_the_exact_promotion_head_on_main() -> None:
+    result = _run_guard(head="a" * 40, checked="a" * 40, base="main")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("head", ["b" * 40, ""])
+def test_the_dispatch_guard_refuses_a_head_the_status_would_not_attach_to(
+    head: str,
+) -> None:
+    """The status attaches to github.sha; gating another SHA lands green elsewhere."""
+    checked = "a" * 40
+    result = _run_guard(head=head, checked=checked, base="main")
+    assert result.returncode != 0
+    out = result.stdout + result.stderr
+    assert "is not the commit this run checks" in out
+    assert checked in out
+
+
+@pytest.mark.parametrize("base", ["develop", "", "main ", "refs/heads/main"])
+def test_the_dispatch_guard_refuses_any_base_but_literal_main(base: str) -> None:
+    """Any other base can make the range empty, which the script passes."""
+    result = _run_guard(head="a" * 40, checked="a" * 40, base=base)
+    assert result.returncode != 0, f"base {base!r} must be refused"
+    assert "base_ref must be main" in result.stdout + result.stderr
 
 
 def test_the_workflow_actually_invokes_the_script() -> None:

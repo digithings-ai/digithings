@@ -3,6 +3,7 @@
  */
 
 import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
+import { gateMetersTurns } from "@/lib/deploy-config/schema";
 import type { EmbedLlmAccess } from "@/lib/embed-tenants";
 
 const NETWORK_ERROR_RE =
@@ -134,7 +135,7 @@ function isInfraEmbedFailure(errorCode?: string, errorMessage?: string | null): 
 export function shouldSuggestByokOnEmbedError(args: {
   llmAccess?: EmbedLlmAccess;
   showByok?: boolean;
-  gateMode?: "turn_limited" | "ungated" | "trial_form";
+  gateMode?: "turn_limited" | "ungated" | "trial_form" | "invite";
   errorCode?: string;
   errorMessage?: string | null;
 }): boolean {
@@ -152,8 +153,12 @@ export function shouldSuggestByokOnEmbedError(args: {
     return showByok === true && (quota || !!errorCode);
   }
 
-  // Legacy: no llmAccess — ungated suppresses; gated + showByok suggests on quota.
-  if (gateMode === "ungated") return false;
+  // Legacy: no llmAccess — an unmetered surface suppresses the BYOK prompt.
+  // `gateMetersTurns` is the one place `invite` is classified as unmetered, for
+  // the same reason it accounts turns like `ungated`: the credential is checked
+  // at the edge, so a quota error here cannot be an invite tenant's own
+  // free-turn budget.
+  if (gateMode !== undefined && !gateMetersTurns(gateMode)) return false;
   if (showByok !== true) return false;
   return quota;
 }

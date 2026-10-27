@@ -42,9 +42,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # The three deployed Next.js app-router trees. Section 7's "57 routes" is these.
 DEPLOYED_APPS = ("dashboard", "digithings-web", "digiquant-web")
 
-# `reference` ships template apps that are never deployed. It is enumerated
+# `digiweb` is the local reference app that are never deployed. It is enumerated
 # separately so the exclusion is visible instead of silent.
-REFERENCE_APPS = ("reference",)
+REFERENCE_APPS = ("digiweb",)
 
 # Which resolver endpoint serves each app, or how the app is reached when it
 # has no endpoint. An entry naming an env var has no endpoint in the resolver and

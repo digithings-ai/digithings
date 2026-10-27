@@ -161,7 +161,7 @@ export type DigichatClientConfig = {
     allowAddForm: boolean;
   };
   gate: {
-    mode: "turn_limited" | "ungated" | "trial_form";
+    mode: "turn_limited" | "ungated" | "trial_form" | "invite";
     llmAccess?: DigichatDeployment["gate"]["llmAccess"];
     lockedContact?: string;
     showByok?: boolean;

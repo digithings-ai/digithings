@@ -25,12 +25,14 @@ remote="${1:-}"
 url="${2:-}"
 
 # GitHub stays the public/release remote. Origin is the agent iteration host.
-# The mirror clone URL pass-throughs normal branches to GitHub. /local accepts
-# only refs/heads/origin/* and those refs never sync to GitHub.
+# The local Forgejo is the local working surface; /local on Origin accepts only
+# refs/heads/origin/* and those refs never sync to GitHub.
 github_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
 origin_mirror_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?$'
 origin_local_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?/local/?$'
 origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
+local_forge_url_regex='^http://(localhost|127\.0\.0\.1):3000/digithings-ai/digithings(\.git)?$'
+local_change_regex='^change/[a-z0-9][a-z0-9-]*$'
 
 # Allowed branch name taxonomy. Keep in sync with BRANCHING.md and
 # scripts/github-rulesets/01-branch-naming.json. That file is the desired
@@ -73,11 +75,14 @@ is_zero_sha() {
 }
 
 is_origin_local=0
+is_local_forge=0
 if [[ "$url" =~ $origin_local_url_regex ]]; then
   is_origin_local=1
+elif [[ "$url" =~ $local_forge_url_regex ]]; then
+  is_local_forge=1
 elif [ -n "$url" ] && ! [[ "$url" =~ $github_url_regex || "$url" =~ $origin_mirror_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
-  echo "         Allowed: github.com/digithings-ai/digithings, or origin.cursor.com/chrizefan/digithings (and its /local endpoint)." >&2
+  echo "         Allowed: github.com/digithings-ai/digithings, origin.cursor.com/chrizefan/digithings (and its /local endpoint), or the local forge at localhost:3000." >&2
   exit 1
 fi
 
@@ -88,6 +93,7 @@ fi
 # after the loop. `while read` runs in this shell (git feeds stdin directly, no
 # pipeline), so `failed` survives the loop.
 failed=0
+gitleaks_missing_warned=0
 
 # Read refs being pushed from stdin: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -119,6 +125,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "         Publish Origin drafts with 'origin push local'. Promote with a task/, module/, or release/ branch." >&2
       failed=1
       continue
+    elif [ "$is_local_forge" -eq 1 ] && [[ "$branch_name" =~ $local_change_regex ]]; then
+      : # sctl change branches are local-forge only
     elif ! [[ "$branch_name" =~ $branch_regex ]]; then
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
       echo "         Allowed patterns (see BRANCHING.md):" >&2
@@ -137,6 +145,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "                        e.g. rescue/DIG-1234-2026-10-21)" >&2
       echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
       echo "                        per-issue, never blanket — BRANCHING.md)" >&2
+      echo "           change/<id>    (local Forgejo sctl change; local forge only)" >&2
       failed=1
       continue
     fi
@@ -166,7 +175,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # Determine the diff range: against the remote sha if present, else against origin/develop.
   if is_zero_sha "$remote_sha" || [ -z "$remote_sha" ]; then
-    base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    if [ "$is_local_forge" -eq 1 ]; then
+      base="$(git merge-base "$local_sha" local/develop 2>/dev/null \
+        || git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    else
+      base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    fi
   else
     base="$remote_sha"
   fi
@@ -176,7 +190,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # the one guard standing between a live-trading edit and origin.
   if [ -z "$base" ]; then
     echo "pre-push: cannot determine a diff base for '$local_ref' — refusing to push unscanned." >&2
-    echo "         Usually origin/develop is just missing locally: run 'git fetch origin' and retry." >&2
+    echo "         Usually origin/develop (or local/develop for the local forge) is missing locally:" >&2
+    echo "         run 'git fetch origin' or 'git fetch local' and retry." >&2
     echo "         A ref whose history is unrelated to develop — an imported tag, a grafted" >&2
     echo "         branch — has no base by nature and cannot be scanned at all; that is the" >&2
     echo "         emergency the --no-verify escape at the top of this file exists for." >&2
@@ -231,6 +246,27 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       failed=1
       continue
     fi
+  fi
+
+  # ── gitleaks: refuse a push that introduces a secret ───────────────────────
+  # Same diff base as the live-trading scan above. CI scans too; this is the
+  # local guard, and it must fail closed when the base is unusable (the base
+  # check above already refused that case). Synthetic hook fixtures opt out.
+  gitleaks_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+  gitleaks_config="${gitleaks_root:+$gitleaks_root/.gitleaks.toml}"
+  if [ "${PRE_PUSH_SKIP_GITLEAKS:-0}" = "1" ]; then
+    : # test fixtures build synthetic commits; the real guard stays below
+  elif command -v gitleaks >/dev/null 2>&1 && [ -n "$gitleaks_config" ] && [ -f "$gitleaks_config" ]; then
+    if ! gitleaks detect --source "$gitleaks_root" --config "$gitleaks_config" --redact --no-banner \
+         --log-opts="$base..$local_sha" >/dev/null 2>&1; then
+      echo "pre-push: gitleaks found a secret in $base..$local_sha — refusing to push." >&2
+      echo "         Remove the secret, rotate it if it was real, and retry." >&2
+      failed=1
+      continue
+    fi
+  elif [ "$gitleaks_missing_warned" -eq 0 ]; then
+    echo "pre-push: gitleaks or .gitleaks.toml unavailable; skipping the local secret scan (CI still scans)." >&2
+    gitleaks_missing_warned=1
   fi
 
   # ── DIG-1589: duplicate-work guard (resume before create) ──────────────────

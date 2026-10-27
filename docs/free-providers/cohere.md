@@ -10,7 +10,7 @@ free_tier_type: trial
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-10-18
+verified_at: 2026-10-25
 source_urls:
   - https://cohere.com/pricing
   - https://docs.cohere.com/docs/rate-limits
@@ -111,3 +111,4 @@ Remove the trial restriction by adding billing. Command A: $2.50/$10 per 1M in/o
 | 2026-08-30 | Automated snapshot sync | provider-review scan |
 | 2026-10-11 | Automated snapshot sync | provider-review scan |
 | 2026-10-18 | Automated snapshot sync | provider-review scan |
+| 2026-10-25 | Automated snapshot sync | provider-review scan |

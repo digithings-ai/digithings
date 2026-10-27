@@ -6,10 +6,11 @@ Final PR: `feat/deslop-epic` → `develop`, left merge-ready for the EM/CTO merg
 
 ## Why this shape
 
-The repo contains two generations of UI. The old gallery (`apps/reference`) and the
-prose design docs (`packages/ui/DESIGN.md`, `PRODUCT.md`, `packages/design/*.md`)
-predate the current work. The active generation is the new website + hero banners,
-the new digiquant desk, digichat, and the terminal clients.
+The repo contains two generations of UI. The old gallery (`apps/reference`, replaced
+by `apps/digiweb` in October 2026) and the prose design docs (`packages/ui/DESIGN.md`,
+`PRODUCT.md`, `packages/design/*.md`) predate the current work. The active generation
+is the new website + hero banners, the new digiquant desk, digichat, and the terminal
+clients.
 
 This epic spends nothing on the old generation. It fixes the new generation against
 the design language the new code actually uses — not against the stale docs.

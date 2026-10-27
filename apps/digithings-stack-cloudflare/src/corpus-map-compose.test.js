@@ -10,10 +10,12 @@ import { DIGITHINGS_ONLY_CORPUS_JSON, composeCorpusMap } from "./tenant-config";
  * exceed 5.1 kB (deploy error 10054, 2026-10-25). `composeCorpusMap` joins them
  * at boot; this gate pins both halves of that promise:
  *
- *  - the merge is LOSSLESS: the composed string is the object the single 5285
- *    byte var used to hold, OCC `researchSystemPrompt` included, byte for byte;
- *  - the merge is FAIL-CLOSED: a broken half cannot widen or empty the map, and
- *    the house entry can never be displaced by the extra half.
+ *  - the merge is LOSSLESS: the composed string carries the object the single
+ *    5285 byte var used to hold, OCC `researchSystemPrompt` included, plus the
+ *    house-slug alias (`digithings-ai`, DIG-5638) that every map arm carries;
+ *  - the merge is FAIL-CLOSED: a broken half cannot widen or empty the map, the
+ *    house entry can never be displaced by the extra half, and an unknown
+ *    tenant is never invented.
  *
  * The expected value is read from the dev-path copy in
  * `infra/digichat-release/compose.profile-a-bundle.override.yml`, which is an
@@ -112,22 +114,34 @@ describe("composeCorpusMap: the split [vars] pair rejoins into the old map", () 
     expect(JSON.parse(primary())).not.toHaveProperty("occ");
   });
 
-  it("composes the byte-identical old value, OCC prompt included", () => {
+  it("composes the transcribed value plus the house alias, OCC prompt included", () => {
     const composed = composeCorpusMap(primary(), extra());
     const expected = JSON.parse(composeCorpusJson());
     const actual = JSON.parse(composed);
 
-    // Deep equality against the full previous object: any drift in a slug, an
-    // index, a vault prefix or one byte of either research prompt fails here.
-    expect(actual).toEqual(expected);
-    expect(Object.keys(actual)).toEqual(["digithings", "occ"]);
+    // The dev-path compose copy names the house tenant `digithings` only, while
+    // the live embed slug is `digithings-ai`; composition must carry both keys
+    // with the SAME entry, or digivault refuses the live chat with 403.
+    const expectedWithAlias = {
+      digithings: expected.digithings,
+      "digithings-ai": expected.digithings,
+      occ: expected.occ,
+    };
+
+    // Deep equality against the full transcribed object: any drift in a slug,
+    // an index, a vault prefix or one byte of either research prompt fails here.
+    expect(actual).toEqual(expectedWithAlias);
+    expect(Object.keys(actual)).toEqual(["digithings", "digithings-ai", "occ"]);
+    expect(actual.digithings.digisearchIndex).toBe("digithings_docs");
+    expect(actual.digithings.vaultPathPrefix).toBe("clients/digithings");
+    expect(actual["digithings-ai"]).toEqual(actual.digithings);
     expect(actual.occ.researchSystemPrompt).toBe(expected.occ.researchSystemPrompt);
     expect(actual.digithings.researchSystemPrompt).toBe(expected.digithings.researchSystemPrompt);
 
     // Not just the same object: the same SERIALISED value, so a change of key
     // order or of compactness (which would rewrite the container's config blob)
     // is caught too.
-    expect(composed).toBe(JSON.stringify(expected));
+    expect(composed).toBe(JSON.stringify(expectedWithAlias));
   });
 
   it("lets the primary half win a slug collision", () => {
@@ -143,17 +157,25 @@ describe("composeCorpusMap: the split [vars] pair rejoins into the old map", () 
   });
 
   it("keeps the readable half when one half does not parse", () => {
+    // `occ` alone carries no house slug, so no house entry is invented.
     const brokenPrimary = composeCorpusMap("{not json", '{"occ":{"digisearchIndex":"occ_help"}}');
     expect(JSON.parse(brokenPrimary)).toEqual({ occ: { digisearchIndex: "occ_help" } });
 
     const brokenExtra = composeCorpusMap('{"digithings":{"digisearchIndex":"digithings_docs"}}', "[]");
-    expect(JSON.parse(brokenExtra)).toEqual({ digithings: { digisearchIndex: "digithings_docs" } });
+    expect(JSON.parse(brokenExtra)).toEqual({
+      digithings: { digisearchIndex: "digithings_docs" },
+      "digithings-ai": { digisearchIndex: "digithings_docs" },
+    });
   });
 
-  it("falls back to the first-party tenant when neither half is usable", () => {
+  it("falls back to the first-party tenant under both house slugs", () => {
     expect(composeCorpusMap("{not json", "{also not json")).toBe(DIGITHINGS_ONLY_CORPUS_JSON);
     expect(JSON.parse(composeCorpusMap("{not json", "{}"))).toEqual({
       digithings: { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+      "digithings-ai": {
+        digisearchIndex: "digithings_docs",
+        vaultPathPrefix: "clients/digithings",
+      },
     });
   });
 
@@ -165,10 +187,13 @@ describe("composeCorpusMap: the split [vars] pair rejoins into the old map", () 
     expect(composeCorpusMap()).toBe(DIGITHINGS_ONLY_CORPUS_JSON);
   });
 
-  it("is the unchanged single-var path when only DIGI_TENANT_CORPUS_MAP is set", () => {
-    // Back-compat: a deployment that has not taken the second var yet must
-    // behave exactly as it did before the split.
+  it("adds only the house alias when only DIGI_TENANT_CORPUS_MAP is set", () => {
+    // Back-compat: a deployment that has not taken the second var yet still
+    // composes to the house corpus under both slugs.
     const only = '{"digithings":{"digisearchIndex":"digithings_docs"}}';
-    expect(composeCorpusMap(only, undefined)).toBe(only);
+    expect(JSON.parse(composeCorpusMap(only, undefined))).toEqual({
+      digithings: { digisearchIndex: "digithings_docs" },
+      "digithings-ai": { digisearchIndex: "digithings_docs" },
+    });
   });
 });

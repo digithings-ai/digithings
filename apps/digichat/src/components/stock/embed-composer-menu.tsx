@@ -1082,7 +1082,6 @@ export function EmbedComposerMenu({
         checked: on,
         insert: optionDraft("/tools", t.slash),
         token: t.slash,
-        aliases: t.label && t.label !== t.slash ? [t.label] : [],
         activate: () => {
           if (readOnly) return;
           toggleTool(t.id);

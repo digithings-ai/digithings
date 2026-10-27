@@ -42,6 +42,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import atexit
 import datetime
 import http.client
 import json
@@ -316,6 +317,11 @@ class ReviewIndependence:
     keychain_service: str = ""
     keychain_account: str = ""
     log_path: str = "~/.config/digithings/merge-queue/reviewer-independence.log"
+    #: Where the answers outlive one tick. Empty means the reader keeps them in
+    #: memory only, which is what every test that builds its own config wants:
+    #: a test must not write the live queue's cache. The policy loader fills
+    #: this in with `PROVENANCE_CACHE_PATH_DEFAULT`.
+    cache_path: str = ""
 
 
 def _effective_mode(cfg: ReviewIndependence) -> str:
@@ -711,6 +717,7 @@ def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndep
             block.get("log_path")
             or "~/.config/digithings/merge-queue/reviewer-independence.log"
         ),
+        cache_path=str(block.get("cache_path") or PROVENANCE_CACHE_PATH_DEFAULT),
     )
 
 
@@ -2358,8 +2365,11 @@ def _marker_verdict(body: str) -> tuple[str, str, bool] | None:
     None means "this comment carries no marker verdict the queue can read" — a
     plain comment, or a marker whose `verdict=` is missing or misspelled. That
     is a missing signal, not a clearance, and it must not be treated as one.
+
+    A marker inside a fence or an inline span is quoted, not posted, so the body
+    is read with its code taken out (#4990).
     """
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         fields = {
             m.group("key").lower(): m.group("value")
             for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
@@ -2403,7 +2413,8 @@ _PROSE_SHA_RE = re.compile(r"(?<![0-9a-zA-Z-])(?P<sha>[0-9a-f]{7,40})(?![0-9a-zA
 # (DIG-5246). The heads it names are read with `_PROSE_SHA_RE`; a line naming
 # none is a withdrawal of the seat's blocks that name no head at all.
 _WITHDRAWAL_LINE_RE = re.compile(
-    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*withdraws?[*_`]*[ \t]*:[ \t]*(?P<refs>[^\n]*)$",
+    r"^[ \t]*(?:[-*+>][ \t]*)?[*_`]*(?P<token>withdraws?)[*_`]*[ \t]*:[ \t]*"
+    r"(?P<refs>[^\n]*)$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -2412,12 +2423,63 @@ _WITHDRAWAL_LINE_RE = re.compile(
 # and reading its first group as a commit would name a head nobody reviewed.
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
+# A fenced code block or an inline code span *shows* a marker, it does not post
+# one. #6197 merged at 2026-10-21 18:43 on the author's own reply, which quoted
+# the reviewer template inside a fence; the queue read the quoted
+# `verdict=approve` as the newest verdict and cleared three standing
+# changes-requested verdicts. #6196 taught the reader about sentences and
+# blockquotes, but a fence is neither, so the quote still read as a claim. The
+# rule now is the Markdown one: whatever a reader sees as code is not a claim.
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_FENCE_CLOSE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})[ \t]*$")
+_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(?P<code>.+?)(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _strip_fenced_blocks(body: str) -> str:
+    """The comment body with fenced code blocks taken out.
+
+    Removed lines become a bare newline, so line numbers and the line-anchored
+    patterns (`^Review verdict:`, `_PROVENANCE_RE`, `_VERDICT_LINE_RE`) keep
+    working on the text that is left.
+    """
+    kept: list[str] = []
+    fence = ""
+    for line in body.splitlines(keepends=True):
+        if fence:
+            match = _FENCE_CLOSE_RE.match(line.strip())
+            if (
+                match
+                and match.group("fence")[0] == fence[0]
+                and len(match.group("fence")) >= len(fence)
+            ):
+                fence = ""
+            kept.append("\n")
+            continue
+        match = _FENCE_OPEN_RE.match(line.strip())
+        if match:
+            fence = match.group("fence")
+            kept.append("\n")
+            continue
+        kept.append(line)
+    return "".join(kept)
+
+
+def _strip_code_blocks(body: str) -> str:
+    """The body with fenced blocks *and* inline code spans taken out.
+
+    This is the reader for markers and provenance, never for prose: a sha a
+    reviewer writes in backticks is still a sha, so the head bindings a prose
+    verdict names are read from `_strip_fenced_blocks`, where the backticks
+    survive (#4990).
+    """
+    return _INLINE_CODE_RE.sub(" ", _strip_fenced_blocks(body))
+
+
 # The seat a verdict belongs to. Every seat on this org pushes under one GitHub
 # login, so `author.login` cannot tell two reviewers apart — the seat id is the
 # provenance marker's `agent=` field, and it is the only place it is written.
 # A verdict whose seat cannot be read is judged by the newest-verdict rule
 # instead of by seat (see `_standing_seat_blocks`).
-_SEAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$")
 
 
 def _comment_text(body: str) -> str:
@@ -2433,11 +2495,40 @@ def _line_at(body: str, index: int) -> str:
 
 
 def _prose_verdict(body: str) -> tuple[str, str] | None:
-    """`(verdict, the line it was read from)` from a `Review verdict:` line."""
-    match = _PROSE_VERDICT_RE.search(body)
-    if match is None:
-        return None
-    return match.group("verdict").lower().replace(" ", "_"), _line_at(body, match.start())
+    """`(verdict, the line it was read from)` from a `Review verdict:` line.
+
+    A line whose `Review verdict:` token sits inside an inline code span is a
+    quote, not a claim, and it is skipped (#4990). The spans are not stripped
+    from the whole body the way `_strip_code_blocks` does for markers: a prose
+    verdict binds the head through every sha in the comment, and a reviewer who
+    writes that sha in backticks has still named it. Only the token decides
+    whether the line is posted, so `Review verdict: `approve`` — the verdict
+    word itself in backticks — is still read, and `` `Review verdict: approve` ``
+    is not. Fenced blocks are already gone: the caller strips them first.
+    """
+    for match in _PROSE_VERDICT_RE.finditer(body):
+        if _inside_inline_code(body, match.start()):
+            continue
+        return match.group("verdict").lower().replace(" ", "_"), _line_at(
+            body, match.start()
+        )
+    return None
+
+
+def _inside_inline_code(body: str, index: int) -> bool:
+    """True when `index` falls inside an inline code span of `body`.
+
+    The withdrawal reader gets the fence-stripped body, so fenced blocks are
+    already gone. Inline spans are still there on purpose: a seat may write the
+    withdrawn head in backticks — ``Withdraws: `3f2a9c1d4b5e` `` — and that is
+    still a withdrawal. So the span cannot be stripped from the whole body the
+    way `_strip_code_blocks` does for markers; only a line whose `Withdraws:`
+    token is itself inside a span is skipped (#4990).
+    """
+    for span in _INLINE_CODE_RE.finditer(body):
+        if span.start() <= index < span.end():
+            return True
+    return False
 
 
 def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
@@ -2450,10 +2541,19 @@ def _withdrawal(body: str) -> tuple[bool, tuple[str, ...]]:
     occurrence first, deduplicated. A line naming no sha withdraws only blocks
     that name no head, so it can never spend a block scoped to a commit the
     reviewer did not name.
+
+    A line inside a fenced block or an inline code span is a quote, not a claim:
+    it withdraws nothing (#4990). That is the same rule the verdict readers
+    follow, and #6197 is why it exists — a comment that shows the syntax must not
+    be able to clear a block.
     """
     declared = False
     heads: list[str] = []
     for match in _WITHDRAWAL_LINE_RE.finditer(body):
+        if _inside_inline_code(body, match.start("token")):
+            # `_strip_fenced_blocks` already removed the fenced case; this is the
+            # inline one: ``Withdraws: 3f2a9c1d4b5e`` in backticks is shown.
+            continue
         declared = True
         for found in _PROSE_SHA_RE.finditer(match.group("refs")):
             sha = found.group("sha").lower()
@@ -2484,9 +2584,14 @@ class PostedVerdict:
 
 
 def _comment_seat(provenance: Mapping[str, str]) -> str:
-    """The seat that posted this comment, or "" when it cannot be read."""
-    agent = str(provenance.get("agent") or "").strip()
-    return agent if agent and _SEAT_ID_RE.match(agent) else ""
+    """The seat that posted this comment, or "" when it cannot be read.
+
+    A seat id is a Paperclip uuid. Anything else — a placeholder like
+    `<your-seat-uuid>`, a display name, a typo — names no seat the queue could
+    hold a block to, so it is not read as one (#4990, #4809).
+    """
+    agent = str(provenance.get("agent") or "").strip().lower()
+    return agent if agent and _UUID_RE.match(agent) else ""
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2498,7 +2603,7 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
     misspelled is skipped, and the line beside it still says what the reviewer
     decided.
     """
-    body = str(comment.get("body") or "")
+    body = _strip_fenced_blocks(str(comment.get("body") or ""))
     text = _comment_text(body)
     marker = _marker_verdict(body)
     prose = _prose_verdict(text)
@@ -2708,7 +2813,107 @@ def _sha_text(sha: str) -> str:
     return f"`{sha[:12]}`" if sha else "no commit"
 
 
-def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
+def _unbound_block_clearance(head_text: str) -> str:
+    """The one way out of a block that names no head (DIG-5630).
+
+    A block whose `scope=` did not parse binds nothing, so there is no commit
+    for the branch to leave behind and no head an approve can name to spend it.
+    The remedies the queue used to prescribe — "a later approve naming the head"
+    and "move the PR to a new head and approve that head" — are both false for
+    this block, and `#6426` took 20+ handbacks over two days following them.
+    `_withdraws` clears it only on an approve naming the current head with a
+    `Withdraws:` line that names no sha (a line naming a sha spends nothing,
+    because the block has no binding to match), so that is what the handback
+    says.
+    """
+    return (
+        "A block that names no head is not spent by the PR moving to a new head: "
+        "the clearing comment is that seat's approve naming the current head "
+        f"{head_text} plus a `Withdraws:` line with no sha on it"
+    )
+
+
+def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
+    """The blocking verdicts that still speak for the head the PR stands at.
+
+    A block naming another commit is spent by the branch moving
+    (`verdict_applies_to_head`): it is not a `changes_requested` this gate can
+    clear, and it asks no seat for anything. A block that names no head is not
+    stale, so it is counted.
+    """
+    return [
+        verdict
+        for verdict in _readable_verdicts(pr)
+        if verdict.verdict in BLOCKING_VERDICTS
+        and verdict_applies_to_head(verdict, head)
+    ]
+
+
+def _clearance_seat_reason(
+    pr: dict[str, Any],
+    approve: PostedVerdict,
+    cfg: ReviewIndependence | None,
+    prov: ReviewerProvenance | None,
+) -> str:
+    """A refusal when an approve that clears a block cannot be shown non-author.
+
+    DIG-4990, item 3. Clause 2 of the verdict rule reads the newest readable
+    verdict, and it used to be enough for that verdict to be an approve: a
+    `changes_requested` whose seat could not be read was cleared by the next
+    comment that said "approve", including the author's own reply. #6197 is
+    the shape — the author's write-up was the newest verdict, and the queue
+    read it as one. The block now survives any approve that names no seat, and
+    any approve from a seat that wrote the PR.
+
+    The author is read the way the reviewer-independence gate reads it:
+    `_author_context` takes the seats from the commits and their Paperclip
+    runs, never from the ticket's assignee. The assignee is the seat asked to
+    move the ticket along, not the seat whose commits are on the branch, and
+    reading it as the author refused the ticket owner's review on #6145
+    (DIG-4809).
+
+    "" is the answer whenever the gate cannot ask the question: `off` reads no
+    provenance at all, and `shadow` measures the reviewer gate without refusing;
+    a Paperclip read that failed says nothing about the branch either. The
+    reviewer-independence gate is the one that reports those — it defers a
+    failed read and refuses an author it cannot identify — so this gate does
+    not publish a second, misleading reason.
+    """
+    if cfg is None or _effective_mode(cfg) != "enforce":
+        return ""
+    try:
+        authors, _ = _author_context(pr, prov or _provenance_for(cfg))
+    except (_PaperclipUnavailable, _AuthorUnidentified):
+        return ""
+    if not authors:
+        return ""
+    head = str(pr.get("headRefOid") or "")
+    head_text = f"`{head[:12]}`" if head else "an unknown head"
+    where = f"comment {approve.comment_id}" if approve.comment_id else "a comment"
+    if not approve.seat:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) names no "
+            "reviewer seat, so it cannot clear the block: a clearance needs the "
+            "provenance marker's `agent=` to name a seat that did not write the PR"
+        )
+    if approve.seat in authors:
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) comes from "
+            f"the PR's authoring seat `{approve.seat[:8]}`, so it cannot clear the "
+            "block: only a seat that did not write the PR can"
+        )
+    return ""
+
+
+def _verdict_value_reason(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """A refusal when the newest readable verdict does not clear this PR.
 
     DIG-4878. A blocking verdict used to be spent the moment the commit it named
@@ -2747,13 +2952,19 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
        `develop` on 2026-10-21 with the security desk's `changes requested` still
        on the branch, because the code reviewer's later approve on the head was
        the newest readable verdict — a second sign-off was never asked for, so
-       the queue never held the PR for it.
+       the queue never held the PR for it. A block that names no head (its
+       `scope=` did not parse, DIG-5630) is spent by no head at all: the PR
+       moving leaves nothing behind, so the clearing comment is the seat's
+       approve naming the current head plus a `Withdraws:` line with no sha.
     2. **Everything else is judged by the newest readable verdict.** The newest
        readable verdict is the one that counts: a blocking verdict blocks when
        it names the head the PR stands at (or names no head at all, which
        cannot be stale); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
-       clearance.
+       clearance. A clearance of a `changes_requested` on the current head must
+       also name a non-author seat: an approve with no provenance seat, or one
+       from a seat that wrote the PR, clears nothing (`_clearance_seat_reason`,
+       item 3 of DIG-4990).
 
     Clause 1 needs the seat, and the seat is written only in the provenance
     marker (`agent=`): every seat pushes under one GitHub login, so a comment's
@@ -2789,7 +3000,18 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
         elif latest.bindings:
             scope_text = f", naming `{latest.bindings[0][:12]}`"
         else:
-            scope_text = ""
+            scope_text = ", naming no head"
+        if not latest.bindings:
+            # DIG-5630: a block whose `scope=` did not parse names no head, so
+            # "a later approve naming the head it covers" is not a way out of it
+            # — any head the PR stands at is covered by nothing. The handback has
+            # to name the form that does clear it.
+            return [
+                f"PR #{pr.get('number')}: the latest review verdict is "
+                f"'{latest.verdict}' ({latest.source}, posted by {latest.author} "
+                f"in {where}){scope_text}, and the PR now stands at {head_text}. "
+                f"{_unbound_block_clearance(head_text)}"
+            ]
         return [
             f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
             f"({latest.source}, posted by {latest.author} in {where}){scope_text}; "
@@ -2797,6 +3019,10 @@ def _verdict_value_reason(pr: dict[str, Any]) -> list[str]:
             f"verdict stands until a later approve names the head it covers"
         ]
     if _covers_head(latest, head):
+        if _blocks_on_head(pr, head):
+            clearance = _clearance_seat_reason(pr, latest, cfg, prov)
+            if clearance:
+                return [clearance]
         return []
     return [
         f"PR #{pr.get('number')}: the latest review verdict is '{latest.verdict}' "
@@ -2815,7 +3041,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
     elif block.bindings:
         scope_text = f", naming `{block.bindings[0][:12]}`"
     else:
-        scope_text = ""
+        scope_text = ", naming no head"
     later = [
         verdict
         for verdict in _readable_verdicts(pr)
@@ -2829,19 +3055,35 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         and not _withdraws(approve, block)
     ):
         # DIG-5246: the handback for the #6280 timeline. The seat did come back
-        # and approve the same head; what it did not do is say it withdraws the
+        # and approve the head; what it did not do is say it withdraws the
         # finding, so the queue cannot read the approve as clearing it.
         if block.bindings:
             withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
-        else:
-            withdraw = "`Withdraws:` line"
+            return (
+                f"PR #{pr.get('number')}: seat {block.seat} posted "
+                f"'{block.verdict}' ({block.source}, in {where}){scope_text} and "
+                f"then approved the same head {head_text} (comment "
+                f"{approve.comment_id or 'a comment'}); an approve on an unchanged "
+                "head does not clear the block it left behind. Add a "
+                f"{withdraw} to the approving comment, or move the PR to a new "
+                "head and approve that head"
+            )
+        # DIG-5630: the block names no head, so "move to a new head" is not a
+        # remedy — every head is outside it, and only the bare withdrawal spends
+        # it. A line naming a sha spends nothing here (`_withdraws`).
         return (
             f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
-            f"({block.source}, in {where}){scope_text} and then approved the same "
-            f"head {head_text} (comment {approve.comment_id or 'a comment'}); an "
-            "approve on an unchanged head does not clear the block it left behind. "
-            f"Add a {withdraw} to the approving comment, or move the PR to a new "
-            "head and approve that head"
+            f"({block.source}, in {where}){scope_text}, and that seat's later "
+            f"approve of {head_text} (comment "
+            f"{approve.comment_id or 'a comment'}) does not clear the block it "
+            f"left behind. {_unbound_block_clearance(head_text)}"
+        )
+    if not block.bindings:
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+            f"{head_text}; a blocking verdict stands until that seat clears it. "
+            f"{_unbound_block_clearance(head_text)}"
         )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
@@ -2973,7 +3215,11 @@ def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
     return False
 
 
-def _gate_review(pr: dict[str, Any]) -> list[str]:
+def _gate_review(
+    pr: dict[str, Any],
+    cfg: ReviewIndependence | None = None,
+    prov: ReviewerProvenance | None = None,
+) -> list[str]:
     """Open change requests block: a formal one, or a verdict posted as a comment.
 
     This gate no longer demands an approving review from a non-author, and it no
@@ -2987,7 +3233,10 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
 
     `_verdict_value_reason` is the value gate, and it runs here, before the
     coverage gate: a PR whose newest verdict blocks must not be carried to a
-    merge by a `reviewed:agent` label (DIG-4878).
+    merge by a `reviewed:agent` label (DIG-4878). A clearance of a block also
+    needs a non-author seat, so the value gate is handed the same reviewer
+    configuration and provenance reader the coverage gate uses (item 3 of
+    DIG-4990).
 
     Both arms are scoped to the head the PR stands at. `reviewDecision` is an
     aggregate GitHub keeps after the branch moves, and a posted verdict keeps
@@ -3000,7 +3249,7 @@ def _gate_review(pr: dict[str, Any]) -> list[str]:
             reasons.append("review has outstanding change requests")
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
-    reasons.extend(_verdict_value_reason(pr))
+    reasons.extend(_verdict_value_reason(pr, cfg, prov))
     return reasons
 
 
@@ -3341,6 +3590,221 @@ PAPERCLIP_READ_BUDGET = 310.0
 PAPERCLIP_READ_ATTEMPTS = 2
 PAPERCLIP_RETRY_BACKOFF = 3.0
 
+#: Where the answers are kept between ticks.
+#:
+#: The budget above was raised on 2026-10-26 because a slow answer read as a
+#: refusal, and a refusal for a transport reason is a false handback. That fix
+#: left the other half of the cost unaddressed: the reader lived for one tick,
+#: so every tick asked for every fact again. The driver fires every 180 s and
+#: reads every open pull request of both repos, which is ~25 tickets, ~25
+#: ticket-run lists and one run per provenance trailer — at 12 s a ticket and
+#: 28-144 s a ticket's run list, a tick that outran its own interval by an
+#: order of magnitude. It also wrote nothing to its log until every pull
+#: request had been judged, so the silence was indistinguishable from a dead
+#: job (DIG-5632).
+#:
+#: The answers are facts about the control plane and almost all of them are
+#: final. A run belongs to one seat forever. A ticket key names one id forever.
+#: A ticket's run list only grows, and it grows at the end: a run that covered
+#: a commit existed before that commit was written. So an answer may stand in
+#: for a read for exactly the commits that were already written when the
+#: answer was taken, and a commit written after it forces a fresh read. That
+#: is the rule `issue_runs` applies, and it is why the cache cannot hide a run
+#: that would make the reviewing seat the authoring seat.
+PROVENANCE_CACHE_PATH_DEFAULT = "~/.config/digithings/merge-queue/provenance-cache.json"
+#: Bumped when the shape below changes, so a cache written by an older queue is
+#: read as no cache instead of as facts it does not hold.
+PROVENANCE_CACHE_VERSION = 1
+#: A cache is a faster queue, never an unbounded file. When it outgrows this,
+#: the oldest answers go first: they are the ones the least has changed under.
+PROVENANCE_CACHE_MAX_ENTRIES = 4096
+#: How long "the API has no such record" is believed. A 404 is a fact about a
+#: key or a run id, and a key can start existing (a ticket filed a minute ago)
+#: and a run id can appear (a comment naming a run that starts after it was
+#: posted), so this answer expires and the others do not.
+PROVENANCE_CACHE_MISS_TTL = 60.0
+
+#: The environment variable the driver sets to the epoch second this tick must
+#: stop reading Paperclip by, and the clock reading that answers it.
+#:
+#: The cache above fixes the steady state; this bounds the worst one. A cold
+#: cache, or a batch of branches that all moved at once, still asks for facts the
+#: cache cannot answer, and one PR was measured at **313.6 s** of reads on
+#: 2026-10-26 — longer than the whole 180 s interval. No budget *between* PRs can
+#: bound that, because the cost is inside one PR. So the driver states a deadline
+#: and the reader stops asking when it passes.
+#:
+#: A read past the deadline is `_PaperclipUnavailable`, which the gate already
+#: treats as `transient`: nothing is concluded about the PR, nothing is published
+#: as a gate, and the PR is judged again on a later tick (DIG-5573). That is the
+#: same answer a slow API already gives — the difference is that it now arrives
+#: before the tick has outlived its interval.
+PAPERCLIP_DEADLINE_ENV = "MQ_PAPERCLIP_DEADLINE"
+
+
+def _paperclip_tick_deadline() -> float | None:
+    """The epoch second this tick must stop reading by, or None for no deadline.
+
+    A value that cannot be read is no deadline: the queue must not stop answering
+    because an environment value was malformed. An absent value is no deadline
+    too, which is what an older driver gives a newer runner.
+    """
+    raw = str(os.environ.get(PAPERCLIP_DEADLINE_ENV) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+#: The stand-in for "the API answered that there is no such record". It is not
+#: None, because None is a payload the JSON could hold.
+_MISSING = object()
+
+#: The fields of each answer the gate reads, and the only ones the cache keeps.
+#: The answers carry more than the gate needs — a ticket body, every comment on
+#: it — and this file sits beside the queue's log on this Mac, so an answer is
+#: cut down to the facts before it is written down. A path that is not one of
+#: the three the gate asks is not cached at all, so a future reader that wants
+#: a whole answer gets the whole answer from the API.
+_RUN_ANSWER_FIELDS = ("id", "agentId")
+_TICKET_ANSWER_FIELDS = ("id", "identifier")
+_ISSUE_RUNS_ANSWER_FIELDS = (
+    "id",
+    "runId",
+    "agentId",
+    "contextIssueId",
+    "startedAt",
+    "finishedAt",
+)
+
+
+def _answer_kind(path: str) -> str:
+    """Which of the three questions `path` asks, or an empty string."""
+    if path.startswith("/api/heartbeat-runs/"):
+        return "run"
+    if path.startswith("/api/issues/"):
+        return "issue_runs" if path.endswith("/runs") else "ticket"
+    return ""
+
+
+def _trim_answer(path: str, payload: Any) -> Any:
+    """The facts of one answer that the cache keeps, or None not to keep it."""
+    kind = _answer_kind(path)
+    if kind == "run" and isinstance(payload, Mapping):
+        return {name: payload.get(name) for name in _RUN_ANSWER_FIELDS}
+    if kind == "ticket" and isinstance(payload, Mapping):
+        return {name: payload.get(name) for name in _TICKET_ANSWER_FIELDS}
+    if kind == "issue_runs" and isinstance(payload, list):
+        return [
+            {name: run.get(name) for name in _ISSUE_RUNS_ANSWER_FIELDS}
+            for run in payload
+            if isinstance(run, Mapping)
+        ]
+    return None
+
+
+class _ProvenanceCache:
+    """The Paperclip answers that outlive one tick.
+
+    The file is written on interpreter exit and only when it changed. A cache
+    the queue cannot write is a slower queue, not a stopped one: every failure
+    here is swallowed and the next read goes to the API.
+    """
+
+    def __init__(self, path: str, now: Any = None) -> None:
+        self._path = path
+        self._entries: dict[str, dict[str, Any]] = {}
+        self._loaded = False
+        self._dirty = False
+        self._now = now or time.time
+
+    def _load(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+        try:
+            raw = json.loads(Path(self._path).expanduser().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(raw, dict) or raw.get("version") != PROVENANCE_CACHE_VERSION:
+            return
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return
+        self._entries = {
+            str(path): entry
+            for path, entry in entries.items()
+            if isinstance(entry, dict) and "at" in entry
+        }
+
+    def get(self, path: str, fresh_after: float) -> tuple[bool, float, Any]:
+        """Whether `path` is known well enough, when it was taken, and the answer.
+
+        The answer is `_MISSING` when the API said there is no such record. The
+        moment is returned so a caller can keep it: an answer taken before a
+        commit may not stand in for one taken after it.
+        """
+        self._load()
+        entry = self._entries.get(path)
+        if entry is None:
+            return False, 0.0, None
+        try:
+            at = float(entry.get("at") or 0.0)
+        except (TypeError, ValueError):
+            return False, 0.0, None
+        if at < fresh_after:
+            return False, at, None
+        if entry.get("missing"):
+            if self._now() - at > PROVENANCE_CACHE_MISS_TTL:
+                return False, at, None
+            return True, at, _MISSING
+        if "data" not in entry:
+            return False, at, None
+        return True, at, entry["data"]
+
+    def put(self, path: str, payload: Any) -> None:
+        self._load()
+        self._entries[path] = {"at": self._now(), "data": payload}
+        self._dirty = True
+        self._prune()
+
+    def put_missing(self, path: str) -> None:
+        self._load()
+        self._entries[path] = {"at": self._now(), "missing": True}
+        self._dirty = True
+        self._prune()
+
+    def _prune(self) -> None:
+        limit = PROVENANCE_CACHE_MAX_ENTRIES
+        if len(self._entries) <= limit:
+            return
+        ordered = sorted(
+            self._entries.items(), key=lambda item: float(item[1].get("at") or 0.0)
+        )
+        for path, _entry in ordered[: len(self._entries) - limit]:
+            del self._entries[path]
+
+    def flush(self) -> None:
+        if not self._dirty:
+            return
+        self._dirty = False
+        target = Path(self._path).expanduser()
+        tmp = target.with_name(target.name + ".tmp")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(
+                json.dumps(
+                    {"version": PROVENANCE_CACHE_VERSION, "entries": self._entries},
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            tmp.replace(target)
+        except OSError:
+            return
+
 
 class ReviewerProvenance:
     """The Paperclip facts the reviewer gate needs: tickets, seats and runs.
@@ -3352,10 +3816,20 @@ class ReviewerProvenance:
     nothing else: it is never printed, logged or written anywhere.
     """
 
-    def __init__(self, cfg: ReviewIndependence) -> None:
+    def __init__(self, cfg: ReviewIndependence, now: Any = None) -> None:
         self._cfg = cfg
         self._token = ""
-        self._cache: dict[str, Any] = {}
+        self._now = now or time.time
+        #: The answers this tick has already asked for, by path, with the moment
+        #: each was taken: a later commit may need a fresher answer than an
+        #: earlier one, so the moment is part of what is cached. `_MISSING` is
+        #: the API's "there is no such record" and is cached like a payload.
+        self._cache: dict[str, tuple[float, Any]] = {}
+        self._store: _ProvenanceCache | None = (
+            _ProvenanceCache(cfg.cache_path, self._now) if cfg.cache_path else None
+        )
+        if self._store is not None:
+            atexit.register(self._store.flush)
 
     def _bearer(self) -> str:
         if self._token:
@@ -3399,10 +3873,39 @@ class ReviewerProvenance:
         self._token = token
         return token
 
-    def _get(self, path: str) -> Any:
+    def _get(self, path: str, *, fresh_after: float = 0.0) -> Any:
+        """One answer, from this tick, from the cache, or from the API.
+
+        `fresh_after` is the latest moment the answer must be at least as new
+        as to be usable: an answer taken before a commit was written may not
+        name a run that covers that commit. Only `issue_runs` passes one.
+        """
         cached = self._cache.get(path)
         if cached is not None:
-            return cached
+            taken, kept = cached
+            if taken >= fresh_after:
+                if kept is _MISSING:
+                    raise _PaperclipMissing(f"Paperclip has no {path}")
+                return kept
+        if self._store is not None:
+            hit, taken, kept = self._store.get(path, fresh_after)
+            if hit:
+                if kept is _MISSING:
+                    self._cache[path] = (taken, _MISSING)
+                    raise _PaperclipMissing(f"Paperclip has no {path}")
+                self._cache[path] = (taken, kept)
+                return kept
+        # The tick's budget for *asking* is spent: no read is started. Nothing is
+        # concluded about the PR, so the gate defers it instead of refusing it
+        # (DIG-5573). A read that has already started is left to finish on its own
+        # budget — a read cut in half is a fact the cache never gets to keep, and
+        # the PR then costs exactly the same on the next tick and every tick after
+        # it, which is a queue that never converges.
+        tick_deadline = _paperclip_tick_deadline()
+        if tick_deadline is not None and time.time() >= tick_deadline:
+            raise _PaperclipUnavailable(
+                f"the tick's read budget is spent, so {path} was not read"
+            )
         url = f"{self._cfg.api_url.rstrip('/')}{path}"
         request = urllib.request.Request(
             url,
@@ -3455,6 +3958,7 @@ class ReviewerProvenance:
                     # failed read would turn a bad id in a comment into a
                     # transport failure, and a transport failure stops every
                     # merge in the queue on a healthy API (DIG-4809, 21 Oct 2026).
+                    self._remember(path, _MISSING)
                     raise _PaperclipMissing(f"Paperclip has no {path}") from exc
                 if exc.code < 500:
                     # 401 and 403 are the credential talking, not the record: the
@@ -3475,7 +3979,7 @@ class ReviewerProvenance:
                 # more try.
                 failure = exc
             else:
-                self._cache[path] = payload
+                self._remember(path, payload)
                 return payload
         if failure is None:
             raise _PaperclipUnavailable(
@@ -3488,6 +3992,22 @@ class ReviewerProvenance:
         plural = "attempt" if attempts == 1 else "attempts"
         raise _PaperclipUnavailable(f"{detail} (after {attempts} {plural})") from failure
 
+    def _remember(self, path: str, payload: Any) -> None:
+        """Keep one answer for the rest of this tick, and for later ticks.
+
+        The tick always keeps the whole answer. The file keeps only the facts
+        the gate reads, and only for the three questions it asks.
+        """
+        self._cache[path] = (self._now(), payload)
+        if self._store is None:
+            return
+        if payload is _MISSING:
+            self._store.put_missing(path)
+            return
+        trimmed = _trim_answer(path, payload)
+        if trimmed is not None:
+            self._store.put(path, trimmed)
+
     def ticket(self, key: str) -> dict[str, Any] | None:
         """The Paperclip issue behind a ticket key, or None when there is none."""
         try:
@@ -3496,10 +4016,22 @@ class ReviewerProvenance:
             return None
         return data if isinstance(data, dict) else None
 
-    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
-        """Every run that happened on one issue."""
+    def issue_runs(
+        self, issue_id: str, *, fresh_after: float = 0.0
+    ) -> list[dict[str, Any]]:
+        """Every run that happened on one issue.
+
+        `fresh_after` is the moment the answer must be at least as new as: the
+        newest commit on the pull request the answer is about to judge. A run
+        list read at T holds every run that covered a commit written before T,
+        because a run starts before the commit it covers, so the answer is
+        exactly as good as a fresh read for those commits. A commit written
+        after T is not covered by that promise and asks for a fresh read.
+        """
         try:
-            data = self._get(f"/api/issues/{issue_id}/runs")
+            data = self._get(
+                f"/api/issues/{issue_id}/runs", fresh_after=fresh_after
+            )
         except _PaperclipMissing:
             return []
         return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
@@ -3533,9 +4065,13 @@ def _provenance_for(cfg: ReviewIndependence) -> ReviewerProvenance:
 
 
 def _provenance_fields(body: str) -> dict[str, str]:
-    """The `digithings-review` marker's fields, lower-cased keys."""
+    """The `digithings-review` marker's fields, lower-cased keys.
+
+    A marker inside a fence or an inline span is a quoted example, not a claim:
+    the body is read with its code taken out (#4990).
+    """
     fields: dict[str, str] = {}
-    for marker in _PROVENANCE_RE.finditer(body):
+    for marker in _PROVENANCE_RE.finditer(_strip_code_blocks(body)):
         for match in _MARKER_FIELD_RE.finditer(marker.group("fields")):
             fields[match.group("key").lower()] = match.group("value")
     return fields
@@ -3557,7 +4093,7 @@ def _scope_head(body: str) -> str:
     one when the comment carries no provenance marker of its own.
     """
     head = ""
-    for marker in _MARKER_RE.finditer(body):
+    for marker in _MARKER_RE.finditer(_strip_code_blocks(body)):
         found = _SCOPE_SHA_RE.search(_marker_fields(marker).get("scope", ""))
         if found:
             head = found.group("sha")
@@ -3571,7 +4107,11 @@ def _carries_review_evidence(body: str, marker_literal: str) -> bool:
     posted verdict marker. The first is the coverage hatch, the second is the
     review rule's own format, and the third is the marker the queue reads for
     a blocking verdict.
+
+    A shape that appears only inside a fence or an inline span is quoted, not
+    posted: the body is read with its code taken out (#4990).
     """
+    body = _strip_code_blocks(body)
     if marker_literal in body:
         return True
     if _VERDICT_LINE_RE.search(body):
@@ -3728,8 +4268,16 @@ def _author_context(
     if ticket:
         issue_id = str(ticket.get("id") or "")
         stamps = _author_dates(pr)
+        # The run list may be taken from a cache only for the commits that were
+        # already written when it was read. A run that covered such a commit
+        # existed by then, so the answer names it; a run that started after the
+        # answer was taken cannot have covered an older commit, and a commit
+        # written after the answer forces the fresh read that sees it. Reads a
+        # tick apart ask the same question, so this is the difference between
+        # ~25 slow reads a tick and none (DIG-5632).
+        known = max((_parse_ts(stamp) or 0.0) for stamp in stamps) if stamps else 0.0
         counts: dict[str, int] = {}
-        for run in prov.issue_runs(issue_id):
+        for run in prov.issue_runs(issue_id, fresh_after=known):
             seat = str(run.get("agentId") or "").lower()
             if not seat:
                 continue
@@ -4342,7 +4890,7 @@ def evaluate(
     unreadable = _ensure_comments(pr, repo)
     if unreadable:
         reasons.append(unreadable)
-    reasons.extend(_gate_review(pr))
+    reasons.extend(_gate_review(pr, policy.review_independence, prov))
     coverage_reasons, review_evidence, deferred = _review_coverage(
         pr, repo, policy.review_independence, prov
     )
