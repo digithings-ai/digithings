@@ -1294,6 +1294,66 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
   });
 
+  it("forwards X-Digi-Max-Tool-Calls to digigraph when the deployment caps tool calls", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "house",
+          backend: { type: "digigraph" },
+          guardrails: { maxToolCallsPerTurn: 5 },
+        },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      await res.text();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Max-Tool-Calls"]).toBe("5");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("omits X-Digi-Max-Tool-Calls when the deployment sets no tool cap", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: { slug: "house", backend: { type: "digigraph" } },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      await res.text();
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Max-Tool-Calls"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("forwards X-Digi-Search-Engine to digigraph upstream headers", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {

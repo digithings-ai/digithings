@@ -379,6 +379,49 @@ class WorkerBuildTest(unittest.TestCase):
         self.assertEqual(_mod.worker_build("/wt-4010", rec), ["worker-build:npm-ci"])
         self.assertEqual(len(calls), 1)
 
+    def test_build_skips_an_app_the_tree_has_retired(self):
+        """A retirement PR deletes the app; the fixed WORKER_APPS still names it.
+
+        #6530 retires apps/digitrace-langfuse (DIG-5136) and could not go green:
+        the runner changed into the app directory and wrangler failed on a
+        project with no config. An app with no wrangler.toml in the tree is
+        retired in that tree and is not built; the rest still are.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            live = _mod.WORKER_APPS[0]
+            retired = _mod.WORKER_APPS[-1]
+            for app in (live, _mod.WORKER_APPS[1]):
+                os.makedirs(os.path.join(wt, "apps", app))
+                open(os.path.join(wt, "apps", app, "wrangler.toml"), "w").close()
+            # The retired app's directory can survive a checkout (ignored
+            # node_modules), so the filter must key on wrangler.toml, not the dir.
+            os.makedirs(os.path.join(wt, "apps", retired))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            built = [c[0].split(":", 1)[1] for c in calls[1:]]
+            self.assertEqual(built, [live, _mod.WORKER_APPS[1]])
+            self.assertNotIn(retired, built)
+
+    def test_build_with_no_apps_dir_builds_the_fixed_list(self):
+        """A unit fixture or an odd tree says nothing about retirement: build all."""
+        with tempfile.TemporaryDirectory() as wt:
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
+
+    def test_a_tree_with_no_buildable_worker_fails_loudly(self):
+        """Every app retired is a broken checkout, not a clean tree.
+
+        Skipping each app because its wrangler.toml is absent would turn a
+        half-checked-out worktree into a green required check. Only a tree that
+        still has at least one buildable Worker is treated as a real tree.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            for app in _mod.WORKER_APPS:
+                os.makedirs(os.path.join(wt, "apps", app))
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+
 
 class BunSuiteGateTest(unittest.TestCase):
     """The bun suites run in local-ci, and the receipt says which ones (DIG-5203).

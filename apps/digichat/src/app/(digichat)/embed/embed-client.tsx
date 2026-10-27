@@ -84,6 +84,12 @@ import {
   decideEmbedSendGate,
 } from "@/lib/embed-send-gate";
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
+import {
+  isPrivateMode,
+  setPrivateMode,
+  setPrivateModeAvailable,
+  subscribePrivateMode,
+} from "@/lib/product-slash-commands";
 
 import {
   buildGatedMessage,
@@ -587,6 +593,30 @@ function EmbedChat({
   }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
+  // ?private=1 resolves once at mount (ON-only, like ?wide=1) into the session
+  // mode; `/private` toggles the same store afterwards. Module scope rather
+  // than state because the slash palette is a static function object and the
+  // transport is frozen on first render (#1339) — both read it at call time.
+  const privateMode = useSyncExternalStore(
+    subscribePrivateMode,
+    isPrivateMode,
+    () => false,
+  );
+  // Mutate the ref in the render body (the "useLatest" idiom) — same reason as
+  // chatPrefsRef below: the transport keeps the accessor it was built with.
+  const privateModeRef = useRef(privateMode);
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  privateModeRef.current = privateMode;
+  const getPrivateMode = useCallback(() => privateModeRef.current, []);
+  // Availability first, then the seed, so the two can never disagree: a tenant
+  // that did not opt in leaves `?private=1` inert, and a tenant that stops
+  // opting in drops the session flag through setPrivateModeAvailable(false).
+  useEffect(() => {
+    setPrivateModeAvailable(tenantCfg.privateMode === true);
+  }, [tenantCfg.privateMode]);
+  useEffect(() => {
+    if (uiParams.privateMode && tenantCfg.privateMode === true) setPrivateMode(true);
+  }, [uiParams.privateMode, tenantCfg.privateMode]);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
@@ -799,6 +829,7 @@ function EmbedChat({
     getMcpSession,
     getEffort,
     getSearchEngine,
+    getPrivateMode,
     getPlanProof,
     getTrialProof,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.

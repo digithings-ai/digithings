@@ -43,11 +43,11 @@ const indexSource = readFileSync(
   "utf-8",
 );
 
-// MCP-scoped vars (#3780 Task 8): forwarded by DigiQuantMcpContainer.envVars
-// ONLY — never duplicated into DigiStackContainer.envVars (the stack container
-// ignores them; duplication was removed in review finding 6). The first
-// envVars block below is the stack container's, the second the MCP one's. The
-// digichat block was removed with the folded DigiChatContainer (#4689).
+// MCP-scoped vars (#3780 Task 8): these belonged to the retired
+// DigiQuantMcpContainer.envVars. The Worker-native DigiQuantMcpAgent
+// (DIG-2913) reads its data through the MARKET_DATA binding, so no container
+// forwards them any more (the container was deleted in DIG-5558) — never
+// duplicated into DigiStackContainer.envVars either.
 const MCP_SCOPED_VARS = new Set([
   "DIGIQUANT_MCP_SCOPE",
   "DIGIQUANT_MARKET_DATA_BACKEND",
@@ -85,6 +85,17 @@ const DIGICHAT_SCOPED_VARS = new Set([
 // envVars block. Exempt from the forward-everything check; the scoping check
 // below still refuses them in any remaining container's block.
 const RETIRED_FOLD_VARS = new Set([...DIGICHAT_SCOPED_VARS, "DIGICHAT_LEGACY_EMBED_ENABLED"]);
+
+// The retired digiquant-mcp container's env surface (DIG-5558). These names
+// stay declared on `Env` because wrangler.toml still carries them for this
+// Worker, but the DigiQuantMcpContainer that forwarded them is gone, so nothing
+// keys them into an envVars block any more. Exempt from the forward-everything
+// check; the scoping check below still refuses them in the remaining block.
+const RETIRED_MCP_CONTAINER_VARS = new Set([
+  ...MCP_SCOPED_VARS,
+  "GLOOMBERB_SESSION_COOKIE",
+]);
+
 
 // Worker-scoped vars: read by the Worker's own request handling and
 // deliberately NOT forwarded into any Container. `MARKET_DATA_ALLOWED_ORIGINS`
@@ -215,7 +226,8 @@ describe("Env / envVars parity", () => {
       (name) =>
         !forwarded.has(name) &&
         !WORKER_SCOPED_VARS.has(name) &&
-        !RETIRED_FOLD_VARS.has(name),
+        !RETIRED_FOLD_VARS.has(name) &&
+        !RETIRED_MCP_CONTAINER_VARS.has(name),
     );
     expect(missing, `Env member(s) declared but never keyed in envVars: ${missing}`).toEqual(
       [],
@@ -234,26 +246,20 @@ describe("Env / envVars parity", () => {
     ).toEqual([]);
   });
 
-  it("keeps MCP-scoped vars on the MCP container block only", () => {
+  it("keeps MCP-scoped vars out of every container block (the MCP container is gone)", () => {
     const blocks = extractAllEnvVarsBlocks(indexSource);
-    expect(blocks.length).toBe(2);
+    // One envVars block remains: DigiStackContainer's. The MCP container's was
+    // deleted with its class (DIG-5558), so its surface must not come back on
+    // the surviving block.
+    expect(blocks.length).toBe(1);
     const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
-    const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
-    // Name the two remaining blocks, so a truncated or re-ordered extraction
-    // fails here instead of making the scoping checks below vacuous.
+    // Name the remaining block, so a truncated or re-ordered extraction fails
+    // here instead of making the absence check below vacuous.
     expect(stackKeys.has("DIGIVAULT_URL"), "blocks[0] is not DigiStackContainer").toBe(true);
-    expect(mcpKeys.has("DIGIQUANT_MCP_SCOPE"), "blocks[1] is not DigiQuantMcpContainer").toBe(
-      true,
-    );
-    const duplicated = [...MCP_SCOPED_VARS].filter((name) => stackKeys.has(name));
+    const resurrected = [...RETIRED_MCP_CONTAINER_VARS].filter((name) => stackKeys.has(name));
     expect(
-      duplicated,
-      `MCP-scoped var(s) duplicated into DigiStackContainer.envVars: ${duplicated}`,
-    ).toEqual([]);
-    const mcpMissing = [...MCP_SCOPED_VARS].filter((name) => !mcpKeys.has(name));
-    expect(
-      mcpMissing,
-      `MCP-scoped var(s) missing from DigiQuantMcpContainer.envVars: ${mcpMissing}`,
+      resurrected,
+      `retired digiquant-mcp var(s) forwarded into a container envVars block: ${resurrected}`,
     ).toEqual([]);
   });
 
@@ -264,16 +270,10 @@ describe("Env / envVars parity", () => {
     // a key here with no container reading it is exactly the dead-config
     // duplication this file exists to catch.
     const blocks = extractAllEnvVarsBlocks(indexSource);
-    expect(blocks.length).toBe(2);
+    expect(blocks.length).toBe(1);
     const stackKeys = new Set(extractEnvVarsKeysFromBody(blocks[0]));
-    const mcpKeys = new Set(extractEnvVarsKeysFromBody(blocks[1]));
     expect(stackKeys.has("DIGIVAULT_URL"), "blocks[0] is not DigiStackContainer").toBe(true);
-    expect(mcpKeys.has("DIGIQUANT_MCP_SCOPE"), "blocks[1] is not DigiQuantMcpContainer").toBe(
-      true,
-    );
-    const leaked = [...DIGICHAT_SCOPED_VARS].filter(
-      (name) => stackKeys.has(name) || mcpKeys.has(name),
-    );
+    const leaked = [...DIGICHAT_SCOPED_VARS].filter((name) => stackKeys.has(name));
     expect(
       leaked,
       `retired digichat fold var(s) forwarded into a container envVars block: ${leaked}`,

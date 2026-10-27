@@ -66,8 +66,9 @@ and the agent carries the search index + MCP tool server-side.
   `apps/digichat/ARCHITECTURE.md`. Foundry and the AI SDK backends
   (openai-completions, openai-responses, anthropic, google-vertex) enforce
   it and stop the tool loop. langgraph and ag-ui stop forwarding the next
-  call (notice/best-effort, no `tool_choice: none` follow-up). digigraph is
-  notice only. a2a is refused at config load. `backend.maxToolCalls` remains
+  call (notice/best-effort, no `tool_choice: none` follow-up). digigraph
+  enforces it upstream and silently — no notice in the UI. a2a is refused at
+  config load. `backend.maxToolCalls` remains
   the Foundry alias and the shared key wins.
 - The agent's search tool needs a project connection that can **read the index
   definition**, not just query it. A query key returns `403` on

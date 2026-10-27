@@ -14,7 +14,6 @@ import {
   rateLimitResumeDelayMs,
   RATE_LIMIT_EXHAUSTED_TEXT,
   FoundryToolCallCounter,
-  toolCallLimitNotice,
   type FoundryStreamEvent,
   type FoundryConversationItem,
   type FoundryResponsesCreateBody,
@@ -2047,7 +2046,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(out).not.toContain("Tool-call limit reached");
   });
 
-  it("stops at the cap, asks for a final answer, and shows a status notice", async () => {
+  it("stops at the cap and asks for a final answer, silently", async () => {
     const first = [
       mcpEvent("added", "c1", "tool_a"),
       mcpEvent("done", "c1", "tool_a"),
@@ -2092,9 +2091,8 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(out).toContain("tool_a");
     expect(out).toContain("tool_b");
     expect(out).not.toContain("tool_c");
-    expect(out).toContain('"type":"data-notice"');
-    expect(out).toContain(toolCallLimitNotice(2));
-    expect(out).toContain('"tone":"status"');
+    expect(out).not.toContain('"type":"data-notice"');
+    expect(out).not.toContain("Tool-call limit reached");
     expect(out).toContain("From the two results, ");
     expect(out).toContain("the answer is 4.");
     expect(out).not.toContain("should not stream");
@@ -2193,7 +2191,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
     expect(out).toContain("tool_a");
     expect(out).not.toContain("tool_b");
-    expect(out).toContain(toolCallLimitNotice(1));
+    expect(out).not.toContain("Tool-call limit reached");
     expect(out).toContain("Final from the instruction.");
     expect(out).not.toContain('"type":"error"');
   });

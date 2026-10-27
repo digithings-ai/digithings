@@ -6,6 +6,7 @@ import {
   guardrailIdentity,
   RESERVATION_TTL_MS,
   TOKEN_WINDOW_MS,
+  TOOL_CAP_INSTRUCTION,
   tokensInWindow,
   truncateToTokens,
   waitForRoomMs,
@@ -207,7 +208,7 @@ describe("createTurnGuard", () => {
     expect(parts).toEqual([]);
   });
 
-  it("stops further tools at the shared cap and does not throw", async () => {
+  it("stops further tools at the shared cap silently and does not throw", async () => {
     const guard = createTurnGuard({
       slug: "trial",
       guardrails: { maxToolCallsPerTurn: 2 },
@@ -217,8 +218,10 @@ describe("createTurnGuard", () => {
       writer: { write: (part) => parts.push(part) },
       toolCallsSoFar: 2,
     });
-    expect(clearance.action).toBe("stop-tools");
-    expect(JSON.stringify(parts)).toContain("Tool-call limit reached (2 this turn)");
+    // The cap is a model instruction, never a user-visible notice.
+    expect(clearance).toEqual({ action: "stop-tools", instruction: TOOL_CAP_INSTRUCTION });
+    expect(parts).toEqual([]);
+    expect(JSON.stringify(parts)).not.toContain("Tool-call limit reached");
     expect(JSON.stringify(parts)).not.toContain('"type":"error"');
   });
 
@@ -292,7 +295,7 @@ describe("createTurnGuard", () => {
     expect(store.read("tpm:user:trial:visitor", time.at()).events.map((event) => event.tokens)).toEqual([900]);
   });
 
-  it("still stops tools when the visitor minute is omitted", async () => {
+  it("still stops tools silently when the visitor minute is omitted", async () => {
     const guard = createTurnGuard({
       slug: "public",
       guardrails: { maxToolCallsPerTurn: 2, tokensPerMinute: { user: 1000 } },
@@ -303,8 +306,9 @@ describe("createTurnGuard", () => {
       writer: { write: (part) => parts.push(part) },
       toolCallsSoFar: 2,
     });
-    expect(clearance.action).toBe("stop-tools");
-    expect(JSON.stringify(parts)).toContain("Tool-call limit reached (2 this turn)");
+    expect(clearance).toEqual({ action: "stop-tools", instruction: TOOL_CAP_INSTRUCTION });
+    expect(parts).toEqual([]);
+    expect(JSON.stringify(parts)).not.toContain("Tool-call limit reached");
   });
 
   it("clips tool results and asks the model to stop once the cap is spent", async () => {

@@ -1785,21 +1785,9 @@ bindings:
   instance_type: standard-2
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack
-  type: container
-  class_name: DigiQuantMcpContainer
-  image: ../../digiquant/Dockerfile.mcp
-  max_instances: 1
-  instance_type: standard-2
-  source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digithings-stack
   type: durable_object
   name: STACK
   class_name: DigiStackContainer
-  source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digithings-stack
-  type: durable_object
-  name: MCP_STACK
-  class_name: DigiQuantMcpContainer
   source: apps/digithings-stack-cloudflare/wrangler.toml
 # DIG-2913 (#6466): the Worker-native market-data MCP that replaced the container
 # route. Its row was missing, so check_contract.py reported this binding as

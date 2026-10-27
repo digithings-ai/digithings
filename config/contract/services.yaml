@@ -175,7 +175,7 @@ workers:
     contract_vars: true # generator manages DT_* block in [vars]
   - name: digithings-stack
     file: apps/digithings-stack-cloudflare/wrangler.toml
-    containers: [DigiStackContainer, DigiQuantMcpContainer]
+    containers: [DigiStackContainer]
     durable_objects: [STACK]
     r2_buckets: [MARKET_DATA]
     contract_vars: true

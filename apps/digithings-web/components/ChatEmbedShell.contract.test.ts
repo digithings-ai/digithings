@@ -10,6 +10,7 @@ import {
   formatShellLoadDiagnostic,
   readParentDocumentPalette,
   readParentDocumentTheme,
+  readPrivateMode,
 } from "@/components/ChatEmbedShell";
 
 describe("ChatEmbedShell contracts", () => {
@@ -21,6 +22,16 @@ describe("ChatEmbedShell contracts", () => {
 
   it("allows cold-start before treating a missing ready as a load failure", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("forwards private mode only for an exact 1, for any tenant", () => {
+    expect(readPrivateMode("?private=1")).toBe(true);
+    expect(readPrivateMode("?private=0")).toBe(false);
+    expect(readPrivateMode("?private=true")).toBe(false);
+    expect(readPrivateMode("?private=")).toBe(false);
+    expect(readPrivateMode("?wide=1")).toBe(false);
+    expect(readPrivateMode("")).toBe(false);
+    expect(readPrivateMode(undefined)).toBe(false);
   });
 
   it("posts digichat:theme with light|dark and an optional palette", () => {

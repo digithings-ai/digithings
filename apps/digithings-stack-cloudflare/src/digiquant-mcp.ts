@@ -1,9 +1,9 @@
 /**
  * Worker-native digiquant market-data MCP (DIG-2913).
  *
- * Replaces the read path that used to run in `DigiQuantMcpContainer`
- * (`digiquant/Dockerfile.mcp`, FastMCP streamable-http on :8767 under
- * Firecracker) with the Worker itself: the tools read the sealed R2
+ * Replaces the read path that used to run in the dedicated digiquant-mcp
+ * container (deleted in DIG-5558; it served FastMCP streamable-http on :8767
+ * under Firecracker) with the Worker itself: the tools read the sealed R2
  * generations through the `MARKET_DATA` binding and decode parquet with
  * `hyparquet`, exactly like `src/market-data.ts` already does for
  * `/v1/market/*`. No container hop, no Python process on the read path.

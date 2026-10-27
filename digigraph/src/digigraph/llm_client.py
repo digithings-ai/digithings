@@ -258,6 +258,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    max_tool_calls: int | None = None,
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     final_response_format: JsonSchemaResponseFormat | None = None,
@@ -281,6 +282,11 @@ def run_tools(
     digillm, which maps it to the model's ``reasoning_effort`` where the level is
     configurable (the ``reasoning_effort`` policy in ``config/model-policy.json``,
     registered above) and keeps the model's default when it is ``None``.
+
+    ``max_tool_calls`` is the chat's hard call cap (``X-Digi-Max-Tool-Calls``),
+    forwarded to digillm, which stops the loop after that many *executed* calls
+    (parallel calls count individually) and answers tool-free from the results
+    gathered. ``None`` leaves the round budget alone.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -295,6 +301,7 @@ def run_tools(
             execute_tool,
             temperature=temperature,
             max_tool_rounds=max_tool_rounds,
+            max_tool_calls=max_tool_calls,
             tool_choice=tool_choice,
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
