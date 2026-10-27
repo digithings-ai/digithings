@@ -83,8 +83,11 @@ custom_domain = true
 # custom_domain = true
 
 # The digichat product surface is deliberately NOT served from this Worker.
-# Decision (Chris, 2026-10-19): OCC is client work and must not ride the base
-# digithings platform. Every digithings.ai digichat path (embed, api/chat,
+# (The 2026-10-19 reason — "OCC is client work and must not ride the base
+# digithings platform" — was superseded on 2026-10-27, DIG-3585: OCC is one
+# tenant of the shared stack, isolated by its invite gate and tenant-scoped
+# indexes. The route ownership below did not change.) Every digithings.ai
+# digichat path (embed, api/chat,
 # api/embed, api/byok, api/plan-proof, api/health, _dtchat, chat/occ) is owned
 # by apps/digichat-cloudflare / the `digithings-digichat` Worker and its own
 # container. The earlier fold (cost epic, #5411) moved those routes here to

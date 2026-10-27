@@ -41,6 +41,12 @@ checks the invite, sets the `occ_invite` cookie, rewrites the request to
 `/chat/embed?host=occ.digithings.ai`, moves the key to `x-embed-token` and
 drops `?token=`, then proxies to the Container. There is no Pages shell and no
 iframe in the chain, and `OCC_INVITE_KEY` exists only as a Worker secret.
+The cookie is scoped to `Path=/chat` so the page's own `/chat/api/*` calls
+carry it; the Worker binds such a call to the OCC tenant (`x-embed-token` +
+`X-Embed-Host: occ.digithings.ai`) only when the cookie is valid **and** the
+Referer is `/chat/occ`, drops the client's own tenant headers from that page,
+drops a client `X-Digi-Tenant` on every `/chat/api/*` call, and never lets the
+cookie reach the Container (`bindOccApiCall` in `src/occ-gate.ts`).
 
 ```text
 Browser
@@ -165,7 +171,7 @@ secrets. They are resolved server-side and stripped by the browser projections
 |---|---|
 | Host keys | `DIGICHAT_EMBED_TENANTS` object keys (and `aliases`) must match iframe `?host=` / `X-Embed-Host`. `X-Embed-Host` only selects the tenant — it never authorizes (see below). |
 | `DIGICHAT_EMBED_HOSTS` | Comma-separated parent hostnames allowed to frame `/embed`. Must include every live parent (marketing `digithings.ai` / `www` / `occ.digithings.ai`, plus `digiquant.io` if the dashboard popup iframes this origin). Not a secret. |
-| First-party token | `digithings.ai` and `www.digithings.ai` skip `X-Embed-Token` when registered **and** the request carries a first-party browser-attested origin (`Origin`/`Referer`). A spoofed `X-Embed-Host` alone does not qualify. `occ.digithings.ai` is **not** on the first-party allowlist (DIG-1210 Act B2). OCC is gated by an **invite key**, carried as `?token=<key>` on `digithings.ai/chat/occ` and forwarded as `X-Embed-Token`. That key is a **bearer capability, not authentication** — anyone holding the link can use the tenant. The JSON schema still requires a `token` field — use a non-secret placeholder for a tenant with no live customer data, and a real secret via `wrangler secret put` for one that has; do not commit one. **Mint, rotate, revoke and verify the OCC key: [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md).** The `/chat/occ` shell is also gated at the edge (`OCC_INVITE_KEY` on the Worker, and the Pages function) so the chat page is not served without the key or the `occ_invite` cookie. |
+| First-party token | `digithings.ai` and `www.digithings.ai` skip `X-Embed-Token` when registered **and** the request carries a first-party browser-attested origin (`Origin`/`Referer`). A spoofed `X-Embed-Host` alone does not qualify. `occ.digithings.ai` is **not** on the first-party allowlist (DIG-1210 Act B2). OCC is gated by an **invite key**, carried as `?token=<key>` on `digithings.ai/chat/occ` and forwarded as `X-Embed-Token`. That key is a **bearer capability, not authentication** — anyone holding the link can use the tenant. The JSON schema still requires a `token` field — use a non-secret placeholder for a tenant with no live customer data, and a real secret via `wrangler secret put` for one that has; do not commit one. **Mint, rotate, revoke and verify the OCC key: [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md).** The `/chat/occ` shell is also gated at the edge (`OCC_INVITE_KEY` on the Worker) so the chat page is not served without the key or the `occ_invite` cookie. |
 | First-party skin | Unset `skin` on those hosts defaults to `digichat` (DigichatThread). Set `"skin": "digichat"` in the wrangler secret anyway so the live JSON matches the YAML examples. Third-party tenants still default to catalog `base`. |
 | Legacy anonymous embed | The flag is deliberately **unset** in `wrangler.toml` `[vars]` (OFF). A stock deploy refuses unregistered hosts. To opt in, add `DIGICHAT_LEGACY_EMBED_ENABLED = "1"` to `[vars]` (the Worker forwards it; deprecated alias `DIGICHAT_EMBED_ENABLED` is also honored) — only on a deployment **without** `DIGICHAT_EMBED_TENANTS`; with tenants configured the flag is ignored and unregistered hosts get 503. |
 | Other hosts | Parent snippet / `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` must equal that tenant’s registry `token`. Put the real JSON only via `wrangler secret put DIGICHAT_EMBED_TENANTS`. |
@@ -175,12 +181,12 @@ Worker **path** routes: `/chat*` (the app itself — the Container is built with
 `DIGICHAT_BASE_PATH=/chat`, DIG-5121) plus the ADR 0018 compatibility window
 `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`
 (1.5 Desk+ HMAC), `/api/health`, `/_dtchat*`. `/embed*` stays **indefinitely**:
-the OCC shell's iframe and the marketing site both point at
+the marketing site and customer embeds point at
 `digithings.ai/embed?host=…`, so it is not a temporary bridge. The `/api/*`
 routes are the old spelling of what the app now serves under `/chat/api/*`
 and are reviewed once the cutover is verified live — they are removed only
-after that, and never before. Pages keeps the `/chat/occ` shell; iframe
-origin stays `digithings.ai`.
+after that, and never before. `/chat/occ` is no longer a Pages shell: the
+Worker's invite gate serves the app there (DIG-3585).
 
 ### digiquant.io Desk+ tenant shape (names only)
 

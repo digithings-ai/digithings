@@ -62,10 +62,18 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   `cache-control: no-store` or any other marker: that would make the gated address
   distinguishable from a plain 404.
 - **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`. The Worker
-  validates it, sets the `occ_invite` session cookie (HttpOnly, SameSite=Strict, Path=/chat/occ),
-  moves the key to the `X-Embed-Token` request header and drops `?token=` before proxying to the
-  Container's `/chat/embed` route. The key never reaches the Container URL, the HTML or the flight
-  payload.
+  validates it, answers a 302 to the tokenless URL with the `occ_invite` session cookie
+  (HttpOnly, Secure, SameSite=Strict, Path=/chat), moves the key to the `X-Embed-Token` request
+  header and drops `?token=` before proxying to the Container's `/chat/embed` route. The key never
+  reaches the Container URL, the HTML or the flight payload, and the cookie itself is stripped
+  before any request reaches the Container.
+- **The page's API calls** (`/chat/api/*`) carry no key of their own: the browser sends the
+  `/chat`-scoped cookie and the Worker (`bindOccApiCall` in `occ-gate.ts`) sets `X-Embed-Token`
+  and `X-Embed-Host: occ.digithings.ai` only when that cookie is valid **and** the Referer is the
+  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent).
+  From that page the client's own `X-Embed-Token` / `X-Embed-Host` are always dropped, and a
+  client-sent `X-Digi-Tenant` is dropped on every `/chat/api/*` call. A house page's calls are
+  never upgraded by the cookie.
 - **Compared with** `tokenMatches` in `apps/digichat/src/lib/embed-chat-tenant.ts:87`.
 - **Not authentication** means: it must be treated as revocable-but-shareable. Anyone holding it
   reaches the OCC tenant. There is no second factor, no per-user identity and no audit trail of

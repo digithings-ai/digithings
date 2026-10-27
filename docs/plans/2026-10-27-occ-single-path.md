@@ -31,7 +31,7 @@ valid token or cookie
   └─ Worker occGate
        ├─ validates against OCC_INVITE_KEY (edge only)
        ├─ answers 302 to the tokenless URL, with occ_invite cookie
-       │    (HttpOnly, SameSite=Strict, Path=/chat/occ) — the key never
+       │    (HttpOnly, Secure, SameSite=Strict, Path=/chat) — the key never
        │    stays in the address bar or in history
        ├─ on the cookie request: rewrites /chat/occ → /chat/embed?host=occ.digithings.ai
        ├─ moves the invite to `x-embed-token` (the app's existing transport)
@@ -55,8 +55,20 @@ The app already has the exact seam this needs:
 1. `GET /chat/occ` with no token and no cookie → **404**, byte-for-byte the site 404. No title, branding or loader.
 2. `GET /chat/occ?token=<valid>` → **302** to the tokenless URL (the key leaves the address bar)
    → **200** chat shell, **no iframe**, OCC tenant.
-3. The redirect sets `occ_invite` (HttpOnly, SameSite=Strict, Path=/chat/occ, no Max-Age).
-4. A reload with the cookie and no query token → **200**, no `Set-Cookie` re-issue.
+3. The redirect sets `occ_invite` (HttpOnly, Secure, SameSite=Strict, **Path=/chat**, no Max-Age).
+   It was `Path=/chat/occ` at first; that cookie never reached `/chat/api/*`, so after the 302 the
+   page painted and every chat turn and tenant-config read was unbound (gap G1). The redirect also
+   expires any leftover `Path=/chat/occ` cookie.
+4. A reload with the cookie and no query token → **200**. It re-affirms the same session cookie on
+   `Path=/chat` (and expires the `Path=/chat/occ` one) so a browser holding the earlier cookie
+   migrates without a new invite link.
+8. The page's `/chat/api/*` calls are OCC **only** when the `/chat` cookie is valid **and** the
+   Referer is `/chat/occ` (`bindOccApiCall`; the gate serves the page with
+   `Referrer-Policy: same-origin`). From that page the client's own tenant headers are dropped; a
+   client `X-Digi-Tenant` is dropped on every `/chat/api/*` call; a house page with the cookie stays
+   the house. The cookie never reaches the container.
+9. The client renders at a bare `/chat/occ`: the server hands the rendered `host` to `EmbedClient`
+   (`initialHost`), since Next keeps `window.location` as the client URL.
 5. The invite key **never** appears in the container request URL, the HTML, or the flight payload.
 6. The key exists in **one** place: the Worker secret.
 7. An invalid invite never wakes the container.
