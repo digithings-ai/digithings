@@ -131,7 +131,6 @@ export default function BookExportBar() {
 
   return (
     <div className="book-export" role="group" aria-label="export the book">
-      <p className="book-export__title">export</p>
       <div className="book-export__row">
         {BOOK_EXPORT_FORMATS.map((format) => {
           const working = state[format.id] === "working";

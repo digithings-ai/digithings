@@ -66,8 +66,6 @@ export const BOOK_READER_CSS = `
    beside them. */
 .book-export {
   margin-top: 1.25rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--hair, rgba(20, 24, 27, 0.12));
 }
 .book-export__title {
   margin: 0 0 0.6rem;
@@ -136,10 +134,14 @@ export const BOOK_READER_CSS = `
   display: block;
   width: ${BOOK_PAGE_WIDTH}px;
   height: ${BOOK_PAGE_HEIGHT}px;
-  background: var(--surface);
-  border-top: 1px solid var(--hair);
-  border-bottom: 1px solid var(--hair);
+  background: transparent;
 }
+
+/* The page boxes stream in as pagedjs lays them out. Showing them one by one
+   while the mark still holds the page looks like a second page loading behind a
+   stuck animation, so they stay invisible until the whole book is in. */
+.book-live__stage .pagedjs_pages { visibility: hidden; }
+.book-live[data-ready="true"] .book-live__stage .pagedjs_pages { visibility: visible; }
 
 /* A tall page arriving mid-load grows the document and summons a scrollbar,
    which shifts a centred layout sideways. Reserve its gutter from the first
@@ -278,16 +280,18 @@ html:has(.book-live) { scrollbar-gutter: stable; }
   .book-nav[data-open="true"] ol { display: block; }
   .book-nav__title { display: none; }
   /* The export stays in the bar: two compact cells, no heading. */
-  .book-nav .book-export { grid-area: export; margin: 0; min-width: 0; }
+  .book-nav .book-export { grid-area: export; margin: 0; min-width: 0; justify-self: start; }
   .book-nav .book-export__title { display: none; }
-  .book-nav .book-export__row { display: flex; gap: 0.4rem; }
+  .book-nav .book-export__row { display: flex; gap: 0.3rem; }
+  /* Icons only: a sheet of paper and a pair of angle brackets say PDF and HTML
+     without spending the width the section pill needs. */
+  .book-nav .book-export__label { display: none; }
+  .book-nav .book-export__mark { display: block; }
   .book-nav .book-export__btn {
+    width: 2.4rem;
     min-height: 2.4rem;
-    padding: 0 0.6rem;
-    font-size: 0.68rem;
+    padding: 0;
   }
-  .book-nav .book-export__mark { display: none; }
-  .book-nav .book-export__row { gap: 0.3rem; }
 }
 
 /* A 320px phone cannot hold "contents" and two full-size cells side by side:

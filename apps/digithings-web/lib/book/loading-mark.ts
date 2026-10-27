@@ -391,36 +391,17 @@ export function startLoadingMark(
   const context = canvas.getContext("2d");
   if (!context) return () => {};
   const ctx: CanvasRenderingContext2D = context;
-  const { width, height, size = 240, still = false } = options;
+  const { width, height, size = 150, still = false } = options;
 
   const dpr = Math.min(2, typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
   canvas.width = Math.round(width * dpr);
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // A field sparse enough to say "page" and no more; the mark carries it.
-  const pitch = 12;
-  const dot = 8;
-  const cols = Math.ceil(width / pitch);
-  const rows = Math.floor(height / pitch);
-  const rand = new Float32Array(cols * rows);
-  for (let i = 0; i < rand.length; i += 1) rand[i] = Math.random();
 
   const originX = (width - size) / 2;
   const originY = (height - size) / 2;
   const unit = size / 60;
-
-  function drawField() {
-    const pad = (pitch - dot) / 2;
-    ctx.fillStyle = `color-mix(in srgb, ${tokens.ink} 16%, transparent)`;
-    for (let r = 0; r < rows; r += 1) {
-      for (let c = 0; c < cols; c += 1) {
-        if (rand[r * cols + c] < 0.028) {
-          ctx.fillRect(c * pitch + pad, r * pitch + pad, dot, dot);
-        }
-      }
-    }
-  }
 
   function drawMark(seam: number, tokens: Tokens) {
     for (const [mx, my, mw, row, opacity] of MARK) {
@@ -439,7 +420,6 @@ export function startLoadingMark(
 
   function render(seam: number) {
     ctx.clearRect(0, 0, width, height);
-    drawField();
     drawMark(seam, tokens);
   }
 
