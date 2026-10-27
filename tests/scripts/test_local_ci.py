@@ -1305,10 +1305,17 @@ class InstallMarkerTest(unittest.TestCase):
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
         # The install refuses a checkout that carries the runner without the
-        # guard (DIG-4796): the two files are installed together.
-        for name in ("local_ci.py", "launch_guard.py"):
-            shutil.copy(os.path.join(_SCRIPTS, name),
-                        os.path.join(checkout, "scripts", "local-ci", name))
+        # guard (DIG-4796), and one where a module the runner imports does not
+        # resolve (DIG-5585). The clone therefore carries every module next to
+        # the runner, plus the shared module in `scripts/`, one directory up.
+        # Copying every `.py` keeps these cases about the marker: a helper
+        # added to the runner is in the clone without editing this list.
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name),
+                            os.path.join(checkout, "scripts", "local-ci", name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(checkout, "scripts", "review_pass_filter.py"))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1335,6 +1342,25 @@ class InstallMarkerTest(unittest.TestCase):
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
 
+    def test_a_dry_run_renders_the_interpreter_the_job_will_run(self):
+        """The plist must name the same interpreter the install check used.
+
+        A `ProgramArguments` entry left as a placeholder lints cleanly and
+        fails only when launchd tries to spawn it, so a render that never
+        substituted the interpreter reads as an installed job and runs nothing
+        (DIG-5725).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                               "--dry-run", checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("__", done.stdout,
+                         "an unsubstituted placeholder is a plist launchd cannot run")
+        self.assertIn("<string>/usr/bin/python3</string>", done.stdout,
+                      "the job must run under the interpreter the install check used")
+
     def test_a_checkout_without_the_guard_is_refused(self):
         """An installer must not point the daemon at a pre-guard checkout.
 
@@ -1347,6 +1373,48 @@ class InstallMarkerTest(unittest.TestCase):
         os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
         rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
         self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
+
+    def test_a_checkout_without_the_install_check_is_refused(self):
+        """An installer must not point the daemon at a checkout with no preflight.
+
+        The runner exits 78 on every tick when `import_preflight.py` is absent
+        (`_require_install`, DIG-5585), so installing from a stale checkout
+        leaves the daemon running and the gate dark. The install refuses the
+        tree before it writes anything (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "import_preflight.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout without the install check must not be installed")
+        self.assertIn("import_preflight.py", done.stderr,
+                      "the refusal must name the module the checkout is missing")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
+
+    def test_a_checkout_missing_an_imported_module_is_refused(self):
+        """A stale checkout can look complete: refuse it by import, not by name.
+
+        The runner imports `pr_template` and fails closed when it is None, so a
+        checkout that carries the runner but not a helper it imports still
+        looks installable. The install asks the checkout's own preflight, which
+        resolves every import, and refuses with the module named (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "pr_template.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout missing an imported module must not be installed")
+        self.assertIn("pr_template", done.stderr,
+                      "the refusal must name the module that could not be resolved")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""
@@ -3942,17 +4010,59 @@ class StepBudgetTest(unittest.TestCase):
         for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
             self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
                                f"{heavy} legitimately needs more than the default")
-        for light in ("scripts/check_doc_links.py", "actionlint"):
+        for light in ("actionlint", "pr-title"):
             self.assertNotIn(light, _mod.STEP_BUDGETS,
                              f"{light} is measured in seconds; it takes the default")
 
+    def test_a_tree_scanner_budget_is_the_scan_timeout(self):
+        """The scanners are not in STEP_BUDGETS, so before DIG-5724 they took
+        the 180 s default and a clean tree false-red at 182-183 s (PR #6525)."""
+        spec = _mod.scan_spec("scripts/scan_customer_pii.py",
+                              "python3 scripts/scan_customer_pii.py")
+        self.assertEqual(spec[2], _mod.SCAN_TIMEOUT,
+                         "SCAN_TIMEOUT is the scanner's caller ceiling")
+        self.assertEqual(spec[6], _mod.SCAN_TIMEOUT,
+                         "and its step budget, not the 180 s STEP_BUDGET default")
+        self.assertGreaterEqual(_mod.SCAN_TIMEOUT, 3 * 183,
+                                "the budget keeps a 3x margin over the worst "
+                                "measured clean-tree runtime (183 s, PR #6525)")
+
+    def test_the_scan_timeout_env_raises_a_scanners_budget(self):
+        """LOCAL_CI_SCAN_TIMEOUT must reach the budget, not only the ceiling."""
+        code = (
+            "import importlib.util, sys;"
+            f"sys.path.insert(0, {_SCRIPTS!r});"
+            "s=importlib.util.spec_from_file_location('local_ci_scan_env', "
+            f"{os.path.join(_SCRIPTS, 'local_ci.py')!r});"
+            "m=importlib.util.module_from_spec(s);sys.modules['local_ci_scan_env']=m;"
+            "s.loader.exec_module(m);"
+            "print(m.SCAN_TIMEOUT, m.scan_spec('scripts/check_doc_links.py', 'true')[6])"
+        )
+        env = dict(os.environ, LOCAL_CI_SCAN_TIMEOUT="900")
+        env.pop("LOCAL_CI_STEP_BUDGET", None)
+        got = subprocess.check_output([sys.executable, "-c", code], env=env,
+                                      text=True, cwd=_SCRIPTS).strip()
+        self.assertEqual(got, "900 900",
+                         "the env knob must raise the ceiling and the budget together")
+
+    def test_both_scanner_waves_take_the_scan_budget(self):
+        """A wave that calls gate_spec directly silently loses the scan budget."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertGreaterEqual(src.count("scan_spec("), 2,
+                                "the pre-uv-sync and post-uv-sync scanner waves must both "
+                                "use scan_spec (DIG-5724)")
+
     def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
-        self.assertEqual(_mod.step_budget("scripts/check_doc_links.py", 600), 180)
+        self.assertEqual(_mod.step_budget("actionlint", 300), 180,
+                         "a non-scanner step still takes the 180 s default")
         self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
         self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
         self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
                          "a tighter caller ceiling still wins")
         self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+        self.assertEqual(_mod.gate_spec("anything", "true", 1800, budget=7)[6], 7,
+                         "gate_spec must pass an explicit budget through")
 
     def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
         """A step that bypasses run_step has no budget, so the gate cannot

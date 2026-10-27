@@ -6,16 +6,18 @@ summary: >-
   estimate carries no number at all.
 ---
 
-Every result the pipeline emits carries its history: the data it read, the
-parameters it ran with, and which stages produced it. That attachment is
-what turns a number into evidence. Months later, an operator can reopen a
-result and reconstruct the conditions behind it — or discover honestly that
-they can no longer be reconstructed, which is itself an answer.
+Every backtest result carries a provenance stamp: the engine, the version
+that actually loaded, the version the project pins, the first characters of
+the lockfile's hash, and whether the returns series behind the chart was
+checked. That attachment is what turns a number into evidence. Months later,
+an operator can rebuild the same environment and rerun it, or find honestly
+that it can no longer be rebuilt, which is itself an answer.
 
-The harder rule concerns refusal. When the pipeline cannot stand behind an
-estimate — too little data, a stage that did not complete — it returns no
-number. A blank where a number would be is uncomfortable, and deliberately
-so: it refuses to manufacture confidence. Partial results are labelled
+The harder rule concerns refusal. If the engine is not installed in the
+process that produced a result, the stamp has no version, and the result is
+marked partial with the words "engine unresolved, not citable". The project's
+own phrase for it is "withhold, never fabricate". A blank where a number would
+be is uncomfortable, and deliberately so. Partial results are labelled
 partial, never rounded up into conclusions.
 
 <Reference kind="architecture" href="repo:digiquant/ARCHITECTURE.md" title="digiquant architecture">
@@ -23,5 +25,5 @@ partial, never rounded up into conclusions.
 </Reference>
 
 > **Why digithings.** A research number you can audit beats a shinier number
-> you cannot. Open pipeline, open ordering rules, attached provenance — the
-> methodology is inspectable instead of marketed.
+> you cannot. The pipeline, the ordering rules and the stamp are all in the
+> open code, so the method can be inspected instead of taken on trust.

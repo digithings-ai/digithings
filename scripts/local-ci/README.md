@@ -150,14 +150,22 @@ Check an install without ticking it:
 python3 scripts/local-ci/import_preflight.py scripts/local-ci/local_ci.py
 ```
 
+`install.sh` asks the same question before it renders the plist or touches the
+job: it requires `import_preflight.py` next to the runner, then runs it against
+the checkout's `local_ci.py` under `/usr/bin/python3`, the interpreter the plist
+names. A checkout with a module missing is refused, with the module named, so an
+installer cannot point the daemon at a tree that would refuse every tick
+(DIG-5725).
+
 ## Deploying it
 
 The guard fails closed: a runner without `launch_guard.py` next to it refuses to
 run at all (exit 78, before any side effect). The install check fails closed the
 same way, so the runner and every module it imports have to land together. The
 order matters. `install.sh` refuses a checkout that carries the runner but not
-the guard for the same reason: an installer must not be able to point the daemon
-at a pre-guard checkout and reopen the hole.
+the guard, and a checkout where any module the runner imports does not resolve,
+for the same reason: an installer must not be able to point the daemon at a
+pre-guard or incomplete checkout and reopen the hole (DIG-4796, DIG-5725).
 
 1. the guard lands in the repository (this change),
 2. a trusted launcher is live - the launchd daemon has to be running under the
@@ -220,6 +228,8 @@ point it at - not a working tree, not a linked worktree (see "The producer"
 below).
 
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
+It still runs the checkout's import check first, so an incomplete checkout prints
+nothing and exits non-zero.
 
 ## The producer
 
@@ -409,9 +419,14 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   ceiling of `STEP_BUDGET` (180 s) and the ones that legitimately need longer
   name themselves in `STEP_BUDGETS` (gitleaks, `uv sync`, mypy, the worker
   dry-runs, the bun suites); an explicit `budget=` wins, and
-  `LOCAL_CI_STEP_BUDGET` raises the default for the whole host. A step that
-  overruns is killed by process group, recorded as `<step> exceeded <N>s and was
-  killed`, and the tick moves on to the next step. Every step also writes
+  `LOCAL_CI_STEP_BUDGET` raises the default for the whole host. **Tree scanners
+  take `LOCAL_CI_SCAN_TIMEOUT` (default 600 s) as both their caller ceiling and
+  their step budget**, so the slow-host knob reaches them; `LOCAL_CI_STEP_BUDGET`
+  does not raise it for a scanner. 600 s is 3.3x the worst measured clean-tree
+  runtime (183 s on 2026-10-27), because the 180 s default killed five scanners
+  on a clean tree in PR #6525 (DIG-5724). A step that overruns is killed by
+  process group, recorded as `<step> exceeded <N>s and was killed`, and the tick
+  moves on to the next step. Every step also writes
   `step=<name> seconds=<n> rc=<n>` to its log, so the next investigation reads
   the duration table instead of re-measuring by hand (2026-10-26).
 - **Static gates, plus two path-gated lanes.** The worker dry-run build and the

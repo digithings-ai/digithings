@@ -2,17 +2,55 @@
 title: Why this book exists
 order: 1
 summary: >-
-  The docs explain how to run the software. This book explains why owning the infrastructure is worth the work.
+  Why digithings exists, the six rules behind it, and where each one is taken up.
 ---
 
-Most of what gets written about AI infrastructure is written by whoever is
-renting it to you. This book is written from the other side of that
-relationship: what changes when you run the thing yourself, and why
-self-hosting is a position worth choosing rather than an inconvenience to
-tolerate until you can afford otherwise.
+digithings began as one builder's own AI stack: a way to use AI for real work,
+on a laptop or in the cloud, without a vendor deciding which model, database or
+interface to use. It's all published, under the MIT licence.
 
-It is not a tour of digithings' internals, the docs on this site already
-cover that, endpoint by endpoint. This is shorter, and argues a position about
-infrastructure in general: why it matters, how it scales, and what it costs.
-Where it needs an example, it reaches for the nearest one, which happens to be
-this project, but the argument is not about digithings.
+AI tooling changes every few months. A better model shows up, or a cheaper vector
+store, or a new agent client, and most applications need a rewrite to take it on.
+
+Here, it's a setting.
+
+## What digithings holds to
+
+Six rules digithings builds by. Each is taken up again later, and the argument
+matters more than the rule.
+
+**Own the stack.** Every part is code you can read, run and change, and when an
+answer looks wrong you follow it down to the line that decided. Chapter 03 makes
+the case.
+
+**Location is a deployment decision.** Chapter 02 is the argument. The same
+services run in Docker on a laptop and in containers in a cloud account, and read
+the same setting names in both. Moving them changes values, not code.
+
+**Open at the seams.** Models are reached over the OpenAI chat format, tools over
+MCP, identity as signed tokens, traces over OpenTelemetry. Standards the stack
+didn't invent, so any part can be swapped for another that speaks them. Chapter 03
+argues it, and says what stays closed.
+
+**Small parts, one job each.** Model access, orchestration, retrieval, identity,
+tracing and the interface are separate modules, so a project that only needs search
+runs retrieval and leaves the rest off. Chapter 04 turns it into three dials.
+
+**Grow in place.** A solo builder and an organisation use the same contracts, and
+the scaling chapter shows how far that carries before the ceiling.
+
+**Show the working.** Answers cite the passages they used, backtests record the
+engine build that produced them, and with tracing on, every request leaves a trail.
+The environment chapter is where those records come from.
+
+## How to read it
+
+The case comes first: software that can live anywhere, an open core, a stack that
+scales without a rewrite, and what people build with it. Then the modules, each with
+what it does, where its seam is and what it costs to run. It ends on your own
+machine, with the first thing to build.
+
+The module chapters assume you're comfortable with Docker and a settings file. If
+nobody on your team is, the last chapter says who does that work.
+
+Read it through in one sitting, or open the chapter your question lives in.

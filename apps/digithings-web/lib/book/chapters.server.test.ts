@@ -17,7 +17,15 @@
  * untested: a regression here is invisible until a chapter silently vanishes.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -193,8 +201,12 @@ describe("the shipped book satisfies the contract", () => {
 
   it("ships one opener per chapter directory and no loose chapter files", () => {
     const chapters = loadChapters(ROOT);
-    expect(chapters.every((c) => c.sections.length > 0)).toBe(true);
     for (const c of chapters) expect(existsSync(join(BOOK, c.slug, CHAPTER_INDEX))).toBe(true);
+    // A chapter may be one printed page with no sections behind it — 05b is
+    // exactly that. What the contract forbids is a chapter file sitting loose,
+    // where the loader would silently drop it.
+    const loose = readdirSync(BOOK, { withFileTypes: true }).filter((entry) => entry.isFile());
+    expect(loose.map((entry) => entry.name)).toEqual([]);
   });
 });
 

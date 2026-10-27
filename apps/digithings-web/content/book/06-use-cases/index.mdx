@@ -2,45 +2,91 @@
 title: What you can build
 order: 7
 summary: >-
-  Financial research, voice, retrieval and agentic exploration from one module set, running locally and scaling without a rewrite.
+  Retrieval, financial research, voice and agentic exploration from one module set, running locally and scaling without a rewrite.
 ---
 
 The same modules make different applications. A use case is a choice of
-modules, not a separate platform.
+modules, and each starts on a single machine.
 
-### Financial research
+## Retrieval over your own documents
 
-A quant workflow needs market data, a research graph, backtesting and a
-readable result. digiquant supplies the vertical and its provenance rules;
-digigraph routes the work; digisearch finds the documents around it; digichat
-is where the analyst asks and reads. Run it on a laptop for one analyst, then
-add capacity when the research team grows.
+Most of what a team needs answered sits in its own files: contracts, notes,
+past research. Retrieval splits those documents into passages, indexes them by
+meaning and hands the ones that matter to the model along with the question.
+The answer cites what it stands on, so a reader can check it.
 
-### Voice
+A workspace filter can travel with each query, so one index can hold several
+teams' documents. The same pipeline runs against a folder on a laptop and
+against a department's archive on managed storage.
 
-Voice belongs on the machine that hears it. digivoice handles speech,
-transcription and rewriting locally, while digichat provides the conversation
-surface. The audio does not need to leave the building to become useful.
+## Financial research
 
-### Retrieval and RAG
+A research desk needs market data, a way to test ideas against history, and
+results it can defend. Most tooling for this is either a spreadsheet that
+cannot be audited or a closed platform whose methodology you take on trust.
 
-A private corpus needs ingestion, indexing and answers that cite their source.
-digisearch owns retrieval, digivault holds the documents and digillm connects
-the model. The same stack runs against a folder on a laptop or a shared index
-for a department.
+digiquant gives the work an ordered pipeline. Data, strategy validation,
+backtest, optimisation and export follow in turn, each stage reading only what
+the stage before it wrote. digigraph routes questions to it, digisearch brings
+in the filings and notes around a position, and digichat is where the analyst
+asks and reads. Every result carries its provenance, so an analyst can defend a
+number to someone who doubts it.
 
-### Agents and exploration
+On one machine this is a private research environment for a single analyst.
+For a team, the pipeline moves to a shared server, backtests run on a
+timetable, and identity decides who can see which research.
 
-An agent needs tools, a loop and a record of what happened. digigraph runs the
-loop, MCP describes the tools, and digitrace keeps the trail. Add your own
-service as another tool and it joins the environment without changing the hub.
+## Voice
 
-### From one person to an organisation
+Speech is the input people are least willing to share, and the usual way to
+process it is to stream it to someone else's servers. digivoice starts from the
+opposite default. It captures the audio, transcribes it with Whisper, offers an
+optional rewrite by a small local model, and speaks the result back with Piper,
+all on the speaker's own Mac, which is the only platform it runs on for now.
+The audio is transcribed where it is spoken, and a hosted model can take its
+place when that's the better trade.
 
-These are not starter demos with an enterprise edition behind them. The same
-contracts hold at every size. Identity, tracing and data become more important
-as the team grows, but the application does not become a different application.
+Because the output is ordinary text, voice becomes a way into the rest of the
+stack. A finished transcript pastes into whatever is in focus: a question in
+the chat, or a research brief dictated while your hands are busy. digichat can
+also switch on the browser's own dictation and read-aloud. That is convenient,
+but it hands the audio to the browser's engine, which in Chrome means Google's.
 
-> **Why digithings.** You can prove the whole application on your own machine,
-> then place it where it needs to run. The modules stay the same. That is what
-> makes the stack useful to a solo builder and to an enterprise at once.
+## Agents and exploration
+
+An agent is a model that is allowed to act. It is given tools, such as search
+this index or open a ticket, and it picks one, reads the result and picks
+again until the task is done. It needs the tools, the loop, a way to stop and
+ask before anything risky, and a record. digigraph runs the loop, MCP carries
+the tools, a gate per tool server decides what may run unattended, and
+digitrace keeps the trail. The gate is checked where the tool actually runs, so
+a prompt that talks a model into a forbidden tool still fails at the gate.
+
+The first agent is usually a handful of scripts a two-person ops team already
+runs, each given a name, an input schema and a description and served from a
+small MCP server. Claude Desktop or a code editor can connect to the same
+server, so the tools you write once work in the stack and outside it. Trying a
+new idea means adding one tool.
+
+## At a glance
+
+| Use case | Modules it runs | Starts on | Grows into |
+| --- | --- | --- | --- |
+| Retrieval | digisearch, digivault, digillm, digichat | A folder on a laptop | A department's archive on managed storage, with access rules per query |
+| Financial research | digiquant, digigraph, digisearch, digichat | One analyst's machine | A shared research server with scheduled runs and access by role |
+| Voice | digivoice, digichat | The Mac with the microphone | Any app on that machine: the transcript pastes wherever the cursor is |
+| Agents | digigraph, digitrace, your MCP servers | Your own scripts as MCP tools | Many tool servers under one approval gate, shared with outside agents |
+
+## One question, four modules
+
+The use cases aren't separate lanes. An analyst dictates a question about a
+holding, and digivoice turns it into text on the speaker's own machine. In the
+chat, the hub asks the verticals what they offer: digisearch
+returns the filing passages behind the position, and digiquant reruns the
+backtest under the stated parameters. The answer cites both, and with tracing
+on, the trail shows every step that produced it.
+
+No new code was written for that question. Each module did its one job, and the
+application is the set of parts that were switched on. The same chain runs
+unchanged when the research moves to a shared server, and that's how an idea
+proved on one machine grows without starting again.

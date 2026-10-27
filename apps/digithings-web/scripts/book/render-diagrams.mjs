@@ -94,7 +94,12 @@ function terminalThemeCss(t) {
     "rect,polygon,.node path,.cluster rect,.actor,.note,.labelBox{rx:0 !important;ry:0 !important;stroke-width:1px !important}",
     `.cluster rect{fill:${t["surface-2"]} !important;stroke:${t["ink-soft"]} !important;stroke-dasharray:3 3}`,
     `.cluster-label text,.cluster-label tspan{fill:${t.accent} !important;letter-spacing:.04em;text-transform:lowercase}`,
+    // Nodes and the lines between them carry the accent: they are the part of
+    // the picture a reader follows, and the only part that should move when the
+    // palette does. Labels stay ink.
     ".flowchart-link,.messageLine0,.messageLine1,.relation{stroke-width:1px !important}",
+    `.node rect,.node polygon,.node circle,.node ellipse,.actor{stroke:${t.accent} !important}`,
+    `.flowchart-link,.messageLine0,.messageLine1,.relation,.edgePath path{stroke:${t.accent} !important}`,
     `marker path,.arrowheadPath,.arrowMarkerPath{fill:${t.accent} !important;stroke:${t.accent} !important}`,
     `.edgeLabel rect,.labelBkg{fill:${t.bg} !important;opacity:1}`,
     `.edgeLabel text,.edgeLabel tspan{fill:${t["ink-soft"]} !important}`,

@@ -19,7 +19,26 @@
  */
 import { useEffect, useRef, useState } from "react";
 
+import { createEmbeddingSubject } from "@/components/landing/embedding-map";
+import { mountField } from "@/components/landing/pixel-field-core";
+import { applyDiagramTheme } from "@/lib/book/diagram-theme";
 import { PAGED_CSS } from "@/lib/book/printCss";
+
+/**
+ * The field's seed. The print run passes one in the query string so both
+ * editions of a build share a pattern and differ only in colour; opening the
+ * route by hand gets a fresh one, which is what makes a rebuild feel new.
+ */
+function coverSeed(): number {
+  // Server render has no location; the field is only mounted in an effect, so a
+  // placeholder here is never drawn.
+  if (typeof window === "undefined") return 2410;
+  const raw = new URLSearchParams(window.location.search).get("seed");
+  const value = raw === null ? NaN : Number(raw);
+  return Number.isFinite(value) ? value : Math.floor(Math.random() * 100_000);
+}
+
+const COVER_SEED = coverSeed();
 
 export default function PagedBoot({ enabled }: { enabled: boolean }) {
   const [status, setStatus] = useState<"idle" | "paginating" | "done" | "failed">("idle");
@@ -51,6 +70,46 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         // one paginated element on this route, so it is that element.
         const content = document.querySelector<HTMLElement>("[data-paged-content]");
         if (!content) throw new Error("no [data-paged-content] element to paginate");
+
+        // The raw document is laid out on the page until pagination finishes,
+        // and it starts with the cover — so a reader (and a screenshot) saw the
+        // title page twice: once unbroken, once as page one.
+        //
+        // The style goes on the WRAPPER, never on the node being paginated:
+        // pagedjs clones that node and copies its inline style with it, which
+        // parked a page's own body off-screen (page 9 lost its text).
+        const host = content.parentElement;
+        const priorStyle = host?.getAttribute("style") ?? "";
+        // A fixed pixel offset, never a viewport unit: at 320px wide, -200vw is
+        // -640px and a 1280px document still reaches x=640 — on screen, over the
+        // title page. Ten thousand pixels is off-screen at every width.
+        if (host) {
+          host.style.cssText =
+            "position:fixed;left:-10000px;top:0;width:1280px;visibility:hidden";
+          // Marked, because pagedjs clones this wrapper into a page box with its
+          // inline style — and a page whose body sits inside the parked wrapper
+          // is blank: the words are there, ten thousand pixels away.
+          host.dataset.pagedParked = "true";
+        }
+
+
+        // The accent is not written here, and must not be: the page boxes are
+        // appended to <html>, so they inherit --accent from the document, and
+        // every palette sets its own live. Freezing the computed value inline
+        // was what made the book keep one palette's colour after the reader
+        // switched to another.
+        // Paginate only once the fonts are the ones the book is set in. pagedjs
+        // measures line lengths as it flows, and the fallback face is narrower:
+        // paginating before the swap fitted the use-cases chapter onto one page
+        // where the printed book gives it two, so the screen had one page fewer
+        // than the PDF and every number after chapter six was wrong.
+        await document.fonts.ready;
+        // Point the figures at this palette's drawings BEFORE pagination: the
+        // page boxes are clones, so whatever src they are cloned from is what
+        // they keep, and a baked ink that is light on a dark page is exactly
+        // the mismatch a reader noticed while the first recolour was in flight.
+        await applyDiagramTheme(document);
+
         const chunker = await previewer.preview(
           content,
           [{ "book-print.css": PAGED_CSS }],
@@ -62,10 +121,47 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         cleanups.current.push(() => chunker.destroy());
         stampPages();
         fillTocPageRefs();
+        mountPageFields();
+        // Diagrams are drawn with a palette baked into the file. Recolour them
+        // now, on the page boxes pagedjs cloned, and finish before the ready
+        // marker so a screenshot cannot catch the drawing half-recoloured.
+        await applyDiagramTheme(document);
+        // The page boxes are clones, so the React component that owns a figure
+        // cannot update them. Watch the two attributes the palette lives on and
+        // recolour the clones in place; the cache is keyed by palette, so a
+        // switch redraws rather than reusing the previous theme's file.
+        const redraw = new MutationObserver(() => {
+          void applyDiagramTheme(document);
+        });
+        redraw.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-theme", "data-palette"],
+        });
+        cleanups.current.push(() => redraw.disconnect());
+        // The field reveals column by column over about a second; a screenshot
+        // taken at the ready marker caught only the first few columns and
+        // printed a stripe down the left edge. Wait for the sweep to finish.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 2200)));
+        });
         // The print step waits on THIS attribute, not on `.pagedjs_page`:
         // pagedjs creates the page boxes before the numbers exist, so waiting
         // for boxes printed the table of contents with every reference still
         // empty. Measured, not assumed.
+        // Unwrap the parked wrapper where pagedjs cloned it around a page's
+        // body. Empty copies are leftovers; a copy carrying text is that page
+        // itself, and it would print blank.
+        document.querySelectorAll<HTMLElement>(".pagedjs_page [data-paged-parked]").forEach((node) => {
+          if (!(node.textContent ?? "").trim()) {
+            node.remove();
+            return;
+          }
+          node.removeAttribute("style");
+          const parent = node.parentNode;
+          while (node.firstChild) parent?.insertBefore(node.firstChild, node);
+          node.remove();
+        });
+
         content.dataset.bookPaginated = String(document.querySelectorAll(".pagedjs_page").length);
         // Paged.js leaves the source document in place beside the page boxes.
         // In print that would emit the source as extra pages before the book —
@@ -74,6 +170,7 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
         content.hidden = true;
         cleanups.current.push(() => {
           content.hidden = false;
+          if (host) host.setAttribute("style", priorStyle);
         });
         setStatus("done");
       } catch (err) {
@@ -140,6 +237,43 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
 function stampPages(): void {
   document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page, index) => {
     page.dataset.bookPage = String(index + 1);
+    // The folio is drawn by the pagination engine on the outer edge; this
+    // imprints the edition and version on the other side, so a reader holding
+    // one page can tell which printing it came from. The title page states it
+    // already, so it is left alone.
+    if (index > 0 && !page.querySelector(".book-page-imprint")) {
+      const imprint = document.createElement("span");
+      imprint.className = "book-page-imprint";
+      imprint.textContent = "2026 · V1";
+      page.appendChild(imprint);
+    }
+  });
+}
+
+/**
+ * The cover and the contents carry the field the welcome page draws: an
+ * embedding map in pixels. It is mounted here, on the page box, and not in the
+ * source document: pagedjs copies the source into the boxes, and a canvas
+ * copied that way arrives without its bitmap, so a field mounted before
+ * pagination printed a blank page.
+ *
+ * It goes on the page box rather than inside the section so it can run edge to
+ * edge — the section sits inside the page margins. The contents page gets the
+ * same field at a lower strength and from a different seed, so the two facing
+ * pages do not read as the same wallpaper.
+ */
+function mountPageFields(): void {
+  document.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((page) => {
+    const cover = page.querySelector(".book-cover");
+    const contents = page.querySelector(".book-contents");
+    if ((!cover && !contents) || page.querySelector(".book-cover__field")) return;
+    const canvas = document.createElement("canvas");
+    canvas.className = cover ? "book-cover__field" : "book-cover__field book-cover__field--quiet";
+    canvas.setAttribute("aria-hidden", "true");
+    page.prepend(canvas);
+    mountField(canvas, createEmbeddingSubject(cover ? COVER_SEED : COVER_SEED + 7), {
+      still: true,
+    });
   });
 }
 

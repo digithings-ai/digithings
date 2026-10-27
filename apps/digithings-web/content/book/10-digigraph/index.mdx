@@ -5,78 +5,53 @@ summary: >-
   One hub routes each request, discovers tools at runtime and streams the answer back. The verticals stay independent of that routing.
 ---
 
-Every system with more than one capability eventually needs someone to answer
-a hard question: when a request arrives, who decides what happens next?
-digigraph is digithings' answer. It is the orchestration hub every user
-request flows through, and its one design commitment is to stay thin. It
-routes, it dispatches, it streams, and it leaves the real work to the
-verticals that own it.
+When a request arrives, something has to decide what happens next. A chat
+message, a research job and a dashboard widget all need the same loop:
+understand the request, pick the tools, run them in order and return the
+result. Without a hub, every caller writes that loop again and the copies
+drift apart. digigraph owns it once, so every interface shares one routing
+behaviour, one tool contract and one streaming format.
 
-## What it is for
-
-A chat message, a research job and a dashboard widget all need the same
-things: understand the request, pick the right tools, run them in the right
-order, and return the result. Without a hub, each of those callers
-re-implements that loop, and they drift apart within months. digigraph owns
-the loop once, so digichat, the dashboard and outside callers all share one
-routing behaviour, one tool contract and one streaming shape.
-
-The audience question this chapter answers is simple: where does the
-intelligence of the system live? Answer: in one place, on purpose.
+The hub is kept deliberately small. It routes, dispatches and streams, and
+leaves the real work to the verticals that own it. A hub adds one more hop on
+every request, and one place where a routing mistake affects every caller.
 
 ## How it works
 
-digigraph runs a state machine. A request enters, the machine walks it
-through stages, research, validation, execution, and optional refinement,
-and conditional edges decide which stages run for each request. Around that
-machine sits a registry of named tools. Some tools live inside the hub;
-vertical services publish their own tool descriptions, which the hub fetches
-lazily and invokes over the network. The hub never carries a hard-coded list
-of what the verticals can do. It asks, at runtime, and dispatches what it
-finds.
+digigraph runs each request through a state machine built on LangGraph. The
+first stage runs the tools the request needs. Later stages are optional and
+vary by use case. A question about documents ends after the first, while a
+trading strategy goes on through validation, backtesting and optional
+optimisation. Around the machine sits a registry of tools. A few live inside
+the hub. The verticals own the rest and publish their descriptions, the name,
+the inputs and what the tool does, which the hub fetches when it first needs
+them.
 
-```mermaid
+```mermaid the hub asks each vertical what it offers instead of assuming it
 flowchart LR
-  IN[request in] --> ROUTE[state machine routes]
-  ROUTE --> LOCAL[local tool]
-  ROUTE --> ASK[ask the vertical what it offers]
-  ASK --> CALL[invoke the chosen tool]
-  LOCAL --> STREAM[stream the answer]
-  CALL --> STREAM
-  STREAM --> OUT[answer out, trace recorded]
+  IN[request] --> HUB[state machine]
+  HUB --> ASK[ask for tools]
+  ASK --> RUN[run tools]
+  RUN --> OUT[streamed answer]
 ```
 
-That middle step, asking instead of assuming, is the whole design. A
-vertical can ship a new tool without a new release of the hub, because the
-hub discovers capabilities instead of declaring them.
+Each service writes its own tool descriptions, so it can improve them without
+a hub release. A question about a company's filings reaches retrieval because
+retrieval described a document search, not because the hub was told where
+documents live.
 
-## Where it meets the rest
+## Where it fits
 
-The hub sits between the interfaces and the verticals. digichat and the
-dashboard send it chat-shaped requests; it answers in a widely compatible
-streaming shape, so ordinary chat clients work unchanged. Downstream it talks
-to digisearch for retrieval and digiquant for analysis, and to models through
-the shared model layer. Identity arrives as a short-lived credential minted
-upstream, which the hub verifies cryptographically instead of trusting the
-caller. Every step is traced through digitrace, so an operator can replay
-which tools ran, in what order, and how long each took.
+The hub speaks the OpenAI chat format, so digichat, Open WebUI or a short
+script can call it and read the streamed answer. Downstream it
+calls the verticals for retrieval and research, and models through the shared
+model layer. Identity arrives as a short-lived signed credential that the hub
+verifies itself rather than trusting the caller. With tracing on, every step is recorded, so a routing
+choice can be questioned after the fact.
+
+No address is written into the hub's code, so moving a vertical to another
+machine changes one line of its configuration.
 
 <Reference kind="architecture" href="repo:digigraph/ARCHITECTURE.md" title="digigraph architecture">
   The hub internals: the state machine, the registry and the discovery protocol.
 </Reference>
-
-## Running it in each home
-
-The hub runs the same in all three homes; only its neighbours change. On a
-laptop it sits beside the other services on the local network and talks to a
-local model runner. In the cloud it runs as part of the worker stack and
-reaches the verticals through service bindings. Self-hosted, it runs wherever
-the operator puts it and points at whichever model endpoints the operator
-chose. Nothing in the hub's own design prefers one home. That portability is
-why the hub never holds credentials longer than a single request.
-
-> **Why digithings.** Most orchestration frameworks want to own your tools: you
-> write to their plugin format and you are locked in. digigraph inverts that,
-> tools are described over standard protocols and discovered at runtime, so the
-> hub works with services it never heard of. That is the modular, no-lock-in
-> position in one component.

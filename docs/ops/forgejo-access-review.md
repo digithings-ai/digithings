@@ -23,7 +23,9 @@ compromise. Owner: Security & Risk (or Chris in solo mode).
 7. Gitleaks: `scripts/forgejo-gitleaks-woodpecker-step.yml` is a **template**;
    no `.woodpecker.yml` exists yet. The local guard is the gitleaks check in
    `scripts/hooks/pre-push.sh` (installed by `make hooks-install`); confirm it
-   is present. Server-side scanning arrives with the Woodpecker pipeline.
+   is present, and that `gitleaks` is on the operator's PATH — the hook refuses
+   a push when the binary or `.gitleaks.toml` is missing rather than skipping
+   the scan (DIG-5722). Server-side scanning arrives with the Woodpecker pipeline.
 8. Audit log: review `access.log` for 401/403 spikes and non-2xx mutations
    (docs/ops/forgejo-audit-log.md).
 9. Record the review outcome (pass / findings) in the report file and file

@@ -28,6 +28,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { applyDiagramTheme } from "@/lib/book/diagram-theme";
+
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const STEP = 1.25;
@@ -170,6 +172,26 @@ export default function SvgPanZoom({ src, alt }: SvgPanZoomProps) {
     else void fig.requestFullscreen?.().then(reset);
   };
 
+  // The files are drawn with a palette baked in; redraw them in the reader's.
+  // A palette or theme switch recolours the page's tokens, so the drawing has
+  // to be rebuilt on the same signal.
+  useEffect(() => {
+    let cancelled = false;
+    const apply = () => {
+      if (!cancelled) void applyDiagramTheme(boxRef.current ?? document);
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-palette"],
+    });
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, []);
+
   const transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   const btn = "border border-hair px-2 py-0.5 font-mono text-[0.75rem] text-ink-soft";
 
@@ -197,9 +219,9 @@ export default function SvgPanZoom({ src, alt }: SvgPanZoomProps) {
             natural proportions, capped to the viewport height, and centres. */}
         <div className="flex justify-center" style={{ transform, transformOrigin: "0 0", willChange: "transform" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="book-figure__light block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={src} alt="" draggable={false} />
+          <img className="book-figure__light block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={src} data-diagram-src={src} alt="" draggable={false} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="book-figure__dark block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={darkVariant(src)} alt="" draggable={false} />
+          <img className="book-figure__dark block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={darkVariant(src)} data-diagram-src={darkVariant(src)} alt="" draggable={false} />
         </div>
       </div>
       <figcaption className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.75rem] text-ink-soft">

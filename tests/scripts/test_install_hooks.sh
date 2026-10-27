@@ -64,6 +64,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The installer asks the scanner question too (DIG-5722): a hook that refuses a
+# push it cannot scan must not arrive on a machine that cannot run it. Every
+# case below is about refs, worktrees and atomic staging, so give the installer
+# a scanner that exists; the availability case removes this shim from PATH.
+SHIM_BIN="$FIXTURE_ROOT/bin"
+mkdir -p "$SHIM_BIN"
+printf '#!/bin/sh\nexit 0\n' >"$SHIM_BIN/gitleaks"
+chmod 755 "$SHIM_BIN/gitleaks"
+export PATH="$SHIM_BIN:$PATH"
+NO_SCANNER_PATH="${PATH#"$SHIM_BIN:"}"
+
 REPO_DIR="$FIXTURE_ROOT/repo"
 mkdir -p "$REPO_DIR"
 git -C "$REPO_DIR" init -q
@@ -93,6 +104,18 @@ assert_exit 0 "default install succeeds" \
 INSTALLED="$REPO_DIR/.git/hooks/pre-push"
 assert_true "hook landed in shared .git/hooks" test -x "$INSTALLED"
 before_hash="$(git hash-object "$INSTALLED")"
+
+echo "== no scanner: refuse before the mv and leave the live hook in place =="
+assert_exit 1 "installer refuses when gitleaks is absent" \
+  env -C "$REPO_DIR" PATH="$NO_SCANNER_PATH" bash "$INSTALLER"
+assert_true "refusal names the missing scanner" \
+  bash -c 'printf "%s" "$1" | grep -q "gitleaks is not on PATH"' _ "$out"
+assert_true "live hook unchanged after scanner refuse" \
+  test "$(git hash-object "$INSTALLED")" = "$before_hash"
+assert_exit 0 "escape installs the hook without a scanner" \
+  env -C "$REPO_DIR" PATH="$NO_SCANNER_PATH" PRE_PUSH_SKIP_GITLEAKS=1 bash "$INSTALLER"
+assert_true "escape install left the expected hook" \
+  test "$(git hash-object "$INSTALLED")" = "$before_hash"
 
 echo "== bad HOOKS_REF leaves the live hook untouched =="
 assert_exit 1 "missing ref fails closed" \

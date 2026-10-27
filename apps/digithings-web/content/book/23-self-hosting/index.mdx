@@ -5,25 +5,49 @@ summary: >-
   The first deployment is the computer in front of you. Prove the application there, then move it to a cloud account when it needs more.
 ---
 
-Most infrastructure projects treat a laptop as a developer convenience: a
-smaller, vaguer version of the real system. That is backwards. If an
-application cannot run on your own computer, it is hard to trust, hard to
-debug and hard to hand to anyone else.
+The laptop is usually treated as a developer convenience, a vaguer copy of the
+real thing. That is backwards. If an application cannot run on your own
+computer, it is hard to trust or to hand on. So the first deployment of
+anything built on digithings is the computer in front of you.
 
-digithings runs fully on one machine: the hub, the modules, the chat surface,
-the data and the tracing. You can prove the application end to end before you
-pay for a server. The same contracts, setting names and service layout apply
-when it moves.
+## The first hour
 
-The point is not local for its own sake. The point is that location becomes a
-deployment decision. Stay on your machine while the work is small. Move to a
-cloud account when it needs more capacity. Split a module onto another machine
-when one part grows faster than the rest. The application does not become a
-different application.
+Choose the model first: a hosted provider's key, or the setting that keeps
+every call on Ollama. Decide before you load anything of your own. Then start
+the stack, load the sample documents and ask about them. The first thing you
+see is the whole loop: interface, hub, retrieval, a model, a trace.
 
-That freedom depends on open source, open protocols and a stack that does not
-hide its seams. A module you cannot inspect is a module you cannot move.
+## The first week
 
-> **Why digithings.** Build it on a Mac, prove it, then place it where it
-> belongs. The stack is designed for that move, not for a single vendor's
-> data centre.
+Pick the use case closest to your work and switch on what it needs. For
+research, the research vertical and retrieval over your notes. For documents,
+retrieval and the vault. For an agent, the tools you already have, over MCP.
+Keep the trace on. It shows how the system reached each answer.
+
+## When it outgrows the machine
+
+You will know: a pipeline needing more memory, an index past the disk, more
+people than one machine should serve. Then move only the module under pressure.
+Put it on a server you own or in a cloud account, point its neighbours there
+and carry on.
+
+## Who runs it
+
+Most teams would rather not run Docker, which is what digithings the company is
+for: the stack set up on your machines or in your cloud account, run and hosted,
+and the workflows built on top. Write to contact@digithings.ai if that is the
+help you need.
+
+## If digithings disappears
+
+The code does not need the company. Everything you build keeps running under
+the MIT licence, and every module ships with architecture notes. Whoever picks
+it up next, person or agent, will not start from a blank page. The design notes
+are at digithings.ai/book.
+
+## A note on the writing
+
+The author decided what this book says. An assistant helped draft and tighten
+it, and every claim was checked against the code. Where the two disagreed, the
+code won, which is the same rule the stack follows: show the working. The
+judgements that remain are the author's, including the ones you disagree with.
