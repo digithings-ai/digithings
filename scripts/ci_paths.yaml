@@ -276,6 +276,11 @@ web:
   # npm ci. Without this entry apps/corpus-index/package.json is an orphan
   # install input and no lane runs the suite.
   - apps/corpus-index/**
+  # digitrace-ingest Worker (DIG-2657, ADR-0036). Same lane, same reason, as
+  # corpus-index above: its vitest and tsc live in that package, and this Worker's
+  # whole contract — the receiver, the protobuf decoder, the queue retry policy
+  # and the index rows — would run nowhere without it.
+  - apps/digitrace-ingest/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -489,6 +494,8 @@ workers:
   - apps/digichat-cloudflare/**
   - apps/digithings-stack-cloudflare/**
   - apps/twelvex-runner/**
+  - apps/digitrace-ingest/**
+  - apps/corpus-index/**
   - apps/**/wrangler.toml
   - package.json
   - package-lock.json

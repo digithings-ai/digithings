@@ -52,7 +52,10 @@ export default function remarkBookDiagrams() {
         // length, which the tree walker relies on.
         node.type = "image";
         node.url = diagramUrl(diagramId(node.value));
-        node.alt = `Figure ${index + 1}`;
+        // The rest of the fence's info string is the caption; "Figure n" is
+        // the fallback, and tells a reader of the printed page very little.
+        const caption = String(node.meta ?? "").trim();
+        node.alt = caption || `Figure ${index + 1}`;
         node.title = null;
         delete node.lang;
         delete node.meta;

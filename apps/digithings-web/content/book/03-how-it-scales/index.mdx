@@ -2,14 +2,47 @@
 title: How it scales
 order: 4
 summary: >-
-  Rented infrastructure scales with the invoice. Self-hosted infrastructure scales with hardware and judgement.
+  Capability and cost are dials, not editions. The same contracts carry a solo builder, a research team and an organisation.
 ---
 
-"Does it scale?" usually means one thing when asked of a rented service and a
-different thing when asked of a stack you run yourself. A rented service
-scales by raising a limit on someone else's dashboard, and the bill follows.
-A self-hosted stack scales by you deciding what to add, when, and that
-decision is yours to make badly or well.
+"Does it scale?" means one thing for a rented service and another for a
+stack you run. A rented service scales when a vendor raises a limit on a
+dashboard, and the bill follows. A stack you run scales when you decide what
+to add and where. That decision is yours. So is the work of running it.
+The stack keeps that work to what one person can carry beside another job:
+updates, backups, and a trace when something sounds wrong.
 
-The second shape is what grows, what can stay fixed, and where the ceiling
-sits once renting is no longer the constraint.
+## Two kinds of scale
+
+The first kind is load: more people, more requests, more documents. The chat
+holds no conversation state of its own, so ten copies behave like one. The hub
+can keep its threads in Postgres, but rate limits and pending approvals stay in
+the process, so a busier day means a bigger machine before it means more
+machines.
+
+The second kind is capability. A chat assistant gains retrieval, then a research
+pipeline, then tools that act on other systems. Each step is one more module
+switched on.
+
+## Three dials
+
+**Which modules run.** Start with the hub, the model layer and the chat. Add
+retrieval, research, a vault or tracing when the work calls for them. A module
+you don't run costs nothing.
+
+**Which models answer.** A small local model is free per call and private. A
+large hosted model reasons better and costs per token. The model layer routes
+each task, so different tasks can use different models at once.
+
+**Where it runs.** One machine, one server, or both. Each module can sit
+wherever its workload is cheapest.
+
+| Who | What they run | What grows, and the bill |
+| --- | --- | --- |
+| A researcher with a laptop and a folder of papers | Hub, model layer, chat and one vertical, with local models | Disk as documents accumulate, then memory when the local model can't keep up |
+| A small team sharing one corpus | Shared retrieval, a research pipeline and identity on one server or a small cloud | Memory and disk for the index, then a second machine |
+| An organisation running several teams | Every module, tracing on every request, several machines or a cloud | Requests per second and stored traces, sized per module |
+
+The rows are one system at three sizes. The contracts and setting names
+match in each, and the application built in the first row is the one running in
+the last.

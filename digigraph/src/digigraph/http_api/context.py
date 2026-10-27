@@ -247,6 +247,18 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         updates["force_tool"] = resolved_force
     effort = _hget(headers, "X-Digi-Effort", "x-digi-effort").strip().lower()
     updates["effort"] = effort if effort in ("low", "medium", "high") else None
+    # Hard tool-call cap for this turn: digichat forwards the deployment's
+    # guardrails.maxToolCallsPerTurn so digillm can stop the tool loop structurally
+    # instead of relying on the prompt sentence the chat-side notice sends. Only an
+    # integer 1..100 is a cap; anything else (absent, junk, out of range) is ignored.
+    # Unconditional like effort above, so a client-supplied body value cannot stick
+    # and a prior turn's cap never survives on the checkpoint.
+    cap_raw = _hget(headers, "X-Digi-Max-Tool-Calls", "x-digi-max-tool-calls").strip()
+    try:
+        cap = int(cap_raw)
+    except ValueError:
+        cap = None
+    updates["max_tool_calls"] = cap if cap is not None and 1 <= cap <= 100 else None
     return updates
 
 

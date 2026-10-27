@@ -302,6 +302,18 @@ class WorkflowRequest(BaseModel):
             "Unrecognized values are ignored. Always overwritten from the header on HTTP."
         ),
     )
+    max_tool_calls: int | None = Field(
+        None,
+        ge=1,
+        le=100,
+        description=(
+            "Hard cap on executed tool calls for this turn (X-Digi-Max-Tool-Calls), "
+            "sent by digichat from the deployment's guardrails.maxToolCallsPerTurn. "
+            "Counts calls, not rounds; the loop stops at the cap and answers tool-free. "
+            "Out-of-range or non-integer values are ignored. Always overwritten from "
+            "the header on HTTP."
+        ),
+    )
 
 
 # Bounds for the operator tool allowlist (DIG-284), mirroring

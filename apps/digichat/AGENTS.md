@@ -39,7 +39,7 @@ Before making any change to `apps/digichat/`:
 
 Beyond root `AGENTS.md`:
 
-- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC and Zammad ticket text is stored and shown as written. Do not add a masker on that path. Secret scrubbing stays.
+- **No PII masking on the storage, prompt or tool path: the invite link is the only access gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC and Zammad ticket text is stored and shown as written; do not add a masker to a prompt, a stored payload or a tool result. **One exception, added 27 Oct: private mode** (`/private`, `?private=1`). It is a per-tenant, per-session, opt-in instruction that asks the model to use stand-ins *in its replies* so a demo transcript can be shown to the client it is about. It changes no stored text, no tool result and no input prompt beyond its own appended instruction, and it is **not** a substitute for the invite gate. Anything broader needs Chris.
 
 - **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
 - **Auth on every route except the documented few**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`, except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof` embed token, `/api/ecosystem/config` `auth()` session, `GET /api/mcp/oauth/callback` OAuth state cookie).

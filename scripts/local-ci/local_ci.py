@@ -244,7 +244,8 @@ RUFF_PATHS_CANDIDATES = ("digibase/src", "digibot/src", "digigraph/src",
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
 WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
-               "digitrace-langfuse", "digichat-cloudflare", "digithings-stack-cloudflare",
+               "digitrace-langfuse", "digitrace-ingest", "digichat-cloudflare",
+               "digithings-stack-cloudflare",
                # twelvex-runner is in the ci.yml worker-build matrix but was missing
                # here, so the local gate built one Worker less than CI does. It is
                # the build that proves the app's workspace imports bundle (DIG-4753).
@@ -328,9 +329,12 @@ ENV = build_env()
 # A scanner has to finish before the tree is judged, and the budget for that is
 # the machine's, not the guard's. On 2026-10-22 the post-merge run on develop
 # 8cfd404816a6 turned three scanners red on a 600 s timeout while the tree was
-# clean (DIG-5318). This is the scanner's own ceiling; the step budget below is
-# the one that actually stops a hung scanner, and LOCAL_CI_STEP_BUDGET raises
-# that for a slow host without a code change.
+# clean (DIG-5318). This is the scanner's own ceiling AND its step budget: a
+# scanner is not in STEP_BUDGETS, so before DIG-5724 it took the 180 s default
+# and min(180, 600) made this knob inert. On PR #6525 (2026-10-27) five
+# clean-tree scanners were killed at 182-183 s while the tree was clean; the
+# 600 s default is 3.3x that worst measurement, and LOCAL_CI_SCAN_TIMEOUT
+# raises both numbers at once for a slower host.
 SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
 
 # A step's own wall-clock ceiling (2026-10-26). The gate does 99.6 s of real
@@ -342,8 +346,10 @@ SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
 # `<step> exceeded <N>s and was killed`, and the tick moves on to the next step.
 # A step that legitimately needs longer names itself in STEP_BUDGETS (`*` is a
 # prefix, for the bun and worker-build families); an explicit `budget=` argument
-# wins over both. LOCAL_CI_STEP_BUDGET raises the default for the whole host,
-# and a caller `timeout` that is tighter than the budget still wins.
+# wins over both. Tree scanners pass SCAN_TIMEOUT as that explicit budget
+# (DIG-5724), so their own knob reaches them. LOCAL_CI_STEP_BUDGET raises the
+# default for every other step on the host, and a caller `timeout` that is
+# tighter than the budget still wins.
 STEP_BUDGET = int(os.environ.get("LOCAL_CI_STEP_BUDGET", "180") or 180)
 STEP_BUDGETS = {
     # A whole-history secret scan and a workspace dependency install are the
@@ -1201,6 +1207,45 @@ def run_bun_suites(wt, step, out, fails):
     return ran
 
 
+def buildable_worker_apps(wt):
+    """The WORKER_APPS this tree still has a ``wrangler.toml`` for.
+
+    WORKER_APPS is a fixed list, so it keeps naming an app after a retirement
+    PR deletes it. The dry-run then changes into ``apps/<app>`` and runs
+    wrangler there. When the directory itself is gone the step refuses by name
+    (the missing-cwd check in ``step``/``run_step_pool``), and when a previous
+    checkout of the same worktree left an ignored ``node_modules`` behind -
+    ``git clean -fdq -e node_modules`` keeps those - the directory still exists
+    and wrangler fails with "Could not detect a directory containing static
+    files" for a project that has no config any more. Either way the required
+    check is red for a tree that is correct: #6530, which retires
+    ``apps/digitrace-langfuse`` (DIG-5136), could not go green at all.
+
+    The dry run is defined by the app's ``wrangler.toml``: an app without one
+    is retired in this tree and is skipped, the same shape as the ruff path
+    list, which drops entries that do not exist so a removal cannot turn every
+    PR red. When ``apps/`` itself is missing (unit fixtures, an odd tree) the
+    list is returned unchanged, so nothing is skipped on a tree we cannot read.
+    """
+    apps_dir = os.path.join(wt, "apps")
+    if not os.path.isdir(apps_dir):
+        return list(WORKER_APPS)
+    live = []
+    for app in WORKER_APPS:
+        if os.path.isfile(os.path.join(apps_dir, app, "wrangler.toml")):
+            live.append(app)
+        else:
+            log(f"worker-build:{app} skipped: no apps/{app}/wrangler.toml in this tree")
+    if not live:
+        # A tree with apps/ and no buildable Worker is a broken checkout, not a
+        # retirement: retire them all and there is nothing left to deploy. Build
+        # the fixed list so the gate fails loudly instead of passing vacuously.
+        log("worker-build: no app in WORKER_APPS has a wrangler.toml; treating "
+            "this as a broken checkout and building the fixed list")
+        return list(WORKER_APPS)
+    return live
+
+
 def worker_build(wt, step, out=None):
     """Run the ci.yml worker-build dry-run over all WORKER_APPS. Failures record via step.
 
@@ -1216,13 +1261,14 @@ def worker_build(wt, step, out=None):
     """
     if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
         return ["worker-build:npm-ci"]
-    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in WORKER_APPS}
+    apps = buildable_worker_apps(wt)
+    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in apps}
     try:
         specs = [gate_spec(f"worker-build:{app}",
                            ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
                             "--containers-rollout=none", "--outdir", outdirs[app]],
                            WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
-                 for app in WORKER_APPS]
+                 for app in apps]
         if out is None:
             failed = []
             for name, cmd, timeout, cwd in ((s[0], s[1], s[2], s[3]) for s in specs):
@@ -1715,13 +1761,30 @@ def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, e
     return False
 
 
-def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=()):
+def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=(), budget=None):
     """One pool spec: a step's arguments plus the wall-clock budget it carries.
 
     The budget is resolved once, here, so a pooled step runs with exactly the
-    ceiling the serial `step()` would have given the same name and timeout.
+    ceiling the serial `step()` would have given the same name and timeout. An
+    explicit `budget` wins over the name table, which is how a tree scanner
+    takes SCAN_TIMEOUT instead of the 180 s default (DIG-5724).
     """
-    return (name, cmd, timeout, cwd, env, stall_rcs, step_budget(name, timeout))
+    return (name, cmd, timeout, cwd, env, stall_rcs,
+            step_budget(name, timeout, budget))
+
+
+def scan_spec(name, cmd, env=None, stall_rcs=()):
+    """One tree-scanner pool spec: SCAN_TIMEOUT is its ceiling and its budget.
+
+    Both scanner waves go through this helper so the two numbers cannot drift
+    apart. The scanner names stay out of STEP_BUDGETS on purpose: their runtime
+    belongs to the machine, and the one knob that raises it must raise the
+    caller ceiling and the step budget together. Passing the budget explicitly
+    is what makes LOCAL_CI_SCAN_TIMEOUT reach the step; without it step_budget()
+    chose the 180 s default and min(180, 600) left the knob inert (DIG-5724).
+    """
+    return gate_spec(name, cmd, SCAN_TIMEOUT, None, env, stall_rcs,
+                     budget=SCAN_TIMEOUT)
 
 
 def run_step_pool(specs, out, limit=STEP_POOL):
@@ -1844,6 +1907,18 @@ def run_checks(pr, out, summary=None):
             "refusing to run gates"
         )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
+    # The R0 allowance gate compares the PR's baseline with the base branch tip.
+    # prepare_wt fetched origin/<base>; a caller that knows the exact base commit
+    # may pass it as baseCommit (reserved for the post-merge driver, which has
+    # no base branch to name). Never guess a ref: an unresolvable one fails the
+    # gate closed, so a SHA is used as given.
+    base_commit = str(pr.get("baseCommit") or "")
+    if re.fullmatch(r"[0-9a-f]{40}", base_commit):
+        r0_base = base_commit
+    elif re.fullmatch(r"[0-9a-f]{40}", base or ""):
+        r0_base = base
+    else:
+        r0_base = "origin/" + base
     fails = []
     def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=(), budget=None):
         # The missing-directory refusal comes first: a step whose cwd is not
@@ -1898,9 +1973,15 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
+              "scripts/check_r0_no_client_literals.py",
+              # DIG-5762: the R0 allowance may only shrink, and this is the PR
+              # lane that must refuse the growth. The gate lived only in the
+              # host runner for months, so #6500 grew the baseline and merged
+              # green (totals 1997 -> 2030) until the post-merge run caught it.
+              "scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base,
+              "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
-            scan_specs.append(gate_spec(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
+            scan_specs.append(scan_spec(s.split()[0], f"python3 {s}", SCAN_ENV, (124, 3)))
     scan_specs.append(gate_spec("actionlint", ["actionlint"], 300, None, None, ()))
     if opts is not None:
         scan_specs.append(gate_spec("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
@@ -1930,7 +2011,7 @@ def run_checks(pr, out, summary=None):
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
             if os.path.exists(f"{WT}/scripts/{s.split()[0]}"):
-                uv_specs.append(gate_spec(s.split()[0], U + f"python scripts/{s}", 600, None, None, ()))
+                uv_specs.append(scan_spec(s.split()[0], U + f"python scripts/{s}"))
         fails.extend(run_step_pool(uv_specs, out))
     n_files, hit = worker_gate(pr, WT)
     if hit is None and n_files is None:

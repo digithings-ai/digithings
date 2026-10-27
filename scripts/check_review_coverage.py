@@ -933,7 +933,17 @@ def _sha_mentioned_in(short_sha: str) -> list[int]:
     query = f"repo:{_repo_slug()} {short_sha} in:comments"
     try:
         found = _gh_json(["api", "-X", "GET", "search/issues", "-f", f"q={query}"])
-    except (subprocess.CalledProcessError, json.JSONDecodeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        # Failing closed is right — an unreadable index must not clear a commit —
+        # but failing *silently* is not: the caller then reports "no review
+        # exists", which is a different and much more misleading claim than
+        # "the review index could not be read". Say which one happened.
+        print(
+            f"warning: search/issues unavailable ({type(exc).__name__}): direct-push "
+            "review discovery is incomplete for this run, so a direct-push refusal "
+            "below may mean 'could not look', not 'no review'",
+            file=sys.stderr,
+        )
         return []
     items = found.get("items") if isinstance(found, dict) else None
     return [
@@ -1051,6 +1061,19 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         )
     if state["bugbot"]:
         return False, f"{BUGBOT_CHECK} reported {state['bugbot'].lower()}"
+    # A near miss is not the same as no evidence, and reporting it as the latter
+    # is actively misleading: on 2026-10-27 the promotion gate said "no completed
+    # agent review (… in-session)" about two PRs that *did* carry an in-session
+    # review comment and were missing only the label that accepts it. The
+    # operator read that as a broken detector, not as a missing label, and went
+    # looking for a bug that was not there. Name the gap.
+    if agent:
+        return False, (
+            f"an in-session review comment exists ({agent['url']}) but the PR is "
+            f"not labelled {AGENT_REVIEW_LABEL!r} — the label is what accepts it. "
+            f"Apply {AGENT_REVIEW_LABEL}, or {OWNER_REVIEW_LABEL} if you read the "
+            "diff yourself"
+        )
     return False, (
         "no completed agent review (Bugbot, CodeRabbit, Claude, in-session), "
         f"no approval, and no {OWNER_REVIEW_LABEL}"

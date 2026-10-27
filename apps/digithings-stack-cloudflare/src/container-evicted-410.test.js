@@ -56,7 +56,7 @@ describe("containerEvictedResponse", () => {
   });
 });
 
-describe("both containers wire the evicted branch", () => {
+describe("the remaining container wires the evicted branch", () => {
   it("imports the eviction helpers", () => {
     expect(stackSource()).toContain('from "./container-errors"');
     expect(stackSource()).toContain("isContainerEvictedError");
@@ -70,18 +70,17 @@ describe("both containers wire the evicted branch", () => {
     // reads the message out of the thrown value, the hop catch reads it out
     // of the classification (DIG-4928).
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const boot = `return containerEvictedResponse("${service}", message);`;
-      const hop = `return containerEvictedResponse("${service}", failure.message);`;
-      expect(source.split(boot).length - 1).toBe(1);
-      expect(source.split(hop).length - 1).toBe(1);
-    }
+    const boot = 'return containerEvictedResponse("stack", message);';
+    const hop = 'return containerEvictedResponse("stack", failure.message);';
+    expect(source.split(boot).length - 1).toBe(1);
+    expect(source.split(hop).length - 1).toBe(1);
+    // The deleted digiquant-mcp container (DIG-5558) must not wire this again.
+    expect(source).not.toContain('containerEvictedResponse("mcp"');
   });
 
   it("keeps the boot 503 for the non-evicted path", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerBootingResponse("${service}", message);`);
-    }
+    expect(source).toContain('return containerBootingResponse("stack", message);');
+    expect(source).not.toContain('containerBootingResponse("mcp"');
   });
 });

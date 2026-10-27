@@ -808,3 +808,206 @@ def test_gitleaks_guard_blocks_a_secret_and_allows_a_clean_tip() -> None:
         clean = run("git", "rev-parse", "HEAD").stdout.strip()
         allowed = push("feat/clean", clean)
         assert allowed.returncode == 0, allowed.stderr
+
+
+# ── DIG-5722: an unavailable scanner refuses the push ────────────────────────
+#
+# The arm is availability, not detection, so these tests must not depend on a
+# real gitleaks being installed: CI has one, a maintainer's Mac may not, and a
+# test skipped on the machine that reproduces the bug is worth nothing. The
+# scanner is therefore supplied as a stub on PATH (or withheld from PATH), and
+# the real binary's *verdict* is left to the test above.
+
+_BASH = shutil.which("bash") or "/bin/bash"
+_HOOK = Path(__file__).resolve().parents[2] / "scripts" / "hooks" / "pre-push.sh"
+
+_TOML = (
+    'title = "test"\n'
+    '[[rules]]\n'
+    'id = "unit-test-token"\n'
+    'description = "unit test token"\n'
+    "regex = '''UNIT_TEST_TOKEN_[A-Z0-9]{8}'''\n"
+)
+
+
+def _path_without_gitleaks(tmp_path: Path) -> str:
+    """A PATH holding the tools the hook uses before the scanner, and no gitleaks.
+
+    Symlinks to the real binaries, not copies: the hook calls ``git`` and
+    ``grep`` on the way here and the refusal must come from the missing
+    scanner, not from a missing dependency earlier in the file.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("git", "grep", "sh"):
+        found = shutil.which(name)
+        assert found is not None, name
+        (bin_dir / name).symlink_to(found)
+    return str(bin_dir)
+
+
+def _path_with_stub_gitleaks(tmp_path: Path, *, exit_code: int = 0) -> str:
+    """The same PATH, with a ``gitleaks`` that always returns ``exit_code``.
+
+    Present-but-silent is the case the hook must treat as *scanned*: the stub
+    stands in for "the binary is installed" and its verdict is fixed so the
+    assertion is about the hook's wiring, not about gitleaks' rules.
+    """
+    path = _path_without_gitleaks(tmp_path)
+    stub = Path(path) / "gitleaks"
+    stub.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+    stub.chmod(0o755)
+    return path
+
+
+def _seed_gitleaks_repo(tmp_path: Path, *, with_config: bool) -> tuple[Path, str, str]:
+    """A repo pushing ``feat/clean`` onto a base of the develop tip.
+
+    The stdin line's ``remote_sha`` is the develop sha, so the hook derives
+    ``base="$remote_sha"`` and needs no ``origin/develop`` ref. That keeps the
+    fixture about the scanner arm and not about base resolution, which the base
+    test above already covers.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(args, cwd=repo, check=True, text=True, capture_output=True)
+
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "pre-push-test@example.com")
+    run("git", "config", "user.name", "pre-push-test")
+    if with_config:
+        (repo / ".gitleaks.toml").write_text(_TOML, encoding="utf-8")
+    (repo / "clean.txt").write_text("clean\n", encoding="utf-8")
+    run("git", "add", "-A")
+    run("git", "commit", "-qm", "seed")
+    run("git", "branch", "-M", "develop")
+    develop = run("git", "rev-parse", "HEAD").stdout.strip()
+
+    run("git", "checkout", "-qb", "feat/clean")
+    (repo / "clean.txt").write_text("still clean\n", encoding="utf-8")
+    run("git", "add", "clean.txt")
+    run("git", "commit", "-qm", "clean")
+    tip = run("git", "rev-parse", "HEAD").stdout.strip()
+    return repo, develop, tip
+
+
+def _push_clean(repo: Path, develop: str, tip: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    line = f"refs/heads/feat/clean {tip} refs/heads/feat/clean {develop}\n"
+    return subprocess.run(
+        [_BASH, str(_HOOK), "origin", "https://github.com/digithings-ai/digithings.git"],
+        cwd=repo,
+        input=line,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+
+@pytest.mark.unit
+def test_gitleaks_absent_refuses_the_push(tmp_path: Path) -> None:
+    """No scanner is a refusal, and the message must not promise a CI backstop.
+
+    CI does scan, but only pull requests and pushes to develop/main
+    (.github/workflows/security-gitleaks.yml), and the local forge has no scan
+    at all — so a topic-branch push with no local scanner is scanned nowhere.
+    The old line said "CI still scans" and let it through.
+    """
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=True)
+    result = _push_clean(
+        repo,
+        develop,
+        tip,
+        {**os.environ, "PATH": _path_without_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "0"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "gitleaks not found" in result.stderr
+    assert "feat/clean" in result.stderr, result.stderr
+    assert "CI still scans" not in result.stderr
+
+
+@pytest.mark.unit
+def test_gitleaks_config_absent_refuses_the_push(tmp_path: Path) -> None:
+    """An installed scanner with no policy file cannot scan; that is a refusal too."""
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=False)
+    result = _push_clean(
+        repo,
+        develop,
+        tip,
+        {**os.environ, "PATH": _path_with_stub_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "0"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert ".gitleaks.toml not found" in result.stderr
+    assert "gitleaks not found" not in result.stderr
+
+
+@pytest.mark.unit
+def test_gitleaks_present_and_clean_allows_the_push(tmp_path: Path) -> None:
+    """The fail-closed arm must not block when the scanner can actually run."""
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=True)
+    result = _push_clean(
+        repo,
+        develop,
+        tip,
+        {**os.environ, "PATH": _path_with_stub_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "0"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Positive assertion only: a whole-stream "gitleaks" negative would break on
+    # any future informational line about the scanner, on a test that is about
+    # the push being allowed. "refusing" is the specific failure this arm exists
+    # to prevent, so that is what must be absent.
+    assert "refusing" not in result.stderr
+
+
+@pytest.mark.unit
+def test_skip_env_prints_the_ref_it_does_not_scan(tmp_path: Path) -> None:
+    """The documented opt-out is loud: it names the ref and the missing backstop.
+
+    A bypass that prints nothing is undiscoverable, which is how
+    PRE_PUSH_SKIP_GITLEAKS=1 stayed out of this file's header (DIG-5722).
+    """
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=True)
+    result = _push_clean(
+        repo,
+        develop,
+        tip,
+        {**os.environ, "PATH": _path_without_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PRE_PUSH_SKIP_GITLEAKS=1" in result.stderr
+    assert "secret scan skipped" in result.stderr
+    assert "feat/clean" in result.stderr, result.stderr
+    assert "Refs not scanned:" in result.stderr
+
+
+@pytest.mark.unit
+def test_skip_env_names_every_ref_on_a_multi_ref_push(tmp_path: Path) -> None:
+    """A multi-ref push must not report only its first ref as skipped.
+
+    The note used to be throttled by a once-per-push flag that named a single
+    ref, so `git push --all` under the escape left the second and later refs with
+    no line at all — the operator reads a clean push (DIG-5722 review).
+    """
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=True)
+    lines = (
+        f"refs/heads/feat/clean {tip} refs/heads/feat/clean {develop}\n"
+        f"refs/heads/feat/other {tip} refs/heads/feat/other {develop}\n"
+    )
+    result = subprocess.run(
+        [_BASH, str(_HOOK), "origin", "https://github.com/digithings-ai/digithings.git"],
+        cwd=repo,
+        input=lines,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "PATH": _path_without_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Refs not scanned:" in result.stderr
+    assert "feat/clean" in result.stderr, result.stderr
+    assert "feat/other" in result.stderr, result.stderr

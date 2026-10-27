@@ -677,6 +677,41 @@ it("relays llm_error detail for the embed disclosure", () => {
   });
 });
 
+// One case per code shape: the colon form (the live failure), the bare
+// underscore form (`art9_refused`, same module's refusal code), and a
+// hyphenated segment (`art9:health:field-name`, what the screen tests use).
+// All three are operator detail; none of them is copy.
+it.each(["art9:genetic:rs_id", "art9_refused", "art9:health:field-name"])(
+  "never relays the internal reason code %s as the user message",
+  (reason) => {
+    const payload = digigraphErrorToEmbedPayload({
+      code: "llm_error",
+      message: reason,
+      detail: reason,
+    });
+    expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+    expect(payload).not.toContain("art9");
+  },
+);
+
+it("drops a machine reason code in detail even when the message is human", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+    detail: "art9:genetic:rs_id",
+  });
+  expect(JSON.parse(payload)).toEqual({ error: "llm_error", message: "The model timed out." });
+  expect(payload).not.toContain("art9");
+});
+
+it("still relays a human sentence from upstream", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+  });
+  expect(JSON.parse(payload).message).toBe("The model timed out.");
+});
+
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
   const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
   const payload = digigraphErrorToEmbedPayload({
@@ -1858,7 +1893,6 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
     capToolPayload(value) {
       return value;
     },
-    noteToolCap() {},
   };
 
   const res = await createDigigraphTraceStreamResponse({
@@ -1877,7 +1911,7 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
   expect(released).toBe(true);
 });
 
-it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+it("keeps the tool-call cap silent when a digigraph trace hits the cap", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       [
@@ -1915,9 +1949,10 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
   });
   const body = await new Response(res.body).text();
 
-  expect(body).toContain("tool-call-limit");
-  expect(body).toContain("Tool-call limit reached (1 this turn)");
-  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).not.toContain("tool-call-limit");
+  expect(body).not.toContain("Tool-call limit reached");
+  expect(body).not.toContain('"type":"data-notice"');
+  // The house loop is not aborted: the answer still arrives.
   expect(body).toContain("Done.");
 });
 

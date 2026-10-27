@@ -2,23 +2,27 @@
 title: "Two kinds of scale"
 order: 1
 summary: >-
-  Usage scale and organizational scale are different problems, and a stack
-  that is honest about the difference solves them separately.
+  Load and capability are different problems. One is solved with copies and
+  hardware, the other with modules, and each module is honest about which it
+  can do today.
 ---
 
-"Scale" quietly means two different things, and conflating them is how a
-reasonable design decision turns into an unreasonable constraint.
+"Scale" means two different things, and mixing them up is how a reasonable
+design turns into an expensive one.
 
-**Usage scale** is more requests, more data, more concurrent work. It is
-largely a hardware and software-engineering problem: faster storage, more
-compute, better caching, a queue instead of a loop.
+**Load** is more requests, more data, more people at once. Whether a module can
+take it by running more copies depends on where it keeps its state. digichat
+keeps conversations in the browser and, when configured, in Postgres, so any
+number of copies can serve the same users. The hub can keep its conversation
+threads in Postgres too, but its rate limits and the tool calls waiting for a
+person's approval live in its own memory. Two copies of the hub would each see
+half of them, so for now the hub scales up, on a bigger machine, before it
+scales out.
 
-**Organizational scale** is more people, more teams, more rules about who
-can see what. It is largely a policy problem: identity, permissions, audit
-trails, and the ability to add a new team without re-architecting the whole
-system around them.
+**Capability** is the application learning to do more: retrieval, then a
+research pipeline, then tools that act on other systems. That is solved by
+switching on a module, not by making an existing one bigger.
 
-A platform that only solves the first kind of scale still falls over the
-moment a second team wants to use it. A platform that only solves the second
-kind is bureaucracy wearing infrastructure's clothes. The two need separate
-answers, even inside one stack.
+The two need separate answers, and a stack that says plainly which modules can
+run as many copies, and which cannot yet, is easier to plan for than one that
+claims they all can.

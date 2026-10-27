@@ -170,6 +170,12 @@ export type DigichatSkinOptions = {
   hiddenAttachmentName?: string;
   /** Product slash wiring; absent = slash/mention adapters stay disabled. */
   slash?: DigichatSkinSlash;
+  /**
+   * Private session, set per session by the host. Hides reasoning text and
+   * tool-call output and shows the mode badge. Display-only: the model still
+   * produces the work, and the stores still hold the real text.
+   */
+  privateMode?: boolean;
 };
 
 /**
@@ -186,6 +192,7 @@ export function DigichatSkin({
   // ("page-context.html"); hosts pass it explicitly.
   hiddenAttachmentName = "page-context.html",
   slash: slashWiring,
+  privateMode,
 }: DigichatSkinOptions) {
   const { welcome, welcomeBody, placeholder, suggestions } = useComposerCopy(
     copy?.welcome ?? "",
@@ -431,6 +438,7 @@ export function DigichatSkin({
       reasoningMode={reasoningUi.mode}
       toolCallsMode={toolCallsUi.mode}
       workVisibility={workVisibility}
+      privateMode={privateMode}
       composerToolbar={
         prefs && prefs.prefs.toolbar !== false ? (
           <DigichatComposerToolbar prefs={prefs} />

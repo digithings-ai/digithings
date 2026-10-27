@@ -379,6 +379,49 @@ class WorkerBuildTest(unittest.TestCase):
         self.assertEqual(_mod.worker_build("/wt-4010", rec), ["worker-build:npm-ci"])
         self.assertEqual(len(calls), 1)
 
+    def test_build_skips_an_app_the_tree_has_retired(self):
+        """A retirement PR deletes the app; the fixed WORKER_APPS still names it.
+
+        #6530 retires apps/digitrace-langfuse (DIG-5136) and could not go green:
+        the runner changed into the app directory and wrangler failed on a
+        project with no config. An app with no wrangler.toml in the tree is
+        retired in that tree and is not built; the rest still are.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            live = _mod.WORKER_APPS[0]
+            retired = _mod.WORKER_APPS[-1]
+            for app in (live, _mod.WORKER_APPS[1]):
+                os.makedirs(os.path.join(wt, "apps", app))
+                open(os.path.join(wt, "apps", app, "wrangler.toml"), "w").close()
+            # The retired app's directory can survive a checkout (ignored
+            # node_modules), so the filter must key on wrangler.toml, not the dir.
+            os.makedirs(os.path.join(wt, "apps", retired))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            built = [c[0].split(":", 1)[1] for c in calls[1:]]
+            self.assertEqual(built, [live, _mod.WORKER_APPS[1]])
+            self.assertNotIn(retired, built)
+
+    def test_build_with_no_apps_dir_builds_the_fixed_list(self):
+        """A unit fixture or an odd tree says nothing about retirement: build all."""
+        with tempfile.TemporaryDirectory() as wt:
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
+
+    def test_a_tree_with_no_buildable_worker_fails_loudly(self):
+        """Every app retired is a broken checkout, not a clean tree.
+
+        Skipping each app because its wrangler.toml is absent would turn a
+        half-checked-out worktree into a green required check. Only a tree that
+        still has at least one buildable Worker is treated as a real tree.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            for app in _mod.WORKER_APPS:
+                os.makedirs(os.path.join(wt, "apps", app))
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+
 
 class BunSuiteGateTest(unittest.TestCase):
     """The bun suites run in local-ci, and the receipt says which ones (DIG-5203).
@@ -620,6 +663,79 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertEqual(len(found), 1)
         names = [e.value for e in found[0].elts if isinstance(e, ast.Constant)]
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
+
+    def test_r0_allowance_gate_in_static_gate_list(self):
+        """A PR that grows the R0 allowance is refused here (DIG-5762).
+
+        The growth gate lived only in the host runner, so #6500 grew the
+        baseline (1997 -> 2030), merged green, and the post-merge run caught it
+        13 h later. The list entry is a string concatenation, so it is not an
+        ast.Constant: pin the command and the base-ref wiring in the source.
+        """
+        found = self._static_lists(self._tree())
+        self.assertEqual(len(found), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn(
+            '"scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base',
+            src,
+        )
+        # The base is the PR's own base branch, or a caller's exact commit.
+        self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
+        self.assertIn('r0_base = "origin/" + base', src)
+
+    def test_run_checks_executes_the_allowance_gate(self):
+        """Functionally: a grown baseline makes `run_checks` return the gate.
+
+        The source pins above prove the command is written down; this proves the
+        static pool actually executes it and reports its non-zero exit as a
+        failed gate. That is the property #6500 merged without: the gate was
+        absent from run_checks, so a grown baseline changed nothing.
+        """
+        tmp = tempfile.mkdtemp()
+        gate = "scripts/check_r0_client_literals_baseline_growth.py"
+        os.makedirs(os.path.join(tmp, "scripts"))
+        with open(os.path.join(tmp, gate), "w") as f:
+            f.write("# fixture: existence is all run_checks tests\n")
+
+        saved = {name: getattr(_mod, name) for name in (
+            "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
+            "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate",
+            "bun_gate")}
+        commands: list[str] = []
+
+        def fake_sh(cmd, cwd=None, timeout=None, out=None, name=None, env=None):
+            text = cmd if isinstance(cmd, str) else " ".join(str(p) for p in cmd)
+            commands.append(text)
+            if gate in text:
+                if out is not None:
+                    out.write("r0-client-literal-baseline-growth: 1 finding(s)\n")
+                return 1, ""
+            return 0, ""
+
+        try:
+            _mod.WT = tmp
+            _mod.sh = fake_sh
+            _mod._guard = lambda: None
+            _mod.wt_is_ours = lambda path: True
+            _mod.pr_body = lambda pr: "Fixes DIG-5762\n"
+            _mod.gitleaks_log_opts = lambda base, sha, out: None
+            _mod.ruff_paths_for_tree = lambda wt: ("", "fixture")
+            _mod.ruff_paths_fallback = lambda wt: None
+            _mod.worker_gate = lambda pr, wt: (None, None)
+            _mod.bun_gate = lambda pr, wt: (0, None)
+            pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+                  "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
+            fails = _mod.run_checks(pr, io.StringIO())
+        finally:
+            for name, value in saved.items():
+                setattr(_mod, name, value)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        self.assertIn(gate, fails)
+        self.assertTrue(
+            any(f"{gate} --base-ref {'b' * 40}" in c for c in commands),
+            "the gate must compare against the caller's base commit",
+        )
 
     def test_static_list_drives_single_step_call(self):
         """Each entry becomes exactly one spec, and the specs are what runs.
@@ -1305,10 +1421,17 @@ class InstallMarkerTest(unittest.TestCase):
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
         # The install refuses a checkout that carries the runner without the
-        # guard (DIG-4796): the two files are installed together.
-        for name in ("local_ci.py", "launch_guard.py"):
-            shutil.copy(os.path.join(_SCRIPTS, name),
-                        os.path.join(checkout, "scripts", "local-ci", name))
+        # guard (DIG-4796), and one where a module the runner imports does not
+        # resolve (DIG-5585). The clone therefore carries every module next to
+        # the runner, plus the shared module in `scripts/`, one directory up.
+        # Copying every `.py` keeps these cases about the marker: a helper
+        # added to the runner is in the clone without editing this list.
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name),
+                            os.path.join(checkout, "scripts", "local-ci", name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(checkout, "scripts", "review_pass_filter.py"))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1335,6 +1458,25 @@ class InstallMarkerTest(unittest.TestCase):
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
 
+    def test_a_dry_run_renders_the_interpreter_the_job_will_run(self):
+        """The plist must name the same interpreter the install check used.
+
+        A `ProgramArguments` entry left as a placeholder lints cleanly and
+        fails only when launchd tries to spawn it, so a render that never
+        substituted the interpreter reads as an installed job and runs nothing
+        (DIG-5725).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                               "--dry-run", checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("__", done.stdout,
+                         "an unsubstituted placeholder is a plist launchd cannot run")
+        self.assertIn("<string>/usr/bin/python3</string>", done.stdout,
+                      "the job must run under the interpreter the install check used")
+
     def test_a_checkout_without_the_guard_is_refused(self):
         """An installer must not point the daemon at a pre-guard checkout.
 
@@ -1347,6 +1489,48 @@ class InstallMarkerTest(unittest.TestCase):
         os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
         rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
         self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
+
+    def test_a_checkout_without_the_install_check_is_refused(self):
+        """An installer must not point the daemon at a checkout with no preflight.
+
+        The runner exits 78 on every tick when `import_preflight.py` is absent
+        (`_require_install`, DIG-5585), so installing from a stale checkout
+        leaves the daemon running and the gate dark. The install refuses the
+        tree before it writes anything (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "import_preflight.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout without the install check must not be installed")
+        self.assertIn("import_preflight.py", done.stderr,
+                      "the refusal must name the module the checkout is missing")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
+
+    def test_a_checkout_missing_an_imported_module_is_refused(self):
+        """A stale checkout can look complete: refuse it by import, not by name.
+
+        The runner imports `pr_template` and fails closed when it is None, so a
+        checkout that carries the runner but not a helper it imports still
+        looks installable. The install asks the checkout's own preflight, which
+        resolves every import, and refuses with the module named (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "pr_template.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout missing an imported module must not be installed")
+        self.assertIn("pr_template", done.stderr,
+                      "the refusal must name the module that could not be resolved")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""
@@ -3942,17 +4126,59 @@ class StepBudgetTest(unittest.TestCase):
         for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
             self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
                                f"{heavy} legitimately needs more than the default")
-        for light in ("scripts/check_doc_links.py", "actionlint"):
+        for light in ("actionlint", "pr-title"):
             self.assertNotIn(light, _mod.STEP_BUDGETS,
                              f"{light} is measured in seconds; it takes the default")
 
+    def test_a_tree_scanner_budget_is_the_scan_timeout(self):
+        """The scanners are not in STEP_BUDGETS, so before DIG-5724 they took
+        the 180 s default and a clean tree false-red at 182-183 s (PR #6525)."""
+        spec = _mod.scan_spec("scripts/scan_customer_pii.py",
+                              "python3 scripts/scan_customer_pii.py")
+        self.assertEqual(spec[2], _mod.SCAN_TIMEOUT,
+                         "SCAN_TIMEOUT is the scanner's caller ceiling")
+        self.assertEqual(spec[6], _mod.SCAN_TIMEOUT,
+                         "and its step budget, not the 180 s STEP_BUDGET default")
+        self.assertGreaterEqual(_mod.SCAN_TIMEOUT, 3 * 183,
+                                "the budget keeps a 3x margin over the worst "
+                                "measured clean-tree runtime (183 s, PR #6525)")
+
+    def test_the_scan_timeout_env_raises_a_scanners_budget(self):
+        """LOCAL_CI_SCAN_TIMEOUT must reach the budget, not only the ceiling."""
+        code = (
+            "import importlib.util, sys;"
+            f"sys.path.insert(0, {_SCRIPTS!r});"
+            "s=importlib.util.spec_from_file_location('local_ci_scan_env', "
+            f"{os.path.join(_SCRIPTS, 'local_ci.py')!r});"
+            "m=importlib.util.module_from_spec(s);sys.modules['local_ci_scan_env']=m;"
+            "s.loader.exec_module(m);"
+            "print(m.SCAN_TIMEOUT, m.scan_spec('scripts/check_doc_links.py', 'true')[6])"
+        )
+        env = dict(os.environ, LOCAL_CI_SCAN_TIMEOUT="900")
+        env.pop("LOCAL_CI_STEP_BUDGET", None)
+        got = subprocess.check_output([sys.executable, "-c", code], env=env,
+                                      text=True, cwd=_SCRIPTS).strip()
+        self.assertEqual(got, "900 900",
+                         "the env knob must raise the ceiling and the budget together")
+
+    def test_both_scanner_waves_take_the_scan_budget(self):
+        """A wave that calls gate_spec directly silently loses the scan budget."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertGreaterEqual(src.count("scan_spec("), 2,
+                                "the pre-uv-sync and post-uv-sync scanner waves must both "
+                                "use scan_spec (DIG-5724)")
+
     def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
-        self.assertEqual(_mod.step_budget("scripts/check_doc_links.py", 600), 180)
+        self.assertEqual(_mod.step_budget("actionlint", 300), 180,
+                         "a non-scanner step still takes the 180 s default")
         self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
         self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
         self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
                          "a tighter caller ceiling still wins")
         self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+        self.assertEqual(_mod.gate_spec("anything", "true", 1800, budget=7)[6], 7,
+                         "gate_spec must pass an explicit budget through")
 
     def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
         """A step that bypasses run_step has no budget, so the gate cannot

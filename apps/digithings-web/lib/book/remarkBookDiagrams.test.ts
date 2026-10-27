@@ -11,7 +11,7 @@ import { findDiagramFences } from "./diagram.ts";
  * disagree the chapter shows a 404 — with nothing failing.
  */
 
-const code = (lang: string, value: string) => ({ type: "code", lang, value, meta: null });
+const code = (lang: string, value: string, meta: string | null = null) => ({ type: "code", lang, value, meta });
 const para = (value: string) => ({ type: "paragraph", children: [{ type: "text", value }] });
 
 const run = (children: object[]) => {
@@ -70,6 +70,21 @@ describe("the rewrite", () => {
   it("numbers several diagrams in document order", () => {
     const out = run([code("mermaid", "graph TD\n A --> B"), code("mermaid", "graph LR\n C --> D")]);
     expect(out.map((n) => n.alt)).toEqual(["Figure 1", "Figure 2"]);
+  });
+
+  // The fence's info string after the language is the figure's caption: on
+  // paper "Figure 1" under every diagram told the reader nothing.
+  it("uses the fence's info string as the caption", () => {
+    const node = run([code("mermaid", "graph TD\n A --> B", "the hub asks before it calls")])[0];
+    expect(node.alt).toBe("the hub asks before it calls");
+  });
+
+  it("does not let the caption change the address", () => {
+    const [plain, captioned] = run([
+      code("mermaid", "graph TD\n A --> B"),
+      code("mermaid", "graph TD\n A --> B", "a caption"),
+    ]);
+    expect(captioned.url).toBe(plain.url);
   });
 
   it("CONTROL: a chapter with no fence comes back untouched", () => {
