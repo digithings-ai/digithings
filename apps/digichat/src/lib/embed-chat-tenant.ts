@@ -5,6 +5,7 @@ import {
   type EmbedTenantClientConfig,
 } from "@/lib/embed-client-config";
 import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
+import { isInviteOnlyDeployment } from "@/lib/embed-invite-only";
 import { isLegacyEmbedEnabled, LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
 import {
   hasConfiguredEmbedTenants,
@@ -84,7 +85,7 @@ export function isEmbedChatRequest(req: Request): boolean {
 }
 
 /** Token match for a tenant whose registry entry carries a non-empty secret. */
-function tokenMatches(required: string, token: string | null | undefined): boolean {
+export function tokenMatches(required: string, token: string | null | undefined): boolean {
   const expected = required.trim();
   const presented = token?.trim();
   return Boolean(expected && presented && presented === expected);
@@ -193,16 +194,18 @@ export function resolveEmbedClientConfigForPaint(
 }
 
 /**
- * The host this request is served on, in trust order: the browser-attested
- * `Origin`/`Referer` (page JavaScript cannot set either), then the proxy's
- * `X-Forwarded-Host`, then `Host`, then the URL. **Selection only** — the
- * caller decides what, if anything, a selected host may unlock.
+ * The host this request is served on: the browser-attested `Origin`/`Referer`
+ * (page JavaScript cannot set either), then `Host`, then the URL.
+ * **Selection only**: the caller decides what, if anything, a selected host
+ * may unlock.
+ *
+ * `X-Forwarded-Host` is never consulted (DIG-3585). Any caller can send it,
+ * and it used to pick an invite-only deployment for a tokenless turn.
  */
 export function requestDeploymentHost(req: Request): string | null {
   const attested = embedOriginHostOf(req.headers);
   if (attested) return attested;
-  const forwarded = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwarded || req.headers.get("host")?.trim();
+  const host = req.headers.get("host")?.trim();
   if (host) return normalizeEmbedHost(host);
   try {
     return normalizeEmbedHost(new URL(req.url).host);
@@ -212,9 +215,16 @@ export function requestDeploymentHost(req: Request): string | null {
 }
 
 /**
- * Anonymous product chat (`/chat`) on a deployment's own host. The request
- * host picks the deployment — never `hosts[0]`, never `config.deployment` —
- * and only that host's explicit `auth: anonymous` opens the path.
+ * Anonymous product chat (`/chat`) on a first-party deployment's own host.
+ * The request host picks the deployment (never `hosts[0]`, never
+ * `config.deployment`), and three rules must all hold:
+ *
+ *  1. the host is first-party (`isFirstPartyEmbedHost`): a customer or
+ *     invite-only host is never served without its token, whatever
+ *     `Origin`/`Host` a caller sends (DIG-3585);
+ *  2. the deployment is not invite-only (by host or by tenant slug);
+ *  3. the deployment declares `auth: anonymous`. Registry tenants that carry
+ *     a token are hydrated as `auth: session` (see `embedTenantToDeployment`).
  *
  * Fail closed: no host, no host match, a config read error, `auth: "session"`,
  * or an absent `auth` all return null, so the caller keeps its 401. The turn
@@ -225,10 +235,11 @@ export function requestDeploymentHost(req: Request): string | null {
  */
 export function resolveAnonymousDeploymentChat(req: Request): EmbedChatTenantContext | null {
   const host = requestDeploymentHost(req);
-  if (!host) return null;
+  if (!host || !isFirstPartyEmbedHost(host)) return null;
   try {
     const dep = matchHostDeployment(host, getDigichatConfig());
     if (!dep || dep.auth !== "anonymous") return null;
+    if (isInviteOnlyDeployment(host, dep.slug)) return null;
     return {
       tenantSlug: dep.slug,
       ownerUserSub: "embed:anonymous",

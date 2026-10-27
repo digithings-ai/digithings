@@ -408,7 +408,7 @@ describe("resolveAnonymousDeploymentChat", () => {
     expect(ctx?.embedConfig?.slug).toBe("digithings-ai");
   });
 
-  it("selects the request host from X-Forwarded-Host when no origin is sent", () => {
+  it("never selects the deployment from X-Forwarded-Host (DIG-3585)", () => {
     setDigichatConfigForTests(
       hostedConfig({
         "digithings.ai": {
@@ -418,11 +418,44 @@ describe("resolveAnonymousDeploymentChat", () => {
         },
       }),
     );
-    const ctx = resolveAnonymousDeploymentChat(
-      productRequest({ "x-forwarded-host": "www.digithings.ai, internal:3005" }),
+    expect(
+      resolveAnonymousDeploymentChat(
+        productRequest({ "x-forwarded-host": "www.digithings.ai, internal:3005" }),
+      ),
+    ).toBeNull();
+    // The attested origin still selects the house deployment.
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://www.digithings.ai" }))
+        ?.tenantSlug,
+    ).toBe("digithings-ai");
+  });
+
+  it("refuses an invite-only or customer host even when it declares auth: anonymous", () => {
+    setDigichatConfigForTests(
+      hostedConfig({
+        "occ.digithings.ai": { slug: "occ", auth: "anonymous" },
+        "client.example": { slug: "client", auth: "anonymous" },
+        "digithings.ai": { slug: "digithings-ai", auth: "anonymous" },
+      }),
     );
-    // www.digithings.ai is the house alias, not its own hosts key.
-    expect(ctx?.tenantSlug).toBe("digithings-ai");
+    for (const headers of [
+      { origin: "https://occ.digithings.ai" },
+      { referer: "https://occ.digithings.ai/chat" },
+      { "x-forwarded-host": "occ.digithings.ai" },
+      { host: "occ.digithings.ai" },
+      { origin: "https://client.example" },
+    ]) {
+      expect(resolveAnonymousDeploymentChat(productRequest(headers))).toBeNull();
+    }
+  });
+
+  it("refuses a first-party host whose deployment is an invite-only tenant", () => {
+    setDigichatConfigForTests(
+      hostedConfig({ "digithings.ai": { slug: "occ", auth: "anonymous" } }),
+    );
+    expect(
+      resolveAnonymousDeploymentChat(productRequest({ origin: "https://digithings.ai" })),
+    ).toBeNull();
   });
 
   it("refuses a host-matched deployment that declares auth: session", () => {

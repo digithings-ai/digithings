@@ -3469,6 +3469,48 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         ),
       );
     });
+
+    describe("a tokenless turn never selects the invite-only deployment", () => {
+      // The blocker the review found: with no token and no embed marker, the
+      // turn fell to resolveAnonymousDeploymentChat, which picked the
+      // deployment from Origin / X-Forwarded-Host and only checked
+      // `auth: anonymous`. Both the app path and the legacy alias are covered.
+      const PATHS = ["https://digithings.ai/chat/api/chat", "https://digithings.ai/api/chat"];
+      const FORMS: Array<[string, Record<string, string>]> = [
+        ["Origin", { origin: `https://${OCC_HOST}` }],
+        ["Referer", { referer: `https://${OCC_HOST}/` }],
+        ["X-Forwarded-Host", { "x-forwarded-host": OCC_HOST }],
+        ["Host", { host: OCC_HOST }],
+        [
+          "X-Forwarded-Host with a house Origin",
+          { origin: "https://digithings.ai", "x-forwarded-host": OCC_HOST },
+        ],
+      ];
+
+      function directTurn(url: string, headers: Record<string, string>): Request {
+        return new Request(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        });
+      }
+
+      for (const url of PATHS) {
+        for (const [name, headers] of FORMS) {
+          it(`refuses ${new URL(url).pathname} with only ${name}`, async () => {
+            const res = await POST(directTurn(url, headers));
+            await expectNotOcc(res);
+            expect(res.status).toBe(401);
+          });
+
+          it(`refuses ${new URL(url).pathname} with only ${name} after the edge`, async () => {
+            await expectNotOcc(await POST(throughEdge(directTurn(url, headers))));
+          });
+        }
+      }
+    });
   });
 
   describe("trace stream (the production default)", () => {

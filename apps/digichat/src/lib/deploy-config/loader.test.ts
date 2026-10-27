@@ -151,6 +151,30 @@ deployment:
     expect(cfg.hosts?.["customer.example"]?.chrome.skin).toBe("base");
   });
 
+  it("hydrates a registry tenant with a token as auth: session, the house as anonymous (DIG-3585)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: null,
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "digithings.ai": {
+            slug: "digithings",
+            token: "house-embed-token",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+          },
+          "occ.digithings.ai": {
+            slug: "occ",
+            token: "invite-fixture",
+            backend: { type: "digigraph" },
+            gateMode: "ungated",
+          },
+        }),
+      },
+    });
+    expect(cfg.hosts?.["occ.digithings.ai"]?.auth).toBe("session");
+    expect(cfg.hosts?.["digithings.ai"]?.auth).toBe("anonymous");
+  });
+
   it("defaults first-party DIGICHAT_EMBED_TENANTS hosts to digichat when skin is omitted", () => {
     const tenants = JSON.stringify({
       "digithings.ai": {
