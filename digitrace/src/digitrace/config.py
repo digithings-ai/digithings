@@ -118,8 +118,8 @@ def otel_export_configured() -> bool:
 
 
 def dual_export_enabled() -> bool:
-    """True when both the LangSmith leg and an OTLP leg are active."""
-    return langsmith_configured() and otel_export_configured()
+    """True when both the LangSmith leg and an OTLP leg are configured."""
+    return export_backend() == "dual"
 
 
 def export_backend() -> ExportBackend:

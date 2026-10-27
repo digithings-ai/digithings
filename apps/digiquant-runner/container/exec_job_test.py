@@ -492,9 +492,9 @@ def _check_house_run(commands: dict[str, Any]) -> None:
     got = exec_job.load_pipeline_env(text)
     if got["DIGIQUANT_MODEL_TIER"] != "cheap" or got["DIGI_CHECKPOINTER"] != "postgres":
         raise SystemExit(f"pipeline env parse drifted: {got}")
-    commented = 'env:\n  DIGI_CHECKPOINTER: postgres          # resume\n  DIGI_OTEL_ENDPOINT: "http://digitrace:8003/v1/otlp"\n'
+    commented = 'env:\n  DIGI_CHECKPOINTER: postgres          # resume\n  LANGSMITH_TRACING: "true"\n'
     parsed = exec_job.load_pipeline_env(commented)
-    if parsed["DIGI_CHECKPOINTER"] != "postgres" or parsed["DIGI_OTEL_ENDPOINT"] != "http://digitrace:8003/v1/otlp":
+    if parsed["DIGI_CHECKPOINTER"] != "postgres" or parsed["LANGSMITH_TRACING"] != "true":
         raise SystemExit(f"pipeline comment parse drifted: {parsed}")
 
     saved = {name: os.environ.get(name) for name in ("RUNNER_AUTH_TOKEN", "GH_ISSUE_TOKEN", "CHEAPERINFERENCE_API_BASE")}
@@ -542,6 +542,7 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         "OPENROUTER_API_KEY",
         "CHEAPERINFERENCE_API_KEY",
         "DIGIQUANT_DIGIKEY_API_KEY",
+        "LANGSMITH_API_KEY",
         "DIGI_OTEL_HEADERS",
         "CORE_POSTGRES_URI",
         "CORE_SUPABASE_URL",
@@ -563,6 +564,7 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         "OPENROUTER_API_KEY",
         "CORE_SUPABASE_URL",
         "SUPABASE_URL",
+        "LANGSMITH_API_KEY",
         "DIGI_OTEL_HEADERS",
         "CORE_POSTGRES_URI",
         "R2_SECRET_ACCESS_KEY",
