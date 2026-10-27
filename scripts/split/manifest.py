@@ -172,6 +172,7 @@ RULES: list[tuple[str, str, str]] = [
     ("apps/digithings-stack-cloudflare/", "R5", "stack Worker + container"),
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
     ("apps/digitrace-langfuse/", "R5", "langfuse"),
+    ("apps/digitrace-ingest/", "R5", "telemetry ingest Worker (platform)"),
     ("apps/digithings-cron/", "R5", "cron"),
     ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
     ("infra/digichat-release/", "R5", "release infra"),
