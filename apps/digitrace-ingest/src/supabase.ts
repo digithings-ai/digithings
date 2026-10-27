@@ -107,6 +107,37 @@ export async function resolveWorkspaceId(
 }
 
 /**
+ * Recompute one trace row from `public.digitrace_spans_index`.
+ *
+ * `public.refresh_digitrace_trace` (migration 144) is UPDATE-only: the
+ * consumer's insert is what creates the row, and this call then makes the
+ * aggregate authoritative over **every** span of the trace, not only the spans
+ * of this message. That is what makes a trace delivered across several OTLP
+ * requests converge on one row instead of the last request's slice replacing
+ * the earlier ones.
+ *
+ * The function is idempotent and serialises refreshes for one trace with a
+ * transaction-scoped advisory lock, so a queue retry and two slices of the same
+ * trace in flight both end at the same row.
+ */
+export async function refreshTraceRow(
+  env: { SUPABASE_URL?: string; CORE_SUPABASE_SERVICE_KEY?: string },
+  workspaceId: string,
+  traceId: string,
+): Promise<void> {
+  const response = await restRequest(env, "rpc/refresh_digitrace_trace", {
+    method: "POST",
+    body: JSON.stringify({ p_workspace_id: workspaceId, p_trace_id: traceId }),
+  });
+  if (!response.ok) {
+    throw new SupabaseError(
+      response.status,
+      describeFailure(response.status, await response.text()),
+    );
+  }
+}
+
+/**
  * Upsert rows, idempotently.
  *
  * `onConflict` names the natural key, so a retried queue message rewrites the

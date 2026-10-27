@@ -86,13 +86,14 @@ interface Recorded {
   upserts: Array<{ table: string; rows: Array<Record<string, unknown>>; onConflict: string }>;
   metrics: number;
   resolved: string[];
+  refreshed: Array<{ workspaceId: string; traceId: string }>;
 }
 
 function recordingDeps(overrides: Partial<ConsumerDeps> = {}): {
   deps: Partial<ConsumerDeps>;
   recorded: Recorded;
 } {
-  const recorded: Recorded = { puts: [], upserts: [], metrics: 0, resolved: [] };
+  const recorded: Recorded = { puts: [], upserts: [], metrics: 0, resolved: [], refreshed: [] };
   const deps: Partial<ConsumerDeps> = {
     putObject: async (_bucket, key, body, metadata) => {
       recorded.puts.push({ key, body, metadata });
@@ -103,6 +104,9 @@ function recordingDeps(overrides: Partial<ConsumerDeps> = {}): {
     },
     upsertRows: async (_env, table, rows, onConflict) => {
       recorded.upserts.push({ table, rows, onConflict });
+    },
+    refreshTraceRow: async (_env, workspaceId, traceId) => {
+      recorded.refreshed.push({ workspaceId, traceId });
     },
     writeSpanMetric: () => {
       recorded.metrics += 1;
@@ -206,20 +210,54 @@ describe("storeMessage", () => {
       started_at: "2023-11-14T22:13:20.000Z",
     });
     expect(recorded.upserts[1].rows[0]).toMatchObject({ span_id: SPAN });
+    expect(recorded.refreshed).toEqual([{ workspaceId: WORKSPACE, traceId: TRACE }]);
   });
 
-  it("writes no trace row for a trace the message could not carry in full", async () => {
+  it("inserts a split trace's row, then recomputes it from the spans index", async () => {
     const { deps, recorded } = recordingDeps();
     await storeMessage(testEnv(), message({ incompleteTraces: [TRACE] }), {
       ...deps,
     } as ConsumerDeps);
 
     const byTable = new Map(recorded.upserts.map((entry) => [entry.table, entry.rows]));
-    // A partial aggregate would be replaced by the next slice: smaller
-    // `span_count`, a duration that never happened, a `name` from a non-root
-    // span. No row is better than a wrong one, and the spans are still indexed.
-    expect(byTable.get("digitrace_traces")).toEqual([]);
+    // `refresh_digitrace_trace` is UPDATE-only: the insert is what creates the
+    // row, and the recompute is what makes it true over every span of the trace
+    // rather than this message's slice. Without the row the dashboard has
+    // nothing to list for a trace above the message budget.
+    expect(byTable.get("digitrace_traces")).toHaveLength(1);
     expect(byTable.get("digitrace_spans_index")).toHaveLength(1);
+    expect(recorded.refreshed).toEqual([{ workspaceId: WORKSPACE, traceId: TRACE }]);
+  });
+
+  it("recomputes each trace, and does not recompute when the span write failed", async () => {
+    const { deps, recorded } = recordingDeps();
+    await storeMessage(testEnv(), message(), { ...deps } as ConsumerDeps);
+
+    const other = "ffffffffffffffffffffffffffffffff";
+    const line = JSON.parse(message().ndjson.trim()) as { span: { traceId: string } };
+    line.span.traceId = other;
+    const second = message({
+      chunk: 1,
+      chunks: 2,
+      archiveKey: "tenant=digithings/date=2026-10-26/digitrace-digichat/uuid-2.ndjson",
+      ndjson: `${JSON.stringify(line)}\n`,
+    });
+    await storeMessage(testEnv(), second, { ...deps } as ConsumerDeps);
+
+    expect(recorded.refreshed).toEqual([
+      { workspaceId: WORKSPACE, traceId: TRACE },
+      { workspaceId: WORKSPACE, traceId: other },
+    ]);
+
+    const failing = recordingDeps({
+      upsertRows: async (_env, table) => {
+        if (table === "digitrace_spans_index") throw new Error("PostgREST 500");
+      },
+    });
+    await expect(
+      storeMessage(testEnv(), message(), { ...failing.deps } as ConsumerDeps),
+    ).rejects.toThrow();
+    expect(failing.recorded.refreshed).toEqual([]);
   });
 
   it("does not write digitrace_sessions: its counters are cross-batch aggregates", async () => {
