@@ -95,6 +95,11 @@ _HOST_RE = re.compile(
 # www.digithings.ai 82 -> 68. Deleting the root copy of
 # review-5061-digichat-mcp-tool-allowlist.md drops one more
 # mcp.digithings.ai literal, 56 -> 55. Decreases only.
+# DIG-5136 retired the digitrace Langfuse app and its runbook: the
+# langfuse.digithings.ai pin (3) leaves with them, and trace.digithings.ai
+# drops 19 -> 1: the app (8), the old runbook (9) and its smoke script (1)
+# carried the rest, and only the local-proxy comment is left. Both re-measured
+# with this file's own scanner.
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 1,
@@ -111,7 +116,7 @@ PINNED_CENSUS = {
     "mcp.digithings.ai": 55,
     "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
-    "trace.digithings.ai": 20,
+    "trace.digithings.ai": 1,
     "www.digiquant.io": 15,
     "www.digithings.ai": 68,
 }
