@@ -100,11 +100,18 @@ jobs:
           list="${ANSWER_CHECK_EMBED_HOSTS:-}"
           usable=$(printf '%s' "$list" | tr -d '[:space:],')
           if [ -z "$usable" ]; then
-            echo "::error::ANSWER_CHECK_EMBED_HOSTS is unset — set the repository variable ANSWER_CHECK_EMBED_HOSTS to the embed host the discovery page names, or dispatch this workflow with the embed_host input. This is a configuration gap, not a DataTap result."
+            echo "::error::the embed-host allowlist resolves to no host — supply the ANSWER_CHECK_EMBED_HOSTS repository variable, or the embed_host input on a dispatch. This is a configuration gap, not a finding."
             exit 2
           fi
 
-          echo "answer-check: embed-host allowlist: $list"
+          # Count the entries, never echo them. The log is public and this file's
+          # whole point is that the host name stays out of the repository. A
+          # dispatch input can also carry a line break, and a value echoed raw
+          # would become an annotation line of its own; folding the breaks first
+          # removes that sink.
+          hosts=$(printf '%s' "$list" | tr '\r\n' '  ')
+          count=$(printf '%s' "$hosts" | awk -F, '{ n = 0; for (i = 1; i <= NF; i++) if ($i !~ /^[[:space:]]*$/) n++; print n }')
+          echo "answer-check: embed-host allowlist resolves to $count host(s)"
 
       - uses: actions/checkout@v4
 

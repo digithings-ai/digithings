@@ -151,11 +151,11 @@ def test_the_workflow_supplies_the_host_allowlist_the_check_needs() -> None:
 # The allowlist guard (DIG-5790). An unset repository variable used to reach the
 # script, which left with "COULD NOT RUN … exit 2" — the same code a client
 # platform that did not answer produces, so 115 consecutive runs could not be
-# told apart from a real DataTap finding without reading each log. The guard is a
-# separate first step, and these tests execute it rather than grep its text.
+# told apart from a real fabrication finding without reading each log. The guard
+# is a separate first step, and these tests execute it rather than grep its text.
 # --------------------------------------------------------------------------- #
 
-GUARD_MARKER = "ANSWER_CHECK_EMBED_HOSTS is unset"
+GUARD_MARKER = "embed-host allowlist resolves to no host"
 
 
 def _guard_step_index() -> int:
@@ -220,9 +220,10 @@ def test_the_guard_fails_closed_on_an_unusable_allowlist(
     """
     result = _run_guard(tmp_path, monkeypatch, value)
     assert result.returncode == 2, f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    assert f"::error::{GUARD_MARKER}" in result.stdout, result.stdout
+    assert "::error::" in result.stdout, result.stdout
+    assert GUARD_MARKER in result.stdout, result.stdout
     assert "repository variable" in result.stdout, result.stdout
-    assert "not a DataTap result" in result.stdout, result.stdout
+    assert "configuration gap, not a finding" in result.stdout, result.stdout
 
 
 def test_the_guard_passes_a_configured_allowlist(
@@ -232,12 +233,30 @@ def test_the_guard_passes_a_configured_allowlist(
 
     Vetting is the script's job (it compares the host the page named against this
     list and refuses a miss), and doing it twice would be a second source of truth.
+    The value is counted and never echoed: the log is public, and this workflow's
+    own header says the host name stays out of the repository.
     """
     host = "embed.example.test"
     result = _run_guard(tmp_path, monkeypatch, host)
     assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    assert host in result.stdout, result.stdout
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
+    assert host not in result.stdout, "the allowlist value reached the public log"
     assert "::error::" not in result.stdout, result.stdout
+
+
+def test_the_guard_cannot_be_used_to_forge_an_annotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dispatch input is free text; a line break in it must not become a command.
+
+    Actions reads `::…::` at the start of a line as a workflow command, so a value
+    echoed raw would let a dispatcher mint a passing annotation. The count line is
+    the only place the value is touched.
+    """
+    result = _run_guard(tmp_path, monkeypatch, "embed.example.test\n::error::forged")
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "::error::forged" not in result.stdout, result.stdout
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
 
 
 def test_the_guard_runs_before_the_probe() -> None:
