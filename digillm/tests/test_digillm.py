@@ -2300,3 +2300,113 @@ def test_forced_wrap_up_stays_unconstrained_without_final_response_format() -> N
     assert out == '{"ok": true}'
     wrap_up = fake_client.chat.completions.create.call_args_list[2].kwargs
     assert "response_format" not in wrap_up
+
+
+# ── Hard tool-call cap (X-Digi-Max-Tool-Calls) ───────────────────────────────
+
+
+def _two_call_tool(name_a: str, name_b: str) -> tuple[MagicMock, MagicMock]:
+    """Two ``tool_calls`` entries for one round (the parallel/shape case)."""
+
+    def _one(call_id: str, name: str) -> MagicMock:
+        fn = MagicMock()
+        fn.name = name
+        fn.arguments = "{}"
+        tc = MagicMock()
+        tc.id = call_id
+        tc.function = fn
+        return tc
+
+    return _one("c-a", name_a), _one("c-b", name_b)
+
+
+def test_max_tool_calls_caps_executions_and_forces_the_tool_free_wrap_up() -> None:
+    """A cap of 3 with two calls per round must stop after exactly 3 executions.
+
+    Counting rounds is not counting calls: 5 rounds can issue 10+ calls. The
+    round that crosses the cap executes only its remaining allowance, the rest are
+    discarded unexecuted (never dispatched, never appended as tool results), and
+    the loop goes straight to the existing tool-free wrap-up so the model has to
+    answer in text from the results already gathered.
+    """
+    tc_a, tc_b = _two_call_tool("alpha", "beta")
+    responses = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),  # round 0: 2 calls -> 2/3 used
+        _mock_response("", tool_calls=[tc_a, tc_b]),  # round 1: only 1 fits the cap
+        _mock_response("answer from the three results"),  # existing wrap-up
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    executed: list[str] = []
+
+    def execute_tool(name: str, args: dict) -> dict:
+        executed.append(name)
+        return {"content": f"{name}-result"}
+
+    steps: list[tuple[str, Any]] = []
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+            max_tool_calls=3,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "answer from the three results"
+    # Exactly the cap was executed -- no more, and not one fewer.
+    assert len(executed) == 3, f"expected 3 executions, got {len(executed)}: {executed}"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert len(calls) == 3, "two tool rounds plus one forced wrap-up"
+    # The wrap-up is the existing tool-free completion.
+    assert not calls[2].kwargs.get("tools")
+    # The discarded call was never appended as a tool result, and the round's
+    # assistant message carries only the call that actually ran (no orphan id).
+    transcript = calls[2].kwargs["messages"]
+    assert len([m for m in transcript if m.get("role") == "tool"]) == 3
+    last_assistant = [m for m in transcript if m.get("role") == "assistant"][-1]
+    assert [c["id"] for c in last_assistant["tool_calls"]] == ["c-a"]
+    # The cap event fires exactly once, and not the round-budget one.
+    assert [p for k, p in steps if k == "tool_call_limit_reached"] == [{"max_tool_calls": 3}]
+    assert not any(k == "round_limit_exhausted" for k, _ in steps)
+
+
+def test_max_tool_calls_none_keeps_the_round_budget_behaviour() -> None:
+    """``None`` (the default) must not change today's loop: the round budget still
+    governs, and parallel calls in a round all execute."""
+    tc_a, tc_b = _two_call_tool("alpha", "beta")
+    responses = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    executed: list[str] = []
+    steps: list[tuple[str, Any]] = []
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: executed.append(name) or {"content": "r"},
+            max_tool_rounds=2,
+            max_tool_calls=None,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "done"
+    assert len(executed) == 4, "both rounds ran in full; no call cap was set"
+    assert not any(k == "tool_call_limit_reached" for k, _ in steps)
+    assert [p for k, p in steps if k == "round_limit_exhausted"] == [{"max_tool_rounds": 2}]

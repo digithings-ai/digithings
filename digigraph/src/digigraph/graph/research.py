@@ -686,6 +686,10 @@ def _run_document_rag_path(
         # 6, not 4: OCC ticket breakdowns page through list results and
         # ran out of rounds, ending in a tool-free wrap-up (DIG-3089).
         max_tool_rounds=6,
+        # The deployment's hard call cap (guardrails.maxToolCallsPerTurn, forwarded by
+        # digichat as X-Digi-Max-Tool-Calls): rounds above bound the loop's shape, this
+        # bounds the calls it actually makes, and the loop answers tool-free at the cap.
+        max_tool_calls=state.get("max_tool_calls"),
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
@@ -706,6 +710,7 @@ def _run_document_rag_path(
             tools=tools_for_llm,
             execute_tool=execute_search,
             max_tool_rounds=4,
+            max_tool_calls=state.get("max_tool_calls"),
             on_tool_step=stream_callback,
             tool_choice="auto",
             reasoning_effort=state.get("effort"),

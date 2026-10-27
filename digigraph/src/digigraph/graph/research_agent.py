@@ -195,6 +195,7 @@ def run_research_agent(
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
     max_tool_rounds: int | None = None,
+    max_tool_calls: int | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -233,6 +234,10 @@ def run_research_agent(
         max_tool_rounds: Optional cap for the tool-calling loop. None (default)
             keeps digillm's default (5); the digiquant research wrapper passes 24 via its own
             ``max_tool_rounds``.
+        max_tool_calls: Optional hard cap on *executed* tool calls in that same loop
+            (counts calls, not rounds). None (default) leaves it to the round budget.
+            Passed straight through to ``run_tools`` so an agentic phase cannot burn
+            more calls than the chat's ``guardrails.maxToolCallsPerTurn`` allows.
 
     Tool-path retry (#1739):
         A tool-grounded turn gets **no** provider-side schema enforcement, so a
@@ -373,6 +378,7 @@ def run_research_agent(
                             execute_tool=traced_execute_tool,
                             temperature=temperature,
                             max_tool_rounds=max_tool_rounds if max_tool_rounds is not None else 5,
+                            max_tool_calls=max_tool_calls,
                             # #4556: enforce the output schema on the loop's forced tool-free
                             # wrap-up. The tool turns cannot carry ``response_format`` (tools and
                             # json_schema are mutually exclusive), so without this the cheap model

@@ -2671,6 +2671,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    max_tool_calls: int | None = None,
     tool_choice: str | ToolArguments = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
@@ -2687,6 +2688,17 @@ def run_tools(
         execute_tool: ``execute_tool(name, arguments) -> str | {"content": str, ...}``.
         temperature:  Sampling temperature.
         max_tool_rounds: Maximum tool rounds before forcing a final answer.
+        max_tool_calls: Optional hard cap on *executed tool calls* for the whole
+            loop — not rounds. Every dispatched call counts, so several parallel
+            calls in one round consume several units of the budget. When a round
+            would cross the cap, only the remaining allowance executes and the
+            rest of that round is discarded unexecuted (never dispatched, never
+            appended as a tool result) and the loop goes straight to the forced
+            tool-free wrap-up below, so the model has to answer in text from the
+            results already gathered. Callers see this as
+            ``("tool_call_limit_reached", {"max_tool_calls": n})`` emitted exactly
+            once, immediately before that wrap-up. ``None`` (default) leaves the
+            loop bounded by ``max_tool_rounds`` alone, exactly as before.
         tool_choice:  Passed to every turn's completion call ("auto" default;
             "required" forces a tool call every round). See :func:`completion`.
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
@@ -2704,7 +2716,10 @@ def run_tools(
             returned tool_calls), immediately before a forced tool-free completion
             synthesizes the final answer from the full transcript -- including
             that last round's own tool results, which its own narration (written
-            before those tools ran) cannot reflect.
+            before those tools ran) cannot reflect. Receives
+            ``("tool_call_limit_reached", {max_tool_calls})`` once when
+            ``max_tool_calls`` is reached (see that parameter), immediately before
+            the same forced tool-free wrap-up.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
@@ -2745,6 +2760,9 @@ def run_tools(
     content = ""
     safe = parallel_safe_tools or set()
     failure_streak: tuple[str, str, int] | None = None
+    # Executed tool calls (not rounds) this invocation; see ``max_tool_calls``.
+    calls_made = 0
+    call_cap_reached = False
 
     def _note_tool_success() -> None:
         nonlocal failure_streak
@@ -2918,6 +2936,27 @@ def run_tools(
                 )
             return content or ""
 
+        # Hard call cap (#X-Digi-Max-Tool-Calls): count executed calls, not rounds —
+        # one round can issue several parallel calls, so a round budget is not a call
+        # budget. Stop before dispatching anything that would cross it; the rest of
+        # this round is discarded unexecuted, so it never runs and never reaches the
+        # transcript as an orphan tool_calls entry.
+        if max_tool_calls is not None:
+            remaining = max_tool_calls - calls_made
+            if remaining <= 0:
+                call_cap_reached = True
+                break
+            if len(tool_calls) > remaining:
+                logger.warning(
+                    "run_tools: max_tool_calls=%d reached; discarding %d unexecuted "
+                    "call(s) from round %d and forcing the tool-free wrap-up",
+                    max_tool_calls,
+                    len(tool_calls) - remaining,
+                    round_idx,
+                )
+                tool_calls = tool_calls[:remaining]
+                call_cap_reached = True
+
         if on_tool_step is not None and streamed_content:
             # This round's content already streamed live via on_tool_step("content", ...)
             # inside _produce_turn, before tool_calls was known — that is unavoidable for
@@ -2968,6 +3007,7 @@ def run_tools(
             parsed.append((tc.get("id", ""), name, args))
 
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
+        calls_made += len(parsed)
         if run_parallel:
             results: dict[int, str | dict[str, Any]] = {}
             tool_errors: dict[int, BaseException] = {}
@@ -3042,17 +3082,30 @@ def run_tools(
                 }
             )
 
-    # Reaching here means every round through max_tool_rounds still returned tool_calls
-    # (any round with no tool_calls returns early above) — the budget is genuinely
-    # exhausted, not just "the model happened to stop." A forced tool-free completion
-    # unconditionally follows below (see its own comment) — this log/signal always
-    # precedes it.
+        if call_cap_reached:
+            break
+
+    # Reaching here means the loop ended without a final answer: either every round
+    # through max_tool_rounds still returned tool_calls (any round with no tool_calls
+    # returns early above), or the hard call cap stopped it mid-round. A forced
+    # tool-free completion unconditionally follows below (see its own comment) — the
+    # matching log/signal always precedes it.
     #
     # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
     # so the for loop body never ran a single round — there is nothing to have
     # "exhausted." Firing the log/signal in that case would falsely claim the model
     # burned through a budget it was never given a chance to use.
-    if max_tool_rounds > 0:
+    if call_cap_reached:
+        # The cap, not the round budget, ended the loop — the round-limit signal below
+        # would be a false claim, so the two are mutually exclusive.
+        logger.warning(
+            "run_tools: reached max_tool_calls=%d without the model answering; "
+            "forcing the tool-free wrap-up",
+            max_tool_calls,
+        )
+        if on_tool_step is not None:
+            on_tool_step("tool_call_limit_reached", {"max_tool_calls": max_tool_calls})
+    elif max_tool_rounds > 0:
         logger.warning(
             "run_tools: exhausted max_tool_rounds=%d without the model returning an "
             "empty tool_calls response",

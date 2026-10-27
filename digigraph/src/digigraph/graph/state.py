@@ -87,6 +87,9 @@ class WorkflowState(TypedDict, total=False):
     web_search_provider: str | None
     # Per-request reasoning effort (X-Digi-Effort). Must be declared.
     effort: str | None
+    # Per-request hard tool-call cap (X-Digi-Max-Tool-Calls). Must be declared, or
+    # LangGraph drops the key and a prior turn's cap sticks on the checkpoint (#2097).
+    max_tool_calls: int | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
