@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
-import { themeInitScript } from "@digithings/ui";
+import { faviconThemeScript, themeInitScript } from "@digithings/ui";
+import { p } from "@/lib/base-path";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import {
@@ -27,9 +28,32 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
+const faviconInit = faviconThemeScript({
+  dark: p("/icons/digi-app-dark.svg"),
+  light: p("/icons/digi-app-light.svg"),
+  touchDark: p("/icons/digi-app-touch-dark.png"),
+  touchLight: p("/icons/digi-app-touch-light.png"),
+});
+
 export const metadata: Metadata = {
   title: "digichat · digithings",
   description: "Production chat UI for the digigraph orchestrator.",
+  icons: {
+    icon: [
+      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "48x48" },
+    ],
+    apple: [{ url: "/icons/digi-app-touch-dark.png", sizes: "180x180" }],
+  },
+  openGraph: {
+    title: "digichat · digithings",
+    description: "Production chat UI for the digigraph orchestrator.",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "digithings" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/og.png"],
+  },
 };
 
 // Pre-paint companion to the shared themeInitScript: mirror [data-theme] onto
@@ -78,6 +102,11 @@ export default async function RootLayout({
           id="digichat-theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
+        <Script
+          id="digichat-favicon-theme"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: faviconInit }}
         />
         <Script
           id="digichat-theme-class-sync"

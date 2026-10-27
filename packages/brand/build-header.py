@@ -296,10 +296,14 @@ def signoff_html(copy: dict[str, str]) -> str:
 
 
 def kit_copies() -> list[tuple[Path, Path]]:
-    """Canonical OG cards → the two live unfurl paths."""
+    """Canonical OG cards → the live unfurl paths, including the square summary card."""
+    square = REPO_ROOT / "apps" / "digithings-web" / "public" / "og-square.png"
+    chat = REPO_ROOT / "apps" / "digichat" / "public" / "og.png"
     return [
         (BRAND / "og" / "digithings-og.png", PUBLIC_OG_PNG),
         (BRAND / "og" / "digiquant-og.png", PUBLIC_DQ_OG_PNG),
+        (BRAND / "og" / "digithings-og-square.png", square),
+        (BRAND / "og" / "digithings-og.png", chat),
     ]
 
 

@@ -11,13 +11,9 @@
   border-bottom: 1px solid var(--hair);
 }
 
-.brand-wordmark {
-  display: block;
+.dw-banner .brand-wordmark {
   height: clamp(2.4rem, 8vw, 4.4rem);
-  aspect-ratio: 88 / 10;
-  background: var(--ink);
-  -webkit-mask: url("/brand/studio/wordmark-mask.svg") center / contain no-repeat;
-  mask: url("/brand/studio/wordmark-mask.svg") center / contain no-repeat;
+  color: var(--ink);
 }
 
 .dw-links {

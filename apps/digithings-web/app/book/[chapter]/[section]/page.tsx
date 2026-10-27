@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import BookPage from "@/components/book/BookPage";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
 import { sectionNeighbours } from "@/lib/book/toc";
+import { SHARE_IMAGE, SHARE_SQUARE } from "@/lib/share";
 
 /** One page per section: `/book/<chapter>/<section>/`. */
 export function generateStaticParams(): Array<{ chapter: string; section: string }> {
@@ -25,8 +26,14 @@ export async function generateMetadata({
     title,
     description: s.summary,
     alternates: { canonical },
-    openGraph: { title, description: s.summary, url: canonical, type: "article" },
-    twitter: { card: "summary", title, description: s.summary },
+    openGraph: {
+      title,
+      description: s.summary,
+      url: canonical,
+      type: "article",
+      images: [SHARE_IMAGE],
+    },
+    twitter: { card: "summary", title, description: s.summary, images: [SHARE_SQUARE.url] },
   };
 }
 

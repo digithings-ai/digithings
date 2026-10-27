@@ -2,7 +2,8 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { fontVariables } from "./fonts";
-import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager, LayoutLines } from "@digithings/ui";
+import { ThemeProvider, MotionProvider, themeInitScript, faviconThemeScript, HashScrollManager, LayoutLines } from "@digithings/ui";
+import { SHARE_IMAGE } from "@/lib/share";
 import { SCROLL_RESUME_FLAG, SCROLL_RESUME_PLACE } from "@/lib/scrollResume";
 import { LegacyByokPurge } from "@/components/LegacyByokPurge";
 
@@ -24,20 +25,16 @@ export const metadata: Metadata = {
   // address only if the canonical says so too; `metadataBase` resolves this to
   // the absolute URL. Per-route canonicals stay with each page's metadata.
   alternates: { canonical: "/" },
-  // Cache-busting paths ensure browsers leave the retired QR mark behind.
-  // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
-  // cursor artwork rather than a browser-generated initial.
+  // The tab icon follows data-theme (faviconThemeScript), not the OS scheme.
+  // The first file is the dark SVG, which matches the SSR default.
   icons: {
     icon: [
-      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
-      { url: "/icons/digi-app-light.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "48x48" },
       { url: "/icons/digi-app-32.png", type: "image/png", sizes: "32x32" },
     ],
-    shortcut: "/icons/digi-app-32.png",
-    apple: [
-      { url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: dark)" },
-      { url: "/icons/digi-app-touch-light.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: light)" },
-    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180" }],
   },
   openGraph: {
     title: "digithings — AI infrastructure in a glass box",
@@ -45,14 +42,7 @@ export const metadata: Metadata = {
       "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
       + "stack you already run. Your own keys and providers, every step traceable.",
     url: "https://digithings.ai",
-    images: [
-      {
-        url: "/og.png",
-        width: 1200,
-        height: 630,
-        alt: "digithings — AI infrastructure in a glass box you own.",
-      },
-    ],
+    images: [SHARE_IMAGE],
     type: "website",
   },
   // X reads the same card as the Open Graph block; without it the link is bare.
@@ -62,7 +52,7 @@ export const metadata: Metadata = {
     description:
       "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
       + "stack you already run. Your own keys and providers, every step traceable.",
-    images: ["/og.png"],
+    images: [SHARE_IMAGE.url],
   },
 };
 
@@ -110,6 +100,13 @@ const docsIvoryInit =
 // dark; without this a visitor whose stored theme is light paints dark first
 // and flips to light only at hydration (~0.5s in) - the load flash. Mirrors
 // the toggle's storage key (dt-theme).
+const faviconInit = faviconThemeScript({
+  dark: "/icons/digi-app-dark.svg",
+  light: "/icons/digi-app-light.svg",
+  touchDark: "/icons/digi-app-touch-dark.png",
+  touchLight: "/icons/digi-app-touch-light.png",
+});
+
 const storedThemeInit =
   "try{var t=localStorage.getItem('dt-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);if(t==='light'){var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
 
@@ -123,6 +120,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}
         <script dangerouslySetInnerHTML={{ __html: storedThemeInit }} />
+        <script dangerouslySetInnerHTML={{ __html: faviconInit }} />
         {/* /docs → ivory default (pre-paint), scoped by pathname; see docsIvoryInit above. */}
         <script dangerouslySetInnerHTML={{ __html: docsIvoryInit }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
