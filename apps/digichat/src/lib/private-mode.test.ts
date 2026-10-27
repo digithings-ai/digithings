@@ -1,16 +1,28 @@
 import { describe, expect, it } from "vitest";
-import type { ModelMessage } from "ai";
+import type { UIMessage } from "ai";
 import {
   isPrivateMode,
   PRIVATE_MODE_INSTRUCTION,
-  withPrivateModePrompt,
+  withPrivateModeUiPrompt,
 } from "./private-mode";
 
-const user = (content: string): ModelMessage => ({ role: "user", content });
-const assistant = (content: string): ModelMessage => ({
-  role: "assistant",
-  content,
+const user = (text: string, id = "u1"): UIMessage => ({
+  id,
+  role: "user",
+  parts: [{ type: "text", text }],
 });
+
+const assistant = (text: string, id = "a1"): UIMessage => ({
+  id,
+  role: "assistant",
+  parts: [{ type: "text", text }],
+});
+
+const textOf = (message: UIMessage | undefined): string =>
+  (message?.parts ?? [])
+    .filter((part) => part.type === "text")
+    .map((part) => (part as { text: string }).text)
+    .join("\n");
 
 describe("isPrivateMode", () => {
   it("accepts only an exact 1, trimmed", () => {
@@ -27,59 +39,57 @@ describe("isPrivateMode", () => {
   });
 });
 
-describe("withPrivateModePrompt", () => {
+describe("withPrivateModeUiPrompt", () => {
   it("appends the instruction to the last user turn and nothing else", () => {
-    const messages = [user("first"), assistant("ok"), user("John Smith")];
-    const out = withPrivateModePrompt(messages);
+    const messages = [user("first"), assistant("ok"), user("John Smith", "u2")];
+    const out = withPrivateModeUiPrompt(messages);
 
     expect(out).toHaveLength(3);
-    expect(out[0]).toEqual(user("first"));
-    expect(out[1]).toEqual(assistant("ok"));
-    expect(out[2]?.content).toBe(
-      `John Smith\n\n${PRIVATE_MODE_INSTRUCTION}`,
-    );
+    expect(textOf(out[0])).toBe("first");
+    expect(textOf(out[1])).toBe("ok");
+    expect(textOf(out[2])).toBe(`John Smith\n${PRIVATE_MODE_INSTRUCTION}`);
   });
 
   it("does not mutate the input", () => {
     const messages = [user("John Smith")];
-    withPrivateModePrompt(messages);
-    expect(messages[0]?.content).toBe("John Smith");
+    withPrivateModeUiPrompt(messages);
+    expect(textOf(messages[0])).toBe("John Smith");
+    expect(messages[0]?.parts).toHaveLength(1);
   });
 
-  it("applies the instruction exactly once across turns", () => {
-    const out = withPrivateModePrompt([
-      user("a"),
-      assistant("b"),
-      user("c"),
-      assistant("d"),
-      user("e"),
+  it("applies the instruction exactly once across a long turn list", () => {
+    const out = withPrivateModeUiPrompt([
+      user("a", "u1"),
+      assistant("b", "a1"),
+      user("c", "u2"),
+      assistant("d", "a2"),
+      user("e", "u3"),
     ]);
-    const occurrences = out.filter(
-      (m) =>
-        typeof m.content === "string" &&
-        m.content.includes("PRIVATE DEMO SESSION"),
+    const carrying = out.filter((m) =>
+      textOf(m).includes("PRIVATE DEMO SESSION"),
     );
-    expect(occurrences).toHaveLength(1);
-    expect(out[4]?.content).toContain("PRIVATE DEMO SESSION");
+    expect(carrying).toHaveLength(1);
+    expect(textOf(out[4])).toContain("PRIVATE DEMO SESSION");
   });
 
-  it("appends a text part when the content is an array", () => {
-    const messages: ModelMessage[] = [
-      { role: "user", content: [{ type: "text", text: "hi" }] },
+  it("keeps a non-text part that already sits in the user turn", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          { type: "text", text: "look at this" },
+          { type: "file", mediaType: "application/pdf", url: "blob:x" },
+        ],
+      },
     ];
-    const out = withPrivateModePrompt(messages);
-    const content = out[0]?.content;
-    expect(Array.isArray(content)).toBe(true);
-    if (!Array.isArray(content)) throw new Error("expected parts");
-    expect(content).toHaveLength(2);
-    expect(content[1]).toEqual({
-      type: "text",
-      text: PRIVATE_MODE_INSTRUCTION,
-    });
+    const out = withPrivateModeUiPrompt(messages);
+    expect(out[0]?.parts).toHaveLength(3);
+    expect(out[0]?.parts[1]).toMatchObject({ type: "file" });
   });
 
   it("returns the messages untouched when there is no user turn", () => {
     const messages = [assistant("only")];
-    expect(withPrivateModePrompt(messages)).toEqual(messages);
+    expect(withPrivateModeUiPrompt(messages)).toEqual(messages);
   });
 });

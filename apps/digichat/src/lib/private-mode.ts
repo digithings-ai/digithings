@@ -7,7 +7,7 @@
  * place; the instruction interpolates them, so it reads exactly as written.
  */
 
-import type { ModelMessage } from "ai";
+import type { UIMessage } from "ai";
 
 export const PERSON_STANDINS = [
   "Alex Morgan",
@@ -36,22 +36,26 @@ export function isPrivateMode(headers: Headers): boolean {
 }
 
 /**
- * Append the private-mode instruction to the **last user turn**.
+ * Append the private-mode instruction to the **last user turn's parts**.
  *
- * It cannot ride a `system` message or an AI SDK `instructions` option: the
- * digigraph backend flattens the request into a single prompt and drops every
- * turn that is not `user` or `assistant` (`digigraph/chat_prompt.py`, pinned by
- * `test_system_messages_are_omitted`), and its request model forbids an
- * `instructions` field outright. A user turn is the only channel that reaches
- * the model, so the policy text goes there. Do not "tidy" this back into a
- * system message — it would be silently discarded and private mode would look
- * like it works while doing nothing.
+ * Two constraints decide the shape of this:
  *
- * Only the last user turn is touched, so earlier turns keep their original
- * text, and the mutation happens on the converted model messages: what the
- * client stores and renders is unchanged.
+ * 1. It cannot ride a `system` message. Digigraph flattens the request into a
+ *    single prompt and drops every turn that is not `user` or `assistant`
+ *    (`digigraph/chat_prompt.py`, pinned by `test_system_messages_are_omitted`),
+ *    and its request model forbids an `instructions` field outright.
+ * 2. It has to be applied to the **UI messages**, before the route picks a
+ *    backend adapter. `api/chat/route.ts` has five paths (foundry, the two
+ *    non-AI-SDK and AI-SDK branches, the digigraph trace stream, and the legacy
+ *    `streamText` pair) and the trace stream is the default one. Patching the
+ *    converted model messages reaches only the legacy pair, which is how this
+ *    first shipped as a no-op. Every path consumes `messages`, so that is where
+ *    the instruction goes.
+ *
+ * Only the last user turn is touched, and only in the request copy: what the
+ * client stores, re-sends and renders is unchanged.
  */
-export function withPrivateModePrompt(messages: ModelMessage[]): ModelMessage[] {
+export function withPrivateModeUiPrompt(messages: UIMessage[]): UIMessage[] {
   let lastUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === "user") {
@@ -62,19 +66,12 @@ export function withPrivateModePrompt(messages: ModelMessage[]): ModelMessage[] 
   if (lastUserIndex === -1) return messages;
 
   const target = messages[lastUserIndex];
-  if (!target || target.role !== "user") return messages;
+  if (!target) return messages;
 
-  const content = target.content;
-  const patched: ModelMessage =
-    typeof content === "string"
-      ? { ...target, content: `${content}\n\n${PRIVATE_MODE_INSTRUCTION}` }
-      : {
-          ...target,
-          content: [
-            ...content,
-            { type: "text" as const, text: PRIVATE_MODE_INSTRUCTION },
-          ],
-        };
+  const patched: UIMessage = {
+    ...target,
+    parts: [...target.parts, { type: "text", text: PRIVATE_MODE_INSTRUCTION }],
+  };
 
   return messages.map((message, index) =>
     index === lastUserIndex ? patched : message,

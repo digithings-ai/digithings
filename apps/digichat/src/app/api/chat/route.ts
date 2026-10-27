@@ -23,7 +23,7 @@ import {
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
-import { isPrivateMode, withPrivateModePrompt } from "@/lib/private-mode";
+import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -201,7 +201,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const messages = body.messages;
+  let messages = body.messages;
   if (!messages?.length) {
     return new Response(JSON.stringify({ error: "messages_required" }), {
       status: 400,
@@ -582,6 +582,12 @@ export async function POST(req: Request) {
   // may be shown to the party it names, so every turn is told to substitute the
   // real names and identifiers it is given.
   const privateMode = isPrivateMode(req.headers);
+  // The instruction is applied to the UI messages here, before the adapter
+  // branch, because every path consumes `messages` — including the digigraph
+  // trace stream, which is the default and converts them itself. Patching the
+  // converted model messages later would reach only the legacy `streamText`
+  // pair and leave private mode a silent no-op on the path OCC actually uses.
+  if (privateMode) messages = withPrivateModeUiPrompt(messages);
 
   // models.costPerWindow stays on the premium budget above. The limits block
   // is the other gates (tokens, turns, sessions, tool calls, model tiers).
@@ -692,14 +698,6 @@ export async function POST(req: Request) {
     runLock.release();
     throw err;
   }
-
-  // Private mode has to ride the last user turn, not a system message: the
-  // digigraph backend drops every non-user/assistant turn before it reaches the
-  // model. See `withPrivateModePrompt`. Both streamText calls below share this
-  // array, so the instruction is applied exactly once.
-  const modelMessages = privateMode
-    ? withPrivateModePrompt(coreMessages)
-    : coreMessages;
 
   // Opt-in web search (#3420): client must ask AND tenant/env must allow.
   // Never forward on a silent default — corpus-only unless both gates pass.
@@ -992,7 +990,7 @@ export async function POST(req: Request) {
           }
           const result = streamText({
             model,
-            messages: modelMessages,
+            messages: coreMessages,
             headers: upstreamHeaders,
             abortSignal: req.signal,
             experimental_transform: smoothStream({ chunking: "word" }),
@@ -1038,7 +1036,7 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    messages: modelMessages,
+    messages: coreMessages,
     headers: upstreamHeaders,
     abortSignal: req.signal,
     experimental_transform: smoothStream({ chunking: "word" }),

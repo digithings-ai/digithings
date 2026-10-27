@@ -1483,6 +1483,7 @@ const AssistantMessage: FC = () => {
 
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
+  const privateMode = useContext(ThreadPrivateModeContext);
   const messageId = useAuiState((s) => s.message.id);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const exportMessage = useRef<HTMLElement | null>(null);
@@ -1540,6 +1541,10 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
+      {/* Private session: the HTML export snapshots the thread anchored at this
+          message, which includes the user's message — the real typed text the
+          mode exists to keep out of a transcript someone else may see. */}
+      {privateMode ? null : (
       <ActionBarMorePrimitive.Root
         onOpenChange={(open) => {
           if (open || !exportHtmlAfterClose.current) return;
@@ -1592,6 +1597,7 @@ const AssistantActionBar: FC = () => {
           </ActionBarMorePrimitive.Item>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
+      )}
       <MessageTiming />
     </ActionBarPrimitive.Root>
   );
