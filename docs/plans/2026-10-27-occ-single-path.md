@@ -30,8 +30,10 @@ There is also a wiring defect behind the second door: `occGate(request, key)` is
 valid token or cookie
   └─ Worker occGate
        ├─ validates against OCC_INVITE_KEY (edge only)
-       ├─ sets occ_invite cookie (HttpOnly, SameSite=Strict, Path=/chat/occ)
-       ├─ rewrites /chat/occ → /chat/embed?host=occ.digithings.ai
+       ├─ answers 302 to the tokenless URL, with occ_invite cookie
+       │    (HttpOnly, SameSite=Strict, Path=/chat/occ) — the key never
+       │    stays in the address bar or in history
+       ├─ on the cookie request: rewrites /chat/occ → /chat/embed?host=occ.digithings.ai
        ├─ moves the invite to `x-embed-token` (the app's existing transport)
        ├─ drops `?token=` from the container request
        └─ container.fetch(...)  ← same proxy `/chat` uses
@@ -51,8 +53,9 @@ The app already has the exact seam this needs:
 ### Invariants this must preserve
 
 1. `GET /chat/occ` with no token and no cookie → **404**, byte-for-byte the site 404. No title, branding or loader.
-2. `GET /chat/occ?token=<valid>` → **200** chat shell, **no iframe**, OCC tenant.
-3. The same request sets `occ_invite` (HttpOnly, SameSite=Strict, Path=/chat/occ, no Max-Age).
+2. `GET /chat/occ?token=<valid>` → **302** to the tokenless URL (the key leaves the address bar)
+   → **200** chat shell, **no iframe**, OCC tenant.
+3. The redirect sets `occ_invite` (HttpOnly, SameSite=Strict, Path=/chat/occ, no Max-Age).
 4. A reload with the cookie and no query token → **200**, no `Set-Cookie` re-issue.
 5. The invite key **never** appears in the container request URL, the HTML, or the flight payload.
 6. The key exists in **one** place: the Worker secret.

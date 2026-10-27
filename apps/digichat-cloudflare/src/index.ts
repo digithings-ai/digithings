@@ -322,8 +322,17 @@ export default {
       // One gate, one secret, one path: the invite is checked here and the
       // request goes to the container's own embed route. Nothing is fetched
       // from this Worker's own URL, and Pages is not in the chain.
+      //
+      // The upstream is wrapped exactly like the /chat proxy above, so a
+      // draining slot or a dropped connection on this path answers the same
+      // retryable 503 / inline HTML `/chat` answers, instead of a raw 5xx.
       const container = getContainer(workerEnv.DIGICHAT, containerId);
-      return occGate(request, workerEnv.OCC_INVITE_KEY, (req) => container.fetch(req));
+      return occGate(request, workerEnv.OCC_INVITE_KEY, async (req) =>
+        frameSafeErrorResponse(
+          req,
+          await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+        ),
+      );
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.

@@ -112,13 +112,24 @@ export async function occGate(
 ): Promise<Response> {
   const url = new URL(request.url);
   const accepted = inviteAccepted(request, expected);
-  if (accepted && expected) {
+  if (accepted === "token" && expected) {
+    // DIG-1437: the key must not stay in the address bar or in browser
+    // history. Set the session cookie and bounce to the same URL without
+    // `token`, so the browser re-requests with the cookie and the key is gone
+    // from the glass. The Pages shell used to do this from the client
+    // (`stripInviteTokenFromUrl` + replaceState); after the 2026-10-27
+    // consolidation the edge owns it, which also keeps the key out of the
+    // container request entirely and works with scripting disabled.
+    const clean = new URL(request.url);
+    clean.searchParams.delete("token");
+    const headers = new Headers({ location: clean.toString(), "cache-control": "no-store" });
+    headers.append("set-cookie", occInviteCookieHeader(expected));
+    return new Response(null, { status: 302, headers });
+  }
+  if (accepted === "cookie" && expected) {
     const res = await containerUpstream(occContainerRequest(request, expected));
     const headers = new Headers(res.headers);
     headers.set("cache-control", "no-store");
-    if (accepted === "token") {
-      headers.append("set-cookie", occInviteCookieHeader(expected));
-    }
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }
   // The 404 is the site's own page, never the container's: it goes to the

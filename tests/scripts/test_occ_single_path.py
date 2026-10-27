@@ -92,3 +92,46 @@ def test_the_gate_has_no_self_fetch_default() -> None:
     assert "containerUpstream(request)" not in src, (
         "the gate is self-fetching the original request again"
     )
+
+
+def test_the_invite_link_does_not_leave_the_key_in_the_address_bar() -> None:
+    """DIG-1437: the key must not sit in the URL after the first load.
+
+    The Pages shell used to strip it client-side (`stripInviteTokenFromUrl` +
+    `replaceState`). After the consolidation the edge owns that: the token arm
+    answers a 302 to the tokenless URL and sets the cookie, so the browser
+    re-requests with the cookie and the key is out of the location bar and
+    history without needing JavaScript.
+    """
+    src = _read(WORKER / "occ-gate.ts")
+    assert re.search(r"status:\s*302", src), (
+        "the invite arm must redirect; returning 200 leaves ?token= in the address bar"
+    )
+    assert re.search(r"location:\s*clean\.toString\(\)", src), (
+        "the redirect must target the same URL with `token` removed"
+    )
+    assert re.search(r'clean\.searchParams\.delete\("token"\)', src), (
+        "the redirect target still carries the invite key"
+    )
+
+
+def test_the_container_route_and_header_the_gate_targets_are_real() -> None:
+    """The seam has two halves, and this pins the app's half.
+
+    A rename of the app's embed route, or a change of the header it reads, would
+    leave every Worker test green while `/chat/occ` 404s in production — the
+    same wiring-gap class this change exists to close.
+    """
+    route = REPO / "apps" / "digichat" / "src" / "app" / "(digichat)" / "embed" / "page.tsx"
+    assert route.is_file(), f"the gate rewrites to a route that does not exist: {route}"
+
+    app_src = REPO / "apps" / "digichat" / "src"
+    consumers = [
+        path
+        for path in app_src.rglob("*")
+        if path.suffix in {".ts", ".tsx"} and "x-embed-token" in path.read_text(encoding="utf-8")
+    ]
+    assert consumers, (
+        "nothing in the app reads x-embed-token: the edge would set a header the "
+        "container ignores, and the invite would never authenticate a turn"
+    )

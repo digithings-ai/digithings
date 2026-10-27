@@ -434,12 +434,19 @@ and live customer PII anyway.
 
 ## Known limits
 
-- **The key travels in a URL query string** on the first load. The Worker removes `?token=` from
-  the Container request and moves it to `x-embed-token`, so it does not reach the app's render,
-  its HTML or its logs; the browser's own address bar and history still hold it until the page
-  navigates. `Referrer-Policy: no-referrer` on `/chat/occ*`
-  (`apps/digithings-web/public/_headers:27-29`, live since DIG-1210) stops it being carried
-  onward. A redirect to the tokenless URL after the cookie is set is a possible follow-up.
+- **The key travels in a URL query string on the very first hop only.** The Worker answers
+  `?token=<key>` with a 302 to the same URL with `token` removed, plus the `occ_invite` cookie, so
+  the browser's address bar and history never keep it. The follow-up request is authenticated by
+  the cookie; the Worker then removes the query token, moves the key to `x-embed-token` and drops
+  it before proxying, so it does not reach the app's render or its HTML.
+  Two limits remain, both real: the Worker reads the key out of its own request URL, and the
+  digichat Worker has `[observability] enabled = true`
+  (`apps/digichat-cloudflare/wrangler.toml:12-13`), so the first hop **can appear in Workers log
+  metadata** — the same exposure the Pages gate never had. And the `Referrer-Policy: no-referrer`
+  rule on `/chat/occ*` (`apps/digithings-web/public/_headers:27-29`) no longer applies: the
+  response is now the container's, whose baked policy is `strict-origin-when-cross-origin`
+  (`apps/digichat/src/lib/security-headers-bake.ts:40`), which strips the query for cross-origin
+  requests and keeps it only for same-origin ones.
 - **No analytics surface exists to leak into.** `apps/digithings-web` contains no beacon, tag or
   analytics client of any kind, and the only `console` output on the embed-tenant path prints
   **host names**, never tokens (`apps/digichat/src/lib/embed-tenants.ts:791`).

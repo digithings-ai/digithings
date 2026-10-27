@@ -64,29 +64,49 @@ describe("occ gate", () => {
     });
   }
 
-  it("serves the app itself for the invite link, not a Pages shell", async () => {
-    const r = await occGate(
+  it("trades the invite link for the cookie, then serves the app itself", async () => {
+    const invite = await occGate(
       new Request(`https://digithings.ai/chat/occ/?token=${KEY}`),
+      KEY,
+      container,
+      site,
+    );
+    // DIG-1437: the key must not stay in the address bar or in history. The
+    // edge answers the link with a redirect to the tokenless URL plus the
+    // session cookie; the browser re-requests with the cookie.
+    expect(invite.status).toBe(302);
+    const location = new URL(invite.headers.get("location") ?? "https://x.invalid/");
+    expect(location.pathname).toBe("/chat/occ/");
+    expect(location.searchParams.get("token")).toBeNull();
+    expect(invite.headers.get("cache-control")).toBe("no-store");
+    // The redirect is the edge's answer: the container is not woken for it.
+    expect(container).not.toHaveBeenCalled();
+
+    const c = invite.headers.get("set-cookie") ?? "";
+    expect(c).toContain(`${OCC_INVITE_COOKIE}=`);
+    expect(c).toMatch(/HttpOnly/);
+    expect(c).toMatch(/SameSite=Strict/);
+    expect(c).not.toMatch(/Max-Age|Expires/);
+
+    // The follow-up request the browser makes, now carrying the cookie.
+    const r = await occGate(
+      new Request("https://digithings.ai/chat/occ/", {
+        headers: { cookie: `${OCC_INVITE_COOKIE}=${KEY}` },
+      }),
       KEY,
       container,
       site,
     );
     expect(r.status).toBe(200);
     expect(await r.text()).toContain("dc-embed-shell");
-    // The 404 upstream is not in the valid path.
     expect(site).not.toHaveBeenCalled();
-
-    const c = r.headers.get("set-cookie") ?? "";
-    expect(c).toContain(`${OCC_INVITE_COOKIE}=`);
-    expect(c).toMatch(/HttpOnly/);
-    expect(c).toMatch(/SameSite=Strict/);
-    expect(c).not.toMatch(/Max-Age|Expires/);
-    expect(r.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("rewrites the container request and moves the invite out of the URL", async () => {
+  it("rewrites the container request and carries the invite as a header", async () => {
     await occGate(
-      new Request(`https://digithings.ai/chat/occ/?token=${KEY}&utm=x`),
+      new Request("https://digithings.ai/chat/occ/?utm=x", {
+        headers: { cookie: `${OCC_INVITE_COOKIE}=${KEY}` },
+      }),
       KEY,
       container,
       site,
@@ -102,8 +122,10 @@ describe("occ gate", () => {
     expect(url.searchParams.get("token")).toBeNull();
     // Unrelated query parameters are preserved.
     expect(url.searchParams.get("utm")).toBe("x");
-    // The app's existing transport, set by the edge.
+    // The app's existing transport, set by the edge — this is what makes the
+    // chat turn work on the cookie arm, not just the first paint.
     expect(req.headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
+    expect(req.headers.get("cookie")).not.toContain("token=");
   });
 
   it("overwrites a client-supplied embed token rather than trusting it", () => {
@@ -124,6 +146,9 @@ describe("occ gate", () => {
     expect(r.status).toBe(200);
     expect(r.headers.get("set-cookie")).toBeNull();
     expect(container).toHaveBeenCalledTimes(1);
+    // The reload must still authenticate the chat turn, not just paint: the
+    // edge puts the key on the container request itself.
+    expect(container.mock.calls[0]![0].headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
   });
 
   it("404s a wrong cookie", async () => {

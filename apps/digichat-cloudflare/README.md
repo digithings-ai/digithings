@@ -12,7 +12,7 @@ Requires **Workers Paid** (Containers are not on Free).
 |---|---|---|
 | `digithings.ai/chat` | Worker → Container — **the digichat app**, built with basePath `/chat` (DIG-5121) | — |
 | `digithings.ai/chat/occ` | Worker `occGate` → Container, served by the app's `/chat/embed` route (invite-gated at the edge) | occ |
-| `digithings.ai/chat/occ?token=<key>` | same; the gate sets the session cookie and moves the key to `x-embed-token` (DIG-1210) | occ |
+| `digithings.ai/chat/occ?token=<key>` | same; the gate answers 302 to the tokenless URL with the session cookie, then the cookie request carries the key as `x-embed-token` (DIG-1210, DIG-1437) | occ |
 | `digithings.ai/embed*` | Worker → Container (ADR 0018 compatibility route) | selected by `host` |
 | `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container (ADR 0018 compatibility routes) | — |
 | `digithings.ai/_dtchat*` | Worker → Container (assetPrefix) | — |
