@@ -18,6 +18,21 @@
 # this file — it is a repository variable, and the refusal names both the
 # variable and the host it saw, so an operator can replace the entry.
 #
+# A dispatch may also name the list for that one run (`embed_host`, below). The
+# variable stays the default; the input exists because this workflow is manual
+# only (DIG-4435), the host changes without us, and until 2026-10-27 an unset
+# variable made every dispatch exit 2 before the check could see anything
+# (DIG-5790). The input is not a weaker pin: the list is still named by a person
+# with write access at the moment of the run, never by the page the check reads,
+# and this workflow carries no secret for it to carry off (a test pins the
+# absence of any secret reference in
+# tests/scripts/test_datatap_answer_check_clock.py).
+#
+# An allowlist that resolves to nothing fails on its own step, below, and says
+# so. That is the difference between "this deployment has not been vetted" and
+# "the check could not reach the answer": both used to leave as exit 2 with only
+# the script's line to tell them apart.
+#
 # No `on.schedule` here on purpose: every clock for this repo lives on the
 # digithings-cron Worker (a GitHub cron on develop would double-fire, and
 # tests/scripts/test_no_gha_schedules.py enforces that).
@@ -31,6 +46,15 @@ name: "Check: DataTap answer integrity"
 
 on:
   workflow_dispatch:
+    inputs:
+      embed_host:
+        description: >-
+          Optional. Comma-separated embed host(s) this run may talk to. Overrides
+          the ANSWER_CHECK_EMBED_HOSTS repository variable. Leave empty to use
+          the variable.
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -51,11 +75,37 @@ jobs:
     timeout-minutes: 10
     # The hosts this deployment allows the check to talk to. A repository
     # variable, not a secret: the value is a hostname, and it is not written
-    # here because the embed host changes on every client redeploy. Unset
-    # means the check refuses to run and says which variable to set.
+    # here because the embed host changes on every client redeploy. A dispatch
+    # may override it for one run with the `embed_host` input; both empty means
+    # the check refuses to run, and the step below says which one to set.
     env:
-      ANSWER_CHECK_EMBED_HOSTS: ${{ vars.ANSWER_CHECK_EMBED_HOSTS }}
+      ANSWER_CHECK_EMBED_HOSTS: ${{ inputs.embed_host || vars.ANSWER_CHECK_EMBED_HOSTS }}
     steps:
+      # Before the checkout on purpose: an unset allowlist is a configuration gap
+      # and no amount of cloning changes that. It also keeps the two failures
+      # apart. An empty allowlist used to reach the script, which left with
+      # "COULD NOT RUN … exit 2" — the same code and the same shape as a client
+      # platform that did not answer, so a blind check read as a DataTap result.
+      # This step fails closed with the fix in the annotation, and exits 2 for the
+      # same reason the script does: 1 is reserved for a fabrication finding.
+      - name: Fail as a config gap when the host allowlist is empty
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # An unset variable arrives as an empty string, and a value of nothing
+          # but separators is no more usable: both would leave the script with an
+          # empty allowlist. Commas are stripped with the whitespace because the
+          # list is comma-separated, so ",," is empty however it is spelled.
+          list="${ANSWER_CHECK_EMBED_HOSTS:-}"
+          usable=$(printf '%s' "$list" | tr -d '[:space:],')
+          if [ -z "$usable" ]; then
+            echo "::error::ANSWER_CHECK_EMBED_HOSTS is unset — set the repository variable ANSWER_CHECK_EMBED_HOSTS to the embed host the discovery page names, or dispatch this workflow with the embed_host input. This is a configuration gap, not a DataTap result."
+            exit 2
+          fi
+
+          echo "answer-check: embed-host allowlist: $list"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
