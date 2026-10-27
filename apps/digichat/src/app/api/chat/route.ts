@@ -23,6 +23,7 @@ import {
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
+import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -200,7 +201,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const messages = body.messages;
+  let messages = body.messages;
   if (!messages?.length) {
     return new Response(JSON.stringify({ error: "messages_required" }), {
       status: 400,
@@ -576,6 +577,17 @@ export async function POST(req: Request) {
   const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
+  // Private demo mode: the client sends x-digi-private: 1 when the transcript
+  // may be shown to the party it names, so every turn is told to substitute the
+  // real names and identifiers it is given.
+  const privateMode = isPrivateMode(req.headers);
+  // The instruction is applied to the UI messages here, before the adapter
+  // branch, because every path consumes `messages` — including the digigraph
+  // trace stream, which is the default and converts them itself. Patching the
+  // converted model messages later would reach only the legacy `streamText`
+  // pair and leave private mode a silent no-op on the path OCC actually uses.
+  if (privateMode) messages = withPrivateModeUiPrompt(messages);
 
   // models.costPerWindow stays on the premium budget above. The limits block
   // is the other gates (tokens, turns, sessions, tool calls, model tiers).
