@@ -24,7 +24,7 @@ digigraph, so digisearch stays installable on its own. Unset map: no-op
 never silently treated as unset.
 
 Index names compare case-insensitively and with ``-`` and ``_`` treated alike,
-so ``occ-tickets`` and ``occ_tickets`` are the same index for this check: a
+so ``tenant-a-tickets`` and ``tenant_a_tickets`` are the same index for this check: a
 spelling variant must not be a way around it.
 """
 
