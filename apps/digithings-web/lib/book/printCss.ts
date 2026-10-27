@@ -27,6 +27,12 @@ export const PRINT_CSS = `
 
 /* Diagrams: one file per theme, picked by the page's data-theme. Light is the
    default and the only one print ever shows. */
+/* A figure's width is decided by the viewport in the site's own stylesheet, so
+   the same diagram was 549px on a desktop and 257px on a phone — and the
+   narrower one let the use-cases chapter fit on one page instead of two, which
+   put every later chapter a page early against the printed book. Pinning the
+   width to the printed measure makes every viewport paginate the same book. */
+.book-figure { width: 100% !important; max-width: 549px !important; margin-inline: auto !important; }
 .book-figure__dark { display: none; }
 :root[data-theme="dark"] .book-figure__light { display: none; }
 :root[data-theme="dark"] .book-figure__dark { display: block; }
@@ -142,6 +148,18 @@ html:has(.book-print) .book-paged-status { display: none !important; }
  * day it is printed.
  */
 export const PAGED_CSS = `
+/* Same pin as the print sheet, and here it is the one that matters: this is the
+   sheet pagedjs actually lays the book out with, on both routes. */
+.book-figure { width: 100% !important; max-width: 549px !important; margin-inline: auto !important; }
+
+/* Diagrams are capped by viewport height in the site's own sheet (75vh). A
+   taller window therefore gave a taller figure, which changed how the text
+   flowed around it — the same book paginated to twenty pages on a desktop and
+   nineteen on a phone. The page box is a fixed A4 sheet; nothing inside it may
+   depend on the window. */
+.pagedjs_page .book-figure__diagram svg,
+.pagedjs_page .book-figure svg { max-height: none !important; }
+
 @page { size: A4 !important; margin: 20mm 18mm 18mm !important; }
 
 /* The site chrome and any live status line are not part of the book. This

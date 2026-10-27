@@ -18,10 +18,10 @@ undoing it is a migration project.
 
 digithings takes the opposite position. The same code runs on a laptop, on a
 server you own and in a cloud account, with the same service contracts, the
-same setting names and the same identity model in each. digithings runs its own
-production on Cloudflare, with the same services in containers behind its edge.
-You build locally, prove the application on real data, and move it when the work
-needs more capacity.
+same setting names and the same identity model in each. The services run in
+containers, so a move between those homes is a deployment decision rather than a
+rewrite. You build locally, prove the application on real data, and move it when
+the work needs more capacity.
 
 ```mermaid one application, three homes, and the same contracts between modules in each
 flowchart LR
