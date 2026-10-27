@@ -1306,14 +1306,14 @@ class InstallMarkerTest(unittest.TestCase):
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
         # The install refuses a checkout that carries the runner without the
         # guard (DIG-4796), and one where a module the runner imports does not
-        # resolve (DIG-5585). The clone therefore carries every module the
-        # runner imports: the helpers next to it and the shared module in
-        # `scripts/`, one directory up.
-        for name in ("local_ci.py", "launch_guard.py", "import_preflight.py",
-                     "review_applied.py", "pr_template.py",
-                     "check_required_context_producers.py"):
-            shutil.copy(os.path.join(_SCRIPTS, name),
-                        os.path.join(checkout, "scripts", "local-ci", name))
+        # resolve (DIG-5585). The clone therefore carries every module next to
+        # the runner, plus the shared module in `scripts/`, one directory up.
+        # Copying every `.py` keeps these cases about the marker: a helper
+        # added to the runner is in the clone without editing this list.
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name),
+                            os.path.join(checkout, "scripts", "local-ci", name))
         shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
                     os.path.join(checkout, "scripts", "review_pass_filter.py"))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
@@ -1341,6 +1341,25 @@ class InstallMarkerTest(unittest.TestCase):
                          "the marker must name the checkout the runner was installed from")
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
+
+    def test_a_dry_run_renders_the_interpreter_the_job_will_run(self):
+        """The plist must name the same interpreter the install check used.
+
+        A `ProgramArguments` entry left as a placeholder lints cleanly and
+        fails only when launchd tries to spawn it, so a render that never
+        substituted the interpreter reads as an installed job and runs nothing
+        (DIG-5725).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                               "--dry-run", checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("__", done.stdout,
+                         "an unsubstituted placeholder is a plist launchd cannot run")
+        self.assertIn("<string>/usr/bin/python3</string>", done.stdout,
+                      "the job must run under the interpreter the install check used")
 
     def test_a_checkout_without_the_guard_is_refused(self):
         """An installer must not point the daemon at a pre-guard checkout.

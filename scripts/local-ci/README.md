@@ -228,6 +228,8 @@ point it at - not a working tree, not a linked worktree (see "The producer"
 below).
 
 `--dry-run` prints the rendered plist and touches nothing: no write, no bootout.
+It still runs the checkout's import check first, so an incomplete checkout prints
+nothing and exits non-zero.
 
 ## The producer
 

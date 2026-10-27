@@ -30,6 +30,8 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LABEL=ai.digithings.local-ci
 # The interpreter the installed job runs. The install check below runs under the same
 # one, so a module that resolves for the check is a module the daemon can import.
+# A bare path, never flags: launch_guard.py refuses a job whose ProgramArguments do not
+# unpack to exactly an interpreter and a script.
 PYTHON=/usr/bin/python3
 CHECKOUT=""
 DRY=0
@@ -79,9 +81,16 @@ if [ ! -x "$PYTHON" ]; then
   echo "install.sh: no python at $PYTHON; the job this would install could not start" >&2
   exit 1
 fi
-if ! "$PYTHON" "$PREFLIGHT" "$SCRIPT" > /dev/null; then
-  echo "install.sh: refusing to install $CHECKOUT: modules the runner imports are missing (listed above)" >&2
-  echo "install.sh: a daemon installed from this checkout would refuse every tick (exit 78)" >&2
+if "$PYTHON" "$PREFLIGHT" "$SCRIPT" > /dev/null; then
+  :
+else
+  status=$?
+  # The preflight writes the cause to stderr above: a missing module, a module that
+  # does not parse, or an interpreter that cannot run it. Do not name a cause here
+  # that it did not report - blaming the wrong thing is the failure this check
+  # exists to stop (DIG-4674).
+  echo "install.sh: refusing to install $CHECKOUT: the import check failed (exit $status); see the lines above" >&2
+  echo "install.sh: a daemon installed from this checkout could refuse every tick (exit 78)" >&2
   exit 1
 fi
 if ! git -C "$CHECKOUT" rev-parse --verify -q HEAD > /dev/null 2>&1; then
