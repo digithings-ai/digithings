@@ -32,10 +32,7 @@ import {
 import type { DigiTurnMode } from "@/lib/turn-mode";
 import { isMutatingTurnMode } from "@/lib/turn-mode";
 import { abortableSleep, waitOutRateLimit } from "@/lib/rate-limit-wait";
-import {
-  TOOL_CAP_INSTRUCTION,
-  toolCallLimitNotice,
-} from "@/lib/guardrails/budget";
+import { TOOL_CAP_INSTRUCTION } from "@/lib/guardrails/budget";
 import type { TurnGuard } from "@/lib/guardrails/turn";
 import {
   CONVERSATION_PART_TYPE,
@@ -258,9 +255,6 @@ export class FoundryToolCallCounter {
     return "new";
   }
 }
-
-/** Status line shown when the adapter stops a turn at the tool-call cap. */
-export { toolCallLimitNotice };
 
 function normalizeMaxToolCalls(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -1973,21 +1967,14 @@ export async function createFoundryStreamResponse(opts: {
         }
 
         if (hitToolCap && toolCap !== undefined) {
-          // Status, not an error: the turn continues into a final answer.
-          // The shared guard writes the notice when it is the one enforcing
-          // the cap; otherwise this adapter writes the same line.
+          // Silent, not an error: the turn continues straight into a final
+          // answer, with no notice in the UI.
           let finalParams: { conversation: string; input?: string; stream: true } = {
             conversation: conversationId,
             stream: true,
           };
           if (opts.guard?.active) {
             finalParams = await clearForGuard(finalParams);
-          } else {
-            writer.write({
-              type: "data-notice",
-              id: "foundry-tool-call-limit",
-              data: { tone: "status", message: toolCallLimitNotice(toolCap) },
-            });
           }
           resumeSeparatorPending = wroteText;
           try {

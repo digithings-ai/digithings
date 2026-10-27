@@ -145,6 +145,163 @@ def test_the_workflow_supplies_the_host_allowlist_the_check_needs() -> None:
     assert "vars.ANSWER_CHECK_EMBED_HOSTS" in body
 
 
+# --------------------------------------------------------------------------- #
+# The allowlist guard (DIG-5790). An unset repository variable used to reach the
+# script, which left with "COULD NOT RUN … exit 2" — the same code a client
+# platform that did not answer produces, so 115 consecutive runs could not be
+# told apart from a real fabrication finding without reading each log. The guard
+# is a separate first step, and these tests execute it rather than grep its text.
+# --------------------------------------------------------------------------- #
+
+GUARD_MARKER = "embed-host allowlist resolves to no host"
+
+
+def _guard_step_index() -> int:
+    steps = _workflow()["jobs"]["check"]["steps"]
+    hits = [
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step.get("run"), str) and GUARD_MARKER in step["run"]
+    ]
+    assert hits, "the check job has no step that refuses an empty host allowlist"
+    assert len(hits) == 1, f"expected exactly one allowlist guard, found {len(hits)}"
+    return hits[0]
+
+
+def _guard_script() -> str:
+    steps = _workflow()["jobs"]["check"]["steps"]
+    return steps[_guard_step_index()]["run"]
+
+
+def _run_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> subprocess.CompletedProcess[str]:
+    """Run the guard as Actions would, with the allowlist as the only input.
+
+    `None` removes the variable from the environment entirely, which is what an
+    unset repository variable looks like to the step; `""` and separator-only
+    strings are the present-but-useless cases.
+    """
+    if value is None:
+        monkeypatch.delenv("ANSWER_CHECK_EMBED_HOSTS", raising=False)
+    else:
+        monkeypatch.setenv("ANSWER_CHECK_EMBED_HOSTS", value)
+
+    script = tmp_path / "guard.sh"
+    script.write_text(_guard_script())
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(None, id="unset"),
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="whitespace-only"),
+        pytest.param(",", id="one-separator"),
+        pytest.param(" , , ", id="separators-and-space"),
+    ],
+)
+def test_the_guard_fails_closed_on_an_unusable_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    """An allowlist with no host in it must never reach the probe.
+
+    Exit 2 and not 1 on purpose: the script's contract says 1 only ever means a
+    fabrication finding, and a missing variable is the check being blind.
+    """
+    result = _run_guard(tmp_path, monkeypatch, value)
+    assert result.returncode == 2, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "::error::" in result.stdout, result.stdout
+    assert GUARD_MARKER in result.stdout, result.stdout
+    assert "repository variable" in result.stdout, result.stdout
+    assert "configuration gap, not a finding" in result.stdout, result.stdout
+
+
+def test_the_guard_passes_a_configured_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real list reaches the probe: the guard reads the value, it does not vet it.
+
+    Vetting is the script's job (it compares the host the page named against this
+    list and refuses a miss), and doing it twice would be a second source of truth.
+    The value is counted and never echoed: the log is public, and this workflow's
+    own header says the host name stays out of the repository.
+    """
+    host = "embed.example.test"
+    result = _run_guard(tmp_path, monkeypatch, host)
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
+    assert host not in result.stdout, "the allowlist value reached the public log"
+    assert "::error::" not in result.stdout, result.stdout
+
+
+def test_the_guard_cannot_be_used_to_forge_an_annotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dispatch input is free text; a line break in it must not become a command.
+
+    Actions reads `::…::` at the start of a line as a workflow command, so a value
+    echoed raw would let a dispatcher mint a passing annotation. The count line is
+    the only place the value is touched.
+    """
+    result = _run_guard(tmp_path, monkeypatch, "embed.example.test\n::error::forged")
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "::error::forged" not in result.stdout, result.stdout
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
+
+
+def test_the_guard_runs_before_the_probe() -> None:
+    """The point is refusing *before* the probe spends a client turn."""
+    steps = _workflow()["jobs"]["check"]["steps"]
+    probe = [
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step.get("run"), str) and MAKE_TARGET in step["run"]
+    ]
+    assert probe, "the check job has no step that runs the probe"
+    assert _guard_step_index() < probe[0], (
+        "the allowlist guard runs after the probe: an empty list would still spend "
+        "a probe before failing"
+    )
+
+
+def test_a_dispatch_can_name_the_allowlist_without_the_variable() -> None:
+    """The variable is the default; one dispatch may override it (DIG-5790).
+
+    The workflow is manual only and the host changes when the client redeploys,
+    so a run must be able to name the host it is testing without a repository
+    admin setting a variable first. The default is still the variable, so an
+    ordinary dispatch needs nothing typed.
+    """
+    doc = _workflow()
+    on = _on(doc)
+    assert isinstance(on, dict), "on: must be a mapping to declare an input"
+    inputs = on["workflow_dispatch"]["inputs"]
+    assert "embed_host" in inputs, "the dispatch declares no embed_host input"
+    assert inputs["embed_host"].get("required") is False, (
+        "a required input would make an ordinary dispatch impossible to run from "
+        "the default"
+    )
+
+    env = doc["jobs"]["check"]["env"]
+    expression = env["ANSWER_CHECK_EMBED_HOSTS"]
+    assert "inputs.embed_host" in expression, "the input is declared but not read"
+    assert "vars.ANSWER_CHECK_EMBED_HOSTS" in expression, (
+        "the repository variable is no longer the default: an ordinary dispatch "
+        "would now need the host typed in"
+    )
+    assert expression.index("inputs.embed_host") < expression.index(
+        "vars.ANSWER_CHECK_EMBED_HOSTS"
+    ), "the variable must be the fallback, not the override"
+
+
 def _jobs_code() -> str:
     """jobs.ts with `//` comments stripped, so a pin counts rows, not prose.
 

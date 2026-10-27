@@ -92,6 +92,36 @@ if ! bash -n "$tmp" 2>/dev/null; then
   exit 1
 fi
 
+# Ask the scanner question here too (DIG-5722). The installed hook refuses a push
+# it cannot scan, so an installer that does not check would put that refusal on
+# the machine by side effect: this directory is shared by every worktree, and
+# `make agents-init` reinstalls from origin/develop on every agent start. The
+# hook would then arrive mid-task and block every push — every branch, every
+# seat — until someone installed the binary, and `agents_init.py` treats the
+# installer's non-zero exit as a warning and carries on, so nothing would decide
+# to do it. Refuse before the `mv` and name the fix; the previous hook stays
+# installed, and the machine keeps whatever guard it had.
+#
+# `PRE_PUSH_SKIP_GITLEAKS=1` is the hook's documented escape, so the installer
+# honours the same decision: set it for this command to install on a machine
+# that cannot take the binary, and every non-fixture push will say in its own
+# output that the scan was skipped.
+if ! command -v gitleaks >/dev/null 2>&1 && [ "${PRE_PUSH_SKIP_GITLEAKS:-0}" != "1" ]; then
+  echo "install-hooks: refusing — gitleaks is not on PATH, so the hook would refuse every push unscanned (DIG-5722)." >&2
+  echo "  Install it:   brew install gitleaks" >&2
+  echo "                (or: go install github.com/gitleaks/gitleaks/v8@latest)" >&2
+  echo "  Then re-run:  make hooks-install   (or make agents-init)" >&2
+  echo "  No scanner available? Set PRE_PUSH_SKIP_GITLEAKS=1 for this command to install" >&2
+  echo "  anyway; each push then prints that the secret scan was skipped." >&2
+  echo "  See SECURITY.md \"Secrets scanning\"." >&2
+  if [ -e "$hooks_dir/pre-push" ]; then
+    echo "  Nothing changed: the hook already in $hooks_dir/pre-push is untouched." >&2
+  else
+    echo "  Nothing changed: no pre-push hook is installed in $hooks_dir." >&2
+  fi
+  exit 1
+fi
+
 chmod 755 "$tmp"
 mv "$tmp" "$hooks_dir/pre-push"
 trap - EXIT

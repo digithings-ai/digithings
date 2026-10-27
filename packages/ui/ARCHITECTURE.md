@@ -292,6 +292,15 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
+**Private mode is not a disclosure level.** `Thread` also takes `privateMode`,
+which drops the work parts and the chain node outright instead of folding them:
+the parts stop mounting, and `group-chainOfThought` returns its children so a
+turn does not show a Worked header that expands to nothing. It is a hard override
+rather than a level because reasoning text and tool-result JSON are user data,
+and the levels above decide only *how much* work is disclosed — none of them
+switches the reasoning off while it is still streaming. Display-only: the parts
+are still produced upstream and still reach the model; generation is unchanged.
+
 **Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
 and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
 `src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is

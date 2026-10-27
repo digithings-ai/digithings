@@ -401,6 +401,9 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     ]
     initial["disabled_tools"] = list(req.disabled_tools) if req.disabled_tools else None
     initial["effort"] = req.effort
+    # Per-request tool-call cap (X-Digi-Max-Tool-Calls). Unconditional, same reason
+    # as effort: a cap from a prior turn must never stick to the next one.
+    initial["max_tool_calls"] = req.max_tool_calls
     return initial
 
 

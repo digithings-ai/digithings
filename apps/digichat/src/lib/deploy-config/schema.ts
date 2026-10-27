@@ -305,6 +305,13 @@ export const FeaturesSchema = z.preprocess(
       modelPicker: z.boolean().default(false),
       branchPicker: z.boolean().default(true),
       pageContext: PageContextModeSchema.default("visible"),
+      /**
+       * Private demo mode (`/private`, `?private=1`): the session asks the
+       * model to use stand-ins for real names and identifiers in its replies.
+       * Off by default — a tenant opts in. Display-side only: stored text and
+       * tool results are untouched, so this is a demo aid, not anonymisation.
+       */
+      privateMode: z.boolean().default(false),
     })
     .strict(),
 );
@@ -792,8 +799,10 @@ const GuardrailTpm = z.number().int().positive().max(10_000_000);
 
 /**
  * How far `maxToolCallsPerTurn` can actually go on a backend.
- * Matches the tool-call column of the limits backend matrix: Foundry and the
- * AI SDK backends stop the loop; digigraph, langgraph, and ag-ui are
+ * Foundry and the AI SDK backends stop the loop in-process; digigraph enforces it
+ * upstream (digichat forwards the cap as `X-Digi-Max-Tool-Calls`, digillm's tool loop
+ * stops at that many executed calls and answers tool-free, and one budget covers the
+ * whole turn) — silently, with no notice in the UI; langgraph and ag-ui are
  * notice/best-effort; a2a has no tool-call hook.
  */
 export type ToolCallCapSupport = "enforce" | "best-effort" | "unsupported";
@@ -806,7 +815,8 @@ export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
     case "anthropic":
     case "google-vertex":
       return "enforce";
-    case "digigraph": // notice only: records the cap and does not abort the loop
+    case "digigraph": // enforced upstream: digigraph stops the loop at the cap
+      return "enforce";
     case "langgraph":
     case "ag-ui":
       return "best-effort";
@@ -817,7 +827,9 @@ export function toolCallCapSupport(backendType: string): ToolCallCapSupport {
 
 /**
  * Refuse a cap the backend cannot apply. A notice/best-effort backend still
- * loads, and validation warns so the limit is not silent.
+ * loads, and validation warns so the limit is not silent. `enforce` covers both
+ * the in-process backends and digigraph, whose cap is enforced upstream in its
+ * tool loop and never announced — stopping the loop is the enforcement.
  * Returns the refusal message, or null when the config may load.
  */
 export function toolCallCapIssue(backendType: string, cap: number | undefined): string | null {
@@ -843,8 +855,10 @@ export const GuardrailsSchema = z
   .object({
     /**
      * Tool calls allowed in one user turn. Enforced on Foundry and the AI SDK
-     * backends. notice/best-effort on digigraph, langgraph, and ag-ui.
-     * Refused on a2a, which has no tool-call hook.
+     * backends, and upstream on digigraph (forwarded as `X-Digi-Max-Tool-Calls`
+     * and shared across the turn's continuations). Silent: no notice is shown.
+     * notice/best-effort on langgraph and ag-ui. Refused on a2a, which has no
+     * tool-call hook.
      */
     maxToolCallsPerTurn: z.number().int().positive().max(100).optional(),
     /** Fraction of the TPM where the model is asked to answer with what it has. */
@@ -918,6 +932,7 @@ export const DeploymentSchema = z
       modelPicker: false,
       branchPicker: true,
       pageContext: "visible",
+      privateMode: false,
     }),
     models: ModelsSchema.default({ available: [] }),
     cli: CliSchema.default({ enabled: false }),

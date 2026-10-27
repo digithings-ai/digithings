@@ -27,21 +27,22 @@ function retrySource() {
 }
 
 describe("every container hop answers a rejection that is not an Error", () => {
-  it("classifies the failure in one place in both container classes", () => {
-    // One classification per container class (DigiStackContainer,
-    // DigiQuantMcpContainer), and both call the same helper: the order of the
-    // checks — a value that is not an Error before the eviction and the
-    // failed vocabulary — is decided there, so it cannot drift between them.
+  it("classifies the failure in one place in the one remaining container class", () => {
+    // The classification lives in the catch of each container class. Only
+    // DigiStackContainer is left: the digiquant-mcp container and its class
+    // were deleted in DIG-5558 (the Worker-native DigiQuantMcpAgent has no
+    // container hop), so this count is the absence pin — a second class would
+    // bring back a second call site here.
     const source = stackSource();
-    expect(source.split("classifyContainerHopFailure(err)").length - 1).toBe(2);
+    expect(source).not.toContain("DigiQuantMcpContainer");
+    expect(source.split("classifyContainerHopFailure(err)").length - 1).toBe(1);
   });
 
-  it("answers the unavailable 503 in both container classes", () => {
+  it("answers the unavailable 503 in the one remaining container class", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const needle = `return containerUnavailableResponse("${service}");`;
-      expect(source.split(needle).length - 1).toBe(1);
-    }
+    expect(source.split('return containerUnavailableResponse("stack");').length - 1).toBe(1);
+    // The retired MCP container's service tag must not linger in this Worker.
+    expect(source).not.toContain('containerUnavailableResponse("mcp")');
   });
 
   it("keeps the cause of the failure out of the answer", () => {
@@ -49,9 +50,8 @@ describe("every container hop answers a rejection that is not an Error", () => {
     // description of the rejected value: internal detail does not leave the
     // Worker (the shared package holds the same contract).
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).not.toContain(`containerUnavailableResponse("${service}",`);
-    }
+    expect(source).not.toContain('containerUnavailableResponse("stack",');
+    expect(source).not.toContain('containerUnavailableResponse("mcp",');
   });
 
   it("guards the hop, not the cold start", () => {
@@ -60,24 +60,18 @@ describe("every container hop answers a rejection that is not an Error", () => {
     // retryable 503 (container_booting), so it never escapes and must keep
     // that answer.
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const guard = source.indexOf(
-        `return containerUnavailableResponse("${service}");`,
-      );
-      const hop = source.indexOf("this.containerFetch(");
-      expect(guard).toBeGreaterThan(hop);
-    }
+    const guard = source.indexOf('return containerUnavailableResponse("stack");');
+    const hop = source.indexOf("this.containerFetch(");
+    expect(guard).toBeGreaterThan(hop);
   });
 
   it("keeps the real Error path unchanged", () => {
     // A real error keeps its own classification: the eviction 410, the failed
     // 503, and the rethrow of anything else.
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerEvictedResponse("${service}", failure.message);`);
-      expect(source).toContain(`return containerFailedResponse("${service}", failure.message);`);
-    }
-    expect(source.split("throw err;").length - 1).toBe(2);
+    expect(source).toContain('return containerEvictedResponse("stack", failure.message);');
+    expect(source).toContain('return containerFailedResponse("stack", failure.message);');
+    expect(source.split("throw err;").length - 1).toBe(1);
   });
 });
 

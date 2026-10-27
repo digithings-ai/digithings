@@ -36,6 +36,12 @@ export type ChatPanelProps = {
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
+  /**
+   * Session private mode. The sidebar title is a fixed neutral label, because
+   * the derived title is the first user message — a demo starting "Hi, John
+   * Smith here…" would put a real name beside the chat.
+   */
+  privateMode?: boolean;
   /** Deploy client projection (features, tools, chrome). */
   clientConfig?: DigichatClientConfig;
 };
@@ -56,6 +62,7 @@ export function ChatPanel({
   onAllowTruncate,
   headerSlot,
   byokMode = false,
+  privateMode = false,
   onByokModeChange,
   clientConfig = DEFAULT_CLIENT_CONFIG,
 }: ChatPanelProps) {
@@ -132,7 +139,9 @@ export function ChatPanel({
         .filter(Boolean);
       const first = userTexts[0];
       if (first && (threadTitle === "New chat" || threadTitle.trim() === "") && onTitleDerived) {
-        const t = first.slice(0, 52) + (first.length > 52 ? "…" : "");
+        const t = privateMode
+          ? "Private session"
+          : first.slice(0, 52) + (first.length > 52 ? "…" : "");
         onTitleDerived(threadId, t);
       }
     },

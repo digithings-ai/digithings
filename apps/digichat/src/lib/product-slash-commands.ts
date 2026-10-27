@@ -41,7 +41,7 @@ import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/pal
 
 export type SlashSubmitAction =
   | { kind: "pass" }
-  | { kind: "block" }
+  | { kind: "block"; reason?: string }
   | { kind: "force"; forceTool: string; text: string }
   | { kind: "force-web"; text: string }
   | { kind: "pane"; command: SlashDef; arg: string }
@@ -59,6 +59,63 @@ export function catalogForceTool(forceTool: string | undefined): string | undefi
 export function extraSlashDefs(api: EmbedChatPrefsApi): SlashDef[] {
   void api;
   return [];
+}
+
+/**
+ * Session private mode (`?private=1`, then `/private` to toggle).
+ *
+ * Module scope, not React state: the slash wiring is a static function object
+ * (`digichat-skin-options`) and `slashSubmitAction` takes no session argument,
+ * so a state value would never reach the command. The transport is frozen on
+ * first render (#1339) for the same reason — its header accessor reads here.
+ * ON-only by construction: a session starts private from the URL or is switched
+ * to it; there is no `private=0`.
+ */
+let privateMode = false;
+const privateModeListeners = new Set<() => void>();
+
+export function isPrivateMode(): boolean {
+  return privateMode;
+}
+
+export function setPrivateMode(on: boolean): void {
+  if (privateMode === on) return;
+  privateMode = on;
+  for (const listener of privateModeListeners) listener();
+}
+
+export function togglePrivateMode(): void {
+  setPrivateMode(!privateMode);
+}
+
+/** `useSyncExternalStore` subscription for the embed's session state. */
+export function subscribePrivateMode(listener: () => void): () => void {
+  privateModeListeners.add(listener);
+  return () => {
+    privateModeListeners.delete(listener);
+  };
+}
+
+/**
+ * Whether the resolved tenant offers private mode at all (`features.privateMode`).
+ *
+ * Separate from the session flag on purpose: the flag answers "is this session
+ * private", this answers "may it ever be". Starts false, so a session painted
+ * before the tenant config lands cannot enter the mode, and a tenant that never
+ * opted in cannot enter it at all — not from `?private=1`, not from `/private`.
+ * Turning availability off also drops a live session flag, or a tenant that
+ * stops offering the mode would leave one on for the rest of the session.
+ */
+let privateModeAvailable = false;
+
+export function isPrivateModeAvailable(): boolean {
+  return privateModeAvailable;
+}
+
+export function setPrivateModeAvailable(on: boolean): void {
+  if (privateModeAvailable === on) return;
+  privateModeAvailable = on;
+  if (!on) setPrivateMode(false);
 }
 
 function themeArgApplies(raw: string): boolean {
@@ -118,6 +175,14 @@ export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): Sla
   if (parsed.kind === "incomplete") return { kind: "block" };
   const { command, arg } = parsed;
   if (command.kind === "tool") return { kind: "block" };
+  // Export serialises the stored messages, which still hold the real text the
+  // user typed — handing over exactly what private mode is meant to hide.
+  if (isPrivateMode() && command.id === "export") {
+    return {
+      kind: "block",
+      reason: "Export is off in a private session — the stored thread still holds the real text.",
+    };
+  }
   if (paneStaysOpen(command, arg)) return { kind: "pane", command, arg };
   return { kind: "run", command, arg };
 }
@@ -319,6 +384,13 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       else api.openThinking();
       return;
     }
+    case "private":
+      // A session flag, not a turn: flips the mode and sends nothing. A tenant
+      // that did not opt in has no mode to flip, so the command does nothing
+      // even if a stale definition or a typed value reaches this far.
+      if (!privateModeAvailable) return;
+      togglePrivateMode();
+      return;
     case "lang": {
       if (!arg) {
         api.openLanguage();

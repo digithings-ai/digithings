@@ -196,6 +196,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       modelPicker: false,
       branchPicker: cfg.branchPicker !== false,
       pageContext: cfg.pageContext ?? "visible",
+      // Private mode is opt-in per tenant: absent means the tenant never
+      // offers it, so the embed cannot enter it from the URL or `/private`.
+      privateMode: cfg.privateMode === true,
     },
     models: {
       ...(cfg.models?.default ? { default: cfg.models.default } : {}),
@@ -298,6 +301,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     speech: dep.features.speech === true ? true : undefined,
     sources: dep.features.sources === false ? false : undefined,
     branchPicker: dep.features.branchPicker === false ? false : undefined,
+    privateMode: dep.features.privateMode === true ? true : undefined,
     defaultLanguage:
       dep.chrome.defaultLanguage === DEFAULT_LANGUAGE_CODE
         ? undefined

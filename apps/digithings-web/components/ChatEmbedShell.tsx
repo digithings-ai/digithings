@@ -249,11 +249,31 @@ function parseOrigin(raw: string): string {
   }
 }
 
+/** Query key carrying the OCC private-mode opt-in, on the parent and embed URL. */
+export const PRIVATE_MODE_PARAM = "private";
+
+/**
+ * Read the private-mode opt-in off a parent URL query string.
+ *
+ * Same shape as `readInviteToken` (live `window.location.search`, never a value
+ * baked into the exported HTML), but its own key: the invite reader is bound to
+ * `token` and a second name for one secret is the reason that helper exists.
+ *
+ * ON-only by construction — exactly `"1"` turns it on. Absent, empty or any
+ * other value is off, so the flag can only ever be added to the embed URL,
+ * never used to switch a tenant's retention back on from the address bar.
+ */
+export function readPrivateMode(search: string | undefined): boolean {
+  if (!search) return false;
+  return new URLSearchParams(search).get(PRIVATE_MODE_PARAM) === "1";
+}
+
 function embedSrc(
   origin: string,
   embedHost: string,
   theme: EmbedShellTheme,
   inviteToken?: string,
+  privateMode = false,
 ): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(`${base}/embed`);
@@ -266,6 +286,10 @@ function embedSrc(
   // Invite key for a gated tenant (DIG-1210). Omitted entirely when absent so a
   // tokenless embed URL is byte-identical to the pre-invite one.
   if (inviteToken) url.searchParams.set("token", inviteToken);
+  // OCC private mode (display-side substitution for demos). Set only when the parent said
+  // exactly `private=1`; omitted otherwise, so the flag is ON-only and an
+  // ordinary embed URL keeps the params it had.
+  if (privateMode) url.searchParams.set(PRIVATE_MODE_PARAM, "1");
   const copy = EMBED_SHELL_COPY[embedHost];
   if (copy) {
     url.searchParams.set("welcome", copy.welcome);
@@ -397,6 +421,11 @@ export function ChatEmbedShell({
       // than during render: the SSR pass cannot see the query, and the exported
       // HTML must not carry one visitor's key to the next.
       const token = acceptsInviteToken ? readInviteToken(window.location.search) : undefined;
+      // Private mode is a capability any embed can opt into, not a property of
+      // the invite gate: any tenant link can carry `?private=1`, and the flag is
+      // inert unless digichat is built to honour it. `acceptsInviteToken` is
+      // deliberately not consulted — a tokenless tenant gets the flag too.
+      const privateMode = readPrivateMode(window.location.search);
       // The key has been read and now lives only in this effect's local state
       // for the session, so it has no further reason to sit in the address bar
       // (DIG-1437). Never a store, a cookie or sessionStorage.
@@ -411,8 +440,12 @@ export function ChatEmbedShell({
       // extra src swap on hydration even when the theme already agrees. Any
       // other visitor's src is left alone: no token means no rebuild.
       const missingToken = Boolean(token) && !current.includes("token=");
-      if (!current.includes(`theme=${theme}`) || missingToken) {
-        setSrc(embedSrc(embedOrigin, embedHost, theme, token));
+      // Same one-swap rule as the key: the exported first paint cannot carry a
+      // per-visitor flag, so an opt-in link needs the rebuild even when the
+      // theme already agrees. Any other visitor's src is left alone.
+      const missingPrivate = privateMode && !current.includes(`${PRIVATE_MODE_PARAM}=`);
+      if (!current.includes(`theme=${theme}`) || missingToken || missingPrivate) {
+        setSrc(embedSrc(embedOrigin, embedHost, theme, token, privateMode));
       }
     });
 

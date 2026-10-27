@@ -59,3 +59,10 @@ BFF_SESSION_GRANTABLE_SCOPES: list[str] = [
     "mcp:digisearch",
     "mcp:digivault",
 ]
+
+#: Scope the MCP edge requires for a digivault *write* tool (`create_note`;
+#: ``MCP_EDGE_WRITE_SCOPES`` in ``apps/digithings-stack-cloudflare``). It is
+#: deliberately **not** in :data:`BFF_SESSION_GRANTABLE_SCOPES`: ``mcp:digivault``
+#: is read-only, so a BFF session can never mint a write-capable edge token.
+#: Only an admin-issued API key that already carries it can write (DIG-5723).
+MCP_DIGIVAULT_WRITE_SCOPE = "mcp:digivault:write"

@@ -9,6 +9,9 @@
  * mode (baseline) arrives in a later step.
  */
 
+import { useSyncExternalStore } from "react";
+import { isPrivateMode, subscribePrivateMode } from "@/lib/product-slash-commands";
+
 import type {
   ComponentProps,
   CSSProperties,
@@ -184,6 +187,14 @@ export function DigiChatHost({
   composerLayout,
 }: DigiChatHostProps) {
   const wakePhase = useDigichatWarmupPhase();
+  // The session flag lives in the slash-command store: the embed seeds it from
+  // `?private=1` and `/private` flips it. It has to arrive as a prop so the
+  // work surfaces unmount, rather than as a CSS hide over mounted content.
+  const privateMode = useSyncExternalStore(
+    subscribePrivateMode,
+    isPrivateMode,
+    () => false,
+  );
   return (
     <AssistantRuntimeProvider runtime={runtime} config={auiConfig}>
       <RuntimeAdapterProvider
@@ -271,7 +282,7 @@ export function DigiChatHost({
                     <ThreadSkinView
                       skin={clientConfig.chrome.skin}
                       composerLayout={composerLayout}
-                      digichat={DIGICHAT_SKIN_OPTIONS}
+                      digichat={{ ...DIGICHAT_SKIN_OPTIONS, privateMode }}
                     />
                   </SkinRuntimeProvider>
                 </div>

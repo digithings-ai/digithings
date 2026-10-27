@@ -111,33 +111,11 @@ max_instances = 1
 # Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.
 instance_type = "standard-1"
 
-# Dedicated digiquant-mcp market-data container (#3780, Task 8). Separate image
-# with the [research]+[mcp] extras serving FastMCP streamable-http on :8767 —
-# never the backtest engine, never part of the Profile A image above.
-# Single replica by design (max_instances = 1 + one pinned Durable Object id
-# MCP_CONTAINER_ID in src/ports.ts): the MCP read path assumes a single replica
-# (in-memory 900s TTL keyed by as_of + manifest version).
-# Cold-start policy: sleepAfter = "3m" on the class in src/index.ts. A cold
-# start pays only the FastMCP import, never a data load (R2 is the cache); the
-# daily market-data-refresh cron keeps R2 fresh and never touches the container.
-# Once the custom-domain route is enabled it can be pinged manually:
-#   curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'
-# Egress verified 2026-09-10: query1.finance.yahoo.com reachable (HTTP 429 =
-# Yahoo rate-limit, i.e. egress works; same retry/backoff as the cron applies),
-# api.stlouisfed.org reachable (HTTP 301 to the API docs).
-[[containers]]
-class_name = "DigiQuantMcpContainer"
-# Build context MUST be the monorepo root. Wrangler's default is the
-# Dockerfile's directory (digiquant/), where `COPY digibase/...`,
-# `COPY digikey/...`, `COPY digiquant/...` fail with "failed to calculate
-# checksum ... not found" (CI run 34863926273, #4046). Resolved relative to
-# this config file: ../.. is the repo root.
-image = "../../digiquant/Dockerfile.mcp"
-image_build_context = "../.."
-max_instances = 1
-# FastMCP read path over R2; standard-1 (4 GiB) for cost. p50/p99 budget was set
-# on standard-2 — re-check latency after deploy.
-instance_type = "standard-1"
+# The dedicated digiquant-mcp container (#3780 Task 8) is GONE from this Worker
+# (DIG-5558): the market-data read path is Worker-native in the
+# DigiQuantMcpAgent Durable Object (src/digiquant-mcp.ts, DIGIQUANT_MCP), so no
+# process, image or Container declaration is left for it. v6 deletes the
+# Durable Object class below.
 
 # The folded DigiChatContainer is GONE from this Worker (Chris, 2026-10-19):
 # the digichat product (and OCC, one of its tenants) runs only in
@@ -154,10 +132,6 @@ instance_type = "standard-1"
 name = "STACK"
 class_name = "DigiStackContainer"
 
-[[durable_objects.bindings]]
-name = "MCP_STACK"
-class_name = "DigiQuantMcpContainer"
-
 # v3 (DigiChatContainer) is left in the migration history deliberately: the DO
 # namespace it created is unbound now, and rewriting an applied migration tag
 # is not a supported operation.
@@ -166,8 +140,8 @@ class_name = "DigiQuantMcpContainer"
 # Worker itself (src/digiquant-mcp.ts) inside this Durable Object: one pinned id
 # (MCP_CONTAINER_ID) owns the 900s fresh-window cache, reads the MARKET_DATA
 # bucket with hyparquet, and serves `POST /mcp` (stateless Streamable HTTP).
-# MCP_STACK above is legacy: nothing routes to it any more; its removal ships
-# with the container sweep (see the issue's follow-up).
+# It replaced the legacy container entirely (DIG-5558): nothing routes to a
+# `MCP_STACK` binding any more, and that binding is gone.
 [[durable_objects.bindings]]
 name = "DIGIQUANT_MCP"
 class_name = "DigiQuantMcpAgent"
@@ -197,6 +171,15 @@ deleted_classes = ["DigiChatContainer"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["DigiQuantMcpAgent"]
+
+# Legacy digiquant-mcp container removal (DIG-5558). v2 created the class and the
+# live Worker still holds Durable Object instances of it, so the script must
+# delete the class explicitly: Cloudflare refuses a script that stops exporting
+# a class instances exist for (error 10064), exactly as v4 did for
+# DigiChatContainer. Tags are append-only — never edit v1..v5.
+[[migrations]]
+tag = "v6"
+deleted_classes = ["DigiQuantMcpContainer"]
 
 # Secrets (wrangler secret put) — never commit values:
 #   DIGIKEY_BFF_TOKEN

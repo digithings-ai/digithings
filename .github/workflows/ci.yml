@@ -164,6 +164,7 @@ jobs:
               - 'apps/dashboard-api/**'
               - 'apps/digidata-api/**'
               - 'apps/corpus-index/**'
+              - 'apps/digitrace-ingest/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -272,6 +273,8 @@ jobs:
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/twelvex-runner/**'
+              - 'apps/digitrace-ingest/**'
+              - 'apps/corpus-index/**'
               - 'apps/**/wrangler.toml'
               - 'package.json'
               - 'package-lock.json'
@@ -760,6 +763,12 @@ jobs:
           - digidata-api
           - digiquant-runner
           - digitrace-langfuse
+          - digitrace-ingest
+          # corpus-index ships a wrangler.toml and pins wrangler, so
+          # tests/scripts/test_worker_build_matrix.py derives it as a Worker the
+          # gate must build. It was missing here, which left it with no PR-time
+          # build at all.
+          - corpus-index
           - digichat-cloudflare
           - digithings-stack-cloudflare
           - twelvex-runner

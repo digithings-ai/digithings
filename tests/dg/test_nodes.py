@@ -248,6 +248,7 @@ class TestResearchNode:
             execute_tool,
             max_tool_rounds: int,
             on_tool_step,
+            max_tool_calls: int | None = None,
             tool_choice: str = "auto",
             reasoning_effort: str | None = None,
         ) -> str:

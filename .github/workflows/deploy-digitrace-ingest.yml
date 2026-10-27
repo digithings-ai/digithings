@@ -1,0 +1,73 @@
+# Deploys the digitrace OTLP/HTTP ingest Worker (DIG-2657, ADR-0036).
+#
+# One Worker, two entry points: `fetch` is POST /v1/traces, `queue` is the
+# consumer that writes R2, the Supabase index and Analytics Engine. It is not
+# tracked by release-please; this workflow is its release.
+#
+# Push to main (path-filtered) or workflow_dispatch. develop is not a deploy
+# path: a change there is validated by the CI `web` lane (test-web.yml, which
+# runs this workspace's Vitest + typecheck) and by the `worker-build` dry run, and
+# reaches production only when develop is promoted into main.
+#
+# environment: production — a deploy is a human gate. The first deploy also needs
+# the day-one resources and the route, which are human steps: the R2 bucket, the
+# Queue and its dead-letter queue, the KV namespace, the Analytics Engine
+# dataset, the service-role secret, the DNS record and the custom domain.
+name: "Deploy: digitrace-ingest"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/digitrace-ingest/**"
+      - ".github/workflows/deploy-digitrace-ingest.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Per-run group, same reasoning as the sibling deploy lanes: a shared group
+  # with cancel-in-progress: false queues every later deploy behind an approval
+  # wait (#2541). An in-flight dispatch is not cancelled either.
+  group: deploy-digitrace-ingest-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install package dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test + typecheck
+        run: |
+          npm run test --workspace digitrace-ingest
+          npm run typecheck --workspace digitrace-ingest
+
+      # The dry run is the same gate the PR pays, repeated against the deploy
+      # tree: it is the only step that proves the Worker bundles before wrangler
+      # talks to the API.
+      - name: Build (dry run)
+        run: npm exec -- wrangler deploy --dry-run --outdir "$RUNNER_TEMP/wrangler-dry-run"
+        working-directory: apps/digitrace-ingest
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/digitrace-ingest
+          command: deploy
+          secrets: |
+            CORE_SUPABASE_SERVICE_KEY
+        env:
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}

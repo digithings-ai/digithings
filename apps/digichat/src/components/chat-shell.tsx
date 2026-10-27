@@ -20,7 +20,15 @@ import "@/styles/chat-shell-cli.css";
  *   - BYOK / streaming / transport live in ChatPanel; transcript chrome is ProductStockShell
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { isPrivateMode, subscribePrivateMode } from "@/lib/product-slash-commands";
 import type { UIMessage } from "ai";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -92,6 +100,14 @@ export function ChatShell({
   displayName?: string | null;
   clientConfig?: DigichatClientConfig;
 }) {
+  // Private mode is a session flag, not server state: this is the same store
+  // the embed seeds from `?private=1` and `/private` flips, so the sidebar title
+  // follows the mode without a second copy of the flag.
+  const privateMode = useSyncExternalStore(
+    subscribePrivateMode,
+    isPrivateMode,
+    () => false,
+  );
   const [threads, setThreads] = useState<ChatThreadState[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [serverPersistence, setServerPersistence] = useState(false);
@@ -676,6 +692,7 @@ export function ChatShell({
               byokMode={byokMode}
               onByokModeChange={setByokMode}
               clientConfig={clientConfig}
+              privateMode={privateMode}
             />
           )}
         </main>

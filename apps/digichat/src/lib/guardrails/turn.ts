@@ -23,7 +23,6 @@ import {
   stricterAction,
   tokensInWindow,
   TOOL_CAP_INSTRUCTION,
-  toolCallLimitNotice,
   waitForRoomMs,
   WRAP_UP_INSTRUCTION,
   type BudgetAction,
@@ -86,8 +85,6 @@ export type TurnGuard = {
   recordUsage(usage: UsageReport): void;
   release(): void;
   capToolPayload(value: unknown): unknown;
-  /** Status notice only. Does not reserve or settle the token window. */
-  noteToolCap(writer: StreamWriter, toolCallsSoFar: number): void;
 };
 
 const PROCEED: RoundClearance = { action: "proceed" };
@@ -103,7 +100,6 @@ export function inactiveTurnGuard(): TurnGuard {
     capToolPayload(value) {
       return value;
     },
-    noteToolCap() {},
   };
 }
 
@@ -147,7 +143,6 @@ export function createTurnGuard(opts: {
     });
   }
   let reservation: { id: string; tokens: number } | null = null;
-  let toolNoticeSent = false;
   let pendingSummary = opts.summarize;
 
   const pendingOf = (text?: string, tokens?: number) =>
@@ -253,17 +248,8 @@ export function createTurnGuard(opts: {
       const overTools =
         resolved.maxToolCallsPerTurn != null && toolCallsSoFar >= resolved.maxToolCallsPerTurn;
       if (overTools) {
-        if (!toolNoticeSent) {
-          writer.write({
-            type: "data-notice",
-            id: "tool-call-limit",
-            data: {
-              tone: "status",
-              message: toolCallLimitNotice(resolved.maxToolCallsPerTurn!),
-            },
-          });
-          toolNoticeSent = true;
-        }
+        // Silent: the cap is enforced upstream (digigraph → digillm counts
+        // executed calls). The instruction is for the model, never the user.
         reserve(pending);
         return { action: "stop-tools", instruction: TOOL_CAP_INSTRUCTION };
       }
@@ -283,19 +269,6 @@ export function createTurnGuard(opts: {
     release() {
       if (!reservation) return;
       settle(reservation.tokens, now());
-    },
-    noteToolCap(writer, toolCallsSoFar) {
-      if (resolved?.maxToolCallsPerTurn == null) return;
-      if (toolCallsSoFar < resolved.maxToolCallsPerTurn || toolNoticeSent) return;
-      writer.write({
-        type: "data-notice",
-        id: "tool-call-limit",
-        data: {
-          tone: "status",
-          message: toolCallLimitNotice(resolved.maxToolCallsPerTurn),
-        },
-      });
-      toolNoticeSent = true;
     },
     capToolPayload(value) {
       if (scopes.length === 0) return value;

@@ -172,6 +172,7 @@ RULES: list[tuple[str, str, str]] = [
     ("apps/digithings-stack-cloudflare/", "R5", "stack Worker + container"),
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
     ("apps/digitrace-langfuse/", "R5", "langfuse"),
+    ("apps/digitrace-ingest/", "R5", "telemetry ingest Worker (platform)"),
     ("apps/digithings-cron/", "R5", "cron"),
     ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
     ("infra/digichat-release/", "R5", "release infra"),
@@ -251,6 +252,7 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/.dockerignore", "R0", "digiquant package config (open)"),
     ("digiquant/AGENTS.md", "R0", "digiquant docs (open)"),
     ("digiquant/ARCHITECTURE.md", "R0", "digiquant docs (open)"),
+    ("digiquant/conftest.py", "R0", "digiquant test config (open)"),
     ("digiquant/Dockerfile", "R0", "digiquant engine image (open)"),
     ("digiquant/Dockerfile.mcp", "R0", "digiquant engine image (open)"),
     ("digiquant/Dockerfile.sandbox", "R0", "digiquant engine image (open)"),
@@ -262,6 +264,12 @@ RULES: list[tuple[str, str, str]] = [
     # with extraction on 294 paths. Each entry mirrors scripts/repo-split/move-lists/rN.paths.
     ("apps/digichat/src/lib/embed-suggestion-pools.test.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("apps/digichat/src/lib/embed-suggestion-pools.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    # One-config slice 1 (#6500): a tenant's complete deployment document and
+    # the equivalence test that pins its live KV row carry client data, so they
+    # move with the client corpus instead of into public R0. Same destination as
+    # the client test above and the OCC example under apps/digichat/config/.
+    ("apps/digichat/config/occ.yaml", "R6", "client tenant deployment document (one-config slice 1)"),
+    ("apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts", "R6", "pins the live tenant row (one-config slice 1)"),
     ("config/byok-providers.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("config/digiquant-model-prices.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("config/digiquant_models.yaml", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
