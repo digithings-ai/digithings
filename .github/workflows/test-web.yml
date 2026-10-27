@@ -266,3 +266,14 @@ jobs:
 
       - name: Test corpus-index
         run: npm run test --workspace corpus-index
+
+      # digitrace-ingest (DIG-2657, ADR-0036) is the OTLP/HTTP ingest Worker: the
+      # receiver, the protobuf decoder, the queue retry policy and the index rows.
+      # Its suite is the only place any of that is tested, and its tsc program
+      # pins `@cloudflare/workers-types`, so both run here rather than in a lane
+      # of their own.
+      - name: Typecheck digitrace-ingest
+        run: npm run typecheck --workspace digitrace-ingest
+
+      - name: Test digitrace-ingest
+        run: npm run test --workspace digitrace-ingest
