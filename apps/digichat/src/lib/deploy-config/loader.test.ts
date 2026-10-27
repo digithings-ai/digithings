@@ -1318,3 +1318,95 @@ describe("getDigichatConfig memo", () => {
     }
   });
 });
+
+describe("YAML token tenants default to auth: session (DIG-3585)", () => {
+  function hostRow(lines: string[], host = "tenant.example"): string {
+    return [
+      "version: 1",
+      "hosts:",
+      `  ${host}:`,
+      "    slug: tenant",
+      "    backend:",
+      "      type: digigraph",
+      ...lines,
+      "",
+    ].join("\n");
+  }
+
+  it("defaults a hosts row with an inline token to session", () => {
+    const cfg = loadDigichatConfig({ fileContents: hostRow(["    token: fixture-token"]), env: {} });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("session");
+  });
+
+  it("defaults a hosts row with a tokenEnv to session, even before the env is set", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow(["    tokenEnv: TENANT_FIXTURE_TOKEN"]),
+      env: {},
+    });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("session");
+  });
+
+  it("keeps an explicit auth on a token row (the house row stays anonymous)", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow(["    auth: anonymous", "    tokenEnv: HOUSE_FIXTURE_TOKEN"], "digithings.ai"),
+      env: {},
+    });
+    expect(cfg.hosts?.["digithings.ai"]?.auth).toBe("anonymous");
+  });
+
+  it("leaves a row without a token on the schema default", () => {
+    const cfg = loadDigichatConfig({ fileContents: hostRow([]), env: {} });
+    expect(cfg.hosts?.["tenant.example"]?.auth).toBe("anonymous");
+  });
+
+  it("does not touch the top-level deployment", () => {
+    const cfg = loadDigichatConfig({
+      fileContents: [
+        "version: 1",
+        "deployment:",
+        "  slug: root",
+        "  token: fixture-token",
+        "  backend:",
+        "    type: digigraph",
+        "",
+      ].join("\n"),
+      env: {},
+    });
+    expect(cfg.deployment?.auth).toBe("anonymous");
+  });
+
+  it("makes a YAML row session when the registry gives that non-first-party host a token", () => {
+    const host = "occ.digithings.ai";
+    const cfg = loadDigichatConfig({
+      fileContents: hostRow([], host),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          [host]: { slug: "tenant", token: "fixture-token", gateMode: "ungated", backend: { type: "digigraph" } },
+        }),
+      },
+    });
+    expect(cfg.hosts?.[host]?.auth).toBe("session");
+  });
+
+  it("keeps the house YAML row's own auth when the registry gives it a token", () => {
+    const cfg = loadDigichatConfig({
+      // The house product defaults add a cost budget, which needs a price cap.
+      fileContents: hostRow(
+        ["    auth: anonymous", "    models:", "      priceCapUsdPerMillion: 2"],
+        "www.digithings.ai",
+      ),
+      env: {
+        DIGICHAT_EMBED_TENANTS: JSON.stringify({
+          "www.digithings.ai": { slug: "tenant", token: "fixture-token", gateMode: "ungated", backend: { type: "digigraph" } },
+        }),
+      },
+    });
+    expect(cfg.hosts?.["www.digithings.ai"]?.auth).toBe("anonymous");
+  });
+
+  it("loads the shipped OCC config as a session tenant", () => {
+    const yaml = readFileSync(resolve(__dirname, "../../../config/occ.yaml"), "utf8");
+    const cfg = loadDigichatConfig({ fileContents: yaml, env: {} });
+    expect(cfg.hosts?.["occ.digithings.ai"]?.auth).toBe("session");
+  });
+});

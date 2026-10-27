@@ -582,6 +582,16 @@ function mergeEmbedTenantsOverlay(
       continue;
     }
     hosts[existingKey] = mergeEmbedTenantIntoDeployment(hosts[existingKey], cfg);
+    // A YAML row for a non-first-party host that the registry gives a token is
+    // a token tenant: it is never anonymous, whatever the YAML row defaulted
+    // to (DIG-3585). A first-party house row keeps the YAML's own `auth`.
+    if (
+      cfg.token?.trim() &&
+      !FIRST_PARTY_EMBED_HOSTS.has(normalized) &&
+      hosts[existingKey].auth === "anonymous"
+    ) {
+      hosts[existingKey] = { ...hosts[existingKey], auth: "session" };
+    }
     if (cfg.requiredPlanTier && !hosts[existingKey].gate.requiredPlanTier) {
       hosts[existingKey] = {
         ...hosts[existingKey],

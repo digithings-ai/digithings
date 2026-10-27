@@ -1375,13 +1375,49 @@ function applyCatalogConfig(
   return { ...config, deployment, hosts };
 }
 
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function hasTokenRef(row: Record<string, unknown>): boolean {
+  const filled = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  return filled(row.token) || filled(row.tokenEnv);
+}
+
+/**
+ * A `hosts` row that carries a `token` or `tokenEnv` and does not say `auth`
+ * is a token tenant, so it defaults to `auth: session`, the same default a
+ * registry tenant with a token gets (`embedTenantToDeployment`). Without this
+ * the schema default (`anonymous`) applied, and only the first-party check in
+ * `resolveAnonymousDeploymentChat` stood between such a row and a tokenless
+ * chat turn (DIG-3585). An explicit `auth:` always wins, so the house row's
+ * `auth: anonymous` is unchanged. The top-level `deployment` is not touched:
+ * its token is for third-party embeds of the root chat.
+ *
+ * Input-only: a row is copied, never mutated in place.
+ */
+export function defaultTokenTenantAuth(input: unknown): unknown {
+  if (!isPlainRecord(input) || !isPlainRecord(input.hosts)) return input;
+  let changed = false;
+  const hosts: Record<string, unknown> = {};
+  for (const [host, row] of Object.entries(input.hosts)) {
+    if (isPlainRecord(row) && !Object.prototype.hasOwnProperty.call(row, "auth") && hasTokenRef(row)) {
+      hosts[host] = { ...row, auth: "session" };
+      changed = true;
+    } else {
+      hosts[host] = row;
+    }
+  }
+  return changed ? { ...input, hosts } : input;
+}
+
 /** Parse + validate unknown JSON/YAML object. Throws on failure (fail closed). */
 export function parseDigichatConfig(
   input: unknown,
   ctx = "digichat config",
   opts?: { openRouterConfigured?: boolean },
 ): DigichatConfig {
-  const result = DigichatConfigSchema.safeParse(input);
+  const result = DigichatConfigSchema.safeParse(defaultTokenTenantAuth(input));
   if (!result.success) {
     const detail = result.error.issues
       .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
