@@ -27,7 +27,7 @@ issue cannot be woken, and the watchdog retries it every tick and is refused eve
 | Terminal-run recovery is not a disposition | `server/src/services/execution-recovery-resolution.ts` sets `status: "blocked", executionRunId: null, checkoutRunId: null` and never sets `unblockDescriptor`. Measured live on 26 Oct between 08:36 and 08:38: DIG-4990 (`legacy_execution_requires_reconciliation`, run `dd9a92cb`), DIG-5585 (same cause, run `5d06e12f`, blocked 15 minutes after the Code Reviewer approved its PR), DIG-2915 (blocked after its owner opened human-only card `e13ec82c`). Root-cause tickets: DIG-4865 (recovery re-blocks a finished state), DIG-1648 (board-owned recovery actions resolve by no path). |
 | A routine execution issue is not a work item | Six of the fourteen naked issues on 26 Oct were dead routine ticks from 21-23 Oct, each superseded by a later tick (DIG-5367, 5370, 5376, 4827, 4832, 5382). Cancelling them with a reason removed them from the class permanently. |
 | An alert ticket whose subject is finished is finished | DIG-5475 alerted on DIG-5463; DIG-5463 was `done` on 24 Oct and no repeat arrived, yet the alert stayed `blocked` for two more days. |
-| A board-owned recovery action cannot be fixed by a seat | DIG-5131 and DIG-5235 carry an active `stranded_assigned_issue` action with `ownerAgentId: null`. Every seat PATCH answers 403 "Agent cannot resolve another owner's recovery action"; `unblockDescriptor` is refused the same way, and an agent may only name itself as a descriptor owner. The manager holding checkout override must clear it (DIG-1648). |
+| A board-owned recovery action cannot be fixed by a seat | DIG-5131 and DIG-5235 carried an active `stranded_assigned_issue` action with `ownerAgentId: null` until the CTO's writes on 26 Oct gave each an open blocker edge and a descriptor, which left the action stale and the server cancelled it (DIG-5235 at 18:03Z, DIG-5131 at 18:12Z). Every seat PATCH answers 403 "Agent cannot resolve another owner's recovery action"; `unblockDescriptor` is refused the same way, and an agent may only name itself as a descriptor owner. The manager holding checkout override must clear it (DIG-1648). |
 
 ## Why the count is the metric
 
@@ -99,6 +99,9 @@ row is downsampled. The repair for a naked issue is still a disposition, not a q
 
 At most 10 issues blocked with no blocker edge and no disposition, and under 500 wake
 refusal rows a week (DIG-5595). On 26 Oct 2026 the company read 125 blocked and 5 with no
-live disposition at 12:16 UTC, and 127 blocked and 2 at 18:22 UTC; both remaining were
-LOCKED on board-owned recovery actions (`DIG-5131`, `DIG-5235`). The row half is not yet
-measured: the cadence change is committed but not deployed, as the section above records.
+live disposition at 12:16 UTC, and 126 blocked and none at 18:17 UTC. The last two members
+left the class when the CTO, in one write per issue, gave each an open blocker edge to
+`DIG-5458` and a CTO-owned descriptor: `DIG-5235` at 18:03 UTC and `DIG-5131` at 18:12 UTC.
+Each board-owned recovery action was then cancelled as stale when the issue gained a
+first-class blocker (18:03:26Z and 18:12:03Z). The row half is not yet measured: the cadence
+change is committed but not deployed, as the section above records.
