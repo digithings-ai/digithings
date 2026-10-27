@@ -7,9 +7,15 @@
 #
 #   uninvited  -> the site's ordinary 404, with no chat shell in the body
 #   invited    -> 200, the chat itself, and no iframe (the Pages shell is gone)
+#   API        -> with ONLY the cookie (Path=/chat) and the OCC page as
+#                 Referer, /chat/api/embed/tenant-config answers the occ
+#                 tenant and one real chat turn streams; without the cookie,
+#                 or with it from a house page, tenant-config is never occ
 #
 # The invited half runs only when OCC_INVITE_KEY is set. The key is read from
 # the environment; it is never printed, and it never appears in this file.
+# The API half sends ONE real turn (one model call); set OCC_SMOKE_SKIP_TURN=1
+# to check the tenant binding without it.
 #
 #   scripts/smoke_occ_invite_gate.sh
 #   scripts/smoke_occ_invite_gate.sh https://digithings.ai
@@ -86,3 +92,95 @@ if grep -qiE '<iframe' "$final"; then
   exit 1
 fi
 echo "ok $URL invited 302 -> cookie -> 200, chat served directly (no iframe)"
+
+# --- The page's API calls (DIG-3585 G1) -------------------------------------
+# The browser on /chat/occ holds the invite only as the cookie; the edge binds
+# its /chat/api/* calls to OCC from the cookie AND the OCC page Referer. Each
+# call below sends what that browser sends: the jar's cookie, never a token.
+ORIGIN="${BASE%/}"
+OCC_PAGE="${ORIGIN}/chat/occ"
+CFG_URL="${ORIGIN}/chat/api/embed/tenant-config"
+TURN_URL="${ORIGIN}/chat/api/chat"
+cfg=$(mktemp)
+turn=$(mktemp)
+trap 'rm -f "$body" "$invited" "$invited.headers" "$jar" "$final" "$cfg" "$turn"' EXIT
+
+if ! grep -q 'occ_invite' "$jar"; then
+  echo "api check failed: the cookie jar lost occ_invite" >&2
+  exit 1
+fi
+# Path=/chat, not /chat/occ: otherwise the browser never sends it to /chat/api/*.
+if ! awk '$0 ~ /occ_invite/ && $3 == "/chat" { found = 1 } END { exit !found }' "$jar"; then
+  echo "api check failed: occ_invite is not scoped to Path=/chat" >&2
+  exit 1
+fi
+
+tenant_slug() {
+  # The slug field of the client-safe tenant config, or nothing.
+  sed -n 's/.*"slug"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
+
+code=$(curl -sS -o "$cfg" -w '%{http_code}' --max-time 30 -b "$jar" \
+  -H "referer: ${OCC_PAGE}" -H "origin: ${ORIGIN}" "$CFG_URL")
+slug=$(tenant_slug "$cfg")
+if [ "$code" != "200" ] || [ "$slug" != "occ" ]; then
+  echo "api check failed: cookie-only tenant-config from the OCC page gave $code slug '${slug}', expected occ" >&2
+  exit 1
+fi
+echo "ok tenant-config with only the cookie -> occ"
+
+code=$(curl -sS -o "$cfg" -w '%{http_code}' --max-time 30 \
+  -H "referer: ${OCC_PAGE}" -H "origin: ${ORIGIN}" "$CFG_URL")
+slug=$(tenant_slug "$cfg")
+if [ "$slug" = "occ" ]; then
+  echo "api check failed: tenant-config WITHOUT the cookie resolved occ" >&2
+  exit 1
+fi
+echo "ok tenant-config without the cookie -> ${slug:-none} ($code), not occ"
+
+code=$(curl -sS -o "$cfg" -w '%{http_code}' --max-time 30 -b "$jar" \
+  -H "referer: ${ORIGIN}/chat" -H "origin: ${ORIGIN}" "$CFG_URL")
+slug=$(tenant_slug "$cfg")
+if [ "$slug" = "occ" ]; then
+  echo "api check failed: a house page with the cookie resolved occ" >&2
+  exit 1
+fi
+echo "ok tenant-config from a house page with the cookie -> ${slug:-none} ($code), not occ"
+
+if [ "${OCC_SMOKE_SKIP_TURN:-}" = "1" ]; then
+  echo "skip the real turn: OCC_SMOKE_SKIP_TURN=1"
+  exit 0
+fi
+
+msg='{"messages":[{"id":"smoke-1","role":"user","parts":[{"type":"text","text":"Reply with the single word: ok"}]}]}'
+
+# The same turn WITHOUT the cookie is refused before any model call, so the
+# 200 below can only be the occ tenant's admission (the app emits no tenant
+# marker in the stream; tenant-config above is the tenant assertion).
+code=$(curl -sS -o "$turn" -w '%{http_code}' --max-time 30 \
+  -H "referer: ${OCC_PAGE}" -H "origin: ${ORIGIN}" \
+  -H 'content-type: application/json' --data "$msg" "$TURN_URL")
+if [ "$code" = "200" ]; then
+  echo "api check failed: a turn from the OCC page WITHOUT the cookie was admitted" >&2
+  exit 1
+fi
+echo "ok a turn from the OCC page without the cookie is refused ($code)"
+
+# One real turn, the request the page itself makes. It must be admitted and
+# stream an answer: an unbound call is refused (401) on the OCC page.
+code=$(curl -sS -N -o "$turn" -w '%{http_code}' --max-time 120 -b "$jar" \
+  -H "referer: ${OCC_PAGE}" -H "origin: ${ORIGIN}" \
+  -H 'content-type: application/json' --data "$msg" "$TURN_URL")
+if [ "$code" != "200" ]; then
+  echo "api check failed: the cookie-only turn from the OCC page got $code" >&2
+  head -c 300 "$turn" >&2 || true
+  echo >&2
+  exit 1
+fi
+if [ ! -s "$turn" ] || grep -q '"type":"error"' "$turn"; then
+  echo "api check failed: the turn returned 200 but streamed no answer or an error" >&2
+  head -c 300 "$turn" >&2 || true
+  echo >&2
+  exit 1
+fi
+echo "ok one real turn with only the cookie streamed an answer as the occ tenant"
