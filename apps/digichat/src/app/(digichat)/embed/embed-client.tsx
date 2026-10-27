@@ -86,8 +86,7 @@ import {
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 import {
   isPrivateMode,
-  setPrivateMode,
-  setPrivateModeAvailable,
+  seedPrivateMode,
   subscribePrivateMode,
 } from "@/lib/product-slash-commands";
 
@@ -626,13 +625,13 @@ function EmbedChat({
   const getPrivateMode = useCallback(() => privateModeRef.current, []);
   // Availability first, then the seed, so the two can never disagree: a tenant
   // that did not opt in leaves `?private=1` inert, and a tenant that stops
-  // opting in drops the session flag through setPrivateModeAvailable(false).
+  // opting in drops the session flag. The URL only turns the mode on.
   useEffect(() => {
-    setPrivateModeAvailable(tenantCfg.privateMode === true);
-  }, [tenantCfg.privateMode]);
-  useEffect(() => {
-    if (uiParams.privateMode && tenantCfg.privateMode === true) setPrivateMode(true);
-  }, [uiParams.privateMode, tenantCfg.privateMode]);
+    seedPrivateMode({
+      tenantOptIn: tenantCfg.privateMode === true,
+      urlPrivate: uiParams.privateMode === true,
+    });
+  }, [tenantCfg.privateMode, uiParams.privateMode]);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in

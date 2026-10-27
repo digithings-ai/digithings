@@ -211,10 +211,10 @@ describe("slashHelpText", () => {
     expect(help).not.toContain("/digisearch —");
     expect(help).not.toContain("/digivault —");
     expect(help).not.toContain("/websearch —");
-    expect(help).toContain("/provider — API provider");
-    expect(help).toContain("/settings — Settings");
-    expect(help).toContain("/mcp — MCP JSON / auth / new");
-    expect(help).toContain("/tools — Connected tools");
+    expect(help).toContain("/provider — Use your own model provider.");
+    expect(help).toContain("/settings — Open every setting.");
+    expect(help).toContain("/mcp — Connect and edit MCP servers.");
+    expect(help).toContain("/tools — Turn connected tools on or off.");
     expect(help).not.toContain("digivault_get_note");
     expect(help).not.toContain("/search —");
     expect(help).not.toContain("/docs —");
@@ -282,7 +282,7 @@ describe("SLASH_COMMANDS", () => {
   it("lists /provider as the public BYOK name, with /byok and /key as aliases", () => {
     expect(SLASH_COMMANDS.find((c) => c.id === "byok")).toMatchObject({
       names: ["/provider", "/byok", "/key"],
-      hint: "API provider",
+      hint: "Use your own model provider.",
     });
   });
 });

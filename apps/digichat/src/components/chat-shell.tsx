@@ -30,7 +30,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { isPrivateMode, subscribePrivateMode } from "@/lib/product-slash-commands";
+import {
+  isPrivateMode,
+  seedPrivateMode,
+  subscribePrivateMode,
+} from "@/lib/product-slash-commands";
 import type { UIMessage } from "ai";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -110,6 +114,17 @@ export function ChatShell({
     isPrivateMode,
     () => false,
   );
+  // Same seed as the stock shell and the embed. Without it, `?private=1` and
+  // `/private` never arm the header this shell's ChatPanel sends.
+  useEffect(() => {
+    const urlPrivate =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("private") === "1";
+    seedPrivateMode({
+      tenantOptIn: clientConfig?.features.privateMode === true,
+      urlPrivate,
+    });
+  }, [clientConfig?.features.privateMode]);
   const [threads, setThreads] = useState<ChatThreadState[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [serverPersistence, setServerPersistence] = useState(false);

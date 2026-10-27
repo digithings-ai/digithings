@@ -162,7 +162,8 @@ describe("/theme", () => {
     });
     const row = buildProductSlashCommands(embed).find((r) => r.id === "theme");
     expect(row).toBeTruthy();
-    expect(row?.description).toBe("default · dark");
+    expect(row?.value).toBe("default · dark");
+    expect(row?.description).toBe("Switch the colour theme.");
 
     executeSlashDef(theme!, "light", embed);
     expect(setTheme).toHaveBeenLastCalledWith("light", "default");

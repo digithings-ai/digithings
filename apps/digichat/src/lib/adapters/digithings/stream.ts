@@ -10,6 +10,7 @@ import {
 } from "@/lib/digigraph";
 import { stripToolDumpFromAnswerDelta } from "@/lib/adapters/digithings/strip-tool-dump";
 import { coreMessagesToDigigraphOpenAi } from "@/lib/digigraph-messages";
+import { separatePrivateInstructionPayload } from "@/lib/private-mode";
 import { type ActivityDetail } from "@/lib/chat-activity";
 import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
 import {
@@ -460,7 +461,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
       // success tail: a part left streaming keeps the thinking animation
       // parked above the final state (foundry wraps the same way).
       try {
-      let outbound = coreMessagesToDigigraphOpenAi(coreMessages);
+      let outbound = separatePrivateInstructionPayload(
+        coreMessagesToDigigraphOpenAi(coreMessages),
+      );
       if (opts.guard?.active) {
         const clearance = await opts.guard.beforeRound({
           writer,

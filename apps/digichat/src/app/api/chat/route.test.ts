@@ -3855,4 +3855,153 @@ describe("POST /api/chat limits", () => {
     expect(vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length).toBe(traceCalls);
     expect(vi.mocked(createFoundryStreamResponse)).not.toHaveBeenCalled();
   });
+
+  describe("private mode", () => {
+    const question = "What about Priya Nair at Initech?";
+    const toolPart = {
+      type: "tool-search",
+      toolCallId: "c1",
+      state: "output-available",
+      input: { q: "ACME-1" },
+      output: { id: "ACME-1", name: "John Smith" },
+    };
+    const body = {
+      messages: [
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ticket ACME-1 is John Smith" }, toolPart],
+        },
+        { id: "u1", role: "user", parts: [{ type: "text", text: question }] },
+      ],
+    };
+
+    function texts(messages: { role: string; parts?: { type: string; text?: string }[] }[]) {
+      return messages.map((message) => ({
+        role: message.role,
+        text: (message.parts ?? [])
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join(""),
+      }));
+    }
+
+    it("keeps the instruction off the typed text on the digigraph trace path and the legacy streamText path", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const traced = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(traced.status).toBe(200);
+      const trace = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: {
+          id?: string;
+          role: string;
+          parts: { type: string; text?: string; output?: unknown }[];
+        }[];
+      };
+      const rows = texts(trace.messages);
+      expect(rows.at(-1)).toEqual({ role: "user", text: question });
+      expect(rows.at(-2)?.text).toContain("PRIVATE DEMO SESSION");
+      expect(rows.at(-2)?.text).not.toContain("Priya Nair");
+      expect(rows.at(-1)?.text).not.toContain("PRIVATE DEMO SESSION");
+      const assistant = trace.messages.find((message) => message.role === "assistant");
+      expect(assistant?.parts.find((part) => part.type === "tool-search")).toEqual(toolPart);
+
+      process.env.DIGICHAT_TRACE_UI = "0";
+      vi.mocked(streamText).mockClear();
+      const legacy = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-digi-private": "1" },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(legacy.status).toBe(200);
+      const legacyCall = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        messages: { role: string; parts?: { type: string; text?: string }[] }[];
+      };
+      const legacyRows = texts(legacyCall.messages);
+      expect(legacyRows.at(-1)).toEqual({ role: "user", text: question });
+      expect(legacyRows.some((row) => row.text.includes("PRIVATE DEMO SESSION"))).toBe(true);
+      expect(legacyRows.filter((row) => row.text.includes(question))).toEqual([
+        { role: "user", text: question },
+      ]);
+    });
+
+    it("does not add the instruction when the private header is absent or not 1", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      for (const header of [undefined, "0", "true"] as const) {
+        vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+        const headers: Record<string, string> = {
+          "content-type": "application/json",
+          "x-digichat-trace": "1",
+        };
+        if (header) headers["x-digi-private"] = header;
+        const res = await POST(
+          new Request("http://localhost/api/chat", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+          }),
+        );
+        expect(res.status).toBe(200);
+        const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+          messages: { parts?: { text?: string }[] }[];
+        };
+        const blob = JSON.stringify(call.messages);
+        expect(blob).not.toContain("PRIVATE DEMO SESSION");
+        expect(blob).toContain(question);
+      }
+    });
+
+    it("passes the separate instruction to Foundry and leaves the tool payload alone", async () => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "foundry-tenant",
+        ownerUserSub: "embed:anonymous",
+        embedConfig: {
+          slug: "foundry-tenant",
+          gateMode: "ungated",
+          theme: "light",
+          attribution: false,
+          token: "tok",
+          backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+          activityDetail: "full",
+        },
+      } as EmbedChatTenantContext);
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://foundry-tenant.digithings.ai",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: {
+          role: string;
+          parts: { type: string; text?: string; output?: unknown }[];
+        }[];
+      };
+      const rows = texts(call.messages);
+      expect(rows.at(-1)).toEqual({ role: "user", text: question });
+      expect(rows.at(-2)?.text).toBe(
+        rows.find((row) => row.text.includes("PRIVATE DEMO SESSION"))?.text,
+      );
+      expect(call.messages.find((message) => message.role === "assistant")?.parts).toContainEqual(
+        toolPart,
+      );
+    });
+  });
 });

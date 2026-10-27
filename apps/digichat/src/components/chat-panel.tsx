@@ -19,6 +19,7 @@ import {
   takePendingForceTool,
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
+import { isPrivateMode, privateModeHeaderEntries } from "@/lib/product-slash-commands";
 import {
   DEFAULT_CLIENT_CONFIG,
   type DigichatClientConfig,
@@ -108,6 +109,11 @@ export function ChatPanel({
             h.set("X-Digi-Force-Tool", forceTool);
           }
           h.set("X-Digi-Run-Id", crypto.randomUUID());
+          // Read at send time. useChat keeps the first transport (#1339), so a
+          // `privateMode` prop closed over here would stay at its mount value
+          // after `/private`.
+          const privateHeader = privateModeHeaderEntries(isPrivateMode());
+          if (privateHeader) h.set(privateHeader[0], privateHeader[1]);
           if (webSearchAllowed) {
             h.set("X-Digi-Enable-Web-Search", "1");
           }

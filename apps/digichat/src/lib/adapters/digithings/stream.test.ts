@@ -1,5 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
+import { PRIVATE_MODE_INSTRUCTION, withPrivateModeUiPrompt } from "@/lib/private-mode";
 import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
@@ -2126,4 +2127,67 @@ it("charges reported usage once when the trace stream finishes", async () => {
     outputTokens: 1,
     totalTokens: 4,
   });
+});
+
+it("sends the private instruction as its own message and leaves the typed question last", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response("", { status: 200 });
+  });
+  const stored = [
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [{ type: "text", text: "ticket ACME-1 is John Smith" }],
+    },
+    {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "What about Priya Nair at Initech?" }],
+    },
+  ] as UIMessage[];
+  const snapshot = structuredClone(stored);
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: withPrivateModeUiPrompt(stored),
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  await new Response(res.body).text();
+
+  expect(stored).toEqual(snapshot);
+  const messages = sent?.messages ?? [];
+  expect(messages.at(-1)).toEqual({
+    role: "user",
+    content: "What about Priya Nair at Initech?",
+  });
+  expect(messages.at(-2)).toEqual({ role: "user", content: PRIVATE_MODE_INSTRUCTION });
+  expect(messages.find((message) => message.role === "assistant")?.content).toBe(
+    "ticket ACME-1 is John Smith",
+  );
+  expect(messages.filter((message) => message.content.includes("PRIVATE DEMO SESSION"))).toHaveLength(
+    1,
+  );
+});
+
+it("does not send the private instruction when the turn is not private", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response("", { status: 200 });
+  });
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("What about John Smith at Acme?")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  await new Response(res.body).text();
+  expect(sent?.messages).toEqual([
+    { role: "user", content: "What about John Smith at Acme?" },
+  ]);
 });
