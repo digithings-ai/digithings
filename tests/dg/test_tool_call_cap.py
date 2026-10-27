@@ -145,3 +145,67 @@ def test_research_agent_tool_path_forwards_the_cap_to_the_nested_loop(
 
     assert out.ok is True
     assert captured["max_tool_calls"] == 4
+
+
+def test_one_budget_covers_the_main_loop_and_every_continuation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 5-call cap is 5 calls for the *turn*, not 5 per ``run_tools`` call.
+
+    The cap is forwarded per invocation, so without a shared counter the main
+    loop plus two continuations could spend 15. Count `tool_call` events — one
+    per executed call — and pass only what is left.
+    """
+    from digigraph.graph.research import research_node
+
+    _patch_research_settings(monkeypatch)
+    granted: list[object] = []
+    executed = 0
+
+    def fake_run_tools(**kwargs: object) -> str:
+        nonlocal executed
+        allowance = kwargs.get("max_tool_calls", "missing")
+        granted.append(allowance)
+        step = kwargs["on_tool_step"]
+        # Four calls offered per invocation, but never more than the allowance.
+        offer = 4 if allowance is None else min(4, int(allowance))
+        for index in range(offer):
+            step("tool_call", {"name": f"tool_{index}"})
+            executed += 1
+        # Ends on a colon → the turn is unfinished, so continuations run.
+        return "working:"
+
+    monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
+    research_node({"prompt": "hi", "max_tool_calls": 5})
+
+    assert granted == [5, 1, 0], f"each call must get the remaining allowance: {granted}"
+    assert executed == 5, f"the turn must not execute more than its cap: {executed}"
+
+
+def test_zero_remaining_passes_zero_and_that_call_executes_no_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the budget is spent the continuation gets 0 and wraps up tool-free."""
+    from digigraph.graph.research import research_node
+
+    _patch_research_settings(monkeypatch)
+    granted: list[object] = []
+    executed: list[str] = []
+
+    def fake_run_tools(**kwargs: object) -> str:
+        allowance = kwargs.get("max_tool_calls", "missing")
+        granted.append(allowance)
+        step = kwargs["on_tool_step"]
+        offer = 2 if allowance is None else min(2, int(allowance))
+        for index in range(offer):
+            step("tool_call", {"name": f"tool_{index}"})
+            executed.append(f"tool_{index}")
+        # The spent-budget call has no tools left and answers instead.
+        return "working:" if allowance else "final answer"
+
+    monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
+    out = research_node({"prompt": "hi", "max_tool_calls": 2})
+
+    assert granted[:2] == [2, 0], f"0 must be passed once the cap is spent: {granted}"
+    assert executed == ["tool_0", "tool_1"], f"no call may run after the cap: {executed}"
+    assert str(out["research_response"]).endswith("final answer")

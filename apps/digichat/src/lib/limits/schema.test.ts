@@ -270,7 +270,9 @@ describe("limits schema", () => {
 
   it("pins the backend matrix", () => {
     expect(SUPPORT_MATRIX.digigraph.models).toBe("enforce");
-    expect(SUPPORT_MATRIX.digigraph.toolCalls).toBe("best-effort");
+    // The cap is enforced upstream (digigraph → digillm counts executed calls),
+    // so digigraph is no longer a best-effort backend for tool calls.
+    expect(SUPPORT_MATRIX.digigraph.toolCalls).toBe("enforce");
     expect(SUPPORT_MATRIX.langgraph.tokens).toBe("best-effort");
     expect(SUPPORT_MATRIX.foundry.cost).toBe("unsupported");
     expect(SUPPORT_MATRIX.foundry.tokens).toBe("partial");

@@ -518,7 +518,19 @@ def _run_document_rag_path(
 
     writer = _safe_stream_writer()
 
+    # One tool-call budget for the *turn*, not one per ``run_tools`` invocation.
+    # ``max_tool_calls`` is forwarded per call, so a main loop plus two
+    # continuations would otherwise spend the whole cap again each time. A
+    # ``tool_call`` event is emitted exactly once per executed tool call, so
+    # counting those is the turn's spend; the remaining allowance is recomputed
+    # from it at every call site. ``None`` (no header) stays uncapped.
+    turn_tool_budget: int | None = state.get("max_tool_calls")
+    counted_tool_calls = 0
+
     def stream_callback(event_type: str, data: Any) -> None:
+        nonlocal counted_tool_calls
+        if event_type == "tool_call":
+            counted_tool_calls += 1
         if (
             event_type == "tool_call"
             and data
@@ -528,6 +540,12 @@ def _run_document_rag_path(
         elif event_type == "tool_call" and data and data.get("name") in tenant_search_tools:
             data = {**data, "index_name": tenant_search_tools[data["name"]]["index"]}
         writer((event_type, data))
+
+    def remaining_tool_calls() -> int | None:
+        """Calls left in the turn's budget. 0 means wrap up with no tools."""
+        if turn_tool_budget is None:
+            return None
+        return max(0, turn_tool_budget - counted_tool_calls)
 
     def execute_one(name: str, args: dict) -> str | dict:
         if name in tenant_search_tools:
@@ -569,6 +587,8 @@ def _run_document_rag_path(
                 locate_tool=name,
                 locate_result=result,
                 execute_fn=execute_one,
+                # Same counter as the main loop: a nested auto-load call is a
+                # call, and must not see a fresh budget.
                 emit=stream_callback,
                 allowed_names=_allowed_names,
             )
@@ -689,7 +709,9 @@ def _run_document_rag_path(
         # The deployment's hard call cap (guardrails.maxToolCallsPerTurn, forwarded by
         # digichat as X-Digi-Max-Tool-Calls): rounds above bound the loop's shape, this
         # bounds the calls it actually makes, and the loop answers tool-free at the cap.
-        max_tool_calls=state.get("max_tool_calls"),
+        # What is passed is the turn's *remaining* allowance, not the cap: calls already
+        # spent by the forced hop count, and the continuations below get what is left.
+        max_tool_calls=remaining_tool_calls(),
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
@@ -710,7 +732,7 @@ def _run_document_rag_path(
             tools=tools_for_llm,
             execute_tool=execute_search,
             max_tool_rounds=4,
-            max_tool_calls=state.get("max_tool_calls"),
+            max_tool_calls=remaining_tool_calls(),
             on_tool_step=stream_callback,
             tool_choice="auto",
             reasoning_effort=state.get("effort"),

@@ -2760,6 +2760,9 @@ def run_tools(
     content = ""
     safe = parallel_safe_tools or set()
     failure_streak: tuple[str, str, int] | None = None
+    # A cap spent at entry (``max_tool_calls=0``): the caller forwards the turn's
+    # *remaining* allowance, so 0 means "no tool rounds left", not "unlimited".
+    cap_spent_at_entry = False
     # Executed tool calls (not rounds) this invocation; see ``max_tool_calls``.
     calls_made = 0
     call_cap_reached = False
@@ -2908,6 +2911,12 @@ def run_tools(
         return cleaned
 
     for round_idx in range(max_tool_rounds):
+        if max_tool_calls is not None and max_tool_calls <= 0:
+            # Do not even ask the model for another tool round: a spent cap wraps
+            # up tool-free from the results the turn already has.
+            cap_spent_at_entry = True
+            call_cap_reached = True
+            break
         content, tool_calls = _produce_turn(current, tools)
         streamed_content = content
         if not tool_calls and tools:
@@ -3127,11 +3136,17 @@ def run_tools(
     # `len(current) > len(messages)` is the max_tool_rounds<=0 guard from above: if no
     # round ever ran, there is no tool result to synthesize from, and `content` (used
     # in the fallback below) was never assigned this call.
-    if len(current) > len(messages):
+    if len(current) > len(messages) or cap_spent_at_entry:
+        has_tool_history = any(isinstance(m, dict) and m.get("role") == "tool" for m in current)
         current.append(
             {
                 "role": "user",
-                "content": "Based on the tool results above, provide a concise final answer.",
+                "content": (
+                    "Based on the tool results above, provide a concise final answer."
+                    if has_tool_history
+                    else "No more tool calls are available for this turn. "
+                    "Answer now from what you already have."
+                ),
             }
         )
         # #4556: the wrap-up is the one legal schema-enforced turn (tools=None).

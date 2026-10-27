@@ -2377,6 +2377,41 @@ def test_max_tool_calls_caps_executions_and_forces_the_tool_free_wrap_up() -> No
     assert not any(k == "round_limit_exhausted" for k, _ in steps)
 
 
+def test_max_tool_calls_zero_wraps_up_without_executing_a_tool() -> None:
+    """A spent turn forwards 0: the model's calls are discarded and the wrap-up runs.
+
+    ``research_node`` passes the *remaining* allowance, which reaches 0 while the
+    turn still needs a final answer. 0 must mean "no tools, answer now", not
+    "unlimited" and not a crash.
+    """
+    tc_a, _ = _two_call_tool("alpha", "beta")
+    responses = [
+        _mock_response("", tool_calls=[tc_a]),  # the model still wants a tool
+        _mock_response("answer with no tools"),  # forced tool-free wrap-up
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    executed: list[str] = []
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "alpha", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: executed.append(name) or {"content": "r"},
+            max_tool_calls=0,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "answer with no tools"
+    assert executed == [], "a 0 cap must not execute a single tool"
+    calls = fake_client.chat.completions.create.call_args_list
+    assert not calls[-1].kwargs.get("tools"), "the wrap-up is tool-free"
+    assert [p for k, p in steps if k == "tool_call_limit_reached"] == [{"max_tool_calls": 0}]
+
+
 def test_max_tool_calls_none_keeps_the_round_budget_behaviour() -> None:
     """``None`` (the default) must not change today's loop: the round budget still
     governs, and parallel calls in a round all execute."""

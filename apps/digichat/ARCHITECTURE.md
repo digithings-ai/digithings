@@ -1167,13 +1167,14 @@ and day windows roll (60s, 3600s, 86400s).
 every guard is off. `tokensPerMinute` applies on every backend. `maxToolCallsPerTurn`
 is enforced on Foundry and the AI SDK backends (openai-completions,
 openai-responses, anthropic, google-vertex), where the adapter can stop the
-tool loop. On digigraph, langgraph, and ag-ui it is notice/best-effort: the
-chat shows a status notice once the count is hit, and langgraph and ag-ui
-stop forwarding the next call, but the upstream agent is not given a
-`tool_choice: none` follow-up. digigraph's `round_boundary` trace calls
-`beforeRound` and discards the result, so the answer band does not reach
-that backend mid-trace; the notice is the whole effect. a2a has no tool-call
-hook, so config load refuses the key. The shape:
+tool loop, and upstream on digigraph (`X-Digi-Max-Tool-Calls`, one budget for
+the whole turn). It is **silent** on every backend that enforces it: no
+status notice is shown once the count is hit. On langgraph and ag-ui it is
+notice/best-effort — they stop forwarding the next call, but the upstream
+agent is not given a `tool_choice: none` follow-up. digigraph's
+`round_boundary` trace calls `beforeRound` and discards the result, so the
+answer band does not reach that backend mid-trace. a2a has no tool-call hook,
+so config load refuses the key. The shape:
 
 ```yaml
 guardrails:                      # omit the block and every guard is off
@@ -1254,10 +1255,11 @@ AI SDK backends apply the same decision in `prepareStep` (`toolChoice: "none"`
 once the cap is spent). Langgraph and ag-ui count tool-call starts and stop
 forwarding at the cap; that is notice/best-effort, because the request was
 already sent and the upstream run is not switched to a no-tool follow-up.
-Digigraph's tool loop runs upstream, so a cap there is a status notice only.
-It does not abort the upstream call, and a wrap-up instruction cannot reach a
-later round of that same request. a2a reports no tool calls, so the key is
-refused at config load.
+Digigraph's tool loop runs upstream, so the cap is enforced there, not here:
+`POST /api/chat` forwards it as `X-Digi-Max-Tool-Calls`, digigraph spends that
+one budget across the turn's main loop and its continuations, and digillm stops
+at the cap and answers tool-free. It is **silent** — no `data-notice`, nothing
+in the UI. a2a reports no tool calls, so the key is refused at config load.
 
 defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
 `rateLimit: true`, and a per-visitor minute of 80000 because house is public.
