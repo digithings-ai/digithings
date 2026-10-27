@@ -441,6 +441,30 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     expect(seen.headers.get("x-embed-host")).toBeNull();
   });
 
+  it("honours OCC_INVITE_MAX_AGE_DAYS: an older cookie is not bound", async () => {
+    const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
+    const old = await occInviteCookieValue(KEY, twoDaysAgo);
+    const headers = { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${old}` };
+    hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
+    hooks.containerFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+
+    await worker.fetch(
+      new Request("https://digithings.ai/chat/api/chat", { method: "POST", body: "{}", headers }),
+      { ...envWithInvite(), OCC_INVITE_MAX_AGE_DAYS: "1" } as Env,
+    );
+    const short = hooks.containerFetch.mock.calls.at(-1)![0];
+    expect(short.headers.get("x-embed-token")).toBeNull();
+    expect(short.headers.get("x-embed-host")).toBeNull();
+
+    // Same cookie under the default (30 days): still bound.
+    await worker.fetch(
+      new Request("https://digithings.ai/chat/api/chat", { method: "POST", body: "{}", headers }),
+      envWithInvite(),
+    );
+    const dflt = hooks.containerFetch.mock.calls.at(-1)![0];
+    expect(dflt.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+  });
+
   it("strips a client-sent X-Digi-Tenant on the legacy /api alias too", async () => {
     const seen = await containerSees({
       path: "/api/chat",

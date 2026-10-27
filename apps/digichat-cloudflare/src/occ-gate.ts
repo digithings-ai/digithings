@@ -8,10 +8,12 @@ import { constantTimeEqual } from "./constant-time";
  * with a real 404 status.
  *
  * A valid `?token=` also sets the tab-session cookie from DIG-1437
- * (b9dd6c4b8). The cookie holds a value derived from the invite key
- * (HMAC-SHA256, see {@link occInviteCookieValue}), never the key itself
- * (HttpOnly, Secure, SameSite=Strict, Path=/chat, no Max-Age). A reload
- * without `?token=` presents the cookie instead of the query.
+ * (b9dd6c4b8). The cookie holds an issued-at time and an HMAC over it keyed
+ * with the invite key (see {@link occInviteCookieValue}), never the key itself
+ * (HttpOnly, Secure, SameSite=Strict, Path=/chat, no Max-Age attribute: the
+ * browser drops it with the session, and the edge refuses it once it is older
+ * than `OCC_INVITE_MAX_AGE_DAYS`, default 30). A reload without `?token=`
+ * presents the cookie instead of the query; reopening the link renews it.
  *
  * Path=/chat, not /chat/occ: the page is only half of the chat. Its API calls
  * (`/chat/api/embed/tenant-config`, every `/chat/api/chat` turn) need the
@@ -44,8 +46,55 @@ export const OCC_INVITE_COOKIE_PATH = CONTAINER_BASE_PATH;
 /** The scope the first edge gate used; retired, see {@link occLegacyCookieClear}. */
 export const OCC_LEGACY_COOKIE_PATH = `${CONTAINER_BASE_PATH}/occ`;
 
-/** Domain-separation label for the cookie derivation (bump to retire every cookie). */
-const OCC_COOKIE_LABEL = "digichat/occ_invite/v1";
+/**
+ * Domain-separation label for the cookie MAC. Bumping it retires every cookie;
+ * v1 (a MAC over the label alone, no issued-at) was retired this way.
+ */
+const OCC_COOKIE_LABEL = "digichat/occ_invite/v2";
+
+/** The version prefix of a cookie value: `v2.<issued-at>.<mac>`. */
+const OCC_COOKIE_VERSION = "v2";
+
+/** Default cookie lifetime when `OCC_INVITE_MAX_AGE_DAYS` is unset or invalid. */
+export const OCC_INVITE_DEFAULT_MAX_AGE_DAYS = 30;
+
+/** Upper bound on a configured lifetime: a typo must not mean "forever". */
+export const OCC_INVITE_MAX_MAX_AGE_DAYS = 365;
+
+/** Clock skew tolerated for an issued-at in the future (edge clocks differ). */
+const OCC_COOKIE_FUTURE_SKEW_S = 300;
+
+/**
+ * How old an `occ_invite` cookie may be. `nowMs` is a test seam; the gate uses
+ * the clock.
+ */
+export interface OccCookiePolicy {
+  maxAgeSeconds: number;
+  nowMs?: number;
+}
+
+/**
+ * The cookie lifetime in seconds from the non-secret `OCC_INVITE_MAX_AGE_DAYS`
+ * var: a whole number of days from 1 to {@link OCC_INVITE_MAX_MAX_AGE_DAYS}.
+ * Unset, malformed, zero or negative falls back to the 30-day default; a larger
+ * value is capped. Never unlimited.
+ */
+export function occInviteMaxAgeSeconds(raw: string | undefined | null): number {
+  const text = (raw ?? "").trim();
+  const days = /^\d{1,4}$/.test(text) ? Number(text) : NaN;
+  const valid = Number.isInteger(days) && days >= 1;
+  const capped = valid ? Math.min(days, OCC_INVITE_MAX_MAX_AGE_DAYS) : OCC_INVITE_DEFAULT_MAX_AGE_DAYS;
+  return capped * 24 * 60 * 60;
+}
+
+/** The default policy: 30 days, the clock. */
+export const DEFAULT_OCC_COOKIE_POLICY: OccCookiePolicy = {
+  maxAgeSeconds: OCC_INVITE_DEFAULT_MAX_AGE_DAYS * 24 * 60 * 60,
+};
+
+function nowSeconds(policy: OccCookiePolicy): number {
+  return Math.floor((policy.nowMs ?? Date.now()) / 1000);
+}
 
 function base64Url(bytes: ArrayBuffer): string {
   let bin = "";
@@ -53,14 +102,7 @@ function base64Url(bytes: ArrayBuffer): string {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/**
- * The `occ_invite` cookie value: HMAC-SHA256 over a fixed label, keyed with
- * the invite key, base64url. The cookie proves the browser opened a valid
- * invite link without carrying the key: a leaked cookie (devtools, a cookie
- * dump) is not the key, does not work as `?token=`, and dies when the key is
- * rotated.
- */
-export async function occInviteCookieValue(expected: string): Promise<string> {
+async function cookieMac(expected: string, issuedAtS: number): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -69,7 +111,45 @@ export async function occInviteCookieValue(expected: string): Promise<string> {
     false,
     ["sign"],
   );
-  return base64Url(await crypto.subtle.sign("HMAC", key, enc.encode(OCC_COOKIE_LABEL)));
+  const msg = enc.encode(`${OCC_COOKIE_LABEL}|${issuedAtS}`);
+  return base64Url(await crypto.subtle.sign("HMAC", key, msg));
+}
+
+/**
+ * The `occ_invite` cookie value: `v2.<issued-at>.<mac>`, where the MAC is
+ * HMAC-SHA256 keyed with the invite key over the label and the issued-at
+ * (unix seconds). The cookie proves the browser opened a valid invite link at
+ * that time, without carrying the key: a leaked cookie is not the key, does
+ * not work as `?token=`, stops working after the max age, and dies when the
+ * key is rotated. Changing the issued-at breaks the MAC.
+ */
+export async function occInviteCookieValue(
+  expected: string,
+  issuedAtS: number = Math.floor(Date.now() / 1000),
+): Promise<string> {
+  const iat = Math.floor(issuedAtS);
+  return `${OCC_COOKIE_VERSION}.${iat}.${await cookieMac(expected, iat)}`;
+}
+
+/**
+ * The issued-at of a valid cookie value, or null. Valid means: the v2 shape,
+ * a MAC that matches under this key (constant-time compare), an issued-at no
+ * older than the policy's max age, and not in the future beyond a small skew.
+ */
+export async function occInviteCookieIssuedAt(
+  value: string,
+  expected: string,
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+): Promise<number | null> {
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== OCC_COOKIE_VERSION) return null;
+  const [, iatText, mac] = parts as [string, string, string];
+  if (!/^\d{1,12}$/.test(iatText) || !mac) return null;
+  const iat = Number(iatText);
+  const macOk = constantTimeEqual(mac, await cookieMac(expected, iat));
+  const now = nowSeconds(policy);
+  const fresh = iat <= now + OCC_COOKIE_FUTURE_SKEW_S && now - iat <= policy.maxAgeSeconds;
+  return macOk && fresh ? iat : null;
 }
 
 /** The `Set-Cookie` value; `cookieValue` comes from {@link occInviteCookieValue}. */
@@ -108,23 +188,33 @@ export function readCookie(header: string | null, name: string): string | null {
 }
 
 /**
- * True when any `occ_invite` value in the Cookie header is the value derived
- * from the invite key ({@link occInviteCookieValue}), compared in constant
- * time. A cookie holding the raw key is not accepted.
+ * The newest valid `occ_invite` value in the Cookie header (see
+ * {@link occInviteCookieIssuedAt}), or null. Every value is checked, so the
+ * time taken does not depend on which one is valid. Expired, tampered,
+ * old-format and raw-key cookies are all null.
  */
+export async function validInviteCookie(
+  header: string | null,
+  expected: string | undefined,
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+): Promise<string | null> {
+  const key = expected?.trim();
+  if (!key) return null;
+  let best: { value: string; iat: number } | null = null;
+  for (const value of readCookies(header, OCC_INVITE_COOKIE)) {
+    const iat = await occInviteCookieIssuedAt(value, key, policy);
+    if (iat !== null && (best === null || iat > best.iat)) best = { value, iat };
+  }
+  return best?.value ?? null;
+}
+
+/** True when the Cookie header carries a valid `occ_invite` (see {@link validInviteCookie}). */
 export async function inviteCookieValid(
   header: string | null,
   expected: string | undefined,
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
 ): Promise<boolean> {
-  const key = expected?.trim();
-  if (!key) return false;
-  const values = readCookies(header, OCC_INVITE_COOKIE);
-  if (!values.length) return false;
-  const want = await occInviteCookieValue(key);
-  let ok = false;
-  // Every value is compared, so the answer does not depend on which one matched.
-  for (const v of values) ok = inviteTokenValid(v, want) || ok;
-  return ok;
+  return (await validInviteCookie(header, expected, policy)) !== null;
 }
 
 /**
@@ -151,6 +241,9 @@ export function withoutInviteCookie(headers: Headers): void {
 /** A path Pages does not have, so its ordinary 404 page comes back. */
 export const SITE_NOT_FOUND_PATH = "/__not-found__";
 
+/** The proof a request carries: a valid `?token=`, or a valid cookie (its value). */
+export type InviteProof = { kind: "token" } | { kind: "cookie"; value: string };
+
 /**
  * Which proof this request carries. The query token and the key are trimmed
  * the same way the container and the /embed gate trim them, so a link pasted
@@ -159,13 +252,14 @@ export const SITE_NOT_FOUND_PATH = "/__not-found__";
 export async function inviteAccepted(
   request: Request,
   expected: string | undefined,
-): Promise<"token" | "cookie" | null> {
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+): Promise<InviteProof | null> {
   const key = expected?.trim();
   if (!key) return null;
   const url = new URL(request.url);
-  if (inviteTokenValid(url.searchParams.get("token")?.trim() || null, key)) return "token";
-  if (await inviteCookieValid(request.headers.get("cookie"), key)) return "cookie";
-  return null;
+  if (inviteTokenValid(url.searchParams.get("token")?.trim() || null, key)) return { kind: "token" };
+  const value = await validInviteCookie(request.headers.get("cookie"), key, policy);
+  return value === null ? null : { kind: "cookie", value };
 }
 
 /** The tenant host the OCC embed resolves for this shell. */
@@ -283,11 +377,14 @@ export function refererIsOccPage(request: Request): boolean {
 export async function bindOccApiCall(
   request: Request,
   expected: string | undefined,
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
 ): Promise<void> {
   const key = expected?.trim();
   const fromOccPage = refererIsOccPage(request);
   const invited =
-    fromOccPage && Boolean(key) && (await inviteCookieValid(request.headers.get("cookie"), key));
+    fromOccPage &&
+    Boolean(key) &&
+    (await inviteCookieValid(request.headers.get("cookie"), key, policy));
   const headers = request.headers;
   headers.delete(DIGI_TENANT_HEADER);
   if (fromOccPage) {
@@ -306,11 +403,12 @@ export async function occGate(
   expected: string | undefined,
   containerUpstream: (req: Request) => Promise<Response> = fetch,
   siteUpstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
+  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
 ): Promise<Response> {
   const url = new URL(request.url);
   const key = expected?.trim();
-  const accepted = await inviteAccepted(request, key);
-  if (accepted === "token" && key) {
+  const accepted = await inviteAccepted(request, key, policy);
+  if (accepted?.kind === "token" && key) {
     // DIG-1437: the key must not stay in the address bar or in browser
     // history. Set the session cookie and bounce to the same URL without
     // `token`, so the browser re-requests with the cookie and the key is gone
@@ -318,6 +416,8 @@ export async function occGate(
     // (`stripInviteTokenFromUrl` + replaceState); after the 2026-10-27
     // consolidation the edge owns it, which also keeps the key out of the
     // container request entirely and works with scripting disabled.
+    // A token hit always issues a FRESH cookie (new issued-at): reopening the
+    // link is how a visitor renews an expired session.
     const clean = new URL(request.url);
     clean.searchParams.delete("token");
     const headers = new Headers({
@@ -325,19 +425,21 @@ export async function occGate(
       "cache-control": "no-store",
       "referrer-policy": OCC_REFERRER_POLICY,
     });
-    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key)));
+    const issuedAt = nowSeconds(policy);
+    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key, issuedAt)));
     headers.append("set-cookie", occLegacyCookieClear());
     return new Response(null, { status: 302, headers });
   }
-  if (accepted === "cookie" && key) {
+  if (accepted?.kind === "cookie" && key) {
     const res = await containerUpstream(occContainerRequest(request, key));
     const headers = new Headers(res.headers);
     headers.set("cache-control", "no-store");
     headers.set("referrer-policy", OCC_REFERRER_POLICY);
     // A browser that still holds a /chat/occ-scoped cookie from an earlier gate
-    // gets it moved to /chat here, so its API calls carry the invite too. Same
-    // value, same session lifetime: re-affirming it changes nothing else.
-    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key)));
+    // gets it moved to /chat here, so its API calls carry the invite too. The
+    // SAME value is re-set (same issued-at): a cookie hit never extends the
+    // session, only a fresh `?token=` hit does.
+    headers.append("set-cookie", occInviteCookieHeader(accepted.value));
     headers.append("set-cookie", occLegacyCookieClear());
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }

@@ -74,11 +74,19 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   and, when the browser sends them, `Sec-Fetch-Site` is `same-origin` and `Origin` is ours.
   The Referer check only tells an OCC call from a house one. Same-origin script can set
   any same-origin referrer, so the HttpOnly cookie is the actual boundary.
-- **The cookie is not the key.** It holds `HMAC-SHA256(key, "digichat/occ_invite/v1")`
+- **The cookie is not the key, and it expires.** It holds `v2.<issued-at>.<mac>`, where
+  `<issued-at>` is unix seconds and `<mac>` is `HMAC-SHA256(key, "digichat/occ_invite/v2|<issued-at>")`
   (base64url), checked in constant time. A leaked cookie does not work as `?token=`.
-  Rotating the key retires every cookie, so open browsers need the new link. A cookie
-  from before this change, which held the raw key, is refused (404), and reopening the
-  link replaces it.
+  - **Max age:** the Worker refuses a cookie older than `OCC_INVITE_MAX_AGE_DAYS` (a non-secret
+    `[vars]` entry in `apps/digichat-cloudflare/wrangler.toml`, whole days 1-365, default 30;
+    an invalid value falls back to 30 and a larger one is capped at 365). An issued-at more than
+    five minutes in the future is refused too. The cookie itself carries no `Max-Age`, so the
+    browser still drops it with the session.
+  - **Renewal:** only a valid `?token=` hit issues a new cookie (fresh issued-at). A page load
+    with the cookie re-sets the same value and never extends it.
+  - **Refusal:** an expired, tampered (issued-at or MAC), old-format (v1) or raw-key cookie gets
+    the site 404 on `/chat/occ`, and an API call carrying one is not bound to the OCC tenant.
+  - **Rotation:** rotating the key retires every cookie, so open browsers need the new link.
   From that page the client's own `X-Embed-Token` / `X-Embed-Host` are always dropped, and a
   client-sent `X-Digi-Tenant` is dropped on every `/chat/api/*` call. A house page's calls are
   never upgraded by the cookie.

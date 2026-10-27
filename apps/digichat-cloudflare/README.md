@@ -41,8 +41,10 @@ checks the invite, sets the `occ_invite` cookie, rewrites the request to
 `/chat/embed?host=occ.digithings.ai`, moves the key to `x-embed-token` and
 drops `?token=`, then proxies to the Container. There is no Pages shell and no
 iframe in the chain, and `OCC_INVITE_KEY` exists only as a Worker secret.
-The cookie holds an HMAC-SHA256 value derived from the key, never the key
-itself, and is checked in constant time. It is scoped to `Path=/chat` so the
+The cookie holds an issued-at time and an HMAC-SHA256 over it keyed with the
+invite key, never the key itself, and is checked in constant time. The Worker
+refuses it once it is older than `OCC_INVITE_MAX_AGE_DAYS` (non-secret
+`[vars]`, default 30 days); reopening the invite link issues a fresh one. It is scoped to `Path=/chat` so the
 page's own `/chat/api/*` calls carry it. The Worker binds such a call to the
 OCC tenant (`x-embed-token` + `X-Embed-Host: occ.digithings.ai`) only when the
 cookie is valid **and** the Referer is `/chat/occ` (with `Sec-Fetch-Site:

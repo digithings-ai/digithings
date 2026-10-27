@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bindOccApiCall,
   DIGI_TENANT_HEADER,
@@ -13,7 +13,11 @@ import {
   isOccShellPath,
   OCC_EMBED_HOST,
   OCC_INVITE_COOKIE,
+  occInviteCookieIssuedAt,
   occInviteCookieValue,
+  occInviteMaxAgeSeconds,
+  OCC_INVITE_DEFAULT_MAX_AGE_DAYS,
+  validInviteCookie,
   occContainerRequest,
   occEmbedGate,
   occGate,
@@ -23,8 +27,18 @@ const KEY = "fixture-invite-key";
 /** The cookie value the edge derives from KEY (never KEY itself). */
 let COOKIE = "";
 
+/** A fixed clock, so a cookie minted in one test second equals one minted in the next. */
+const NOW_MS = Date.UTC(2026, 9, 27, 12, 0, 0);
+const NOW_S = NOW_MS / 1000;
+const DAY_S = 24 * 60 * 60;
+
 beforeAll(async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW_MS });
   COOKIE = await occInviteCookieValue(KEY);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 /** The site's own 404: what an uninvited request must look like. */
@@ -383,8 +397,9 @@ describe("occ API binding (/chat/api/* from the OCC page)", () => {
   it("stores a derived value in the cookie, never the key, and refuses the raw key", async () => {
     expect(COOKIE).not.toBe(KEY);
     expect(COOKIE).not.toContain(KEY);
-    expect(COOKIE).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    // Stable for one key, different for another (a rotated key retires it).
+    expect(COOKIE).toMatch(/^v2\.\d+\.[A-Za-z0-9_-]{43}$/);
+    expect(COOKIE.split(".")[1]).toBe(String(NOW_S));
+    // Stable for one key and time, different for another key (rotation retires it).
     expect(await occInviteCookieValue(KEY)).toBe(COOKIE);
     expect(await occInviteCookieValue(`${KEY}-rotated`)).not.toBe(COOKIE);
     expect(await inviteCookieValid(`${OCC_INVITE_COOKIE}=${KEY}`, KEY)).toBe(false);
@@ -424,5 +439,135 @@ describe("occ API binding (/chat/api/* from the OCC page)", () => {
     const only = new Headers({ cookie: `${OCC_INVITE_COOKIE}=${COOKIE}` });
     withoutInviteCookie(only);
     expect(only.get("cookie")).toBeNull();
+  });
+});
+
+describe("occ invite cookie lifetime (issued-at inside the MAC)", () => {
+  const policy = (days: number, nowMs = NOW_MS) => ({ maxAgeSeconds: days * DAY_S, nowMs });
+  const page = (cookie: string) =>
+    new Request("https://digithings.ai/chat/occ/", { headers: { cookie } });
+
+  it("reads the max age from the non-secret var, defaulting to 30 days and capped", () => {
+    expect(OCC_INVITE_DEFAULT_MAX_AGE_DAYS).toBe(30);
+    expect(occInviteMaxAgeSeconds(undefined)).toBe(30 * DAY_S);
+    expect(occInviteMaxAgeSeconds("")).toBe(30 * DAY_S);
+    expect(occInviteMaxAgeSeconds("7")).toBe(7 * DAY_S);
+    expect(occInviteMaxAgeSeconds(" 14 ")).toBe(14 * DAY_S);
+    // Zero, negative, fractional or junk never means "no expiry".
+    for (const bad of ["0", "-1", "1.5", "abc", "30d", "1e3"]) {
+      expect(occInviteMaxAgeSeconds(bad)).toBe(30 * DAY_S);
+    }
+    expect(occInviteMaxAgeSeconds("9999")).toBe(365 * DAY_S);
+  });
+
+  it("accepts a cookie up to the max age and refuses it one second later", async () => {
+    const issued = await occInviteCookieValue(KEY, NOW_S - 30 * DAY_S);
+    expect(await occInviteCookieIssuedAt(issued, KEY, policy(30))).toBe(NOW_S - 30 * DAY_S);
+    expect(await occInviteCookieIssuedAt(issued, KEY, policy(30, NOW_MS + 1000))).toBeNull();
+    expect(await occInviteCookieIssuedAt(issued, KEY, policy(7))).toBeNull();
+  });
+
+  it("404s an expired cookie on /chat/occ and never wakes the container", async () => {
+    const old = await occInviteCookieValue(KEY, NOW_S - 31 * DAY_S);
+    const r = await occGate(page(`${OCC_INVITE_COOKIE}=${old}`), KEY, container, site, policy(30));
+    expect(r.status).toBe(404);
+    expect(container).not.toHaveBeenCalled();
+    expect(r.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("does not bind an expired cookie on the chat API", async () => {
+    const old = await occInviteCookieValue(KEY, NOW_S - 31 * DAY_S);
+    const req = new Request("https://digithings.ai/chat/api/chat", {
+      method: "POST",
+      headers: {
+        referer: "https://digithings.ai/chat/occ/",
+        "sec-fetch-site": "same-origin",
+        cookie: `${OCC_INVITE_COOKIE}=${old}`,
+      },
+    });
+    await bindOccApiCall(req, KEY, policy(30));
+    expect(req.headers.get(EMBED_TOKEN_HEADER)).toBeNull();
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBeNull();
+    expect(req.headers.get("cookie")).toBeNull();
+  });
+
+  it("refuses a tampered issued-at, a tampered MAC, a future issued-at and old formats", async () => {
+    const good = await occInviteCookieValue(KEY, NOW_S - DAY_S);
+    const [, iat, mac] = good.split(".") as [string, string, string];
+    const flipped = `${mac.slice(0, -1)}${mac.endsWith("A") ? "B" : "A"}`;
+    const forms = [
+      `v2.${Number(iat) + DAY_S}.${mac}`, // a renewed issued-at under the old MAC
+      `v2.${iat}.${flipped}`,
+      `v1.${iat}.${mac}`,
+      `v2.${iat}`,
+      `v2.${iat}.${mac}.x`,
+      `v2.-5.${mac}`,
+      `v2.${iat}x.${mac}`,
+      mac, // the v1 shape: a MAC alone
+      KEY, // the raw key
+    ];
+    for (const value of forms) {
+      expect(await occInviteCookieIssuedAt(value, KEY, policy(30))).toBeNull();
+      const r = await occGate(page(`${OCC_INVITE_COOKIE}=${value}`), KEY, container, site, policy(30));
+      expect(r.status).toBe(404);
+    }
+    // Minted for the future (beyond clock skew) with a VALID MAC: still refused.
+    const future = await occInviteCookieValue(KEY, NOW_S + DAY_S);
+    expect(await occInviteCookieIssuedAt(future, KEY, policy(30))).toBeNull();
+    // A few seconds of skew is tolerated.
+    const skew = await occInviteCookieValue(KEY, NOW_S + 60);
+    expect(await occInviteCookieIssuedAt(skew, KEY, policy(30))).toBe(NOW_S + 60);
+    expect(container).not.toHaveBeenCalled();
+  });
+
+  it("retires every cookie when the key is rotated", async () => {
+    const before = await occInviteCookieValue(KEY, NOW_S);
+    expect(await occInviteCookieIssuedAt(before, `${KEY}-rotated`, policy(30))).toBeNull();
+    const r = await occGate(
+      page(`${OCC_INVITE_COOKIE}=${before}`),
+      `${KEY}-rotated`,
+      container,
+      site,
+      policy(30),
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it("re-issues a fresh cookie on a valid ?token= hit, even over an expired one", async () => {
+    const old = await occInviteCookieValue(KEY, NOW_S - 40 * DAY_S);
+    const r = await occGate(
+      new Request(`https://digithings.ai/chat/occ/?token=${KEY}`, {
+        headers: { cookie: `${OCC_INVITE_COOKIE}=${old}` },
+      }),
+      KEY,
+      container,
+      site,
+      policy(30),
+    );
+    expect(r.status).toBe(302);
+    const set = r.headers
+      .getSetCookie()
+      .find((v) => v.startsWith(`${OCC_INVITE_COOKIE}=v2.`)) ?? "";
+    const value = decodeURIComponent(set.slice(`${OCC_INVITE_COOKIE}=`.length).split(";")[0]!);
+    expect(await occInviteCookieIssuedAt(value, KEY, policy(30))).toBe(NOW_S);
+    expect(value).not.toBe(old);
+  });
+
+  it("never extends a session on a cookie hit: it re-sets the same issued-at", async () => {
+    const issued = await occInviteCookieValue(KEY, NOW_S - 10 * DAY_S);
+    const r = await occGate(page(`${OCC_INVITE_COOKIE}=${issued}`), KEY, container, site, policy(30));
+    expect(r.status).toBe(200);
+    expect(r.headers.getSetCookie()).toContain(
+      `${OCC_INVITE_COOKIE}=${issued}; Path=/chat; Secure; HttpOnly; SameSite=Strict`,
+    );
+  });
+
+  it("picks the newest valid cookie when a browser sends several", async () => {
+    const older = await occInviteCookieValue(KEY, NOW_S - 20 * DAY_S);
+    const newer = await occInviteCookieValue(KEY, NOW_S - 2 * DAY_S);
+    const expired = await occInviteCookieValue(KEY, NOW_S - 90 * DAY_S);
+    const header = `${OCC_INVITE_COOKIE}=${expired}; ${OCC_INVITE_COOKIE}=${older}; ${OCC_INVITE_COOKIE}=${newer}`;
+    expect(await validInviteCookie(header, KEY, policy(30))).toBe(newer);
+    expect(await validInviteCookie(`${OCC_INVITE_COOKIE}=${expired}`, KEY, policy(30))).toBeNull();
   });
 });
