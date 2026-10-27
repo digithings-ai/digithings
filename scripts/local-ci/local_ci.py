@@ -1207,6 +1207,45 @@ def run_bun_suites(wt, step, out, fails):
     return ran
 
 
+def buildable_worker_apps(wt):
+    """The WORKER_APPS this tree still has a ``wrangler.toml`` for.
+
+    WORKER_APPS is a fixed list, so it keeps naming an app after a retirement
+    PR deletes it. The dry-run then changes into ``apps/<app>`` and runs
+    wrangler there. When the directory itself is gone the step refuses by name
+    (the missing-cwd check in ``step``/``run_step_pool``), and when a previous
+    checkout of the same worktree left an ignored ``node_modules`` behind -
+    ``git clean -fdq -e node_modules`` keeps those - the directory still exists
+    and wrangler fails with "Could not detect a directory containing static
+    files" for a project that has no config any more. Either way the required
+    check is red for a tree that is correct: #6530, which retires
+    ``apps/digitrace-langfuse`` (DIG-5136), could not go green at all.
+
+    The dry run is defined by the app's ``wrangler.toml``: an app without one
+    is retired in this tree and is skipped, the same shape as the ruff path
+    list, which drops entries that do not exist so a removal cannot turn every
+    PR red. When ``apps/`` itself is missing (unit fixtures, an odd tree) the
+    list is returned unchanged, so nothing is skipped on a tree we cannot read.
+    """
+    apps_dir = os.path.join(wt, "apps")
+    if not os.path.isdir(apps_dir):
+        return list(WORKER_APPS)
+    live = []
+    for app in WORKER_APPS:
+        if os.path.isfile(os.path.join(apps_dir, app, "wrangler.toml")):
+            live.append(app)
+        else:
+            log(f"worker-build:{app} skipped: no apps/{app}/wrangler.toml in this tree")
+    if not live:
+        # A tree with apps/ and no buildable Worker is a broken checkout, not a
+        # retirement: retire them all and there is nothing left to deploy. Build
+        # the fixed list so the gate fails loudly instead of passing vacuously.
+        log("worker-build: no app in WORKER_APPS has a wrangler.toml; treating "
+            "this as a broken checkout and building the fixed list")
+        return list(WORKER_APPS)
+    return live
+
+
 def worker_build(wt, step, out=None):
     """Run the ci.yml worker-build dry-run over all WORKER_APPS. Failures record via step.
 
@@ -1222,13 +1261,14 @@ def worker_build(wt, step, out=None):
     """
     if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
         return ["worker-build:npm-ci"]
-    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in WORKER_APPS}
+    apps = buildable_worker_apps(wt)
+    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in apps}
     try:
         specs = [gate_spec(f"worker-build:{app}",
                            ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
                             "--containers-rollout=none", "--outdir", outdirs[app]],
                            WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
-                 for app in WORKER_APPS]
+                 for app in apps]
         if out is None:
             failed = []
             for name, cmd, timeout, cwd in ((s[0], s[1], s[2], s[3]) for s in specs):
