@@ -880,14 +880,16 @@ head it reads in a repository listed in `queue_status_repos` (today only
 | State | When |
 |---|---|
 | `success` | Immediately before `gh pr merge --match-head-commit` on that exact SHA. |
-| `failure` | The PR was refused; the description names the first reason. |
+| `failure` | The PR was refused; the description names the first reason. Also posted on the same SHA right after a `success` when GitHub then refuses the `gh pr merge`, before the tick fails. |
 | `pending` | Eligible but not reached this tick, only behind its base, or a fact the queue could not read this tick. |
 
 Statuses are per SHA, so a push leaves the new head with no `merge-queue` status at all,
 and a `success` can only ever vouch for the commit the gates read. A state GitHub already
-shows is not re-posted (GitHub keeps every status sent, up to 1000 per SHA and context).
-`list` and `--dry-run` post nothing, and a failed post only warns: a lost `success` makes
-GitHub refuse the merge, which fails the tick loudly.
+shows is not re-posted, `success` included (GitHub keeps every status sent, up to 1000 per
+SHA and context). `list` and `--dry-run` post nothing, and a failed post only warns: a lost
+`success` makes GitHub refuse the merge, which fails the tick loudly. A merge GitHub refuses
+after the `success` post never leaves the head green: the queue posts `failure` with GitHub's
+refusal on that SHA, then fails the tick, so a hand merge cannot ride the stale `success`.
 
 Branch protection on `develop` then requires `merge-queue` beside `local-ci`. Two
 consequences are handled in the queue:
@@ -898,6 +900,27 @@ consequences are handled in the queue:
   `mergeStateStatus=BLOCKED`. In a `queue_status_repos` repository, `BLOCKED` is not a
   refusal while `merge-queue` is not green: every other cause of `BLOCKED` on `develop`
   has its own gate, and an unmodelled one makes `gh pr merge` refuse.
+- **The "base moved" wording.** The queue reports a `BLOCKED` read as
+  `mergeStateStatus=BLOCKED (base moved since the checks ran)`. That text predates the
+  required status and is misleading for it: once `merge-queue` is required, a missing
+  status alone makes GitHub say `BLOCKED` with no base movement at all. In a
+  `queue_status_repos` repository that case is no longer reported; the reason appears only
+  when `BLOCKED` stands with `merge-queue` already green, or in a repository the queue
+  posts no status in. `BEHIND`, `DIRTY` and `UNKNOWN` refuse exactly as before.
+
+**twelve-x is not covered.** `digithings-ai/twelve-x` is not in `queue_status_repos` and its
+`develop` has no branch protection to require a status, so a write-access hand merge there
+still skips every queue gate. Release merges to its `main` are hand merges by design (the
+queue only takes `develop`): Chris runs them with `gh pr merge --match-head-commit <sha>`,
+never `--admin`. Nothing here changes either path.
+
+**Rebase order with DIG-5812 / DIG-5818.** Those tickets touch the changes-requested hold
+(`mq-cr-hold`) and the queue's verdict functions next to `evaluate()`. As of 2026-10-27 the
+DIG-5812 branch (#6563) is withdrawn and in draft, and DIG-5818's fix is guard-side, so
+this status change has no rebase dependency. If either lands a change to `evaluate()` or
+the verdict helpers later, whichever PR merges second rebases onto the first and keeps the
+status loop around the new gate: a held PR must end a tick with `failure` or `pending`,
+never `success`.
 
 Like `local-ci`, `merge-queue` is a commit status: anyone with write access could post it
 by hand. It stops the accidental bypass, not a deliberate one. Restricting who can merge

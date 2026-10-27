@@ -20,15 +20,17 @@ report on some PR shape blocks those PRs forever — the failure mode
 names the checks and is responsible for having seen them report. See that doc
 before adding one.
 
-The one exception is ``RECORDED_REQUIRED_CHECKS``: a branch whose required set
-has been decided and seen to report. ``apply`` with no ``--check`` on such a branch
-writes that set; it is a record, not a guess, and it changes only by a reviewed edit.
+The one exception is ``RECORDED_PROTECTION``: a branch whose required set and
+strictness have been decided and seen to report. ``apply`` with no ``--check`` on such
+a branch writes that set, and ``apply`` with no ``--strict``/``--no-strict`` on such a
+branch writes the recorded strictness; it is a record, not a guess, and it changes
+only by a reviewed edit.
 
 Usage::
 
     python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
     python3 scripts/enable_branch_protection.py apply  --repo digithings-ai/digithings --branch develop \\
-        --mode classic --no-strict --dry-run     # the recorded set: local-ci + merge-queue
+        --mode classic --dry-run     # the recorded set: local-ci + merge-queue, strict=false
     python3 scripts/enable_branch_protection.py apply  --repo digithings-ai/twelve-x --branch develop \\
         --check test --require-approvals 1 --mode ruleset --merge-queue
 """
@@ -46,15 +48,35 @@ from typing import Any
 # organizations` is the legacy value; current Free orgs report `free`.
 FREE_PLANS: frozenset[str] = frozenset({"free", "free for organizations"})
 
+
 # Required checks a branch's protection has been decided to carry, keyed by
 # (repo, branch). `local-ci` is the host mirror's status (DIG-3707). `merge-queue` is
 # the status scripts/merge_queue.py posts on a head immediately before it merges it
 # (2026-10-27): requiring it is what stops a write-access merge on `develop` from
 # going round the queue's review gates. Add `merge-queue` only once the queue is
 # posting it, or every PR on the branch blocks on a status nothing sends.
-RECORDED_REQUIRED_CHECKS: dict[tuple[str, str], tuple[str, ...]] = {
-    ("digithings-ai/digithings", "develop"): ("local-ci", "merge-queue"),
+#
+# `strict` is recorded with the contexts because it is part of the same decision:
+# live `develop` is `strict: false` (DIG-3707), and the parser's general default of
+# `--strict` would otherwise turn on up-to-date-branch enforcement nobody decided.
+@dataclass(frozen=True)
+class RecordedProtection:
+    checks: tuple[str, ...]
+    strict: bool
+
+
+RECORDED_PROTECTION: dict[tuple[str, str], RecordedProtection] = {
+    ("digithings-ai/digithings", "develop"): RecordedProtection(
+        checks=("local-ci", "merge-queue"), strict=False
+    ),
 }
+# The contexts alone, for readers that only need the names.
+RECORDED_REQUIRED_CHECKS: dict[tuple[str, str], tuple[str, ...]] = {
+    key: rec.checks for key, rec in RECORDED_PROTECTION.items()
+}
+
+# The parser's strictness when neither the flag nor a record decides it.
+DEFAULT_STRICT = True
 
 PRO_REQUIRED_MARKERS: tuple[str, ...] = ("upgrade to github pro", "make this repository public")
 
@@ -514,8 +536,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="require the branch to be up to date with its base before merging",
+        default=None,
+        help=(
+            "require the branch to be up to date with its base before merging "
+            "(default: the branch's recorded strictness, else true)"
+        ),
     )
     parser.add_argument(
         "--replace-checks",
@@ -539,12 +564,23 @@ def main(argv: list[str] | None = None) -> int:
     # not spend an API round trip to find out, and on a plan-blocked repo it would
     # otherwise be masked by the plan refusal — the operator fixes the plan, runs
     # again, and only then learns their `--check` was missing.
-    if args.command == "apply" and not args.check:
-        recorded = RECORDED_REQUIRED_CHECKS.get((args.repo, args.branch))
-        if recorded:
-            args.check = list(recorded)
-            print(f"using the recorded required checks for {args.repo}:{args.branch}: "
-                  + ", ".join(recorded))
+    recorded = RECORDED_PROTECTION.get((args.repo, args.branch))
+    if args.command == "apply" and not args.check and recorded:
+        args.check = list(recorded.checks)
+        print(
+            f"using the recorded required checks for {args.repo}:{args.branch}: "
+            + ", ".join(recorded.checks)
+        )
+    if args.strict is None:
+        if recorded is not None:
+            args.strict = recorded.strict
+            if args.command == "apply":
+                print(
+                    f"using the recorded strictness for {args.repo}:{args.branch}: "
+                    f"strict={str(recorded.strict).lower()}"
+                )
+        else:
+            args.strict = DEFAULT_STRICT
     if args.command == "apply" and not args.check:
         print(
             "enable_branch_protection: refusing to apply with no --check. A branch with no "

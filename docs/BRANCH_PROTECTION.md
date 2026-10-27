@@ -307,7 +307,9 @@ snapshot. Two things had to be true before promoting it, and only the first now 
 > immediately before it merges it — see [MERGE_QUEUE.md](MERGE_QUEUE.md#the-merge-queue-status-making-the-queue-the-merge-path-on-develop).
 > Neither is a workflow check, so neither fits the snapshot below, which is still the
 > Actions-era set; `scripts/enable_branch_protection.py` records the decided pair in
-> `RECORDED_REQUIRED_CHECKS` until the snapshot model covers status contexts.
+> `RECORDED_PROTECTION` (contexts and `strict: false`) until the snapshot model covers
+> status contexts, so `apply` with no `--check` and no `--strict`/`--no-strict` writes
+> exactly the live strictness rather than turning up-to-date enforcement on.
 
 ## Ownership of `develop`'s required contexts
 

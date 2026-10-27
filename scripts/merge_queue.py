@@ -5401,16 +5401,33 @@ def main(argv: list[str] | None = None) -> int:
             head = next((v for v in verdicts if v.eligible), None)
             if head is None:
                 break
-            if policy.posts_queue_status:
+            if policy.posts_queue_status and head.queue_status != "SUCCESS":
                 # Posted on the exact SHA `merge_one` pins with --match-head-commit, so
                 # the green status can only ever vouch for the commit the gates read.
+                # Skipped when GitHub already shows `success` on this head (a tick
+                # that posted it and then stopped before the merge): GitHub keeps
+                # every status sent, so the same state is never posted twice.
                 post_queue_status(
                     args.repo,
                     head.head_sha,
                     "success",
                     f"passed the merge queue gates; merging as {authority.role}",
                 )
-            merge_one(args.repo, head, authority, policy)
+            try:
+                merge_one(args.repo, head, authority, policy)
+            except QueueError as exc:
+                if policy.posts_queue_status:
+                    # GitHub refused the merge after the queue posted `success`. Left
+                    # alone, that green required status would let a hand merge land
+                    # the PR the queue just failed to merge — the bypass this status
+                    # exists to close. Overwrite it on the same SHA, then fail the tick.
+                    post_queue_status(
+                        args.repo,
+                        head.head_sha,
+                        "failure",
+                        f"merge refused by GitHub: {exc}",
+                    )
+                raise
             comment_audit(
                 args.repo,
                 head,

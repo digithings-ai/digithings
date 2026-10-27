@@ -8741,6 +8741,59 @@ def test_a_failed_status_post_warns_and_leaves_the_merge_to_github(gh_stub: Any)
     assert stub.matching("pr merge 15")
 
 
+def test_a_merge_github_refuses_after_success_posts_failure_on_that_head(
+    gh_stub: Any,
+) -> None:
+    """`success` then a refused `gh pr merge` must not leave the required status green.
+
+    Otherwise a hand merge finds `merge-queue` satisfied on a PR the queue failed to
+    merge, which is the bypass the status exists to close.
+    """
+    sha = "a" * 40
+    prs = [_pr(20, head_sha=sha, approved=True)]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stdout="{}"),
+            gh_rule(
+                r"^pr merge",
+                stderr="GraphQL: Pull Request is not mergeable (mergePullRequest)",
+                exit_code=1,
+            ),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == mq.EXIT_OPERATIONAL, done.stdout
+    posts = _status_calls(stub)
+    assert [_field(p, "state") for p in posts] == ["success", "failure"]
+    assert all(f"repos/{DIGITHINGS_REPO}/statuses/{sha}" in p for p in posts)
+    desc = _field(posts[1], "description")
+    assert "not mergeable" in desc
+    assert len(desc) <= mq.QUEUE_STATUS_DESCRIPTION_MAX
+    # Ordered: success, then the refused merge, then the overwrite.
+    joined = [" ".join(c) for c in stub.calls]
+    merge_at = next(i for i, c in enumerate(joined) if c.startswith("pr merge 20"))
+    status_at = [i for i, c in enumerate(joined) if "/statuses/" in c]
+    assert status_at[0] < merge_at < status_at[1]
+    assert not stub.matching("pr comment 20")
+
+
+def test_success_github_already_shows_is_not_re_posted_before_the_merge(
+    gh_stub: Any,
+) -> None:
+    """The doc's "a state GitHub already shows is not re-posted" holds for `success` too."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    prs = [_pr(21, approved=True, extra_checks=[queue_ok])]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 21")
+    assert _status_calls(stub) == []
+
+
 def test_dry_run_and_list_post_no_status(gh_stub: Any) -> None:
     prs = [_pr(16, approved=True), _pr(17, approved=True, local_ci_state="FAILURE")]
     stub = _status_stub(gh_stub, prs)

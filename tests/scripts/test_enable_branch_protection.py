@@ -630,12 +630,80 @@ def test_apply_with_no_check_on_a_recorded_branch_writes_the_recorded_set(
         "develop",
         "--mode",
         "classic",
-        "--no-strict",
         "--dry-run",
     )
     assert done.returncode == EXIT_OK, done.stderr
     payload = json.loads(done.stdout.split("(classic):", 1)[1].split("\ndry run", 1)[0])
     status = payload["required_status_checks"]
     assert status["contexts"] == ["local-ci", "merge-queue"]
+    # No --strict/--no-strict given: the recorded strictness decides, and live
+    # `develop` is strict:false. The parser's general default must not leak in.
     assert status["strict"] is False
+    assert "strict=false" in done.stdout
     assert not stub.matching("-X PUT") and not stub.matching("--method PUT")
+
+
+def test_digithings_develop_records_strict_false() -> None:
+    """Strictness is part of the recorded decision: live `develop` is strict:false."""
+    recorded = ebp.RECORDED_PROTECTION[("digithings-ai/digithings", "develop")]
+    assert recorded.strict is False
+    assert recorded.checks == ("local-ci", "merge-queue")
+
+
+def _recorded_develop_payload(gh_stub: Any, *extra: str) -> dict[str, Any]:
+    stub = _preflight_stub(gh_stub, private=False, plan="free")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(
+            r"/branches/[^/]+/protection$",
+            stdout={"required_status_checks": {"strict": False, "contexts": ["local-ci"]}},
+        ),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "digithings-ai/digithings",
+        "--branch",
+        "develop",
+        "--mode",
+        "classic",
+        *extra,
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    payload = json.loads(done.stdout.split("(classic):", 1)[1].split("\ndry run", 1)[0])
+    return payload["required_status_checks"]
+
+
+def test_an_explicit_check_on_a_recorded_branch_still_takes_the_recorded_strictness(
+    gh_stub: Any,
+) -> None:
+    status = _recorded_develop_payload(gh_stub, "--check", "local-ci", "--check", "merge-queue")
+    assert status["strict"] is False
+
+
+def test_an_explicit_strict_flag_overrides_the_record(gh_stub: Any) -> None:
+    assert _recorded_develop_payload(gh_stub, "--strict")["strict"] is True
+
+
+def test_an_unrecorded_branch_keeps_the_strict_default(gh_stub: Any) -> None:
+    stub = _preflight_stub(gh_stub, private=False, plan="free")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(r"/branches/[^/]+/protection$", stdout={}),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "digithings-ai/digithings",
+        "--branch",
+        "release",
+        "--check",
+        "local-ci",
+        "--mode",
+        "classic",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    payload = json.loads(done.stdout.split("(classic):", 1)[1].split("\ndry run", 1)[0])
+    assert payload["required_status_checks"]["strict"] is True
