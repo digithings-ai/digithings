@@ -60,7 +60,7 @@ chat.digithings.localhost {
 }
 
 # --- trace.digithings.ai -> digitrace (digitrace:8003) ------------------------
-# /_langfuse/healthz, /_langfuse/worker-wake, /api/public/otel
+# /health, /healthz, /v1/status
 trace.digithings.localhost {
 	reverse_proxy digitrace:8003
 }

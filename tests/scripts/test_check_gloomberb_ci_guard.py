@@ -184,13 +184,11 @@ def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        # The five root deploy images, which a `*/Dockerfile` glob cannot reach at
+        # The root deploy images, which a `*/Dockerfile` glob cannot reach at
         # all: with no directory component there is no `/` to anchor the glob on.
         "infra/docker/Dockerfile.digichat-cloudflare",
         "infra/docker/Dockerfile.digiquant-runner",
         "infra/docker/Dockerfile.digithings-stack-cloudflare",
-        "infra/docker/Dockerfile.digitrace-langfuse-web",
-        "infra/docker/Dockerfile.digitrace-langfuse-worker",
         # Nested targets.
         "digiquant/Dockerfile.mcp",
         "digiquant/Dockerfile.sandbox",
@@ -273,7 +271,7 @@ def test_the_root_override_stays_local(guard: Any) -> None:
     [
         "docker-compose.override.yml",
         "docker-compose.override.yaml",
-        "apps/digitrace-langfuse/docker-compose.local.yml",
+        "apps/example/docker-compose.local.yml",
     ],
 )
 def test_local_compose_files_stay_local(guard: Any, path: str) -> None:
@@ -520,8 +518,6 @@ def test_coverage_gaps_would_have_caught_the_bare_dockerfile_patterns(
         "infra/docker/Dockerfile.digichat-cloudflare",
         "infra/docker/Dockerfile.digiquant-runner",
         "infra/docker/Dockerfile.digithings-stack-cloudflare",
-        "infra/docker/Dockerfile.digitrace-langfuse-web",
-        "infra/docker/Dockerfile.digitrace-langfuse-worker",
         "digiquant/Dockerfile.mcp",
         "digiquant/Dockerfile.sandbox",
         "digivault/Dockerfile.mcp",

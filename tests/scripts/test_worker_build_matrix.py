@@ -33,10 +33,9 @@ matrix has to learn about it.
 The two flags are pinned for the same reach-in-reverse reason. Drop
 `--containers-rollout=none` and wrangler demands a Docker CLI to build the
 container image *"even in dry-run mode"*, so the job fails outright on any
-machine without one — four of the seven apps are container Workers
-(digichat-cloudflare, digiquant-runner, digithings-stack-cloudflare and
-digitrace-langfuse ship `[[containers]]`; digithings-cron, dashboard-api and
-digidata-api do not — each verified with `grep -c '\[\[containers\]\]'`).
+machine without one — three of the six apps are container Workers
+(digichat-cloudflare, digiquant-runner and digithings-stack-cloudflare ship
+`[[containers]]`; digithings-cron, dashboard-api and digidata-api do not — each verified with `grep -c '\[\[containers\]\]'`).
 Drop `--dry-run` and the gate starts needing Cloudflare credentials, which breaks it
 on fork PRs and puts a secret on the path of a read-only check.
 """

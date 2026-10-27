@@ -7,12 +7,9 @@
 # files move to R6 and are removed by a second filter-repo pass (see r5.drop).
 apps/digithings-stack-cloudflare
 apps/digichat-cloudflare
-apps/digitrace-langfuse
 apps/digithings-cron
 infra/docker/Dockerfile.digithings-stack-cloudflare
 infra/docker/Dockerfile.digichat-cloudflare
-infra/docker/Dockerfile.digitrace-langfuse-web
-infra/docker/Dockerfile.digitrace-langfuse-worker
 infra/digichat-release
 infra/digichat-digithings
 scripts/zammad_mcp
@@ -38,9 +35,9 @@ docs/ops/digichat-aca-secret-fingerprints.json
 docs/ops/digichat-datatap-aca.md
 docs/ops/digifetch-post-deploy-verification.md
 docs/ops/digiquant-digikey-service-key.md
+docs/ops/digitrace-langfuse.md
 docs/ops/digiquant-runner.md
 docs/ops/digithings-cron.md
-docs/ops/digitrace-langfuse.md
 docs/ops/gloomberb-session-cookie.md
 docs/ops/local-deploy-parity.md
 docs/ops/paperclip-routine-watch.md

@@ -93,7 +93,7 @@ def chat_completion(...): ...
 - With `LANGSMITH_API_KEY` set and the `langsmith` package installed, calls
 emit LangSmith spans scrubbed by the built-in PII redactor.
 - With an OTLP endpoint set (`OTEL_EXPORTER_OTLP_ENDPOINT`,
-`DIGI_OTEL_ENDPOINT`, or a Langfuse OTLP env), each call also opens an
+`DIGI_OTEL_ENDPOINT`, or `DIGITRACE_OTLP_ENDPOINT`), each call also opens an
 OTel span that carries only the run name and short correlation ids.
 - With neither leg active, the decorator returns your function unchanged.
 
@@ -136,9 +136,9 @@ curl -s http://localhost:8003/v1/status # tracing diagnostic
 `GET /healthz` answers "is the process up". `GET /v1/status` answers "is
 tracing configured", returning `TraceStatus`: `tracing_configured`,
 `langsmith_sdk_installed`, the sanitized `langsmith_host`, an echoed
-`request_id`, and the dual-export fields `langfuse_configured`,
-`otel_export_configured`, `dual_export`, `export_backend`, and
-`langfuse_host`. None of those fields carry a secret. To enable the
+`request_id`, and the dual-export fields `otel_export_configured`,
+`dual_export`, and `export_backend`. None of those fields carry a secret. To
+enable the
 LangSmith leg, set `LANGSMITH_API_KEY` (and optionally
 `LANGSMITH_ENDPOINT`) in `.env` and restart; `/v1/status` will flip
 `tracing_configured` to true.

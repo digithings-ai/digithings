@@ -242,10 +242,6 @@ web:
   # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
   # Same install-input / web-lane cover as digichat-cloudflare above.
   - apps/digithings-stack-cloudflare/**
-  # digitrace Langfuse Web+Worker Containers (#4930 Phase 1).
-  - apps/digitrace-langfuse/**
-  - infra/docker/Dockerfile.digitrace-langfuse-web
-  - infra/docker/Dockerfile.digitrace-langfuse-worker
   # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
   # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
   # it, its vitest/wrangler live in that package, and this lane already pays the
@@ -490,7 +486,6 @@ workers:
   - apps/dashboard-api/**
   - apps/digidata-api/**
   - apps/digiquant-runner/**
-  - apps/digitrace-langfuse/**
   - apps/digichat-cloudflare/**
   - apps/digithings-stack-cloudflare/**
   - apps/twelvex-runner/**

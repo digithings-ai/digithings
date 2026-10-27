@@ -114,7 +114,6 @@ WORKERS: Tuple[Worker, ...] = (
     Worker("dashboard-api", "apps/dashboard-api", "wrangler.toml", 8789),
     Worker("digithings-cron", "apps/digithings-cron", "wrangler.toml", 8790, scheduled=True),
     Worker("digiquant-runner", "apps/digiquant-runner", "wrangler.toml", 8791),
-    Worker("digitrace-langfuse", "apps/digitrace-langfuse", "wrangler.toml", 8792),
 )
 
 SHIM_PREFIX = "SelfHost"

@@ -1,7 +1,8 @@
-"""Phase 3 Task 7: GH → Cloudflare put of digikey + Langfuse names.
+"""Phase 3 Task 7: GH → Cloudflare put of the house digikey.
 
 Mirrors ``sync-digiquant-runner-mail-secrets.yml``. Values stay inside Actions;
-the job logs name + length only. Never LangSmith.
+the job logs name + length only. Never LangSmith. Tracing is in-house digitrace,
+so no Langfuse names are synced.
 """
 
 from __future__ import annotations
@@ -24,11 +25,12 @@ ENV_TS = REPO_ROOT / "apps" / "digiquant-runner" / "src" / "env.ts"
 
 MUST_PUT = (
     "DIGIQUANT_DIGIKEY_API_KEY",
+)
+LANGFUSE_NAMES = (
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_BASE_URL",
     "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-    "DIGI_OTEL_HEADERS",
 )
 PARKED = (
     "LANGSMITH",
@@ -75,10 +77,10 @@ class TestSyncDigiquantRunnerHouseSecrets:
             # Was `assert "environment" not in job`. #248 gave every job that reads a
             # `secrets.*` name an `environment: cron`, because that is the only way
             # GitHub exposes an environment-scope secret — and this workflow reads
-            # `DIGIQUANT_DIGIKEY_API_KEY` and the three `LANGFUSE_*` names. What has to
-            # hold instead is that the gate cannot make a run wait: with a required
-            # reviewer this job would hold its concurrency group while unapproved and
-            # stop the workflow outright (#2541).
+            # `DIGIQUANT_DIGIKEY_API_KEY`. What has to hold instead is that the gate
+            # cannot make a run wait: with a required reviewer this job would hold
+            # its concurrency group while unapproved and stop the workflow outright
+            # (#2541).
             assert job.get("environment") == "cron", (
                 f"{name} should declare `environment: cron` so the secrets it reads can "
                 "move out of repo scope; without it an environment-scope secret is "
@@ -90,7 +92,7 @@ class TestSyncDigiquantRunnerHouseSecrets:
             "`.github/environments.json`"
         )
 
-    def test_puts_digikey_and_langfuse_on_single_script(self) -> None:
+    def test_puts_digikey_on_single_script(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         blob = _blob(WORKFLOW)
         mail = _blob(MAIL)
@@ -99,10 +101,12 @@ class TestSyncDigiquantRunnerHouseSecrets:
         assert "workers/scripts/${script}/secrets" in mail
         for name in MUST_PUT:
             assert f"put {name}" in blob, name
-        assert "${LANGFUSE_BASE_URL%/}/api/public/otel" in blob
-        assert 'printf \'%s:%s\' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY"' in blob
-        assert "base64 -w0" in blob
-        assert "Authorization=Basic" in blob
+        # Langfuse is retired: the workflow must not put or derive its names.
+        for name in LANGFUSE_NAMES:
+            assert name not in text, name
+        assert "api/public/otel" not in blob
+        assert "base64" not in blob
+        assert "Authorization=Basic" not in blob
         for name in PARKED:
             assert name not in text, name
         assert "[env." not in WRANGLER.read_text(encoding="utf-8")
@@ -113,8 +117,6 @@ class TestSyncDigiquantRunnerHouseSecrets:
         assert "len=${#text}" in blob
         assert 'echo "$text"' not in blob
         assert "echo '$text'" not in blob
-        assert 'echo "$otlp_endpoint"' not in blob
-        assert 'echo "$otel_headers"' not in blob
         assert "printenv" not in blob
         assert "FAIL empty $name" in blob
         assert 'type:"secret_text"' in blob or 'type:"secret_text"' in blob
@@ -122,7 +124,9 @@ class TestSyncDigiquantRunnerHouseSecrets:
     def test_env_ts_forwards_synced_names(self) -> None:
         text = ENV_TS.read_text(encoding="utf-8")
         for name in MUST_PUT:
-            assert f"{name}: env.{name}" in text, name
+            assert name in text, name
+        for name in LANGFUSE_NAMES:
+            assert name not in text, name
 
     def test_docs_are_house_sync_not_langsmith(self) -> None:
         wrangler = WRANGLER.read_text(encoding="utf-8")
@@ -130,13 +134,12 @@ class TestSyncDigiquantRunnerHouseSecrets:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         assert "sync-digiquant-runner-digikey-secret.yml" in wrangler
         assert "DIGIQUANT_DIGIKEY_API_KEY" in wrangler
-        assert "LANGFUSE_SECRET_KEY" in wrangler
+        assert "LANGFUSE" not in wrangler
         assert "LANGSMITH" not in wrangler
         assert "LANGSMITH" not in workflow
         assert "LANGSMITH" not in docs
         assert "sync-digiquant-runner-digikey-secret.yml" in docs
         assert "gh workflow run" in docs
         assert "DIGIQUANT_DIGIKEY_API_KEY" in docs
-        assert "LANGFUSE_SECRET_KEY" in docs
-        assert "DIGITRACE_LANGFUSE_OTLP_ENDPOINT" in docs
+        assert "LANGFUSE" not in docs
         assert "does not resume clocks" in docs.lower() or "do not resume clocks" in docs.lower()

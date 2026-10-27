@@ -67,7 +67,6 @@ EXPECTED_WORKERS = {
     "dashboard-api",
     "digithings-cron",
     "digiquant-runner",
-    "digitrace-langfuse",
 }
 
 
@@ -96,7 +95,7 @@ def test_dev_ports_do_not_collide_with_published_compose_ports() -> None:
 
     Every integer in a compose `ports` entry is collected, including container
     ports and IP octets, so the census is a deliberate superset. A superset is
-    safe here because 8787-8792 are distinctive; an undercount would not be.
+    safe here because 8787-8791 are distinctive; an undercount would not be.
     """
     compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
     published = set()
@@ -156,7 +155,7 @@ def test_the_binding_census_is_not_vacuous() -> None:
     for worker in gen.WORKERS:
         real = worker.real_config.read_text(encoding="utf-8")
         found += len(re.findall(r'name = "([A-Z_]+)"', real))
-    assert found >= 8, f"binding census found only {found}; the transform test is vacuous"
+    assert found >= 7, f"binding census found only {found}; the transform test is vacuous"
 
 
 def test_service_bindings_survive_the_transform() -> None:
@@ -234,9 +233,7 @@ def test_a_real_durable_object_keeps_its_own_name_and_migration() -> None:
     assert "BackfillLedger" not in entry
 
 
-@pytest.mark.parametrize(
-    "worker_name", ["digithings-stack", "digichat", "digiquant-runner", "digitrace-langfuse"]
-)
+@pytest.mark.parametrize("worker_name", ["digithings-stack", "digichat", "digiquant-runner"])
 def test_renamed_classes_keep_their_bindings_but_lose_their_sqlite_migration(
     worker_name: str,
 ) -> None:
@@ -333,18 +330,15 @@ def test_shim_table_parses() -> None:
         "DigiChatContainer",
         "DigiQuantMcpContainer",
         "DigiQuantRunnerContainer",
-        "LangfuseWebContainer",
-        "LangfuseWorkerContainer",
     } <= set(classes)
 
 
 def test_shim_keys_on_class_and_port_not_port_alone() -> None:
-    """DigiChatContainer and LangfuseWebContainer both default to port 3000."""
     classes = _shim_classes()
     assert '3000: { service: "digichat", hostPort: 3005' in classes["DigiChatContainer"], (
         "container port 3000 maps to compose host port 3005, not 3000"
     )
-    assert "ports: {}" in classes["LangfuseWebContainer"], (
+    assert "ports: {}" in classes["DigiQuantRunnerContainer"], (
         "an unmapped class must have an empty port map"
     )
 
@@ -367,8 +361,6 @@ def test_digistack_container_fronts_the_five_compose_services() -> None:
     [
         ("DigiQuantMcpContainer", "digiquant-mcp"),
         ("DigiQuantRunnerContainer", "digiquant-runner"),
-        ("LangfuseWebContainer", "digitrace-langfuse-web"),
-        ("LangfuseWorkerContainer", "digitrace-langfuse-worker"),
     ],
 )
 def test_classes_without_a_compose_service_declare_what_is_missing(
@@ -404,8 +396,8 @@ def test_single_session_command_shape() -> None:
     assert "--local" in argv
     assert "--persist-to" in argv and argv[argv.index("--persist-to") + 1] == ".wrangler/state"
     configs = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-c"]
-    assert len(configs) == len(gen.WORKERS) == 6
-    assert len(set(configs)) == 6, "a worker config must appear exactly once"
+    assert len(configs) == len(gen.WORKERS) == 5
+    assert len(set(configs)) == 5, "a worker config must appear exactly once"
     assert configs[0].endswith("digithings-stack-cloudflare/wrangler.selfhost.toml"), (
         "primary first"
     )
@@ -417,10 +409,10 @@ def test_single_session_command_shape() -> None:
 
 def test_per_worker_mode_gives_every_worker_its_own_command() -> None:
     argvs = gen.argv_per_worker("per-worker")
-    assert len(argvs) == 6
+    assert len(argvs) == 5
     scheduled = [argv for argv in argvs if "--test-scheduled" in argv]
     assert len(scheduled) == 1, "only the cron worker needs --test-scheduled"
-    assert len({argv[argv.index("-c") + 1] for argv in argvs}) == 6
+    assert len({argv[argv.index("-c") + 1] for argv in argvs}) == 5
     for argv in argvs:
         assert "--persist-to" in argv and argv[argv.index("--persist-to") + 1] == ".wrangler/state"
 

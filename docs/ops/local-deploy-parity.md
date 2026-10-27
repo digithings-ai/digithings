@@ -35,7 +35,6 @@ Seven surfaces are registered today:
 | `digithings-digichat` | `apps/digichat-cloudflare/wrangler.toml` | Worker |
 | `digithings-stack` | `apps/digithings-stack-cloudflare/wrangler.toml` | Worker |
 | `digiquant-runner` | `apps/digiquant-runner/wrangler.toml` | Worker |
-| `digitrace-langfuse` | `apps/digitrace-langfuse/wrangler.toml` | Worker |
 | `digithings-web` | `apps/digithings-web/wrangler.toml` | Pages |
 
 `digithings-web` is a Pages project: its config has no `main` and has

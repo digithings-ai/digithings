@@ -20,8 +20,8 @@ the `cf-container-target-port` request header
 (`apps/digithings-stack-cloudflare/src/index.ts:153`). The shim reads that
 header and forwards to the compose service on the host.
 
-Resolution is keyed on **(class, port)**, never on port alone:
-`DigiChatContainer` and `LangfuseWebContainer` both default to port 3000.
+Resolution is keyed on **(class, port)**, never on port alone: the same
+container port means a different compose service per class.
 
 ## Generate and run
 
@@ -51,7 +51,6 @@ Run each command from the repository root.
 | dashboard-api | 8789 | auxiliary |
 | digithings-cron | 8790 | `--test-scheduled` |
 | digiquant-runner | 8791 | auxiliary |
-| digitrace-langfuse | 8792 | auxiliary |
 
 None of these collide with a published compose port; the test suite parses
 `docker-compose.yml` and asserts that, so the table cannot drift silently.
@@ -94,11 +93,6 @@ These container classes have **no compose service today**, so the shim answers
 |---|---|---|
 | `DigiQuantMcpContainer` | 8767 | `digiquant-mcp` publishing 8767 |
 | `DigiQuantRunnerContainer` | 8080 | `digiquant-runner` publishing 8080 |
-| `LangfuseWebContainer` | 3000 | `digitrace-langfuse-web` |
-| `LangfuseWorkerContainer` | 3030 | `digitrace-langfuse-worker` |
-
-`apps/digitrace-langfuse/docker-compose.local.yml` has only `clickhouse` and
-`redis`; the Langfuse application containers themselves are not there.
 
 Mapped today: `DigiStackContainer` (8000 digigraph, 8001 digiquant, 8002
 digisearch, 8003 digitrace, 8004 digivault, 8005 digikey, 4000 litellm) and
