@@ -1962,7 +1962,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.responseLanguage).toBe("fr");
   });
 
-  it("passes maxToolCalls from the foundry backend to the adapter", async () => {
+  it("passes the shared guardrail cap, not the Foundry alias, when the tenant sets no cap", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "foundry-tenant",
       ownerUserSub: "embed:anonymous",

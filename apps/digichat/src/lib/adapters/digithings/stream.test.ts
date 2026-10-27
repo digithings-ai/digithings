@@ -677,15 +677,30 @@ it("relays llm_error detail for the embed disclosure", () => {
   });
 });
 
-it("never relays an internal reason code as the user message", () => {
-  // The live failure: the chat rendered `art9:genetic:rs_id` as the message.
-  // A stable reason code is operator detail (art9-screen.ts says so explicitly).
+// One case per code shape: the colon form (the live failure), the bare
+// underscore form (`art9_refused`, same module's refusal code), and a
+// hyphenated segment (`art9:health:field-name`, what the screen tests use).
+// All three are operator detail; none of them is copy.
+it.each(["art9:genetic:rs_id", "art9_refused", "art9:health:field-name"])(
+  "never relays the internal reason code %s as the user message",
+  (reason) => {
+    const payload = digigraphErrorToEmbedPayload({
+      code: "llm_error",
+      message: reason,
+      detail: reason,
+    });
+    expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+    expect(payload).not.toContain("art9");
+  },
+);
+
+it("drops a machine reason code in detail even when the message is human", () => {
   const payload = digigraphErrorToEmbedPayload({
     code: "llm_error",
-    message: "art9:genetic:rs_id",
+    message: "The model timed out.",
     detail: "art9:genetic:rs_id",
   });
-  expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+  expect(JSON.parse(payload)).toEqual({ error: "llm_error", message: "The model timed out." });
   expect(payload).not.toContain("art9");
 });
 
@@ -1937,6 +1952,10 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
 
   expect(body).toContain("tool-call-limit");
   expect(body).toContain("Tool-call limit reached (1 this turn)");
+  // The observer path promises nothing: digigraph cannot abort the upstream loop,
+  // so "Answering from the results gathered so far" was a promise the adapter
+  // could not keep (DIG-5715). Only the enforcing path says that.
+  expect(body).not.toContain("Answering from the results gathered so far");
   // The house loop is not aborted: the answer after the notice still arrives.
   expect(body).toContain("Done.");
 });

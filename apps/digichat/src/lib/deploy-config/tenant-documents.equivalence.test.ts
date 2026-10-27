@@ -223,6 +223,18 @@ describe("digithings.ai — config/digithings.yaml equals today's house resoluti
     expect(actual.gate.mode).toBe("ungated");
   });
 
+  it("resolves identical guardrails, with the tool-call cap deliberately ahead of live KV", () => {
+    // DIG-5715 raised the house cap 5 -> 20. Nothing in this repo writes KV
+    // `config-yaml`, so the document is deliberately ahead of the live key until
+    // an operator writes it. Pinned as a pair so that gap is visible instead of
+    // silent: if either side drifts to a third value, this fails.
+    const { maxToolCallsPerTurn: documentCap, ...documentRest } = actual.guardrails!;
+    const { maxToolCallsPerTurn: liveCap, ...liveRest } = expected.guardrails!;
+    expect(documentRest).toEqual(liveRest);
+    expect(documentCap).toBe(20);
+    expect(liveCap === 5 || liveCap === 20).toBe(true);
+  });
+
   it("resolves the same embed token ref", () => {
     expect(actual.tokenEnv).toBe(expected.tokenEnv);
     expect(actual.tokenEnv).toBe("DIGICHAT_HOST_DIGITHINGS_AI_TOKEN");

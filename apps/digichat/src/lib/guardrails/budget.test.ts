@@ -207,6 +207,21 @@ describe("createTurnGuard", () => {
     expect(parts).toEqual([]);
   });
 
+  it("an observer notice states the cap without promising an answer", () => {
+    const guard = createTurnGuard({
+      slug: "trial",
+      guardrails: { maxToolCallsPerTurn: 2 },
+    });
+    const parts: unknown[] = [];
+    guard.noteToolCap({ write: (part) => parts.push(part) }, 2);
+    const text = JSON.stringify(parts);
+    expect(text).toContain("Tool-call limit reached (2 this turn)");
+    // The observer path is for backends that cannot abort the upstream loop
+    // (digigraph). Nothing is wrapping up, so the notice must not say it is —
+    // the old wording promised an answer and the loop carried on (DIG-5715).
+    expect(text).not.toContain("Answering from the results gathered so far");
+  });
+
   it("stops further tools at the shared cap and does not throw", async () => {
     const guard = createTurnGuard({
       slug: "trial",
@@ -219,6 +234,8 @@ describe("createTurnGuard", () => {
     });
     expect(clearance.action).toBe("stop-tools");
     expect(JSON.stringify(parts)).toContain("Tool-call limit reached (2 this turn)");
+    // The enforcing path does stop the loop, so it may say it is answering now.
+    expect(JSON.stringify(parts)).toContain("Answering from the results gathered so far");
     expect(JSON.stringify(parts)).not.toContain('"type":"error"');
   });
 

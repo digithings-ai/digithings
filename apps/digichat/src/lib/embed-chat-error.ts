@@ -6,8 +6,27 @@ import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
 import { gateMetersTurns } from "@/lib/deploy-config/schema";
 import type { EmbedLlmAccess } from "@/lib/embed-tenants";
 
-/** `art9:<category>:<signal>` and friends: stable internal reason codes, never user copy. */
-const INTERNAL_REASON_CODE_RE = /^[a-z][a-z0-9_]*:[a-z0-9_]+(?::[a-z0-9_]+)*$/;
+/**
+ * Whether a string is a stable internal reason code rather than user copy.
+ *
+ * `art9-screen.ts` documents the family: `art9:<category>:<signal>` ("stable
+ * reason code, never the value"), hyphenated segments such as
+ * `art9:health:field-name`, and bare codes such as `art9_refused` (the refusal
+ * code in the same module). Two shapes therefore count:
+ *
+ *   `<prefix>:<segment>[:<segment>...]`  `art9:genetic:rs_id`, `art9:health:field-name`
+ *   `<prefix>_<segment>[...]`            `art9_refused`, `art9_screen_unavailable`
+ *
+ * No shape admits a space, so an upstream human sentence ("The model timed
+ * out.") is never mistaken for a code.
+ */
+const INTERNAL_REASON_CODE_RE =
+  /^(?:[a-z][a-z0-9_]*(?::[a-z0-9_-]+)+|[a-z][a-z0-9]*_[a-z0-9_-]+)$/;
+
+/** One place that decides "machine code, not copy" — the SSE and embed paths share it. */
+export function isInternalReasonCode(value: string): boolean {
+  return INTERNAL_REASON_CODE_RE.test(value.trim());
+}
 
 const NETWORK_ERROR_RE =
   /\b(fetch failed|failed to fetch|networkerror|network error|econnrefused)\b/i;
@@ -175,7 +194,7 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   // is still shown (see the test that pins it); a machine reason code like
   // `art9:genetic:rs_id` is not, because it is operator detail that reached a live
   // transcript. When there is nothing but a code, the user gets plain copy.
-  if (code === "llm_error" && (message === undefined || INTERNAL_REASON_CODE_RE.test(message))) {
+  if (code === "llm_error" && (message === undefined || isInternalReasonCode(message))) {
     return "That answer could not be completed. Try a narrower question, or ask again.";
   }
   if (message) {

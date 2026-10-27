@@ -19,7 +19,7 @@ import {
   uiMessagesForUpstream,
   writeStandardActivity,
 } from "@/lib/ui-stream-parts";
-import { BYOK_MODEL_REMEDIABLE_CODES } from "@/lib/embed-chat-error";
+import { BYOK_MODEL_REMEDIABLE_CODES, isInternalReasonCode } from "@/lib/embed-chat-error";
 import { CredentialRedirectError, fetchGuarded } from "@/lib/fetch-guarded";
 import type { TurnGuard } from "@/lib/guardrails/turn";
 
@@ -42,25 +42,26 @@ export type DigigraphErrorPayload = {
 };
 
 /**
- * A stable internal reason code: `art9:genetic:rs_id`, `art9_refused`, and the
- * like. These are produced for the operator log - the `art9-screen` module says
- * so explicitly ("stable `art9:<category>:<signal>` reason code, never the
- * value") - and one reached a live chat as the user-visible message (#DIG toolcap).
- * A user gets copy, not a code.
+ * Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`.
+ *
+ * Internal reason codes (`art9:genetic:rs_id`, `art9_refused`) are operator
+ * detail — `art9-screen` says so explicitly — and one reached a live chat as the
+ * visible message (DIG-5715). A user gets copy, not a code. The shape lives in
+ * `isInternalReasonCode` so this path and `formatEmbedChatError` cannot drift.
  */
-const INTERNAL_REASON_CODE_RE = /^[a-z][a-z0-9_]*:[a-z0-9_]+(?::[a-z0-9_]+)*$/;
-
-/** Map digigraph's `{ code, message }` to embed-chat-error's `{ error, message }`. */
 export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string {
   const code = typeof err.code === "string" && err.code.length ? err.code : "digigraph_error";
   const payload: { error: string; message?: string; detail?: string } = { error: code };
-  const machineReason = typeof err.message === "string" && INTERNAL_REASON_CODE_RE.test(err.message.trim());
+  // Judged per field, not once for the pair: a human message with a machine reason
+  // code in `detail` must still lose the code (a live transcript rendered one).
+  const messageIsCode = typeof err.message === "string" && isInternalReasonCode(err.message);
+  const detailIsCode = typeof err.detail === "string" && isInternalReasonCode(err.detail);
   // BYOK remediable codes carry trusted copy in embed-chat-error — never relay
   // digigraph's message (it can echo caller headers or other upstream detail).
   if (
     typeof err.message === "string" &&
     err.message.length &&
-    !machineReason &&
+    !messageIsCode &&
     !BYOK_MODEL_REMEDIABLE_CODES.has(code)
   ) {
     payload.message = err.message;
@@ -68,7 +69,7 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
   if (
     typeof err.detail === "string" &&
     err.detail.length &&
-    !machineReason &&
+    !detailIsCode &&
     !BYOK_MODEL_REMEDIABLE_CODES.has(code)
   ) {
     payload.detail = err.detail;
