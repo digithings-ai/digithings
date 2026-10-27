@@ -1869,8 +1869,9 @@ def run_checks(pr, out, summary=None):
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
     # The R0 allowance gate compares the PR's baseline with the base branch tip.
     # prepare_wt fetched origin/<base>; a caller that knows the exact base commit
-    # (the post-merge driver) may pass it as baseCommit. Never guess a ref: an
-    # unresolvable one fails the gate closed, so a SHA is used as given.
+    # may pass it as baseCommit (reserved for the post-merge driver, which has
+    # no base branch to name). Never guess a ref: an unresolvable one fails the
+    # gate closed, so a SHA is used as given.
     base_commit = str(pr.get("baseCommit") or "")
     if re.fullmatch(r"[0-9a-f]{40}", base_commit):
         r0_base = base_commit
