@@ -133,7 +133,11 @@ export default async function EmbedRouteShell({
             "try{document.documentElement.dataset.embedWide=/[?&]wide=1(?:&|$)/.test(window.location.search)?'1':'0';}catch(e){}",
         }}
       />
-      <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
+      <EmbedClient
+        initialTenantCfg={seededCfg}
+        initialBoot={first(params.boot) ?? null}
+        initialHost={first(params.host) ?? null}
+      />
     </div>
   );
 }

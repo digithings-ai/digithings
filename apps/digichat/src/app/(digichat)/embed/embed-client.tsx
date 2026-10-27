@@ -237,17 +237,31 @@ export function readTrialProofMessage(
  * read from the params by the *server* component in page.tsx, where the prop
  * does work, and arrives here already resolved. The client still re-reads the
  * params itself for everything else.
+ *
+ * `initialHost` is the `host` the server rendered with. It matters only when
+ * the address bar does not carry it: the invite-gated OCC page (DIG-3585) is
+ * served at a bare `/chat/occ`, rewritten at the edge to `/embed?host=…`, so
+ * the server saw the host and the client's URL (Next keeps `window.location`
+ * as the canonical URL) does not. Without the fallback the client would
+ * hydrate as a host-less embed — a mismatch with the server's paint. The URL's
+ * own `?host=` always wins.
  */
 export default function EmbedClient({
   initialTenantCfg,
   initialBoot,
+  initialHost,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
   initialBoot?: string | null;
+  initialHost?: string | null;
 }) {
   return (
     <Suspense fallback={null}>
-      <EmbedPageInner initialTenantCfg={initialTenantCfg} initialBoot={initialBoot} />
+      <EmbedPageInner
+        initialTenantCfg={initialTenantCfg}
+        initialBoot={initialBoot}
+        initialHost={initialHost}
+      />
     </Suspense>
   );
 }
@@ -255,14 +269,16 @@ export default function EmbedClient({
 function EmbedPageInner({
   initialTenantCfg,
   initialBoot,
+  initialHost,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
   initialBoot?: string | null;
+  initialHost?: string | null;
 }) {
   const searchParams = useSearchParams();
   const accent = resolveAccent(searchParams.get("accent"));
   const token = searchParams.get("token") ?? undefined;
-  const host = searchParams.get("host") ?? undefined;
+  const host = searchParams.get("host") ?? (initialHost || undefined);
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
 
   // Warm-up on load: wake sleeping services; chat sends wait on the gate.

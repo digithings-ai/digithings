@@ -224,12 +224,11 @@ fi
 echo
 if [ "$failures" -eq 0 ]; then
   echo "All $checks checks passed."
-  echo "Not scriptable: the manual half is open https://digithings.ai/chat/occ?token=\$OCC_INVITE_KEY"
-  echo "in a browser, where a person completes one real chat message as an OCC staff user. That is"
-  echo "the only proof that Pages -> readInviteToken -> X-Embed-Token -> digichat -> Container -> model"
-  echo "works end to end. On DIG-4810 this half was closed by decision on 2026-10-21 (the machine"
-  echo "proof was enough); run it for a rotation, and record the result in"
-  echo "docs/ops/SECRETS_ROTATION.md 'Rotation log'."
+  echo "The invited path is scriptable now: OCC_INVITE_KEY=... scripts/smoke_occ_invite_gate.sh"
+  echo "checks /chat/occ both uninvited (404) and invited (200, chat served directly, no iframe)."
+  echo "What remains manual: open https://digithings.ai/chat/occ?token=\$OCC_INVITE_KEY in a browser and"
+  echo "complete one real chat message as an OCC staff user — the only proof that the full"
+  echo "Worker occGate -> /chat/embed + x-embed-token -> Container -> model chain answers."
   exit 0
 fi
 

@@ -17,15 +17,21 @@ enabled = true
 #
 # That note said the zone routes had been folded into digithings-stack in code
 # (cost epic: one DigiChat container, not two) and that the seven routes below
-# would MOVE there once that cutover was deployed. The fold is dead. Chris
-# decided on 2026-10-19 (recorded in
-# apps/digithings-stack-cloudflare/wrangler.toml) that OCC is client work and
-# must not ride the base digithings platform: every digithings.ai digichat path
-# — embed, api/chat, api/embed, api/byok, api/plan-proof, api/health, _dtchat,
-# chat/occ and now chat* — is owned by THIS Worker and its own container. The
-# stack Worker serves only its own custom domains (graph/key/search), which is
-# what ended every stack deploy failing with `Can't deploy routes that are
-# assigned to another worker`.
+# would MOVE there once that cutover was deployed. The fold is dead: every
+# digithings.ai digichat path — embed, api/chat, api/embed, api/byok,
+# api/plan-proof, api/health, _dtchat, chat/occ and now chat* — is owned by
+# THIS Worker and its one shared container. The stack Worker serves only its
+# own custom domains (graph/key/search), which is what ended every stack deploy
+# failing with `Can't deploy routes that are assigned to another worker`.
+#
+# Superseded rationale (2026-10-19 → 2026-10-27, DIG-3585): this note used to
+# say OCC is client work that must not ride the shared digithings platform.
+# Chris reversed that on 2026-10-27: OCC is one tenant of the shared stack and
+# of this Worker's one container, like the house chat. What keeps it apart is
+# not a separate deployment but the gate — the invite link (src/occ-gate.ts)
+# is the only way in to /chat/occ, its API calls are bound to the OCC tenant
+# at this edge only from that page with a valid invite cookie, and the OCC
+# indexes answer only the OCC tenant. The route ownership above is unchanged.
 #
 # So the seven routes below are this Worker's live surface and they STAY here.
 # They are not a temporary bridge with a stack move behind them, and the stack
@@ -46,12 +52,13 @@ enabled = true
 # src/paths.ts: containerPathFor).
 #
 # Compatibility window (ADR 0018): the seven routes below stay declared.
-# /embed* stays for good — the OCC shell's iframe points at
-# digithings.ai/embed?host=… and the marketing site's own shell points it at
-# digithings.ai/embed?host=digithings.ai, so that route is not a temporary
-# bridge. The /api/* routes below are the legacy spelling of what the app now
-# serves under /chat/api/*; they are reviewed once the cutover is verified
-# live. The OCC shell (/chat/occ*) stays a Pages shell behind the invite gate.
+# /embed* stays for good — the marketing site's own shell points it at
+# digithings.ai/embed?host=digithings.ai and customer embeds use it, so that
+# route is not a temporary bridge (its host=occ door stays invite-gated: see
+# occEmbedGate). The /api/* routes below are the legacy spelling of what the
+# app now serves under /chat/api/*; they are reviewed once the cutover is
+# verified live. /chat/occ* is no Pages shell any more: this Worker's invite
+# gate serves the app itself there (DIG-3585).
 #
 # To roll back: this exact route list IS the rollback shape.
 [[routes]]

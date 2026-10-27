@@ -86,7 +86,10 @@ describe("the proxy call site", () => {
 
   it("does not retry the admin reset lever or the meta route", () => {
     // Both are served by the Worker itself and never reach the container.
-    const retryAt = indexSource.indexOf("fetchContainerWithRetry(");
+    // The LAST retry call is the /chat proxy: the OCC branch keeps its own
+    // wrapped upstream earlier in the same handler (it must, or /chat/occ
+    // would answer a raw 5xx on a draining slot while /chat retries).
+    const retryAt = indexSource.lastIndexOf("fetchContainerWithRetry(");
     const resetAt = indexSource.indexOf("digichatContainerReset(");
     const metaAt = indexSource.indexOf('"/_digichat/meta"');
     expect(retryAt).toBeGreaterThan(-1);
