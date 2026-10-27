@@ -39,6 +39,10 @@ hosts:
       sources: true
       branchPicker: true
       speech: false
+      # Private demo mode: replies use stand-ins for real names and identifiers
+      # so a transcript can be shown to the client it is about. Display-side
+      # only — stored text and tool results are untouched.
+      privateMode: true
     # Premium spend meter off. The picker list stays the default catalog.
     models:
       # Picker is the inherited catalog. `occPicker: false` is the off

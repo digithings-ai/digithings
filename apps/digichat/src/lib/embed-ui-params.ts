@@ -14,6 +14,10 @@ export type EmbedUiParams = {
    * hosts like digithings.ai /chat and /chat/occ), not a tenant-config default,
    * so narrow widget embeds elsewhere keep the readable-column width. */
   wide?: boolean;
+  /** `?private=1` — start this session in private mode. ON-only, like `wide`:
+   * a demo aid for client-facing tenants, never a data-protection control (the
+   * stores keep the real text). The in-session toggle is `/private`. */
+  privateMode?: boolean;
 };
 
 function readHexParam(sp: URLSearchParams, key: string): string | undefined {
@@ -47,5 +51,6 @@ export function readEmbedUiParams(search: string): EmbedUiParams {
   // compare against an object that omits the key entirely, and `toEqual`
   // treats `undefined`-valued keys as absent but not `false`-valued ones.
   const wide = sp.get("wide") === "1" ? true : undefined;
-  return { welcome, placeholder, suggestions, accent, accentForeground, wide };
+  const privateMode = sp.get("private") === "1" ? true : undefined;
+  return { welcome, placeholder, suggestions, accent, accentForeground, wide, privateMode };
 }

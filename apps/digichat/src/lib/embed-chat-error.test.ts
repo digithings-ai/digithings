@@ -328,6 +328,22 @@ describe("model-remediable refusals with no upstream message", () => {
     });
   }
 
+  // One case per code shape: the colon form (the live failure), the bare
+  // underscore form (`art9_refused`), and a hyphenated segment
+  // (`art9:health:field-name`). Each must fall back to plain copy.
+  it.each(["art9:genetic:rs_id", "art9_refused", "art9:health:field-name"])(
+    "gives llm_error plain copy instead of the machine reason code %s",
+    (reason) => {
+      const formatted = formatEmbedChatError(
+        new Error(JSON.stringify({ error: "llm_error", message: reason })),
+      );
+      expect(formatted).toBe(
+        "That answer could not be completed. Try a narrower question, or ask again.",
+      );
+      expect(formatted).not.toContain("art9");
+    },
+  );
+
   // An upstream message, when there is one, still wins — the SSE path carries it.
   it("prefers the upstream message when one is present", () => {
     const formatted = formatEmbedChatError(

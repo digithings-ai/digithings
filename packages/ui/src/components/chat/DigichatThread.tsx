@@ -52,6 +52,12 @@ export type DigichatThreadProps = {
   density?: "compact" | "default" | "airy";
   /** `follow` chases the stream; `free` never moves the viewport. */
   scrollMode?: ScrollMode;
+  /**
+   * Private session: the work surfaces that carry user data — reasoning text
+   * and tool-call JSON — do not mount at all, and the composer shows the mode
+   * badge. Display-only; see packages/ui/ARCHITECTURE.md.
+   */
+  privateMode?: boolean;
 };
 
 export function DigichatThread({
@@ -73,6 +79,7 @@ export function DigichatThread({
   scrollbars,
   density = "default",
   scrollMode,
+  privateMode,
 }: DigichatThreadProps) {
   return (
     <Thread
@@ -94,6 +101,7 @@ export function DigichatThread({
       scrollbars={scrollbars}
       density={density}
       scrollMode={scrollMode}
+      privateMode={privateMode}
     />
   );
 }

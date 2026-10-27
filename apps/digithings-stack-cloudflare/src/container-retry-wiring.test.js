@@ -65,10 +65,11 @@ describe("every container-backed route retries once", () => {
   it("converts the containers package's 500 into the failed-container answer", () => {
     // @cloudflare/containers 0.3.7 answers a container that died mid-request
     // with a 500 instead of throwing, so the recycle has to be recognised on
-    // the RESPONSE — once per container class.
+    // the RESPONSE — once for the one remaining container class (the
+    // digiquant-mcp container was deleted in DIG-5558).
     const source = stackSource();
     expect(source).toContain("containerRestartMessage");
-    expect(source.split("await containerRestartMessage(response)").length - 1).toBe(2);
+    expect(source.split("await containerRestartMessage(response)").length - 1).toBe(1);
   });
 
   it("keeps the MCP edge proxy forwarding to the mapped port", () => {
@@ -91,28 +92,26 @@ describe("the container wrapper separates a failed container from a booting one"
     // reads the message out of the thrown value, the hop catch reads it out
     // of the classification (DIG-4928).
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const boot = `return containerFailedResponse("${service}", message);`;
-      const hop = `return containerFailedResponse("${service}", failure.message);`;
-      expect(source.split(boot).length - 1).toBe(1);
-      expect(source.split(hop).length - 1).toBe(1);
-    }
+    const boot = 'return containerFailedResponse("stack", message);';
+    const hop = 'return containerFailedResponse("stack", failure.message);';
+    expect(source.split(boot).length - 1).toBe(1);
+    expect(source.split(hop).length - 1).toBe(1);
+    // The deleted digiquant-mcp container (DIG-5558) must not wire this again.
+    expect(source).not.toContain('containerFailedResponse("mcp"');
   });
 
   it("keeps the boot 503 for a container that is still starting", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerBootingResponse("${service}", message);`);
-    }
+    expect(source).toContain('return containerBootingResponse("stack", message);');
+    expect(source).not.toContain('containerBootingResponse("mcp"');
   });
 
   it("keeps the evicted 410 for a confirmed eviction", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const boot = `return containerEvictedResponse("${service}", message);`;
-      const hop = `return containerEvictedResponse("${service}", failure.message);`;
-      expect(source.split(boot).length - 1).toBe(1);
-      expect(source.split(hop).length - 1).toBe(1);
-    }
+    const boot = 'return containerEvictedResponse("stack", message);';
+    const hop = 'return containerEvictedResponse("stack", failure.message);';
+    expect(source.split(boot).length - 1).toBe(1);
+    expect(source.split(hop).length - 1).toBe(1);
+    expect(source).not.toContain('containerEvictedResponse("mcp"');
   });
 });

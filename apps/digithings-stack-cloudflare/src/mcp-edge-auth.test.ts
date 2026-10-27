@@ -12,9 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MCP_EDGE_JWKS_KV_KEY,
   MCP_EDGE_JWKS_TTL_MS,
+  MCP_EDGE_MAX_INSPECT_BYTES,
   _resetMcpEdgeJwksCacheForTests,
   authorizeMcpEdge,
   mcpScopeForServer,
+  mcpWriteScopeForTool,
   scopeGrants,
   verifyDigikeyJwt,
 } from "./mcp-edge-auth";
@@ -559,5 +561,185 @@ describe("JWKS sources", () => {
       TENANT_CONFIG: { get: async () => null, put: async () => {} },
     };
     expect((await verifyDigikeyJwt(token, env)).ok).toBe(false);
+  });
+});
+
+/**
+ * `mcp:<serverId>` is read-only (DIG-5723). The tool name only exists in the
+ * JSON-RPC body, so these tests drive the real request shape a client sends:
+ * a POST to `/_stack/mcp/digivault/mcp` with `tools/call`.
+ */
+describe("write tools need their own scope", () => {
+  function toolCall(
+    body: unknown,
+    token: string,
+    serverId = "digivault",
+    method = "POST",
+  ): Request {
+    return new Request(`https://stack.test/_stack/mcp/${serverId}/mcp`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: method === "POST" ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  function rpc(tool: string, id = 1) {
+    return {
+      jsonrpc: "2.0",
+      id,
+      method: "tools/call",
+      params: { name: tool, arguments: {} },
+    };
+  }
+
+  it("maps the one mutating digivault tool to its write scope", () => {
+    expect(mcpWriteScopeForTool("digivault", "create_note")).toBe("mcp:digivault:write");
+    // Reads need nothing beyond the server scope.
+    expect(mcpWriteScopeForTool("digivault", "search_notes")).toBe("");
+    expect(mcpWriteScopeForTool("digivault", "search_tag")).toBe("");
+    // The static-key-only servers keep their historical surface.
+    expect(mcpWriteScopeForTool("digisearch", "websets_create")).toBe("");
+    expect(mcpWriteScopeForTool("unknown", "create_note")).toBe("");
+  });
+
+  it("lets mcp:digivault run a read tool", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(rpc("search_notes"), token),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: true, via: "jwt", scope: "mcp:digivault" });
+  });
+
+  it("refuses create_note with 403 for mcp:digivault alone", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(rpc("create_note"), token),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: false, status: 403, reason: "missing_scope" });
+  });
+
+  it("refuses a write tool inside a JSON-RPC batch", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(
+        [{ jsonrpc: "2.0", id: 0, method: "initialize", params: {} }, rpc("create_note")],
+        token,
+      ),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: false, status: 403, reason: "missing_scope" });
+  });
+
+  it("allows create_note when the token carries the write scope too", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault mcp:digivault:write"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(rpc("create_note"), token),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision.ok).toBe(true);
+  });
+
+  it("does not let a write scope stand in for the read scope", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault:write"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(rpc("create_note"), token),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: false, status: 403, reason: "missing_scope" });
+  });
+
+  it("keeps the static-key compat path unchanged", async () => {
+    stubJwks([primary]);
+    const request = new Request("https://stack.test/_stack/mcp/digivault/mcp", {
+      method: "POST",
+      headers: { "x-digi-mcp-key": STATIC_KEY, "content-type": "application/json" },
+      body: JSON.stringify(rpc("create_note")),
+    });
+    const decision = await authorizeMcpEdge({
+      request,
+      serverId: "digivault",
+      expectedKey: STATIC_KEY,
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: true, via: "key" });
+  });
+
+  it("ignores a GET, which opens the stream and calls no tool", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(null, token, "digivault", "GET"),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision.ok).toBe(true);
+  });
+
+  it("refuses a JWT-authenticated body it cannot inspect", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: new Request("https://stack.test/_stack/mcp/digivault/mcp", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: "{not json",
+      }),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: false, status: 400, reason: "uninspectable_body" });
+  });
+
+  it("refuses an oversized body rather than passing it uninspected", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault"));
+    const decision = await authorizeMcpEdge({
+      request: new Request("https://stack.test/_stack/mcp/digivault/mcp", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "content-length": String(MCP_EDGE_MAX_INSPECT_BYTES + 1),
+        },
+        body: "{}",
+      }),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision).toEqual({ ok: false, status: 400, reason: "uninspectable_body" });
+  });
+
+  it("leaves the digisearch surface alone", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    const decision = await authorizeMcpEdge({
+      request: toolCall(rpc("websets_create"), token, "digisearch"),
+      serverId: "digisearch",
+      expectedKey: "",
+      env: ENV,
+    });
+    expect(decision.ok).toBe(true);
   });
 });

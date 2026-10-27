@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cloudflare modular redesign — today vs target</title>
+<style>
+  :root {
+    --ink: #111; --ink-soft: #555; --hair: #d8d8d8; --surface: #fff;
+    --surface-2: #f5f5f3; --accent: #1a5cff; --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 32px 64px;
+    background: var(--surface); color: var(--ink);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  h1 { font-size: 18px; letter-spacing: .02em; margin: 0 0 6px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+       color: var(--ink-soft); margin: 36px 0 10px; font-weight: 500; }
+  p.lede { color: var(--ink-soft); max-width: 78ch; margin: 0 0 8px; }
+  .panel { border: 1px solid var(--hair); background: var(--surface-2); padding: 16px; }
+  svg { display: block; width: 100%; height: auto; background: var(--surface); }
+  .box { fill: #fff; stroke: var(--ink); stroke-width: 1; }
+  .box-hair { fill: #fff; stroke: var(--hair); stroke-width: 1; }
+  .box-warn { fill: #fff; stroke: var(--warn); stroke-width: 1; stroke-dasharray: 4 3; }
+  .box-key { fill: #fff; stroke: var(--accent); stroke-width: 1; }
+  .lbl { font: 11px ui-monospace, monospace; fill: var(--ink); }
+  .lbl-sm { font: 9.5px ui-monospace, monospace; fill: var(--ink-soft); }
+  .lbl-b { font: 11px ui-monospace, monospace; fill: var(--ink); font-weight: 600; }
+  .arrow { stroke: var(--ink); stroke-width: 1; fill: none; marker-end: url(#a); }
+  .arrow-dash { stroke: var(--ink-soft); stroke-width: 1; fill: none;
+                stroke-dasharray: 3 3; marker-end: url(#b); }
+  table { border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+  th, td { border-bottom: 1px solid var(--hair); padding: 6px 10px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-soft); font-weight: 500; text-transform: uppercase;
+       font-size: 10px; letter-spacing: .1em; }
+  .note { color: var(--ink-soft); font-size: 11px; margin-top: 8px; }
+  .pos { color: var(--warn); }
+  .neg { color: #067a46; }
+</style>
+</head>
+<body>
+
+<h1>Cloudflare backend — today vs modular target</h1>
+<p class="lede">Every module its own service, scaling alone. Containers only where the
+workload demands a process; Workers for everything request-scoped; D1 / KV / R2 as the
+only shared state.</p>
+
+<h2>Today — one box, eight programs, one lifecycle</h2>
+<div class="panel">
+<svg viewBox="0 0 880 380" role="img" aria-label="Today: two containers, one holding eight programs">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect class="box" x="16" y="16" width="120" height="40"/>
+  <text class="lbl" x="76" y="41" text-anchor="middle">browser</text>
+
+  <rect class="box" x="180" y="16" width="250" height="40"/>
+  <text class="lbl-b" x="305" y="33" text-anchor="middle">Worker edge</text>
+  <text class="lbl-sm" x="305" y="47" text-anchor="middle">digichat routes + stack routes</text>
+
+  <path class="arrow" d="M136,36 L178,36"/>
+
+  <rect class="box" x="180" y="96" width="150" height="66"/>
+  <text class="lbl-b" x="255" y="117" text-anchor="middle">chat container</text>
+  <text class="lbl-sm" x="255" y="132" text-anchor="middle">Next standalone</text>
+  <text class="lbl-sm" x="255" y="145" text-anchor="middle">+ python helpdesk MCP</text>
+  <path class="arrow" d="M255,56 L255,94"/>
+
+  <rect class="box-warn" x="360" y="96" width="500" height="200" rx="2"/>
+  <text class="lbl-b" x="374" y="116">stack container — standard-1, 4 GiB, one wake for everything</text>
+
+  <rect class="box-hair" x="376" y="128" width="110" height="30"/>
+  <text class="lbl-sm" x="431" y="147" text-anchor="middle">digigraph :8000</text>
+  <rect class="box-hair" x="496" y="128" width="110" height="30"/>
+  <text class="lbl-sm" x="551" y="147" text-anchor="middle">digikey :8005</text>
+  <rect class="box-hair" x="616" y="128" width="110" height="30"/>
+  <text class="lbl-sm" x="671" y="147" text-anchor="middle">digisearch :8002</text>
+  <rect class="box-hair" x="736" y="128" width="110" height="30"/>
+  <text class="lbl-sm" x="791" y="147" text-anchor="middle">digivault :8004</text>
+
+  <rect class="box-hair" x="376" y="168" width="110" height="30"/>
+  <text class="lbl-sm" x="431" y="187" text-anchor="middle">litellm :4000</text>
+  <rect class="box-hair" x="496" y="168" width="110" height="30"/>
+  <text class="lbl-sm" x="551" y="187" text-anchor="middle">searxng :8080</text>
+  <rect class="box-hair" x="616" y="168" width="110" height="30"/>
+  <text class="lbl-sm" x="671" y="187" text-anchor="middle">redis :6379</text>
+  <rect class="box-hair" x="736" y="168" width="110" height="30"/>
+  <text class="lbl-sm" x="791" y="187" text-anchor="middle">3× MCP :8765+</text>
+
+  <text class="lbl-sm" x="374" y="222">every service talks over localhost; one image, one cold start, one failure domain</text>
+  <path class="arrow" d="M430,56 L430,94"/>
+  <path class="arrow" d="M600,56 L600,94"/>
+
+  <rect class="box" x="180" y="316" width="250" height="40"/>
+  <text class="lbl-sm" x="305" y="341" text-anchor="middle">Postgres · R2 · KV</text>
+  <path class="arrow-dash" d="M300,296 L300,340"/>
+  <path class="arrow-dash" d="M600,296 L540,316"/>
+</svg>
+</div>
+
+<h2>Target — one module, one service, one scale knob</h2>
+<div class="panel">
+<svg viewBox="0 0 880 520" role="img" aria-label="Target: independent modules with explicit interfaces">
+  <rect class="box" x="16" y="16" width="120" height="40"/>
+  <text class="lbl" x="76" y="41" text-anchor="middle">browser</text>
+
+  <rect class="box-key" x="180" y="16" width="300" height="40"/>
+  <text class="lbl-b" x="330" y="33" text-anchor="middle">Worker edge</text>
+  <text class="lbl-sm" x="330" y="47" text-anchor="middle">routing · invite gate · tenant config from KV</text>
+  <path class="arrow" d="M136,36 L178,36"/>
+
+  <rect class="box" x="180" y="110" width="160" height="60"/>
+  <text class="lbl-b" x="260" y="132" text-anchor="middle">chat-web</text>
+  <text class="lbl-sm" x="260" y="146" text-anchor="middle">container · basic</text>
+  <text class="lbl-sm" x="260" y="159" text-anchor="middle">scales on sessions</text>
+  <path class="arrow" d="M300,56 L280,108"/>
+
+  <rect class="box-key" x="390" y="110" width="160" height="60"/>
+  <text class="lbl-b" x="470" y="132" text-anchor="middle">mcp-edge</text>
+  <text class="lbl-sm" x="470" y="146" text-anchor="middle">Worker · JWT per server</text>
+  <text class="lbl-sm" x="470" y="159" text-anchor="middle">scales on requests</text>
+  <path class="arrow" d="M360,56 L450,108"/>
+
+  <rect class="box" x="180" y="220" width="160" height="60"/>
+  <text class="lbl-b" x="260" y="242" text-anchor="middle">digigraph</text>
+  <text class="lbl-sm" x="260" y="256" text-anchor="middle">container · standard-1</text>
+  <text class="lbl-sm" x="260" y="269" text-anchor="middle">scales on turns</text>
+  <path class="arrow" d="M260,170 L260,218"/>
+
+  <rect class="box" x="390" y="220" width="160" height="60"/>
+  <text class="lbl-b" x="470" y="242" text-anchor="middle">digisearch</text>
+  <text class="lbl-sm" x="470" y="256" text-anchor="middle">container · standard-1</text>
+  <text class="lbl-sm" x="470" y="269" text-anchor="middle">scales on queries</text>
+  <path class="arrow" d="M420,170 L450,218"/>
+  <path class="arrow" d="M330,250 L388,250"/>
+
+  <rect class="box-key" x="600" y="220" width="150" height="60"/>
+  <text class="lbl-b" x="675" y="242" text-anchor="middle">digivault</text>
+  <text class="lbl-sm" x="675" y="256" text-anchor="middle">Worker · D1 + R2</text>
+  <text class="lbl-sm" x="675" y="269" text-anchor="middle">scales on requests</text>
+  <path class="arrow" d="M550,250 L598,250"/>
+  <path class="arrow" d="M490,170 L640,218"/>
+
+  <rect class="box-key" x="600" y="110" width="150" height="60"/>
+  <text class="lbl-b" x="675" y="132" text-anchor="middle">digikey</text>
+  <text class="lbl-sm" x="675" y="146" text-anchor="middle">Worker · D1 + KV</text>
+  <text class="lbl-sm" x="675" y="159" text-anchor="middle">scales on requests</text>
+  <path class="arrow" d="M340,280 L675,172"/>
+  <path class="arrow" d="M550,140 L598,140"/>
+
+  <rect class="box" x="180" y="330" width="160" height="46"/>
+  <text class="lbl-sm" x="260" y="350" text-anchor="middle">host runner</text>
+  <text class="lbl-sm" x="260" y="364" text-anchor="middle">digiquant · twelvex jobs</text>
+
+  <rect class="box" x="390" y="330" width="360" height="46"/>
+  <text class="lbl-sm" x="570" y="350" text-anchor="middle">D1 · KV · R2 — the only shared state</text>
+  <text class="lbl-sm" x="570" y="364" text-anchor="middle">no shared process, no shared filesystem</text>
+
+  <path class="arrow-dash" d="M260,280 L260,328"/>
+  <path class="arrow-dash" d="M470,280 L500,328"/>
+  <path class="arrow-dash" d="M675,280 L640,328"/>
+
+  <text class="lbl-sm" x="180" y="410">removed entirely: redis · seed_chroma · searxng (provider) · litellm (alias map to config)</text>
+  <text class="lbl-sm" x="180" y="428">each container can be asleep while another serves; each Worker has no cold start</text>
+</svg>
+</div>
+
+<h2>Cost — measured rates, ~400 awake hours per module</h2>
+<table>
+  <thead>
+    <tr><th>Scenario</th><th>≈ monthly</th><th>vs today</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Today (measured, DIG-2904)</td><td>$77</td><td>—</td></tr>
+    <tr><td>Modular, chat stays a container</td><td>$31</td><td class="neg">−$46 if langfuse is unused</td></tr>
+    <tr><td>Modular, chat moved to a Worker</td><td>$25</td><td class="neg">−$8 vs the two containers alone</td></tr>
+    <tr><td>Lean, not split (one stripped box)</td><td>$29</td><td>≈ container cost today, no isolation gain</td></tr>
+  </tbody>
+</table>
+<p class="note">Memory is billed per <em>provisioned</em> instance type, so moving a service out of
+the box does not shrink the box. Splitting is cost-neutral to slightly more expensive than the
+containers it replaces; the only large saving is deleting whatever is awake and unused —
+today that is 2× langfuse at standard-2, then the two runners. <span class="pos">Delete before you split.</span></p>
+
+</body>
+</html>

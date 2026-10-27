@@ -119,7 +119,6 @@ describe("createAiSdkStreamResponse", () => {
       capToolPayload(value) {
         return value;
       },
-      noteToolCap() {},
     };
     await createAiSdkStreamResponse({ ...opts, guard });
     expect(ai.createUIMessageStream).toHaveBeenCalled();

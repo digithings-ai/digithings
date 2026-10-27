@@ -156,6 +156,28 @@ def _nonblank_tenant_slug(value: str) -> str:
     return slug
 
 
+def _normalise_scopes(values: list[str]) -> list[str]:
+    """Strip, validate, de-duplicate and keep order.
+
+    The JWT ``scope`` claim is a space-delimited string, so an entry with
+    surrounding whitespace is minted verbatim and splits into a different token
+    on the wire, while a duplicate is noise the caller never asked for
+    (DIG-5723). An entry with *inner* whitespace is two scopes pretending to be
+    one and is refused outright. Blank entries are dropped; the caller decides
+    whether an all-blank list means "inherit" or is an error.
+    """
+    out: list[str] = []
+    for raw in values:
+        scope = raw.strip()
+        if not scope:
+            continue
+        if any(ch.isspace() for ch in scope) or any(ord(ch) < 32 for ch in scope):
+            raise ValueError(f"invalid scope: {raw!r}")
+        if scope not in out:
+            out.append(scope)
+    return out
+
+
 class AdminIssueBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -192,7 +214,10 @@ def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueRespons
             status_code=403, detail="dev_global keys disabled (set DIGIKEY_ALLOW_DEV_GLOBAL=1)"
         )
     raw, prefix = generate_raw_key()
-    scopes = body.scopes
+    try:
+        scopes = _normalise_scopes(body.scopes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.kind == "dev_global" and (not scopes or scopes == ["*"]):
         scopes = ["*"]
     row = ApiKeyRow(
@@ -269,15 +294,24 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         scopes = list(DEFAULT_BFF_SESSION_SCOPES)
         if body.requested_scopes:
+            # DIG-5723: strip/dedupe before the grant check and the claim, and
+            # refuse a list that is all blanks rather than minting a token that
+            # asked for nothing.
+            try:
+                requested = _normalise_scopes(body.requested_scopes)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not requested:
+                raise HTTPException(status_code=400, detail="requested_scopes must not be blank")
             # DIG-5635: the settable set is wider than the inherited one. The
             # MCP edge scopes may be requested but are never handed out by
             # default, so a token minted without requested_scopes stays off the
             # edge.
-            if not scope_grants_required(BFF_SESSION_GRANTABLE_SCOPES, body.requested_scopes):
+            if not scope_grants_required(BFF_SESSION_GRANTABLE_SCOPES, requested):
                 raise HTTPException(
                     status_code=400, detail="requested_scopes not allowed for bff session"
                 )
-            scopes = body.requested_scopes
+            scopes = requested
         # Profile pointers (#308): include on JWT when a row exists for this
         # subject; omit both claims when missing so clients can route to intake.
         # Full profile payload CRUD is #307 — this lookup is id/version only.
@@ -351,11 +385,17 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
 
         scopes = list(row.scopes) if isinstance(row.scopes, list) else []
         if body.requested_scopes:
-            if not scope_grants_required(scopes, body.requested_scopes):
+            try:
+                requested = _normalise_scopes(body.requested_scopes)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not requested:
+                raise HTTPException(status_code=400, detail="requested_scopes must not be blank")
+            if not scope_grants_required(scopes, requested):
                 raise HTTPException(
                     status_code=400, detail="requested_scopes not allowed for this key"
                 )
-            scopes = body.requested_scopes
+            scopes = requested
 
         token, jti = issue_access_token(
             _private_key,
