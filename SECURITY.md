@@ -124,8 +124,12 @@ Every pull request and every push to `develop`/`main` runs
   **refuses the push** instead of skipping the scan: the GitHub workflow covers
   pull requests and `develop`/`main` pushes only, and the local forge has no
   scanner yet, so a topic-branch push would otherwise leave unscanned
-  (DIG-5722). `PRE_PUSH_SKIP_GITLEAKS=1` skips the scan for one push and prints
-  the ref it did not scan — for synthetic fixtures and machines that cannot
+  (DIG-5722). The installer asks the same question before it replaces the hook:
+  with no `gitleaks` on `PATH` it refuses and leaves the installed hook alone,
+  because `make agents-init` reinstalls this shared hook on every start and a
+  generator must not be what turns a machine that cannot scan into one that
+  cannot push. `PRE_PUSH_SKIP_GITLEAKS=1` skips the scan for one push and prints
+  the refs it did not scan — for synthetic fixtures and machines that cannot
   install the binary, not for a push you believe is clean.
 - **Secret-list drift.** `make secrets-audit` matches every `secrets.*` read under
   `.github/` against each level a name can live at — repo secret, repo variable, org

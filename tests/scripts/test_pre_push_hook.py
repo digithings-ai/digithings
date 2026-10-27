@@ -838,7 +838,7 @@ def _path_without_gitleaks(tmp_path: Path) -> str:
     scanner, not from a missing dependency earlier in the file.
     """
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(exist_ok=True)
     for name in ("git", "grep", "sh"):
         found = shutil.which(name)
         assert found is not None, name
@@ -956,7 +956,11 @@ def test_gitleaks_present_and_clean_allows_the_push(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "gitleaks" not in result.stderr.lower()
+    # Positive assertion only: a whole-stream "gitleaks" negative would break on
+    # any future informational line about the scanner, on a test that is about
+    # the push being allowed. "refusing" is the specific failure this arm exists
+    # to prevent, so that is what must be absent.
+    assert "refusing" not in result.stderr
 
 
 @pytest.mark.unit
@@ -976,5 +980,34 @@ def test_skip_env_prints_the_ref_it_does_not_scan(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "PRE_PUSH_SKIP_GITLEAKS=1" in result.stderr
+    assert "secret scan skipped" in result.stderr
     assert "feat/clean" in result.stderr, result.stderr
-    assert "not scanned" in result.stderr
+    assert "Refs not scanned:" in result.stderr
+
+
+@pytest.mark.unit
+def test_skip_env_names_every_ref_on_a_multi_ref_push(tmp_path: Path) -> None:
+    """A multi-ref push must not report only its first ref as skipped.
+
+    The note used to be throttled by a once-per-push flag that named a single
+    ref, so `git push --all` under the escape left the second and later refs with
+    no line at all — the operator reads a clean push (DIG-5722 review).
+    """
+    repo, develop, tip = _seed_gitleaks_repo(tmp_path, with_config=True)
+    lines = (
+        f"refs/heads/feat/clean {tip} refs/heads/feat/clean {develop}\n"
+        f"refs/heads/feat/other {tip} refs/heads/feat/other {develop}\n"
+    )
+    result = subprocess.run(
+        [_BASH, str(_HOOK), "origin", "https://github.com/digithings-ai/digithings.git"],
+        cwd=repo,
+        input=lines,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "PATH": _path_without_gitleaks(tmp_path), "PRE_PUSH_SKIP_GITLEAKS": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Refs not scanned:" in result.stderr
+    assert "feat/clean" in result.stderr, result.stderr
+    assert "feat/other" in result.stderr, result.stderr

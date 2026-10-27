@@ -278,12 +278,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ "${PRE_PUSH_SKIP_GITLEAKS:-0}" = "1" ]; then
     if [ "$gitleaks_skip_noted" -eq 0 ]; then
       echo "pre-push: WARNING: secret scan skipped — PRE_PUSH_SKIP_GITLEAKS=1." >&2
-      echo "         '${branch_name:-$local_ref}' is not scanned for secrets before it leaves this machine." >&2
       echo "         No other scan covers this push: GitHub gitleaks runs on pull" >&2
       echo "         requests and develop/main pushes only, and the local forge has none." >&2
       echo "         Use this for synthetic fixtures, not for a push you believe is clean." >&2
+      echo "         Refs not scanned:" >&2
       gitleaks_skip_noted=1
     fi
+    # One line per ref, not one per push: the header promises the escape prints
+    # which refs it skipped, and throttling the whole note would name only the
+    # first of a multi-ref push — the rest would read as scanned (DIG-5722 review).
+    echo "           ${branch_name:-$local_ref}" >&2
   elif ! command -v gitleaks >/dev/null 2>&1; then
     echo "pre-push: gitleaks not found — refusing to push '${branch_name:-$local_ref}' unscanned." >&2
     echo "         Install it ('brew install gitleaks'; see SECURITY.md \"Secrets scanning\")" >&2
