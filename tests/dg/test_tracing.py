@@ -10,7 +10,6 @@ _TRACING_ENVS = (
     "LANGSMITH_API_KEY",
     "LANGSMITH_TRACING",
     "LANGCHAIN_TRACING_V2",
-    "DIGITRACE_OTLP_ENDPOINT",
     "DIGI_OTEL_ENDPOINT",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
 )
@@ -38,29 +37,41 @@ def test_trace_helpers_noop_when_disabled() -> None:
 
 
 @pytest.mark.unit
-def test_configure_ignores_a_vendor_key_and_writes_no_env(
+def test_configure_sets_langsmith_defaults_when_key_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A vendor key is not a backend: the stack configures no SDK leg."""
     monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
     status = tracing_mod.configure_langgraph_tracing()
     import os
 
-    assert "LANGSMITH_TRACING" not in os.environ
-    assert "LANGCHAIN_TRACING_V2" not in os.environ
-    assert "langsmith" not in status
+    assert os.environ.get("LANGSMITH_TRACING") == "true"
+    assert os.environ.get("LANGCHAIN_TRACING_V2") == "true"
     assert status["otel"] is False
 
 
 @pytest.mark.unit
-def test_configure_noop_without_endpoint() -> None:
+def test_configure_respects_explicit_operator_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    tracing_mod.configure_langgraph_tracing()
+    import os
+
+    assert os.environ.get("LANGSMITH_TRACING") == "false"
+
+
+@pytest.mark.unit
+def test_configure_noop_without_key() -> None:
+    import os
+
     status = tracing_mod.configure_langgraph_tracing()
-    assert status == {"otel": False}
+    assert "LANGSMITH_TRACING" not in os.environ
+    assert status["langsmith"] is False
+    assert status["otel"] is False
 
 
 @pytest.mark.unit
 def test_configure_reports_otel_when_endpoint_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
+    monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://digitrace:8003/v1/otlp")
     status = tracing_mod.configure_langgraph_tracing()
     assert status["otel"] is True
 

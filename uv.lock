@@ -1336,7 +1336,7 @@ otel = [
     { name = "digibase", extra = ["otel"] },
 ]
 tracing = [
-    { name = "digibase", extra = ["otel"] },
+    { name = "langsmith" },
 ]
 
 [package.dev-dependencies]
@@ -1350,7 +1350,6 @@ dev = [
 requires-dist = [
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
-    { name = "digibase", extras = ["otel"], marker = "extra == 'tracing'", editable = "digibase" },
     { name = "digikey", editable = "digikey" },
     { name = "digillm", editable = "digillm" },
     { name = "digitrace", editable = "digitrace" },
@@ -1363,6 +1362,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres", marker = "extra == 'checkpoint-postgres'", specifier = ">=2.0" },
     { name = "langgraph-checkpoint-sqlite", marker = "extra == 'checkpoint-sqlite'", specifier = ">=2.0" },
     { name = "langgraph-checkpoint-sqlite", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.1" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "openai", specifier = ">=1.0" },
@@ -1905,7 +1905,7 @@ otel = [
     { name = "digibase", extra = ["otel"] },
 ]
 tracing = [
-    { name = "digibase", extra = ["otel"] },
+    { name = "langsmith" },
 ]
 
 [package.dev-dependencies]
@@ -1919,10 +1919,10 @@ dev = [
 requires-dist = [
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
-    { name = "digibase", extras = ["otel"], marker = "extra == 'tracing'", editable = "digibase" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
+    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.1" },
     { name = "pydantic", specifier = ">=2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]

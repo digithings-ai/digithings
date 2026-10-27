@@ -1,8 +1,8 @@
 """Unit tests for the digitrace trace wrapper and backend resolution.
 
 Acceptance for the ADR-0036 amendment: the in-house OTLP leg is the default and
-a vendor (LangSmith, Langfuse-OTLP) is only ever selected by its own env vars —
-supported integrations, never the default digitrace solution.
+the remaining vendor integration (LangSmith) is only ever selected by its own
+env vars — supported, never the default digitrace solution.
 """
 
 from __future__ import annotations
@@ -12,26 +12,21 @@ import types
 from typing import Any, get_args
 
 import pytest
+from digitrace.config import ExportBackend
 
 from digitrace import config as config_mod
 from digitrace import trace as trace_mod
-from digitrace.config import ExportBackend
 
 _TELEMETRY_ENVS = (
     "LANGSMITH_API_KEY",
     "LANGSMITH_ENDPOINT",
-    "LANGFUSE_HOST",
-    "LANGFUSE_URL",
-    "LANGFUSE_OTLP_ENDPOINT",
-    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
     "DIGI_OTEL_ENDPOINT",
-    "DIGITRACE_OTLP_ENDPOINT",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "DIGI_OTEL_HEADERS",
     "OTEL_EXPORTER_OTLP_HEADERS",
 )
 
-_VENDOR_BACKENDS = {"dual", "langsmith", "langfuse-otlp"}
+_VENDOR_BACKENDS = {"dual", "langsmith"}
 
 
 @pytest.fixture(autouse=True)
@@ -102,12 +97,12 @@ def _block_otel_import(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_backend_enum_has_the_five_documented_values() -> None:
-    assert set(get_args(ExportBackend)) == {"dual", "langsmith", "langfuse-otlp", "otel", "none"}
+def test_backend_enum_has_the_four_documented_values() -> None:
+    assert set(get_args(ExportBackend)) == {"dual", "langsmith", "otel", "none"}
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("backend", ["dual", "langsmith", "langfuse-otlp", "otel", "none"])
+@pytest.mark.parametrize("backend", ["dual", "langsmith", "otel", "none"])
 def test_status_model_accepts_every_backend_value(backend: str) -> None:
     status = config_mod.TraceStatus(
         version="0.1.0",
@@ -139,26 +134,6 @@ def test_langsmith_backend_uses_configured_endpoint_host(
 
 
 @pytest.mark.unit
-def test_langfuse_otlp_backend_selected_by_langfuse_endpoint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("LANGFUSE_OTLP_ENDPOINT", "https://trace.example.com/api/public/otel")
-    assert config_mod.langfuse_configured() is True
-    assert config_mod.export_backend() == "langfuse-otlp"
-    assert config_mod.langfuse_host_sanitized() == "trace.example.com"
-
-
-@pytest.mark.unit
-def test_langfuse_otlp_backend_selected_by_host_plus_generic_endpoint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://collector:4318")
-    monkeypatch.setenv("LANGFUSE_HOST", "trace.example.com")
-    assert config_mod.export_backend() == "langfuse-otlp"
-    assert config_mod.langfuse_host_sanitized() == "trace.example.com"
-
-
-@pytest.mark.unit
 def test_dual_backend_when_both_legs_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
     monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://collector:4318")
@@ -177,7 +152,6 @@ def test_default_backend_is_none_without_any_env() -> None:
     assert config_mod.otel_export_configured() is False
     assert config_mod.tracing_enabled() is False
     assert config_mod.langsmith_host_sanitized() is None
-    assert config_mod.langfuse_host_sanitized() is None
 
     def fn() -> int:
         return 1
@@ -189,7 +163,7 @@ def test_default_backend_is_none_without_any_env() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "env_var",
-    ["DIGI_OTEL_ENDPOINT", "DIGITRACE_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"],
+    ["DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"],
 )
 def test_plain_otlp_endpoint_resolves_to_in_house_otel_never_a_vendor(
     monkeypatch: pytest.MonkeyPatch, env_var: str
@@ -198,7 +172,6 @@ def test_plain_otlp_endpoint_resolves_to_in_house_otel_never_a_vendor(
     monkeypatch.setenv(env_var, "http://digitrace:8003/v1/otlp")
     assert config_mod.export_backend() == "otel"
     assert config_mod.export_backend() not in _VENDOR_BACKENDS
-    assert config_mod.langfuse_configured() is False
 
 
 @pytest.mark.unit
@@ -214,7 +187,6 @@ def test_unrelated_vendor_keys_never_select_a_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for vendor_env, value in (
-        ("LANGFUSE_SECRET_KEY", "sk-lf-fake"),
         ("HELICONE_API_KEY", "sk-helicone-fake"),
         ("BRAINTRUST_API_KEY", "sk-braintrust-fake"),
         ("ARIZE_API_KEY", "sk-arize-fake"),
@@ -238,8 +210,6 @@ def test_status_exposes_vendor_host_and_flags_without_secrets(
     monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_super_secret_token_do_not_leak")
     monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://eu.api.smith.langchain.com")
     monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://collector:4318")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-super-secret")
-    monkeypatch.setenv("LANGFUSE_HOST", "trace.example.com")
     monkeypatch.setattr(server_mod, "langsmith_sdk_importable", lambda: True)
 
     r = TestClient(server_mod.app).get("/v1/status")
@@ -248,10 +218,8 @@ def test_status_exposes_vendor_host_and_flags_without_secrets(
     assert body["export_backend"] == "dual"
     assert body["dual_export"] is True
     assert body["otel_export_configured"] is True
-    assert body["langfuse_configured"] is True
     assert body["langsmith_sdk_installed"] is True
     assert body["langsmith_host"] == "eu.api.smith.langchain.com"
-    assert body["langfuse_host"] == "trace.example.com"
     assert "lsv2_" not in r.text
     assert "sk-lf" not in r.text
 

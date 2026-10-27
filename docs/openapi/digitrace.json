@@ -12,27 +12,9 @@
           },
           "export_backend": {
             "default": "none",
-            "description": "One of dual|langsmith|langfuse-otlp|otel|none (in-house otel is the default)",
+            "description": "One of dual|langsmith|otel|none (in-house otel is the default)",
             "title": "Export Backend",
             "type": "string"
-          },
-          "langfuse_configured": {
-            "default": false,
-            "description": "A Langfuse-specific endpoint/host env var is set",
-            "title": "Langfuse Configured",
-            "type": "boolean"
-          },
-          "langfuse_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Sanitized Langfuse host (no secrets); null unless configured",
-            "title": "Langfuse Host"
           },
           "langsmith_host": {
             "anyOf": [

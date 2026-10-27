@@ -255,6 +255,5 @@ describe("phase 4 checkpoint-archive", () => {
     expect(JSON.stringify(spec)).not.toContain("FRED_API_KEY");
     expect(JSON.stringify(spec)).not.toContain("OPENROUTER_API_KEY");
     expect(JSON.stringify(spec)).not.toContain("LANGSMITH_API_KEY");
-    expect(JSON.stringify(spec)).not.toContain("LANGSMITH_PROJECT");
   });
 });

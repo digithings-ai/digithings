@@ -22,9 +22,9 @@ Homepage = "https://digithings.ai"
 Repository = "https://github.com/digithings-ai/digithings"
 
 [project.optional-dependencies]
-# The `tracing` extra is the in-house OTLP leg (the stack default). The vendor
-# SDK remains an *optional integration*, installable by name but never assumed.
-tracing = ["digibase[otel]"]
+tracing = ["langsmith>=0.1"]
+# Temporary alias until Phase 3 cuts LangSmith (#4929): digitrace[langsmith] and
+# the pre-rename digitrace[langsmith] installs keep working.
 langsmith = ["langsmith>=0.1"]
 otel = ["digibase[otel]"]
 dev = ["httpx>=0.27"]

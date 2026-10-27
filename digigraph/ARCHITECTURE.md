@@ -1103,9 +1103,9 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 **Protocol:** Library calls (no HTTP)
 
 - `digitrace.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
-- The OTel leg activates when an OTLP endpoint is set (in-house digitrace by default); the optional LangSmith leg activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed. A vendor is never the default.
+- Activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
 - Span attributes must include `workflow_id`, `request_id`, `session_id`. Raw prompts, API keys, and full doc bodies must not appear in spans.
-- In Docker Compose, a digitrace container exposes `GET /v1/status` on port 8003. digigraph does not make HTTP calls to digitrace; the library exports to the configured OTLP endpoint (or to LangSmith when that optional integration is selected).
+- In Docker Compose, a digitrace container exposes `GET /v1/status` on port 8003. digigraph does not make HTTP calls to digitrace; the library communicates with LangSmith directly.
 
 ### 9.5 digichat
 
@@ -1242,7 +1242,7 @@ digigraph:
 | `DIGIQUANT_OPTIMIZE_N_TRIALS` | `50` | Default optimization trial count |
 | `AUDIT_LOG_PATH` | `/audit/events.jsonl` | JSONL audit log output path |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | OTel OTLP exporter endpoint (optional) |
-| `LANGSMITH_API_KEY` | (from `.env`) | Optional LangSmith integration key (not the default; unset in the stack) |
+| `LANGSMITH_API_KEY` | (from `.env`) | LangSmith tracing key (optional) |
 
 ### 10.3 MCP Server Startup
 
@@ -1331,7 +1331,7 @@ Until this is implemented, `DIGI_ALLOW_CODE_EXEC` should default to `0` and oper
 - `digigraph_active_streaming_sessions` (gauge)
 - `digigraph_rate_limit_rejections_total` (labels: path)
 
-This complements digitrace's in-house OTLP tracing with operational metrics visible to Grafana or similar systems.
+This complements digitrace's LangSmith tracing with operational metrics visible to Grafana or similar systems.
 
 ### 12.7 Compiled Graph Cache
 

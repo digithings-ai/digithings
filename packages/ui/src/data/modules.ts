@@ -226,9 +226,10 @@ export const modules: ModuleNode[] = [
     tagline: "Correlation IDs across every hop — and prompts logged by length, never by text.",
     summary: [
       "Structured logging, Prometheus metrics and OpenTelemetry spans thread through every request, so a multi-hop run is traceable.",
-      "Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Spans leave over OTLP with only a run name and short correlation ids.",
+      "Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.",
     ],
     stack: [
+      { name: "LangSmith", icon: null, mono: "LS" },
       { name: "OpenTelemetry", icon: "opentelemetry" },
       { name: "Prometheus", icon: "prometheus" },
       { name: "FastAPI", icon: "fastapi" },

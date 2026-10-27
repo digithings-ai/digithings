@@ -10,8 +10,7 @@ from urllib.parse import unquote
 logger = logging.getLogger(__name__)
 
 # Prefer the digithings alias; fall back to the OpenTelemetry standard env var.
-# DIGITRACE_OTLP_ENDPOINT is the digitrace-specific name for the same ingest.
-_ENDPOINT_ENVS = ("DIGI_OTEL_ENDPOINT", "DIGITRACE_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+_ENDPOINT_ENVS = ("DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
 _HEADERS_ENVS = ("DIGI_OTEL_HEADERS", "OTEL_EXPORTER_OTLP_HEADERS")
 
 

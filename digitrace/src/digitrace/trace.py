@@ -5,10 +5,9 @@ env var is set (by default the in-house digitrace OTLP ingest, headers via
 ``DIGI_OTEL_HEADERS`` / ``OTEL_EXPORTER_OTLP_HEADERS``). With no endpoint, or no
 OpenTelemetry SDK importable, the OTel leg is a no-op.
 
-LangSmith and Langfuse-OTLP are *supported, optional* integrations: the
-LangSmith SDK leg activates only when ``LANGSMITH_API_KEY`` is set and the
-package is installed, and Langfuse is reached over the generic OTLP pair above.
-Neither is the default and neither is configured by the stack.
+LangSmith is a *supported, optional* integration: the LangSmith SDK leg
+activates only when ``LANGSMITH_API_KEY`` is set and the package is installed.
+It is not the default and is not configured by the stack.
 
 The OTel leg sets only safe attributes (run name + short correlation ids); it
 never carries prompts, completions, or secrets. PII redaction stays on

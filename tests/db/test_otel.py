@@ -19,7 +19,6 @@ pytestmark = pytest.mark.unit
 def _clear_otel_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in (
         "DIGI_OTEL_ENDPOINT",
-        "DIGITRACE_OTLP_ENDPOINT",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "DIGI_OTEL_HEADERS",
         "OTEL_EXPORTER_OTLP_HEADERS",

@@ -1,4 +1,4 @@
-"""PII redaction helpers for trace payloads and PII scans.
+"""PII redaction for digitrace trace payloads before LangSmith submission.
 
 ``PiiRedactor`` walks arbitrary dict / list / tuple structures and replaces
 PII-looking substrings inside string values with opaque sentinels. Built-in
@@ -13,10 +13,9 @@ Additional comma-separated regexes from the ``DIGI_PII_PATTERNS`` environment
 variable are appended and render as ``[REDACTED]``. Non-string values pass
 through (nested structures recurse).
 
-The module operates on plain Python structures and has no tracing-SDK
-dependency. It is used by ``scripts/scan_customer_pii.py`` and is available to
-any caller that needs to scrub a payload before it leaves the process; the OTLP
-export leg attaches only run names and short correlation ids, never payloads.
+The module has no runtime dependency on ``langsmith``; it operates on plain
+Python structures. ``digitrace.trace`` wires it into ``langsmith.traceable``
+via the SDK's native ``process_inputs`` / ``process_outputs`` hooks.
 """
 
 from __future__ import annotations

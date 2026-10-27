@@ -114,8 +114,10 @@ jobs:
           # For extra workspaces, add OPENWIKI_LANGSMITH_API_KEY_2, _3, ... as repo
           # secrets and env entries here.
           OPENWIKI_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          # Tracing stays in-house: point this at digitrace's OTLP ingest
-          # instead of a vendor when the run needs spans.
+          # Optional: also trace this workflow's own OpenWiki run to LangSmith.
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_PROJECT: openwiki
+          LANGCHAIN_TRACING_V2: "true"
 
       - name: Remove transient OpenWiki run state
         if: ${{ !cancelled() }}

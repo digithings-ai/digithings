@@ -1,6 +1,8 @@
-"""Unit tests for digitrace.trace (OTLP-only wrapper)."""
+"""Unit tests for digitrace.trace."""
 
 from __future__ import annotations
+
+from typing import Any
 
 import pytest
 
@@ -8,13 +10,8 @@ from digitrace import trace as trace_mod
 
 
 @pytest.mark.unit
-def test_traceable_no_op_without_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in (
-        "DIGI_OTEL_ENDPOINT",
-        "DIGITRACE_OTLP_ENDPOINT",
-        "OTEL_EXPORTER_OTLP_ENDPOINT",
-    ):
-        monkeypatch.delenv(key, raising=False)
+def test_traceable_no_op_when_sdk_not_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", False)
     monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
 
     @trace_mod.traceable("demo")
@@ -26,10 +23,8 @@ def test_traceable_no_op_without_endpoint(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-def test_traceable_no_op_without_otel_package(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://digitrace:8003/v1/otlp")
-    monkeypatch.setitem(__import__("sys").modules, "opentelemetry", None)
-    monkeypatch.setitem(__import__("sys").modules, "opentelemetry.trace", None)
+def test_traceable_no_op_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
 
     @trace_mod.traceable("demo2")
     def fn2() -> str:
@@ -39,20 +34,62 @@ def test_traceable_no_op_without_otel_package(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
-def test_otel_leg_enabled_reports_endpoint_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DIGI_OTEL_ENDPOINT", raising=False)
-    monkeypatch.delenv("DIGITRACE_OTLP_ENDPOINT", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    assert trace_mod.otel_leg_enabled() is False
+def test_traceable_passes_redaction_hooks_to_langsmith(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When tracing is active, redactor hooks must reach langsmith.traceable."""
+    captured: dict[str, Any] = {}
 
-    monkeypatch.setenv("DIGITRACE_OTLP_ENDPOINT", "http://digitrace:8003/v1/otlp")
-    # Endpoint alone is not enough without the SDK installed in this environment.
-    assert trace_mod.otel_leg_enabled() == _sdk_present()
+    def fake_traceable(**kwargs: Any):
+        captured.update(kwargs)
+
+        def wrap(fn):
+            return fn
+
+        return wrap
+
+    class FakeLs:
+        traceable = staticmethod(fake_traceable)
+
+    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", True)
+    monkeypatch.setattr(trace_mod, "_langsmith", FakeLs)
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
+
+    @trace_mod.traceable("demo3")
+    def fn3(x: int) -> int:
+        return x + 1
+
+    assert fn3(1) == 2
+    assert captured["name"] == "demo3"
+    assert callable(captured["process_inputs"])
+    assert callable(captured["process_outputs"])
+    # Hooks must actually redact.
+    assert captured["process_inputs"]({"email": "u@e.co"}) == {"email": "[REDACTED_EMAIL]"}
+    assert captured["process_outputs"]("sk-abcdefghij1234567") == "[REDACTED_KEY]"
 
 
-def _sdk_present() -> bool:
-    try:
-        import opentelemetry.trace  # noqa: F401
-    except ImportError:
-        return False
-    return True
+@pytest.mark.unit
+def test_traceable_no_op_when_traceable_setup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When langsmith.traceable rejects process_* kwargs, return the original function."""
+    calls: list[dict[str, Any]] = []
+
+    def fake_traceable(**kwargs: Any):
+        calls.append(kwargs)
+        raise TypeError("unexpected kwarg")
+
+    class FakeLs:
+        traceable = staticmethod(fake_traceable)
+
+    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", True)
+    monkeypatch.setattr(trace_mod, "_langsmith", FakeLs)
+    monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test_fake_key")
+
+    @trace_mod.traceable("demo4")
+    def fn4() -> int:
+        return 7
+
+    assert fn4() == 7
+    assert len(calls) == 1
+    assert "process_inputs" in calls[0]

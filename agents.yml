@@ -98,7 +98,7 @@ components:
 
   - name: digitrace
     port: 8003
-    description: "In-house OTLP observability library + status API"
+    description: "LangSmith-aligned observability library + status API"
     agents_doc: digitrace/AGENTS.md
     arch_doc: digitrace/ARCHITECTURE.md
     test_cmd: "pytest tests/dsm/ -m unit -v --tb=short"

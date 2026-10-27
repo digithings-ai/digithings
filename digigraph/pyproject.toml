@@ -36,7 +36,7 @@ Homepage = "https://digithings.ai"
 Repository = "https://github.com/digithings-ai/digithings"
 
 [project.optional-dependencies]
-tracing = ["digibase[otel]"]
+tracing = ["langsmith>=0.1"]
 dev = ["langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single

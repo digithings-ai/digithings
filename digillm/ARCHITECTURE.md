@@ -15,7 +15,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 - Python 3.12, Pydantic v2, full type hints, ruff line-length 100.
 - Hard deps: `openai>=1.0`, `pydantic>=2` only.
 - Optional extras: `[modes]` (PyYAML, for path-based mode resolution),
-  `[trace]` (digitrace — in-house OTel tracing by default; LangSmith optional), `[dev]` (pytest, ruff, pyyaml).
+  `[trace]` (digitrace, for LangSmith tracing), `[dev]` (pytest, ruff, pyyaml).
 - No `import fastapi`; no `Request` objects anywhere in this package.
 
 ## Module map
@@ -671,9 +671,7 @@ finally:
 `@traceable("completion")` is imported from `digitrace.trace` inside a
 `try/except ImportError` that falls back to a no-op decorator. digillm therefore
 has **no hard dependency** on digitrace; install `digillm[trace]` (or have
-digitrace on the path) and set an OTLP endpoint to enable spans — in-house
-digitrace by default, with `LANGSMITH_API_KEY` selecting the optional LangSmith
-integration.
+digitrace on the path) plus `LANGSMITH_API_KEY` to enable spans.
 
 ## Environment variables
 

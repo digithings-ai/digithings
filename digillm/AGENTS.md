@@ -47,7 +47,7 @@ Before making any change to `digillm/`:
 Beyond root `AGENTS.md`:
 
 - **Hard deps are `openai>=1.0` + `pydantic>=2` only.** YAML (`[modes]`),
-  tracing (`[trace]`), and MCP (`[mcp]`) are opt-in extras; never move them to
+  LangSmith (`[trace]`), and MCP (`[mcp]`) are opt-in extras; never move them to
   `dependencies`.
 - **No FastAPI, no `Request` objects, no service coupling.** digigraph imports
   `digillm` in-process; digillm must never import digigraph back.

@@ -1,11 +1,11 @@
 # digitrace — Spec
 
 **Port:** 8003  
-**Role:** Backend-neutral observability library and operator status API (in-house digitrace OTLP is the default; LangSmith and Langfuse-OTLP are optional, non-default integrations).
+**Role:** Backend-neutral observability library and operator status API (LangSmith backend in Phase 0).
 
 ## Capabilities
 
-- Distributed trace collection compatible with OTLP (in-house digitrace) and, when configured, the LangSmith schema
+- Distributed trace collection compatible with LangSmith schema
 - Run/span lifecycle management (library, not HTTP API)
 - Operator status endpoint reporting config and versions
 - OTel integration for exporting traces

@@ -312,6 +312,8 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
           # (uploaded below). Export is fail-soft; disable with DIGIQUANT_SHADOW_ARTIFACT_MODE=off.
           DIGIQUANT_SHADOW_ARTIFACT_MODE: export

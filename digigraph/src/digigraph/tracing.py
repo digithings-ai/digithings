@@ -1,25 +1,22 @@
-"""OpenTelemetry-only tracing wiring for digigraph.
+"""Phase 2 dual-export tracing wiring for digigraph (#4931).
 
 LangGraph run/node spans nest with digillm LLM/tool spans (which already go
 through ``digitrace.trace.traceable`` in ``digillm.client`` — those call sites
-are unchanged). The single mechanism is fail-soft:
+are unchanged). Two mechanisms, both fail-soft:
 
-:func:`trace_run` decorates the workflow entry points in ``workflow.py``;
-:func:`trace_node` wraps the plain-function graph nodes in ``graph/graph.py``.
-Each emits an OTLP span to the in-house digitrace collector via
-``digitrace.trace``. The compiled research subgraph is deliberately NOT
-wrapped — it must stay a native runnable so
-``graph.stream(..., subgraphs=True)`` custom events keep flowing.
+1. Explicit spans: :func:`trace_run` decorates the workflow entry points in
+   ``workflow.py``; :func:`trace_node` wraps the plain-function graph nodes in
+   ``graph/graph.py``. Each emits a LangSmith run AND an OTel span (in-house
+   digitrace) via ``digitrace.trace``. The compiled research subgraph is deliberately NOT
+   wrapped — it must stay a native runnable so ``graph.stream(...,
+   subgraphs=True)`` custom events keep flowing.
+2. Auto-instrumentation: :func:`configure_langgraph_tracing` defaults
+   ``LANGSMITH_TRACING`` / ``LANGCHAIN_TRACING_V2`` on when a LangSmith key is
+   present, so LangGraph natively emits run/node traces without code changes.
 
-There is no vendor SDK leg: external observability providers are integrations
-digitrace can export to over OTLP, not a backend this service configures. The
-plug point is the generic endpoint/headers pair
-(``DIGI_OTEL_ENDPOINT`` / ``DIGITRACE_OTLP_ENDPOINT`` /
-``OTEL_EXPORTER_OTLP_ENDPOINT`` plus ``DIGI_OTEL_HEADERS``).
-
-No-op when no OTLP endpoint is configured (decorators return the original
-function). Never carries prompts, documents, or secrets — only run/node names
-plus the correlation ids ``digitrace.trace`` already allows.
+No-op when neither backend is configured (decorators return the original
+function). Never carries prompts, documents, or secrets — only run/node
+names plus the correlation ids ``digitrace.trace`` already allows.
 """
 
 from __future__ import annotations
@@ -61,26 +58,29 @@ __all__ = [
 
 
 def configure_langgraph_tracing() -> dict[str, bool]:
-    """Report whether the OTLP export leg is configured.
+    """Enable LangGraph auto-instrumentation when a LangSmith key is present.
 
-    Fail-soft and side-effect free: no vendor SDK is enabled and no environment
-    variable is written. Returns ``{"otel": ...}`` for logging / tests so the
-    call sites in ``workflow.py`` can stay unchanged.
+    Idempotent: only fills in ``LANGSMITH_TRACING`` / ``LANGCHAIN_TRACING_V2``
+    when the operator has not set them explicitly. Returns the backend status
+    snapshot (``{"langsmith": ..., "otel": ...}``) for logging / tests.
     """
+    langsmith = bool((os.environ.get("LANGSMITH_API_KEY") or "").strip())
+    if langsmith:
+        os.environ.setdefault("LANGSMITH_TRACING", "true")
+        os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     otel = any(
         (os.environ.get(key) or "").strip()
         for key in (
             "DIGI_OTEL_ENDPOINT",
-            "DIGITRACE_OTLP_ENDPOINT",
             "OTEL_EXPORTER_OTLP_ENDPOINT",
         )
     )
     try:
-        from digitrace.config import otel_export_configured
+        from digitrace.config import otel_export_configured, tracing_enabled
 
-        status = {"otel": otel_export_configured()}
+        status = {"langsmith": tracing_enabled(), "otel": otel_export_configured()}
     except ImportError:
-        status = {"otel": otel}
+        status = {"langsmith": langsmith, "otel": otel}
     logger.debug("digigraph tracing status: %s", status)
     return status
 

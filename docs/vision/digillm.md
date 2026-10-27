@@ -26,7 +26,7 @@ LLM access code is where subtle production bugs live: inconsistent retry/backoff
 
 ## How it fits in the ecosystem
 
-digillm sits beneath every component that calls a model. Consumers: **twelve-x** and **digigraph** are on it today; **digisearch** reaches it on its optional web-research path. digigraph declares it a hard dependency (`digillm>=0.1.0`) and its in-tree `llm_client`, `llm_auth` and `llm_errors` modules are thin wrappers that delegate here: the in-tree LLM implementation was extracted from digigraph, so the wrappers are the seam, not a pending migration. It depends only on `openai` and `pydantic`, with optional extras for path-based mode resolution (`[modes]`) and tracing (`[trace]` — in-house digitrace over OTLP by default, with LangSmith as an optional non-default integration). It imports cleanly with no side effects and no FastAPI in the dependency tree.
+digillm sits beneath every component that calls a model. Consumers: **twelve-x** and **digigraph** are on it today; **digisearch** reaches it on its optional web-research path. digigraph declares it a hard dependency (`digillm>=0.1.0`) and its in-tree `llm_client`, `llm_auth` and `llm_errors` modules are thin wrappers that delegate here: the in-tree LLM implementation was extracted from digigraph, so the wrappers are the seam, not a pending migration. It depends only on `openai` and `pydantic`, with optional extras for path-based mode resolution (`[modes]`) and LangSmith tracing (`[trace]`). It imports cleanly with no side effects and no FastAPI in the dependency tree.
 
 ## Capabilities — Current
 
@@ -38,7 +38,7 @@ Shipped and in active use:
 - `structured_completion` — OpenAI `json_schema` → validated Pydantic model
 - `resolve_model` — opt-in test/medium/best resolution (no implicit substitution)
 - Per-request override contextvars for proxy key and BYOK (bring-your-own-key)
-- Optional tracing via the `[trace]` extra (in-house digitrace over OTLP by default; LangSmith optional)
+- Optional digitrace/LangSmith tracing via the `[trace]` extra
 
 ## Capabilities — 12-month roadmap
 

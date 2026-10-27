@@ -42,3 +42,4 @@ env:
   DIGIQUANT_MARKET_DATA_BACKEND: "r2"
 
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
+  LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)
