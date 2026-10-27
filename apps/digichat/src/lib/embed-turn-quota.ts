@@ -49,7 +49,14 @@ export function isOverEmbedTrialLimit(ip: string): boolean {
   return s.count >= s.limit;
 }
 
-/** Raise this IP's cap (client-signaled unlock). Idempotent. */
+/**
+ * Raise this IP's cap. Idempotent.
+ *
+ * A server-side decision only: the degraded quota path bounds an entitlement
+ * it could not verify at the trial cap. It is never called from a
+ * client-asserted value — the client-asserted unlock header was deleted from
+ * the chat route (DIG-4525), so nothing the browser sends reaches this cap.
+ */
 export function unlockEmbedTrial(
   ip: string,
   raisedLimit: number = EMBED_TRIAL_TURN_LIMIT,

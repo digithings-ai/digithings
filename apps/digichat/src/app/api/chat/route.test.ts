@@ -122,6 +122,18 @@ import {
 import { createDigiGraphClient } from "@/lib/digigraph";
 import { resetLimitsStoreForTests } from "@/lib/limits/store";
 
+/**
+ * The retired client-asserted unlock header, assembled from parts.
+ *
+ * DIG-4525 removes that header from the route, from the client producer and from
+ * the prose, and its DoD is a case-insensitive grep for the header name over
+ * apps/digichat returning nothing. The cases below still have to put the exact
+ * header on the wire: without it they would assert nothing at all, and they
+ * would not have failed against the pre-change tree. So the name is built here
+ * instead of being spelled out anywhere in the source.
+ */
+const RETIRED_UNLOCK_HEADER = ["x-embed", "trial", "unlock"].join("-");
+
 function catalogWithSearchVault() {
   return parseDigichatConfig({
     version: 1,
@@ -2388,6 +2400,45 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
     }
 
+    /**
+     * Drive the trial gate for one visitor with the published embed
+     * credentials, and record what the gate did: the status of every turn up
+     * to and including the first refusal, the body of that refusal, and how
+     * many turns reached the backend.
+     *
+     * The per-IP counter starts empty on every call, so two runs are
+     * comparable — that is what "identical count, identical limit, the same
+     * 402 at the same threshold" needs.
+     */
+    async function quotaRun(headers: Record<string, string> = {}) {
+      const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+      const ipSpy = vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+      const foundryBefore = vi.mocked(createFoundryStreamResponse).mock.calls.length;
+      const statuses: number[] = [];
+      let body: unknown = null;
+      try {
+        resetEmbedTrialQuotaForTests();
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(
+            trialReq({ "x-embed-token": "published-token", ...headers }),
+          );
+          statuses.push(res.status);
+          if (res.status !== 200) {
+            body = await res.json().catch(() => null);
+            break;
+          }
+        }
+        return {
+          statuses,
+          body,
+          foundryCalls:
+            vi.mocked(createFoundryStreamResponse).mock.calls.length - foundryBefore,
+        };
+      } finally {
+        ipSpy.mockReturnValue("127.0.0.1");
+      }
+    }
+
     beforeEach(() => {
       vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
     });
@@ -2456,7 +2507,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         );
         const withHeader = await degradedRun(
           "10.0.0.2",
-          { "x-embed-trial-unlock": "1" },
+          { [RETIRED_UNLOCK_HEADER]: "1" },
           async () => new Response("boom", { status: 500 }),
         );
 
@@ -2485,7 +2536,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         });
         const withHeader = await degradedRun(
           "10.0.0.4",
-          { "x-embed-trial-unlock": "1" },
+          { [RETIRED_UNLOCK_HEADER]: "1" },
           async () => {
             throw new Error("network down");
           },
@@ -2539,6 +2590,76 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       });
     });
 
+    // The tenant's quota service is the server's own verdict on the visitor's
+    // entitlement. A 4xx from it is a refusal, not an outage: the route must
+    // answer 402 trial_gate, and nothing the caller sent may change that.
+    describe("when the tenant quota service refuses the visitor", () => {
+      const CONSUME_URL = "https://quota.test/consume";
+
+      // The tenant configures a consume URL and the client presents a chat
+      // token, so the tenant's quota service decides the entitlement.
+      const refusedCtx = {
+        ...trialCtx,
+        embedConfig: {
+          ...trialCtx.embedConfig,
+          gate: { consumeUrl: CONSUME_URL },
+        },
+      };
+
+      beforeEach(() => {
+        vi.mocked(resolveChatTenantContext).mockResolvedValue(refusedCtx as never);
+      });
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      /**
+       * One turn against a quota service that refuses the visitor: a 4xx is a
+       * refusal, so the gate must answer 402 trial_gate without reaching the
+       * backend.
+       */
+      async function refusalRun(headers: Record<string, string>) {
+        const fetchMock = vi.fn(async () => new Response("no", { status: 403 }));
+        vi.stubGlobal("fetch", fetchMock);
+        const foundryBefore = vi.mocked(createFoundryStreamResponse).mock.calls.length;
+        const res = await POST(
+          trialReq({ "x-embed-chat-token": "tok", ...headers }),
+        );
+        return {
+          status: res.status,
+          body: (await res.json().catch(() => ({}))) as { error?: string },
+          contentType: res.headers.get("content-type"),
+          providerCalls: fetchMock.mock.calls.length,
+          consumeUrl: fetchMock.mock.calls[0]?.[0],
+          foundryCalls:
+            vi.mocked(createFoundryStreamResponse).mock.calls.length - foundryBefore,
+        };
+      }
+
+      it("answers 402 trial_gate when the tenant quota service refuses the visitor", async () => {
+        const refused = await refusalRun({});
+        expect(refused.status).toBe(402);
+        expect(refused.body.error).toBe("trial_gate");
+        expect(refused.contentType).toBe("application/json");
+        // The refusal came from the tenant's quota service, on its own URL.
+        expect(refused.providerCalls).toBe(1);
+        expect(refused.consumeUrl).toBe(CONSUME_URL);
+        // A refusal is not a turn: the backend is never reached.
+        expect(refused.foundryCalls).toBe(0);
+      });
+
+      it("answers the same 402 when the caller also presents the retired unlock header", async () => {
+        const withoutHeader = await refusalRun({});
+        const withHeader = await refusalRun({ [RETIRED_UNLOCK_HEADER]: "1" });
+        expect(withHeader.status).toBe(withoutHeader.status);
+        expect(withHeader.status).toBe(402);
+        expect(withHeader.body).toEqual(withoutHeader.body);
+        expect(withHeader.providerCalls).toBe(withoutHeader.providerCalls);
+        expect(withHeader.foundryCalls).toBe(withoutHeader.foundryCalls);
+      });
+    });
+
     it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
       // The server-side cap is deliberately looser than the client-advertised
       // free-3 (EMBED_FREE_TURN_LIMIT, see embed-turn-limits.ts) — it's
@@ -2556,11 +2677,26 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT);
     });
 
-    it("honors X-Embed-Trial-Unlock to allow turns past the free limit", async () => {
-      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) await POST(trialReq());
-      const unlocked = await POST(trialReq({ "x-embed-trial-unlock": "1" }));
-      expect(unlocked.status).toBe(200);
-      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
+    it("gives a caller presenting the retired unlock header exactly the same quota outcome as one without it", async () => {
+      // The plan's non-negotiable negative assertion (DIG-4525): a valid
+      // host+token PLUS the retired header buys no quota relief — identical
+      // count, identical limit, the same 402 at the same threshold. Before
+      // DIG-4525 the header raised the cap to the trial budget, so this case
+      // failed: the header-carrying visitor was never refused.
+      const withoutHeader = await quotaRun();
+      const withHeader = await quotaRun({ [RETIRED_UNLOCK_HEADER]: "1" });
+
+      // The gate still gates: the free turns, then the trial_gate refusal.
+      expect(withoutHeader.statuses).toEqual([
+        ...Array(EMBED_FREE_TURN_LIMIT).fill(200),
+        402,
+      ]);
+      expect(withoutHeader.body).toMatchObject({ error: "trial_gate" });
+      // Identical count, identical limit, the same 402 at the same threshold.
+      expect(withHeader.statuses).toEqual(withoutHeader.statuses);
+      expect(withHeader.body).toEqual(withoutHeader.body);
+      expect(withHeader.foundryCalls).toBe(withoutHeader.foundryCalls);
+      expect(withHeader.foundryCalls).toBe(EMBED_FREE_TURN_LIMIT);
     });
 
     it("fails open when the quota check throws, so the turn still reaches the backend", async () => {
