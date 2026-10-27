@@ -177,20 +177,18 @@ It **refuses to deploy** if the commit cannot be resolved.
 > and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
-The digiquant-mcp container reads its market-data secrets from the Worker environment — set
-each value via stdin (`$VALUE`-only, never commit values):
+**The digiquant-mcp container is gone (DIG-5558).** The market-data MCP read path
+is the Worker-native `DigiQuantMcpAgent` Durable Object (bound as `DIGIQUANT_MCP`,
+see `src/digiquant-mcp.ts`), which reads the `MARKET_DATA` R2 bucket directly.
+There is no second container image, no `MCP_STACK` binding and no per-container
+secret set to maintain: the `R2_*` secrets that fed the old container are no
+longer read by this Worker.
 
-```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
-```
-
-The `env -u CLOUDFLARE_API_TOKEN` prefix is load-bearing: that variable doubles as
-wrangler's own auth token, so leaving it exported makes wrangler authenticate as the
-Vectorize/D1-scoped secret instead of your login session (auth error 10000) — see the
-trap documented in `wrangler.toml:150-177`.
+The `env -u CLOUDFLARE_API_TOKEN` prefix on any `wrangler` command is still
+load-bearing: that variable doubles as wrangler's own auth token, so leaving it
+exported makes wrangler authenticate as the Vectorize/D1-scoped secret instead of
+your login session (auth error 10000) — see the trap documented at the top of
+`wrangler.toml`.
 
 Custom domains `graph.digithings.ai` / `key.digithings.ai` /
 `search.digithings.ai` are declared in `wrangler.toml`. First deploy may take

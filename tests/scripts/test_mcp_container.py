@@ -1,10 +1,11 @@
-"""Unit tests for the dedicated digiquant-mcp container + hosting wiring (#3780, Task 8).
+"""Unit tests for the digiquant-mcp image and its hosting wiring (#3780, Task 8).
 
-The hosted market-data MCP server is a dedicated container built from
-``digiquant/Dockerfile.mcp`` (FastMCP ``streamable-http`` on :8767 with the
-``[research]``/``[mcp]`` extras — never the backtest engine), fronted by a
-second Cloudflare Container (``DigiQuantMcpContainer``) beside the Profile A
-stack in ``apps/digithings-stack-cloudflare/``.
+The market-data MCP server image is ``digiquant/Dockerfile.mcp`` (FastMCP
+``streamable-http`` on :8767 with the ``[research]``/``[mcp]`` extras — never
+the backtest engine). The second Cloudflare Container that used to front it
+(``DigiQuantMcpContainer``) was deleted in DIG-5558: the hosted surface is the
+Worker-native ``DigiQuantMcpAgent`` Durable Object, and the tests below pin the
+container's absence so it cannot quietly return.
 
 RED premise (review finding 3): at creation these tests failed with
 ``FileNotFoundError`` (brief Step 2) because ``Dockerfile.mcp`` did not exist
@@ -17,6 +18,7 @@ absence: Dockerfile assertions run against the comment-stripped body
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -55,7 +57,7 @@ def _code_lines(path: Path) -> str:
 
 
 def _env_vars_blocks(source: str) -> list[str]:
-    """All ``envVars = { ... };`` blocks in index.ts: [stack, mcp, digichat]."""
+    """All ``envVars = { ... };`` blocks in index.ts (DigiStackContainer only)."""
     return [m.group(1) for m in re.finditer(r"envVars = \{([\s\S]*?)\n {2}\};", source)]
 
 
@@ -108,17 +110,32 @@ def test_mcp_dockerfile_copy_sources_exist_from_repo_root() -> None:
             assert (REPO_ROOT / src).exists(), src
 
 
-def test_wrangler_wires_dedicated_mcp_container() -> None:
-    text = WRANGLER.read_text()
-    assert "digiquant/Dockerfile.mcp" in text
-    assert "DigiQuantMcpContainer" in text
-    assert "MCP_STACK" in text
+def test_wrangler_no_longer_wires_a_dedicated_mcp_container() -> None:
+    """DIG-5558: the container, image entry and MCP_STACK binding are gone.
+
+    Asserted on the parsed TOML, not the raw text: the class name must survive
+    in the migration history (``v2`` created it, ``v6`` deletes it) because
+    tags are append-only, so a text search would pass on history alone.
+    """
+    data = tomllib.loads(WRANGLER.read_text())
+    containers = [row.get("class_name") for row in data.get("containers", [])]
+    assert "DigiQuantMcpContainer" not in containers
+    assert "digiquant/Dockerfile.mcp" not in WRANGLER.read_text()
+    bindings = [row.get("name") for row in data.get("durable_objects", {}).get("bindings", [])]
+    assert "MCP_STACK" not in bindings
+    assert "DIGIQUANT_MCP" in bindings
+    migrations = {row.get("tag"): row for row in data.get("migrations", [])}
+    assert migrations["v2"].get("new_sqlite_classes") == ["DigiQuantMcpContainer"]
+    assert migrations["v6"].get("deleted_classes") == ["DigiQuantMcpContainer"]
 
 
 def test_worker_routes_mcp_service() -> None:
     index = WORKER_INDEX.read_text()
-    assert "DigiQuantMcpContainer" in index
-    assert "DIGIQUANT_MCP_PORT" in index
+    # DIG-5558: the Worker holds no container class or port for the market-data
+    # MCP path; it forwards to the DigiQuantMcpAgent Durable Object instead.
+    assert "DigiQuantMcpContainer" not in index
+    assert "DIGIQUANT_MCP_PORT" not in index
+    assert "DIGIQUANT_MCP.idFromName(" in index
     # Finding 1: no *unauthenticated* forwarding route ships. The removed
     # workers.dev `/_stack/mcp` path forwarder never comes back; the only live
     # MCP edge routes are the secret-gated per-server map in index.ts
@@ -139,22 +156,30 @@ def test_worker_routes_mcp_service() -> None:
 
 
 def test_stack_container_env_has_no_mcp_duplication() -> None:
-    """Finding 6: MCP secrets live on DigiQuantMcpContainer.envVars only."""
+    """Finding 6, inverted by DIG-5558: no container forwards MCP secrets now.
+
+    The MCP block left with its class and the digichat block with #4689, so
+    DigiStackContainer's is the only ``envVars`` block left. A seam that puts
+    one of these names back on it is exactly the dead-config duplication the
+    original finding removed.
+    """
     blocks = _env_vars_blocks(WORKER_INDEX.read_text())
-    assert len(blocks) == 3
-    stack_block, mcp_block, digichat_block = blocks
+    assert len(blocks) == 1
     for name in MCP_SCOPED_VARS:
-        assert f"{name}:" not in stack_block, name
-        assert f"{name}:" in mcp_block, name
-        assert f"{name}:" not in digichat_block, name
+        assert f"{name}:" not in blocks[0], name
 
 
-def test_mcp_container_backend_passthrough_matches_library_default() -> None:
-    """Finding 7: no silent default flip — unset/empty keeps library behavior."""
-    mcp_block = _env_vars_blocks(WORKER_INDEX.read_text())[1]
-    entry = next(ln for ln in mcp_block.splitlines() if "DIGIQUANT_MARKET_DATA_BACKEND" in ln)
-    assert '"r2"' not in entry
-    assert '?? ""' in entry
+def test_no_container_forwards_the_backend_passthrough() -> None:
+    """Finding 7, inverted by DIG-5558: the pass-through left with the block.
+
+    No silent default flip was the rule while a container forwarded it; with the
+    container deleted the only Worker-side occurrence must be the ``Env``
+    declaration, never an ``envVars`` entry that ships an empty string.
+    """
+    blocks = _env_vars_blocks(WORKER_INDEX.read_text())
+    assert blocks
+    for block in blocks:
+        assert "DIGIQUANT_MARKET_DATA_BACKEND" not in block
 
 
 def test_wrangler_documents_mcp_secrets() -> None:
@@ -188,4 +213,7 @@ def test_architecture_documents_mcp_hosting() -> None:
     assert host in surface
     assert host not in text
     assert "digiquant:backtest" in text
-    assert "DigiQuantMcpContainer" in text
+    # DIG-5558: hosting is Worker-native; the container is not the documented
+    # surface any more.
+    assert "DigiQuantMcpAgent" in text
+    assert "DigiQuantMcpContainer" not in text

@@ -330,10 +330,14 @@ carries the `[research]`/`[mcp]` extras — never the backtest engine. The hoste
 bind is non-loopback via `DIGIQUANT_MCP_HOST=0.0.0.0` /
 `DIGIQUANT_MCP_PORT=8767` (code defaults stay `127.0.0.1:8767` for local runs).
 
-Cloudflare wiring (`apps/digithings-stack-cloudflare/`): `DigiQuantMcpContainer`
-beside `DigiStackContainer` (own `[[containers]]` image entry, `MCP_STACK`
-binding, `v2` migration), routed by exact hostname (`mcp.digithings.ai`,
-reserved) only — no workers.dev forwarding route ships. Single replica by design (`max_instances = 1`, one pinned
+Cloudflare wiring (`apps/digithings-stack-cloudflare/`): the hosted surface is
+Worker-native — the `DigiQuantMcpAgent` Durable Object (bound `DIGIQUANT_MCP`),
+which reads the sealed R2 generations directly. The dedicated
+`DigiQuantMcpContainer` that used to sit beside `DigiStackContainer` was
+deleted in DIG-5558 (its `[[containers]]` entry and `MCP_STACK` binding are
+gone; migration `v6` deletes the class), so the image below now only serves
+local and self-host runs. Routed by exact hostname (`mcp.digithings.ai`,
+reserved) only — no workers.dev forwarding route ships. Single replica by design (one pinned
 `MCP_CONTAINER_ID`): the read path assumes one replica (in-memory 900s TTL
 keyed by `as_of` + manifest version; correctness never depends on the cache —
 R2 is source of truth).
@@ -383,9 +387,9 @@ risk; it stays on the Python server until the seal carries precomputed
 indicators), and there is **no live vendor overlap** — an `as_of` after the
 manifest seal is an error (`beyond_seal`) rather than a history-only window that
 looks fresh. The 900s fresh-window cache moves into the DO instance, which is
-why one pinned id still owns the endpoint. The container class, its
-`[[containers]]` entry and the `MCP_STACK` binding remain declared but
-unrouted until the removal sweep lands.
+why one pinned id still owns the endpoint. The legacy container class, its
+`[[containers]]` entry and the `MCP_STACK` binding were removed in DIG-5558
+(migration `v6` deletes the class); only the Worker-native DO remains.
 
 Per-component secrets (`wrangler secret put`, never committed):
 `MCP_EDGE_KEY` (edge key for the Worker-native endpoint above and the

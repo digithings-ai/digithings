@@ -49,11 +49,13 @@ describe("container boot 503s carry the boot code + Retry-After", () => {
     expect(helper).toContain('"Retry-After"');
   });
 
-  it("serves the boot 503 from both containers", () => {
+  it("serves the boot 503 from the one remaining container", () => {
+    // DigiStackContainer only: the digiquant-mcp container was deleted in
+    // DIG-5558, so its boot 503 wiring must not come back (the Worker-native
+    // DigiQuantMcpAgent boots no container).
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerBootingResponse("${service}", message);`);
-    }
+    expect(source).toContain('return containerBootingResponse("stack", message);');
+    expect(source).not.toContain('containerBootingResponse("mcp"');
   });
 
   it("has no remaining plain-text container-not-ready 503", () => {

@@ -16,8 +16,9 @@ import { describe, expect, it } from "vitest";
  *
  * Loopback-only services (digivault, LiteLLM, redis, the *-mcp programs) are
  * deliberately absent: the Worker does not route to them. The dedicated
- * digiquant-mcp container (DIGIQUANT_MCP_PORT) is a different image and is not
- * part of the shared stack.
+ * digiquant-mcp container (DIGIQUANT_MCP_PORT, a different image) used to sit
+ * outside the shared stack too; it was deleted in DIG-5558, so its port is
+ * pinned as not routed below rather than as a bind to verify.
  *
  * Deliberately plain `.js`, same reason as env-vars-pin.test.js /
  * public-routes.test.js: tsconfig.json scopes `types` to
@@ -77,4 +78,15 @@ describe("container binds for Worker-routed ports", () => {
       expect(binds).toEqual(binds.map(() => "0.0.0.0"));
     });
   }
+
+  it("keeps the deleted digiquant-mcp container out of the Worker's routed binds", () => {
+    // DIG-5558 deleted DigiQuantMcpContainer and its MCP_STACK binding: the
+    // market-data read path is the Worker-native DigiQuantMcpAgent, which reads
+    // R2 directly and never proxies to a container port. If the class came back,
+    // its dedicated image would need a bind check again — so its absence is
+    // pinned here.
+    const indexSource = readFileSync(join(here, "index.ts"), "utf-8");
+    expect(indexSource).not.toContain("DigiQuantMcpContainer");
+    expect(indexSource).not.toContain("DIGIQUANT_MCP_PORT");
+  });
 });
