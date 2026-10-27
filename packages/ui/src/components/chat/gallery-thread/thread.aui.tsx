@@ -202,8 +202,7 @@ export type ThreadProps = {
   /**
    * Private session. Reasoning text and tool-call payloads are user data, so
    * the parts switch drops them entirely — while streaming as well as at
-   * rest — and the composer carries a quiet "Private session" badge. Default
-   * off; other hosts are unaffected.
+   * rest. Default off; other hosts are unaffected.
    */
   privateMode?: boolean | undefined;
   /**
@@ -574,7 +573,6 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
-  const privateMode = useContext(ThreadPrivateModeContext);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLElement | null>(null);
   const attachViewport = useCallback((node: HTMLElement | null) => {
@@ -660,21 +658,6 @@ const ThreadRoot: FC<{
                 <ThreadSuggestions />
               </div>
             </AuiIf>
-            {/* Sits immediately above the composer: it names the mode the
-                current session is in, and is a label — not a control, so it
-                carries no `cursor-pointer` and no button semantics. */}
-            {privateMode ? (
-              <div
-                data-slot="aui_private-mode-badge"
-                className="text-ink-mute flex items-center gap-1.5 self-start text-xs leading-none"
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 shrink-0 rounded-full bg-current"
-                />
-                Private session
-              </div>
-            ) : null}
             <Composer
               autoFocus={autoFocus}
               placeholder={placeholder}

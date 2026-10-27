@@ -16,6 +16,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -51,7 +52,9 @@ import {
   applyThemePick,
   buildProductSlashCommands,
   currentThemeState,
+  isPrivateMode,
   languageSelectOptions,
+  subscribePrivateMode,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
 import {
@@ -115,6 +118,11 @@ export type MenuRow = {
   id: string;
   label: string;
   value: string;
+  /**
+   * One short sentence. Drawn only under the highlighted row, so the list
+   * itself stays a name and its current value.
+   */
+  detail?: string;
   /** Accessible name override (defaults to `label`); used to expose full ids. */
   ariaLabel?: string;
   activate: () => void;
@@ -537,6 +545,11 @@ export function EmbedComposerMenu({
   const echoArmed = useRef(false);
   const mcpDraftRef = useRef(mcpDraft);
   const keyFormId = useId();
+  const menuDescBase = useId();
+  // `/private` lives in a module store, not in prefs, so the row's on/off
+  // value has to subscribe or it stays stale after a toggle.
+  const privateOn = useSyncExternalStore(subscribePrivateMode, isPrivateMode, () => false);
+  const rowPointer = useRef("");
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
   const [appliedOpen, setAppliedOpen] = useState("");
   /** Provider headers the visitor opened or closed; null means the default. */
@@ -628,7 +641,8 @@ export function EmbedComposerMenu({
           return {
             id: command.id,
             label: command.label ?? `/${command.id}`,
-            value: command.description ?? "",
+            value: command.value ?? "",
+            ...(command.description ? { detail: command.description } : {}),
             ...(draft ? { insert: draft } : {}),
             activate: node
               ? () => {
@@ -648,7 +662,8 @@ export function EmbedComposerMenu({
       {
         id: "scroll",
         label: slashName(api.prefs.scroll === "free" ? "scroll follow" : "scroll free"),
-        value: api.prefs.scroll === "free" ? "Free" : "Follow",
+        value: api.prefs.scroll === "free" ? "free" : "follow",
+        detail: "Follow the latest message, or leave the scroll where it is.",
         checked: api.prefs.scroll === "follow",
         activate: () => {
           commitExclusive(() =>
@@ -657,7 +672,7 @@ export function EmbedComposerMenu({
         },
       },
     ];
-  }, [api, onClose]);
+  }, [api, onClose, privateOn]);
 
   const languageRows = useMemo(
     (): MenuRow[] =>
@@ -2059,31 +2074,47 @@ export function EmbedComposerMenu({
                 const toggle =
                   typeof row.checked === "boolean" && (view === "main" || view === "tools");
                 const exclusive = Boolean(row.exclusive);
+                const selected = index === cursor;
+                const detailId = row.detail ? `${menuDescBase}-desc-${index}` : undefined;
                 return (
+                  <div key={row.id} className="flex flex-col">
                   <button
-                    key={row.id}
                     id={`dc-menu-${row.id}`}
                     type="button"
                     role={toggle ? "menuitemcheckbox" : exclusive ? "menuitemradio" : "menuitem"}
                     aria-checked={typeof row.checked === "boolean" ? row.checked : undefined}
                     aria-expanded={typeof row.expanded === "boolean" ? row.expanded : undefined}
+                    aria-selected={selected}
+                    aria-describedby={selected ? detailId : undefined}
                     aria-label={row.ariaLabel}
-                    data-cursor={index === cursor ? "true" : undefined}
+                    data-cursor={selected ? "true" : undefined}
                     className={MENU_ROW_CLASS}
                     ref={(node) => {
-                      if (index === cursor) node?.scrollIntoView({ block: "nearest" });
+                      if (selected) node?.scrollIntoView({ block: "nearest" });
                     }}
                     onMouseEnter={() => {
                       echoArmed.current = true;
                       setCursor(index);
                     }}
-                    onClick={() => runRow(row)}
+                    onPointerDown={(event) => {
+                      rowPointer.current = event.pointerType;
+                    }}
+                    onClick={() => {
+                      // A phone has no hover, so the first tap selects the row
+                      // and shows its sentence. The next tap runs it.
+                      if (rowPointer.current === "touch" && !selected) {
+                        echoArmed.current = true;
+                        setCursor(index);
+                        return;
+                      }
+                      runRow(row);
+                    }}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
                     {/* The user-message chevron marks the cursor on every page,
                         including a checked radio row; the value mark (diamond)
                         stays on the right, so the two never collide. */}
-                    {index === cursor ? (
+                    {selected ? (
                       <span className="aui-menu-cursor" aria-hidden>
                         <DotMatrix state="user" className="size-3.5" />
                       </span>
@@ -2107,7 +2138,10 @@ export function EmbedComposerMenu({
                       {row.label}
                     </span>
                     {row.value || (exclusive && row.checked) ? (
-                      <span className="text-ink-mute ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs">
+                      <span
+                        data-slot="palette-value"
+                        className="text-ink-mute ml-auto flex min-w-0 max-w-[45%] items-center justify-end gap-2 truncate text-right text-xs"
+                      >
                         {row.value ? <span className="truncate">{row.value}</span> : null}
                         {exclusive && row.checked ? (
                           <span
@@ -2127,6 +2161,16 @@ export function EmbedComposerMenu({
                       </span>
                     ) : null}
                   </button>
+                  {selected && row.detail ? (
+                    <p
+                      id={detailId}
+                      data-slot="palette-detail"
+                      className="text-ink-mute truncate px-2 pb-1 text-xs leading-tight"
+                    >
+                      {row.detail}
+                    </p>
+                  ) : null}
+                  </div>
                 );
               })
             : null}

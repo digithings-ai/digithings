@@ -1676,6 +1676,14 @@ unknown id is dropped on parse, so a typo costs the palette and never the mode.
 `ChatEmbedShell` reads the parent's `[data-palette]` and forwards only a known
 id (`readParentDocumentPalette`).
 
+The app thread's no-palette canvas reset (`product-chrome.css`) is gated with
+`:where(:root:not([data-palette]))`, so a named palette's `--bg`, `--surface`,
+`--ink`, `--accent`, `--hair`, and `--hair-2` stay the values `palettes.css`
+gives digithings.ai. `src/styles/palette-parity.test.ts` walks every id in
+`PALETTE_IDS` for light and dark, on the product document and the top-level
+embed document. An id added to that list without a `palettes.css` block, or a
+chat rule that paints over the block, fails the test.
+
 **`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
 palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
 lasts for the tab: it is stored in sessionStorage under

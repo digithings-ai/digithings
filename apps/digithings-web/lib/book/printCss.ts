@@ -236,7 +236,8 @@ html:has(.book-print) .book-root > div, .book-flow, [data-paged-content] {
   width: 90mm;
   margin: 0 0 14mm;
 }
-.book-cover__mark svg { display: block; width: 100%; height: auto; }
+.book-cover__mark svg,
+.book-cover__mark .brand-wordmark { display: block; width: 100%; height: auto; color: var(--ink); }
 .book-cover__title, .book-cover__subtitle, .book-cover__meta { position: relative; }
 .book-cover__kicker {
   margin: 0 0 22mm;

@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @import "@digithings/design/tokens.css";
 @import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/brand-wordmark.css";
 @import "@digithings/ui/styles/docs.css";
 @import "@digithings/ui/styles/nav-shell.css";
 @import "@digithings/ui/styles/pricing.css";

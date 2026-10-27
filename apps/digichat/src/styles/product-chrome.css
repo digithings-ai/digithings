@@ -415,9 +415,18 @@ body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app
   background: var(--bg);
 }
 
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread__footer,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread-list {
+/* Named palettes keep --bg, --surface, and --hair from palettes.css.
+   :where() adds no specificity, so this reset applies only while no
+   data-palette is set, and a later sheet of equal weight can still retie it. */
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread,
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread__footer,
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread-list {
   --bg: transparent;
   --surface: transparent;
   --hair: var(--term-hair);

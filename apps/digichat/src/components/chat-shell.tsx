@@ -2,6 +2,7 @@
 
 /** CLI / session / terminal sheets — only for persistence:server ChatShell. */
 import "@/styles/chat-shell-cli.css";
+import { BrandWordmark } from "@digithings/ui";
 
 /**
  * ChatShell — authenticated chat chrome for digichat.
@@ -28,7 +29,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { isPrivateMode, subscribePrivateMode } from "@/lib/product-slash-commands";
+import {
+  isPrivateMode,
+  seedPrivateMode,
+  subscribePrivateMode,
+} from "@/lib/product-slash-commands";
 import type { UIMessage } from "ai";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -109,6 +114,17 @@ export function ChatShell({
     isPrivateMode,
     () => false,
   );
+  // Same seed as the stock shell and the embed. Without it, `?private=1` and
+  // `/private` never arm the header this shell's ChatPanel sends.
+  useEffect(() => {
+    const urlPrivate =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("private") === "1";
+    seedPrivateMode({
+      tenantOptIn: clientConfig?.features.privateMode === true,
+      urlPrivate,
+    });
+  }, [clientConfig?.features.privateMode]);
   const [threads, setThreads] = useState<ChatThreadState[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [serverPersistence, setServerPersistence] = useState(false);
@@ -471,7 +487,7 @@ export function ChatShell({
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
           <div>
-            <div>DT</div>
+            <BrandWordmark className="h-4 w-auto" mask={p("/wordmark-mask.svg")} />
             <div>
               <div>digichat</div>
               <div>v0.1 · digithings</div>

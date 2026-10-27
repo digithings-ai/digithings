@@ -138,6 +138,7 @@ import {
 } from "@/lib/pending-chat-headers";
 import { webSearchStorageKey } from "@/lib/web-search-pref";
 import { DEFAULT_CLIENT_CONFIG, type DigichatClientConfig } from "@/lib/deploy-config/client-projection";
+import { seedPrivateMode } from "@/lib/product-slash-commands";
 
 function baseProps() {
   return {
@@ -341,5 +342,39 @@ describe("ChatPanel web search follows the deployment allow", () => {
     const headers = await sendHeaders(off);
     expect(window.localStorage.getItem(key)).toBeNull();
     expect(headers.has("X-Digi-Enable-Web-Search")).toBe(false);
+  });
+});
+
+describe("ChatPanel prepareSendMessagesRequest — X-Digi-Private", () => {
+  afterEach(() => {
+    seedPrivateMode({ tenantOptIn: false, urlPrivate: false });
+  });
+
+  it("reads the session flag at send time and leaves the stored thread unchanged", async () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: false });
+    capturedTransportConfig = undefined;
+    render(<ChatPanel {...baseProps()} />);
+    const config = readCapturedTransportConfig();
+    if (!config) throw new Error("AssistantChatTransport was never constructed by ChatPanel");
+    const stored = [
+      { id: "u1", role: "user" as const, parts: [{ type: "text" as const, text: "John Smith" }] },
+    ];
+
+    const off = await config.prepareSendMessagesRequest({
+      messages: stored,
+      id: "t1",
+      body: undefined,
+    });
+    expect(new Headers(off.headers).has("X-Digi-Private")).toBe(false);
+
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    const on = await config.prepareSendMessagesRequest({
+      messages: stored,
+      id: "t1",
+      body: undefined,
+    });
+    expect(new Headers(on.headers).get("X-Digi-Private")).toBe("1");
+    expect(JSON.stringify(on.body)).toContain("John Smith");
+    expect(JSON.stringify(on.body)).not.toContain("PRIVATE DEMO SESSION");
   });
 });

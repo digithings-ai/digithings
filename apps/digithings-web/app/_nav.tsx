@@ -5,22 +5,13 @@
  *  Cross-domain: the header links out to digiquant.io (the quant product);
  *  digiquant.io intentionally does not link back in its header.
  */
-import { type NavItem, type NavLink } from "@digithings/ui";
-import { DIGITHINGS } from "@digithings/hero-banner/definitions";
-import { ScrollBanner } from "@/components/landing/ScrollBanner";
+import { type NavItem, type NavLink, BrandWordmark } from "@digithings/ui";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
-// The DIGITHINGS hero banner, armed at mount and kept live. It is on screen at
-// scroll 0, and it replays LOADING with the landing hero on every visit instead
-// of skipping to the settled mark after the first play in the tab.
+// One studio wordmark for every top bar that renders <Brand />.
 export const Brand = () => (
-  <ScrollBanner
-    def={DIGITHINGS}
-    inView={false}
-    replayLoading
-    className="w-[8.5rem] max-[880px]:w-[7rem]"
-  />
+  <BrandWordmark className="h-[1.05rem] w-auto text-ink max-[880px]:h-[0.95rem]" />
 );
 
 /** v7 nav shape (used by <DtNav />): wayfinding links on the left of the tail,
