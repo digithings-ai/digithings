@@ -51,6 +51,12 @@ jobs:
           npm run test --workspace digithings-cron
           npm run typecheck --workspace digithings-cron
 
+      # An all-zero binding id cannot exist in the account, so wrangler would fail
+      # at the API call, after this lane's approval. Refuse it here instead
+      # (DIG-5840, the digitrace-ingest first-deploy failure).
+      - name: Refuse placeholder binding ids
+        run: python3 scripts/check_worker_bindings.py --config apps/digithings-cron/wrangler.toml
+
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
         with:
