@@ -300,6 +300,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }),
       );
       vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(streamText).mockClear();
 
       expect((await POST(chatRequest({}))).status).toBe(401);
       expect((await POST(chatRequest({ "x-embed-token": "wrong" }))).status).toBe(401);
