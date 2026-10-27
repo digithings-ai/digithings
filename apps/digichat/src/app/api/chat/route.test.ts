@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+import { bindOccApiCall } from "../../../../../digichat-cloudflare/src/occ-gate";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 
 vi.mock("@/lib/request-auth", () => ({
@@ -3309,6 +3310,146 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       // The deployment's lock survived the merge and still pins the model.
       expect(forwarded).toEqual(["digigraph"]);
+    });
+  });
+
+  describe("DIG-3585: the OCC page's turn is OCC only through the edge-bound invite cookie", () => {
+    // These drive the real embed tenant resolution with a request shaped the
+    // way the digichat Worker hands it to the container: the browser on
+    // /chat/occ holds the invite only as the occ_invite cookie (no ?token=,
+    // no ?host= in its URL), and the Worker's bindOccApiCall decides — from
+    // the cookie AND the Referer — whether the call is the OCC tenant's.
+    const OCC_HOST = "occ.digithings.ai";
+    /** A test fixture, not a credential. */
+    const INVITE = "occ-invite-fixture-not-a-secret";
+    const OCC_PAGE = "https://digithings.ai/chat/occ";
+
+    function installOcc(): void {
+      setDigichatConfigForTests(
+        loadDigichatConfig({
+          fileContents: [
+            "version: 1",
+            "hosts:",
+            `  ${OCC_HOST}:`,
+            "    slug: occ",
+            `    token: ${INVITE}`,
+            "    backend:",
+            "      type: digigraph",
+            '      digisearchIndex: "occ_help,occ-tickets"',
+            "      vaultPathPrefix: clients/occ-fixture",
+            "",
+          ].join("\n"),
+          env: {
+            DIGICHAT_EMBED_TENANTS: JSON.stringify({
+              [OCC_HOST]: {
+                slug: "occ",
+                token: INVITE,
+                gateMode: "ungated",
+                backend: {
+                  type: "digigraph",
+                  digisearchIndex: "occ_help,occ-tickets",
+                  vaultPathPrefix: "clients/occ-fixture",
+                },
+              },
+            }),
+          },
+        }),
+      );
+    }
+
+    /** What the browser on a page sends, before the edge touches it. */
+    function browserTurn(referer: string, headers: Record<string, string> = {}): Request {
+      return new Request("https://digithings.ai/chat/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          referer,
+          origin: "https://digithings.ai",
+          // The client's own guess at its host when the URL names none.
+          "x-embed-host": "https://digithings.ai",
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    /** The same turn after the Worker's edge binding. */
+    function throughEdge(req: Request): Request {
+      bindOccApiCall(req, INVITE);
+      return req;
+    }
+
+    function lastUpstreamHeaders(): Record<string, string> | undefined {
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as
+        | { headers?: Record<string, string> }
+        | undefined;
+      return call?.headers;
+    }
+
+    /** Never the OCC tenant, its corpus or its vault, whatever the status. */
+    async function expectNotOcc(res: Response): Promise<void> {
+      if (res.status !== 200) {
+        expect(res.status).toBeGreaterThanOrEqual(400);
+        expect(vi.mocked(streamText)).not.toHaveBeenCalled();
+        return;
+      }
+      const h = lastUpstreamHeaders() ?? {};
+      expect(h["X-Digi-Tenant"]).not.toBe("occ");
+      expect(h["X-Digi-Corpus-Index"] ?? "").not.toMatch(/occ/);
+      expect(h["X-Digi-Vault-Prefix"] ?? "").not.toMatch(/occ/);
+    }
+
+    beforeEach(() => {
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(streamText).mockClear();
+      installOcc();
+    });
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+    });
+
+    it("resolves a cookie-only turn from /chat/occ to the OCC tenant", async () => {
+      const res = await POST(throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${INVITE}` })));
+      expect(res.status).toBe(200);
+      const h = lastUpstreamHeaders();
+      expect(h?.["X-Digi-Tenant"]).toBe("occ");
+      expect(h?.["X-Digi-Corpus-Index"]).toBe("occ_help,occ-tickets");
+      expect(h?.["X-Digi-Vault-Prefix"]).toBe("clients/occ-fixture");
+    });
+
+    it("never resolves OCC from /chat/occ without the cookie", async () => {
+      await expectNotOcc(await POST(throughEdge(browserTurn(OCC_PAGE))));
+    });
+
+    it("never resolves OCC from /chat/occ with a wrong cookie and forged headers", async () => {
+      await expectNotOcc(
+        await POST(
+          throughEdge(
+            browserTurn(OCC_PAGE, {
+              cookie: "occ_invite=guess",
+              "x-embed-token": "guess",
+              "x-embed-host": `https://${OCC_HOST}`,
+              "x-digi-tenant": "occ",
+            }),
+          ),
+        ),
+      );
+    });
+
+    it("never upgrades a house turn that carries the cookie", async () => {
+      await expectNotOcc(
+        await POST(
+          throughEdge(
+            browserTurn("https://digithings.ai/chat", {
+              cookie: `occ_invite=${INVITE}`,
+              "x-digi-tenant": "occ",
+            }),
+          ),
+        ),
+      );
     });
   });
 
