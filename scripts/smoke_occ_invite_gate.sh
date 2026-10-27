@@ -49,12 +49,16 @@ fi
 #
 # The gate answers the link with a 302 to the tokenless URL and the
 # `occ_invite` cookie (DIG-1437), so the check is two requests: the redirect
-# itself, then the follow-up a browser makes with the cookie.
+# itself, then the follow-up a browser makes with the cookie. It sends the bare
+# link form people share (/chat/occ?token=, no trailing slash) and requires the
+# redirect to land on the clean page URL WITH the slash, so the key never stays
+# in the address bar.
+LINK="${BASE%/}/chat/occ"
 invited=$(mktemp)
 jar=$(mktemp)
 trap 'rm -f "$body" "$invited" "$jar"' EXIT
 code=$(curl -sS -G -o "$invited" -D "$invited.headers" -w '%{http_code}' --max-time 30 \
-  -c "$jar" -H 'accept: text/html' --data-urlencode "token=${OCC_INVITE_KEY}" "$URL")
+  -c "$jar" -H 'accept: text/html' --data-urlencode "token=${OCC_INVITE_KEY}" "$LINK")
 
 if [ "$code" != "302" ]; then
   # Never echo the URL here: it carries the invite.
@@ -72,6 +76,10 @@ case "$location" in
     exit 1
     ;;
 esac
+if [ "$location" != "$URL" ]; then
+  echo "invited check failed: expected the redirect to $URL, got $location" >&2
+  exit 1
+fi
 
 # Follow it the way the browser does: same URL, cookie instead of the query.
 final=$(mktemp)

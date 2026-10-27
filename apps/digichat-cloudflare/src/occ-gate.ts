@@ -27,8 +27,11 @@ import { constantTimeEqual } from "./constant-time";
  * container is never asked for an uninvited request, and the Pages project is
  * not in the OCC path at all (2026-10-27 consolidation).
  */
+/** The OCC page's public path, without the trailing slash. */
+export const OCC_PAGE_PATH = "/chat/occ";
+
 export function isOccShellPath(pathname: string): boolean {
-  return pathname === "/chat/occ" || pathname.startsWith("/chat/occ/");
+  return pathname === OCC_PAGE_PATH || pathname.startsWith(`${OCC_PAGE_PATH}/`);
 }
 
 /** Constant-time string compare (length leak only); false when either side is empty. */
@@ -418,8 +421,12 @@ export async function occGate(
     // container request entirely and works with scripting disabled.
     // A token hit always issues a FRESH cookie (new issued-at): reopening the
     // link is how a visitor renews an expired session.
+    // The bare `/chat/occ?token=` link lands on `/chat/occ/`, the same clean
+    // address as `/chat/occ/?token=`: one canonical URL, no key in it, and no
+    // second hop for a trailing-slash redirect after the cookie is set.
     const clean = new URL(request.url);
     clean.searchParams.delete("token");
+    if (clean.pathname === OCC_PAGE_PATH) clean.pathname = `${OCC_PAGE_PATH}/`;
     const headers = new Headers({
       location: clean.toString(),
       "cache-control": "no-store",

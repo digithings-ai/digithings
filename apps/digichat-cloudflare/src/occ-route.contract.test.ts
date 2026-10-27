@@ -37,6 +37,10 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
     expect(script).toMatch(/OCC_INVITE_KEY/);
     expect(script).toMatch(/iframe/);
     expect(script).toMatch(/\/chat\/occ\//);
+    // The bare link must redirect to the clean trailing-slash page URL, so the
+    // key never stays in the address bar after load.
+    expect(script).toMatch(/LINK="\$\{BASE%\/\}\/chat\/occ"/);
+    expect(script).toMatch(/"\$location" != "\$URL"/);
   });
 
   it("the post-deploy smoke checks the page's API calls with only the cookie (G1)", () => {

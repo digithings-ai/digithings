@@ -487,6 +487,8 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).not.toContain(KEY);
     expect(res.headers.get("location")).not.toContain("token=");
+    // The bare link lands on the canonical page address, trailing slash included.
+    expect(res.headers.get("location")).toBe("https://digithings.ai/chat/occ/");
     expect(hooks.containerFetch).not.toHaveBeenCalled();
     expect([...logged, ...quiet]).toEqual([]);
   });

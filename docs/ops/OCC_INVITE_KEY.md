@@ -62,7 +62,7 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   `cache-control: no-store` or any other marker: that would make the gated address
   distinguishable from a plain 404.
 - **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`. The Worker
-  validates it, answers a 302 to the tokenless URL with the `occ_invite` session cookie
+  validates it, answers a 302 to the tokenless page URL `/chat/occ/` (trailing slash) with the `occ_invite` session cookie
   (HttpOnly, Secure, SameSite=Strict, Path=/chat), moves the key to the `X-Embed-Token` request
   header and drops `?token=` before proxying to the Container's `/chat/embed` route. The key never
   reaches the Container URL, the HTML or the flight payload, and the cookie itself is stripped

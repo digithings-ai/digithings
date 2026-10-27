@@ -153,6 +153,44 @@ describe("occ gate", () => {
     );
   });
 
+  // Production served the token link at /chat/occ/?token= with a 200, so the
+  // key stayed in the address bar. Every spelling of the link must now end on
+  // the clean page address with the trailing slash, in one hop.
+  for (const [link, clean] of [
+    ["/chat/occ?token=KEY", "https://digithings.ai/chat/occ/"],
+    ["/chat/occ/?token=KEY", "https://digithings.ai/chat/occ/"],
+    ["/chat/occ?lang=it&token=KEY", "https://digithings.ai/chat/occ/?lang=it"],
+    ["/chat/occ/?token=KEY&lang=it", "https://digithings.ai/chat/occ/?lang=it"],
+  ] as const) {
+    it(`302s '${link.replace("KEY", "<key>")}' to the clean URL '${clean}'`, async () => {
+      const r = await occGate(
+        new Request(`https://digithings.ai${link.replace("KEY", encodeURIComponent(KEY))}`),
+        KEY,
+        container,
+        site,
+      );
+      expect(r.status).toBe(302);
+      const location = r.headers.get("location") ?? "";
+      expect(location).toBe(clean);
+      expect(location).not.toContain(KEY);
+      expect(location).not.toContain("token");
+      expect(container).not.toHaveBeenCalled();
+    });
+  }
+
+  it("serves the clean trailing-slash URL with the cookie, with no further redirect", async () => {
+    const r = await occGate(
+      new Request("https://digithings.ai/chat/occ/", {
+        headers: { cookie: `${OCC_INVITE_COOKIE}=${COOKIE}` },
+      }),
+      KEY,
+      container,
+      site,
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("location")).toBeNull();
+  });
+
   it("404s a cookie that holds the raw key (cookies from before the HMAC)", async () => {
     const req = new Request("https://digithings.ai/chat/occ/", {
       headers: { cookie: `${OCC_INVITE_COOKIE}=${KEY}` },
