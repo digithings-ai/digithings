@@ -114,6 +114,49 @@ def test_nothing_at_all_is_not_a_review() -> None:
     assert "no completed agent review" in why
 
 
+def test_a_marker_comment_without_the_label_names_the_missing_label() -> None:
+    """A near miss must not be reported as "no review at all".
+
+    On 2026-10-27 the promotion gate said "no completed agent review (… in-session)"
+    about PRs that *did* carry an in-session review comment and were missing only
+    the label that accepts it. The operator read that as a broken detector, went
+    looking for a bug that was not there, and only found the real gap by reading
+    the source. The refusal has to name the one thing left to do.
+    """
+    reviewed, why = crc.verdict_for(
+        _state(
+            agent_review={
+                "actor": "chrizefan",
+                "at": "2026-10-27T00:00:00Z",
+                "url": "https://github.com/digithings-ai/digithings/pull/1#c",
+            }
+        )
+    )
+    assert not reviewed
+    assert "in-session review comment exists" in why
+    assert crc.AGENT_REVIEW_LABEL in why
+    assert "no completed agent review" not in why
+
+
+def test_an_unreadable_review_index_is_loud_and_still_fails_closed(monkeypatch, capsys) -> None:
+    """Failing closed is right; failing silently is not.
+
+    `_sha_mentioned_in` is discovery for the direct-push hatch. When the search
+    index cannot be read it returns nothing, and the caller then reports "no
+    review exists" — a different and much more misleading claim than "could not
+    look". The warning has to make that distinction visible.
+    """
+
+    def _boom(*_args: object, **_kwargs: object) -> dict:
+        raise subprocess.CalledProcessError(1, "gh")
+
+    monkeypatch.setattr(crc, "_gh_json", _boom)
+    assert crc._sha_mentioned_in("abc1234") == []
+    err = capsys.readouterr().err
+    assert "search/issues unavailable" in err
+    assert "could not look" in err
+
+
 # ── the reviewed:owner hatch ─────────────────────────────────────────────────
 #
 # Added because the gate's own first run had no honest hatch: a solo maintainer
