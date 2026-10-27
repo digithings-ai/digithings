@@ -1998,7 +1998,9 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
       maxToolCalls?: number;
     };
-    expect(call?.maxToolCalls).toBe(5);
+    // The shared guardrail outranks the Foundry alias (pinned below), so the
+    // house cap is what reaches the adapter even though this tenant asked for 5.
+    expect(call?.maxToolCalls).toBe(20);
     expect(call && "guard" in call).toBe(true);
   });
 

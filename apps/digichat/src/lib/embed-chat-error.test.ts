@@ -328,6 +328,16 @@ describe("model-remediable refusals with no upstream message", () => {
     });
   }
 
+  it("gives llm_error plain copy instead of a machine reason code", () => {
+    const formatted = formatEmbedChatError(
+      new Error(JSON.stringify({ error: "llm_error", message: "art9:genetic:rs_id" })),
+    );
+    expect(formatted).toBe(
+      "That answer could not be completed. Try a narrower question, or ask again.",
+    );
+    expect(formatted).not.toContain("art9");
+  });
+
   // An upstream message, when there is one, still wins — the SSE path carries it.
   it("prefers the upstream message when one is present", () => {
     const formatted = formatEmbedChatError(

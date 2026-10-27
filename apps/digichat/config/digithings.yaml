@@ -92,7 +92,11 @@ deployment: &house
     digisearchIndex: digithings_docs
     vaultPathPrefix: clients/digithings
   # Stability on every deployment, including overlays that clear the
-  # spend limits below. 5 matches digillm's tool-round limit. answerAt asks
+  # spend limits below. 20 is deliberate headroom for retrieval-heavy turns:
+  # at 5 the cap fired on ordinary document lookups. On the digigraph backend
+  # this number is ADVISORY - digigraph owns the tool loop and stops it itself
+  # (max_tool_rounds upstream), so digichat cannot abort it; see
+  # toolCallCapSupport() in deploy-config/schema.ts. answerAt asks
   # the model to finish; pauseAt waits out the window. Both are the
   # guardrail defaults.
   # The 80000-token minute is per visitor, and it belongs to house because
@@ -104,7 +108,7 @@ deployment: &house
   # per-visitor minute. The tool-call cap, the answer guard, and a shared
   # deployment minute stay on.
   guardrails:
-    maxToolCallsPerTurn: 5
+    maxToolCallsPerTurn: 20
     answerAt: 0.7
     pauseAt: 0.9
     rateLimit: true

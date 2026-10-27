@@ -677,6 +677,26 @@ it("relays llm_error detail for the embed disclosure", () => {
   });
 });
 
+it("never relays an internal reason code as the user message", () => {
+  // The live failure: the chat rendered `art9:genetic:rs_id` as the message.
+  // A stable reason code is operator detail (art9-screen.ts says so explicitly).
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "art9:genetic:rs_id",
+    detail: "art9:genetic:rs_id",
+  });
+  expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+  expect(payload).not.toContain("art9");
+});
+
+it("still relays a human sentence from upstream", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+  });
+  expect(JSON.parse(payload).message).toBe("The model timed out.");
+});
+
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
   const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
   const payload = digigraphErrorToEmbedPayload({

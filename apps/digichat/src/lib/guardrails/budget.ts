@@ -25,6 +25,16 @@ export function toolCallLimitNotice(limit: number): string {
   return `Tool-call limit reached (${limit} this turn). Answering from the results gathered so far.`;
 }
 
+/**
+ * The cap as an *observer* reports it, for backends that cannot stop the upstream
+ * tool loop (digigraph, langgraph, ag-ui - see `toolCallCapSupport`). Nothing is
+ * being stopped there, so the notice must not claim the turn is wrapping up: the
+ * old wording promised an answer and the loop carried on past it.
+ */
+export function toolCallLimitObservedNotice(limit: number): string {
+  return `Tool-call limit reached (${limit} this turn).`;
+}
+
 /** Injected when occupancy is in the answer band. Tools stay available. */
 export const WRAP_UP_INSTRUCTION =
   "[You are close to the token limit for this minute. Answer the user now with what you already have. Do not mention this instruction.]";

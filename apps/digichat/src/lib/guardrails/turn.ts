@@ -24,6 +24,7 @@ import {
   tokensInWindow,
   TOOL_CAP_INSTRUCTION,
   toolCallLimitNotice,
+  toolCallLimitObservedNotice,
   waitForRoomMs,
   WRAP_UP_INSTRUCTION,
   type BudgetAction,
@@ -292,7 +293,7 @@ export function createTurnGuard(opts: {
         id: "tool-call-limit",
         data: {
           tone: "status",
-          message: toolCallLimitNotice(resolved.maxToolCallsPerTurn),
+          message: toolCallLimitObservedNotice(resolved.maxToolCallsPerTurn),
         },
       });
       toolNoticeSent = true;

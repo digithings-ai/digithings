@@ -6,6 +6,9 @@ import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
 import { gateMetersTurns } from "@/lib/deploy-config/schema";
 import type { EmbedLlmAccess } from "@/lib/embed-tenants";
 
+/** `art9:<category>:<signal>` and friends: stable internal reason codes, never user copy. */
+const INTERNAL_REASON_CODE_RE = /^[a-z][a-z0-9_]*:[a-z0-9_]+(?::[a-z0-9_]+)*$/;
+
 const NETWORK_ERROR_RE =
   /\b(fetch failed|failed to fetch|networkerror|network error|econnrefused)\b/i;
 
@@ -168,6 +171,13 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   if (!parsed) return null;
 
   const { code, message, raw } = parsed;
+  // `llm_error` carries the provider's own failure. A human sentence from upstream
+  // is still shown (see the test that pins it); a machine reason code like
+  // `art9:genetic:rs_id` is not, because it is operator detail that reached a live
+  // transcript. When there is nothing but a code, the user gets plain copy.
+  if (code === "llm_error" && (message === undefined || INTERNAL_REASON_CODE_RE.test(message))) {
+    return "That answer could not be completed. Try a narrower question, or ask again.";
+  }
   if (message) {
     return message;
   }
