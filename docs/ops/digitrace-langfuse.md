@@ -43,9 +43,9 @@ design review is
 
 ## Follow-ups for a human (not done here, deliberately)
 
-- **R2 bucket `digitrace-langfuse-events`** may exist on the account and may
-  hold data. It was not listed for deletion, not emptied and not touched. A
-  human decides whether it is empty before removing it.
+- **R2 bucket `digitrace-langfuse-events`** does **not** exist on the account
+  (`wrangler r2 bucket info` → code 10006, checked 2026-10-27). The app was never
+  deployed, so no bucket was ever created and there is nothing to empty or delete.
 - **`infra/local-proxy/Caddyfile`** still carries a `trace.digithings.localhost`
   route (documented in [`docs/LOCAL_STACK.md`](../LOCAL_STACK.md)) that proxies
   to `digitrace:8003`. That is the live digitrace service, not the retired

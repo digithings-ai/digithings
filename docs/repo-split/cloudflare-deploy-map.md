@@ -53,7 +53,7 @@ Modified times for the six Workers:
 
 `apps/digidata-api/wrangler.toml` exists on develop, and the live account does not contain a Worker named `digidata-api`. It was never deployed.
 
-`apps/digitrace-langfuse` and its Dockerfiles were **deleted** (DIG-5136): the Worker `digitrace-langfuse` was never created on the live account, so there was nothing to migrate and the code was dead. Its R2 bucket `digitrace-langfuse-events` is a human follow-up — it was not listed, emptied or deleted here.
+`apps/digitrace-langfuse` and its Dockerfiles were **deleted** (DIG-5136): the Worker `digitrace-langfuse` was never created on the live account, so there was nothing to migrate and the code was dead. Its R2 bucket `digitrace-langfuse-events` **does not exist** on the account either (`wrangler r2 bucket info` → code 10006, 2026-10-27); nothing was ever created for this app, so there is nothing to empty or delete.
 
 `digidata-api` goes to R7 `twelve-x`. It needs no migration step for Cloudflare; it needs a decision about whether to deploy it or to delete it.
 
