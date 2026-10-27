@@ -28,14 +28,14 @@ const REGISTRY = JSON.stringify({
     token: INVITE,
     backend: {
       type: "digigraph",
-      digisearchIndex: "occ_help,occ-tickets",
+      digisearchIndex: "tenant_help,tenant-tickets",
       vaultPathPrefix: "clients/occ-fixture",
     },
     mcp: {
       servers: [
         {
-          id: "zammad",
-          url: "http://zammad-mcp:8770/mcp",
+          id: "tickets-mcp",
+          url: "http://tickets-mcp:8770/mcp",
           label: "Tickets",
           default: true,
           allowedTools: ["search_tickets"],
@@ -70,7 +70,7 @@ async function tenantSeen(req: Request): Promise<{ slug?: string; mcp?: { server
 
 function expectNotOcc(body: { slug?: string; mcp?: { servers?: unknown[] } }): void {
   expect(body.slug).not.toBe("occ");
-  expect(JSON.stringify(body)).not.toMatch(/occ_help|occ-tickets|zammad|occ-fixture/);
+  expect(JSON.stringify(body)).not.toMatch(/tenant_help|tenant-tickets|tickets-mcp|occ-fixture/);
 }
 
 beforeEach(() => {
@@ -91,7 +91,7 @@ describe("tenant-config from the OCC page (DIG-3585)", () => {
     const body = await tenantSeen(browserRead(OCC_PAGE, { cookie: `occ_invite=${INVITE}` }));
     expect(body.slug).toBe("occ");
     // The OCC tools come with it (the negative cases below must never see them).
-    expect(JSON.stringify(body.mcp)).toContain("zammad");
+    expect(JSON.stringify(body.mcp)).toContain("tickets-mcp");
     // The client-safe projection: the tool is listed, its secret never is.
     expect(JSON.stringify(body)).not.toContain(INVITE);
   });

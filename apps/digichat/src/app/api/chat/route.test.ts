@@ -3335,7 +3335,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
             `    token: ${INVITE}`,
             "    backend:",
             "      type: digigraph",
-            '      digisearchIndex: "occ_help,occ-tickets"',
+            '      digisearchIndex: "tenant_help,tenant-tickets"',
             "      vaultPathPrefix: clients/occ-fixture",
             "",
           ].join("\n"),
@@ -3347,7 +3347,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
                 gateMode: "ungated",
                 backend: {
                   type: "digigraph",
-                  digisearchIndex: "occ_help,occ-tickets",
+                  digisearchIndex: "tenant_help,tenant-tickets",
                   vaultPathPrefix: "clients/occ-fixture",
                 },
               },
@@ -3416,7 +3416,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       expect(res.status).toBe(200);
       const h = lastUpstreamHeaders();
       expect(h?.["X-Digi-Tenant"]).toBe("occ");
-      expect(h?.["X-Digi-Corpus-Index"]).toBe("occ_help,occ-tickets");
+      expect(h?.["X-Digi-Corpus-Index"]).toBe("tenant_help,tenant-tickets");
       expect(h?.["X-Digi-Vault-Prefix"]).toBe("clients/occ-fixture");
     });
 
