@@ -409,9 +409,14 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   ceiling of `STEP_BUDGET` (180 s) and the ones that legitimately need longer
   name themselves in `STEP_BUDGETS` (gitleaks, `uv sync`, mypy, the worker
   dry-runs, the bun suites); an explicit `budget=` wins, and
-  `LOCAL_CI_STEP_BUDGET` raises the default for the whole host. A step that
-  overruns is killed by process group, recorded as `<step> exceeded <N>s and was
-  killed`, and the tick moves on to the next step. Every step also writes
+  `LOCAL_CI_STEP_BUDGET` raises the default for the whole host. **Tree scanners
+  take `LOCAL_CI_SCAN_TIMEOUT` (default 600 s) as both their caller ceiling and
+  their step budget**, so the slow-host knob reaches them; `LOCAL_CI_STEP_BUDGET`
+  does not raise it for a scanner. 600 s is 3.3x the worst measured clean-tree
+  runtime (183 s on 2026-10-27), because the 180 s default killed five scanners
+  on a clean tree in PR #6525 (DIG-5724). A step that overruns is killed by
+  process group, recorded as `<step> exceeded <N>s and was killed`, and the tick
+  moves on to the next step. Every step also writes
   `step=<name> seconds=<n> rc=<n>` to its log, so the next investigation reads
   the duration table instead of re-measuring by hand (2026-10-26).
 - **Static gates, plus two path-gated lanes.** The worker dry-run build and the

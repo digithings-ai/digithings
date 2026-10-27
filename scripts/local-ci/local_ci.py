@@ -328,9 +328,12 @@ ENV = build_env()
 # A scanner has to finish before the tree is judged, and the budget for that is
 # the machine's, not the guard's. On 2026-10-22 the post-merge run on develop
 # 8cfd404816a6 turned three scanners red on a 600 s timeout while the tree was
-# clean (DIG-5318). This is the scanner's own ceiling; the step budget below is
-# the one that actually stops a hung scanner, and LOCAL_CI_STEP_BUDGET raises
-# that for a slow host without a code change.
+# clean (DIG-5318). This is the scanner's own ceiling AND its step budget: a
+# scanner is not in STEP_BUDGETS, so before DIG-5724 it took the 180 s default
+# and min(180, 600) made this knob inert. On PR #6525 (2026-10-27) five
+# clean-tree scanners were killed at 182-183 s while the tree was clean; the
+# 600 s default is 3.3x that worst measurement, and LOCAL_CI_SCAN_TIMEOUT
+# raises both numbers at once for a slower host.
 SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
 
 # A step's own wall-clock ceiling (2026-10-26). The gate does 99.6 s of real
@@ -342,8 +345,10 @@ SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
 # `<step> exceeded <N>s and was killed`, and the tick moves on to the next step.
 # A step that legitimately needs longer names itself in STEP_BUDGETS (`*` is a
 # prefix, for the bun and worker-build families); an explicit `budget=` argument
-# wins over both. LOCAL_CI_STEP_BUDGET raises the default for the whole host,
-# and a caller `timeout` that is tighter than the budget still wins.
+# wins over both. Tree scanners pass SCAN_TIMEOUT as that explicit budget
+# (DIG-5724), so their own knob reaches them. LOCAL_CI_STEP_BUDGET raises the
+# default for every other step on the host, and a caller `timeout` that is
+# tighter than the budget still wins.
 STEP_BUDGET = int(os.environ.get("LOCAL_CI_STEP_BUDGET", "180") or 180)
 STEP_BUDGETS = {
     # A whole-history secret scan and a workspace dependency install are the
@@ -1715,13 +1720,30 @@ def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, e
     return False
 
 
-def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=()):
+def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=(), budget=None):
     """One pool spec: a step's arguments plus the wall-clock budget it carries.
 
     The budget is resolved once, here, so a pooled step runs with exactly the
-    ceiling the serial `step()` would have given the same name and timeout.
+    ceiling the serial `step()` would have given the same name and timeout. An
+    explicit `budget` wins over the name table, which is how a tree scanner
+    takes SCAN_TIMEOUT instead of the 180 s default (DIG-5724).
     """
-    return (name, cmd, timeout, cwd, env, stall_rcs, step_budget(name, timeout))
+    return (name, cmd, timeout, cwd, env, stall_rcs,
+            step_budget(name, timeout, budget))
+
+
+def scan_spec(name, cmd, env=None, stall_rcs=()):
+    """One tree-scanner pool spec: SCAN_TIMEOUT is its ceiling and its budget.
+
+    Both scanner waves go through this helper so the two numbers cannot drift
+    apart. The scanner names stay out of STEP_BUDGETS on purpose: their runtime
+    belongs to the machine, and the one knob that raises it must raise the
+    caller ceiling and the step budget together. Passing the budget explicitly
+    is what makes LOCAL_CI_SCAN_TIMEOUT reach the step; without it step_budget()
+    chose the 180 s default and min(180, 600) left the knob inert (DIG-5724).
+    """
+    return gate_spec(name, cmd, SCAN_TIMEOUT, None, env, stall_rcs,
+                     budget=SCAN_TIMEOUT)
 
 
 def run_step_pool(specs, out, limit=STEP_POOL):
@@ -1900,7 +1922,7 @@ def run_checks(pr, out, summary=None):
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
               "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
-            scan_specs.append(gate_spec(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, None, SCAN_ENV, (124, 3)))
+            scan_specs.append(scan_spec(s.split()[0], f"python3 {s}", SCAN_ENV, (124, 3)))
     scan_specs.append(gate_spec("actionlint", ["actionlint"], 300, None, None, ()))
     if opts is not None:
         scan_specs.append(gate_spec("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
@@ -1930,7 +1952,7 @@ def run_checks(pr, out, summary=None):
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
             if os.path.exists(f"{WT}/scripts/{s.split()[0]}"):
-                uv_specs.append(gate_spec(s.split()[0], U + f"python scripts/{s}", 600, None, None, ()))
+                uv_specs.append(scan_spec(s.split()[0], U + f"python scripts/{s}"))
         fails.extend(run_step_pool(uv_specs, out))
     n_files, hit = worker_gate(pr, WT)
     if hit is None and n_files is None:
