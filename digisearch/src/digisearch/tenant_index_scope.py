@@ -23,6 +23,12 @@ digigraph, so digisearch stays installable on its own. Unset map: no-op
 (single-tenant installs, local dev). Set but unusable: fail closed with 503,
 never silently treated as unset.
 
+Every index name a request carries must match ``^[a-z0-9][a-z0-9_-]{0,63}$``
+once normalized (:func:`validate_index_name`). Anything else -- a path segment
+such as ``x/../name``, a ``?`` or ``#``, a percent escape, an empty entry in a
+comma list -- is refused before any backend sees it, so a name can never steer
+a backend URL to another index or action.
+
 Index names compare case-insensitively and with ``-`` and ``_`` treated alike,
 so ``tenant-a-tickets`` and ``tenant_a_tickets`` are the same index for this check: a
 spelling variant must not be a way around it.
@@ -33,6 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import Iterable
 
 from fastapi import HTTPException, Request
@@ -42,6 +49,10 @@ logger = logging.getLogger(__name__)
 _MAP_ENV = "DIGI_TENANT_CORPUS_MAP"
 _PUBLIC_ENV = "DIGISEARCH_PUBLIC_TENANTS"
 _DEFAULT_PUBLIC_TENANTS = "digithings"
+#: Required scope for an MCP bearer's tenant claim to count (the MCP edge scope).
+_MCP_SCOPE = "mcp:digisearch"
+#: The only shape an index name may take once normalized.
+INDEX_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
 
 
 class TenantIndexMapError(RuntimeError):
@@ -56,13 +67,48 @@ class IndexNotPermitted(Exception):
         self.index_name = index_name
 
 
+class InvalidIndexName(ValueError):
+    """An index name (or one entry of a comma list) is not a plain index name."""
+
+    def __init__(self, index_name: str) -> None:
+        super().__init__(f"invalid index name {index_name!r}")
+        self.index_name = index_name
+
+
 def normalize_index(name: str) -> str:
     return name.strip().lower().replace("-", "_")
+
+
+def validate_index_name(name: str) -> str:
+    """Return ``name`` stripped, or raise :class:`InvalidIndexName`.
+
+    The check runs on the normalized form, so ``Tenant-A`` passes and
+    ``x/../name``, ``./name``, ``name/query?``, ``name#`` and ``%2D`` do not.
+    """
+    if not isinstance(name, str) or not INDEX_NAME_RE.fullmatch(normalize_index(name)):
+        raise InvalidIndexName(str(name))
+    return name.strip()
 
 
 def split_indexes(index_name: str | None) -> list[str]:
     """The indexes one request names. A comma list fans out over several."""
     return [part.strip() for part in (index_name or "").split(",") if part.strip()]
+
+
+def parse_index_list(index_name: str) -> list[str]:
+    """The validated indexes of a request's ``index_name`` (a comma list).
+
+    Empty entries are dropped, as :func:`split_indexes` does (``"a,,b"`` is
+    ``a`` and ``b``), but a value with no name at all (``""``, ``" , "``) is
+    refused rather than left for a caller to replace with a default index.
+    Every remaining entry must pass :func:`validate_index_name`.
+    """
+    if not isinstance(index_name, str):
+        raise InvalidIndexName(str(index_name))
+    parts = [validate_index_name(part) for part in split_indexes(index_name)]
+    if not parts:
+        raise InvalidIndexName(index_name)
+    return parts
 
 
 def _claimed_indexes(entry: dict) -> set[str]:
@@ -123,17 +169,18 @@ def check_indexes(
     """Raise :class:`IndexNotPermitted` for the first index the caller may not read.
 
     ``verified_tenant`` must come from a signature-checked claim, never from a
-    header. ``None`` means the caller has no verified tenant.
+    header. ``None`` means the caller has no verified tenant. Raises
+    :class:`InvalidIndexName` for a malformed name, whether or not a map is set.
     """
+    parts = [part for name in index_names for part in parse_index_list(name)]
     scoped = load_scoped_indexes(raw_map)
     if not scoped:
         return
     tenant = (verified_tenant or "").strip().lower()
-    for name in index_names:
-        for part in split_indexes(name):
-            owners = scoped.get(normalize_index(part))
-            if owners is not None and tenant not in owners:
-                raise IndexNotPermitted(part)
+    for part in parts:
+        owners = scoped.get(normalize_index(part))
+        if owners is not None and tenant not in owners:
+            raise IndexNotPermitted(part)
 
 
 def verified_tenant_from_request(request: Request) -> str | None:
@@ -146,10 +193,14 @@ def verified_tenant_from_request(request: Request) -> str | None:
 
 
 def enforce_request_indexes(request: Request, *index_names: str | None) -> None:
-    """HTTP guard: 403 for an index the caller's tenant does not own, 503 for a broken map."""
-    names = [n for n in index_names if n]
+    """HTTP guard: 400 for a malformed name, 403 for an index the caller's tenant
+    does not own, 503 for a broken map. ``None`` (no index named) is skipped; an
+    empty or blank string is a malformed name, never a default."""
+    names = [n for n in index_names if n is not None]
     try:
         check_indexes(names, verified_tenant_from_request(request))
+    except InvalidIndexName as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TenantIndexMapError as exc:
         logger.error("tenant index scope unavailable: %s", exc)
         raise HTTPException(status_code=503, detail="tenant index scope is misconfigured") from exc
@@ -173,7 +224,13 @@ def verified_tenant_from_bearer(authorization: str | None) -> str | None:
     Used by the MCP server, which has no auth middleware of its own: the stack
     edge verifies the token and forwards the request with the header intact, and
     the claim is re-read from the signature-checked token here rather than from
-    any header the edge or the caller could set. Any failure is ``None``.
+    any header the edge or the caller could set.
+
+    The token gets the same checks ``DigiAuthMiddleware.jwt_context`` applies:
+    signature, revocation (the ``jti`` blocklist, failing closed when it is
+    required but unreachable) and scope (``mcp:digisearch``, the MCP edge scope).
+    Any failure is ``None``: the caller then has no verified tenant and every
+    tenant-scoped index stays closed.
     """
     text = (authorization or "").strip()
     if not text.lower().startswith("bearer "):
@@ -182,12 +239,22 @@ def verified_tenant_from_bearer(authorization: str | None) -> str | None:
     if not token:
         return None
     try:
+        from digikey import blocklist
         from digikey.integrations.service_middleware import digikey_auth_active
         from digikey.jwt_verify import decode_token
+        from digikey.scopes import scope_grants_required
 
         if not digikey_auth_active():
             return None
         claims = decode_token(token)
+        if claims.jti:
+            blocklist.assert_blocklist_ready()
+            if blocklist.is_configured() and blocklist.is_blocked(claims.jti):
+                logger.info("tenant index scope: MCP bearer is revoked")
+                return None
+        if not scope_grants_required(claims.scopes, [_MCP_SCOPE]):
+            logger.info("tenant index scope: MCP bearer lacks %s", _MCP_SCOPE)
+            return None
     except Exception:
         logger.info("tenant index scope: MCP bearer did not verify")
         return None

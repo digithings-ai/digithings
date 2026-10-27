@@ -72,7 +72,7 @@ from digisearch.orchestrator_tools import (
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index, unseeded_indexes
-from digisearch.tenant_index_scope import enforce_request_indexes
+from digisearch.tenant_index_scope import enforce_request_indexes, parse_index_list
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -383,6 +383,17 @@ def _normalize_mode(value: object) -> str:
     return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
+def _checked_index_field(value: object) -> object:
+    """Request-model guard: an ``index_name`` must be a comma list of plain names.
+
+    See :func:`digisearch.tenant_index_scope.validate_index_name`. A malformed
+    value is a validation error (422) before any handler or backend runs.
+    """
+    if isinstance(value, str):
+        parse_index_list(value)
+    return value
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -460,6 +471,11 @@ class QueryRequest(BaseModel):
     def _normalize_query_mode(cls, value: object) -> str:
         return _normalize_mode(value)
 
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
+
 
 class QueryResponse(BaseModel):
     """Response for POST /query."""
@@ -495,6 +511,11 @@ class IngestRequest(BaseModel):
         default=None,
         description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
     )
+
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
 
 
 class IngestResponse(BaseModel):
@@ -559,6 +580,11 @@ class ResearchTurnRequest(BaseModel):
     @classmethod
     def _normalize_query_mode(cls, value: object) -> str:
         return _normalize_mode(value)
+
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
 
 
 @app.get("/health")
@@ -813,6 +839,15 @@ class OrchestratorInvokeRequest(BaseModel):
         description="Index when arguments omit index_name (hub workflow default).",
     )
 
+    @field_validator("default_index_name")
+    @classmethod
+    def _check_default_index_name(cls, value: object) -> object:
+        # An empty default means "not set" (the env default applies), as before;
+        # anything else, including a blank comma list, must be well formed.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _checked_index_field(value)
+
 
 class OrchestratorToolsResponse(BaseModel):
     """Response for POST /v1/orchestrator_tools (SIMP-020)."""
@@ -932,6 +967,19 @@ def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsRe
     return OrchestratorToolsResponse(tools=tools)
 
 
+def _digisearch_arg_index(args: dict[str, Any], default_index: str) -> str:
+    """The index an orchestrator tool call names, or ``default_index`` when it names none.
+
+    A missing or empty ``index_name`` argument takes the default; a non-string
+    one is a 400. The value is checked by :func:`enforce_request_indexes` (400
+    for a malformed name, 403 for another tenant's index) before it is used.
+    """
+    raw = args.get("index_name")
+    if raw is not None and not isinstance(raw, str):
+        raise HTTPException(status_code=400, detail="index_name must be a string")
+    return (raw or default_index or "default").strip() or "default"
+
+
 def _query_request_from_digisearch_args(
     args: dict[str, Any],
     *,
@@ -943,7 +991,7 @@ def _query_request_from_digisearch_args(
     skip_rerank: bool = False,
 ) -> QueryRequest:
     qtext = str(args.get("query") or "").strip()
-    idx = (args.get("index_name") or default_index or "default").strip() or "default"
+    idx = _digisearch_arg_index(args, default_index)
     filt_raw = args.get("filter")
     filt = str(filt_raw).strip() if filt_raw else None
     filters = args.get("filters") if isinstance(args.get("filters"), list) else None
@@ -1183,6 +1231,9 @@ def api_orchestrator_invoke(
     if tool == TOOL_DIGISEARCH:
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
+        # Checked before the request model is built, so a malformed name is a
+        # 400 here rather than a model validation error.
+        enforce_request_indexes(request, _digisearch_arg_index(args, default_idx))
         qreq = _query_request_from_digisearch_args(
             args,
             default_index=default_idx,
@@ -1193,7 +1244,6 @@ def api_orchestrator_invoke(
         )
         if not qreq.text.strip():
             return OrchestratorInvokeResponse(ok=False, error="query is required")
-        enforce_request_indexes(request, qreq.index_name)
         return _orchestrator_run_query(qreq, tool)
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
@@ -1202,7 +1252,7 @@ def api_orchestrator_invoke(
         requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
         max_results = _resolve_fetch_all_max(requested_max)
         qtext = str(args.get("query") or "").strip()
-        idx = (args.get("index_name") or default_idx or "default").strip() or "default"
+        idx = _digisearch_arg_index(args, default_idx)
         mode = str(args.get("mode") or "hybrid")
         filt_raw = args.get("filter")
         filt = str(filt_raw).strip() if filt_raw else None
@@ -1304,7 +1354,7 @@ def api_orchestrator_invoke(
         msg = str(args.get("user_message") or "").strip()
         if not msg:
             return OrchestratorInvokeResponse(ok=False, error="user_message is required")
-        idx = (args.get("index_name") or default_idx or "default").strip() or "default"
+        idx = _digisearch_arg_index(args, default_idx)
         enforce_request_indexes(request, idx)
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
@@ -1662,6 +1712,11 @@ class IngestUrlRequest(BaseModel):
         default=None,
         description="Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
     )
+
+    @field_validator("index_name")
+    @classmethod
+    def _check_index_name(cls, value: object) -> object:
+        return _checked_index_field(value)
 
 
 @app.post("/ingest", response_model=IngestResponse)

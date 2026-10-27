@@ -106,7 +106,7 @@ def test_research_turn_rejects_raw_filter_when_index_disallows(
     write_index_config: Callable[[bool], str],
 ) -> None:
     add_chunks(
-        "__raw_filter_research__",
+        "raw_filter_research",
         [
             Chunk(
                 id="rf1",
@@ -122,7 +122,7 @@ def test_research_turn_rejects_raw_filter_when_index_disallows(
         "/v1/research_turn",
         json={
             "user_message": "risk",
-            "index_name": "__raw_filter_research__",
+            "index_name": "raw_filter_research",
             "top_k": 3,
             "filter": "sourceType eq 'EXCHANGE'",
         },

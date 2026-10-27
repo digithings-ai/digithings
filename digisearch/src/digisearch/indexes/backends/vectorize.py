@@ -8,12 +8,14 @@ import time
 import uuid
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.indexes.backends.vectorize_errors import (
     VectorizeBackendError as VectorizeBackendError,
 )
 from digisearch.indexes.base import DigiIndex
+from digisearch.tenant_index_scope import validate_index_name
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +138,9 @@ class VectorizeBackend(DigiIndex):
         http_post: HttpPost | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> None:
-        self.name = name
+        # The name becomes a URL path segment: only a plain index name may get
+        # there (DIG-3585), and it is percent-quoted as well.
+        self.name = validate_index_name(name)
         self.embedding_provider = embedding_provider
         self._account_id = account_id
         self._api_token = api_token
@@ -144,7 +148,8 @@ class VectorizeBackend(DigiIndex):
         self._batch_size = batch_size
 
     def _url(self, action: str) -> str:
-        return f"{API_ROOT}/accounts/{self._account_id}/vectorize/v2/indexes/{self.name}/{action}"
+        index = quote(self.name, safe="")
+        return f"{API_ROOT}/accounts/{self._account_id}/vectorize/v2/indexes/{index}/{action}"
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_token}"}

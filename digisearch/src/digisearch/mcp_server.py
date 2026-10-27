@@ -29,11 +29,12 @@ from digisearch.research_search import search_strategies as _search_strategies_i
 from digisearch.search._stub import query_index
 from digisearch.tenant_index_scope import (
     IndexNotPermitted,
+    InvalidIndexName,
     TenantIndexMapError,
     check_indexes,
     load_scoped_indexes,
     normalize_index,
-    split_indexes,
+    parse_index_list,
     verified_tenant_from_bearer,
 )
 from digisearch.web_search.models import summarize_validation_error
@@ -82,9 +83,14 @@ def _enforce_mcp_index(index_name: str | None) -> None:
     the request unchanged, so the tenant is read here from the signature-checked
     bearer itself. The static key carries no tenant and never opens a
     tenant-scoped index. The bearer is only verified when a scoped index is
-    actually named, so public-index calls cost nothing extra.
+    actually named, so public-index calls cost nothing extra. A malformed
+    name (see :func:`~digisearch.tenant_index_scope.validate_index_name`) is
+    refused first, map or no map.
     """
-    names = split_indexes(index_name)
+    try:
+        names = parse_index_list(index_name or "")
+    except InvalidIndexName as exc:
+        raise ToolError(str(exc)) from exc
     try:
         scoped = load_scoped_indexes()
     except TenantIndexMapError as exc:

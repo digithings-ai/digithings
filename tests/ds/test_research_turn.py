@@ -19,7 +19,7 @@ def client() -> TestClient:
 
 @pytest.mark.unit
 def test_run_research_turn_aggregates_citations() -> None:
-    idx = "__agent_turn__"
+    idx = "agent_turn"
     add_chunks(idx, [
         Chunk(
             id="c1",
@@ -43,7 +43,7 @@ def test_run_research_turn_aggregates_citations() -> None:
 
 @pytest.mark.unit
 def test_api_v1_research_turn(client: TestClient) -> None:
-    idx = "__agent_http__"
+    idx = "agent_http"
     add_chunks(idx, [
         Chunk(
             id="c2",

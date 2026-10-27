@@ -1411,7 +1411,14 @@ house docs corpus stays open).
 | Surface | Tenant read from | Refusal |
 |---|---|---|
 | `POST /query`, `POST /v1/research_turn`, `POST /v1/orchestrator_invoke` (`digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`) | `request.state.digi_auth`, only when `tenant_slug_verified` | 403 |
-| MCP `semantic`, `search_strategies`, `research_turn` | the request's bearer, re-verified with digikey; the static edge key carries no tenant | tool error |
+| MCP `semantic`, `search_strategies`, `research_turn` | the request's bearer, re-verified with digikey (signature, `jti` revocation, `mcp:digisearch` scope); the static edge key carries no tenant | tool error |
+
+Every index name is also checked for shape first, map or no map: after
+normalization each comma-list entry must match `^[a-z0-9][a-z0-9_-]{0,63}$`.
+Path segments (`x/../name`, `./name`), `?`, `#`, percent escapes and a list with
+no name at all (`" , "`) are refused: 422 from the request models, 400 from
+orchestrator invoke, a tool error on MCP, `InvalidIndexName` from `query_index`
+and `VectorizeBackend`, which also percent-quotes the name in its URL.
 
 The resolved index is checked, including a default and every member of a comma
 list; `-` and `_` compare alike. An unsigned `X-Digi-Tenant` header never counts.

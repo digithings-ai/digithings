@@ -11,14 +11,20 @@ from __future__ import annotations
 import json
 
 import pytest
-from digisearch.core.models import Chunk
+from digisearch.core.models import Chunk, Query
+from digisearch.indexes.backends.vectorize import VectorizeBackend
 from digisearch.search import add_chunks
+from digisearch.search._stub import query_index
 from digisearch.server import app
 from digisearch.tenant_index_scope import (
     IndexNotPermitted,
+    InvalidIndexName,
     TenantIndexMapError,
     check_indexes,
     load_scoped_indexes,
+    parse_index_list,
+    validate_index_name,
+    verified_tenant_from_bearer,
 )
 from fastapi.testclient import TestClient
 from mcp.server.fastmcp.exceptions import ToolError
@@ -331,3 +337,205 @@ def test_the_module_reads_the_map_on_every_call(monkeypatch: pytest.MonkeyPatch)
     assert tenant_index_scope.load_scoped_indexes() == {}
     monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", CORPUS_MAP)
     assert tenant_index_scope.load_scoped_indexes()
+
+
+# --- index-name allowlist -----------------------------------------------------------
+
+#: Names that must never reach a backend: path segments, URL syntax, escapes,
+#: blank comma lists, and names outside ``[a-z0-9][a-z0-9_-]{0,63}``.
+BAD_NAMES = [
+    "x/../name",
+    "./name",
+    "name/query?",
+    "name/query#",
+    "%2D",
+    "tenant%2Da",
+    "..",
+    "name/",
+    "na me",
+    "_leading",
+    "-leading",
+    "name.with.dots",
+    "a" * 65,
+    "",
+    " ",
+    " , ",
+    ",",
+    ", ,",
+    f"{HOUSE_INDEX},x/../{HELP_INDEX}",
+]
+BAD_IDS = [
+    "dotdot-path",
+    "dot-slash",
+    "query-qmark",
+    "query-hash",
+    "pct-2D",
+    "pct-inside",
+    "dotdot",
+    "trailing-slash",
+    "space",
+    "leading-underscore",
+    "leading-dash",
+    "dots",
+    "too-long",
+    "empty",
+    "blank",
+    "blank-list",
+    "comma",
+    "commas",
+    "bad-entry-in-list",
+]
+
+
+@pytest.mark.parametrize("name", BAD_NAMES, ids=BAD_IDS)
+def test_parse_index_list_refuses_anything_but_plain_names(name: str) -> None:
+    with pytest.raises(InvalidIndexName):
+        parse_index_list(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["default", HOUSE_INDEX, HELP_INDEX, TICKETS_INDEX, "Tenant-A-Tickets", "a", "0", "a" * 64],
+)
+def test_plain_names_pass(name: str) -> None:
+    assert validate_index_name(f" {name} ") == name
+
+
+def test_a_comma_list_of_plain_names_passes() -> None:
+    assert parse_index_list(f"{HOUSE_INDEX}, {HELP_INDEX}") == [HOUSE_INDEX, HELP_INDEX]
+    # Empty entries beside a real name are dropped, as before; only a list
+    # with no name at all is refused.
+    assert parse_index_list(f"{HOUSE_INDEX},, ,") == [HOUSE_INDEX]
+
+
+@pytest.mark.parametrize("name", BAD_NAMES, ids=BAD_IDS)
+def test_check_indexes_refuses_malformed_names_with_or_without_a_map(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    with pytest.raises(InvalidIndexName):
+        check_indexes([name], TENANT)
+    with pytest.raises(InvalidIndexName):
+        check_indexes([name], TENANT, raw_map=CORPUS_MAP)
+
+
+@pytest.mark.parametrize("name", BAD_NAMES, ids=BAD_IDS)
+def test_query_refuses_a_malformed_index_name(scoped_map: None, name: str) -> None:
+    r = _client(TENANT).post("/query", json={"text": "scope fixture", "index_name": name})
+    assert r.status_code in (400, 422), r.text
+
+
+@pytest.mark.parametrize("name", BAD_NAMES, ids=BAD_IDS)
+def test_research_turn_refuses_a_malformed_index_name(scoped_map: None, name: str) -> None:
+    r = _client(TENANT).post(
+        "/v1/research_turn", json={"user_message": "scope fixture", "index_name": name}
+    )
+    assert r.status_code in (400, 422), r.text
+
+
+@pytest.mark.parametrize(
+    "tool,key",
+    [
+        ("digisearch", "query"),
+        ("digisearch_fetch_all", "query"),
+        ("digisearch_research_delegate", "user_message"),
+    ],
+)
+@pytest.mark.parametrize(
+    "name", ["x/../name", "./name", "name/query?", "name/query#", "%2D", " , "]
+)
+def test_orchestrator_invoke_refuses_a_malformed_index_name_with_400(
+    scoped_map: None, tool: str, key: str, name: str
+) -> None:
+    r = _client(TENANT).post(
+        "/v1/orchestrator_invoke",
+        json={"tool": tool, "arguments": {key: "scope fixture", "index_name": name}},
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_orchestrator_invoke_refuses_a_malformed_default_index(scoped_map: None) -> None:
+    r = _client(TENANT).post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "digisearch",
+            "arguments": {"query": "scope fixture"},
+            "default_index_name": "x/../name",
+        },
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_orchestrator_invoke_refuses_a_non_string_index(scoped_map: None) -> None:
+    r = _client(TENANT).post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digisearch", "arguments": {"query": "scope fixture", "index_name": 7}},
+    )
+    assert r.status_code == 400, r.text
+
+
+@pytest.mark.parametrize(
+    "name", ["x/../name", "./name", "name/query?", "name/query#", "%2D", " , "]
+)
+def test_mcp_refuses_a_malformed_index_name(mcp_bearer, name: str) -> None:
+    mcp_bearer(f"Bearer {mint_test_jwt(tenant_slug=TENANT)}")
+    with pytest.raises(ToolError, match="invalid index name"):
+        _call_semantic(name)
+
+
+@pytest.mark.parametrize("name", [" , ", ",", "x/../name", "%2D"])
+def test_query_index_never_falls_back_to_the_default_for_a_bad_list(name: str) -> None:
+    with pytest.raises(InvalidIndexName):
+        query_index(Query(text="scope fixture", top_k=1), index_name=name)
+
+
+@pytest.mark.parametrize("name", ["x/../name", "./name", "name/query?", "name/query#", "%2D"])
+def test_vectorize_backend_refuses_a_malformed_name(name: str) -> None:
+    with pytest.raises(InvalidIndexName):
+        VectorizeBackend(name, account_id="acct", api_token="unused")
+
+
+def test_vectorize_backend_quotes_the_index_path_segment() -> None:
+    backend = VectorizeBackend(TICKETS_INDEX, account_id="acct", api_token="unused")
+    assert backend._url("query").endswith(f"/vectorize/v2/indexes/{TICKETS_INDEX}/query")
+
+
+# --- the MCP bearer gets the middleware's revocation and scope checks -------------------
+
+
+def test_mcp_bearer_without_the_mcp_scope_has_no_tenant() -> None:
+    token = mint_test_jwt(tenant_slug=TENANT, scopes=["digisearch:query"])
+    assert verified_tenant_from_bearer(f"Bearer {token}") is None
+    token = mint_test_jwt(tenant_slug=TENANT, scopes=["mcp:digisearch"])
+    assert verified_tenant_from_bearer(f"Bearer {token}") == TENANT
+
+
+def test_a_revoked_mcp_bearer_has_no_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digikey import blocklist
+
+    monkeypatch.setattr(blocklist, "is_configured", lambda: True)
+    monkeypatch.setattr(blocklist, "is_blocked", lambda jti: True)
+    assert verified_tenant_from_bearer(f"Bearer {mint_test_jwt(tenant_slug=TENANT)}") is None
+
+
+def test_an_mcp_bearer_fails_closed_when_the_blocklist_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digikey import blocklist
+
+    def down(jti: str) -> bool:
+        raise blocklist.BlocklistUnavailable("down")
+
+    monkeypatch.setattr(blocklist, "is_configured", lambda: True)
+    monkeypatch.setattr(blocklist, "is_blocked", down)
+    assert verified_tenant_from_bearer(f"Bearer {mint_test_jwt(tenant_slug=TENANT)}") is None
+
+
+def test_an_mcp_bearer_fails_closed_when_the_blocklist_is_required_but_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digikey import blocklist
+
+    monkeypatch.setattr(blocklist, "require_blocklist_enabled", lambda: True)
+    monkeypatch.setattr(blocklist, "is_configured", lambda: False)
+    assert verified_tenant_from_bearer(f"Bearer {mint_test_jwt(tenant_slug=TENANT)}") is None

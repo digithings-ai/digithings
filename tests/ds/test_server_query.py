@@ -19,7 +19,7 @@ def client() -> TestClient:
 @pytest.fixture
 def indexed_results(client: TestClient) -> None:
     """Put chunks in stub index so /query returns something."""
-    idx = "__unit_test_api__"
+    idx = "unit_test_api"
     for i in range(3):
         add_chunks(idx, [
             Chunk(
@@ -39,7 +39,7 @@ def test_query_accepts_filter_columns_response_mode(client: TestClient, indexed_
         "/query",
         json={
             "text": "Content",
-            "index_name": "__unit_test_api__",
+            "index_name": "unit_test_api",
             "top_k": 10,
             "filter": None,
             "filters": [{"field": "sourceType", "op": "eq", "value": "EXCHANGE"}],
@@ -66,7 +66,7 @@ def test_query_response_mode_summary_returns_summary(client: TestClient, indexed
         "/query",
         json={
             "text": "Content",
-            "index_name": "__unit_test_api__",
+            "index_name": "unit_test_api",
             "top_k": 10,
             "response_mode": "summary",
         },
@@ -92,7 +92,7 @@ def test_query_skip_returns_later_hit_and_full_total(client: TestClient) -> None
     """
     from digisearch.search._stub import get_stub_index
 
-    idx = "__unit_test_skip__"
+    idx = "unit_test_skip"
     get_stub_index().pop(idx, None)
     for i in range(3):
         add_chunks(
@@ -128,8 +128,8 @@ def test_fanout_query_total_counts_matches_beyond_the_page(client: TestClient) -
     """A longer leg used to make POST /query report the page length as total."""
     from digisearch.search._stub import get_stub_index
 
-    index_a = "__unit_test_fanout_a__"
-    index_b = "__unit_test_fanout_b__"
+    index_a = "unit_test_fanout_a"
+    index_b = "unit_test_fanout_b"
     stub = get_stub_index()
     stub.pop(index_a, None)
     stub.pop(index_b, None)
@@ -181,7 +181,7 @@ def test_query_summarize_if_over_returns_summary(client: TestClient, indexed_res
         "/query",
         json={
             "text": "Content",
-            "index_name": "__unit_test_api__",
+            "index_name": "unit_test_api",
             "top_k": 10,
             "summarize_if_over": 1,
         },

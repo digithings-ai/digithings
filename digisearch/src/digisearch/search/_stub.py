@@ -25,6 +25,7 @@ from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
 from digisearch.indexes.backends.backend_errors import CorpusNotSeededError, SearchBackendError
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+from digisearch.tenant_index_scope import parse_index_list
 
 if TYPE_CHECKING:
     from digisearch.search.reranker import Reranker
@@ -463,9 +464,15 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     out to each index and merges with RRF, so one tenant can serve docs plus
     tickets without routing changes upstream. Backend errors still propagate
     per index (fail-closed, never answered from a different corpus).
+
+    ``None`` or ``""`` means ``"default"``. Any other value must be a comma list
+    of plain index names (:func:`~digisearch.tenant_index_scope.parse_index_list`):
+    a blank list such as ``" , "`` or a name that is not ``[a-z0-9][a-z0-9_-]*``
+    raises :class:`~digisearch.tenant_index_scope.InvalidIndexName` (a
+    ``ValueError``) instead of falling back to the default index or reaching a
+    backend.
     """
-    names = [name.strip() for name in str(index_name or "default").split(",")]
-    names = [name for name in names if name] or ["default"]
+    names = parse_index_list(index_name or "default")
     guard_unseeded(names)
     if len(names) == 1:
         return _maybe_rerank(query, _query_single_index(query, names[0]))

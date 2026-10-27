@@ -374,13 +374,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     module's prose and develop's newer DIG-2203 / DIG-4657 paragraphs changed
     the chunk boundaries from index 125 on — count 135, hashes re-recorded —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 136 for DIG-3585 (tenant-scoped index section,
+    index-name allowlist paragraph and module-map row in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 135
+    assert len(chunks) == 136
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -451,15 +454,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "5f32459eb46e4976",
-        "f7ef2f68779a303e",
-        "ed9fd383de98c694",
-        "cd4e7192b6baa3d3",
-        "a03c67e88e3c2999",
-        "8bb70d874a5aceb3",
-        "354bda51b13bec14",
-        "81a3302403f3eb85",
-        "0a50c275d11604aa",
+        "903f6049e9495bf9",
+        "4919fce1aa644520",
+        "a1c847c4b61b430e",
+        "c8935c81b3be7fd1",
+        "e0faa8234a76d0e4",
+        "c0a6b8a2691f5fb8",
+        "cd14006358b03c8e",
+        "0c89c5242abcd0a4",
+        "dcfe87a5614470e3",
+        "8b39231cdac6030d",
         "ef6a144c2e1e109e",
         "f27dfd53b2cda272",
         "d90f1ea6b18577c2",
