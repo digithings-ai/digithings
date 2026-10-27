@@ -332,11 +332,15 @@ Scopes follow a `service:action` namespace. Defined (implicitly) in `scopes.py` 
 | `digisearch:ingest` | digisearch | `/ingest*` |
 | `digivault:read` | digivault | `/v1/orchestrator_tools`, `/v1/orchestrator_invoke`, `POST /v1/notes/by-path`, and all GET note routes |
 | `digivault:write` | digivault | Mutating note routes; `digivault_create_note` is additionally handler-enforced on the shared `/v1/orchestrator_invoke` |
+| `mcp:digivault` | MCP edge | digivault MCP surface, **read-only**: `search_notes`, `search_tag`, `backlinks`, `lint` |
+| `mcp:digivault:write` | MCP edge | `create_note` on the digivault MCP surface; **not** grantable to a `bff_session` — admin-issued keys only |
 | `*` | all | Wildcard — all scopes |
 
 Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`, `digisearch:screen`, `digivault:read`.
 
 Grantable BFF session scopes (`BFF_SESSION_GRANTABLE_SCOPES`, DIG-5635): the default set **plus** `mcp:digisearch` and `mcp:digivault`. A `bff_session` caller may request those two, and only those two beyond the defaults; the exchange answers 400 for anything else (`mcp:*` included). They are intentionally absent from the default set: a token minted with no `requested_scopes` carries no `mcp:` scope, so digichat's MCP-edge mint is the one caller that opts in (`apps/digichat/src/lib/mcp-edge-token.ts`).
+
+`mcp:digivault` is read-only (DIG-5723). The MCP edge requires `mcp:digivault:write` for `create_note` (`MCP_EDGE_WRITE_SCOPES` in `apps/digithings-stack-cloudflare/src/mcp-edge-auth.ts`), and that scope is deliberately **not** in `BFF_SESSION_GRANTABLE_SCOPES`: a BFF session can never mint a write-capable edge token. An API key that may write carries both scopes; `mcp:digivault:write` alone does not satisfy `mcp:digivault`.
 
 ### LiteLLM proxy key funnel
 

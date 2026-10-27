@@ -115,12 +115,22 @@ def test_migration_144_is_the_only_144() -> None:
 
 def test_number_is_not_already_claimed_by_a_digitrace_object(sql: str) -> None:
     """No earlier migration creates a digitrace object, so there is no merge
-    collision to reconcile and no second definition of these tables."""
-    others = [
-        path
-        for path in MIGRATIONS.rglob("*.sql")
-        if path != MIGRATION and "digitrace_" in path.read_text(encoding="utf-8", errors="replace")
-    ]
+    collision to reconcile and no second definition of these tables.
+
+    Scoped to files numbered BELOW 144 on purpose. A later migration that
+    merely mentions `digitrace_` (a follow-up that comments on these tables,
+    or DIG-2661's read path) must not turn this guard red: it is a collision
+    check on the number, not a claim on the word.
+    """
+    others = []
+    for path in MIGRATIONS.rglob("*.sql"):
+        if path == MIGRATION:
+            continue
+        prefix = path.name.split("_", 1)[0]
+        if not prefix.isdigit() or int(prefix) >= 144:
+            continue
+        if "digitrace_" in path.read_text(encoding="utf-8", errors="replace"):
+            others.append(path)
     assert others == [], f"digitrace objects already defined in: {others}"
 
 
@@ -129,6 +139,25 @@ def test_every_statement_parses_as_postgresql(sql: str) -> None:
     pglast = pytest.importorskip("pglast")
     statements = pglast.parse_sql(sql)
     assert len(statements) > 10, "expected the four tables, indexes, policies and the prune"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ("refresh_digitrace_trace", "refresh_digitrace_session", "prune_digitrace_index"),
+)
+def test_function_bodies_parse_as_plpgsql(sql: str, name: str) -> None:
+    """`parse_sql` sees a dollar-quoted body as a string, so a body-level
+    syntax error passes the check above unnoticed. These three bodies are the
+    parts most likely to break, so parse them with the PL/pgSQL parser too.
+    """
+    parser = pytest.importorskip("pglast.parser")
+    parse_plpgsql = getattr(parser, "parse_plpgsql_json", None)
+    if parse_plpgsql is None:
+        pytest.skip("this pglast build has no PL/pgSQL parser")
+    start = sql.index(f"CREATE OR REPLACE FUNCTION public.{name}")
+    statement = sql[start : sql.index("$$;", start) + 3]
+    parsed = parse_plpgsql(statement)
+    assert parsed, f"{name}: the PL/pgSQL parser returned nothing"
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +184,51 @@ def test_every_table_carries_the_house_tenancy_column(sql: str, table: str) -> N
     ), f"{table} must carry workspace_id uuid NOT NULL REFERENCES public.workspaces(id)"
 
 
+@pytest.mark.parametrize(
+    "table", ("digitrace_traces", "digitrace_spans_index", "digitrace_sessions")
+)
+def test_edge_values_are_not_columns_on_the_index_rows(sql: str, table: str) -> None:
+    """ADR-0036 section 5, in as many words: `tenant_slug` and
+    `tenant_slug_verified` are edge values and "are not columns on the index
+    rows". The archive object carries them; the index's one tenancy column is
+    `workspace_id`.
+
+    This is a guard against the shape that broke the first draft: a column the
+    writer never populates reads NULL/false on every row, so the flag says
+    "unverified" even for a claim that resolved. A wrong value with a
+    diagnostic's name is worse than no column.
+    """
+    columns = _columns(sql, table)
+    assert "tenant_slug" not in columns, f"{table} must not carry tenant_slug (ADR-0036 §5)"
+    assert "tenant_slug_verified" not in columns, (
+        f"{table} must not carry tenant_slug_verified (ADR-0036 §5)"
+    )
+
+
+def test_tenancy_has_exactly_one_column_and_the_archive_carries_the_edge_values(raw: str) -> None:
+    """The decision is recorded where the next reader looks: in the header."""
+    assert re.search(r"EDGE VALUES", raw), "the header must say what the ADR says"
+    assert re.search(r"NOT stored on the index row at all", raw)
+
+
+def test_sessions_table_comment_names_its_writer(sql: str) -> None:
+    """The reviewer's B2 on a8705ad13c: the table shipped with rolled-up
+    counters, no way to maintain them, and a COMMENT that claimed them. The
+    table's own inventory entry now names the function that maintains it, so
+    the next reader is not told totals exist without being told who writes
+    them.
+    """
+    match = re.search(r"COMMENT ON TABLE public\.digitrace_sessions IS", sql, re.I)
+    assert match, "the sessions table must carry an inventory comment"
+    # The comment body itself contains a ';', so the statement is not
+    # delimited that way: read the literal block that follows the entry.
+    body = sql[match.end() : match.end() + 700]
+    assert "refresh_digitrace_session" in body, "the comment must name the writer"
+    assert re.search(r"PostgREST upsert", body, re.I), (
+        "and must say why a plain upsert cannot be the writer"
+    )
+
+
 def test_no_prompt_or_completion_text_anywhere(sql: str) -> None:
     """ADR-0036 section 7. Bodies live in R2; this index holds hashes."""
     for table in TABLES:
@@ -176,9 +250,9 @@ def test_jsonb_blobs_are_defaulted_not_nullable(sql: str) -> None:
     """attributes/resource are allowlisted projections, never a null dump."""
     for table in ("digitrace_traces", "digitrace_spans_index"):
         body = _table_body(sql, table)
-        assert re.search(
-            r"attributes\s+jsonb\s+NOT NULL\s+DEFAULT\s+'\{\}'::jsonb", body, re.I
-        ), f"{table}.attributes must default to an empty object"
+        assert re.search(r"attributes\s+jsonb\s+NOT NULL\s+DEFAULT\s+'\{\}'::jsonb", body, re.I), (
+            f"{table}.attributes must default to an empty object"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -188,15 +262,17 @@ def test_jsonb_blobs_are_defaulted_not_nullable(sql: str) -> None:
 
 @pytest.mark.parametrize("table", TABLES)
 def test_rls_is_enabled_on_every_table(sql: str, table: str) -> None:
-    assert re.search(
-        rf"ALTER TABLE public\.{table} ENABLE ROW LEVEL SECURITY", sql, re.I
-    ), f"{table} would be world-readable to any authenticated user without RLS"
+    assert re.search(rf"ALTER TABLE public\.{table} ENABLE ROW LEVEL SECURITY", sql, re.I), (
+        f"{table} would be world-readable to any authenticated user without RLS"
+    )
 
 
 @pytest.mark.parametrize("table", TABLES)
 def test_anon_holds_nothing(sql: str, table: str) -> None:
     """These are tenant rows. anon must never be granted anything, ever."""
-    assert re.search(rf"REVOKE ALL ON public\.{table} FROM PUBLIC, anon", sql, re.I)
+    assert re.search(
+        rf"REVOKE ALL ON public\.{table} FROM PUBLIC, anon, authenticated;", sql, re.I
+    ), f"{table} must revoke authenticated explicitly, not rely on 060's default ACL"
     assert not re.search(
         rf"GRANT\s+\w[\w,\s]*ON public\.{table}\s+TO\s+[^;]*\banon\b", sql, re.I
     ), f"{table} must not be granted to anon"
@@ -229,7 +305,9 @@ def test_house_select_policy_is_used_verbatim(sql: str, table: str) -> None:
     )
     assert policy, f"{table} must carry the house SELECT policy"
     body = policy.group(1)
-    assert re.search(r"workspace_id IN \(\s*SELECT workspace_id FROM public\.workspace_members", body, re.I)
+    assert re.search(
+        r"workspace_id IN \(\s*SELECT workspace_id FROM public\.workspace_members", body, re.I
+    )
     assert re.search(r"user_id = auth\.uid\(\)", body, re.I)
 
 
@@ -255,6 +333,210 @@ def test_tenant_boundary_is_documented_as_the_app_filter(raw: str) -> None:
 # ---------------------------------------------------------------------------
 # Retention
 # ---------------------------------------------------------------------------
+
+
+def _function_body(sql: str, name: str) -> str:
+    start = sql.index(f"CREATE OR REPLACE FUNCTION public.{name}")
+    body = sql[start:]
+    return body[: body.index("$$;")]
+
+
+def test_trace_table_comment_names_its_writer(sql: str) -> None:
+    """The same B2 shape one table over: `digitrace_traces` carries a
+    span-derived aggregate, and the consumer's per-request upsert cannot merge
+    it. The inventory entry must name the function that repairs it, or the next
+    reader is told the numbers exist without being told who keeps them true.
+    """
+    match = re.search(r"COMMENT ON TABLE public\.digitrace_traces IS", sql, re.I)
+    assert match, "the traces table must carry an inventory comment"
+    body = sql[match.end() : match.end() + 700]
+    assert "refresh_digitrace_trace" in body, "the comment must name the writer"
+    assert re.search(r"replaces rather than merges", body, re.I), (
+        "and must say why a plain upsert cannot be the writer"
+    )
+
+
+def test_trace_writer_recomputes_the_span_derived_columns(sql: str) -> None:
+    """A trace delivered across several OTLP requests must converge on one
+    row. Recompute from `digitrace_spans_index`, the same shape as sessions:
+    the queue is at-least-once, so accumulating deltas would double-count.
+    """
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(r"p_workspace_id uuid,\s*p_trace_id text", fn), (
+        "the writer takes the two identity keys and nothing else"
+    )
+    assert re.search(r"count\(\*\)::integer", fn, re.I), "span_count"
+    assert re.search(r"min\(s\.started_at\)", fn, re.I), "started_at is the earliest span"
+    assert re.search(r"max\(s\.ended_at\)", fn, re.I), "ended_at is the latest span end"
+    assert re.search(r"FILTER \(WHERE s\.parent_span_id IS NULL\)", fn, re.I), (
+        "name comes from the ROOT span, not from whichever slice arrived first"
+    )
+    assert not re.search(r"span_count\s*=\s*public\.digitrace_traces\.span_count", fn, re.I), (
+        "accumulating would double-count on a Queue redelivery"
+    )
+
+
+def test_trace_writer_leaves_an_open_trace_unfinished(sql: str) -> None:
+    """`ended_at` is NULL while any span of the trace is still open, and so is
+    the duration: a trace has ended only when all of its spans have. Reporting
+    a duration from the slices that happen to have arrived is a number that
+    never happened.
+    """
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(
+        r"count\(\*\) FILTER \(WHERE s\.ended_at IS NULL\) > 0\s+THEN NULL", fn, re.I
+    ), "an open span must keep ended_at NULL"
+    assert re.search(r"WHEN v_ended IS NULL THEN NULL", fn, re.I), "and the duration with it"
+
+
+def test_trace_writer_never_downgrades_a_recorded_error(sql: str) -> None:
+    """The consumer treats a span with an `exception.type` event as failed, and
+    span events are not in the index, so the index alone cannot see that
+    failure. Error is therefore sticky: the recompute may set it, never clear
+    it, or the row would flip back to OK on the next refresh.
+    """
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(
+        r"WHEN v_any_error\s+OR t\.status = 'STATUS_CODE_ERROR'\s+THEN 'STATUS_CODE_ERROR'",
+        fn,
+    ), "the existing error must survive a recompute that cannot see the event"
+
+
+def test_trace_writer_is_update_only_and_keeps_the_request_columns(sql: str) -> None:
+    """`source`, `service_name`, `attributes` and `resource` come from the OTLP
+    message and are not derivable from the index. The consumer stays the row's
+    insert writer, and this function must not invent or overwrite them.
+    """
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(r"UPDATE public\.digitrace_traces", fn), "it repairs an existing row"
+    assert not re.search(r"INSERT INTO public\.digitrace_traces", fn, re.I), (
+        "it must not insert: there is no request-level data to insert with"
+    )
+    for column in ("source", "service_name", "attributes", "resource"):
+        assert not re.search(rf"^\s*{column}\s*=", fn, re.M), (
+            f"{column} is request-level, not span-derived"
+        )
+
+
+def test_trace_writer_is_locked_down_and_pins_its_path(sql: str) -> None:
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(r"SET search_path = ''", fn)
+    assert re.search(r"SECURITY INVOKER", fn), "say it explicitly, do not rely on the default"
+    assert not re.search(r"SECURITY DEFINER", fn), "no definer rights are needed here"
+    for grant in (
+        r"REVOKE ALL ON FUNCTION public\.refresh_digitrace_trace\(uuid, text\) FROM PUBLIC;",
+        r"REVOKE ALL ON FUNCTION public\.refresh_digitrace_trace\(uuid, text\) FROM anon, authenticated;",
+        r"GRANT EXECUTE ON FUNCTION public\.refresh_digitrace_trace\(uuid, text\) TO service_role;",
+    ):
+        assert re.search(grant, sql, re.I), grant
+
+
+def test_trace_writer_serialises_concurrent_refreshes(sql: str) -> None:
+    """Recompute is idempotent, not concurrency-safe: two overlapping refreshes
+    each read the spans before either writes, and the later writer stores the
+    older aggregate. The lock is taken before the aggregate, and its key is
+    prefixed so it cannot collide with the sessions lock space.
+    """
+    fn = _function_body(sql, "refresh_digitrace_trace")
+    assert re.search(
+        r"pg_catalog\.pg_advisory_xact_lock\(\s*"
+        r"pg_catalog\.hashtextextended\('trace:' \|\| p_workspace_id::text \|\| ':' \|\| p_trace_id, 0\)\s*\)",
+        fn,
+    ), "the refresh must serialise on (workspace_id, trace_id) before it reads"
+    assert fn.index("pg_advisory_xact_lock") < fn.index("FROM public.digitrace_spans_index"), (
+        "the lock must be taken before the recompute, not after it"
+    )
+
+
+def test_sessions_writer_recomputes_from_the_spans_index(sql: str) -> None:
+    """Recompute, not accumulate. The consumer reads from a Queue, which is
+    at-least-once: adding a batch's deltas double-counts on a redelivery, while
+    recomputing from `digitrace_spans_index` lands on the same numbers twice.
+    """
+    fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.refresh_digitrace_session") :]
+    fn = fn[: fn.index("$$;")]
+    assert re.search(
+        r"CREATE OR REPLACE FUNCTION public\.refresh_digitrace_session\(\s*"
+        r"p_workspace_id uuid,\s*p_session_id text\s*\)",
+        fn,
+    ), "the writer takes the two tenancy keys and nothing else"
+    assert re.search(r"count\(DISTINCT s\.trace_id\)", fn, re.I), "trace_count"
+    assert re.search(r"count\(\*\)", fn, re.I), "span_count"
+    assert re.search(r"sum\(s\.total_tokens\)", fn, re.I)
+    assert re.search(r"sum\(s\.cost_usd\)", fn, re.I)
+    assert re.search(r"ON CONFLICT \(workspace_id, session_id\) DO UPDATE", fn, re.I)
+    # the counters are SET from the recomputation, never `+ excluded.`
+    assert not re.search(r"trace_count\s*=\s*digitrace_sessions\.trace_count", fn, re.I), (
+        "accumulating would double-count on a Queue redelivery"
+    )
+
+
+def test_sessions_writer_is_locked_down_and_pins_its_path(sql: str) -> None:
+    """INVOKER, not DEFINER: the only grantee already holds the DML and the
+    SELECT, so definer rights would add an escalation surface for nothing."""
+    fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.refresh_digitrace_session") :]
+    fn = fn[: fn.index("$$;")]
+    assert re.search(r"SET search_path = ''", fn)
+    assert re.search(r"SECURITY INVOKER", fn), "say it explicitly, do not rely on the default"
+    assert not re.search(r"SECURITY DEFINER", fn), "no definer rights are needed here"
+    for grant in (
+        r"REVOKE ALL ON FUNCTION public\.refresh_digitrace_session\(uuid, text\) FROM PUBLIC;",
+        r"REVOKE ALL ON FUNCTION public\.refresh_digitrace_session\(uuid, text\) FROM anon, authenticated;",
+        r"GRANT EXECUTE ON FUNCTION public\.refresh_digitrace_session\(uuid, text\) TO service_role;",
+    ):
+        assert re.search(grant, sql, re.I), grant
+
+
+def test_sessions_writer_serialises_concurrent_refreshes(sql: str) -> None:
+    """Recompute is idempotent, not concurrency-safe. Two overlapping calls
+    each read the spans before either writes, and the later writer can store
+    the older total - an undercount that never corrects itself. The function
+    takes a transaction-scoped advisory lock on the session before it reads.
+    """
+    fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.refresh_digitrace_session") :]
+    fn = fn[: fn.index("$$;")]
+    lock = re.search(
+        r"pg_catalog\.pg_advisory_xact_lock\(\s*"
+        r"pg_catalog\.hashtextextended\(p_workspace_id::text \|\| ':' \|\| p_session_id, 0\)\s*\)",
+        fn,
+    )
+    assert lock, "the refresh must serialise on (workspace_id, session_id) before it reads"
+    # ...and before the aggregate, or it protects nothing.
+    assert fn.index("pg_advisory_xact_lock") < fn.index("FROM public.digitrace_spans_index"), (
+        "the lock must be taken before the recompute, not after it"
+    )
+
+
+def test_sessions_token_total_is_wide_enough_for_a_bigint_sum(sql: str) -> None:
+    """The reviewer's note: `sum(total_tokens)` is bigint, so an int4 column
+    raises `integer out of range` above 2 147 483 647 instead of storing it.
+    No rows exist yet, so widening is free now and never free later.
+    """
+    columns = _columns(sql, "digitrace_sessions")
+    assert "total_tokens" in columns
+    assert re.search(
+        r"total_tokens\s+bigint\s+NOT NULL DEFAULT 0", _table_body(sql, "digitrace_sessions")
+    ), "total_tokens must be bigint to receive a bigint sum"
+
+
+def test_apply_section_stops_on_an_already_applied_ledger(raw: str) -> None:
+    """#6525 edits a migration that already merged. Re-running it against an
+    applied database is a silent no-op (CREATE TABLE IF NOT EXISTS keeps the old
+    columns), so the file itself has to say stop and go through 145 instead.
+    """
+    assert re.search(r"already carries 144,\s*\n?--\s*STOP", raw, re.I), (
+        "the Apply section must stop the operator when the ledger already has 144"
+    )
+    assert "SILENT NO-OP" in raw.upper()
+    assert re.search(r"\b145\b", raw), "and must name the migration that would carry the fix"
+
+
+def test_sessions_writer_does_not_invent_an_empty_row(sql: str) -> None:
+    """A call for a session with no spans written yet must not create a row
+    full of zeroes that later reads as a real, empty session."""
+    fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.refresh_digitrace_session") :]
+    fn = fn[: fn.index("$$;")]
+    assert re.search(r"IF v_spans = 0 THEN\s+RETURN;", fn, re.I)
 
 
 def test_retention_function_signature_and_defaults(sql: str) -> None:
@@ -344,7 +626,9 @@ def test_scheduled_prune_uses_the_measured_window(sql: str) -> None:
 
 def test_vacuum_is_plain_analyze_and_never_full(sql: str) -> None:
     assert re.search(r"VACUUM \(ANALYZE\)", sql, re.I)
-    assert not re.search(r"VACUUM FULL", sql, re.I), "ACCESS EXCLUSIVE lock, and no bloat to reclaim"
+    assert not re.search(r"VACUUM FULL", sql, re.I), (
+        "ACCESS EXCLUSIVE lock, and no bloat to reclaim"
+    )
 
 
 def test_no_top_level_vacuum_statement(sql: str) -> None:

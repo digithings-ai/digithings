@@ -621,6 +621,25 @@ class StaticGateWiringTest(unittest.TestCase):
         names = [e.value for e in found[0].elts if isinstance(e, ast.Constant)]
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
 
+    def test_r0_allowance_gate_in_static_gate_list(self):
+        """A PR that grows the R0 allowance is refused here (DIG-5762).
+
+        The growth gate lived only in the host runner, so #6500 grew the
+        baseline (1997 -> 2030), merged green, and the post-merge run caught it
+        13 h later. The list entry is a string concatenation, so it is not an
+        ast.Constant: pin the command and the base-ref wiring in the source.
+        """
+        found = self._static_lists(self._tree())
+        self.assertEqual(len(found), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn(
+            '"scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base',
+            src,
+        )
+        # The base is the PR's own base branch, or a caller's exact commit.
+        self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
+        self.assertIn('r0_base = "origin/" + base', src)
+
     def test_static_list_drives_single_step_call(self):
         """Each entry becomes exactly one spec, and the specs are what runs.
 
