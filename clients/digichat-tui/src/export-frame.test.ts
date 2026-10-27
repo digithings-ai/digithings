@@ -107,3 +107,18 @@ test("the committed fixture is what the exporter writes today", async () => {
   const record = await captureChatThread({ capturedAt: committed.capturedAt });
   expect(record).toEqual(committed);
 });
+
+test(
+  "a second capture in one process still proves it read the fixture",
+  async () => {
+    // Two captures in one process: the guard resets the fixture counter at the
+    // start of each capture, so the second frame must make its own reads. If
+    // the client stopped refetching per mount, this capture would read nothing
+    // and the guard would throw rather than record a stale frame.
+    const first = await captureChatThread({ capturedAt: "2026-10-22T06:00:00.000Z" });
+    const second = await captureChatThread({ capturedAt: "2026-10-22T06:00:00.000Z" });
+    expect(second.frame).toBe(first.frame);
+    expect(second.frame).toContain("what is a recorded frame");
+  },
+  30_000,
+);
