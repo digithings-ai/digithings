@@ -251,6 +251,7 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/.dockerignore", "R0", "digiquant package config (open)"),
     ("digiquant/AGENTS.md", "R0", "digiquant docs (open)"),
     ("digiquant/ARCHITECTURE.md", "R0", "digiquant docs (open)"),
+    ("digiquant/conftest.py", "R0", "digiquant test config (open)"),
     ("digiquant/Dockerfile", "R0", "digiquant engine image (open)"),
     ("digiquant/Dockerfile.mcp", "R0", "digiquant engine image (open)"),
     ("digiquant/Dockerfile.sandbox", "R0", "digiquant engine image (open)"),
