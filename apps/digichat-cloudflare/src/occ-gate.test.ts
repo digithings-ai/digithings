@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  bindOccApiCall,
+  DIGI_TENANT_HEADER,
+  EMBED_HOST_HEADER,
   EMBED_TOKEN_HEADER,
+  inviteCookieValid,
+  isChatApiPath,
+  refererIsOccPage,
+  withoutInviteCookie,
   inviteTokenValid,
   isInviteOnlyEmbedRequest,
   isOccShellPath,
@@ -82,11 +89,21 @@ describe("occ gate", () => {
     // The redirect is the edge's answer: the container is not woken for it.
     expect(container).not.toHaveBeenCalled();
 
-    const c = invite.headers.get("set-cookie") ?? "";
+    const cookies = invite.headers.getSetCookie();
+    const c = cookies.find((v) => v.startsWith(`${OCC_INVITE_COOKIE}=${KEY}`)) ?? "";
     expect(c).toContain(`${OCC_INVITE_COOKIE}=`);
     expect(c).toMatch(/HttpOnly/);
+    expect(c).toMatch(/Secure/);
     expect(c).toMatch(/SameSite=Strict/);
+    // Path=/chat, not /chat/occ: the page's own /chat/api/* calls must carry
+    // the invite too, or the chat paints and every turn is refused.
+    expect(c).toMatch(/Path=\/chat(;|$)/);
     expect(c).not.toMatch(/Max-Age|Expires/);
+    // The earlier gate's /chat/occ-scoped cookie is retired in the same answer.
+    expect(cookies).toContain(
+      `${OCC_INVITE_COOKIE}=; Path=/chat/occ; Max-Age=0; Secure; HttpOnly; SameSite=Strict`,
+    );
+    expect(invite.headers.get("referrer-policy")).toBe("same-origin");
 
     // The follow-up request the browser makes, now carrying the cookie.
     const r = await occGate(
@@ -125,7 +142,9 @@ describe("occ gate", () => {
     // The app's existing transport, set by the edge — this is what makes the
     // chat turn work on the cookie arm, not just the first paint.
     expect(req.headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
-    expect(req.headers.get("cookie")).not.toContain("token=");
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBe(OCC_EMBED_HOST);
+    // The cookie is the key itself: it stops at the edge.
+    expect(req.headers.get("cookie")).toBeNull();
   });
 
   it("overwrites a client-supplied embed token rather than trusting it", () => {
@@ -138,14 +157,26 @@ describe("occ gate", () => {
     expect(req.headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
   });
 
-  it("serves the bare path on reload with the cookie, without re-issuing it", async () => {
+  it("serves the bare path on reload with the cookie and moves it to Path=/chat", async () => {
     const req = new Request("https://digithings.ai/chat/occ/", {
       headers: { cookie: `other=1; ${OCC_INVITE_COOKIE}=${KEY}` },
     });
     const r = await occGate(req, KEY, container, site);
     expect(r.status).toBe(200);
-    expect(r.headers.get("set-cookie")).toBeNull();
+    // A browser holding a cookie from the earlier /chat/occ-scoped gate gets
+    // the same session cookie re-affirmed on /chat (no Max-Age: still a tab
+    // session) and the old one expired, so its API calls carry the invite.
+    const cookies = r.headers.getSetCookie();
+    expect(cookies).toContain(
+      `${OCC_INVITE_COOKIE}=${KEY}; Path=/chat; Secure; HttpOnly; SameSite=Strict`,
+    );
+    expect(cookies).toContain(
+      `${OCC_INVITE_COOKIE}=; Path=/chat/occ; Max-Age=0; Secure; HttpOnly; SameSite=Strict`,
+    );
+    expect(r.headers.get("referrer-policy")).toBe("same-origin");
     expect(container).toHaveBeenCalledTimes(1);
+    // Other cookies still reach the app; the invite does not.
+    expect(container.mock.calls[0]![0].headers.get("cookie")).toBe("other=1");
     // The reload must still authenticate the chat turn, not just paint: the
     // edge puts the key on the container request itself.
     expect(container.mock.calls[0]![0].headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
@@ -224,5 +255,109 @@ describe("occ gate", () => {
     expect(await occEmbedGate(new Request(`https://digithings.ai/embed?host=occ.digithings.ai&token=${KEY}`), KEY, site)).toBeNull();
     expect(await occEmbedGate(new Request("https://digithings.ai/embed?host=digithings.ai"), KEY, site)).toBeNull();
     expect(isInviteOnlyEmbedRequest(new URL("https://digithings.ai/api/chat?host=occ.digithings.ai"))).toBe(false);
+  });
+});
+
+describe("occ API binding (/chat/api/* from the OCC page)", () => {
+  const OCC_PAGE = "https://digithings.ai/chat/occ";
+  const HOUSE_PAGE = "https://digithings.ai/chat";
+
+  function apiCall(headers: Record<string, string>, path = "/chat/api/chat"): Request {
+    return new Request(`https://digithings.ai${path}`, { method: "POST", headers, body: "{}" });
+  }
+
+  it("recognises the app API under its base path only", () => {
+    expect(isChatApiPath("/chat/api/chat")).toBe(true);
+    expect(isChatApiPath("/chat/api/embed/tenant-config")).toBe(true);
+    expect(isChatApiPath("/api/chat")).toBe(false);
+    expect(isChatApiPath("/chat/occ")).toBe(false);
+    expect(isChatApiPath("/chat/apix")).toBe(false);
+  });
+
+  it("knows an OCC page referer only on the same origin", () => {
+    expect(refererIsOccPage(apiCall({ referer: OCC_PAGE }))).toBe(true);
+    expect(refererIsOccPage(apiCall({ referer: `${OCC_PAGE}/?x=1` }))).toBe(true);
+    expect(refererIsOccPage(apiCall({ referer: HOUSE_PAGE }))).toBe(false);
+    expect(refererIsOccPage(apiCall({ referer: "https://digithings.ai/chat/occult" }))).toBe(false);
+    expect(refererIsOccPage(apiCall({ referer: "https://evil.example/chat/occ" }))).toBe(false);
+    expect(refererIsOccPage(apiCall({ referer: "not a url" }))).toBe(false);
+    expect(refererIsOccPage(apiCall({}))).toBe(false);
+  });
+
+  it("binds a cookie-carrying call from the OCC page to the OCC tenant", () => {
+    const req = apiCall({
+      referer: OCC_PAGE,
+      cookie: `a=1; ${OCC_INVITE_COOKIE}=${KEY}`,
+      // What the client sends on its own: the fallback host and no token.
+      [EMBED_HOST_HEADER]: "https://digithings.ai",
+    });
+    bindOccApiCall(req, KEY);
+    expect(req.headers.get(EMBED_TOKEN_HEADER)).toBe(KEY);
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBe(OCC_EMBED_HOST);
+    expect(req.headers.get("cookie")).toBe("a=1");
+  });
+
+  it("strips the client's tenant headers from the OCC page without a valid cookie", () => {
+    for (const cookie of [undefined, `${OCC_INVITE_COOKIE}=wrong`, `${OCC_INVITE_COOKIE}=`]) {
+      const req = apiCall({
+        referer: OCC_PAGE,
+        ...(cookie ? { cookie } : {}),
+        [EMBED_TOKEN_HEADER]: "forged-or-guessed",
+        [EMBED_HOST_HEADER]: OCC_EMBED_HOST,
+        [DIGI_TENANT_HEADER]: "occ",
+      });
+      bindOccApiCall(req, KEY);
+      expect(req.headers.get(EMBED_TOKEN_HEADER)).toBeNull();
+      expect(req.headers.get(EMBED_HOST_HEADER)).toBeNull();
+      expect(req.headers.get(DIGI_TENANT_HEADER)).toBeNull();
+      expect(req.headers.get("cookie")).toBeNull();
+    }
+  });
+
+  it("fails closed with the Worker secret unset", () => {
+    const req = apiCall({ referer: OCC_PAGE, cookie: `${OCC_INVITE_COOKIE}=${KEY}` });
+    bindOccApiCall(req, undefined);
+    expect(req.headers.get(EMBED_TOKEN_HEADER)).toBeNull();
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBeNull();
+  });
+
+  it("never upgrades a house call, even with a valid cookie", () => {
+    const req = apiCall({
+      referer: HOUSE_PAGE,
+      cookie: `${OCC_INVITE_COOKIE}=${KEY}`,
+      [EMBED_HOST_HEADER]: "https://digithings.ai",
+      [DIGI_TENANT_HEADER]: "occ",
+    });
+    bindOccApiCall(req, KEY);
+    expect(req.headers.get(EMBED_TOKEN_HEADER)).toBeNull();
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBe("https://digithings.ai");
+    expect(req.headers.get(DIGI_TENANT_HEADER)).toBeNull();
+    expect(req.headers.get("cookie")).toBeNull();
+  });
+
+  it("leaves another tenant's own token transport alone", () => {
+    const req = apiCall({
+      referer: "https://digithings.ai/embed?host=customer.example",
+      [EMBED_TOKEN_HEADER]: "customer-token",
+      [EMBED_HOST_HEADER]: "https://customer.example",
+    });
+    bindOccApiCall(req, KEY);
+    expect(req.headers.get(EMBED_TOKEN_HEADER)).toBe("customer-token");
+    expect(req.headers.get(EMBED_HOST_HEADER)).toBe("https://customer.example");
+  });
+
+  it("accepts any one valid invite cookie among several paths", () => {
+    expect(inviteCookieValid(`${OCC_INVITE_COOKIE}=old; ${OCC_INVITE_COOKIE}=${KEY}`, KEY)).toBe(true);
+    expect(inviteCookieValid(`${OCC_INVITE_COOKIE}=old`, KEY)).toBe(false);
+    expect(inviteCookieValid(null, KEY)).toBe(false);
+  });
+
+  it("drops only the invite cookie", () => {
+    const h = new Headers({ cookie: `a=1; ${OCC_INVITE_COOKIE}=${KEY}; b=2` });
+    withoutInviteCookie(h);
+    expect(h.get("cookie")).toBe("a=1; b=2");
+    const only = new Headers({ cookie: `${OCC_INVITE_COOKIE}=${KEY}` });
+    withoutInviteCookie(only);
+    expect(only.get("cookie")).toBeNull();
   });
 });

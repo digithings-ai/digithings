@@ -1,6 +1,6 @@
 /**
- * Paths digichat owns on digithings.ai (Pages owns the marketing site and the
- * invite-gated OCC shell at /chat/occ).
+ * Paths digichat owns on digithings.ai (Pages owns the marketing site; the
+ * invite-gated /chat/occ is answered by the gate in index.ts before these run).
  * digithings + OCC (and future tenants) share one Container — tenant selection
  * is via /embed?host=… / X-Embed-Host, not separate Container instances.
  *
@@ -96,8 +96,8 @@ export function isContainerInternalPath(pathname: string): boolean {
 }
 
 /**
- * True for the canonical /chat surface: the app itself, minus the invite-gated
- * OCC shell, which stays a Pages surface behind the gate.
+ * True for the canonical /chat surface: the app itself, minus /chat/occ, which
+ * only the invite gate may answer (it never falls through to this proxy).
  */
 export function isChatSurfacePath(pathname: string): boolean {
   if (isOccShellPath(pathname)) return false;
@@ -107,8 +107,8 @@ export function isChatSurfacePath(pathname: string): boolean {
 /**
  * True for the public paths this Worker forwards to the digichat Container.
  *
- * The canonical /chat surface is proxied (DIG-5121) except for the
- * invite-gated OCC shell, which stays a Pages surface behind the gate.
+ * The canonical /chat surface is proxied (DIG-5121) except for /chat/occ,
+ * which the invite gate answers itself.
  */
 export function shouldProxyToDigiChat(pathname: string): boolean {
   if (isChatSurfacePath(pathname)) return true;

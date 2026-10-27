@@ -9,9 +9,10 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
  * Route ownership for the invite-gated OCC shell.
  *
  * DIG-3585 pinned BOTH workers so a cutover or a rollback could not drop the
- * gate. Chris reversed the cutover on 2026-10-19: OCC is client work and must
- * not ride the base digithings platform, so exactly ONE worker declares the
- * route — the digichat one that also holds OCC_INVITE_KEY.
+ * gate. Since 2026-10-19 exactly ONE worker declares the route — the digichat
+ * one that also holds OCC_INVITE_KEY. (That day's reason, keeping OCC off the
+ * shared platform, was superseded on 2026-10-27: OCC is a tenant of the
+ * shared stack, isolated by the gate. The single route owner stands.)
  */
 const OCC_ROUTE_OWNER = "apps/digichat-cloudflare/wrangler.toml";
 const BASE_PLATFORM = "apps/digithings-stack-cloudflare/wrangler.toml";
@@ -36,5 +37,21 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
     expect(script).toMatch(/OCC_INVITE_KEY/);
     expect(script).toMatch(/iframe/);
     expect(script).toMatch(/\/chat\/occ\//);
+  });
+
+  it("the post-deploy smoke checks the page's API calls with only the cookie (G1)", () => {
+    const script = readFileSync(join(repoRoot, "scripts/smoke_occ_invite_gate.sh"), "utf8");
+    // The cookie must reach /chat/api/*, so it is scoped to /chat.
+    expect(script).toMatch(/\$3 == "\/chat"/);
+    // Tenant binding: cookie-only from the OCC page is occ; without the
+    // cookie, or from a house page, it never is.
+    expect(script).toMatch(/\/chat\/api\/embed\/tenant-config/);
+    expect(script).toMatch(/!= "occ"/);
+    expect(script).toMatch(/= "occ"/);
+    // One real turn, through the same cookie jar, never a token.
+    expect(script).toMatch(/\/chat\/api\/chat/);
+    expect(script).toMatch(/-b "\$jar"[\s\S]*--data "\$msg" "\$TURN_URL"/);
+    // The key is read from the environment only and never put on a turn.
+    expect(script).not.toMatch(/x-embed-token/i);
   });
 });

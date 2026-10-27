@@ -368,3 +368,80 @@ describe("boot config re-read window", () => {
     expect(servedToken(container)).toBe("after-stop");
   });
 });
+
+describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
+  const KEY = "fixture-invite-key";
+
+  function envWithInvite(): Env {
+    return { ...workerEnv(), OCC_INVITE_KEY: KEY } as Env;
+  }
+
+  async function containerSees(init: RequestInit & { path?: string }): Promise<Request> {
+    hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
+    hooks.containerFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+    const { path = "/chat/api/chat", ...rest } = init;
+    await worker.fetch(new Request(`https://digithings.ai${path}`, rest), envWithInvite());
+    expect(hooks.containerFetch).toHaveBeenCalledTimes(1);
+    return hooks.containerFetch.mock.calls[0]![0];
+  }
+
+  it("binds a cookie-only call from /chat/occ to the OCC tenant", async () => {
+    const seen = await containerSees({
+      method: "POST",
+      body: "{}",
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+    });
+    expect(seen.headers.get("x-embed-token")).toBe(KEY);
+    expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+    expect(seen.headers.get("cookie")).toBeNull();
+  });
+
+  it("binds the tenant-config read the same way", async () => {
+    const seen = await containerSees({
+      path: "/chat/api/embed/tenant-config",
+      headers: { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${KEY}` },
+    });
+    expect(seen.headers.get("x-embed-host")).toBe("occ.digithings.ai");
+  });
+
+  it("does not bind a house call that carries the cookie", async () => {
+    const seen = await containerSees({
+      method: "POST",
+      body: "{}",
+      headers: {
+        referer: "https://digithings.ai/chat",
+        cookie: `occ_invite=${KEY}`,
+        "x-digi-tenant": "occ",
+      },
+    });
+    expect(seen.headers.get("x-embed-token")).toBeNull();
+    expect(seen.headers.get("x-embed-host")).toBeNull();
+    expect(seen.headers.get("x-digi-tenant")).toBeNull();
+    expect(seen.headers.get("cookie")).toBeNull();
+  });
+
+  it("drops forged tenant headers from the OCC page without the cookie", async () => {
+    const seen = await containerSees({
+      method: "POST",
+      body: "{}",
+      headers: {
+        referer: "https://digithings.ai/chat/occ",
+        "x-embed-token": "guess",
+        "x-embed-host": "occ.digithings.ai",
+      },
+    });
+    expect(seen.headers.get("x-embed-token")).toBeNull();
+    expect(seen.headers.get("x-embed-host")).toBeNull();
+  });
+
+  it("strips a client-sent X-Digi-Tenant on the legacy /api alias too", async () => {
+    const seen = await containerSees({
+      path: "/api/chat",
+      method: "POST",
+      body: "{}",
+      headers: { "x-digi-tenant": "occ" },
+    });
+    expect(new URL(seen.url).pathname).toBe("/chat/api/chat");
+    expect(seen.headers.get("x-digi-tenant")).toBeNull();
+  });
+});
