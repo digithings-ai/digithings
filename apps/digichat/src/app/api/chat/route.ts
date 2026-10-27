@@ -23,6 +23,7 @@ import {
 } from "@/lib/backend-adapters";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
+import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -200,7 +201,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const messages = body.messages;
+  let messages = body.messages;
   if (!messages?.length) {
     return new Response(JSON.stringify({ error: "messages_required" }), {
       status: 400,
@@ -389,14 +390,15 @@ export async function POST(req: Request) {
             // entitlement is unverified. Bound it server-side at the trial cap (100
             // turns per IP per 24h) instead of skipping the budget, which is what an
             // outage used to do — that granted unbounded free turns to anyone
-            // presenting a chat token. Same counter and same cap as the
-            // client-asserted unlock below, so a forged header buys nothing the server
-            // did not grant.
+            // presenting a chat token.
             unlockEmbedTrial(ip);
           }
-          if (req.headers.get("x-embed-trial-unlock") === "1") {
-            unlockEmbedTrial(ip);
-          }
+          // No client-asserted unlock. The route used to raise this IP's cap
+          // when the caller sent the client-asserted unlock header, but a value
+          // the browser can set is not an entitlement: the client counter sent
+          // it and anyone could forge it (DIG-4525). Relief comes only from the
+          // server's own verdicts — the tenant's quota service, an allowlisted
+          // monitor, or the degraded bound above.
           if (isOverEmbedTrialLimit(ip)) {
             return new Response(
               JSON.stringify({
@@ -575,6 +577,17 @@ export async function POST(req: Request) {
   const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
+
+  // Private demo mode: the client sends x-digi-private: 1 when the transcript
+  // may be shown to the party it names, so every turn is told to substitute the
+  // real names and identifiers it is given.
+  const privateMode = isPrivateMode(req.headers);
+  // The instruction is applied to the UI messages here, before the adapter
+  // branch, because every path consumes `messages` — including the digigraph
+  // trace stream, which is the default and converts them itself. Patching the
+  // converted model messages later would reach only the legacy `streamText`
+  // pair and leave private mode a silent no-op on the path OCC actually uses.
+  if (privateMode) messages = withPrivateModeUiPrompt(messages);
 
   // models.costPerWindow stays on the premium budget above. The limits block
   // is the other gates (tokens, turns, sessions, tool calls, model tiers).
@@ -806,6 +819,16 @@ export async function POST(req: Request) {
   }
   if (reasoningEffort) {
     upstreamHeaders["X-Digi-Effort"] = reasoningEffort;
+  }
+  // Hard tool-call cap for the upstream loop. The chat-side turn guard can only
+  // *ask* the model to stop — digigraph ran 52 calls past it in one turn — so
+  // forward the deployment's cap and let digillm stop the loop structurally at
+  // that many executed calls and answer tool-free. Silent by design: the answer
+  // from the results gathered so far is the only thing the user sees.
+  // Foundry and the AI SDK backends enforce the cap in-process and do not need it.
+  const upstreamToolCap = limitGuardrails?.maxToolCallsPerTurn;
+  if (upstreamToolCap != null) {
+    upstreamHeaders["X-Digi-Max-Tool-Calls"] = String(upstreamToolCap);
   }
   // Search engine choice for digisearch web_search (#4724): allowlisted names
   // only, unknown/blank dropped. "auto" is the hub default, so it is omitted

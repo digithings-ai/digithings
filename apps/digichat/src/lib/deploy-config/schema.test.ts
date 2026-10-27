@@ -357,7 +357,9 @@ describe("DigichatConfigSchema", () => {
       maxToolCallsPerTurn: 5,
       tokensPerMinute: { deployment: 100_000, user: 80_000 },
     });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("notice/best-effort"));
+    // digigraph enforces the cap upstream (X-Digi-Max-Tool-Calls reaches digillm's
+    // tool loop), so a cap here is no longer a notice-only configuration.
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("notice/best-effort"));
     warn.mockRestore();
     expect(() =>
       parseDigichatConfig({

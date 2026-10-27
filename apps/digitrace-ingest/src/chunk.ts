@@ -23,8 +23,10 @@
  * later message replace the row with its own slice — a smaller `span_count`, a
  * duration that never happened, and a `name` from a span that is not the root.
  * One trace only crosses a boundary when it alone exceeds the budget; those
- * trace ids are listed in `incompleteTraces`, and the consumer writes no
- * aggregate row for them rather than a partial one.
+ * trace ids are listed in `incompleteTraces`, so the message states where its
+ * aggregate stops. The consumer inserts the partial row and then recomputes it
+ * from the spans index (`refresh_digitrace_trace`), which makes the row true
+ * over every span of the trace again.
  */
 import { archiveKey, archiveLine, messageFor } from "./archive";
 import type { ArchiveLine, IngestMessage, SpanRecord } from "./types";

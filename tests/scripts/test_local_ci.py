@@ -379,6 +379,49 @@ class WorkerBuildTest(unittest.TestCase):
         self.assertEqual(_mod.worker_build("/wt-4010", rec), ["worker-build:npm-ci"])
         self.assertEqual(len(calls), 1)
 
+    def test_build_skips_an_app_the_tree_has_retired(self):
+        """A retirement PR deletes the app; the fixed WORKER_APPS still names it.
+
+        #6530 retires apps/digitrace-langfuse (DIG-5136) and could not go green:
+        the runner changed into the app directory and wrangler failed on a
+        project with no config. An app with no wrangler.toml in the tree is
+        retired in that tree and is not built; the rest still are.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            live = _mod.WORKER_APPS[0]
+            retired = _mod.WORKER_APPS[-1]
+            for app in (live, _mod.WORKER_APPS[1]):
+                os.makedirs(os.path.join(wt, "apps", app))
+                open(os.path.join(wt, "apps", app, "wrangler.toml"), "w").close()
+            # The retired app's directory can survive a checkout (ignored
+            # node_modules), so the filter must key on wrangler.toml, not the dir.
+            os.makedirs(os.path.join(wt, "apps", retired))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            built = [c[0].split(":", 1)[1] for c in calls[1:]]
+            self.assertEqual(built, [live, _mod.WORKER_APPS[1]])
+            self.assertNotIn(retired, built)
+
+    def test_build_with_no_apps_dir_builds_the_fixed_list(self):
+        """A unit fixture or an odd tree says nothing about retirement: build all."""
+        with tempfile.TemporaryDirectory() as wt:
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
+
+    def test_a_tree_with_no_buildable_worker_fails_loudly(self):
+        """Every app retired is a broken checkout, not a clean tree.
+
+        Skipping each app because its wrangler.toml is absent would turn a
+        half-checked-out worktree into a green required check. Only a tree that
+        still has at least one buildable Worker is treated as a real tree.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            for app in _mod.WORKER_APPS:
+                os.makedirs(os.path.join(wt, "apps", app))
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+
 
 class BunSuiteGateTest(unittest.TestCase):
     """The bun suites run in local-ci, and the receipt says which ones (DIG-5203).
@@ -620,6 +663,79 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertEqual(len(found), 1)
         names = [e.value for e in found[0].elts if isinstance(e, ast.Constant)]
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
+
+    def test_r0_allowance_gate_in_static_gate_list(self):
+        """A PR that grows the R0 allowance is refused here (DIG-5762).
+
+        The growth gate lived only in the host runner, so #6500 grew the
+        baseline (1997 -> 2030), merged green, and the post-merge run caught it
+        13 h later. The list entry is a string concatenation, so it is not an
+        ast.Constant: pin the command and the base-ref wiring in the source.
+        """
+        found = self._static_lists(self._tree())
+        self.assertEqual(len(found), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn(
+            '"scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base',
+            src,
+        )
+        # The base is the PR's own base branch, or a caller's exact commit.
+        self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
+        self.assertIn('r0_base = "origin/" + base', src)
+
+    def test_run_checks_executes_the_allowance_gate(self):
+        """Functionally: a grown baseline makes `run_checks` return the gate.
+
+        The source pins above prove the command is written down; this proves the
+        static pool actually executes it and reports its non-zero exit as a
+        failed gate. That is the property #6500 merged without: the gate was
+        absent from run_checks, so a grown baseline changed nothing.
+        """
+        tmp = tempfile.mkdtemp()
+        gate = "scripts/check_r0_client_literals_baseline_growth.py"
+        os.makedirs(os.path.join(tmp, "scripts"))
+        with open(os.path.join(tmp, gate), "w") as f:
+            f.write("# fixture: existence is all run_checks tests\n")
+
+        saved = {name: getattr(_mod, name) for name in (
+            "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
+            "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate",
+            "bun_gate")}
+        commands: list[str] = []
+
+        def fake_sh(cmd, cwd=None, timeout=None, out=None, name=None, env=None):
+            text = cmd if isinstance(cmd, str) else " ".join(str(p) for p in cmd)
+            commands.append(text)
+            if gate in text:
+                if out is not None:
+                    out.write("r0-client-literal-baseline-growth: 1 finding(s)\n")
+                return 1, ""
+            return 0, ""
+
+        try:
+            _mod.WT = tmp
+            _mod.sh = fake_sh
+            _mod._guard = lambda: None
+            _mod.wt_is_ours = lambda path: True
+            _mod.pr_body = lambda pr: "Fixes DIG-5762\n"
+            _mod.gitleaks_log_opts = lambda base, sha, out: None
+            _mod.ruff_paths_for_tree = lambda wt: ("", "fixture")
+            _mod.ruff_paths_fallback = lambda wt: None
+            _mod.worker_gate = lambda pr, wt: (None, None)
+            _mod.bun_gate = lambda pr, wt: (0, None)
+            pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+                  "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
+            fails = _mod.run_checks(pr, io.StringIO())
+        finally:
+            for name, value in saved.items():
+                setattr(_mod, name, value)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        self.assertIn(gate, fails)
+        self.assertTrue(
+            any(f"{gate} --base-ref {'b' * 40}" in c for c in commands),
+            "the gate must compare against the caller's base commit",
+        )
 
     def test_static_list_drives_single_step_call(self):
         """Each entry becomes exactly one spec, and the specs are what runs.

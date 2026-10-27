@@ -22,6 +22,9 @@ JWT in `Authorization: Bearer` carrying `mcp:digisearch` / `mcp:digivault`
 (verified against `DIGIKEY_JWKS_URL`, see `src/mcp-edge-auth.ts`), or
 `x-digi-mcp-key` matching the `MCP_EDGE_KEY` secret; with neither it returns a
 fail-closed 401, and a valid token without the server's scope gets 403.
+`mcp:digivault` is read-only: `create_note` additionally requires
+`mcp:digivault:write` (never grantable to a BFF session), and a JWT-authenticated
+POST body the edge cannot inspect is refused 400 rather than passed unchecked.
 Secrets only via `npx wrangler secret put` — never commit values. Operator
 secrets currently required: `MCP_EDGE_KEY` (edge key for the OCC MCP path; set
 with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
@@ -49,7 +52,7 @@ One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 | _(loopback only)_ | LiteLLM `:4000` | LLM router |
 | _(loopback only)_ | Redis `:6379` | digikey blocklist |
 | _(key-gated edge)_ | digisearch-mcp `:8765` | RAG MCP (fail-loud backend gate); edge route `/_stack/mcp/digisearch/*` (x-digi-mcp-key) |
-| _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1`) |
+| _(key-gated edge)_ | digivault-mcp `:8769` | vault MCP (search_notes/search_tag/backlinks/lint; write `create_note` needs `DIGIVAULT_MCP_WRITE=1` **and** the `mcp:digivault:write` edge scope) |
 | _(loopback only)_ | digigraph-mcp `:8766` | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 ```text
@@ -174,20 +177,18 @@ It **refuses to deploy** if the commit cannot be resolved.
 > and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
 > [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
-The digiquant-mcp container reads its market-data secrets from the Worker environment — set
-each value via stdin (`$VALUE`-only, never commit values):
+**The digiquant-mcp container is gone (DIG-5558).** The market-data MCP read path
+is the Worker-native `DigiQuantMcpAgent` Durable Object (bound as `DIGIQUANT_MCP`,
+see `src/digiquant-mcp.ts`), which reads the `MARKET_DATA` R2 bucket directly.
+There is no second container image, no `MCP_STACK` binding and no per-container
+secret set to maintain: the `R2_*` secrets that fed the old container are no
+longer read by this Worker.
 
-```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCESS_KEY_ID
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_SECRET_ACCESS_KEY
-```
-
-The `env -u CLOUDFLARE_API_TOKEN` prefix is load-bearing: that variable doubles as
-wrangler's own auth token, so leaving it exported makes wrangler authenticate as the
-Vectorize/D1-scoped secret instead of your login session (auth error 10000) — see the
-trap documented in `wrangler.toml:150-177`.
+The `env -u CLOUDFLARE_API_TOKEN` prefix on any `wrangler` command is still
+load-bearing: that variable doubles as wrangler's own auth token, so leaving it
+exported makes wrangler authenticate as the Vectorize/D1-scoped secret instead of
+your login session (auth error 10000) — see the trap documented at the top of
+`wrangler.toml`.
 
 Custom domains `graph.digithings.ai` / `key.digithings.ai` /
 `search.digithings.ai` are declared in `wrangler.toml`. First deploy may take
@@ -306,7 +307,7 @@ Ollama in this path unless you need them.
 | Redis `:6379` | loopback | digikey blocklist |
 | SearXNG `:8080` | loopback | Primary `web_search` backend for digisearch ([#4297](https://github.com/digithings-ai/digithings/issues/4297)) |
 | digisearch-mcp `:8765` | key-gated edge | RAG MCP (fail-loud backend gate); `/_stack/mcp/digisearch/*` |
-| digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1`) |
+| digivault-mcp `:8769` | key-gated edge | vault MCP (search_notes/search_tag/backlinks/lint; `create_note` with `DIGIVAULT_MCP_WRITE=1` **and** the `mcp:digivault:write` edge scope) |
 | digigraph-mcp `:8766` | loopback | orchestrator MCP (`DIGI_MCP_REQUIRE_AUTH=1`, stack JWKS) |
 
 Hosted `:8765`/`:8002` `web_search` runs against an **in-stack SearXNG**

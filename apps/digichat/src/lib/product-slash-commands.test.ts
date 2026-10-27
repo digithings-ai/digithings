@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
@@ -10,7 +10,11 @@ import {
   catalogForceTool,
   executeSlashDef,
   extraSlashDefs,
+  isPrivateMode,
+  isPrivateModeAvailable,
   prefixSlashAdapter,
+  setPrivateMode,
+  setPrivateModeAvailable,
   slashItemPrefixMatch,
   slashSubmitAction,
 } from "./product-slash-commands";
@@ -435,5 +439,37 @@ describe("/toolbar and /scrollbar", () => {
     expect(row).toBeDefined();
     row?.execute?.();
     expect(a.setToolbar).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("private mode availability", () => {
+  const def = { id: "private" as const, names: ["/private"], needsArg: false, hint: "" };
+
+  afterEach(() => {
+    setPrivateModeAvailable(false);
+    setPrivateMode(false);
+  });
+
+  it("ignores /private when the tenant did not opt in", () => {
+    executeSlashDef(def, "", api());
+    expect(isPrivateModeAvailable()).toBe(false);
+    expect(isPrivateMode()).toBe(false);
+    expect(slashSubmitAction("/export")).toMatchObject({ kind: "run" });
+  });
+
+  it("toggles once the tenant opts in, and export stays blocked while private", () => {
+    setPrivateModeAvailable(true);
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(true);
+    expect(slashSubmitAction("/export")).toMatchObject({ kind: "block" });
+  });
+
+  it("drops a live session flag when the tenant stops offering the mode", () => {
+    setPrivateModeAvailable(true);
+    setPrivateMode(true);
+    setPrivateModeAvailable(false);
+    expect(isPrivateModeAvailable()).toBe(false);
+    expect(isPrivateMode()).toBe(false);
+    expect(slashSubmitAction("/export")).toMatchObject({ kind: "run" });
   });
 });

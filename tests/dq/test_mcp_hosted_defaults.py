@@ -1,8 +1,10 @@
 """Hosted digiquant-mcp defaults: read-scope only off localhost (Phase 2 Track D).
 
-The hosted container (`digiquant/Dockerfile.mcp` + `DigiQuantMcpContainer.envVars`
-in the stack Worker) must resolve `DIGIQUANT_MCP_SCOPE` to `read`; `full` never
-leaves localhost. Local `python -m digiquant.mcp_server` keeps defaulting to
+The hosted image (`digiquant/Dockerfile.mcp`) resolves `DIGIQUANT_MCP_SCOPE` to
+`read`; `full` never leaves localhost. The Cloudflare Container that forwarded it
+(`DigiQuantMcpContainer.envVars` in the stack Worker) was deleted in DIG-5558 —
+the hosted read path is the Worker-native `DigiQuantMcpAgent` — so that wiring is
+pinned as an absence. Local `python -m digiquant.mcp_server` keeps defaulting to
 `full` (pinned here so the hosted default cannot leak into the library default).
 """
 
@@ -30,12 +32,14 @@ def test_hosted_image_defaults_scope_to_read():
 
 
 @pytest.mark.unit
-def test_stack_container_passes_scope_through_default_read():
-    # Asserted on file text: DigiQuantMcpContainer is a Cloudflare Container /
+def test_the_deleted_stack_container_no_longer_forwards_scope():
+    # Asserted on file text: the removed class was a Cloudflare Container /
     # Durable Object, not constructible outside the Workers runtime (same reason
-    # env-vars-pin.test.js reads index.ts as text).
+    # env-vars-pin.test.js reads index.ts as text). DIG-5558 deleted it, so the
+    # hosted scope default is no longer a container concern.
     text = STACK_INDEX_TS.read_text(encoding="utf-8")
-    assert HOSTED_ENVVAR_LINE in text
+    assert HOSTED_ENVVAR_LINE not in text
+    assert "DigiQuantMcpContainer" not in text
 
 
 @pytest.mark.unit

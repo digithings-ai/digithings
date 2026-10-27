@@ -199,7 +199,6 @@ export async function createLangGraphStreamResponse(opts: {
         const guard = opts.guard;
         if (!guard?.active || guard.toolCap == null) return true;
         if (toolCallsSoFar >= guard.toolCap) {
-          guard.noteToolCap(writer, toolCallsSoFar);
           capped = true;
           upstream.abort();
           return false;
