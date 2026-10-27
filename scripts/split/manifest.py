@@ -263,6 +263,12 @@ RULES: list[tuple[str, str, str]] = [
     # with extraction on 294 paths. Each entry mirrors scripts/repo-split/move-lists/rN.paths.
     ("apps/digichat/src/lib/embed-suggestion-pools.test.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("apps/digichat/src/lib/embed-suggestion-pools.ts", "R6", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    # One-config slice 1 (#6500): a tenant's complete deployment document and
+    # the equivalence test that pins its live KV row carry client data, so they
+    # move with the client corpus instead of into public R0. Same destination as
+    # the client test above and the OCC example under apps/digichat/config/.
+    ("apps/digichat/config/occ.yaml", "R6", "client tenant deployment document (one-config slice 1)"),
+    ("apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts", "R6", "pins the live tenant row (one-config slice 1)"),
     ("config/byok-providers.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("config/digiquant-model-prices.json", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("config/digiquant_models.yaml", "R2", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
@@ -342,6 +348,11 @@ RULES: list[tuple[str, str, str]] = [
     ("digiquant/data/", "R0", "digiquant data dir (open)"),
     ("digiquant/config/", "R0", "digiquant config (open)"),
     ("apps/digichat/", "R0", "digichat engine (open)"),
+    # DIG-5762: #6523 added this app without a manifest rule, so every
+    # `manifest.py --check` (local-ci) went red on develop while the PR lane
+    # that would have said so did not run the gate. digitrace is the open
+    # tracing module; its ingest Worker ships with it.
+    ("apps/digitrace-ingest/", "R0", "digitrace OTLP ingest Worker (open tracing module, DIG-2657)"),
     ("apps/digiweb/", "R0", "reference app (open)"),
     ("packages/design/", "R0", "design tokens (open)"),
     ("packages/ui/", "R0", "shared UI (open)"),
