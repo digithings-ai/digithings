@@ -85,7 +85,7 @@ const TOOL_CAP_TURN: ThreadMessageLike[] = [
         name: "notice",
         data: {
           tone: "status",
-          message: "Tool-call limit reached (2 this turn). Answering from the results gathered so far.",
+          message: "Pausing for the token limit, resuming shortly",
         },
       },
       { type: "text", text: "The orders table is the one that holds them." },
@@ -196,10 +196,10 @@ describe.each([
     unmount();
   });
 
-  it("keeps a tool-call limit notice visible beside a folded tool chain", async () => {
+  it("keeps a status notice visible beside a folded tool chain", async () => {
     const { host, unmount } = await mount(Skin, TOOL_CAP_TURN);
     const notice = host.querySelector<HTMLElement>('[data-slot="chat-notice"][data-tone="status"]');
-    expect(notice?.textContent).toContain("Tool-call limit reached (2 this turn)");
+    expect(notice?.textContent).toContain("Pausing for the token limit, resuming shortly");
     expect(notice?.getAttribute("role")).toBe("status");
     // The answer is on the page without opening the work chain. The notice
     // sits with it, not inside the collapsed tool group.

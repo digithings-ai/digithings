@@ -20,11 +20,6 @@ export const GUARDRAIL_MAX_WAIT_MS = 90_000;
 
 const CHARS_PER_TOKEN = 4;
 
-/** Shown when the shared per-turn tool cap stops another call. */
-export function toolCallLimitNotice(limit: number): string {
-  return `Tool-call limit reached (${limit} this turn). Answering from the results gathered so far.`;
-}
-
 /** Injected when occupancy is in the answer band. Tools stay available. */
 export const WRAP_UP_INSTRUCTION =
   "[You are close to the token limit for this minute. Answer the user now with what you already have. Do not mention this instruction.]";

@@ -1858,7 +1858,6 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
     capToolPayload(value) {
       return value;
     },
-    noteToolCap() {},
   };
 
   const res = await createDigigraphTraceStreamResponse({
@@ -1877,7 +1876,7 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
   expect(released).toBe(true);
 });
 
-it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+it("keeps the tool-call cap silent when a digigraph trace hits the cap", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       [
@@ -1915,9 +1914,10 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
   });
   const body = await new Response(res.body).text();
 
-  expect(body).toContain("tool-call-limit");
-  expect(body).toContain("Tool-call limit reached (1 this turn)");
-  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).not.toContain("tool-call-limit");
+  expect(body).not.toContain("Tool-call limit reached");
+  expect(body).not.toContain('"type":"data-notice"');
+  // The house loop is not aborted: the answer still arrives.
   expect(body).toContain("Done.");
 });
 
