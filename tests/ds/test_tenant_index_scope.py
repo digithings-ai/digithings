@@ -500,6 +500,152 @@ def test_vectorize_backend_quotes_the_index_path_segment() -> None:
     assert backend._url("query").endswith(f"/vectorize/v2/indexes/{TICKETS_INDEX}/query")
 
 
+# --- POST /ingest and /ingest/url: writes are scoped like reads ------------------------
+
+
+@pytest.fixture
+def ingest_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Record the writes the ingest routes hand on, instead of running a pipeline.
+
+    The gate under test runs before these calls; a refused request must never
+    reach them (no file read, no URL fetched, no chunk written).
+    """
+    from types import SimpleNamespace
+
+    from digisearch.pipeline.url_ingest import UrlIngestResult
+
+    from digisearch import server
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_ingest_source(source: str, *, index_name: str, **_: object) -> SimpleNamespace:
+        calls.append(("ingest", index_name))
+        return SimpleNamespace(doc_id="doc-1", chunks_created=1, index_name=index_name, status="ok")
+
+    def fake_ingest_url(source_url: str, *, index_name: str, **_: object) -> UrlIngestResult:
+        calls.append(("ingest_url", index_name))
+        return UrlIngestResult(
+            doc_id="doc-1",
+            chunks_created=1,
+            index_name=index_name,
+            source_url=source_url,
+            final_url=source_url,
+        )
+
+    monkeypatch.setattr(server, "ingest_source", fake_ingest_source)
+    monkeypatch.setattr(server, "ingest_url", fake_ingest_url)
+    return calls
+
+
+def _ingest(client: TestClient, route: str, index_name: str):
+    if route == "/ingest":
+        return client.post("/ingest", json={"source": "doc.md", "index_name": index_name})
+    return client.post(
+        "/ingest/url", json={"source_url": "https://example.test/a", "index_name": index_name}
+    )
+
+
+INGEST_ROUTES = ["/ingest", "/ingest/url"]
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+@pytest.mark.parametrize("index_name", [HELP_INDEX, TICKETS_INDEX])
+def test_ingest_writes_a_tenant_index_for_its_own_verified_tenant(
+    scoped_map: None, ingest_calls: list, route: str, index_name: str
+) -> None:
+    r = _ingest(_client(TENANT), route, index_name)
+    assert r.status_code == 200, r.text
+    assert [name for _, name in ingest_calls] == [index_name]
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+@pytest.mark.parametrize(
+    "caller",
+    [HOUSE, "pytest-tenant", ""],
+    ids=["house-tenant", "other-tenant", "no-tenant-claim"],
+)
+@pytest.mark.parametrize(
+    "index_name",
+    [HELP_INDEX, TICKETS_INDEX, "tenant-a-help", "TENANT_A_TICKETS"],
+)
+def test_ingest_refuses_a_tenant_index_to_any_other_caller(
+    scoped_map: None, ingest_calls: list, route: str, caller: str, index_name: str
+) -> None:
+    """House callers cannot write tenant indexes, under any spelling, and nothing is written."""
+    r = _ingest(_client(caller), route, index_name)
+    assert r.status_code == 403, r.text
+    assert ingest_calls == []
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+def test_ingest_ignores_an_unsigned_tenant_header(
+    scoped_map: None, ingest_calls: list, route: str
+) -> None:
+    client = TestClient(app, headers={**auth_headers(tenant_slug=""), "X-Digi-Tenant": TENANT})
+    r = _ingest(client, route, HELP_INDEX)
+    assert r.status_code == 403, r.text
+    assert ingest_calls == []
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+def test_ingest_checks_the_default_index_too(
+    monkeypatch: pytest.MonkeyPatch, ingest_calls: list, route: str
+) -> None:
+    """An omitted ``index_name`` is ``default``; a tenant that claims it owns it."""
+    monkeypatch.setenv(
+        "DIGI_TENANT_CORPUS_MAP", json.dumps({TENANT: {"digisearchIndex": "default"}})
+    )
+    monkeypatch.delenv("DIGISEARCH_PUBLIC_TENANTS", raising=False)
+    body = {"source": "doc.md"} if route == "/ingest" else {"source_url": "https://example.test/a"}
+    assert _client(HOUSE).post(route, json=body).status_code == 403
+    assert ingest_calls == []
+    assert _client(TENANT).post(route, json=body).status_code == 200
+    assert ingest_calls[-1][1] == "default"
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+def test_ingest_keeps_the_house_docs_writable_by_any_ingest_caller(
+    scoped_map: None, ingest_calls: list, route: str
+) -> None:
+    """A public tenant's index is not tenant-scoped; the ingest scope alone decides."""
+    r = _ingest(_client("pytest-tenant"), route, HOUSE_INDEX)
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+def test_ingest_is_unchanged_without_a_map(
+    monkeypatch: pytest.MonkeyPatch, ingest_calls: list, route: str
+) -> None:
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    r = _ingest(_client("pytest-tenant"), route, HELP_INDEX)
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+def test_ingest_fails_closed_on_a_broken_map(
+    monkeypatch: pytest.MonkeyPatch, ingest_calls: list, route: str
+) -> None:
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not json")
+    r = _ingest(_client(TENANT), route, HELP_INDEX)
+    assert r.status_code == 503, r.text
+    assert ingest_calls == []
+
+
+@pytest.mark.parametrize("route", INGEST_ROUTES)
+@pytest.mark.parametrize(
+    "name",
+    [*BAD_NAMES, f"{HOUSE_INDEX},{HELP_INDEX}", f"{HELP_INDEX},{HELP_INDEX}"],
+    ids=[*BAD_IDS, "comma-list-house-then-tenant", "comma-list-repeated"],
+)
+def test_ingest_takes_exactly_one_plain_index_name(
+    scoped_map: None, ingest_calls: list, route: str, name: str
+) -> None:
+    """A write names one index: a malformed name or a comma list is a 422."""
+    r = _ingest(_client(TENANT), route, name)
+    assert r.status_code == 422, r.text
+    assert ingest_calls == []
+
+
 # --- the MCP bearer gets the middleware's revocation and scope checks -------------------
 
 

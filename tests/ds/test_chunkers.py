@@ -377,13 +377,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 136 for DIG-3585 (tenant-scoped index section,
     index-name allowlist paragraph and module-map row in ARCHITECTURE.md) —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 138 for DIG-3585 (the ingest rows and the Azure
+    single-index limitation in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 136
+    assert len(chunks) == 138
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -398,9 +401,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5eaa545f6fd87479",
         "c1b340d871d4f198",
         "35bae5b21ed48559",
-        "6bb725ee96409565",
-        "2496b0331a6908ca",
-        "d79c9e4802601817",
+        "4ff1d7b5bf338818",
+        "5ed382a8f54b00aa",
+        "835637cf4772f008",
         "8135b004b65f5e71",
         "0dc944d1f2f84fbf",
         "601b25fe802c685b",
@@ -460,10 +463,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c8935c81b3be7fd1",
         "e0faa8234a76d0e4",
         "c0a6b8a2691f5fb8",
-        "cd14006358b03c8e",
-        "0c89c5242abcd0a4",
-        "dcfe87a5614470e3",
-        "8b39231cdac6030d",
+        "d32a1d05b498b935",
+        "0bf590b652b0098e",
+        "919b1f9a58b35212",
+        "351350091b79142d",
+        "81a3302403f3eb85",
+        "0a50c275d11604aa",
         "ef6a144c2e1e109e",
         "f27dfd53b2cda272",
         "d90f1ea6b18577c2",

@@ -72,7 +72,11 @@ from digisearch.orchestrator_tools import (
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
 from digisearch.search._stub import query_index, unseeded_indexes
-from digisearch.tenant_index_scope import enforce_request_indexes, parse_index_list
+from digisearch.tenant_index_scope import (
+    enforce_request_indexes,
+    parse_index_list,
+    validate_index_name,
+)
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -394,6 +398,18 @@ def _checked_index_field(value: object) -> object:
     return value
 
 
+def _checked_single_index_field(value: object) -> object:
+    """Write-model guard: an ingest writes to exactly one plain index name.
+
+    A comma list means "search these" on the read routes; on a write it would
+    name one index called ``a,b``, so it is refused here (422) along with
+    every malformed name (:func:`digisearch.tenant_index_scope.validate_index_name`).
+    """
+    if isinstance(value, str):
+        validate_index_name(value)
+    return value
+
+
 class QueryRequest(BaseModel):
     """Request body for POST /query."""
 
@@ -515,7 +531,7 @@ class IngestRequest(BaseModel):
     @field_validator("index_name")
     @classmethod
     def _check_index_name(cls, value: object) -> object:
-        return _checked_index_field(value)
+        return _checked_single_index_field(value)
 
 
 class IngestResponse(BaseModel):
@@ -1716,12 +1732,16 @@ class IngestUrlRequest(BaseModel):
     @field_validator("index_name")
     @classmethod
     def _check_index_name(cls, value: object) -> object:
-        return _checked_index_field(value)
+        return _checked_single_index_field(value)
 
 
 @app.post("/ingest", response_model=IngestResponse)
-def api_ingest(req: IngestRequest) -> IngestResponse:
+def api_ingest(req: IngestRequest, request: Request) -> IngestResponse:
     """Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`."""
+    # A tenant-scoped index takes writes only from its own verified tenant,
+    # exactly as /query serves reads (DIG-3585): a house or other-tenant
+    # caller cannot write into a tenant's corpus. Checked before any fetch.
+    enforce_request_indexes(request, req.index_name)
     try:
         result = ingest_source(
             req.source,
@@ -1740,8 +1760,10 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
 
 
 @app.post("/ingest/url", response_model=UrlIngestResult)
-def api_ingest_url(req: IngestUrlRequest) -> UrlIngestResult:
+def api_ingest_url(req: IngestUrlRequest, request: Request) -> UrlIngestResult:
     """Ingest a URL via :func:`digisearch.pipeline.url_ingest.ingest_url`."""
+    # Same tenant-index check as /ingest, before the URL is fetched.
+    enforce_request_indexes(request, req.index_name)
     try:
         return ingest_url(req.source_url, index_name=req.index_name, metadata=req.metadata)
     except ImportError as exc:
