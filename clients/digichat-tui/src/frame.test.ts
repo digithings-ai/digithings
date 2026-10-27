@@ -40,12 +40,20 @@ describe("recorded frame geometry", () => {
     expect(cropped.width).toBe("  what is a recorded frame".length);
   });
 
-  test("the crop keeps the banner when the header rows are kept", () => {
+  test("the crop keeps the banner rows when headerRows is not given", () => {
     const cropped = cropChatPane(captured(["  chat thread"]), {
       railCols: railColumns(DEFAULT_FRAME_WIDTH),
     });
-    expect(cropped.frame).toContain("wordmark row 0");
-    expect(cropped.frame).toContain("chat thread");
+    // The banner is not dropped: a row survives for each of the WORDMARK_ROWS
+    // above the thread. It is full width and has no rail, so the rail crop
+    // leaves only its right-hand part — the wordmark itself sits in the
+    // columns the crop removes. This assertion used to check `wordmark row 0`
+    // survived, which only held because a row shorter than the rail was
+    // emitted whole: the leak this suite now refuses.
+    const rows = cropped.frame.split("\n");
+    expect(rows).toHaveLength(WORDMARK_ROWS + 1);
+    expect(rows[WORDMARK_ROWS]).toBe("  chat thread");
+    expect(cropped.frame).not.toContain("wordmark");
   });
 
   test("the crop strips the trailing spaces of a row", () => {
@@ -54,6 +62,26 @@ describe("recorded frame geometry", () => {
       headerRows: WORDMARK_ROWS,
     });
     expect(cropped.frame).toBe("  padded");
+  });
+
+  test("a row shorter than the rail cannot leak a session title", () => {
+    // The real client pads every row to the terminal width, but the crop must
+    // not rely on that. An unpadded rail row carrying a session title is
+    // shorter than `railCols`; it must still be cut away, not emitted whole.
+    const railCols = railColumns(DEFAULT_FRAME_WIDTH);
+    const unpadded = [
+      ...header(),
+      `${" ".repeat(railCols)}  chat thread`,
+      "  book",
+      "  desk",
+    ].join("\n");
+    const cropped = cropChatPane(unpadded, {
+      railCols,
+      headerRows: WORDMARK_ROWS,
+    });
+    expect(cropped.frame).toBe("  chat thread");
+    expect(cropped.frame).not.toContain("book");
+    expect(cropped.frame).not.toContain("desk");
   });
 
   test("the crop refuses a capture with no pane in it", () => {
