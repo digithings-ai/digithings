@@ -2,6 +2,8 @@
 
 /** CLI / session / terminal sheets — only for persistence:server ChatShell. */
 import "@/styles/chat-shell-cli.css";
+import { BrandWordmark } from "@digithings/ui";
+import { p } from "@/lib/base-path";
 
 /**
  * ChatShell — authenticated chat chrome for digichat.
@@ -468,7 +470,7 @@ export function ChatShell({
       <aside className="app-sidebar" aria-label="App sidebar" data-expanded={!collapsed}>
         <div className="app-sidebar-body">
           <div>
-            <div>DT</div>
+            <BrandWordmark className="h-4 w-auto" mask={p("/wordmark-mask.svg")} />
             <div>
               <div>digichat</div>
               <div>v0.1 · digithings</div>

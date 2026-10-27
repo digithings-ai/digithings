@@ -1,12 +1,11 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { ContactMailto, CopyCommand, CtaLink, Reveal, SocialRow } from "@digithings/ui";
+import { BrandWordmark, ContactMailto, CopyCommand, CtaLink, Reveal, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ContactForm } from "@/components/landing/ContactForm";
 import { PixelField } from "@/components/landing/PixelField";
-import { PixelWordmark } from "@digithings/ui/pixel-wordmark";
 import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
@@ -50,7 +49,7 @@ function Hero() {
     <section className="pixel-hero border-b border-hair">
       <PixelField />
       <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[6rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[7rem]">
-        <PixelWordmark />
+        <BrandWordmark className="pixel-word pixel-word-hero" />
         <h1
           className="hero-rise m-0 mt-[2rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
           style={rise(0)}

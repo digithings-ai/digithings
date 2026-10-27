@@ -2,9 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { preparedBanner } from "@digithings/hero-banner";
-import { DIGITHINGS } from "@digithings/hero-banner/definitions";
-
 /**
  * DIG-2304: the footer wordmark must not be cropped by its own band.
  *
@@ -29,18 +26,18 @@ import { DIGITHINGS } from "@digithings/hero-banner/definitions";
  */
 
 const CSS_PATH = join(__dirname, "globals.css");
-const MARK_PATH = join(__dirname, "../../../packages/ui/src/components/landing/PixelWordmark.tsx"); // moved DIG-3695
+const MARK_PATH = join(__dirname, "../../../packages/ui/src/components/brand/BrandWordmark.tsx");
+const MARK_CSS = join(__dirname, "../../../packages/ui/src/styles/brand-wordmark.css");
 
 const css = readFileSync(CSS_PATH, "utf8");
 const markSrc = readFileSync(MARK_PATH, "utf8");
+const markCss = readFileSync(MARK_CSS, "utf8");
 
 /** --page-pad, from packages/design/tokens.css: --page-pad: var(--gutter). */
 const PAGE_PAD = "clamp(1.25rem, 4vw, 3.25rem)";
 
-/** The grid the mark actually renders with, read off the shared definition
- *  the component draws (DIG-2702). The band model assumes this aspect. */
-const { layout } = preparedBanner(DIGITHINGS);
-const ASPECT = layout.width / layout.height;
+/** The studio mask is 88×10. The band model assumes this aspect. */
+const ASPECT = 88 / 10;
 
 const VIEWPORTS = [1280, 1440, 1600, 1728, 1920];
 
@@ -254,15 +251,13 @@ const BROKEN = `
 describe("footer wordmark band (DIG-2304)", () => {
   it("keeps the aspect the model assumes", () => {
     // 88x10 -> 8.8, the figure the globals.css comment cites.
-    expect(`${layout.width}x${layout.height}`).toBe("88x10");
+    expect(markCss).toContain("aspect-ratio: 88 / 10");
     expect(ASPECT).toBe(8.8);
   });
 
-  it("renders the shared DIGITHINGS definition, not a local copy", () => {
-    // The routing pin: the mark must draw the definition above, so the
-    // aspect above is the aspect on screen.
-    expect(markSrc).toContain("@digithings/hero-banner/definitions");
-    expect(markSrc).toContain("DIGITHINGS");
+  it("renders the shared studio mask, not a local copy", () => {
+    expect(markSrc).toContain("wordmark-mask.svg");
+    expect(markSrc).toContain('label = "digithings"');
   });
 
   it("gives the band no fixed height, so a box cannot crop the mark", () => {

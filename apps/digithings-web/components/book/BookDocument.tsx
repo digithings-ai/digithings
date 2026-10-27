@@ -1,7 +1,7 @@
+import { BrandWordmark } from "@digithings/ui";
 import BookToc from "@/components/book/BookToc";
 import PagedBoot from "@/components/book/PagedBoot";
 import { briefChapters } from "@/lib/book/brief";
-import { WORDMARK } from "@/lib/book/wordmark";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
 
 /**
@@ -64,11 +64,9 @@ export default async function BookDocument() {
         </div>
 
         <section className="book-cover">
-          <div
-            className="book-cover__mark"
-            aria-hidden
-            dangerouslySetInnerHTML={{ __html: WORDMARK }}
-          />
+          <div className="book-cover__mark text-ink" aria-hidden>
+            <BrandWordmark />
+          </div>
           <div className="book-cover__foot">
             <h1 className="book-cover__title">the digithings book</h1>
             <div className="book-cover__title">Chris Stefan · digithings.ai/book</div>

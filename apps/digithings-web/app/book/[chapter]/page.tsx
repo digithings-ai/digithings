@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import BookPage from "@/components/book/BookPage";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
 import { readingOrder } from "@/lib/book/toc";
+import { SHARE_IMAGE, SHARE_SQUARE } from "@/lib/share";
 
 /** Every chapter opener is a static page: `output: "export"` has no server. */
 export function generateStaticParams(): Array<{ chapter: string }> {
@@ -21,8 +22,8 @@ export async function generateMetadata({ params }: { params: Promise<{ chapter: 
     title,
     description: c.summary,
     alternates: { canonical },
-    openGraph: { title, description: c.summary, url: canonical, type: "article" },
-    twitter: { card: "summary", title, description: c.summary },
+    openGraph: { title, description: c.summary, url: canonical, type: "article", images: [SHARE_IMAGE] },
+    twitter: { card: "summary", title, description: c.summary, images: [SHARE_SQUARE.url] },
   };
 }
 

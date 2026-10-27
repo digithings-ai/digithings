@@ -400,13 +400,16 @@ Three components, each matching the weight of the surface it imitates:
 | export | form | weight | use |
 |--------|------|--------|-----|
 | `TerminalMark` | outlined SVG paths + a `<rect>` cursor | 400 | the mark. `variant="full"` is `digi` + cursor; `variant="compact"` is the `d` reduction |
-| `TerminalWordmark` | text, token-backed utilities | 400 | the default wordmark |
+| `TerminalWordmark` | text, token-backed utilities | 400 | mono product names other than the digithings lockup |
+| `BrandWordmark` | CSS mask of the studio 4×4 wordmark | — | the digithings wordmark on pages, nav, and the book |
 | `HairlineWordmark` | outlined SVG, stroked | 500 | display only, replicating the footer colophon |
 
 Three constraints that fail silently if broken:
 
-- **The mark and hairline are outlined paths, not text.** The mark because the
-  same artwork is the favicon source and must not depend on a loaded font; the
+- **The mark and hairline are outlined paths, not text.** The mark must not
+  depend on a loaded font. Favicons are not this mark: `packages/brand/build-favicon.py`
+  bakes the brand-studio logo (`studio/logo-mark.svg`). The digithings wordmark
+  on pages is `BrandWordmark`, masking `studio/wordmark-mask.svg`. The
   hairline because its overlapping contours are the design. `TerminalWordmark`
   is deliberately text — it is plain mono at tracking 0 with nothing to preserve,
   so outlining would ship ~9 KB of path data for a glyph-identical result.
@@ -434,19 +437,22 @@ that Next.js file convention overrides `metadata.icons` and would drop the
 queries silently.
 
 Each product app also owns explicit 32px fallback, 180px Apple touch, and
-192/512px web-app PNGs plus a maskable 512px variant. digithings and digiquant
-use the compact terminal mark; the digiquant dashboard uses the canonical four-stroke mark.
-Tab and Apple metadata publish light/dark pairs with media queries. Web App
-Manifest icons use one contrast-safe default because installed icons are cached
-by the operating system and the manifest standard has no live colour-scheme
-selector; changing those assets requires removing and reinstalling the shortcut.
+192/512px web-app PNGs plus a maskable 512px variant. digithings and digichat
+bake `studio/logo-mark.svg`. digiquant bakes the same logo with its up/down
+bands. The dashboard keeps its own icons. A small head script
+(`faviconThemeScript`) points the tab icon at the light or dark file from
+`data-theme`. Web App Manifest icons use one contrast-safe default because
+installed icons are cached by the operating system and the manifest standard
+has no live colour-scheme selector; changing those assets requires removing
+and reinstalling the shortcut.
 
 Off-repo uploads (GitHub, X, LinkedIn, slides, mail) are generated under
-`packages/brand/` — avatars from the favicon tile, OG cards and social
-headers from outlined Geist Mono + `HEADLINES` in `build-og.py`. Headers are a
-**compact stack**, not a cropped 1200×630 card. `build-header.py --check` keeps
-the served copies on the design-reference `/brand` page in sync (not on
-digithings.ai). See `packages/brand/README.md`.
+`packages/brand/`. Avatars come from `studio/logo-mark.svg`. Link-preview
+cards come from the studio field plus the wordmark (digiquant: the tinted
+logo). Social headers are still outlined Geist Mono + `HEADLINES` in
+`build-og.py` — a **compact stack**, not a cropped 1200×630 card.
+`build-header.py --check` keeps the served `og.png` copies in sync. See
+`packages/brand/README.md`.
 
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the
