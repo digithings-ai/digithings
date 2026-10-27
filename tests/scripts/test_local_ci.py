@@ -4010,17 +4010,59 @@ class StepBudgetTest(unittest.TestCase):
         for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
             self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
                                f"{heavy} legitimately needs more than the default")
-        for light in ("scripts/check_doc_links.py", "actionlint"):
+        for light in ("actionlint", "pr-title"):
             self.assertNotIn(light, _mod.STEP_BUDGETS,
                              f"{light} is measured in seconds; it takes the default")
 
+    def test_a_tree_scanner_budget_is_the_scan_timeout(self):
+        """The scanners are not in STEP_BUDGETS, so before DIG-5724 they took
+        the 180 s default and a clean tree false-red at 182-183 s (PR #6525)."""
+        spec = _mod.scan_spec("scripts/scan_customer_pii.py",
+                              "python3 scripts/scan_customer_pii.py")
+        self.assertEqual(spec[2], _mod.SCAN_TIMEOUT,
+                         "SCAN_TIMEOUT is the scanner's caller ceiling")
+        self.assertEqual(spec[6], _mod.SCAN_TIMEOUT,
+                         "and its step budget, not the 180 s STEP_BUDGET default")
+        self.assertGreaterEqual(_mod.SCAN_TIMEOUT, 3 * 183,
+                                "the budget keeps a 3x margin over the worst "
+                                "measured clean-tree runtime (183 s, PR #6525)")
+
+    def test_the_scan_timeout_env_raises_a_scanners_budget(self):
+        """LOCAL_CI_SCAN_TIMEOUT must reach the budget, not only the ceiling."""
+        code = (
+            "import importlib.util, sys;"
+            f"sys.path.insert(0, {_SCRIPTS!r});"
+            "s=importlib.util.spec_from_file_location('local_ci_scan_env', "
+            f"{os.path.join(_SCRIPTS, 'local_ci.py')!r});"
+            "m=importlib.util.module_from_spec(s);sys.modules['local_ci_scan_env']=m;"
+            "s.loader.exec_module(m);"
+            "print(m.SCAN_TIMEOUT, m.scan_spec('scripts/check_doc_links.py', 'true')[6])"
+        )
+        env = dict(os.environ, LOCAL_CI_SCAN_TIMEOUT="900")
+        env.pop("LOCAL_CI_STEP_BUDGET", None)
+        got = subprocess.check_output([sys.executable, "-c", code], env=env,
+                                      text=True, cwd=_SCRIPTS).strip()
+        self.assertEqual(got, "900 900",
+                         "the env knob must raise the ceiling and the budget together")
+
+    def test_both_scanner_waves_take_the_scan_budget(self):
+        """A wave that calls gate_spec directly silently loses the scan budget."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertGreaterEqual(src.count("scan_spec("), 2,
+                                "the pre-uv-sync and post-uv-sync scanner waves must both "
+                                "use scan_spec (DIG-5724)")
+
     def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
-        self.assertEqual(_mod.step_budget("scripts/check_doc_links.py", 600), 180)
+        self.assertEqual(_mod.step_budget("actionlint", 300), 180,
+                         "a non-scanner step still takes the 180 s default")
         self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
         self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
         self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
                          "a tighter caller ceiling still wins")
         self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+        self.assertEqual(_mod.gate_spec("anything", "true", 1800, budget=7)[6], 7,
+                         "gate_spec must pass an explicit budget through")
 
     def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
         """A step that bypasses run_step has no budget, so the gate cannot
