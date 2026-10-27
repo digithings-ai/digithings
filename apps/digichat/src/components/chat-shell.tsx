@@ -3,7 +3,6 @@
 /** CLI / session / terminal sheets — only for persistence:server ChatShell. */
 import "@/styles/chat-shell-cli.css";
 import { BrandWordmark } from "@digithings/ui";
-import { p } from "@/lib/base-path";
 
 /**
  * ChatShell — authenticated chat chrome for digichat.
