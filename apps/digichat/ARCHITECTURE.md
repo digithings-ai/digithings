@@ -1636,7 +1636,10 @@ entirely so values cannot leak.
 **Site theme and rails.** `/chat` (product, `chrome.mode: app`) and `/chat/occ`
 (top-level embed document) use `packages/design/tokens.css` — the same custom
 properties as digithings.ai — and the shared `LayoutLines` rails (`--frame-w`,
-`--page-pad`, `--hair-2`). `dt-theme` and `dt-palette` are painted by
+`--page-pad`, `--hair-2`, column width inlined so a host that does not scan the
+kit utility still insets them). The thread portal mirror in `chat-aui.css`
+does not override `--bg` / `--ink` / `--hair` on these documents. `dt-theme` and
+`dt-palette` are painted by
 `themeInitScript` before first paint. A top-level embed with no `?theme=` does
 not pin, so that paint stays (`data-site-theme`). An iframe, or a URL that
 names `?theme=`, still pins. `?palette=` is adopted only when the id is in the

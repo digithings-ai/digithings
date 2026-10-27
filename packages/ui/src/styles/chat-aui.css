@@ -1008,15 +1008,17 @@
    .digichat-thread / .digichat-launcher subtree that declares the palette
    vars. Mirror the palette on <html> so --bg / --ink / --hair resolve in
    portals and those layers get an opaque surface instead of a transparent
-   one (the tooltip-content background comes from chatbot.css). */
-html:has([data-thread-skin="digichat"]) {
+   one (the tooltip-content background comes from chatbot.css).
+   Site chat (/chat app, top-level /chat/occ) is excluded: it keeps
+   packages/design/tokens.css, and a portal there should use that same source. */
+html:has([data-thread-skin="digichat"]):not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
   --bg: #0a0e0c;
   --ink: #eceef0;
   --hair: rgba(255, 255, 255, 0.09);
 }
 
-html[data-theme="light"]:has([data-thread-skin="digichat"]),
-html.light:has([data-thread-skin="digichat"]) {
+html[data-theme="light"]:has([data-thread-skin="digichat"]):not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])),
+html.light:has([data-thread-skin="digichat"]):not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
   --bg: #f4f3ee;
   --ink: #1a1c1e;
   --hair: rgba(12, 12, 10, 0.12);
