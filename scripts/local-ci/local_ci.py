@@ -1867,6 +1867,17 @@ def run_checks(pr, out, summary=None):
             "refusing to run gates"
         )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
+    # The R0 allowance gate compares the PR's baseline with the base branch tip.
+    # prepare_wt fetched origin/<base>; a caller that knows the exact base commit
+    # (the post-merge driver) may pass it as baseCommit. Never guess a ref: an
+    # unresolvable one fails the gate closed, so a SHA is used as given.
+    base_commit = str(pr.get("baseCommit") or "")
+    if re.fullmatch(r"[0-9a-f]{40}", base_commit):
+        r0_base = base_commit
+    elif re.fullmatch(r"[0-9a-f]{40}", base or ""):
+        r0_base = base
+    else:
+        r0_base = "origin/" + base
     fails = []
     def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=(), budget=None):
         # The missing-directory refusal comes first: a step whose cwd is not
@@ -1921,7 +1932,13 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py", "scripts/split/manifest.py --check"]:
+              "scripts/check_r0_no_client_literals.py",
+              # DIG-5762: the R0 allowance may only shrink, and this is the PR
+              # lane that must refuse the growth. The gate lived only in the
+              # host runner for months, so #6500 grew the baseline and merged
+              # green (totals 1997 -> 2030) until the post-merge run caught it.
+              "scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base,
+              "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
             scan_specs.append(scan_spec(s.split()[0], f"python3 {s}", SCAN_ENV, (124, 3)))
     scan_specs.append(gate_spec("actionlint", ["actionlint"], 300, None, None, ()))

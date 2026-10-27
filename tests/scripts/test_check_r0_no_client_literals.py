@@ -58,6 +58,12 @@ def test_r0_classification() -> None:
     assert not is_r0("apps/dashboard-api/src/index.ts")
     assert not is_r0("apps/digithings-stack-cloudflare/src/index.ts")
     assert not is_r0("apps/digichat/config/examples/occ-embed.yaml")
+    # One-config slice 1 (#6500): the tenant deployment document and the test
+    # that pins its live row are client material and move to R6, not R0.
+    assert not is_r0("apps/digichat/config/occ.yaml")
+    assert not is_r0(
+        "apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts"
+    )
     assert not is_r0("docs/superpowers/plans/2026-09-10-cloudflare-v2-phase0-stranded-work.md")
     # Unmapped paths default to R0 (public by default) until mapped.
     assert is_r0("apps/brand-new-surface/index.ts")
