@@ -147,8 +147,10 @@ def _nonblank_tenant_slug(value: str) -> str:
     """Strip and reject blank tenants.
 
     ``Field(min_length=1)`` accepts whitespace-only strings; after ``.strip()`` those
-    become ``""`` and mint JWTs that fail open into the unsigned ``X-Digi-Tenant``
-    header fallback (#2303). Match the CLI guard in ``digikey.cli``.
+    become ``""`` and mint JWTs with no tenant claim. Such a token now gets no
+    tenant at all (the middleware no longer reads ``X-Digi-Tenant``; #2303,
+    DIG-3585), so it would only fail later and less clearly. Match the CLI guard
+    in ``digikey.cli``.
     """
     slug = value.strip()
     if not slug:
@@ -289,8 +291,8 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
         try:
             tenant_slug = _nonblank_tenant_slug(body.tenant_slug)
         except ValueError as exc:
-            # Whitespace-only passes the truthy check above but would mint an empty
-            # claim and unlock the unsigned tenant-header fallback (#2303).
+            # Whitespace-only passes the truthy check above but would mint a token
+            # with no tenant claim (#2303).
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         scopes = list(DEFAULT_BFF_SESSION_SCOPES)
         if body.requested_scopes:
