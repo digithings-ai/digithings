@@ -618,6 +618,33 @@ describe("embed tenant round-trip", () => {
     expect(back.pageContext).toBe("silent");
   });
 
+  it("carries privateMode through the fold in both directions, and never invents it", () => {
+    // The client gate is `privateMode === true`. A tenant that never opted in
+    // must project `undefined`, not `false`, or the client would be told about
+    // an opt-in the tenant never made; a tenant that did must survive the fold
+    // both ways, which is the bug that made the flag dead at the client.
+    const on = embedTenantToDeployment({
+      slug: "occ",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "light",
+      privateMode: true,
+    });
+    expect(on.features.privateMode).toBe(true);
+    expect(deploymentToEmbedTenant(on).privateMode).toBe(true);
+
+    const off = embedTenantToDeployment({
+      slug: "plain",
+      token: "t",
+      backend: { type: "digigraph" },
+      gateMode: "ungated",
+      theme: "dark",
+    });
+    expect(off.features.privateMode).toBe(false);
+    expect(deploymentToEmbedTenant(off).privateMode).toBeUndefined();
+  });
+
   it("defaults pageContext to visible when the tenant omits it", () => {
     const dep = embedTenantToDeployment({
       slug: "plain",
