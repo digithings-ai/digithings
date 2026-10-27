@@ -314,8 +314,16 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    // Computed before the invite gate because /chat/occ is served by the same
+    // container as /chat: the gate validates, then proxies there. The id is
+    // derived from the deploy's rev, never hand-pinned.
+    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
     if (isOccShellPath(url.pathname)) {
-      return occGate(request, workerEnv.OCC_INVITE_KEY);
+      // One gate, one secret, one path: the invite is checked here and the
+      // request goes to the container's own embed route. Nothing is fetched
+      // from this Worker's own URL, and Pages is not in the chain.
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return occGate(request, workerEnv.OCC_INVITE_KEY, (req) => container.fetch(req));
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
@@ -323,9 +331,7 @@ export default {
     if (embedGate) return embedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
-    // it destroys is the same derived id the proxy below addresses, computed
-    // once here from the deploy's rev.
-    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
+    // it destroys is the same derived id the proxy below addresses.
     if (url.pathname === DIGICHAT_ADMIN_RESET_PATH) {
       return digichatContainerReset(
         request,

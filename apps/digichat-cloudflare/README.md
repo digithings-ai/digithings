@@ -11,8 +11,8 @@ Requires **Workers Paid** (Containers are not on Free).
 | Public path | Owner | Tenant |
 |---|---|---|
 | `digithings.ai/chat` | Worker → Container — **the digichat app**, built with basePath `/chat` (DIG-5121) | — |
-| `digithings.ai/chat/occ` | Pages shell → iframe `/embed?host=occ.digithings.ai` | occ |
-| `digithings.ai/chat/occ?token=<key>` | same, plus the invite key forwarded to digichat (DIG-1210) | occ |
+| `digithings.ai/chat/occ` | Worker `occGate` → Container, served by the app's `/chat/embed` route (invite-gated at the edge) | occ |
+| `digithings.ai/chat/occ?token=<key>` | same; the gate sets the session cookie and moves the key to `x-embed-token` (DIG-1210) | occ |
 | `digithings.ai/embed*` | Worker → Container (ADR 0018 compatibility route) | selected by `host` |
 | `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container (ADR 0018 compatibility routes) | — |
 | `digithings.ai/_dtchat*` | Worker → Container (assetPrefix) | — |
@@ -36,13 +36,18 @@ Future chats = a new path in the app + a row in `DIGICHAT_EMBED_TENANTS`
 through `p()` (`apps/digichat/src/lib/base-path.ts`) so it carries the
 prefix.
 
+`/chat/occ` is an invite-gated path on that same app (2026-10-27): the Worker
+checks the invite, sets the `occ_invite` cookie, rewrites the request to
+`/chat/embed?host=occ.digithings.ai`, moves the key to `x-embed-token` and
+drops `?token=`, then proxies to the Container. There is no Pages shell and no
+iframe in the chain, and `OCC_INVITE_KEY` exists only as a Worker secret.
+
 ```text
 Browser
   → digithings.ai/chat           (Worker → one digichat Container, basePath /chat)
-  → digithings.ai/chat/occ       (Pages shell)
-       → iframe digithings.ai/embed?host=…   (Worker → one digichat Container)
-            → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
-            → DIGIKEY_URL=https://key.digithings.ai
+  → digithings.ai/chat/occ       (Worker occGate → same Container, /chat/embed)
+       → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+       → DIGIKEY_URL=https://key.digithings.ai
 ```
 
 ## What is NOT in the digichat Container

@@ -94,17 +94,15 @@ browser → digithings-digichat Worker (/chat*)
   → isOccShellPath → occGate
   → valid ?token= or occ_invite cookie?  (OCC_INVITE_KEY, constant-time)
       no  → fetch /__not-found__ → the site's own 404
-      yes → set cookie, bare fetch() → Pages → /chat/occ/
-  → pages function chat/occ/[[path]].ts (second, identical gate)
-  → ChatPageShell(embedHost = "the gated tenant host")
-  → <iframe src="https://digithings.ai/embed?host=the gated tenant host&layout=page&…">
-  → /embed* route → the SAME digichat Worker → the SAME container
+      yes → set cookie, rewrite to /chat/embed?host=the gated tenant host,
+            move the key to x-embed-token, drop ?token=
+  → the SAME digichat Worker's container proxy → the SAME container
+  → the app's embed route renders the chat directly (no Pages shell, no iframe)
 ```
 
-Two gates, one behaviour: `apps/digichat-cloudflare/src/occ-gate.ts:13-102` at the
-edge and `apps/digithings-web/functions/chat/occ/[[path]].ts:50-61` on Pages. The
-token is `OCC_INVITE_KEY`; `/chat/occ` itself is **never** proxied to the
-container — the container only ever sees the `/embed` request.
+One gate, one behaviour: `apps/digichat-cloudflare/src/occ-gate.ts` is the only
+place the invite is checked. The token is `OCC_INVITE_KEY`; the Pages shell and
+its twin gate were removed in the 2026-10-27 consolidation.
 
 ### 3. MCP: `search.digithings.ai/_stack/mcp/digisearch/mcp`
 
@@ -147,11 +145,11 @@ dialled. Auth modes are in `src/mcp-edge-auth.ts:507-539`, the host rewrite in
 | MCP servers | digisearch, digivault | helpdesk (static key), digisearch, digivault |
 | tool visibility | house catalog | OCC catalog + skills pack `occ` |
 
-The separation is made in exactly two places: the shell page hardcodes
-`embedHost={OCC_CHAT_EMBED_HOST}` (`apps/digithings-web/app/chat/occ/page.tsx:28-35`),
-and the `the gated tenant host` row exists only in KV (`embed-tenants`) and in the
-`config-yaml` document. There is no second Worker, no second container, no second
-KV.
+The separation is made in exactly two places: the Worker's `occGate` rewrites
+`/chat/occ` onto the app's `/chat/embed` route with `host=occ.digithings.ai`
+(`apps/digichat-cloudflare/src/occ-gate.ts`), and the `occ.digithings.ai` row exists
+only in KV (`embed-tenants`) and in the `config-yaml` document. There is no second
+Worker, no second container, no second KV, and no second shell.
 
 That is the design's strength and its risk: one deployment serves every tenant,
 so a defect in tenant resolution is not contained to one surface — which is what

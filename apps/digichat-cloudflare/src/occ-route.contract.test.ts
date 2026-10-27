@@ -29,8 +29,12 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
   it("the post-deploy smoke refuses a chat shell on a non-404", () => {
     const script = readFileSync(join(repoRoot, "scripts/smoke_occ_invite_gate.sh"), "utf8");
     expect(script).toMatch(/404/);
-    expect(script).toMatch(/ChatPageShell/);
-    expect(script).toMatch(/dc-chat-main/);
+    // The marker the app itself renders (dc-embed-shell), not the deleted
+    // Pages shell's wrapper: the smoke must look for what is really served.
+    expect(script).toMatch(/dc-embed-shell/);
+    // Both halves of the gate: the rejected request and the accepted one.
+    expect(script).toMatch(/OCC_INVITE_KEY/);
+    expect(script).toMatch(/iframe/);
     expect(script).toMatch(/\/chat\/occ\//);
   });
 });
