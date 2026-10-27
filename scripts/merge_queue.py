@@ -87,6 +87,18 @@ STALE_MERGE_STATES: frozenset[str] = frozenset({"BLOCKED", "BEHIND", "DIRTY", "U
 # it is left out of the audit comment's check list.
 IGNORED_STATUS_CONTEXTS: frozenset[str] = frozenset({"qa/gate"})
 
+# The commit status the queue posts on a PR head, so GitHub can require it. Without
+# it, GitHub accepts any write-access merge on `develop` the moment `local-ci` is
+# green, and the queue's review gates are advisory: on 2026-10-27 three PRs merged
+# by hand over a standing changes-requested review and a red `review-applied`.
+# Like `local-ci`, anyone with write access could post this by hand; it stops the
+# accidental bypass, not a deliberate one. It is posted only for repositories named
+# in `queue_status_repos`, and the queue never reads its own status as a check —
+# it is in `ignored_checks`, so a stale `failure` cannot refuse the PR it describes.
+QUEUE_STATUS_CONTEXT = "merge-queue"
+# GitHub caps a commit status description at 140 characters and rejects longer ones.
+QUEUE_STATUS_DESCRIPTION_MAX = 140
+
 # --- CI provenance (DIG-4794) -------------------------------------------------
 #
 # `local-ci` is a commit status, and GitHub's own documentation says what that is
@@ -443,6 +455,10 @@ class Policy:
     status_context_checks: frozenset[str] = frozenset()
     ci_provenance: CiProvenance = field(default_factory=CiProvenance)
     review_independence: ReviewIndependence = field(default_factory=ReviewIndependence)
+    #: Repositories whose PR heads carry the queue's own `merge-queue` status.
+    queue_status_repos: frozenset[str] = frozenset()
+    #: Resolved by `for_repo`: True when this repository requires the status.
+    posts_queue_status: bool = False
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -478,7 +494,11 @@ class Policy:
         and `_audit_body` both read `policy.required_checks`, so the check the merge
         depended on and the check the audit comment names cannot come from two places.
         """
-        return replace(self, required_checks=self.required_for(repo))
+        return replace(
+            self,
+            required_checks=self.required_for(repo),
+            posts_queue_status=repo in self.queue_status_repos,
+        )
 
 
 @dataclass
@@ -506,6 +526,10 @@ class Verdict:
     #: every other tick (DIG-5573, 42 handbacks on #6418 in 29 h). Such a PR is not
     #: eligible — an unread gate is not a cleared gate — it is skipped this tick.
     deferred: str = ""
+    #: The state of the queue's own `merge-queue` status on this head as GitHub
+    #: reported it ("" when none). Read so a tick does not re-post the same state:
+    #: GitHub keeps every status it is sent, up to 1000 per SHA and context.
+    queue_status: str = ""
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -549,7 +573,22 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         },
         ci_provenance=_load_ci_provenance(raw.get("ci_provenance"), path),
         review_independence=_load_review_independence(raw, path),
+        queue_status_repos=_load_queue_status_repos(raw, path),
     )
+
+
+def _load_queue_status_repos(raw: Mapping[str, Any], path: Path) -> frozenset[str]:
+    """Read `queue_status_repos`: where the queue posts its `merge-queue` status.
+
+    A bare string is refused rather than iterated: `"digithings-ai/digithings"`
+    read as a list is twenty-four one-letter repositories and posts nowhere.
+    """
+    value = raw.get("queue_status_repos")
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise QueueError(f"{path}: queue_status_repos must be a list of owner/name strings")
+    return frozenset(value)
 
 
 def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenance:
@@ -4878,7 +4917,19 @@ def evaluate(
     # The local queue has to catch it itself.
     state = str(pr.get("mergeStateStatus") or "")
     stale_reason = f"mergeStateStatus={state} (base moved since the checks ran)"
-    if state in STALE_MERGE_STATES:
+    queue_status = _queue_status_state(pr)
+    # Once `develop` requires `merge-queue`, GitHub reports every PR the queue has not
+    # yet passed as BLOCKED — the status is missing because the queue has not posted
+    # it, and the queue would never post it because the PR reads BLOCKED. Break that
+    # loop only where it can arise: in a repository that requires the status, while
+    # the status is not yet green. Every other cause of BLOCKED on `develop` has its
+    # own gate below (a red required check, a changes-requested review, an open
+    # thread), and a cause none of them models makes `gh pr merge` refuse, which
+    # fails the tick loudly rather than landing anything.
+    blocked_by_own_status = (
+        state == "BLOCKED" and policy.posts_queue_status and queue_status != "SUCCESS"
+    )
+    if state in STALE_MERGE_STATES and not blocked_by_own_status:
         reasons.append(stale_reason)
 
     reasons.extend(_gate_checks(pr, policy, repo=repo))
@@ -4927,6 +4978,7 @@ def evaluate(
         ),
         stale_base_only=stale_base_only,
         deferred=deferred,
+        queue_status=queue_status,
     )
 
 
@@ -4961,6 +5013,86 @@ def _audit_body(verdict: Verdict, authority: Authority, policy: Policy) -> str:
         "Gate definition and the roster: `docs/MERGE_QUEUE.md`, "
         "`scripts/merge_queue_policy.json`."
     )
+
+
+def _queue_status_state(pr: dict[str, Any]) -> str:
+    """The state of the queue's own status on this head, upper-cased; "" when absent.
+
+    GitHub's rollup carries one row per context — the latest — so the first match is
+    the current state.
+    """
+    for e in pr.get("statusCheckRollup") or []:
+        if isinstance(e, dict) and _check_name(e) == QUEUE_STATUS_CONTEXT:
+            return str(e.get("state") or e.get("conclusion") or "").upper()
+    return ""
+
+
+def _status_description(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= QUEUE_STATUS_DESCRIPTION_MAX:
+        return text
+    return text[: QUEUE_STATUS_DESCRIPTION_MAX - 1] + "…"
+
+
+def post_queue_status(repo: str, sha: str, state: str, description: str) -> bool:
+    """Post the `merge-queue` commit status on one head. Returns False on failure.
+
+    A failed post warns and does not stop the tick. That is safe in both
+    directions: a missing `success` leaves GitHub refusing the merge, which fails
+    the tick loudly in `merge_one`; a missing `failure` leaves the head with no
+    green status to merge on, because statuses are per SHA and the queue only
+    ever posts `success` immediately before merging that exact SHA.
+    """
+    proc = subprocess.run(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repo}/statuses/{sha}",
+            "-f",
+            f"state={state}",
+            "-f",
+            f"context={QUEUE_STATUS_CONTEXT}",
+            "-f",
+            f"description={_status_description(description)}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(
+            f"warning: posting {QUEUE_STATUS_CONTEXT}={state} on {sha[:12]} failed: "
+            f"{proc.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def refusal_status(verdict: Verdict) -> tuple[str, str] | None:
+    """The `merge-queue` state and description for a PR the queue did not merge.
+
+    `failure` names the first gate the PR failed. `pending` covers the cases where
+    nobody has to fix anything: an eligible PR waiting its turn, a branch that is
+    only behind its base, and a fact the queue could not read this tick. Returns
+    None when GitHub already shows this state, so a tick does not re-post it.
+    """
+    if verdict.eligible:
+        state, desc = "pending", "eligible; waiting its turn in the merge queue"
+    elif verdict.stale_base_only:
+        state, desc = "pending", "behind its base; the queue updates it, then re-runs checks"
+    elif verdict.reasons:
+        extra = len(verdict.reasons) - 1
+        more = f" (+{extra} more)" if extra else ""
+        state, desc = "failure", f"refused: {verdict.reasons[0]}{more}"
+    elif verdict.deferred:
+        state, desc = "pending", f"not judged this tick: {verdict.deferred}"
+    else:
+        return None
+    if verdict.queue_status == state.upper():
+        return None
+    return state, desc
 
 
 def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy) -> None:
@@ -5269,6 +5401,15 @@ def main(argv: list[str] | None = None) -> int:
             head = next((v for v in verdicts if v.eligible), None)
             if head is None:
                 break
+            if policy.posts_queue_status:
+                # Posted on the exact SHA `merge_one` pins with --match-head-commit, so
+                # the green status can only ever vouch for the commit the gates read.
+                post_queue_status(
+                    args.repo,
+                    head.head_sha,
+                    "success",
+                    f"passed the merge queue gates; merging as {authority.role}",
+                )
             merge_one(args.repo, head, authority, policy)
             comment_audit(
                 args.repo,
@@ -5296,6 +5437,20 @@ def main(argv: list[str] | None = None) -> int:
                     f"updated #{candidate.number} {candidate.head_ref} onto {args.base} — "
                     "checks re-run against the current base; the next tick re-evaluates it"
                 )
+
+        if policy.posts_queue_status:
+            # Every PR the tick did not merge gets a non-green status on its current
+            # head, so a `success` left on an older head cannot be mistaken for a
+            # verdict on this one, and a hand merge sees the refusal reason. A PR this
+            # tick merged or updated is skipped: the first is closed, the second has a
+            # new head that the next read judges.
+            skip = {v.number for v in merged} | {v.number for v in updated}
+            for v in verdicts:
+                if v.number in skip or not v.head_sha:
+                    continue
+                status = refusal_status(v)
+                if status:
+                    post_queue_status(args.repo, v.head_sha, *status)
 
         if not merged:
             print("nothing merged — no PR passed the queue gates")

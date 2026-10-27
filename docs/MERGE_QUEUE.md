@@ -866,6 +866,43 @@ method, the review basis and the checks that were green. That comment is the ans
 
 Exit 2 and 3 are refusals with a reason. They are not failures to retry.
 
+## The `merge-queue` status: making the queue the merge path on `develop`
+
+GitHub does not know the queue exists. `develop` requires `local-ci` and nothing else,
+so any account with write access can merge a green PR by hand, and the queue's review
+gates — a standing changes-requested verdict, an approve that must name the head — are
+skipped. On 2026-10-27 that is how #6544, #6512 and #6516 landed.
+
+So in `run` mode the queue posts a commit status, context `merge-queue`, on every PR
+head it reads in a repository listed in `queue_status_repos` (today only
+`digithings-ai/digithings`):
+
+| State | When |
+|---|---|
+| `success` | Immediately before `gh pr merge --match-head-commit` on that exact SHA. |
+| `failure` | The PR was refused; the description names the first reason. |
+| `pending` | Eligible but not reached this tick, only behind its base, or a fact the queue could not read this tick. |
+
+Statuses are per SHA, so a push leaves the new head with no `merge-queue` status at all,
+and a `success` can only ever vouch for the commit the gates read. A state GitHub already
+shows is not re-posted (GitHub keeps every status sent, up to 1000 per SHA and context).
+`list` and `--dry-run` post nothing, and a failed post only warns: a lost `success` makes
+GitHub refuse the merge, which fails the tick loudly.
+
+Branch protection on `develop` then requires `merge-queue` beside `local-ci`. Two
+consequences are handled in the queue:
+
+- `merge-queue` is in `ignored_checks`, so the queue never reads its own `failure` from
+  an earlier tick as a red check.
+- Once the status is required, GitHub reports every PR the queue has not yet passed as
+  `mergeStateStatus=BLOCKED`. In a `queue_status_repos` repository, `BLOCKED` is not a
+  refusal while `merge-queue` is not green: every other cause of `BLOCKED` on `develop`
+  has its own gate, and an unmodelled one makes `gh pr merge` refuse.
+
+Like `local-ci`, `merge-queue` is a commit status: anyone with write access could post it
+by hand. It stops the accidental bypass, not a deliberate one. Restricting who can merge
+to one identity is the stronger fix and a separate decision.
+
 ## What this does not do
 
 **It cannot stop a direct push to `develop`.** The queue governs the merge path; it does

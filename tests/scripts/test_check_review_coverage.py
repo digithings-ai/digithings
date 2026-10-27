@@ -2077,3 +2077,25 @@ def test_the_failure_guidance_tells_you_how_to_hatch_a_direct_push() -> None:
     src = SCRIPT.read_text(encoding="utf-8")
     assert "it has no PR at all" in src
     assert "no merged source pull request" in src
+
+
+def test_the_board_seats_bare_review_author_is_a_bot() -> None:
+    """gh 2.102 sends a review author as a bare `{"login": "digiforge-board"}`.
+
+    No `is_bot`, no `[bot]` suffix: read as a person, the seat's APPROVED review
+    cleared coverage on #6516 over a standing changes-requested review
+    (2026-10-27). The login is listed by name so the approval is not counted.
+    """
+    assert crc.is_bot_login({"login": "digiforge-board"})
+    assert crc.is_bot_login("digiforge-board")
+    review = {"author": {"login": "digiforge-board"}, "state": "APPROVED"}
+    state, reviewed, _why = _sink([review])
+    assert state["approvals"] == []
+    assert not reviewed
+
+
+def test_the_board_seat_is_not_exempt_from_commit_review_coverage() -> None:
+    """`BOT_AUTHORS` exempts a commit author from review coverage. The seat authors
+    the squash commit of nearly every PR, so it must never be added there."""
+    assert "digiforge-board" not in crc.BOT_AUTHORS
+    assert "digiforge-board[bot]" not in crc.BOT_AUTHORS

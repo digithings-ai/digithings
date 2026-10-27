@@ -20,11 +20,15 @@ report on some PR shape blocks those PRs forever — the failure mode
 names the checks and is responsible for having seen them report. See that doc
 before adding one.
 
+The one exception is ``RECORDED_REQUIRED_CHECKS``: a branch whose required set
+has been decided and seen to report. ``apply`` with no ``--check`` on such a branch
+writes that set; it is a record, not a guess, and it changes only by a reviewed edit.
+
 Usage::
 
     python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
     python3 scripts/enable_branch_protection.py apply  --repo digithings-ai/digithings --branch develop \\
-        --check 'Required checks passed' --check 'doc-links + agents-init' --mode classic --dry-run
+        --mode classic --no-strict --dry-run     # the recorded set: local-ci + merge-queue
     python3 scripts/enable_branch_protection.py apply  --repo digithings-ai/twelve-x --branch develop \\
         --check test --require-approvals 1 --mode ruleset --merge-queue
 """
@@ -41,6 +45,16 @@ from typing import Any
 # GitHub's plan names as they arrive from `GET /orgs/{org}`. `free for
 # organizations` is the legacy value; current Free orgs report `free`.
 FREE_PLANS: frozenset[str] = frozenset({"free", "free for organizations"})
+
+# Required checks a branch's protection has been decided to carry, keyed by
+# (repo, branch). `local-ci` is the host mirror's status (DIG-3707). `merge-queue` is
+# the status scripts/merge_queue.py posts on a head immediately before it merges it
+# (2026-10-27): requiring it is what stops a write-access merge on `develop` from
+# going round the queue's review gates. Add `merge-queue` only once the queue is
+# posting it, or every PR on the branch blocks on a status nothing sends.
+RECORDED_REQUIRED_CHECKS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("digithings-ai/digithings", "develop"): ("local-ci", "merge-queue"),
+}
 
 PRO_REQUIRED_MARKERS: tuple[str, ...] = ("upgrade to github pro", "make this repository public")
 
@@ -525,6 +539,12 @@ def main(argv: list[str] | None = None) -> int:
     # not spend an API round trip to find out, and on a plan-blocked repo it would
     # otherwise be masked by the plan refusal — the operator fixes the plan, runs
     # again, and only then learns their `--check` was missing.
+    if args.command == "apply" and not args.check:
+        recorded = RECORDED_REQUIRED_CHECKS.get((args.repo, args.branch))
+        if recorded:
+            args.check = list(recorded)
+            print(f"using the recorded required checks for {args.repo}:{args.branch}: "
+                  + ", ".join(recorded))
     if args.command == "apply" and not args.check:
         print(
             "enable_branch_protection: refusing to apply with no --check. A branch with no "

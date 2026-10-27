@@ -603,3 +603,39 @@ def test_replace_checks_opts_into_dropping_the_existing_ones(gh_stub: Any) -> No
     assert done.returncode == EXIT_OK, done.stderr
     assert "already requires" not in done.stdout
     assert "old-check" not in done.stdout
+
+
+def test_digithings_develop_records_local_ci_and_the_queue_status() -> None:
+    """The decided set for `develop`: the CI status and the merge queue's own status."""
+    recorded = ebp.RECORDED_REQUIRED_CHECKS[("digithings-ai/digithings", "develop")]
+    assert recorded == ("local-ci", "merge-queue")
+
+
+def test_apply_with_no_check_on_a_recorded_branch_writes_the_recorded_set(
+    gh_stub: Any,
+) -> None:
+    stub = _preflight_stub(gh_stub, private=False, plan="free")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(
+            r"/branches/[^/]+/protection$",
+            stdout={"required_status_checks": {"strict": False, "contexts": ["local-ci"]}},
+        ),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "digithings-ai/digithings",
+        "--branch",
+        "develop",
+        "--mode",
+        "classic",
+        "--no-strict",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    payload = json.loads(done.stdout.split("(classic):", 1)[1].split("\ndry run", 1)[0])
+    status = payload["required_status_checks"]
+    assert status["contexts"] == ["local-ci", "merge-queue"]
+    assert status["strict"] is False
+    assert not stub.matching("-X PUT") and not stub.matching("--method PUT")

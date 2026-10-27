@@ -8577,3 +8577,199 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
     assert "reports no commit" in written, written
+
+
+# --- the queue's own `merge-queue` status (2026-10-27) --------------------------
+#
+# `develop` requires `local-ci` and nothing else, so on 2026-10-27 three PRs were
+# merged by hand over a standing changes-requested review: GitHub has no idea the
+# queue exists. The queue now posts a `merge-queue` commit status that branch
+# protection can require, `success` only on the exact head it is about to merge.
+
+
+def _status_calls(stub: GhStub) -> list[list[str]]:
+    return [c for c in stub.calls if any("/statuses/" in a for a in c)]
+
+
+def _field(call: list[str], name: str) -> str:
+    for i, arg in enumerate(call):
+        if arg == "-f" and call[i + 1].startswith(f"{name}="):
+            return call[i + 1].split("=", 1)[1]
+    raise AssertionError(f"no -f {name}= in {call}")
+
+
+def _status_stub(gh_stub: Any, prs: list[dict[str, Any]]) -> GhStub:
+    return _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stdout="{}"),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+
+
+def test_success_is_posted_on_the_merged_head_before_the_merge(gh_stub: Any) -> None:
+    prs = [_pr(42, head_sha="d" * 40, approved=True)]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    posts = _status_calls(stub)
+    assert len(posts) == 1, posts
+    post = posts[0]
+    assert f"repos/{DIGITHINGS_REPO}/statuses/{'d' * 40}" in post
+    assert _field(post, "state") == "success"
+    assert _field(post, "context") == "merge-queue"
+    # Ordered: the status GitHub requires must exist before the merge is asked for.
+    joined = [" ".join(c) for c in stub.calls]
+    status_at = next(i for i, c in enumerate(joined) if "/statuses/" in c)
+    merge_at = next(i for i, c in enumerate(joined) if c.startswith("pr merge 42"))
+    assert status_at < merge_at
+
+
+def test_a_refused_pr_gets_a_failure_naming_the_reason(gh_stub: Any) -> None:
+    prs = [_pr(7, head_sha="e" * 40, approved=True, local_ci_state="FAILURE")]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert not stub.matching("pr merge")
+    posts = _status_calls(stub)
+    assert len(posts) == 1, posts
+    assert f"repos/{DIGITHINGS_REPO}/statuses/{'e' * 40}" in posts[0]
+    assert _field(posts[0], "state") == "failure"
+    desc = _field(posts[0], "description")
+    assert "local-ci" in desc
+    assert len(desc) <= 140
+
+
+def test_a_stale_success_on_a_refused_head_is_overwritten(gh_stub: Any) -> None:
+    """A `success` left by a merge that GitHub refused must not outlive the refusal."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    prs = [
+        _pr(8, approved=True, local_ci_state="FAILURE", extra_checks=[queue_ok]),
+    ]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    posts = _status_calls(stub)
+    assert [_field(p, "state") for p in posts] == ["failure"]
+
+
+def test_a_state_github_already_shows_is_not_re_posted(gh_stub: Any) -> None:
+    """GitHub keeps every status sent, up to 1000 per SHA; a tick must not add one."""
+    queue_red = {"__typename": "StatusContext", "context": "merge-queue", "state": "FAILURE"}
+    prs = [_pr(9, approved=True, local_ci_state="FAILURE", extra_checks=[queue_red])]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert _status_calls(stub) == []
+
+
+def test_an_eligible_pr_not_reached_this_tick_is_pending(gh_stub: Any) -> None:
+    prs = [
+        _pr(1, head_sha="1" * 40, approved=True),
+        _pr(2, head_sha="2" * 40, created="2026-10-02T00:00:00Z", approved=True),
+    ]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    states = {p[p.index("--method") + 2].rsplit("/", 1)[1]: _field(p, "state")
+              for p in _status_calls(stub)}
+    assert states == {"1" * 40: "success", "2" * 40: "pending"}
+
+
+def test_the_queue_does_not_read_its_own_failure_as_a_red_check(gh_stub: Any) -> None:
+    """`merge-queue` is in `ignored_checks`: last tick's `failure` cannot refuse this one."""
+    queue_red = {"__typename": "StatusContext", "context": "merge-queue", "state": "FAILURE"}
+    prs = [_pr(10, approved=True, extra_checks=[queue_red])]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 10")
+
+
+def test_blocked_only_by_the_missing_queue_status_still_queues(gh_stub: Any) -> None:
+    """Once `develop` requires `merge-queue`, GitHub reads every unposted PR as BLOCKED.
+
+    Treating that BLOCKED as a gate would deadlock: the queue never posts the status
+    because the PR is blocked, and the PR is blocked because the status is missing.
+    """
+    prs = [_pr(11, approved=True, merge_state="BLOCKED")]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 11")
+
+
+def test_blocked_with_a_green_queue_status_is_still_refused() -> None:
+    """When `merge-queue` is already green, BLOCKED means something else and stands."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    pr = _pr(12, approved=True, merge_state="BLOCKED", extra_checks=[queue_ok])
+    verdict = mq.evaluate(
+        pr, _policy(DIGITHINGS_REPO), acting_role="cto", base="develop", repo=None
+    )
+    assert any("mergeStateStatus=BLOCKED" in r for r in verdict.reasons)
+
+
+def test_twelve_x_posts_no_status_and_keeps_blocked_as_a_gate(gh_stub: Any) -> None:
+    """twelve-x has no branch protection to require the status, so nothing changes there."""
+    prs = [_pr(13, approved=True, merge_state="BLOCKED"), _pr(14, approved=True)]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", TWELVE_X_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert _status_calls(stub) == []
+    assert "mergeStateStatus=BLOCKED" in done.stdout or stub.matching("pr merge 14")
+    assert not stub.matching("pr merge 13")
+
+
+def test_a_failed_status_post_warns_and_leaves_the_merge_to_github(gh_stub: Any) -> None:
+    """A lost `success` makes GitHub refuse the merge; the post itself must not crash."""
+    prs = [_pr(15, approved=True)]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stderr="gh: Server Error (HTTP 502)", exit_code=1),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "posting merge-queue=success" in done.stderr
+    assert stub.matching("pr merge 15")
+
+
+def test_dry_run_and_list_post_no_status(gh_stub: Any) -> None:
+    prs = [_pr(16, approved=True), _pr(17, approved=True, local_ci_state="FAILURE")]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto", "--dry-run")
+    _run("list", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert _status_calls(stub) == []
+
+
+def test_the_status_description_fits_githubs_limit() -> None:
+    verdict = mq.Verdict(
+        number=1, title="", head_ref="", created_at="", head_sha="f" * 40,
+        eligible=False, reasons=("x" * 500, "second"),
+    )
+    status = mq.refusal_status(verdict)
+    assert status is not None
+    assert len(mq._status_description(status[1])) <= mq.QUEUE_STATUS_DESCRIPTION_MAX
+
+
+def test_the_shipped_policy_ignores_the_queue_status_and_posts_it_on_digithings() -> None:
+    policy = mq.load_policy()
+    assert mq.QUEUE_STATUS_CONTEXT in policy.ignored_checks
+    assert policy.for_repo(DIGITHINGS_REPO).posts_queue_status
+    assert not policy.for_repo(TWELVE_X_REPO).posts_queue_status
+
+
+def test_a_bare_string_queue_status_repos_is_refused(tmp_path: Path) -> None:
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["queue_status_repos"] = DIGITHINGS_REPO
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(mq.QueueError, match="queue_status_repos"):
+        mq.load_policy(path)
