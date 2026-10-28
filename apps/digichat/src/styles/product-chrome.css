@@ -415,23 +415,9 @@ body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app
   background: var(--bg);
 }
 
-/* Named palettes keep --bg, --surface, and --hair from palettes.css.
-   :where() adds no specificity, so this reset applies only while no
-   data-palette is set, and a later sheet of equal weight can still retie it. */
-:where(:root:not([data-palette]))
-  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
-  .digichat-thread,
-:where(:root:not([data-palette]))
-  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
-  .digichat-thread__footer,
-:where(:root:not([data-palette]))
-  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
-  .digichat-thread-list {
-  --bg: transparent;
-  --surface: transparent;
-  --hair: var(--term-hair);
-  background: transparent;
-}
+/* The thread column (footer, list) sits on the page canvas: see the
+   "one canvas" rule in site-chat.css, which covers every palette and both
+   site surfaces (/chat and the top-level /chat/occ). */
 
 /* Box rules: the sidebar header and the tool row share one height, so their
    bottom rules run as a single line across the page. */

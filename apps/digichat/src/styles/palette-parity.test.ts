@@ -340,3 +340,51 @@ describe("chat palette parity with digithings.ai", () => {
     expect((occThread["--bg"] ?? "").toLowerCase()).toBe(declared!.toLowerCase());
   });
 });
+
+/**
+ * The thread column has no canvas of its own on a site chat. The footer that
+ * holds the welcome, the examples and the composer used to paint
+ * `bg-surface` in every named palette (and on the top-level OCC page in every
+ * palette), which drew a tinted box around the welcome block that the rest of
+ * the page did not share. It must resolve to the page canvas for every
+ * palette, on /chat and on the top-level embed.
+ */
+function footerTokens(theme: string, id: string | null, surface: "app" | "occ"): Record<string, string> {
+  document.documentElement.setAttribute("data-theme", theme);
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  if (surface === "occ") document.documentElement.setAttribute("data-site-theme", "1");
+  else document.documentElement.removeAttribute("data-site-theme");
+  const mode = surface === "app" ? "app" : "embed";
+  document.body.innerHTML = `<div data-stock-product data-thread-skin="digichat" data-chrome-mode="${mode}"><div class="digichat-thread"><div class="digichat-thread__footer bg-surface"></div></div></div>`;
+  const host = document.querySelector("[data-stock-product]")!;
+  const thread = document.querySelector(".digichat-thread")!;
+  const footer = document.querySelector(".digichat-thread__footer")!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, host, thread, footer]);
+  return maps[maps.length - 1];
+}
+
+describe("chat thread column sits on the page canvas", () => {
+  const all = [null, ...PALETTE_IDS].flatMap((id) =>
+    (["light", "dark"] as const).flatMap((theme) =>
+      (["app", "occ"] as const).map((surface) => [id ?? "default", theme, surface] as const),
+    ),
+  );
+
+  it.each(all)("%s %s %s: the footer paints no surface", (id, theme, surface) => {
+    const footer = footerTokens(theme, id === "default" ? null : id, surface);
+    expect(footer["--bg"]).toBe("transparent");
+    expect(footer["--surface"]).toBe("transparent");
+  });
+
+  it("the site-chat rule clears the footer background with no palette gate", () => {
+    const css = stripComments(
+      readFileSync(path.join(ROOT, "apps/digichat/src/styles/site-chat.css"), "utf8"),
+    );
+    const rule = css.match(/[^{}]*\.digichat-thread__footer[^{}]*\{[^}]*\}/g) ?? [];
+    const canvas = rule.find((r) => /background:\s*transparent/.test(r));
+    expect(canvas, "site-chat.css footer canvas rule").toBeTruthy();
+    expect(canvas).not.toMatch(/data-palette/);
+    expect(canvas).toMatch(/data-site-theme="1"/);
+  });
+});
