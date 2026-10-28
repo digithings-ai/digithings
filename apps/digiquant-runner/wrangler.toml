@@ -29,6 +29,10 @@
 # max_instances stays 1.
 # Nautilus stays on this image; it is not a second class.
 # ARCHIVE is the house-run skip ledger on the existing digithings-archive bucket.
+# DIGIQUANT_CHECKPOINTER (optional plain var, S4b DIG-2887): "sqlite" moves the
+# house-run LangGraph checkpoints off Postgres onto a container file saved to
+# R2 (pipeline-runs/house-run/<date>/checkpoints.sqlite) when a run stops
+# early, and restored on resume. Unset keeps the pipeline file's postgres.
 name = "digiquant-runner"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"

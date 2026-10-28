@@ -63,6 +63,7 @@ def main() -> int:
     _check_busy_gate_and_publish_bound()
     _check_publish_if_present(commands)
     _check_house_run(commands)
+    _check_sqlite_checkpoints(commands)
     for mod_name in (
         "house_chain_step_test",
         "wake_stack_test",
@@ -687,6 +688,99 @@ def _check_house_run(commands: dict[str, Any]) -> None:
     source = Path(exec_job.__file__).read_text(encoding="utf-8")
     if "Pipeline: digiquant research" in source:
         raise SystemExit("exec_job must not hardcode the house workflow name")
+
+
+class _FakeR2:
+    """In-memory stand-in for the boto3 client: no network, no credentials."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def upload_file(self, filename: str, bucket: str, key: str) -> None:
+        self.objects[f"{bucket}/{key}"] = Path(filename).read_bytes()
+
+    def download_file(self, bucket: str, key: str, filename: str) -> None:
+        body = self.objects.get(f"{bucket}/{key}")
+        if body is None:
+            raise FileNotFoundError(key)
+        Path(filename).write_bytes(body)
+
+
+def _check_sqlite_checkpoints(commands: dict[str, Any]) -> None:
+    """S4b: DIGIQUANT_CHECKPOINTER=sqlite swaps the house-run saver; unset keeps postgres."""
+    import sqlite3
+    import tempfile
+
+    args = {"run_date": "2026-09-30", "refresh_scope": "none"}
+    previous = os.environ.pop(exec_job.CHECKPOINTER_FLAG, None)
+    old_dir = exec_job.CHECKPOINT_DIR
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            exec_job.CHECKPOINT_DIR = Path(tmp) / "ckpt"
+
+            default = exec_job.build_child_env("house-run", run_id="r1", commands=commands, args=args)
+            if default.get("DIGI_CHECKPOINTER") != "postgres" or "DIGI_CHECKPOINTER_SQLITE_URI" in default:
+                raise SystemExit(f"unset flag must keep postgres: {default.get('DIGI_CHECKPOINTER')}")
+            for value in ("", "Postgres", "d1", "sqlite3"):
+                os.environ[exec_job.CHECKPOINTER_FLAG] = value
+                other = exec_job.build_child_env("house-run", run_id="r1", commands=commands, args=args)
+                if other.get("DIGI_CHECKPOINTER") != "postgres":
+                    raise SystemExit(f"{value!r} must keep postgres")
+
+            os.environ[exec_job.CHECKPOINTER_FLAG] = " SQLite "
+            env = exec_job.build_child_env("house-run", run_id="r1", commands=commands, args=args)
+            want = str(exec_job.CHECKPOINT_DIR / "house-run-2026-09-30.sqlite")
+            if env.get("DIGI_CHECKPOINTER") != "sqlite" or env.get("DIGI_CHECKPOINTER_SQLITE_URI") != want:
+                raise SystemExit(f"sqlite flag not applied: {env.get('DIGI_CHECKPOINTER_SQLITE_URI')}")
+            plain = exec_job.build_child_env("prices-at-open", run_id="r1", commands=commands)
+            if "DIGI_CHECKPOINTER_SQLITE_URI" in plain:
+                raise SystemExit("only checkpointing commands get the sqlite file")
+
+            for bad in ("../x", "a/b", ".hidden"):
+                try:
+                    exec_job.checkpoint_file(bad)
+                except RuntimeError:
+                    continue
+                raise SystemExit(f"run_date {bad!r} must not escape the checkpoint dir")
+
+            r2 = _FakeR2()
+            if exec_job.upload_checkpoints("2026-09-30", client=r2, bucket="b"):
+                raise SystemExit("no file yet: nothing to upload")
+            if exec_job.restore_checkpoints("2026-09-30", client=r2, bucket="b"):
+                raise SystemExit("no saved object: restore must report a fresh start")
+
+            live = exec_job.checkpoint_file("2026-09-30")
+            live.parent.mkdir(parents=True, exist_ok=True)
+            db = sqlite3.connect(live)
+            db.execute("create table checkpoints (thread_id text, n integer)")
+            db.execute("insert into checkpoints values ('r0', 7)")
+            db.commit()
+            # Keep the writer open: the snapshot must still be consistent.
+            if not exec_job.upload_checkpoints("2026-09-30", client=r2, bucket="b"):
+                raise SystemExit("checkpoint upload skipped")
+            db.close()
+            if "b/pipeline-runs/house-run/2026-09-30/checkpoints.sqlite" not in r2.objects:
+                raise SystemExit(f"checkpoint key drifted: {list(r2.objects)}")
+            if list(exec_job.CHECKPOINT_DIR.glob("*.upload")):
+                raise SystemExit("upload snapshot left on disk")
+
+            live.unlink()
+            if not exec_job.restore_checkpoints("2026-09-30", client=r2, bucket="b"):
+                raise SystemExit("checkpoint restore failed")
+            row = sqlite3.connect(live).execute("select thread_id, n from checkpoints").fetchone()
+            if row != ("r0", 7):
+                raise SystemExit(f"restored checkpoint drifted: {row}")
+
+            def _boom(_day: str) -> bool:
+                raise OSError("disk")
+
+            exec_job._checkpoints_best_effort(_boom, "2026-09-30", "upload")
+    finally:
+        exec_job.CHECKPOINT_DIR = old_dir
+        if previous is None:
+            os.environ.pop(exec_job.CHECKPOINTER_FLAG, None)
+        else:
+            os.environ[exec_job.CHECKPOINTER_FLAG] = previous
 
 
 if __name__ == "__main__":
