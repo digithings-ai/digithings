@@ -176,14 +176,14 @@ export class DigiStackContainer extends Container {
     // query vector does not match the stored vectors and retrieval silently
     // misses. Digisearch reads the list per query (search/_stub.py).
     DIGISEARCH_WORKERS_AI_INDEXES: env.DIGISEARCH_WORKERS_AI_INDEXES ?? "",
-    // Cloudflare caps a text binding at 5.1 kB and the whole map was 5285 bytes,
-    // so `wrangler deploy` failed with code 10054 and wrangler.toml now ships it
-    // as two vars. This joins them; ./tenant-config owns the merge rule (primary
-    // wins on a slug collision, digithings-only floor when neither half is
-    // usable). The composed string is byte-identical to the old single var.
+    // The house entry is a public [vars] value; every other tenant is client
+    // config held in the DIGI_TENANT_CORPUS_MAP_PRIVATE Worker secret, so it never
+    // sits in the public repo. This joins them; ./tenant-config owns the merge rule
+    // (house wins on a slug collision, digithings-only floor when neither half is
+    // usable).
     DIGI_TENANT_CORPUS_MAP: composeCorpusMap(
       env.DIGI_TENANT_CORPUS_MAP,
-      env.DIGI_TENANT_CORPUS_MAP_EXTRA,
+      env.DIGI_TENANT_CORPUS_MAP_PRIVATE,
     ),
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
@@ -432,7 +432,8 @@ export interface Env {
    * except the house `digithings` entry. Worker-scoped -- it is read to build
    * the container's `DIGI_TENANT_CORPUS_MAP` and never forwarded itself.
    */
-  DIGI_TENANT_CORPUS_MAP_EXTRA?: string;
+  /** Worker secret: every non-house tenant's corpus map (client config). */
+  DIGI_TENANT_CORPUS_MAP_PRIVATE?: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   OPENAI_API_KEY?: string;

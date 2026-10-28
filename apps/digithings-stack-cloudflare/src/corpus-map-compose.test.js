@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import { DIGITHINGS_ONLY_CORPUS_JSON, composeCorpusMap } from "./tenant-config";
 
 /**
- * The corpus map is two wrangler `[vars]` because one text binding may not
- * exceed 5.1 kB (deploy error 10054, 2026-10-25). `composeCorpusMap` joins them
- * at boot; this gate pins both halves of that promise:
+ * The corpus map is split: the house entry is a wrangler `[vars]` value and every
+ * other tenant is the DIGI_TENANT_CORPUS_MAP_PRIVATE Worker secret (client config
+ * stays out of this public repo, DIG-3585; the split itself dates from the 5.1 kB
+ * binding cap, deploy error 10054). `composeCorpusMap` joins them at boot; this
+ * gate pins both halves of that promise:
  *
  *  - the merge is LOSSLESS: the composed string carries the object the single
  *    5285 byte var used to hold, OCC `researchSystemPrompt` included, plus the
@@ -91,51 +93,63 @@ function composeCorpusJson() {
 
 const wranglerSource = () => readFileSync(WRANGLER, "utf8");
 const primary = () => tomlVar(wranglerSource(), "DIGI_TENANT_CORPUS_MAP");
-const extra = () => tomlVar(wranglerSource(), "DIGI_TENANT_CORPUS_MAP_EXTRA");
+/**
+ * Stand-in for the DIGI_TENANT_CORPUS_MAP_PRIVATE Worker secret: every non-house
+ * tenant from the independent compose transcription. The secret's real value is
+ * not in this repo (DIG-3585), so the test composes against the same shape.
+ */
+const privateHalf = () => {
+  const all = JSON.parse(composeCorpusJson());
+  const rest = {};
+  for (const [slug, entry] of Object.entries(all)) {
+    if (slug !== "digithings") rest[slug] = entry;
+  }
+  return JSON.stringify(rest);
+};
 
-describe("composeCorpusMap: the split [vars] pair rejoins into the old map", () => {
-  it("ships both halves as separate vars, each under Cloudflare's 5.1 kB cap", () => {
+describe("composeCorpusMap: the house var and the private-tenant secret rejoin", () => {
+  it("ships only the house tenant in [vars], under Cloudflare's 5.1 kB cap", () => {
     // A zero here would make every assertion below vacuous.
     expect(primary()).toBeTruthy();
-    expect(extra()).toBeTruthy();
     expect(primary().length).toBeGreaterThan(0);
-    expect(extra().length).toBeGreaterThan(0);
-    // 5100 is the limit the deploy reported (5.1 kB); leave the same headroom
-    // Cloudflare measures against, not a fudge factor.
+    // 5100 is the limit the deploy reported (5.1 kB).
     expect(primary().length).toBeLessThan(5100);
-    expect(extra().length).toBeLessThan(5100);
-  });
-
-  it("puts the house tenant in the unsuffixed var and the rest in the extra one", () => {
     // digigraph reads DIGI_TENANT_CORPUS_MAP by name, so the house entry must
-    // stay in it; splitting it the other way would break the deployed reader.
+    // stay in it -- and nothing else may: other tenants are client config.
     expect(Object.keys(JSON.parse(primary()))).toEqual(["digithings"]);
-    expect(Object.keys(JSON.parse(extra()))).toContain("occ");
-    expect(JSON.parse(primary())).not.toHaveProperty("occ");
   });
 
-  it("composes the transcribed value plus the house alias, OCC prompt included", () => {
-    const composed = composeCorpusMap(primary(), extra());
+  it("keeps every non-house tenant out of the public wrangler.toml (DIG-3585)", () => {
+    // The old second [vars] half carried a client's routing and research prompt
+    // in a public file. It now lives in a Worker secret; neither name may come
+    // back as a plain var.
+    expect(tomlVar(wranglerSource(), "DIGI_TENANT_CORPUS_MAP_EXTRA")).toBeUndefined();
+    expect(tomlVar(wranglerSource(), "DIGI_TENANT_CORPUS_MAP_PRIVATE")).toBeUndefined();
+    for (const slug of Object.keys(JSON.parse(privateHalf()))) {
+      expect(wranglerSource()).not.toContain(`\\"${slug}\\":{`);
+    }
+  });
+
+  it("composes the house var and the private secret into the full map plus the alias", () => {
+    const composed = composeCorpusMap(primary(), privateHalf());
     const expected = JSON.parse(composeCorpusJson());
     const actual = JSON.parse(composed);
 
     // The dev-path compose copy names the house tenant `digithings` only, while
     // the live embed slug is `digithings-ai`; composition must carry both keys
     // with the SAME entry, or digivault refuses the live chat with 403.
-    const expectedWithAlias = {
-      digithings: expected.digithings,
-      "digithings-ai": expected.digithings,
-      occ: expected.occ,
-    };
+    const expectedWithAlias = { digithings: expected.digithings, "digithings-ai": expected.digithings };
+    for (const [slug, entry] of Object.entries(expected)) {
+      if (slug !== "digithings") expectedWithAlias[slug] = entry;
+    }
 
     // Deep equality against the full transcribed object: any drift in a slug,
-    // an index, a vault prefix or one byte of either research prompt fails here.
+    // an index, a vault prefix or one byte of the house research prompt fails here.
     expect(actual).toEqual(expectedWithAlias);
-    expect(Object.keys(actual)).toEqual(["digithings", "digithings-ai", "occ"]);
+    expect(Object.keys(actual).slice(0, 2)).toEqual(["digithings", "digithings-ai"]);
     expect(actual.digithings.digisearchIndex).toBe("digithings_docs");
     expect(actual.digithings.vaultPathPrefix).toBe("clients/digithings");
     expect(actual["digithings-ai"]).toEqual(actual.digithings);
-    expect(actual.occ.researchSystemPrompt).toBe(expected.occ.researchSystemPrompt);
     expect(actual.digithings.researchSystemPrompt).toBe(expected.digithings.researchSystemPrompt);
 
     // Not just the same object: the same SERIALISED value, so a change of key
@@ -188,8 +202,8 @@ describe("composeCorpusMap: the split [vars] pair rejoins into the old map", () 
   });
 
   it("adds only the house alias when only DIGI_TENANT_CORPUS_MAP is set", () => {
-    // Back-compat: a deployment that has not taken the second var yet still
-    // composes to the house corpus under both slugs.
+    // A deployment whose private secret is not set yet still composes to the
+    // house corpus under both slugs (fail closed for every other tenant).
     const only = '{"digithings":{"digisearchIndex":"digithings_docs"}}';
     expect(JSON.parse(composeCorpusMap(only, undefined))).toEqual({
       digithings: { digisearchIndex: "digithings_docs" },

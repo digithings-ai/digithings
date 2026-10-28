@@ -27,11 +27,10 @@
  *
  * PRECEDENCE (highest first)
  *   1. the KV namespace, when bound and readable;
- *   2. the wrangler `[vars]` pair, the interim source;
+ *   2. the house `[vars]` value plus the private-tenant secret, the interim source;
  *   3. `DIGITHINGS_ONLY_CORPUS_MAP`, first-party only.
- * Arm 2 is NOT this leaf's to remove. `wrangler.toml` `[vars]` still carries the
- * live OCC entry and the `TENANT_CONFIG` namespace does not exist yet, so
- * deleting arm 2 now would strip tenant config off the deployed Worker. It is
+ * Arm 2 is NOT this leaf's to remove: it is what the deployed Worker serves
+ * today, so deleting it would strip tenant config off the Worker. It is
  * removed by the scrub that owns the corpus-map literal (DIG-3689). Arms are
  * REPLACED, not merged: merging would keep a client tenant alive from a source
  * that is supposed to have been retired, which is the fail-open direction.
@@ -41,8 +40,11 @@
  * the OCC research prompt alone is 4239 of them -- so `wrangler deploy` failed
  * with code 10054 and the Worker could not ship. The value is now two vars,
  * `DIGI_TENANT_CORPUS_MAP` (the house `digithings` entry alone) and
- * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant, today just `occ`), and
+ * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant), and
  * {@link composeCorpusMap} joins them into the one string the container reads.
+ * DIG-3585 then moved that second half out of `[vars]` into the Worker secret
+ * `DIGI_TENANT_CORPUS_MAP_PRIVATE`: it is client config and must not ship in a
+ * public file. The house entry stays a `[vars]` value.
  * The house entry keeps the unsuffixed name because digigraph reads that name
  * directly; splitting is a binding-size workaround, not a shape change. The
  * composed value is the old map plus the house-slug alias (`digithings-ai`,
@@ -237,8 +239,12 @@ export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusM
   return withHouseSlugAlias(projected);
 }
 
-/** Wrangler `[vars]` name for the second half of the split corpus map. */
-export const CORPUS_MAP_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA";
+/**
+ * Worker SECRET holding every non-house tenant's corpus map. It used to be the
+ * `DIGI_TENANT_CORPUS_MAP_EXTRA` `[vars]` value, which put client routing and a
+ * client research prompt in the public repo (DIG-3585).
+ */
+export const CORPUS_MAP_PRIVATE_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_PRIVATE";
 
 /**
  * Parse a `DIGI_TENANT_CORPUS_MAP` value (the `[vars]` legacy arm).
@@ -275,7 +281,7 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
  * Join the split `[vars]` pair into the single corpus map the container reads.
  *
  * The merge rule is one sentence: the primary half wins on every slug collision,
- * so a stale `DIGI_TENANT_CORPUS_MAP_EXTRA` can never shadow or widen the house
+ * so a stale `DIGI_TENANT_CORPUS_MAP_PRIVATE` can never shadow or widen the house
  * entry it does not own. Extra entries therefore only ADD tenants.
  *
  * Never returns an empty string. A half that does not parse is dropped with a
@@ -291,7 +297,7 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
  */
 export function composeCorpusMap(primary?: string, extra?: string): string {
   const house = parseCorpusMapArm(primary, "DIGI_TENANT_CORPUS_MAP");
-  const others = parseCorpusMapArm(extra, CORPUS_MAP_EXTRA_ENV_VAR);
+  const others = parseCorpusMapArm(extra, CORPUS_MAP_PRIVATE_ENV_VAR);
   if (house === undefined && others === undefined) return DIGITHINGS_ONLY_CORPUS_JSON;
 
   const merged: TenantCorpusMap = { ...house };

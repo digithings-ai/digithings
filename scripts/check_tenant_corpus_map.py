@@ -5,10 +5,12 @@ Compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix`` values acr
 (a) ``infra/digichat-release/compose.profile-a-bundle.override.yml``
 ``DIGICHAT_EMBED_TENANTS`` JSON (only entries carrying a ``backend`` with
 ``digisearchIndex`` — the ``digithings.ai`` + ``occ.digithings.ai`` hosts),
-(b) ``apps/digithings-stack-cloudflare/wrangler.toml``, as a PAIR of vars:
-``DIGI_TENANT_CORPUS_MAP`` + ``DIGI_TENANT_CORPUS_MAP_EXTRA``, joined with the
-same precedence ``composeCorpusMap`` uses in ``src/index.ts`` — primary wins a
-slug collision, so a stale extra half can never shadow the house entry.
+(b) ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``,
+which carries the HOUSE tenant only. Every other tenant is client config and
+lives in the ``DIGI_TENANT_CORPUS_MAP_PRIVATE`` Worker secret (DIG-3585), which
+is not in the repo, so the comparison covers the house slugs on both sides and
+the gate separately refuses any non-house tenant (or the retired
+``DIGI_TENANT_CORPUS_MAP_EXTRA`` var) creeping back into the public file.
 
 Both sides then get the house-slug alias (``digithings`` and the live
 ``digithings-ai`` carry the same entry), because that is the map the container
@@ -48,13 +50,14 @@ _WRANGLER_REL = Path("apps/digithings-stack-cloudflare/wrangler.toml")
 _INDEX_TS_REL = Path("apps/digithings-stack-cloudflare/src/index.ts")
 
 _ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
-_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA"
+_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA"  # retired [vars] half; must stay absent
+_PRIVATE_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_PRIVATE"
 
-#: The wiring ``src/index.ts`` must keep: both halves read, composed by name.
+#: The wiring ``src/index.ts`` must keep: house var + private secret, composed by name.
 _WIRING_RE = re.compile(
     r"DIGI_TENANT_CORPUS_MAP:\s*composeCorpusMap\(\s*"
     r"env\.DIGI_TENANT_CORPUS_MAP,\s*"
-    r"env\.DIGI_TENANT_CORPUS_MAP_EXTRA,?\s*\)"
+    r"env\.DIGI_TENANT_CORPUS_MAP_PRIVATE,?\s*\)"
 )
 
 #: A corpus map carried inline again would have to hold one of these.
@@ -173,7 +176,11 @@ def load_embed_map(compose_path: Path) -> dict[str, dict[str, str]]:
 
 
 def load_wrangler_vars(wrangler_path: Path) -> tuple[str | None, str | None]:
-    """``(primary, extra)`` raw values from wrangler ``[vars]``."""
+    """``(primary, retired_extra)`` raw values from wrangler ``[vars]``.
+
+    ``retired_extra`` must be ``None``: a value there means the client half came
+    back into the public file (see :func:`check_wrangler_private_tenants`).
+    """
     with open(wrangler_path, "rb") as fh:
         doc = tomllib.load(fh)
     variables = doc.get("vars", {})
@@ -189,6 +196,32 @@ def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]]:
     return with_house_slug_alias(_reduce_corpus_map(compose_corpus_vars(primary, extra)))
 
 
+_HOUSE_SLUGS = (HOUSE_TENANT_SLUG, LIVE_HOUSE_TENANT_SLUG)
+
+
+def house_only(mapping: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """The house slugs of a map -- the part that may live in the public repo."""
+    return {slug: entry for slug, entry in mapping.items() if slug in _HOUSE_SLUGS}
+
+
+def check_wrangler_private_tenants(wrangler_path: Path) -> list[str]:
+    """Refuse client tenant config in the public wrangler.toml (DIG-3585)."""
+    problems: list[str] = []
+    primary, extra = load_wrangler_vars(wrangler_path)
+    if extra is not None:
+        problems.append(
+            f"wrangler [vars] carries {_EXTRA_ENV_VAR}; non-house tenants belong in the "
+            f"{_PRIVATE_ENV_VAR} Worker secret, not the public repo"
+        )
+    others = sorted(set(json.loads(primary)) - set(_HOUSE_SLUGS))
+    if others:
+        problems.append(
+            f"wrangler {_ENV_VAR} carries non-house tenant(s) {others}; they belong in the "
+            f"{_PRIVATE_ENV_VAR} Worker secret"
+        )
+    return problems
+
+
 def check_index_ts_wiring(index_ts_path: Path) -> list[str]:
     """Problems with ``src/index.ts``'s side of the split, as human-readable strings.
 
@@ -201,8 +234,8 @@ def check_index_ts_wiring(index_ts_path: Path) -> list[str]:
     problems: list[str] = []
     if not _WIRING_RE.search(src):
         problems.append(
-            f"index.ts does not compose the [vars] pair: expected "
-            f"`{_ENV_VAR}: composeCorpusMap(env.{_ENV_VAR}, env.{_EXTRA_ENV_VAR})`"
+            f"index.ts does not compose the house var with the private secret: expected "
+            f"`{_ENV_VAR}: composeCorpusMap(env.{_ENV_VAR}, env.{_PRIVATE_ENV_VAR})`"
         )
     for marker in _LITERAL_MARKERS:
         if marker in src:
@@ -261,15 +294,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     named = [
-        ("embed", load_embed_map(args.compose_file)),
-        ("wrangler", load_wrangler_map(args.wrangler_file)),
+        ("embed", house_only(load_embed_map(args.compose_file))),
+        ("wrangler", house_only(load_wrangler_map(args.wrangler_file))),
     ]
     report = compare_maps(named)
-    problems = list(report["problems"]) + check_index_ts_wiring(args.index_ts_file)
+    problems = (
+        list(report["problems"])
+        + check_wrangler_private_tenants(args.wrangler_file)
+        + check_index_ts_wiring(args.index_ts_file)
+    )
     if not problems:
         print(
-            f"corpus map ok: {len(named[0][1])} slug(s) agree (house alias included) across "
-            f"compose and the wrangler [vars] pair, and index.ts composes it"
+            f"corpus map ok: {len(named[0][1])} house slug(s) agree across compose and "
+            f"wrangler [vars], no client tenant ships in wrangler.toml, and index.ts "
+            f"composes the house var with the private secret"
         )
         return 0
     print("corpus map DRIFT:")
