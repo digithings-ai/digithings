@@ -231,6 +231,9 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
+    // First embed request carries the parent palette, not only light/dark.
+    expect(shellSrc).toContain("EMBED_FRAME_THEME_SCRIPT");
+    expect(shellSrc).toContain("url.searchParams.set('palette',palette)");
     // The transparent overlay is the banner cover now, not the tool-chain rows.
     expect(shellSrc).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
     expect(shellSrc).toContain('background: "transparent"');

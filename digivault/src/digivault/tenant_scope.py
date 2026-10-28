@@ -49,25 +49,16 @@ least one usable tenant -> prefix mapping raises ``TenantCorpusMapError``,
 which ``enforce_tenant_path_prefix`` turns into a loud ``503`` rather than a
 silent pass-through.
 
-**Known residual dependency, not closed by this module.** ``tenant_slug`` is
-only as trustworthy as ``request.state.digi_auth`` makes it. Today, digikey's
-``DigiAuthMiddleware`` (``service_middleware.py``) falls back to the
-caller-supplied, unsigned ``X-Digi-Tenant``/``X-Digichat-Tenant`` header
-whenever the JWT's own ``tenant_slug`` claim is empty, with no signal on
-``DigiAuthContext`` distinguishing a verified claim from a header override —
-a caller holding *any* credential with an empty ``tenant_slug`` and
-``digivault:read`` could set that header and defeat this module's check
-entirely. Verified this is not reachable through digikey's own issuance API
-today (both ``/v1/oauth/token`` grant types require a non-empty
-``tenant_slug`` to mint a token at all — see ``digikey/src/digikey/server.py``
-lines ~213-234 and ~127) — the one path found is an operator issuing a CLI key
-with an empty ``--tenant`` (``digikey/src/digikey/cli.py``), not something an
-external caller can trigger. So this is a latent single point of failure, not
-an active bypass of any normally-issued credential, but it means digivault's
-enforcement is only as strong as an invariant digivault itself cannot see or
-verify. Found in the in-session review of this module's own PR #2298; tracked
-as #2303 rather than fixed here, since a JWT/auth-trust change is its own
-Human Gate item (see CLAUDE.md) independent of this PR's scope.
+**Residual dependency, closed in DIG-3585.** ``tenant_slug`` is only as
+trustworthy as ``request.state.digi_auth`` makes it. digikey's
+``DigiAuthMiddleware`` (``service_middleware.py``) used to fill an empty
+``tenant_slug`` claim from the caller-supplied, unsigned
+``X-Digi-Tenant``/``X-Digichat-Tenant`` header, so a caller holding a token
+with an empty claim and ``digivault:read`` could name any tenant (#2303, found
+in the review of PR #2298). The middleware no longer reads those headers: a
+token with no tenant claim has no tenant, and this module refuses it any mapped
+prefix. digikey's own issuance never mints a claimless token (both
+``/v1/oauth/token`` grants and the CLI refuse a blank tenant).
 """
 
 from __future__ import annotations

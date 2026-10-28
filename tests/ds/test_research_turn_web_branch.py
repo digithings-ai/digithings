@@ -669,7 +669,7 @@ def test_api_research_turn_source_defaults_to_corpus(monkeypatch, client):
         raise AssertionError("web branch must not run for the corpus default")
 
     monkeypatch.setattr(mod, "node_web_retrieve", boom)
-    idx = "__agent_http_corpus_default__"
+    idx = "agent_http_corpus_default"
     add_chunks(
         idx,
         [

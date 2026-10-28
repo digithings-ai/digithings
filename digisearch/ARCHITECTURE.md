@@ -274,6 +274,11 @@ YAML `chunker:` via `DigiSearchConfig`.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. URL ingest is a separate, SSRF-guarded route — `POST /ingest/url`, below.
 
+`index_name` must be exactly one plain index name (a comma list or a malformed
+name is a 422), and a tenant-scoped index takes writes only from its own
+verified tenant (403 otherwise, before the source is read) — see
+[Tenant-scoped indexes](#tenant-scoped-indexes-dig-3585).
+
 #### `POST /ingest/url`
 
 Auth required (`digisearch:ingest` scope; the `/ingest` path prefix covers this
@@ -291,7 +296,8 @@ readability), stages it as a temp `page.md`, and delegates to the same
 `pipeline.ingest.ingest_source` filesystem path. `text/*` and
 `application/xhtml+xml` only. Error mapping: blocked/malformed URL → 400,
 download too large → 413, unsupported content type → 415, empty extract → 422,
-other ingest failures → their `IngestError.http_status`.
+other ingest failures → their `IngestError.http_status`. The `index_name` rules
+of `POST /ingest` apply, and the tenant check runs before the URL is fetched.
 
 #### query.mode semantics
 
@@ -1267,6 +1273,7 @@ digisearch/src/digisearch/
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
 ├── backend_require.py         # Shared real-backend gate (HTTP startup + MCP run_mcp)
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
+├── tenant_index_scope.py      # tenant-scoped index guard for /query, orchestrator invoke and MCP (DIG-3585)
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
 ├── pipeline/
@@ -1397,6 +1404,55 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### Tenant-scoped indexes (DIG-3585)
+
+`tenant_index_scope.py` binds an index to the tenants that own it. Ownership is
+read from `DIGI_TENANT_CORPUS_MAP` (the map digigraph and digivault already
+read): a tenant entry claims every index in its `digisearchIndex` comma list and
+in `digisearchTools[*].index`. A claimed index is tenant-scoped unless a public
+tenant also claims it (`DIGISEARCH_PUBLIC_TENANTS`, default `digithings`, so the
+house docs corpus stays open).
+
+| Surface | Tenant read from | Refusal |
+|---|---|---|
+| `POST /query`, `POST /v1/research_turn`, `POST /v1/orchestrator_invoke` (`digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`) | `request.state.digi_auth`, only when `tenant_slug_verified` | 403 |
+| MCP `semantic`, `search_strategies`, `research_turn` | the request's bearer, re-verified with digikey (signature, `jti` revocation, `mcp:digisearch` scope); the static edge key carries no tenant | tool error |
+| `POST /ingest`, `POST /ingest/url` (writes) | `request.state.digi_auth`, only when `tenant_slug_verified` | 403, before the source is read or fetched |
+
+Writes are scoped exactly like reads: only the owning tenant's verified token may
+ingest into a tenant-scoped index, so a house caller (a token for the house
+tenant, another tenant, or no tenant claim at all) cannot write a tenant corpus
+under any spelling of its name. An ingest names exactly one index: a comma list
+is a 422 on the write routes. A public tenant's index (the house docs) stays
+writable by any `digisearch:ingest` caller, as before.
+
+Every index name is also checked for shape first, map or no map: after
+normalization each comma-list entry must match `^[a-z0-9][a-z0-9_-]{0,63}$`.
+Path segments (`x/../name`, `./name`), `?`, `#`, percent escapes and a list with
+no name at all (`" , "`) are refused: 422 from the request models, 400 from
+orchestrator invoke, a tool error on MCP, `InvalidIndexName` from `query_index`
+and `VectorizeBackend`, which also percent-quotes the name in its URL.
+
+The resolved index is checked, including a default and every member of a comma
+list; `-` and `_` compare alike. An unsigned `X-Digi-Tenant` header never counts.
+Unset map: no check. Set but unusable: 503 / tool error (fail closed). A tenant
+chat keeps working because digigraph forwards that chat's own tenant JWT on
+`/v1/orchestrator_invoke`, and digichat mints the MCP JWT for the same tenant.
+
+**Limitation: Azure AI Search serves one physical index.** The check above
+decides on the request's `index_name`, and it isolates tenants only where that
+name selects the physical index: Vectorize, Chroma and the stub. The Azure
+backend (`indexes/backends/azure_search.py`) opens a single `SearchClient` on
+the index named by `DIGISEARCH_INDEX_CONFIG` / `AZURE_SEARCH_INDEX_NAME`, and
+the request's `index_name` only labels its logs. The router tries Azure first,
+so on a deployment with Azure configured every query, whatever index it names
+(including a public one such as the house docs), reads that one Azure index.
+Until Azure maps `index_name` to an index, a deployment with Azure configured
+must hold a single tenant's corpus in it, or scope it by `workspace_id`
+([Multi-tenant isolation](#multi-tenant-isolation)), and must not rely on
+tenant-scoped index names to keep tenants apart. Ingest is not affected: it
+never writes to Azure (`route_add_chunks` goes to Vectorize, Chroma or the stub).
 
 ### Unseeded corpora (#5045)
 

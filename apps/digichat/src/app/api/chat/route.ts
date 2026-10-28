@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     authResult instanceof Response && isEmbedChatRequest(req)
       ? resolveEmbedChatTenant(req)
       : authResult instanceof Response
-        ? (resolveAnonymousInstallChat() ??
+        ? (resolveAnonymousInstallChat(req) ??
           resolveAnonymousDeploymentChat(req) ??
           authResult)
         : await resolveChatTenantContext(req, authResult);

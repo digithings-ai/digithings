@@ -37,6 +37,10 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
     expect(script).toMatch(/OCC_INVITE_KEY/);
     expect(script).toMatch(/iframe/);
     expect(script).toMatch(/\/chat\/occ\//);
+    // The bare link must redirect to the clean trailing-slash page URL, so the
+    // key never stays in the address bar after load.
+    expect(script).toMatch(/LINK="\$\{BASE%\/\}\/chat\/occ"/);
+    expect(script).toMatch(/"\$location" != "\$URL"/);
   });
 
   it("the post-deploy smoke checks the page's API calls with only the cookie (G1)", () => {
@@ -53,5 +57,15 @@ describe("OCC invite route contract (DIG-3585, separation 2026-10-19)", () => {
     expect(script).toMatch(/-b "\$jar"[\s\S]*--data "\$msg" "\$TURN_URL"/);
     // The key is read from the environment only and never put on a turn.
     expect(script).not.toMatch(/x-embed-token/i);
+  });
+
+  it(`${OCC_ROUTE_OWNER} keeps query strings out of Workers Logs and traces`, () => {
+    // The invite link carries the key as ?token= on its first hit, and the
+    // legacy /embed door carries it the same way. The invocation log records
+    // the request URL, so the query string is redacted for this Worker.
+    const toml = readFileSync(join(repoRoot, OCC_ROUTE_OWNER), "utf8");
+    const section = toml.match(/^\[observability\]\n([\s\S]*?)(?=^\[)/m);
+    expect(section, "[observability] section").not.toBeNull();
+    expect(section![1]).toMatch(/^redact_query_string\s*=\s*true\s*$/m);
   });
 });

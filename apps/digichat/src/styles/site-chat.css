@@ -1,0 +1,127 @@
+/* Site chat surfaces (/chat product app, top-level /chat/occ) paint with
+   packages/design/tokens.css — the same source as digithings.ai.
+   Framed embeds (dashboard modal, customer hosts) opt out below so importing
+   that sheet does not restyle them. */
+
+/* Undo tokens.css on a document that is not a site chat. */
+:root:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
+  --bg: initial;
+  --surface: initial;
+  --surface-2: initial;
+  --hair: initial;
+  --hair-2: initial;
+  --hair-strong: initial;
+  --ink: initial;
+  --ink-soft: initial;
+  --ink-mute: initial;
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-weak: initial;
+  --on-accent: initial;
+  --term-bg: initial;
+  --term-ink: initial;
+  --term-mute: initial;
+  --term-hair: initial;
+  --term-fill: initial;
+  --frame-w: initial;
+  --page-pad: initial;
+  --gutter: initial;
+  --wrap: initial;
+  --font-sans: var(--font-sans-face, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-family: var(--font-sans);
+  --font-display: var(--font-sans);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+:root.dark:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
+  --accent: oklch(0.274 0.006 286.033);
+}
+
+/* tokens.css accent classes would paint module livery on the site chat.
+   Framed embeds keep their own accent class (and any inline hex). */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])) [class^="accent-"],
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])) [class*=" accent-"] {
+  --accent: unset;
+  --on-accent: unset;
+}
+
+/* Default theme matches the website: accent collapses to ink. A palette
+   selector is more specific and wins when data-palette is set. */
+:root[data-theme="dark"]:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-palette]) {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --accent-weak: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+:root[data-theme="light"]:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-palette]) {
+  --accent: var(--ink);
+  --on-accent: var(--surface);
+  --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+:root[data-theme="dark"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]),
+:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"],
+:root[data-theme="light"] [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] {
+  --term-bg: var(--bg);
+  --term-ink: var(--ink);
+  --term-mute: var(--ink-mute);
+  --term-hair: var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Thread-local hexes lose to the site tokens. App mode stays transparent so
+   the body canvas (and the rails) show through; a top-level embed paints --bg. */
+:root[data-theme]:is([data-site-theme="1"], :has([data-chrome-mode="app"])) .digichat-thread {
+  --bg: inherit;
+  --surface: inherit;
+  --surface-2: inherit;
+  --hair: inherit;
+  --hair-2: inherit;
+  --ink: inherit;
+  --ink-soft: inherit;
+  --ink-mute: inherit;
+  --accent: inherit;
+  --accent-weak: inherit;
+  --on-accent: inherit;
+  --term-bg: var(--bg);
+  --term-ink: var(--ink);
+  --term-mute: var(--ink-mute);
+  --term-hair: var(--hair);
+  --term-fill: color-mix(in srgb, var(--ink) 5%, var(--bg));
+  --up: inherit;
+  --down: inherit;
+  --danger: inherit;
+  --warn: inherit;
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --muted: var(--term-fill);
+  --muted-foreground: var(--ink-mute);
+  --border: var(--hair);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --composer-bg: var(--surface);
+  color: var(--ink);
+}
+
+:root[data-theme]:has([data-chrome-mode="app"]) .digichat-thread {
+  background: transparent;
+}
+
+:root[data-site-theme="1"]:not(:has([data-chrome-mode="app"])) .digichat-thread {
+  background: var(--bg);
+}
+
+/* Embed rails mount on every embed document and hide unless this is the
+   top-level page. The product app uses .site-rails and is not gated here. */
+html:not([data-site-rails="1"]) .dc-site-rails {
+  display: none;
+}

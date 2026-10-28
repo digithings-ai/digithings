@@ -36,7 +36,14 @@ export function isPrivateMode(headers: Headers): boolean {
 }
 
 /**
- * Append the private-mode instruction to the **last user turn's parts**.
+ * Id of the request-only user message that carries the instruction.
+ * Adapters recognise it and keep it out of the typed user text.
+ */
+export const PRIVATE_MODE_MESSAGE_ID = "digi-private-instruction";
+
+/**
+ * Insert the private-mode instruction as its **own user message**, immediately
+ * before the last user turn.
  *
  * Two constraints decide the shape of this:
  *
@@ -52,10 +59,19 @@ export function isPrivateMode(headers: Headers): boolean {
  *    first shipped as a no-op. Every path consumes `messages`, so that is where
  *    the instruction goes.
  *
- * Only the last user turn is touched, and only in the request copy: what the
- * client stores, re-sends and renders is unchanged.
+ * The instruction is its own message, not a part of the typed turn. Digigraph
+ * reads the last user turn as the tool query (`last_user_turn`); gluing the
+ * instruction onto that text would change what tools search for. A message
+ * placed just before the question stays in the model payload and leaves the
+ * question byte-identical.
+ *
+ * Only the request copy changes: what the client stores, re-sends and renders
+ * is unchanged.
  */
 export function withPrivateModeUiPrompt(messages: UIMessage[]): UIMessage[] {
+  if (messages.some((message) => message.id === PRIVATE_MODE_MESSAGE_ID)) {
+    return messages;
+  }
   let lastUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === "user") {
@@ -65,21 +81,57 @@ export function withPrivateModeUiPrompt(messages: UIMessage[]): UIMessage[] {
   }
   if (lastUserIndex === -1) return messages;
 
-  const target = messages[lastUserIndex];
-  if (!target) return messages;
-
-  const patched: UIMessage = {
-    ...target,
-    // The digigraph prompt builder joins a turn's text blocks with `""`, so a
-    // bare instruction would be glued to the user's question. The separator
-    // belongs here, not in the shared joiner, which every message uses.
-    parts: [
-      ...target.parts,
-      { type: "text", text: `\n\n${PRIVATE_MODE_INSTRUCTION}` },
-    ],
+  const instruction: UIMessage = {
+    id: PRIVATE_MODE_MESSAGE_ID,
+    role: "user",
+    parts: [{ type: "text", text: PRIVATE_MODE_INSTRUCTION }],
   };
+  return [
+    ...messages.slice(0, lastUserIndex),
+    instruction,
+    ...messages.slice(lastUserIndex),
+  ];
+}
 
-  return messages.map((message, index) =>
-    index === lastUserIndex ? patched : message,
+/** The instruction text when this request copy carries the private message. */
+export function privateModeInstructionText(messages: readonly UIMessage[]): string | null {
+  const hit = messages.find(
+    (message) => message.id === PRIVATE_MODE_MESSAGE_ID && message.role === "user",
   );
+  if (!hit) return null;
+  const text = hit.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+  return text === PRIVATE_MODE_INSTRUCTION ? text : null;
+}
+
+/**
+ * Provider `{role, content}` bodies. A joiner that glues the instruction onto
+ * the question is split so the question stays its own message and comes last
+ * — that last user turn is what tools search.
+ */
+export function separatePrivateInstructionPayload<T extends { role: string; content: string }>(
+  messages: readonly T[],
+): T[] {
+  const out: T[] = [];
+  for (const message of messages) {
+    if (message.role !== "user" || !message.content.includes(PRIVATE_MODE_INSTRUCTION)) {
+      out.push(message);
+      continue;
+    }
+    if (message.content.trim() === PRIVATE_MODE_INSTRUCTION) {
+      out.push({ ...message, content: PRIVATE_MODE_INSTRUCTION });
+      continue;
+    }
+    const at = message.content.indexOf(PRIVATE_MODE_INSTRUCTION);
+    const before = message.content.slice(0, at).trim();
+    const after = message.content
+      .slice(at + PRIVATE_MODE_INSTRUCTION.length)
+      .trim();
+    const userText = [before, after].filter(Boolean).join("\n\n");
+    out.push({ ...message, content: PRIVATE_MODE_INSTRUCTION });
+    if (userText) out.push({ ...message, content: userText });
+  }
+  return out;
 }

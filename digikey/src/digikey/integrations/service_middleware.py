@@ -49,12 +49,6 @@ def digikey_auth_active() -> bool:
     )
 
 
-def _tenant_headers(request: Request) -> str:
-    return (
-        request.headers.get("X-Digi-Tenant") or request.headers.get("X-Digichat-Tenant") or ""
-    ).strip()
-
-
 def jwt_context(
     request: Request, raw_bearer: str, required_scopes: list[str]
 ) -> DigiAuthContext | JSONResponse:
@@ -102,11 +96,12 @@ def jwt_context(
         )
     ctx = claims_to_context(claims, bearer_token=raw_bearer)
     ctx.caller_service = (request.headers.get("X-Digi-Caller") or "").strip() or None
-    # tenant_slug_verified was already set from the JWT claim above (claims_to_context)
-    # and is deliberately NOT set here — a header-filled tenant_slug must stay
-    # unverified so downstream authorization checks can tell the two apart (#2303).
-    if not ctx.tenant_slug and (tn := _tenant_headers(request)):
-        ctx.tenant_slug = tn
+    # The tenant comes from the signed claim only (claims_to_context). A token
+    # with no tenant claim has no tenant: the unsigned X-Digi-Tenant /
+    # X-Digichat-Tenant headers are never read here, so a caller cannot name a
+    # tenant it does not hold (#2303, DIG-3585). Services that scope tenant data
+    # (digigraph corpus routing, digivault prefixes, digisearch indexes) therefore
+    # fail closed for such a token.
     return ctx
 
 

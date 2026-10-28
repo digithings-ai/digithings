@@ -22,7 +22,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def indexed(client: TestClient) -> None:
-    idx = "__orch_invoke__"
+    idx = "orch_invoke"
     for i in range(5):
         add_chunks(
             idx,
@@ -44,7 +44,7 @@ def test_orchestrator_invoke_digisearch(client: TestClient, indexed: None) -> No
         "/v1/orchestrator_invoke",
         json={
             "tool": "digisearch",
-            "arguments": {"query": "Orchestrator", "index_name": "__orch_invoke__", "top_k": 2},
+            "arguments": {"query": "Orchestrator", "index_name": "orch_invoke", "top_k": 2},
         },
     )
     assert r.status_code == 200
@@ -66,7 +66,7 @@ def test_orchestrator_invoke_fetch_all_respects_cap(
             "tool": "digisearch_fetch_all",
             "arguments": {
                 "query": "Orchestrator",
-                "index_name": "__orch_invoke__",
+                "index_name": "orch_invoke",
                 "max_results": 100,
             },
         },

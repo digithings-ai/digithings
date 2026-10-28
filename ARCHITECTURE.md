@@ -313,7 +313,7 @@ All four protected services (digigraph, digiquant, digisearch, digivault) use `d
 | `X-Request-ID` | Propagated hub→vertical | Correlation across audit logs and traces |
 | `X-LiteLLM-Proxy-Key` | digichat → digigraph → LiteLLM | Per-session LLM proxy authorization |
 | `X-Session-Id` / `X-Digichat-Session` | digichat → digigraph | LangGraph `thread_id` for checkpoint continuity |
-| `X-Digi-Tenant` | Optional; operator-set | Multi-tenant routing (Phase 2) |
+| `X-Digi-Tenant` | digichat → digigraph | Informational only. Services never take the tenant from it; the tenant is the JWT's signed `tenant_slug` claim (DIG-3585) |
 
 ### digichat Auth Exchange Flow
 
@@ -332,7 +332,7 @@ Machine clients use `grant_type=api_key` with a `dgk_live_` key for the same exc
 ### Known Gaps
 
 - **JWT revocation depends on the blocklist backend:** digikey writes revoked `jti` values to a Redis blocklist with a per-entry TTL, and protected services reject a blocklisted `jti` (ADR-0007). Compose sets `DIGIKEY_REQUIRE_BLOCKLIST=1` and a `digikey-blocklist-redis` URL, so an unreachable Redis fails closed with `503 auth_backend_unavailable`. A deployment that leaves both `DIGIKEY_BLOCKLIST_REDIS_URL` and `DIGIKEY_REQUIRE_BLOCKLIST` unset keeps pre-revocation behavior (tokens valid until `exp`).
-- **Multi-tenant incomplete:** `X-Digi-Tenant` is propagated but tenant isolation within digisearch and digiquant is not enforced at the data layer today.
+- **Multi-tenant incomplete:** the tenant comes only from the JWT's signed `tenant_slug` claim (never the `X-Digi-Tenant` header, DIG-3585). digigraph corpus routing, digivault path prefixes and digisearch tenant-scoped indexes enforce it; digiquant does not isolate tenants at the data layer today.
 - **digibase credential broker not shipped:** Each service holds its own raw `DATABASE_URL` / `REDIS_URL`. Central credential rotation is Phase 1 of the digibase service roadmap.
 
 ---

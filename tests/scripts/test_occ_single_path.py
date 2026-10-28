@@ -86,7 +86,8 @@ def test_the_gate_has_no_self_fetch_default() -> None:
     the upstream with the original request object.
     """
     src = _read(WORKER / "occ-gate.ts")
-    assert "containerUpstream(occContainerRequest(request, expected))" in src, (
+    # The second argument is the (trimmed) invite key, whatever its local name.
+    assert re.search(r"containerUpstream\(occContainerRequest\(request, \w+\)\)", src), (
         "the valid branch must send a rewritten container request, never the original request"
     )
     assert "containerUpstream(request)" not in src, (

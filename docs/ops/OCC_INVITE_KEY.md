@@ -62,7 +62,7 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   `cache-control: no-store` or any other marker: that would make the gated address
   distinguishable from a plain 404.
 - **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`. The Worker
-  validates it, answers a 302 to the tokenless URL with the `occ_invite` session cookie
+  validates it, answers a 302 to the tokenless page URL `/chat/occ/` (trailing slash) with the `occ_invite` session cookie
   (HttpOnly, Secure, SameSite=Strict, Path=/chat), moves the key to the `X-Embed-Token` request
   header and drops `?token=` before proxying to the Container's `/chat/embed` route. The key never
   reaches the Container URL, the HTML or the flight payload, and the cookie itself is stripped
@@ -70,7 +70,23 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
 - **The page's API calls** (`/chat/api/*`) carry no key of their own: the browser sends the
   `/chat`-scoped cookie and the Worker (`bindOccApiCall` in `occ-gate.ts`) sets `X-Embed-Token`
   and `X-Embed-Host: occ.digithings.ai` only when that cookie is valid **and** the Referer is the
-  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent).
+  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent),
+  and, when the browser sends them, `Sec-Fetch-Site` is `same-origin` and `Origin` is ours.
+  The Referer check only tells an OCC call from a house one. Same-origin script can set
+  any same-origin referrer, so the HttpOnly cookie is the actual boundary.
+- **The cookie is not the key, and it expires.** It holds `v2.<issued-at>.<mac>`, where
+  `<issued-at>` is unix seconds and `<mac>` is `HMAC-SHA256(key, "digichat/occ_invite/v2|<issued-at>")`
+  (base64url), checked in constant time. A leaked cookie does not work as `?token=`.
+  - **Max age:** the Worker refuses a cookie older than `OCC_INVITE_MAX_AGE_DAYS` (a non-secret
+    `[vars]` entry in `apps/digichat-cloudflare/wrangler.toml`, whole days 1-365, default 30;
+    an invalid value falls back to 30 and a larger one is capped at 365). An issued-at more than
+    five minutes in the future is refused too. The cookie itself carries no `Max-Age`, so the
+    browser still drops it with the session.
+  - **Renewal:** only a valid `?token=` hit issues a new cookie (fresh issued-at). A page load
+    with the cookie re-sets the same value and never extends it.
+  - **Refusal:** an expired, tampered (issued-at or MAC), old-format (v1) or raw-key cookie gets
+    the site 404 on `/chat/occ`, and an API call carrying one is not bound to the OCC tenant.
+  - **Rotation:** rotating the key retires every cookie, so open browsers need the new link.
   From that page the client's own `X-Embed-Token` / `X-Embed-Host` are always dropped, and a
   client-sent `X-Digi-Tenant` is dropped on every `/chat/api/*` call. A house page's calls are
   never upgraded by the cookie.
@@ -447,10 +463,17 @@ and live customer PII anyway.
   the browser's address bar and history never keep it. The follow-up request is authenticated by
   the cookie; the Worker then removes the query token, moves the key to `x-embed-token` and drops
   it before proxying, so it does not reach the app's render or its HTML.
-  Two limits remain, both real: the Worker reads the key out of its own request URL, and the
-  digichat Worker has `[observability] enabled = true`
-  (`apps/digichat-cloudflare/wrangler.toml:12-13`), so the first hop **can appear in Workers log
-  metadata** — the same exposure the Pages gate never had. And the `Referrer-Policy: no-referrer`
+  The Worker reads the key out of its own request URL, and it answers the 302 before any app code
+  runs: nothing in the Worker logs the URL (`index.test.ts` pins that a token hit produces no
+  console output and never reaches the container). The platform's own **invocation log** does
+  record the request URL, and the digichat Worker keeps Workers Logs on
+  (`[observability] enabled = true` in `apps/digichat-cloudflare/wrangler.toml`), so the Worker
+  also sets `redact_query_string = true` there: query strings are dropped from its logs and
+  traces, for `/chat/occ?token=` and the legacy `/embed?...&token=` door alike (pinned by
+  `occ-route.contract.test.ts`). This takes effect on the next Worker deploy; invocation logs
+  written before it may still hold a first-hop URL until Workers Logs retention (7 days) ages
+  them out. The legacy `/embed` door still passes its URL to the container, whose app does not
+  log request URLs. One limit remains: the `Referrer-Policy: no-referrer`
   rule on `/chat/occ*` (`apps/digithings-web/public/_headers:27-29`) no longer applies: the
   response is now the container's, whose baked policy is `strict-origin-when-cross-origin`
   (`apps/digichat/src/lib/security-headers-bake.ts:40`), which strips the query for cross-origin

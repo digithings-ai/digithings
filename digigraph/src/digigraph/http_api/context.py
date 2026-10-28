@@ -136,7 +136,10 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     if auth is not None:
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
-        if auth.tenant_slug:
+        # Only a signed tenant claim names the tenant (#2303, DIG-3585). The
+        # middleware no longer fills tenant_slug from a header; the flag check
+        # keeps that true for a context built any other way.
+        if auth.tenant_slug and getattr(auth, "tenant_slug_verified", False):
             updates["digi_trace_tenant"] = auth.tenant_slug
             tenant_from_auth = auth.tenant_slug
         if auth.project_id:
@@ -155,11 +158,9 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         corpus_map=corpus_map,
     )
     # The effective tenant slug, resolved exactly as resolve_corpus_override does
-    # (verified auth first, the unsigned routing hint only when auth named no
-    # tenant) so corpus and skills can never resolve to two different tenants.
-    tenant_slug = tenant_from_auth or (
-        _hget(http_request.headers, "X-Digi-Tenant", "x-digi-tenant").strip().lower() or None
-    )
+    # (the verified auth tenant only; no unsigned header) so corpus and skills
+    # can never resolve to two different tenants.
+    tenant_slug = tenant_from_auth
     # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
     # digisearch_index / vault_path_prefix must be written unconditionally so a client
     # body value cannot survive into graph state (digisearch has no server-side

@@ -28,6 +28,8 @@ import {
   isOccShellPath,
   occEmbedGate,
   occGate,
+  occInviteMaxAgeSeconds,
+  type OccCookiePolicy,
   withoutInviteCookie,
 } from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
@@ -262,6 +264,11 @@ export class DigiChatContainer extends Container {
   }
 }
 
+/** The `occ_invite` cookie lifetime from the non-secret var (default 30 days). */
+function occCookiePolicy(env: Env): OccCookiePolicy {
+  return { maxAgeSeconds: occInviteMaxAgeSeconds(env.OCC_INVITE_MAX_AGE_DAYS) };
+}
+
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
   /**
@@ -269,6 +276,11 @@ export interface Env {
    * /chat/api/* calls to the invite. Worker-only; never forwarded.
    */
   OCC_INVITE_KEY?: string;
+  /**
+   * Non-secret: how many days an `occ_invite` cookie is honoured after the
+   * invite link set it (whole days, 1-365; default 30). Worker-only.
+   */
+  OCC_INVITE_MAX_AGE_DAYS?: string;
   /**
    * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
    * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
@@ -339,11 +351,16 @@ export default {
       // draining slot or a dropped connection on this path answers the same
       // retryable 503 / inline HTML `/chat` answers, instead of a raw 5xx.
       const container = getContainer(workerEnv.DIGICHAT, containerId);
-      return occGate(request, workerEnv.OCC_INVITE_KEY, async (req) =>
-        frameSafeErrorResponse(
-          req,
-          await fetchContainerWithRetry(req, (r) => container.fetch(r)),
-        ),
+      return occGate(
+        request,
+        workerEnv.OCC_INVITE_KEY,
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
       );
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
@@ -440,7 +457,11 @@ export default {
     // Judged on the path the container sees, so a legacy /api/* alias is bound
     // the same way as its /chat/api/* target.
     if (isChatApiPath(new URL(containerRequest.url).pathname)) {
-      bindOccApiCall(containerRequest, workerEnv.OCC_INVITE_KEY);
+      await bindOccApiCall(
+        containerRequest,
+        workerEnv.OCC_INVITE_KEY,
+        occCookiePolicy(workerEnv),
+      );
     }
     // The invite cookie stops at the edge on every path, like the edge key.
     withoutInviteCookie(containerRequest.headers);

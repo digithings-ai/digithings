@@ -3,6 +3,9 @@ import type { UIMessage } from "ai";
 import {
   isPrivateMode,
   PRIVATE_MODE_INSTRUCTION,
+  PRIVATE_MODE_MESSAGE_ID,
+  privateModeInstructionText,
+  separatePrivateInstructionPayload,
   withPrivateModeUiPrompt,
 } from "./private-mode";
 
@@ -40,14 +43,17 @@ describe("isPrivateMode", () => {
 });
 
 describe("withPrivateModeUiPrompt", () => {
-  it("appends the instruction to the last user turn and nothing else", () => {
+  it("inserts the instruction as its own user message before the last user turn", () => {
     const messages = [user("first"), assistant("ok"), user("John Smith", "u2")];
     const out = withPrivateModeUiPrompt(messages);
 
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(4);
     expect(textOf(out[0])).toBe("first");
     expect(textOf(out[1])).toBe("ok");
-    expect(textOf(out[2])).toBe(`John Smith\n\n${PRIVATE_MODE_INSTRUCTION}`);
+    expect(out[2]?.id).toBe(PRIVATE_MODE_MESSAGE_ID);
+    expect(textOf(out[2])).toBe(PRIVATE_MODE_INSTRUCTION);
+    expect(textOf(out[3])).toBe("John Smith");
+    expect(privateModeInstructionText(out)).toBe(PRIVATE_MODE_INSTRUCTION);
   });
 
   it("does not mutate the input", () => {
@@ -65,14 +71,13 @@ describe("withPrivateModeUiPrompt", () => {
       assistant("d", "a2"),
       user("e", "u3"),
     ]);
-    const carrying = out.filter((m) =>
-      textOf(m).includes("PRIVATE DEMO SESSION"),
-    );
+    const carrying = out.filter((m) => textOf(m).includes("PRIVATE DEMO SESSION"));
     expect(carrying).toHaveLength(1);
-    expect(textOf(out[4])).toContain("PRIVATE DEMO SESSION");
+    expect(out[4]?.id).toBe(PRIVATE_MODE_MESSAGE_ID);
+    expect(textOf(out[5])).toBe("e");
   });
 
-  it("keeps a non-text part that already sits in the user turn", () => {
+  it("leaves a non-text part on the typed turn and does not copy it onto the instruction", () => {
     const messages: UIMessage[] = [
       {
         id: "u1",
@@ -84,12 +89,56 @@ describe("withPrivateModeUiPrompt", () => {
       },
     ];
     const out = withPrivateModeUiPrompt(messages);
-    expect(out[0]?.parts).toHaveLength(3);
-    expect(out[0]?.parts[1]).toMatchObject({ type: "file" });
+    expect(out[0]?.id).toBe(PRIVATE_MODE_MESSAGE_ID);
+    expect(out[0]?.parts).toEqual([{ type: "text", text: PRIVATE_MODE_INSTRUCTION }]);
+    expect(out[1]?.parts).toHaveLength(2);
+    expect(out[1]?.parts[1]).toMatchObject({ type: "file" });
   });
 
   it("returns the messages untouched when there is no user turn", () => {
     const messages = [assistant("only")];
     expect(withPrivateModeUiPrompt(messages)).toEqual(messages);
+    expect(privateModeInstructionText(messages)).toBeNull();
+  });
+
+  it("does not insert a second instruction when one is already present", () => {
+    const once = withPrivateModeUiPrompt([user("John Smith")]);
+    expect(withPrivateModeUiPrompt(once)).toBe(once);
+  });
+});
+
+describe("separatePrivateInstructionPayload", () => {
+  it("splits a glued instruction off the typed text and leaves the question last", () => {
+    const glued = `notes\n\n${PRIVATE_MODE_INSTRUCTION}\n\nJohn Smith at Acme`;
+    const out = separatePrivateInstructionPayload([{ role: "user", content: glued }]);
+    expect(out).toEqual([
+      { role: "user", content: PRIVATE_MODE_INSTRUCTION },
+      { role: "user", content: "notes\n\nJohn Smith at Acme" },
+    ]);
+  });
+
+  it("leaves an already-separate instruction and every other message unchanged", () => {
+    const tool = {
+      role: "tool",
+      content: JSON.stringify({ ticket: "ACME-1", name: "John Smith" }),
+    };
+    const out = separatePrivateInstructionPayload([
+      { role: "user", content: PRIVATE_MODE_INSTRUCTION },
+      { role: "user", content: "John Smith" },
+      tool,
+      { role: "assistant", content: "ticket ACME-1 belongs to John Smith" },
+    ]);
+    expect(out[0]).toEqual({ role: "user", content: PRIVATE_MODE_INSTRUCTION });
+    expect(out[1]).toEqual({ role: "user", content: "John Smith" });
+    expect(out[2]).toBe(tool);
+    expect(out[3]?.content).toBe("ticket ACME-1 belongs to John Smith");
+  });
+
+  it("does nothing when private mode is off", () => {
+    const messages = [
+      { role: "user", content: "John Smith" },
+      { role: "assistant", content: "hello John" },
+    ];
+    expect(separatePrivateInstructionPayload(messages)).toEqual(messages);
   });
 });
