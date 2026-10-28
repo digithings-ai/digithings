@@ -88,7 +88,13 @@ export type TraceCostBucket = {
 export type TraceCost = {
   workspace_id: string;
   window: { since: string | null; until: string | null };
-  totals: { spans: number; input_tokens: number; output_tokens: number; total_tokens: number; cost_usd: number };
+  totals: {
+    spans: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+  };
   by_model: TraceCostBucket[];
   /** 'index' today; the Analytics Engine aggregate is the source of record. */
   cost_source: string;
