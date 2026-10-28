@@ -450,7 +450,7 @@ export async function POST(req: Request) {
 
   // Private demo session (`x-digi-private: 1`), honoured only for a tenant
   // that opted in. The instruction rides the UI messages (below); the stream
-  // wrapper strips tool and reasoning payloads and scrubs obvious identifiers
+  // wrapper strips tool and reasoning payloads and the tenant's own names
   // before anything reaches the browser (`lib/private-stream.ts`).
   const privateMode =
     isPrivateMode(req.headers) &&
