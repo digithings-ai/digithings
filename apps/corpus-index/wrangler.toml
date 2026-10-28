@@ -21,11 +21,12 @@ binding = "AI"
 DRY_RUN = "0"
 CLOUDFLARE_ACCOUNT_ID = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 
-# Replace the id before the first deploy (`wrangler kv namespace create corpus-index`).
-# The id identifies an account namespace, not a client.
+# The live `corpus-index` namespace (created 13 Oct; the deployed Worker is
+# bound to it). The id identifies an account namespace, not a client. The
+# all-zero placeholder that used to sit here would have failed the next deploy.
 [[kv_namespaces]]
 binding = "CORPUS_INDEX_KV"
-id = "00000000000000000000000000000000"
+id = "16160cf4676d4175a2ec4044f0aead1b"
 
 [[workflows]]
 name = "corpus-index-daily"
