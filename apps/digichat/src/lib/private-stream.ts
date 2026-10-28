@@ -182,11 +182,26 @@ export function privatizeChunk(chunk: Chunk, scrubber: PrivateTextScrubber): Chu
   return chunk;
 }
 
-/** Hold back a delta's last partial word so a split email is scrubbed whole. */
-function splitAtLastBoundary(text: string): [ready: string, rest: string] {
+/** Held-back text is released past this length, so a long run cannot stall the answer. */
+const MAX_HELD_BACK = 256;
+// A trailing run that may still grow into a phone number: it starts at a word
+// boundary with a digit, `+` or `(`, and holds only digits and phone separators.
+const TRAILING_PHONE_RUN_RE = /(?:^|\s)([+(]?\d[\d\s().+-]*)$/;
+
+/**
+ * Hold back a delta's last partial word so a split email is scrubbed whole,
+ * and a trailing digit run too: a phone number is written with spaces
+ * (`+39 06 1234 5678`), so cutting at the last space would let its first
+ * groups out before the rest arrives, and neither piece would match.
+ */
+export function splitAtLastBoundary(text: string): [ready: string, rest: string] {
   const at = Math.max(text.lastIndexOf(" "), text.lastIndexOf("\n"), text.lastIndexOf("\t"));
-  if (at === -1) return text.length > 256 ? [text, ""] : ["", text];
-  return [text.slice(0, at + 1), text.slice(at + 1)];
+  if (at === -1) return text.length > MAX_HELD_BACK ? [text, ""] : ["", text];
+  let cut = at + 1;
+  const run = TRAILING_PHONE_RUN_RE.exec(text.slice(0, cut));
+  if (run) cut = run.index + run[0].length - run[1].length;
+  if (text.length - cut > MAX_HELD_BACK) cut = at + 1;
+  return [text.slice(0, cut), text.slice(cut)];
 }
 
 /**

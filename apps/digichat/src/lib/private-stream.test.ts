@@ -7,6 +7,7 @@ import {
   privateTermsFor,
   privatizeChatResponse,
   privatizeChunk,
+  splitAtLastBoundary,
 } from "./private-stream";
 import {
   privateToolRecorder,
@@ -220,6 +221,40 @@ describe("privatizeChatResponse", () => {
       (e): e is Record<string, unknown> => typeof e !== "string" && e.type === "reasoning-delta",
     );
     expect(reasoning).toEqual([{ type: "reasoning-delta", id: "r1", delta: PRIVATE_REASONING_TEXT }]);
+  });
+
+  it("scrubs a phone number written with spaces even when it streams one group at a time", async () => {
+    const pieces = ["Call ", "+39", " 06", " 1234", " 5678", " or ", "555", "-123", "-4567", " today, ", "room 12", " ok"];
+    const res = privatizeChatResponse(
+      new Response(
+        streamOf(
+          sse([
+            { type: "text-start", id: "t" },
+            ...pieces.map((delta) => ({ type: "text-delta", id: "t", delta })),
+            { type: "text-end", id: "t" },
+          ]),
+        ),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+    const raw = await res.clone().text();
+    expect(raw).not.toContain("1234");
+    expect(raw).not.toContain("5678");
+    expect(raw).not.toContain("4567");
+    const text = (await readEvents(res))
+      .filter((e): e is Record<string, unknown> => typeof e !== "string" && e.type === "text-delta")
+      .map((e) => e.delta)
+      .join("");
+    expect(text).toBe("Call +1 555 0100 or +1 555 0101 today, room 12 ok");
+  });
+
+  it("holds back only a trailing digit run, and never more than 256 characters", () => {
+    expect(splitAtLastBoundary("Call +39 06 ")).toEqual(["Call ", "+39 06 "]);
+    expect(splitAtLastBoundary("Call (06) 1234 ")).toEqual(["Call ", "(06) 1234 "]);
+    expect(splitAtLastBoundary("hello world ")).toEqual(["hello world ", ""]);
+    expect(splitAtLastBoundary("in 2026 we ")).toEqual(["in 2026 we ", ""]);
+    const digits = `${"12 ".repeat(100)}`;
+    expect(splitAtLastBoundary(digits)).toEqual([digits, ""]);
   });
 
   it("flushes held-back text when the stream ends without text-end", async () => {
