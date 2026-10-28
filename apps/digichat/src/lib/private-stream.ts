@@ -12,11 +12,12 @@
  *    a reasoning block's start and end. The client cannot open a step because
  *    there is nothing in it, and an export of the stored thread has nothing to
  *    leak.
- * 2. **A deterministic scrub of the answer text.** Email addresses and phone
- *    numbers become consistent placeholders, and the tenant's own names (its
- *    slug and operator MCP server ids) become a generic label. It is a safety
- *    net under the prompt, not anonymisation: names the model repeats are the
- *    prompt's job.
+ * 2. **The tenant's own names are kept out of the answer text.** Its slug and
+ *    operator MCP server ids become a generic label, and are stripped from
+ *    tool names. People, emails, phone numbers and addresses are not scrubbed
+ *    here: the prompt (`private-mode.ts`) asks the model for consistent
+ *    fictional stand-ins, and that is the whole of it (owner decision,
+ *    28 Oct 2026: a second regex pass over the answer is not wanted).
  *
  * Works on the wire format every chat path shares (AI SDK UI message stream:
  * SSE `data: {json}` events), so one wrapper covers every backend adapter.
@@ -36,12 +37,6 @@ export const PRIVATE_REASONING_TEXT = "…";
 
 /** Error text a failed step carries in a private session. */
 export const PRIVATE_TOOL_ERROR = "Step failed.";
-
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-// A phone number: optional +country, optional (area), then 2-4 digit groups
-// joined by space, dot or dash; or a bare +international run. Matches are kept
-// only with 9+ digits, so dates, times and short ids pass through.
-const PHONE_RE = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{2,4}(?:[\s.-]\d{2,4}){2,5}|\+\d{9,15}/g;
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -63,10 +58,8 @@ export function privateTermsFor(cfg: {
   return [...out];
 }
 
-/** Stateful scrubber: the same email or phone gets the same placeholder. */
+/** Replaces the tenant's own names with {@link PRIVATE_TERM_LABEL}. */
 export class PrivateTextScrubber {
-  private readonly emails = new Map<string, string>();
-  private readonly phones = new Map<string, string>();
   private readonly termRe: RegExp | null;
 
   constructor(terms: readonly string[] = []) {
@@ -78,28 +71,8 @@ export class PrivateTextScrubber {
   }
 
   scrub(text: string): string {
-    if (!text) return text;
-    let out = text.replace(EMAIL_RE, (hit) => {
-      const key = hit.toLowerCase();
-      let alias = this.emails.get(key);
-      if (!alias) {
-        alias = `contact${this.emails.size + 1}@example.com`;
-        this.emails.set(key, alias);
-      }
-      return alias;
-    });
-    out = out.replace(PHONE_RE, (hit) => {
-      const digits = hit.replace(/\D/g, "");
-      if (digits.length < 9) return hit;
-      let alias = this.phones.get(digits);
-      if (!alias) {
-        alias = `+1 555 01${String(this.phones.size).padStart(2, "0")}`;
-        this.phones.set(digits, alias);
-      }
-      return alias;
-    });
-    if (this.termRe) out = out.replace(this.termRe, PRIVATE_TERM_LABEL);
-    return out;
+    if (!text || !this.termRe) return text;
+    return text.replace(this.termRe, PRIVATE_TERM_LABEL);
   }
 
   /** A tool name with the tenant's own names removed: `helpdesk_search_tickets` → `search_tickets`. */
@@ -182,7 +155,7 @@ export function privatizeChunk(chunk: Chunk, scrubber: PrivateTextScrubber): Chu
   return chunk;
 }
 
-/** Hold back a delta's last partial word so a split email is scrubbed whole. */
+/** Hold back a delta's last partial word so a split tenant name is scrubbed whole. */
 function splitAtLastBoundary(text: string): [ready: string, rest: string] {
   const at = Math.max(text.lastIndexOf(" "), text.lastIndexOf("\n"), text.lastIndexOf("\t"));
   if (at === -1) return text.length > 256 ? [text, ""] : ["", text];

@@ -61,21 +61,10 @@ describe("privateTermsFor", () => {
 });
 
 describe("PrivateTextScrubber", () => {
-  it("replaces emails and phone numbers with consistent placeholders", () => {
-    const s = new PrivateTextScrubber();
-    const out = s.scrub(
-      "Mail jane.doe@client.example or call +39 333 123 4567. Again: JANE.DOE@client.example",
-    );
-    expect(out).not.toContain("jane.doe");
-    expect(out).not.toContain("123 4567");
-    expect(out).toBe(
-      "Mail contact1@example.com or call +1 555 0100. Again: contact1@example.com",
-    );
-  });
-
-  it("leaves dates, times and short ids alone", () => {
-    const s = new PrivateTextScrubber();
-    const text = "Ticket 10045 opened 2026-10-28 at 14:30, priority 2.";
+  it("leaves emails, phone numbers, dates and ids to the prompt's stand-ins", () => {
+    const s = new PrivateTextScrubber(["deskly"]);
+    const text =
+      "Mail jane.doe@client.example or call +39 333 123 4567. Ticket 10045 opened 2026-10-28 at 14:30.";
     expect(s.scrub(text)).toBe(text);
   });
 
@@ -171,8 +160,8 @@ describe("privatizeChatResponse", () => {
       output: { requester: "Jane Doe", email: "jane.doe@client.example" },
     },
     { type: "text-start", id: "t1" },
-    { type: "text-delta", id: "t1", delta: "Write to jane.do" },
-    { type: "text-delta", id: "t1", delta: "e@client.example via Deskly" },
+    { type: "text-delta", id: "t1", delta: "Write to the requester via Des" },
+    { type: "text-delta", id: "t1", delta: "kly" },
     { type: "text-end", id: "t1" },
     { type: "finish" },
     "[DONE]",
@@ -215,7 +204,7 @@ describe("privatizeChatResponse", () => {
       .filter((e): e is Record<string, unknown> => typeof e !== "string" && e.type === "text-delta")
       .map((e) => e.delta)
       .join("");
-    expect(text).toBe(`Write to contact1@example.com via ${PRIVATE_TERM_LABEL}`);
+    expect(text).toBe(`Write to the requester via ${PRIVATE_TERM_LABEL}`);
     const reasoning = events.filter(
       (e): e is Record<string, unknown> => typeof e !== "string" && e.type === "reasoning-delta",
     );
