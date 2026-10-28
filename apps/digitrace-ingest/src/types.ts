@@ -36,7 +36,7 @@ export interface IngestMessage {
    * alone exceeded the message budget and had to be split across chunks.
    *
    * `digitrace_traces` holds cross-span aggregates (`span_count`, the time
-   * range, `name`, `status`), and a PostgREST upsert replaces a row rather than
+   * range, `name`, `status`), and an upsert replaces a row rather than
    * merging into it. The consumer therefore inserts the row and immediately
    * recomputes it from `digitrace_spans_index`; this list marks the traces whose
    * aggregate cannot be complete from this message alone, so a reader (and a
@@ -52,10 +52,8 @@ export interface Env {
   INGEST_TOKENS: KVNamespace;
   INGEST_QUEUE: Queue<IngestMessage>;
   ANALYTICS: AnalyticsEngineDataset;
-  /** `[vars]` in wrangler.toml. */
-  SUPABASE_URL?: string;
-  /** Secret, `wrangler secret put CORE_SUPABASE_SERVICE_KEY`. */
-  CORE_SUPABASE_SERVICE_KEY?: string;
+  /** D1 `digitrace`, the queryable index (migrations/0001_digitrace_index.sql). */
+  INDEX_DB?: D1Database;
   /**
    * Test-only seam: the token lookup, the clock and the queue are real bindings
    * in production. Nothing here changes production behaviour when unset.

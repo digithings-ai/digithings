@@ -1,13 +1,14 @@
 /**
- * The Supabase index rows.
+ * The D1 index rows.
  *
  * The archive is the system of record; this is the queryable window over it
  * (ADR-0036 §3). Every row is a pure function of the queue message plus the
  * resolved `workspace_id`, so a retried message rewrites identical rows and the
  * upserts in `consumer.ts` are idempotent — no clock, no counter, no "now".
  *
- * The column names below are the schema DIG-2658 ships in
- * `digiquant/supabase/migrations/prod/144_digitrace_index.sql`, not an
+ * The column names below are the schema in
+ * `apps/digitrace-ingest/migrations/0001_digitrace_index.sql` (the D1 port of
+ * DIG-2658's schema, DIG-2887 S1), not an
  * independent guess: a name that does not exist there is a runtime 400 on the
  * first real batch, which no type can catch.
  *
@@ -18,9 +19,9 @@
  *     `workspace_id`.
  *   - `digitrace_sessions` is not written by this consumer. Its `trace_count`,
  *     `span_count`, `total_tokens` and `total_cost_usd` are cross-batch
- *     aggregates, and PostgREST's upsert can only *replace* them: a second batch
+ *     aggregates, and an upsert can only *replace* them: a second batch
  *     would overwrite a larger count with a smaller one. Writing them from a
- *     REST upsert would produce numbers that silently shrink, so the ingest path
+ *     plain upsert would produce numbers that silently shrink, so the ingest path
  *     leaves the table alone; the migration and the dashboard leaf own how it is
  *     materialised.
  *   - `digitrace_scores` is not written here either. ADR-0036 §4/§8 put that
@@ -29,7 +30,7 @@
  * `digitrace_traces` is the other cross-batch aggregate. The row these
  * functions build is the one this message can see, and `consumer.ts` treats it
  * as the insert payload: after the spans are written it calls
- * `refresh_digitrace_trace`, which recomputes `span_count`, the time range, the
+ * the trace recompute (`REFRESH_TRACE_SQL`), which recomputes `span_count`, the time range, the
  * root name and the error status over **every** span of the trace. The row is
  * therefore correct even when `chunkSpans` had to split a trace (the ids in
  * `incompleteTraces`) or when the trace arrived across several OTLP requests.
@@ -267,8 +268,8 @@ export function indexRows(
     .sort((a, b) => a.traceId.localeCompare(b.traceId))
     .map((accumulator) => traceRow(accumulator, source, workspaceId, receivedAt));
 
-  // A stable order makes a batch idempotent in its PostgREST payload, which is
-  // what an upsert with `merge-duplicates` expects on a retry.
+  // A stable order makes a batch idempotent in its D1 statements, which is
+  // what an `ON CONFLICT DO UPDATE` upsert expects on a retry.
   spans.sort((a, b) =>
     `${String(a.trace_id)}/${String(a.span_id)}`.localeCompare(
       `${String(b.trace_id)}/${String(b.span_id)}`,

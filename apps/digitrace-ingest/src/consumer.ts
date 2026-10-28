@@ -18,7 +18,7 @@ import {
   refreshTraceRow as defaultRefreshTraceRow,
   resolveWorkspaceId as defaultResolveWorkspaceId,
   upsertRows as defaultUpsertRows,
-} from "./supabase";
+} from "./d1";
 import type { ArchiveLine, Env, IngestMessage, SpanRecord } from "./types";
 
 /** The longest delay between attempts, in seconds. */
@@ -159,7 +159,7 @@ export async function storeMessage(
   // spans index**, because this message may not hold the whole trace: a trace
   // over the message budget has its slice named in `incompleteTraces`, and a
   // trace exported across several OTLP requests has earlier slices already in
-  // the table. `refresh_digitrace_trace` is UPDATE-only, so the insert is
+  // the table. the trace recompute (`REFRESH_TRACE_SQL`) is UPDATE-only, so the insert is
   // required; the recompute is what makes `span_count`, the time range, the
   // root name and the sticky error true over all spans, not this slice.
   await deps.upsertRows(env, "digitrace_traces", rows.traces, CONFLICT_TARGETS.traces);

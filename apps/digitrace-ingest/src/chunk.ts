@@ -25,7 +25,7 @@
  * One trace only crosses a boundary when it alone exceeds the budget; those
  * trace ids are listed in `incompleteTraces`, so the message states where its
  * aggregate stops. The consumer inserts the partial row and then recomputes it
- * from the spans index (`refresh_digitrace_trace`), which makes the row true
+ * from the spans index (the trace recompute (`REFRESH_TRACE_SQL`)), which makes the row true
  * over every span of the trace again.
  */
 import { archiveKey, archiveLine, messageFor } from "./archive";

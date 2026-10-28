@@ -4,7 +4,7 @@
  * One Worker, two entry points (ADR-0036 §1):
  *   fetch — `POST /v1/traces`, the OTLP/HTTP receiver. Per-source token, tenant
  *           resolved server-side, both OTLP encodings, size cap, sampling.
- *   queue — the consumer. Archive object in R2, index rows in Supabase, metric
+ *   queue — the consumer. Archive object in R2, index rows in D1, metric
  *           points in Workers Analytics Engine.
  *
  * The receiver refuses an unknown token, a tenant the token may not claim, a

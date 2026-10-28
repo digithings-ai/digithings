@@ -107,8 +107,7 @@ export function testEnv(
     tokens?: Record<string, string>;
     queueFail?: boolean;
     archiveFail?: boolean;
-    supabaseUrl?: string;
-    supabaseKey?: string;
+    indexDb?: D1Database;
   } = {},
 ): TestEnv {
   const queue = fakeQueue({ fail: options.queueFail });
@@ -120,8 +119,7 @@ export function testEnv(
     INGEST_TOKENS: kv.namespace,
     INGEST_QUEUE: queue.queue,
     ANALYTICS: analytics.dataset,
-    SUPABASE_URL: options.supabaseUrl ?? "https://core.example.supabase.co",
-    CORE_SUPABASE_SERVICE_KEY: options.supabaseKey ?? "service-role-key",
+    INDEX_DB: options.indexDb,
     __queue: queue,
     __archive: archive,
     __kv: kv,

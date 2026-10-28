@@ -49,7 +49,7 @@ describe("indexRows", () => {
   });
 
   it("writes exactly the columns the index migration defines", () => {
-    // Pinned to digiquant/supabase/migrations/prod/144_digitrace_index.sql.
+    // Pinned to migrations/0001_digitrace_index.sql.
     // A column that is not there is a runtime 400, so the name list is the test.
     const rows = indexRows([record("b7ad6b7169203331")], WORKSPACE, RECEIVED, SOURCE);
 

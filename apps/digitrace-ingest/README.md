@@ -1,13 +1,13 @@
 # digitrace-ingest
 
 The OTLP/HTTP ingest path for digitrace: a Cloudflare Worker that receives traces,
-queues them, and fans the batch out to an R2 archive, a Supabase index and Workers
+queues them, and fans the batch out to an R2 archive, a D1 index and Workers
 Analytics Engine. Design: [ADR-0036](../../docs/adr/0036-digitrace-cloudflare-native-tracing.md);
 exact shapes: [`CONTRACT.md`](./CONTRACT.md).
 
 ```
 source ──POST /v1/traces──▶ fetch  ──▶ Queue ──▶ queue ──┬─▶ R2  digitrace-archive
-        (token + tenant)                                  ├─▶ Supabase core.public.digitrace_*
+        (token + tenant)                                  ├─▶ D1 digitrace.digitrace_*
                                                           └─▶ Analytics Engine digitrace_ingest
 ```
 
@@ -92,7 +92,7 @@ never assign one to a variable in a file that is committed.
 
 `npm test` — 165 tests over the receiver, the protobuf decoder, the chunker, the
 queue grouping, the consumer and its retry policy, the index rows, the metric
-points, the PostgREST client, the token check, sampling, and the deployment
+points, the D1 writer, the token check, sampling, and the deployment
 contract in `wrangler.toml`. The suite is plain Node: bindings are fakes, because
 what is under test is this Worker's decisions, not Miniflare.
 

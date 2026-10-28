@@ -41,8 +41,8 @@ The hosting target is now the ADR-0036 pipeline:
 apps → OTLP/HTTP → digitrace-ingest Worker → Queue → consumer
      → R2 digitrace-archive (system of record; OTLP-JSON NDJSON, one object per batch,
        key `tenant=<slug>/date=<YYYY-MM-DD>/<source>/<uuid>.ndjson`)
-     → Supabase core / public (digitrace_traces, digitrace_spans_index, digitrace_scores,
-       digitrace_sessions) with per-table RLS on workspace_id
+     → D1 digitrace (digitrace_traces, digitrace_spans_index, digitrace_scores,
+       digitrace_sessions), tenant-scoped on workspace_id in Worker code (DIG-2887 S1)
      → Workers Analytics Engine (tokens, cost, latency per tenant and model)
 dashboard Traces tab reads through dashboard-api; `digitrace replay` loads an R2 window into
 MLflow 3.10+ with the [genai] extra over OTLP/HTTP /v1/traces, on the Mac or on a scale-to-zero

@@ -60,10 +60,12 @@ describe("the bindings the code requires", () => {
     expect(toml).toContain('dataset = "digitrace_ingest"');
   });
 
-  it("names the core Supabase project, and keeps the key a secret", () => {
-    expect(toml).toContain('SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"');
-    expect(toml).toContain("CORE_SUPABASE_SERVICE_KEY");
-    expect(toml).not.toMatch(/^CORE_SUPABASE_SERVICE_KEY\s*=/m);
+  it("binds the D1 index and its migrations, not Supabase (DIG-2887 S1)", () => {
+    expect(toml).toContain("[[d1_databases]]");
+    expect(toml).toContain('binding = "INDEX_DB"');
+    expect(toml).toContain('database_name = "digitrace"');
+    expect(toml).toContain('migrations_dir = "migrations"');
+    expect(toml).not.toMatch(/supabase/i);
   });
 });
 
@@ -96,8 +98,18 @@ describe("secrets stay out of the file", () => {
     expect(toml).not.toMatch(/digi_live_[A-Za-z0-9_-]+/);
   });
 
-  it("documents the secret name without a value", () => {
-    const line = toml.split("\n").find((entry) => entry.includes("CORE_SUPABASE_SERVICE_KEY"));
-    expect(line?.trim().startsWith("#")).toBe(true);
+  it("needs no Worker secret: the D1 binding is the credential", () => {
+    expect(toml).not.toMatch(/secret put/);
+  });
+
+  it("marks every placeholder id, so the deploy preflight can skip it", () => {
+    const ids = toml.split("\n").filter((line) => /^(id|database_id) = "/.test(line));
+    expect(ids.length).toBe(2);
+    for (const line of ids) {
+      if (/"0{8}-?0{4}-?0{4}-?0{4}-?0{12}"/.test(line)) {
+        const at = toml.indexOf(line);
+        expect(toml.slice(Math.max(0, at - 600), at)).toContain("PLACEHOLDER");
+      }
+    }
   });
 });
