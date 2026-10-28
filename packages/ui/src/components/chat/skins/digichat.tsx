@@ -306,7 +306,11 @@ export function DigichatSkin({
       }
       return c;
     });
-  }, [enableSlash, slashPrefs, slashWiring, copyExport, aui, extra]);
+    // `privateMode` is read inside `buildCommands` (the `/private` row's
+    // value) from a store, not from an argument: listing it here rebuilds the
+    // rows when it flips, so the palette shows the current value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableSlash, slashPrefs, slashWiring, copyExport, aui, extra, privateMode]);
 
   const slash = unstable_useSlashCommandAdapter({
     commands,
