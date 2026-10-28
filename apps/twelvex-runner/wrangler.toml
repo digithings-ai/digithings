@@ -32,7 +32,7 @@
 # workflow job env carries.
 #
 # Cutover flag (DIG-2887 S2), optional plain var, unset = "1":
-#   TWELVEX_FORWARD_CORE_KEY = "0" stops forwarding CORE_SUPABASE_SERVICE_KEY.
+#   TWELVEX_FORWARD_CORE_KEY = "0" stops forwarding the core service key.
 #   Leave it unset until the twelve-x graph no longer writes the core calendar;
 #   the pinned graph refuses to start without the key.
 #

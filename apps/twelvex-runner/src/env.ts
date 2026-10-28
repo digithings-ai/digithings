@@ -22,7 +22,7 @@ export interface Env extends DataEnv {
   /** Core project key. The FX research graph writes the shared core calendar. */
   CORE_SUPABASE_SERVICE_KEY?: string;
   /**
-   * "0" stops forwarding CORE_SUPABASE_SERVICE_KEY into the container, which is
+   * "0" stops forwarding the core service key into the container, which is
    * how twelve-x leaves the core project (DIG-2887 S2). Unset or any other value
    * keeps forwarding it: the pinned twelve-x graph still writes the core
    * calendar and refuses to start without the key, so turning it off before the
