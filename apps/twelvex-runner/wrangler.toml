@@ -31,6 +31,16 @@
 # uses, and it is a plain var below with the same literal the twelve-x
 # workflow job env carries.
 #
+# Cutover flag (DIG-2887 S2), optional plain var, unset = "1":
+#   TWELVEX_FORWARD_CORE_KEY = "0" stops forwarding CORE_SUPABASE_SERVICE_KEY.
+#   Leave it unset until the twelve-x graph no longer writes the core calendar;
+#   the pinned graph refuses to start without the key.
+#
+# twelve-x data API (moved here from the retired digidata-api Worker, S2):
+#   DATA_API_TOKEN  -- secret; bearer on /v1/* (not RUNNER_AUTH_TOKEN)
+#   DATA_BACKEND    -- optional plain var; "supabase" (default, uses the
+#                      TWELVEX_SUPABASE_* secrets above) | "d1" (TWELVEX_DB)
+#
 # Not required for the ingest and heartbeat jobs (checked against the
 # workflow env blocks and twelve_x market_context / heartbeat): TWELVEX_R2_*,
 # SUPABASE_DB_URL. Ingest writes Supabase. It does not call an LLM and it
@@ -65,3 +75,13 @@ class_name = "TwelveXRunnerContainer"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TwelveXRunnerContainer"]
+
+# twelve-x's own D1 database (DIG-2887 S2). This Worker is the only one that
+# binds twelve-x data, and it binds nothing of core.
+# PLACEHOLDER database_id: `wrangler d1 create twelvex` needs Chris's go, then
+# replace the id. Do not deploy this Worker while the id is all zeros.
+[[d1_databases]]
+binding = "TWELVEX_DB"
+database_name = "twelvex"
+database_id = "00000000-0000-0000-0000-00000000d1a1"
+migrations_dir = "d1/twelvex"

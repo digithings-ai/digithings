@@ -162,7 +162,7 @@ digithings/
 ├── apps/         # 14 apps. digithings-web (marketing + digibook),
 │                 # digiquant-web (the desk at /app), digichat, dashboard,
 │                 # reference (pattern gallery), plus the API, runner and
-│                 # worker apps: dashboard-api, digidata-api, corpus-index,
+│                 # worker apps: dashboard-api, corpus-index,
 │                 # digiquant-runner, twelvex-runner, digithings-cron,
 │                 # digichat-cloudflare, digithings-stack-cloudflare,
 │                 # and digiquant-app (parked).

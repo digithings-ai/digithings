@@ -159,7 +159,6 @@ jobs:
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
               - 'apps/dashboard-api/**'
-              - 'apps/digidata-api/**'
               - 'apps/corpus-index/**'
               - 'apps/digitrace-ingest/**'
               - 'package.json'
@@ -264,7 +263,6 @@ jobs:
             workers:
               - 'apps/digithings-cron/**'
               - 'apps/dashboard-api/**'
-              - 'apps/digidata-api/**'
               - 'apps/digiquant-runner/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
@@ -777,7 +775,6 @@ jobs:
         app:
           - digithings-cron
           - dashboard-api
-          - digidata-api
           - digiquant-runner
           - digitrace-ingest
           # corpus-index ships a wrangler.toml and pins wrangler, so

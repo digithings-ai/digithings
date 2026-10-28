@@ -1,12 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
-import worker from "./index";
+import { handleDataApi, isDataApiPath } from "./api";
+
+const worker = { fetch: handleDataApi };
 import { pickBackend, SupabaseBackend } from "./backends";
 import { BadRequest, parseSelect, selectSql, upsertSql, validateUpsert } from "./query";
 import { TWELVEX_TABLES } from "./tables.twelvex";
 
 const [T, spec] = Object.entries(TWELVEX_TABLES).find(([, s]) => s.pk.length > 0)!;
 const C0 = spec.columns[0];
-const env = { DATA_API_TOKEN: "t0k", SUPABASE_TWELVEX_URL: "https://x.supabase.co", SUPABASE_TWELVEX_SERVICE_KEY: "k" };
+const env = { DATA_API_TOKEN: "t0k", TWELVEX_SUPABASE_URL: "https://x.supabase.co", TWELVEX_SUPABASE_SERVICE_KEY: "k" };
+
+describe("routing", () => {
+  it("owns /v1 and nothing else", () => {
+    expect(isDataApiPath("/v1/health")).toBe(true);
+    expect(isDataApiPath("/v1/twelvex/fx_daily_digest")).toBe(true);
+    expect(isDataApiPath("/run/ingest")).toBe(false);
+    expect(isDataApiPath("/v10")).toBe(false);
+  });
+});
 
 describe("auth", () => {
   it("fails closed without token config", async () => {

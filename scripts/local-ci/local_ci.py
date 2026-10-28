@@ -243,7 +243,7 @@ RUFF_PATHS_CANDIDATES = ("digibase/src", "digibot/src", "digigraph/src",
 
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
-WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
+WORKER_APPS = ("digithings-cron", "dashboard-api", "digiquant-runner",
                "digitrace-ingest", "digichat-cloudflare",
                "digithings-stack-cloudflare",
                # twelvex-runner is in the ci.yml worker-build matrix but was missing

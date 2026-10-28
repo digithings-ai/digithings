@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-vacuity harness for apps/digidata-api/d1/twelvex/0001_init.sql (DIG-2890).
+"""Non-vacuity harness for apps/twelvex-runner/d1/twelvex/0001_init.sql (DIG-2890).
 
 What it proves, in this order:
   1. the schema APPLIES to a fresh SQLite database (rc!=0 and a non-empty stderr
@@ -28,7 +28,7 @@ import tempfile
 
 _here = os.path.dirname(os.path.abspath(__file__))
 _default = os.path.join(
-    _here, os.pardir, "apps", "digidata-api", "d1", "twelvex", "0001_init.sql"
+    _here, os.pardir, "apps", "twelvex-runner", "d1", "twelvex", "0001_init.sql"
 )
 if len(sys.argv) > 1 and sys.argv[1] == "--schema":
     schema = sys.argv[2]

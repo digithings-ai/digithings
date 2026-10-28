@@ -23,6 +23,7 @@ import {
   verdictLine,
   SESSION_LABEL,
 } from "./alerts";
+import { handleDataApi, isDataApiPath } from "./data/api";
 import type { Env } from "./env";
 import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 import {
@@ -126,6 +127,12 @@ export async function handle(
 
   if (request.method === "GET" && path === "/healthz") {
     return Response.json({ ok: true });
+  }
+
+  // twelve-x data API (DIG-2887 S2). Its own bearer (DATA_API_TOKEN), its own
+  // database (TWELVEX_DB), Supabase until cutover. Never reaches the container.
+  if (isDataApiPath(path)) {
+    return handleDataApi(request, env);
   }
 
   const match = /^\/run\/([^/]+)$/.exec(path);

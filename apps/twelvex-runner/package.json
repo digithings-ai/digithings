@@ -1,6 +1,6 @@
 {
   "name": "twelvex-runner",
-  "description": "On-demand Cloudflare Container that runs the twelve-x ingest and session-heartbeat jobs.",
+  "description": "On-demand Cloudflare Container that runs the twelve-x jobs, plus the twelve-x data API over its own D1 database.",
   "license": "MIT",
   "homepage": "https://digithings.ai",
   "repository": {
@@ -14,7 +14,8 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "vitest run && python3 -m unittest container/server_test.py",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "d1:local:twelvex": "wrangler d1 execute twelvex --local --file d1/twelvex/0001_init.sql"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

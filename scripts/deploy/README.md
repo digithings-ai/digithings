@@ -13,7 +13,6 @@ install a launchd job.
 | `runner` | `runner-vX.Y.Z` | `apps/digiquant-runner` | `digiquant-runner` |
 | `dashboard-api` | `dashboard-api-vX.Y.Z` | `apps/dashboard-api` | `dashboard-api` |
 | `corpus-index` | `corpus-index-vX.Y.Z` | no source on `develop` | `corpus-index` |
-| `digidata-api` | `digidata-api-vX.Y.Z` | `apps/digidata-api` | `digidata-api` |
 
 `corpus-index` has no source directory on `develop` (repo-split review G1).
 Its job still requires a signed tag, then refuses. It does not create a

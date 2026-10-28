@@ -11,10 +11,17 @@ export interface Backend {
   upsert(q: UpsertQuery): Promise<{ written: number }>;
 }
 
-export interface Env {
+/**
+ * The data API's slice of the twelvex-runner env. The Supabase pair reuses the
+ * runner's own twelve-x secrets, so the move adds no second copy of the key.
+ */
+export interface DataEnv {
+  /** "supabase" (default until cutover) | "d1". */
   DATA_BACKEND?: string;
+  /** Bearer required on every /v1 data call. Separate from RUNNER_AUTH_TOKEN. */
   DATA_API_TOKEN?: string;
+  /** twelve-x's own D1 database (`twelvex`). Never a core database. */
   TWELVEX_DB?: D1Database;
-  SUPABASE_TWELVEX_URL?: string;
-  SUPABASE_TWELVEX_SERVICE_KEY?: string;
+  TWELVEX_SUPABASE_URL?: string;
+  TWELVEX_SUPABASE_SERVICE_KEY?: string;
 }

@@ -5,4 +5,3 @@ cron	cron	apps/digithings-cron	digithings-cron	R5
 runner	runner	apps/digiquant-runner	digiquant-runner	R2
 dashboard-api	dashboard-api	apps/dashboard-api	dashboard-api	R2
 corpus-index	corpus-index	-	corpus-index	R5
-digidata-api	digidata-api	apps/digidata-api	digidata-api	R7

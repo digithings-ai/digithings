@@ -1834,14 +1834,15 @@ bindings:
   name: TWELVEX_CONTAINER
   class_name: TwelveXRunnerContainer
   source: apps/twelvex-runner/wrangler.toml
-# DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
-# routes, no remote database); the binding exists so the parity contract can see
-# the name. A remote database_id is a cutover step and needs Chris's approval.
-- worker: digidata-api
+# twelve-x data API (DIG-2895, moved from the retired digidata-api Worker in
+# DIG-2887 S2). The D1 database id is a PLACEHOLDER (no remote database yet); the
+# binding exists so the parity contract can see the name. A remote database_id
+# is a cutover step and needs Chris's approval.
+- worker: twelvex-runner
   type: d1_database
   name: TWELVEX_DB
   database_name: twelvex
-  source: apps/digidata-api/wrangler.toml
+  source: apps/twelvex-runner/wrangler.toml
 # Daily corpus index. The KV id in wrangler.toml is a placeholder. The live
 # namespace id stays out of this repo. No production deploy workflow.
 - worker: corpus-index

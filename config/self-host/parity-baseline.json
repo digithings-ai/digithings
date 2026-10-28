@@ -383,9 +383,6 @@
         "DT_VARIANT": "var",
         "DigiChatContainer": "container"
       },
-      "apps/digidata-api/wrangler.toml": {
-        "TWELVEX_DB": "d1_database"
-      },
       "apps/digiquant-runner/wrangler.toml": {
         "ARCHIVE": "r2_bucket",
         "DigiQuantRunnerContainer": "container",
@@ -445,6 +442,7 @@
         "DRY_RUN": "var",
         "OPENAI_API_BASE": "var",
         "TWELVEX_CONTAINER": "durable_object_namespace",
+        "TWELVEX_DB": "d1_database",
         "TwelveXRunnerContainer": "container"
       }
     }
