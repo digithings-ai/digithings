@@ -1759,13 +1759,13 @@ bindings:
   name: TWELVEX_RUNNER
   service: twelvex-runner
   source: apps/digithings-cron/wrangler.toml
-# DIG-4487: two slots, so a deploy can start the new instance while the
-# previous id's instance drains. Mirrors apps/digichat-cloudflare/wrangler.toml.
+# DIG-4487: ten slots (t1702u), so a deploy can start the new instance while
+# the previous id's instance drains. Mirrors apps/digichat-cloudflare/wrangler.toml.
 - worker: digithings-digichat
   type: container
   class_name: DigiChatContainer
   image: ../../infra/docker/Dockerfile.digichat-cloudflare
-  max_instances: 2
+  max_instances: 10
   instance_type: null
   source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-digichat
@@ -1781,7 +1781,7 @@ bindings:
   type: container
   class_name: DigiStackContainer
   image: ../../infra/docker/Dockerfile.digithings-stack-cloudflare
-  max_instances: 5
+  max_instances: 10
   instance_type: standard-2
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack

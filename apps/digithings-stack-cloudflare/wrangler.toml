@@ -107,8 +107,16 @@ class_name = "DigiStackContainer"
 # context (#4046).
 image = "../../infra/docker/Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
-# Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
-max_instances = 1
+# Ten slots (owner call, t1702u). The stack container id is derived from the
+# deploying commit (src/ports.ts, DIG-3229) and every request routes to that ONE
+# id, so steady state is still one running instance: the slots are a ceiling,
+# not a fleet, and they do not add per-user capacity. What they fix is the
+# deploy rollover: with one slot the new rev's instance could not start while
+# the previous rev's instance was still running or draining, and every caller
+# got 503 container_booting until it exited (2026-10-28, ~90 min after a
+# deploy). Billing is per running instance: idle slots cost nothing, and an
+# old-rev instance stops after sleepAfter (5m) once traffic moves to the new id.
+max_instances = 10
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 # standard-1 = 4 GiB (was standard-2, 6 GiB). Memory is billed per GiB-s.
 # Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.

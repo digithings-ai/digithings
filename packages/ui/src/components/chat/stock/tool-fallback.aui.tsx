@@ -49,7 +49,7 @@ export const formatToolDuration = (ms: number) => {
  * an `output-error` part carries `result = { error }`. Derive the error state
  * from `isError` so a failed or orphaned row does not render as success.
  */
-function resolveToolStatus(
+export function resolveToolStatus(
   status: ToolCallMessagePartStatus | undefined,
   isError: boolean | undefined,
   result: unknown,
@@ -149,25 +149,23 @@ function ToolFallbackDuration({
   );
 }
 
-function ToolFallbackTrigger({
-  toolName,
-  title,
-  status,
-  className,
-  ...props
-}: React.ComponentProps<typeof CollapsibleTrigger> & {
-  toolName: string;
-  title?: string;
-  status?: ToolCallMessagePartStatus;
-}) {
+/**
+ * The row's words and glyph for a tool status: upstream assistant-ui wording,
+ * one word per state. Shared with the private-session row
+ * (`gallery-thread/private-work-step.tsx`), which must read exactly the same.
+ */
+export function toolTriggerLabel(status: ToolCallMessagePartStatus | undefined): {
+  label: string;
+  matrixState: DotMatrixState;
+  isRunning: boolean;
+  isCancelled: boolean;
+} {
   const statusType = status?.type ?? "complete";
   const isRunning = statusType === "running";
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
-
-  // Upstream assistant-ui wording, one word per state.
   const label = isCancelled
     ? "Cancelled tool"
     : isErrorStatus
@@ -180,6 +178,21 @@ function ToolFallbackTrigger({
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
+  return { label, matrixState, isRunning, isCancelled };
+}
+
+function ToolFallbackTrigger({
+  toolName,
+  title,
+  status,
+  className,
+  ...props
+}: React.ComponentProps<typeof CollapsibleTrigger> & {
+  toolName: string;
+  title?: string;
+  status?: ToolCallMessagePartStatus;
+}) {
+  const { label, matrixState, isRunning, isCancelled } = toolTriggerLabel(status);
 
   return (
     <CollapsibleTrigger
@@ -864,4 +877,5 @@ export {
   ToolFallbackError,
   ToolFallbackApproval,
   ToolFallbackAttribution,
+  ToolFallbackDuration,
 };
