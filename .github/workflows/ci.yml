@@ -485,6 +485,27 @@ jobs:
       - name: R0 client-literal baseline growth guard
         run: python3 scripts/check_r0_client_literals_baseline_growth.py --base-ref "origin/${{ github.base_ref }}"
 
+  # DIG-2887 S0: the Supabase exit freezes new usage. Every file that touches
+  # Supabase today is allowlisted with its marker count in
+  # scripts/supabase_freeze_baseline.json; a new file, a higher count or a new
+  # migration/edge function fails, and the baseline itself may only shrink
+  # against the base branch. Stdlib-only, same fetch-depth reasoning as above.
+  supabase-freeze:
+    name: Supabase usage freeze (exit in progress)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Supabase usage may only shrink
+        run: python3 scripts/check_supabase_freeze.py --base-ref "origin/${{ github.base_ref }}"
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -968,6 +989,7 @@ jobs:
       - vendor-content-gate
       - plaintext-credential-guard
       - r0-client-literals-baseline-growth
+      - supabase-freeze
       - workflow-secret-refs
       - digibase
       - digikey
