@@ -148,7 +148,7 @@ export function useStockChatPrefs({
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
     language: (config.defaultLanguage || deps.detectLanguage?.()) ?? deps.defaultLanguageCode,
-    model: config.defaultModel ?? config.availableModels[0] ?? "",
+    model: initialStockSessionModel(config),
     extra: extraOffFromCatalog(catalogTools),
     view: config.view,
     thinking: config.thinking,
@@ -446,6 +446,24 @@ export function useStockChatPrefs({
     getSearchEngine,
     setWebSearch: (on: boolean) => setChatPrefs((p) => ({ ...p, webSearch: on })),
   };
+}
+
+/**
+ * Model id the session starts on. When the curated default is the model the
+ * Auto preset resolves to, the session starts on Auto (empty): the toolbar
+ * reads "auto", the Auto row is selected, and the turn sends no
+ * X-Digi-Model, so the server runs its default (that same model). Mirrors
+ * the embed client's `sessionModelSeed` (#6326). Otherwise the curated
+ * default, else the first available id.
+ */
+export function initialStockSessionModel(
+  config: Pick<StockChatPrefsConfig, "defaultModel" | "availableModels" | "modelPicker">,
+): string {
+  const named = config.defaultModel?.trim() || "";
+  const auto =
+    config.modelPicker?.presets.find((preset) => preset.id === "auto")?.model.trim() || "";
+  if (named && auto && named === auto) return "";
+  return config.defaultModel ?? config.availableModels[0] ?? "";
 }
 
 export function StockChatPrefsHost({

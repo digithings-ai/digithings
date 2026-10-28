@@ -120,6 +120,23 @@
   background: var(--bg);
 }
 
+/* One canvas. On a site chat (/chat and the top-level /chat/occ) the thread
+   column has no background of its own: the welcome, the examples and the
+   composer sit straight on the page --bg, between the rails, exactly as on
+   digithings.ai. This used to live in product-chrome.css behind
+   :root:not([data-palette]) and [data-chrome-mode="app"], so every named
+   palette, and the OCC page in every palette, painted the footer
+   `bg-surface` as a tinted box around the welcome block. No palette gate:
+   palettes.css still owns --term-hair and every root token. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.digichat-thread__footer, .digichat-thread-list) {
+  --bg: transparent;
+  --surface: transparent;
+  --hair: var(--term-hair);
+  background: transparent;
+}
+
 /* Embed rails mount on every embed document and hide unless this is the
    top-level page. The product app uses .site-rails and is not gated here. */
 html:not([data-site-rails="1"]) .dc-site-rails {

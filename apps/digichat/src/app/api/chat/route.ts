@@ -24,6 +24,12 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
+import { privateTermsFor, privatizeChatResponse } from "@/lib/private-stream";
+import {
+  privateToolRecorder,
+  privateToolScope,
+  rehydratePrivateToolParts,
+} from "@/lib/private-tool-cache";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -442,7 +448,28 @@ export async function POST(req: Request) {
     );
   }
 
-  const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
+  // Private demo session (`x-digi-private: 1`), honoured only for a tenant
+  // that opted in. The instruction rides the UI messages (below); the stream
+  // wrapper strips tool and reasoning payloads and the tenant's own names
+  // before anything reaches the browser (`lib/private-stream.ts`).
+  const privateMode =
+    isPrivateMode(req.headers) &&
+    (embedConfig?.privateMode === true || dep?.features?.privateMode === true);
+  const privateTerms = privateMode ? privateTermsFor(embedConfig ?? dep) : [];
+  // Server-side memory of this session's full tool calls (the browser only
+  // holds stripped steps), so a follow-up turn keeps its tool context.
+  const toolScope = privateToolScope({
+    tenantSlug,
+    ownerUserSub,
+    sessionHeader: req.headers.get("x-digichat-session") ?? req.headers.get("x-session-id"),
+  });
+  const finish = (res: Response) =>
+    releaseChatRunLockOnResponseEnd(
+      privateMode
+        ? privatizeChatResponse(res, privateTerms, privateToolRecorder(toolScope))
+        : res,
+      runLock.release,
+    );
 
   // Deploy `models.available` allowlist (fail closed when non-empty). Resolved
   // before the backend branch so it applies to foundry too, not just digigraph.
@@ -578,15 +605,16 @@ export async function POST(req: Request) {
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
 
-  // Private demo mode: the client sends x-digi-private: 1 when the transcript
-  // may be shown to the party it names, so every turn is told to substitute the
+  // Private demo mode (resolved above): every turn is told to substitute the
   // real names and identifiers it is given.
-  const privateMode = isPrivateMode(req.headers);
   // The instruction is applied to the UI messages here, before the adapter
   // branch, because every path consumes `messages` — including the digigraph
   // trace stream, which is the default and converts them itself. Patching the
   // converted model messages later would reach only the legacy `streamText`
   // pair and leave private mode a silent no-op on the path OCC actually uses.
+  // The browser holds only stripped tool steps; put this session's kept
+  // payloads back so a follow-up turn still has its earlier tool results.
+  if (privateMode) messages = rehydratePrivateToolParts(messages, toolScope);
   if (privateMode) messages = withPrivateModeUiPrompt(messages);
 
   // models.costPerWindow stays on the premium budget above. The limits block

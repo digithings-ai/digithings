@@ -24,7 +24,7 @@ hosts:
       theme: light
       skin: digichat
       title: OCC help assistant
-      welcome: Ask about Online Compliance Center policies, procedures, and help articles.
+      welcome: Ask about OCC.
       attribution: true
     features:
       # The live row carries no `features` block, and the bridge resolves

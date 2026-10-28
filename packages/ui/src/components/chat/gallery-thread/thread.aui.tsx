@@ -33,6 +33,7 @@ import {
 } from "./scroll-mode";
 import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
+import { PrivateWorkStep } from "./private-work-step";
 import {
   resolveWorkDisclosure,
   type WorkVisibility,
@@ -306,13 +307,13 @@ const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
 );
 
 /**
- * Private session. Hides the work surfaces that can carry user data —
- * reasoning text and tool-call payloads, including the JSON a tool result
- * renders — at the parts switch, so they never mount. A hard override rather
- * than a disclosure preference: `reasoningMode` / `toolCallsMode` /
- * `workVisibility` decide how much of the work is *disclosed*, and none of
- * them switches the chain off while it is still running. Default false, so
- * every skin that does not pass `privateMode` renders exactly as before.
+ * Private session. Reasoning and tool calls still show as steps in the chain
+ * (kind, tool name, finished or failed) but render as `PrivateWorkStep`, which
+ * cannot be opened: the reasoning text and tool payloads are stripped server
+ * side and must not mount here either. A hard override rather than a
+ * disclosure preference: `reasoningMode` / `toolCallsMode` / `workVisibility`
+ * decide how much of the work is *disclosed*. Default false, so every skin
+ * that does not pass `privateMode` renders exactly as before.
  */
 const ThreadPrivateModeContext = createContext(false);
 
@@ -1273,13 +1274,6 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought": {
-                // Private session: the work parts inside render null, so the
-                // chain wrapper must not mount either — a turn would otherwise
-                // show a folded "Worked" header that expands to nothing, which
-                // also hints that the work happens to be visible elsewhere.
-                // Children still render, so a notice or status part that the
-                // grouping placed inside the chain is not swallowed.
-                if (privateMode) return <>{children}</>;
                 // A status part is not work. The grouping puts the
                 // connection state into the chain, so without this guard the
                 // chain header appears before the model has said anything —
@@ -1294,6 +1288,16 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
+                // Private session: no folding header. Every step shows flat
+                // as a `PrivateWorkStep` (kind, name, outcome) and nothing in
+                // the chain opens — there is no body to open.
+                if (privateMode) {
+                  return (
+                    <div data-slot="aui_chain-of-thought" data-private="">
+                      {children}
+                    </div>
+                  );
+                }
                 // The chain is the one disclosure boundary: every work part
                 // nests under it (see `chainGroupBy`), so the level's fold
                 // rule here reaches a reasoning-only, a tool-only and a
@@ -1329,7 +1333,9 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-tool": {
-                if (privateMode) return null;
+                // Private session: the steps show flat inside the chain, with
+                // no per-group disclosure (they have no body to open).
+                if (privateMode) return <>{children}</>;
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
@@ -1366,7 +1372,7 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-reasoning": {
-                if (privateMode) return null;
+                if (privateMode) return <>{children}</>;
                 if (reasoningMode === "off") return null;
                 if (ReasoningGroup) {
                   return (
@@ -1399,12 +1405,23 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning": {
-                if (privateMode) return null;
+                if (privateMode) return <PrivateWorkStep kind="reasoning" statusType={part.status?.type} />;
                 if (reasoningMode === "off") return null;
                 return <Reasoning {...part} />;
               }
               case "tool-call":
-                if (privateMode) return null;
+                if (privateMode) {
+                  const status = part.status as { type?: string; reason?: string } | undefined;
+                  return (
+                    <PrivateWorkStep
+                      kind="tool"
+                      toolName={part.toolName}
+                      statusType={status?.type}
+                      reason={status?.reason}
+                      isError={part.isError}
+                    />
+                  );
+                }
                 if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
