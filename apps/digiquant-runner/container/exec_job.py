@@ -617,14 +617,23 @@ def _prepare_shadow_plans(
 
 
 def _apply_resume(spec: dict[str, Any], args: dict[str, str], child_env: dict[str, str]) -> None:
-    export_args = spec.get("export_args") or []
-    if "resume_run_id" not in export_args or child_env.get("RESUME_RUN_ID"):
-        return
     run_date = str(args.get("run_date", "")).strip()
-    resumed = _read_interrupted_resume(run_date)
-    if resumed:
-        child_env["RESUME_RUN_ID"] = resumed
-    if child_env.get("RESUME_RUN_ID") and child_env.get("DIGI_CHECKPOINTER") == "sqlite":
+    sqlite_on = child_env.get("DIGI_CHECKPOINTER") == "sqlite"
+    if sqlite_on:
+        # SqliteSaver cannot create parent directories, and digigraph only
+        # makes its own default directory, so make ours before the child runs.
+        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    export_args = spec.get("export_args") or []
+    if "resume_run_id" not in export_args:
+        return
+    if not child_env.get("RESUME_RUN_ID"):
+        resumed = _read_interrupted_resume(run_date)
+        if resumed:
+            child_env["RESUME_RUN_ID"] = resumed
+    # Restore for either resume path: the interrupted marker above, or an
+    # explicit resume_run_id (the only path after a fail or timeout, which save
+    # the file but write no marker).
+    if child_env.get("RESUME_RUN_ID") and sqlite_on:
         _checkpoints_best_effort(restore_checkpoints, run_date, "restore")
 
 

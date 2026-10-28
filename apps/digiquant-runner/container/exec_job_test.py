@@ -771,6 +771,32 @@ def _check_sqlite_checkpoints(commands: dict[str, Any]) -> None:
             if row != ("r0", 7):
                 raise SystemExit(f"restored checkpoint drifted: {row}")
 
+            # _apply_resume makes the directory (SqliteSaver cannot) and
+            # restores on an EXPLICIT resume_run_id too, not only on the marker.
+            spec = commands["house-run"]
+            exec_job.CHECKPOINT_DIR = Path(tmp) / "fresh"
+            fresh_env = {"DIGI_CHECKPOINTER": "sqlite"}
+            with mock.patch.object(exec_job, "_read_interrupted_resume", return_value=None):
+                exec_job._apply_resume(spec, args, fresh_env)
+            if not exec_job.CHECKPOINT_DIR.is_dir():
+                raise SystemExit("checkpoint dir not created before the child runs")
+            if "RESUME_RUN_ID" in fresh_env:
+                raise SystemExit("no marker and no arg must not invent a resume")
+            explicit = {"DIGI_CHECKPOINTER": "sqlite", "RESUME_RUN_ID": "r0"}
+            with mock.patch.object(exec_job, "_read_interrupted_resume") as marker, mock.patch.object(
+                exec_job, "restore_checkpoints", return_value=True
+            ) as restore:
+                exec_job._apply_resume(spec, args, explicit)
+            if marker.called:
+                raise SystemExit("explicit resume must not be overridden by the marker")
+            if restore.call_args is None or restore.call_args.args[0] != "2026-09-30":
+                raise SystemExit("explicit resume_run_id must restore the checkpoint file")
+            pg = {"DIGI_CHECKPOINTER": "postgres", "RESUME_RUN_ID": "r0"}
+            with mock.patch.object(exec_job, "restore_checkpoints") as restore_pg:
+                exec_job._apply_resume(spec, args, pg)
+            if restore_pg.called:
+                raise SystemExit("postgres runs must not touch the checkpoint file")
+
             def _boom(_day: str) -> bool:
                 raise OSError("disk")
 
