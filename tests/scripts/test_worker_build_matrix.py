@@ -35,7 +35,7 @@ The two flags are pinned for the same reach-in-reverse reason. Drop
 container image *"even in dry-run mode"*, so the job fails outright on any
 machine without one — three of the six apps are container Workers
 (digichat-cloudflare, digiquant-runner and digithings-stack-cloudflare ship
-`[[containers]]`; digithings-cron, dashboard-api and digidata-api do not — each verified with `grep -c '\[\[containers\]\]'`).
+`[[containers]]`; digithings-cron and dashboard-api do not — each verified with `grep -c '\[\[containers\]\]'`).
 Drop `--dry-run` and the gate starts needing Cloudflare credentials, which breaks it
 on fork PRs and puts a secret on the path of a read-only check.
 """

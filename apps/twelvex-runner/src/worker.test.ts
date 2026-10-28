@@ -51,6 +51,27 @@ function containerResult(over: Partial<RunResult> = {}): RunResult {
 }
 
 describe("routing and auth", () => {
+  it("serves the twelve-x data API without the runner token or the container", async () => {
+    const container = vi.fn();
+    const health = await handle(
+      new Request("https://twelvex-runner/v1/health"),
+      env(),
+      stubOf(container),
+    );
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ ok: true, backend: "supabase" });
+    // The runner bearer is not the data API bearer: it must not open /v1.
+    const denied = await handle(
+      new Request("https://twelvex-runner/v1/twelvex/fx_daily_digest", {
+        headers: { Authorization: "Bearer runner-token" },
+      }),
+      env(),
+      stubOf(container),
+    );
+    expect(denied.status).toBe(401);
+    expect(container).not.toHaveBeenCalled();
+  });
+
   it("healthz does not call the container", async () => {
     const container = vi.fn();
     const res = await handle(new Request("https://twelvex-runner/healthz"), env(), stubOf(container));

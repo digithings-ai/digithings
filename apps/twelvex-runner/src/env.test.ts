@@ -53,4 +53,25 @@ describe("dataPlaneEnv", () => {
     expect("GH_ISSUES_TOKEN" in forwarded).toBe(false);
     expect(dataPlaneEnv(env({ DRY_RUN: "1" })).DRY_RUN).toBe("1");
   });
+
+  it("keeps forwarding the core key unless the cutover flag is exactly 0", () => {
+    const core = { CORE_SUPABASE_SERVICE_KEY: "core-key-value" };
+    expect(dataPlaneEnv(env(core)).CORE_SUPABASE_SERVICE_KEY).toBe("core-key-value");
+    expect(
+      dataPlaneEnv(env({ ...core, TWELVEX_FORWARD_CORE_KEY: "1" })).CORE_SUPABASE_SERVICE_KEY,
+    ).toBe("core-key-value");
+    expect(
+      "CORE_SUPABASE_SERVICE_KEY" in dataPlaneEnv(env({ ...core, TWELVEX_FORWARD_CORE_KEY: "0" })),
+    ).toBe(false);
+    expect(
+      "CORE_SUPABASE_SERVICE_KEY" in
+        dataPlaneEnv(env({ ...core, TWELVEX_FORWARD_CORE_KEY: " 0 " })),
+    ).toBe(false);
+  });
+
+  it("never forwards the data API's token or backend switch", () => {
+    const forwarded = dataPlaneEnv(env({ DATA_API_TOKEN: "data-token", DATA_BACKEND: "d1" }));
+    expect("DATA_API_TOKEN" in forwarded).toBe(false);
+    expect("DATA_BACKEND" in forwarded).toBe(false);
+  });
 });

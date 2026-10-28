@@ -10,7 +10,7 @@ Target repos (docs/repo-split, PR #5695):
   R4 digithings-web (priv)          digithings.ai, digibook, brand
   R5 digithings-stack (priv)        shared prod platform (stack, digichat Worker, cron)
   R6 digichat-tenants (priv)        client corpora + rollout tooling (writes KV/R2)
-  R7 twelve-x (exists, priv)        client desk + digidata-api
+  R7 twelve-x (exists, priv)        client desk + its data API
   delete                            paths that move nowhere (replaced tooling)
 
 Chris's 01:26 calls (15 Oct, baked in below):
@@ -192,8 +192,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/test_verify_occ_invite_key.sh", "R6", "rollout tooling"),
     ("scripts/datatap_answer_integrity_check.py", "R6", "answer-check tooling"),
     ("scripts/check_tenant_corpus_map.py", "R6", "tenant corpus map check"),
-    # ---- R7: client desk + digidata-api ----
-    ("apps/digidata-api/", "R7", "digidata-api (D1 twelvex)"),
+    # ---- R7: client desk (twelvex-runner carries the twelve-x data API) ----
     ("apps/twelvex-runner/", "R7", "twelve-x runner container (R7)"),
     # ---- R0: repo root files (open) ----
     (".coderabbit.yaml", "R0", "root config (open)"),

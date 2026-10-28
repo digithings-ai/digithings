@@ -23,10 +23,9 @@ is reachable only through the Worker that hosts it.
 |---|---|---|
 | `digithings-digichat` | `digithings.ai` — `/chat*`, `/chat/occ*`, `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/api/mcp/helpdesk*`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` | `apps/digichat-cloudflare/wrangler.toml:57-133` |
 | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (custom domains) | `apps/digithings-stack-cloudflare/wrangler.toml:43-83` |
-| `digiquant-runner`, `twelvex-runner` | no routes; service-bound workers | `apps/digiquant-runner/wrangler.toml:34-39`, `apps/twelvex-runner/wrangler.toml:38-43` |
+| `digiquant-runner`, `twelvex-runner` | no routes; service-bound workers (`twelvex-runner` also serves the twelve-x data API, ex-`digidata-api`) | `apps/digiquant-runner/wrangler.toml:34-39`, `apps/twelvex-runner/wrangler.toml:38-43` |
 | `digitrace-langfuse` | `trace.digithings.ai` (route commented out) | `apps/digitrace-langfuse/wrangler.toml:27-30` |
 | `digithings-cron`, `corpus-index`, `dashboard-api` | workers.dev only, no routes | `apps/digithings-cron/wrangler.toml:9-13` etc. |
-| `digidata-api` | **not deployed** — no workflow, no route | `apps/digidata-api/wrangler.toml:2-3` |
 
 The two that matter for chat are `digithings-digichat` and `digithings-stack`.
 

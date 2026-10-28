@@ -1,8 +1,12 @@
+import type { DataEnv } from "./data/types";
+
 /**
  * twelvex-runner bindings.
  * Data-plane secrets are forwarded into the container. Auth tokens are not.
+ * The data API's bindings (TWELVEX_DB, DATA_BACKEND, DATA_API_TOKEN) come from
+ * {@link DataEnv}; none of them is forwarded into the container.
  */
-export interface Env {
+export interface Env extends DataEnv {
   /** Bearer required on POST /run/*. Never forwarded into the container. */
   RUNNER_AUTH_TOKEN?: string;
   /** Issues read/write on digithings-ai/twelve-x. Never forwarded. */
@@ -17,6 +21,14 @@ export interface Env {
   CHEAPERINFERENCE_API_KEY?: string;
   /** Core project key. The FX research graph writes the shared core calendar. */
   CORE_SUPABASE_SERVICE_KEY?: string;
+  /**
+   * "0" stops forwarding the core service key into the container, which is
+   * how twelve-x leaves the core project (DIG-2887 S2). Unset or any other value
+   * keeps forwarding it: the pinned twelve-x graph still writes the core
+   * calendar and refuses to start without the key, so turning it off before the
+   * twelve-x side drops that write would fail every FX session.
+   */
+  TWELVEX_FORWARD_CORE_KEY?: string;
   /** Model endpoint the house path uses. */
   OPENAI_API_BASE?: string;
 }
@@ -47,7 +59,7 @@ export function dataPlaneEnv(env: Env): Record<string, string> {
   if (env.CHEAPERINFERENCE_API_KEY) {
     forwarded.OPENAI_API_KEY = env.CHEAPERINFERENCE_API_KEY;
   }
-  if (env.CORE_SUPABASE_SERVICE_KEY) {
+  if (env.CORE_SUPABASE_SERVICE_KEY && forwardsCoreKey(env)) {
     forwarded.CORE_SUPABASE_SERVICE_KEY = env.CORE_SUPABASE_SERVICE_KEY;
   }
   if (env.OPENAI_API_BASE) {
@@ -55,4 +67,9 @@ export function dataPlaneEnv(env: Env): Record<string, string> {
   }
   forwarded.DRY_RUN = env.DRY_RUN === "1" ? "1" : "0";
   return forwarded;
+}
+
+/** Whether the core project key still reaches the container. See Env. */
+export function forwardsCoreKey(env: Pick<Env, "TWELVEX_FORWARD_CORE_KEY">): boolean {
+  return (env.TWELVEX_FORWARD_CORE_KEY ?? "").trim() !== "0";
 }

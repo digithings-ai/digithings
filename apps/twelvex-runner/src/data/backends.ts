@@ -1,5 +1,5 @@
 import { selectSql, upsertSql } from "./query";
-import type { Backend, Env, SelectQuery, UpsertQuery } from "./types";
+import type { Backend, DataEnv, SelectQuery, UpsertQuery } from "./types";
 
 export class D1Backend implements Backend {
   readonly name = "d1" as const;
@@ -48,13 +48,13 @@ export class SupabaseBackend implements Backend {
 }
 
 /** Supabase stays the default until a project is cut over (DIG-2902/2903). */
-export function pickBackend(env: Env, db: "twelvex"): Backend {
+export function pickBackend(env: DataEnv, db: "twelvex"): Backend {
   const mode = (env.DATA_BACKEND ?? "supabase").toLowerCase();
   if (mode === "d1") {
     if (!env.TWELVEX_DB) throw new Error("DATA_BACKEND=d1 but TWELVEX_DB binding missing");
     return new D1Backend(env.TWELVEX_DB);
   }
   if (mode !== "supabase") throw new Error(`unknown DATA_BACKEND ${mode}`);
-  if (!env.SUPABASE_TWELVEX_URL || !env.SUPABASE_TWELVEX_SERVICE_KEY) throw new Error(`supabase backend for ${db} not configured`);
-  return new SupabaseBackend(env.SUPABASE_TWELVEX_URL, env.SUPABASE_TWELVEX_SERVICE_KEY);
+  if (!env.TWELVEX_SUPABASE_URL || !env.TWELVEX_SUPABASE_SERVICE_KEY) throw new Error(`supabase backend for ${db} not configured`);
+  return new SupabaseBackend(env.TWELVEX_SUPABASE_URL, env.TWELVEX_SUPABASE_SERVICE_KEY);
 }

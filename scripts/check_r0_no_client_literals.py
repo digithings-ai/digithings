@@ -74,7 +74,6 @@ NON_R0_PREFIXES: tuple[str, ...] = (
     "apps/digithings-cron/",
     "infra/digichat-release/",
     "infra/digichat-digithings/",
-    "apps/digidata-api/",
     "apps/digichat/config/datatap-trial-foundry.yaml",
     "apps/digichat/config/datatap-trial-test.yaml",
     "apps/digichat/config/examples/occ-embed.yaml",

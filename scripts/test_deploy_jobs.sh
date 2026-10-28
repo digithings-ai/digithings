@@ -23,7 +23,7 @@ ok() { echo "ok   $*"; }
 
 # --- source invariants -------------------------------------------------------
 
-ids="stack digichat cron runner dashboard-api corpus-index digidata-api"
+ids="stack digichat cron runner dashboard-api corpus-index"
 for id in $ids; do
   [ -x "scripts/deploy/${id}.sh" ] || fail "missing executable scripts/deploy/${id}.sh"
   grep -q -- "--job ${id} " "scripts/deploy/${id}.sh" || fail "${id}.sh does not pass --job ${id}"
