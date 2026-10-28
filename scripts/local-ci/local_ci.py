@@ -1979,6 +1979,8 @@ def run_checks(pr, out, summary=None):
               # host runner for months, so #6500 grew the baseline and merged
               # green (totals 1997 -> 2030) until the post-merge run caught it.
               "scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base,
+              # DIG-2887 S0: Supabase usage may only shrink while the exit runs.
+              "scripts/check_supabase_freeze.py --base-ref " + r0_base,
               "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
             scan_specs.append(scan_spec(s.split()[0], f"python3 {s}", SCAN_ENV, (124, 3)))

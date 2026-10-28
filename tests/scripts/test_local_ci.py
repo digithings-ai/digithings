@@ -683,6 +683,11 @@ class StaticGateWiringTest(unittest.TestCase):
         self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
         self.assertIn('r0_base = "origin/" + base', src)
 
+    def test_supabase_freeze_gate_in_static_gate_list(self):
+        """New Supabase usage is refused on the PR, not after merge (DIG-2887 S0)."""
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn('"scripts/check_supabase_freeze.py --base-ref " + r0_base', src)
+
     def test_run_checks_executes_the_allowance_gate(self):
         """Functionally: a grown baseline makes `run_checks` return the gate.
 
