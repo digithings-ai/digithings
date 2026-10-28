@@ -172,7 +172,7 @@ describe("ChatEmbedShell contracts", () => {
     const copyPath = fileURLToPath(new URL("../lib/embedCopy.ts", import.meta.url));
     const copy = readFileSync(copyPath, "utf8");
     expect(copy).toContain("Ask about digithings");
-    expect(copy).toContain("Ask about Online Compliance Center");
+    expect(copy).toContain('welcome: "Ask about OCC.",');
   });
 
   it("forwards the OCC invite key from the parent URL to the embed", async () => {
