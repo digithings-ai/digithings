@@ -28,6 +28,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
+import { isPrivateUrlParam, privateFirstPaintTenant } from "@/lib/private-chrome";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts. A top-level page with no ?theme= (the /chat/occ document)
@@ -64,7 +65,12 @@ export default async function EmbedRouteShell({
   if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
     notFound();
   }
-  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
+  const { seeded: tenantSeededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
+  // A private page (`?private=1`, or a reload of one) for a tenant that opted
+  // in paints the generic support-desk copy from the first byte: the tenant's
+  // welcome, title, placeholder and chips never reach the HTML or the client
+  // props serialised into it. Normal mode keeps the tenant's own copy.
+  const seededCfg = privateFirstPaintTenant(tenantSeededCfg, isPrivateUrlParam(params.private));
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
   // The host's URL overrides (welcome / placeholder / suggestions / accent)
   // seed the first paint too: the client hook applies them post-mount, which
