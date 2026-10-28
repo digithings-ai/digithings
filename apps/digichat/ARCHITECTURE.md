@@ -1474,8 +1474,9 @@ header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `A
 `#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
 set or override it — only the operator/token pairing on the same YAML row can.
 **`authScheme: jwt` is the chat's own identity.** Instead of a static token the BFF mints a digikey JWT, scoped
-`mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — `DIGICHAT_MCP_IDENTITY_KEY`
-(a `dgk_live_…` key) when configured, else the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`) — and reuses it
+`mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`), whose token names the
+turn's tenant, and `DIGICHAT_MCP_IDENTITY_KEY` (a `dgk_live_…` key) only when there is no BFF credential, because an
+API-key token carries the key row's own tenant and digisearch scopes tenant indexes on that claim — and reuses it
 until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The BFF credential path sends
 `requested_scopes: ["mcp:digisearch", "mcp:digivault"]`, which digikey answers from
 `BFF_SESSION_GRANTABLE_SCOPES` (`digikey/src/digikey/scopes.py`): the default session scopes **plus** those two
