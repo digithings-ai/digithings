@@ -669,12 +669,21 @@ function EmbedChat({
   // Availability first, then the seed, so the two can never disagree: a tenant
   // that did not opt in leaves `?private=1` inert, and a tenant that stops
   // opting in drops the session flag. The URL only turns the mode on.
+  // The store is seeded after paint, so until the first seed the chrome reads
+  // the same inputs the seed uses: a `?private=1` page for an opted-in tenant
+  // never flashes the tenant's own welcome, placeholder or title.
+  const privateSeededRef = useRef(false);
   useEffect(() => {
     seedPrivateMode({
       tenantOptIn: tenantCfg.privateMode === true,
       urlPrivate: uiParams.privateMode === true,
     });
+    privateSeededRef.current = true;
   }, [tenantCfg.privateMode, uiParams.privateMode]);
+  // eslint-disable-next-line react-hooks/refs -- read-only first-paint guard, see above
+  const privateChrome = privateSeededRef.current
+    ? privateMode
+    : privateMode || (tenantCfg.privateMode === true && uiParams.privateMode === true);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
@@ -1239,7 +1248,7 @@ function EmbedChat({
     placeholder,
     suggestions,
     headerTitle,
-  } = privateSessionChrome(privateMode, {
+  } = privateSessionChrome(privateChrome, {
     welcome: tenantWelcomeIntro,
     placeholder: uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…",
     suggestions: tenantSuggestions,

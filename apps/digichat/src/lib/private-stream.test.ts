@@ -8,6 +8,12 @@ import {
   privatizeChatResponse,
   privatizeChunk,
 } from "./private-stream";
+import {
+  privateToolRecorder,
+  privateToolScope,
+  rehydratePrivateToolParts,
+  resetPrivateToolCacheForTests,
+} from "./private-tool-cache";
 
 function sse(chunks: Array<unknown | string>): string {
   return chunks
@@ -230,6 +236,53 @@ describe("privatizeChatResponse", () => {
         .map((e) => e.delta)
         .join(""),
     ).toBe("hi there");
+  });
+
+  it("gives short upstream tool ids a fresh unguessable id per turn, kept and restored server side", async () => {
+    resetPrivateToolCacheForTests();
+    const scope = privateToolScope({ tenantSlug: "t", ownerUserSub: "anon" });
+    const toolTurn = (output: unknown) =>
+      privatizeChatResponse(
+        new Response(
+          streamOf(
+            sse([
+              { type: "tool-input-start", toolCallId: "tool-1", toolName: "search" },
+              { type: "tool-input-available", toolCallId: "tool-1", toolName: "search", input: { q: "x" } },
+              { type: "tool-output-available", toolCallId: "tool-1", output },
+              { type: "finish" },
+            ]),
+          ),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+        [],
+        privateToolRecorder(scope),
+      );
+    const idsOf = (events: Array<Record<string, unknown> | string>) =>
+      events
+        .filter((e): e is Record<string, unknown> => typeof e !== "string" && "toolCallId" in e)
+        .map((e) => e.toolCallId as string);
+    const first = idsOf(await readEvents(await toolTurn({ n: 1 })));
+    const second = idsOf(await readEvents(await toolTurn({ n: 2 })));
+    expect(new Set(first).size).toBe(1);
+    expect(new Set(second).size).toBe(1);
+    expect(first[0]).toMatch(/^ptc_[0-9a-f-]{36}$/);
+    expect(second[0]).not.toBe(first[0]);
+    // Both turns' payloads are kept under their own ids and restored.
+    const restored = rehydratePrivateToolParts(
+      [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            { type: "tool-search", toolCallId: first[0], state: "output-available", input: {}, output: {} },
+            { type: "tool-search", toolCallId: second[0], state: "output-available", input: {}, output: {} },
+          ],
+        } as never,
+      ],
+      scope,
+    );
+    const outputs = (restored[0].parts as Array<Record<string, unknown>>).map((part) => part.output);
+    expect(outputs).toEqual([{ n: 1 }, { n: 2 }]);
   });
 
   it("passes JSON responses through untouched", async () => {

@@ -4091,7 +4091,7 @@ describe("POST /api/chat limits", () => {
       expect(res.status).toBe(200);
       const raw = await res.text();
       expect(raw).not.toContain("Priya");
-      expect(raw).toContain('"type":"tool-output-available","toolCallId":"c1","output":{}');
+      expect(raw).toMatch(/"type":"tool-output-available","toolCallId":"ptc_[^"]+","output":\{\}/);
       expect(raw).toContain('"type":"reasoning-start"');
       expect(raw).toContain("Found one ticket.");
     });
@@ -4125,7 +4125,9 @@ describe("POST /api/chat limits", () => {
 
     it("keeps full tool results server side and gives them back to the model on the next turn", async () => {
       delete process.env.DIGICHAT_TRACE_UI;
-      const callId = "call_9b1e77c0d2";
+      // Upstream ids are short and reused every turn (`tool-1`); the browser
+      // gets an unguessable alias and sends that one back.
+      const callId = "tool-1";
       const turn1 = [
         { type: "start", messageId: "m1" },
         { type: "tool-input-start", toolCallId: callId, toolName: "helpdesk_search" },
@@ -4168,6 +4170,9 @@ describe("POST /api/chat limits", () => {
       const browser = await first.text();
       expect(browser).not.toContain("Priya");
       expect(browser).not.toContain("helpdesk");
+      const browserId = /"toolCallId":"(ptc_[^"]+)"/.exec(browser)?.[1];
+      expect(browserId).toBeDefined();
+      expect(browser).not.toContain(`"toolCallId":"${callId}"`);
 
       // Turn 2: the browser sends back only the stripped step.
       vi.mocked(createDigigraphTraceStreamResponse).mockClear();
@@ -4184,7 +4189,7 @@ describe("POST /api/chat limits", () => {
                 parts: [
                   {
                     type: "tool-search",
-                    toolCallId: callId,
+                    toolCallId: browserId,
                     state: "output-available",
                     input: {},
                     output: {},
@@ -4202,7 +4207,7 @@ describe("POST /api/chat limits", () => {
       };
       const tool = call.messages
         .flatMap((m) => m.parts)
-        .find((p) => p.toolCallId === callId);
+        .find((p) => p.toolCallId === browserId);
       expect(tool).toMatchObject({
         type: "tool-helpdesk_search",
         input: { q: "Priya" },

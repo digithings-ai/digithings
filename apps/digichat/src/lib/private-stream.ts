@@ -202,6 +202,19 @@ export function createPrivateStreamTransform(
   const decoder = new TextDecoder();
   const scrubber = new PrivateTextScrubber(terms);
   const pending = new Map<string, string>();
+  // Upstream tool call ids can be short and reused every turn (`tool-1`). The
+  // browser and the server-side tool memory get a fresh unguessable id per
+  // call instead, so a kept payload can neither be guessed nor overwritten by
+  // a later turn's `tool-1`.
+  const toolIds = new Map<string, string>();
+  const aliasToolCallId = (id: string): string => {
+    let alias = toolIds.get(id);
+    if (!alias) {
+      alias = `ptc_${crypto.randomUUID()}`;
+      toolIds.set(id, alias);
+    }
+    return alias;
+  };
   let buffer = "";
 
   const emit = (controller: TransformStreamDefaultController<Uint8Array>, chunk: unknown) => {
@@ -239,6 +252,9 @@ export function createPrivateStreamTransform(
     if (!chunk || typeof chunk !== "object") {
       emit(controller, chunk);
       return;
+    }
+    if (typeof chunk.toolCallId === "string" && chunk.toolCallId) {
+      chunk = { ...chunk, toolCallId: aliasToolCallId(chunk.toolCallId) };
     }
     if (onRawChunk) {
       try {
