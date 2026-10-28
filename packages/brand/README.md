@@ -116,7 +116,7 @@ a seam inside its frame.
 | asset | canonical path | notes |
 |---|---|---|
 | **Chris Stefan avatar** | `apps/digithings-web/public/team/chris.png` | 460×460. Under the 500×500 GitHub recommends — re-export larger from the source if you need it for a profile |
-| **Open Graph cards** | `apps/digithings-web/public/og.png`, `apps/digithings-web/public/og-square.png`, `apps/digiquant-web/public/og.png`, `apps/digichat/public/og.png` | generated — see below. Digiquant's card is the quant logo, not the digithings wordmark |
+| **Open Graph cards** | `apps/digithings-web/public/og.png`, `apps/digithings-web/public/og-square.png`, `apps/digiquant-web/public/og.png`, `apps/digichat/public/og.png` | generated — see below. Digiquant's card is the DIGIQUANT pixel wordmark over a hero-style chart |
 | **digithings.ai favicons** | `apps/digithings-web/public/icons/` and `favicon-dg{,-light}.svg` | `build-favicon.py` from `logo-mark.svg`. `favicon-dg.svg` is the light tile (the integrations chip loads it); `favicon-dg-light.svg` is the dark tile |
 | **digiquant.io favicons** | `apps/digiquant-web/public/icons/` and `favicon-dg{,-light}.svg` | same filenames, quant up/down bands. Not a byte copy of the digithings tiles |
 | **digichat favicons** | `apps/digichat/public/icons/` and `src/app/icon.svg` | the digithings set. `icon.svg` is the dark tile |
@@ -133,7 +133,9 @@ a seam inside its frame.
 `og/` holds the link-preview cards, and `build-og.py` generates them from the
 studio: the digithings wordmark on the field at 1200×630 (preset `open-graph`,
 wordmark 9% of the height) and 1080×1080 (preset `square`, wordmark 5.5%),
-and the digiquant logo on the same field. One mark per card.
+and, for digiquant, the DIGIQUANT wordmark drawn the same 4×4 way (hero-banner
+font and its glyph overrides, same 9% height) over a seeded candlestick chart in
+the digiquant.io hero colours. One mark per card.
 
 ```bash
 python3 packages/brand/build-og.py           # rebuild

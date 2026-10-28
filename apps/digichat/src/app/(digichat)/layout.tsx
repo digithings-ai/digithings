@@ -4,6 +4,7 @@ import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { faviconThemeScript, themeInitScript } from "@digithings/ui";
 import { p } from "@/lib/base-path";
+import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import {
@@ -36,6 +37,8 @@ const faviconInit = faviconThemeScript({
 });
 
 export const metadata: Metadata = {
+  // Absolute og:image / twitter:image (see lib/public-origin.ts).
+  metadataBase: PUBLIC_ORIGIN,
   title: "digichat · digithings",
   description: "Production chat UI for the digigraph orchestrator.",
   icons: {

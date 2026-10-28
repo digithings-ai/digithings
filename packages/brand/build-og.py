@@ -7,9 +7,10 @@ site — it renders in Slack, iMessage, LinkedIn, X, Discord, WhatsApp.
 The cards follow the brand studio. Digithings uses the open-graph preset
 (1200×630, field, dark, word-only, wordmark at 9% of the height) and the square
 preset (1080×1080, wordmark at 5.5%) for summary cards. Digiquant uses the same
-field with the quant-tinted logo, not the digithings word — a share card shows
-one mark. The default theme's accent is ink, so the digithings card stays
-monochrome.
+4×4 pixel wordmark style (DIGIQUANT, from the hero-banner font and its glyph
+overrides) at the same size, over a candlestick chart like the digiquant.io
+hero instead of the field. The default theme's accent is ink, so both marks
+stay monochrome.
 
 ``HEADLINES``, ``outline`` and the Geist Mono cursor constants stay in this
 module because ``build-header.py`` still outlines the X and LinkedIn headers
@@ -117,11 +118,6 @@ def _studio():
     return studio_compose
 
 
-# Logo height on the digiquant card, as a percent of the 630px frame.
-# The studio's logo-only layout is 60; 42 keeps the field visible around it.
-QUANT_LOGO_PCT = 42
-
-
 def _word_card(width: int, height: int, field: str, size_pct: float) -> str:
     studio = _studio()
     inner, box_w, box_h = studio.wordmark_inner(studio.DARK_INK)
@@ -138,18 +134,175 @@ def _word_card(width: int, height: int, field: str, size_pct: float) -> str:
     )
 
 
+# --- the digiquant card ---------------------------------------------------
+#
+# Same frame as the digithings card: the 4×4 pixel wordmark at the studio's
+# open-graph size. The ground is a candlestick chart drawn the way the
+# digiquant.io hero draws one (packages/ui chart-scale colours, SMA 20, EMA 50,
+# Bollinger 20/2, volume underneath). The series is a seeded walk, not market
+# data, so the card is byte-for-byte reproducible.
+
+QUANT_WORD_PCT = 9  # the digithings card's wordmark height
+QUANT_SEED = 0x9A17  # DIGIQUANT's banner seed
+
+# packages/ui/src/components/finance-charts/chart-scale.ts, dark snapshot.
+CHART = {
+    "up": "#3DD6C4",
+    "down": "#E5533E",
+    "sma": "#1EC98A",
+    "ema": "#5AD4F0",
+    "band": "#F09238",
+}
+CHART_DIM = 0.5  # the whole chart sits under the mark, like the studio field
+BAR_PITCH, BAR_BODY = 8, 5
+PRICE_TOP, PRICE_BOTTOM = 30, 500
+VOLUME_TOP, VOLUME_BOTTOM = 530, 630
+SMA_LENGTH, EMA_LENGTH, BB_LENGTH, BB_MULT = 20, 50, 20, 2.0
+
+
+def _series(count: int, seed: int) -> list[tuple[float, float, float, float, float]]:
+    """(open, high, low, close, volume) bars: a rally, a range, then a sell-off."""
+    studio = _studio()
+    rand = studio._lcg(seed)
+    # Drift per bar for each third of the window.
+    legs = [0.0032, 0.0, -0.0028]
+    price = 100.0
+    bars = []
+    for index in range(count + EMA_LENGTH):
+        leg = legs[min(2, max(0, index - EMA_LENGTH) * 3 // count)] if index >= EMA_LENGTH else 0.0
+        shock = (next(rand) - 0.5) * 0.032
+        open_ = price
+        close = max(1.0, open_ * (1 + leg + shock))
+        high = max(open_, close) * (1 + next(rand) ** 2 * 0.014)
+        low = min(open_, close) * (1 - next(rand) ** 2 * 0.014)
+        volume = 0.15 + next(rand) ** 3 * 0.6 + 40 * abs(close - open_) / open_
+        bars.append((open_, high, low, close, volume))
+        price = close
+    return bars
+
+
+def _sma(values: list[float], length: int) -> list[float | None]:
+    return [
+        None if i + 1 < length else sum(values[i + 1 - length : i + 1]) / length
+        for i in range(len(values))
+    ]
+
+
+def _ema(values: list[float], length: int) -> list[float]:
+    alpha = 2 / (length + 1)
+    out, current = [], values[0]
+    for value in values:
+        current = alpha * value + (1 - alpha) * current
+        out.append(current)
+    return out
+
+
+def _bands(values: list[float], length: int, mult: float) -> tuple[list, list]:
+    upper, lower = [], []
+    for i in range(len(values)):
+        if i + 1 < length:
+            upper.append(None)
+            lower.append(None)
+            continue
+        window = values[i + 1 - length : i + 1]
+        mean = sum(window) / length
+        sd = (sum((v - mean) ** 2 for v in window) / length) ** 0.5
+        upper.append(mean + mult * sd)
+        lower.append(mean - mult * sd)
+    return upper, lower
+
+
+def _chart_layer(width: int, height: int) -> str:
+    count = width // BAR_PITCH + 1
+    bars = _series(count, QUANT_SEED)
+    closes = [bar[3] for bar in bars]
+    sma = _sma(closes, SMA_LENGTH)[EMA_LENGTH:]
+    ema = _ema(closes, EMA_LENGTH)[EMA_LENGTH:]
+    upper, lower = _bands(closes, BB_LENGTH, BB_MULT)
+    upper, lower = upper[EMA_LENGTH:], lower[EMA_LENGTH:]
+    bars = bars[EMA_LENGTH:]
+
+    top = max(max(b[1] for b in bars), max(u for u in upper if u is not None))
+    bottom = min(min(b[2] for b in bars), min(v for v in lower if v is not None))
+    span = top - bottom
+
+    def y(price: float) -> int:
+        return round(PRICE_TOP + (top - price) / span * (PRICE_BOTTOM - PRICE_TOP))
+
+    def x(index: int) -> int:
+        return index * BAR_PITCH
+
+    peak_volume = max(b[4] for b in bars)
+    parts = []
+    grid = "rgba(255, 255, 255, 0.09)"
+    for gy in range(PRICE_TOP, VOLUME_BOTTOM, 70):
+        parts.append(f'<rect x="0" y="{gy}" width="{width}" height="1" fill="{grid}"/>')
+    for gx in range(0, width, 160):
+        parts.append(f'<rect x="{gx}" y="0" width="1" height="{height}" fill="{grid}"/>')
+    for index, (open_, high, low, close, volume) in enumerate(bars):
+        colour = CHART["up"] if close >= open_ else CHART["down"]
+        left = x(index)
+        body_top, body_bottom = sorted((y(open_), y(close)))
+        parts.append(
+            f'<rect x="{left + BAR_BODY // 2}" y="{y(high)}" width="1" '
+            f'height="{max(1, y(low) - y(high))}" fill="{colour}"/>'
+        )
+        parts.append(
+            f'<rect x="{left}" y="{body_top}" width="{BAR_BODY}" '
+            f'height="{max(1, body_bottom - body_top)}" fill="{colour}"/>'
+        )
+        bar_h = round(volume / peak_volume * (VOLUME_BOTTOM - VOLUME_TOP))
+        parts.append(
+            f'<rect x="{left}" y="{VOLUME_BOTTOM - bar_h}" width="{BAR_BODY}" '
+            f'height="{bar_h}" fill="{colour}" opacity="0.45"/>'
+        )
+
+    def line(values: list, colour: str) -> str:
+        points = " ".join(
+            f"{x(i) + BAR_BODY / 2:g},{y(v)}" for i, v in enumerate(values) if v is not None
+        )
+        return (
+            f'<polyline points="{points}" fill="none" stroke="{colour}" stroke-width="2" '
+            'stroke-linejoin="round" shape-rendering="geometricPrecision"/>'
+        )
+
+    parts += [
+        line(upper, CHART["band"]),
+        line(lower, CHART["band"]),
+        line(sma, CHART["sma"]),
+        line(ema, CHART["ema"]),
+    ]
+    return f'<g opacity="{CHART_DIM}">{"".join(parts)}</g>'
+
+
+def _quiet_zone(width: int, height: int, bg: str) -> str:
+    """A soft ground-coloured ellipse so the mark reads over the candles."""
+    return (
+        '<defs><radialGradient id="quiet" cx="50%" cy="50%" r="50%">'
+        f'<stop offset="0" stop-color="{bg}" stop-opacity="0.92"/>'
+        f'<stop offset="0.55" stop-color="{bg}" stop-opacity="0.7"/>'
+        f'<stop offset="1" stop-color="{bg}" stop-opacity="0"/>'
+        "</radialGradient></defs>"
+        f'<ellipse cx="{width / 2:g}" cy="{height / 2:g}" rx="{width * 0.36:g}" '
+        f'ry="{height * 0.3:g}" fill="url(#quiet)" shape-rendering="geometricPrecision"/>'
+    )
+
+
 def _quant_card() -> str:
     studio = _studio()
-    inner, box_w, box_h = studio.quant_logo_inner("dark")
+    inner, box_w, box_h = studio.pixel_wordmark_inner(
+        "DIGIQUANT", studio.DARK_INK, module="digiquant", seed=QUANT_SEED
+    )
     return studio.frame(
         WIDTH,
         HEIGHT,
         f'<rect width="{WIDTH}" height="{HEIGHT}" fill="{studio.DARK_BG}"/>',
-        studio.field_layer("og", studio.DARK_INK, WIDTH, HEIGHT),
-        studio.place(inner, box_w, box_h, WIDTH, HEIGHT, QUANT_LOGO_PCT),
+        _chart_layer(WIDTH, HEIGHT),
+        _quiet_zone(WIDTH, HEIGHT, studio.DARK_BG),
+        studio.place(inner, box_w, box_h, WIDTH, HEIGHT, QUANT_WORD_PCT),
         comment=(
             "GENERATED by packages/brand/build-og.py — do not hand-edit. "
-            "Brand-studio field, digiquant logo only."
+            "Pixel wordmark over the digiquant hero chart."
         ),
     )
 
