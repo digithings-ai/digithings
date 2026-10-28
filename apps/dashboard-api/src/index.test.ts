@@ -100,6 +100,22 @@ describe("FX Hub mount", () => {
   });
 });
 
+describe("prices-live mount (Supabase exit S4)", () => {
+  it("is not mounted while PRICES_LIVE_WORKER_ROUTES is off (the default)", async () => {
+    const res = await app.fetch(new Request("https://x/prices-live", { method: "POST" }), NO_ENV);
+    expect(res.status).not.toBe(401);
+    const quotes = await app.fetch(new Request("https://x/prices-live/quotes"), NO_ENV);
+    expect(quotes.status).toBe(400);
+  });
+
+  it("mounts behind the flag, and the refresh still needs the cron token", async () => {
+    const env: Env = { PRICES_LIVE_WORKER_ROUTES: "1" };
+    const res = await app.fetch(new Request("https://x/prices-live", { method: "POST" }), env);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
+  });
+});
+
 describe("router", () => {
   it("rejects unknown routes with the envelope", async () => {
     const res = await app.fetch(new Request("https://x/nope"), NO_ENV);

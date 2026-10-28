@@ -6,6 +6,7 @@ import marketSrc from "./market.ts?raw";
 import adminSrc from "./admin.ts?raw";
 import routesSrc from "./routes.ts?raw";
 import routerSrc from "./router.ts?raw";
+import kvStoreSrc from "./kv-store.ts?raw";
 import indexSrc from "../index.ts?raw";
 
 // Two properties the port has to hold for the cutover to be a cutover rather
@@ -28,6 +29,7 @@ const SOURCES: Record<string, string> = {
   "admin.ts": adminSrc,
   "routes.ts": routesSrc,
   "router.ts": routerSrc,
+  "kv-store.ts": kvStoreSrc,
 };
 
 /** Removes block and line comments so the scans below read CODE, not prose. */
@@ -83,12 +85,13 @@ describe("router surface", () => {
     expect(routerSrc).toContain("/prices-live");
   });
 
-  it("keeps the prices-live paths off the dashboard-api entrypoint", () => {
-    // src/index.ts is the deployed entrypoint; mounting there is a production
-    // change and this leaf must not make one. The port has to stay importable
-    // but unmounted until the cutover decision, so the entrypoint must not
-    // import the prices-live router at all.
+  it("mounts the prices-live paths on the entrypoint only behind its flag", () => {
+    // src/index.ts is the deployed entrypoint. Supabase exit S4 mounts the
+    // router there, but only when PRICES_LIVE_WORKER_ROUTES is "1", so the
+    // edge function stays the serving path until cutover.
     expect(indexSrc.length, "entrypoint resolved to an empty string").toBeGreaterThan(0);
-    expect(indexSrc).not.toMatch(/prices-live/);
+    const entry = code(indexSrc);
+    expect(entry).toMatch(/PRICES_LIVE_ROUTE_PATHS\.has\(path\)\s*&&\s*pricesLiveWorkerRoutesOn\(/);
+    expect(entry.match(/createPricesLiveFetch\(/g)?.length).toBe(1);
   });
 });
