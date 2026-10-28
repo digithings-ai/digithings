@@ -811,7 +811,7 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
-        "comments,commits,labels",
+        "comments,commits,labels,body",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -3411,6 +3411,51 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
 def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     return _review_coverage(pr, repo)[0]
 
+_HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*[-*]\s*\[[xX]\]")
+
+
+def _human_gate_section(body: str) -> str:
+    """Text under a heading that names the Human Gate section, up to the next heading."""
+    if not body:
+        return ""
+    m = re.search(r"(?im)^#{0,6}\s*[^\n]*human gate[^\n]*$", body)
+    if not m:
+        # Fall back to a line that names the section even without a markdown heading.
+        m = re.search(r"(?im)^.*human gate.*$", body)
+        if not m:
+            return ""
+    rest = body[m.end():]
+    n = re.search(r"(?im)^#{1,6}\s+", rest)
+    return rest[: n.start()] if n else rest
+
+
+def _body_requires_human_review(pr: dict[str, Any]) -> bool:
+    """True when the PR body ticks a Human Gate box or asks for Chris's review."""
+    body = str(pr.get("body") or "")
+    section = _human_gate_section(body)
+    if section and _HUMAN_GATE_CHECKED_RE.search(section):
+        return True
+    normalised = body.replace("\u2019", "'").lower()
+    return "needs chris's review" in normalised
+
+
+def _gate_human_gate(pr: dict[str, Any]) -> list[str]:
+    """Refuse a PR that needs human review unless it carries `reviewed:owner`.
+
+    Bugbot or seat approval alone is never enough for such a PR: the
+    `reviewed:owner` label is the only thing that clears it. The queue posts
+    the refusal as a `merge-queue` status so GitHub's required check keeps the
+    PR out of `develop` until Chris has reviewed it.
+    """
+    if "reviewed:owner" in _label_names(pr):
+        return []
+    if _body_requires_human_review(pr):
+        return [
+            "Human Gate: PR body requires human review (ticked Human Gate box "
+            "or 'Needs Chris's review') — needs the `reviewed:owner` label"
+        ]
+    return []
+
 
 # --- reviewer independence: the review must come from another seat ------------
 #
@@ -4932,6 +4977,7 @@ def evaluate(
     if state in STALE_MERGE_STATES and not blocked_by_own_status:
         reasons.append(stale_reason)
 
+    reasons.extend(_gate_human_gate(pr))
     reasons.extend(_gate_checks(pr, policy, repo=repo))
     # The verdict gate reads the review record, so the row is completed before either
     # review gate runs. `_review_coverage`'s own lazy fetch is not enough on its own:
@@ -5494,3 +5540,10 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --- aliases for the Human Gate gate (DIG-5942) ------------------------------
+human_gate_blocks = _body_requires_human_review
+human_gate_requires_owner = _body_requires_human_review
+is_human_gate_blocked = _body_requires_human_review
+gate_human_gate = _gate_human_gate

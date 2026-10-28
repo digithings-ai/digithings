@@ -106,6 +106,7 @@ def _pr(
     local_ci_target_url: str = "",
     local_ci_started_at: str = "2026-10-21T02:06:27Z",
     local_ci_created_at: str = "",
+    body: str = "",
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
     # `local-ci` is the host mirror's commit status, and it is a REQUIRED check on both
@@ -170,8 +171,11 @@ def _pr(
     # asserted a missing comment list was *eligible*.
     pr["comments"] = list(comments) if comments is not None else []
     pr["commits"] = list(commits) if commits is not None else [{"oid": head_sha}]
+    pr["body"] = body
     for key in omit:
         pr.pop(key, None)
+    if "body" in omit:
+        pr.pop("body", None)
     return pr
 
 
@@ -3722,7 +3726,7 @@ def test_the_generated_rule_adapters_carry_the_roster() -> None:
 _MARKER = "<!-- in-session-review -->"
 
 
-def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str, Any]:
+def _labeled_pr(number: int, comments: list[dict[str, Any]] | None, body: str = "") -> dict[str, Any]:
     """A `reviewed:agent` PR.
 
     `comments=None` means the row was fetched WITHOUT the comment list — the shape the
@@ -3730,7 +3734,7 @@ def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str,
     refuses when it has no repo to read from. A read that came back empty is
     `comments=[]`, which is a different row.
     """
-    pr = _pr(number, omit=("comments",))
+    pr = _pr(number, omit=("comments",), body=body)
     pr["labels"] = [{"name": "reviewed:agent"}]
     if comments is not None:
         pr["comments"] = comments
@@ -8826,3 +8830,59 @@ def test_a_bare_string_queue_status_repos_is_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(mq.QueueError, match="queue_status_repos"):
         mq.load_policy(path)
+
+
+# --- Human Gate blocks the merge queue until `reviewed:owner` ----------------
+
+
+_HUMAN_GATE_UNTICKED = """## Summary
+
+Some change.
+
+## Human Gate
+
+- [ ] Live-trading path modified
+- [ ] Auth or crypto modified
+
+**Is human review required?** No
+"""
+
+_HUMAN_GATE_TICKED = """## Summary
+
+Some change.
+
+## Human Gate
+
+- [ ] Live-trading path modified
+- [x] Auth or crypto modified
+
+**Is human review required?** Yes
+"""
+
+
+def test_human_gate_ticked_box_blocks_merge_queue() -> None:
+    pr = _pr(9001, approved=True, body=_HUMAN_GATE_TICKED)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+    assert any("reviewed:owner" in r for r in verdict.reasons)
+
+
+def test_human_gate_needs_chris_review_blocks_merge_queue() -> None:
+    pr = _pr(9002, approved=True, body="## Summary\n\nx\n\nNeeds Chris's review\n")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_reviewed_owner_unblocks_merge_queue() -> None:
+    pr = _pr(9003, approved=True, body=_HUMAN_GATE_TICKED)
+    pr["labels"] = [{"name": "reviewed:owner"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_human_gate_unticked_template_passes_merge_queue() -> None:
+    pr = _pr(9004, approved=True, body=_HUMAN_GATE_UNTICKED)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
