@@ -22,6 +22,7 @@ The last tests read the real deploy lanes: a check nobody calls is prose.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -59,6 +60,12 @@ def _load() -> ModuleType:
     spec = importlib.util.spec_from_file_location("check_worker_bindings", SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # `Finding` is a dataclass, and the decorator resolves the module's
+    # namespace through `sys.modules`. Without this line the check's own
+    # import target is not registered, so the first `Finding` raises
+    # `AttributeError: 'NoneType' object has no attribute '__dict__'` and every
+    # rule test errors at fixture setup instead of testing a rule.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
