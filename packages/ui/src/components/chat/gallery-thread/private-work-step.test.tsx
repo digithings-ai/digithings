@@ -1,9 +1,6 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { PrivateWorkStep, privateWorkStepLabel } from "./private-work-step";
 
@@ -28,7 +25,7 @@ afterEach(() => {
 });
 
 describe("privateWorkStepLabel", () => {
-  it("labels tool outcomes", () => {
+  it("uses the normal tool row wording", () => {
     expect(privateWorkStepLabel({ kind: "tool", statusType: "complete" })).toEqual({
       label: "Used tool",
       state: "success",
@@ -39,48 +36,59 @@ describe("privateWorkStepLabel", () => {
     expect(
       privateWorkStepLabel({ kind: "tool", statusType: "incomplete", reason: "error" }).label,
     ).toBe("Failed tool");
-    expect(privateWorkStepLabel({ kind: "tool", statusType: "running" }).label).toBe("Running tool");
+    expect(
+      privateWorkStepLabel({ kind: "tool", statusType: "incomplete", reason: "cancelled" }),
+    ).toEqual({ label: "Cancelled tool", state: "idle" });
+    expect(privateWorkStepLabel({ kind: "tool", statusType: "running" })).toEqual({
+      label: "Running tool",
+      state: "tool",
+    });
+    expect(privateWorkStepLabel({ kind: "tool", statusType: "requires-action" }).label).toBe(
+      "Waiting on tool",
+    );
   });
 
-  it("labels reasoning", () => {
-    expect(privateWorkStepLabel({ kind: "reasoning", statusType: "running" }).label).toBe("Thinking");
-    expect(privateWorkStepLabel({ kind: "reasoning", statusType: "complete" }).label).toBe("Thought");
+  it("labels reasoning Reasoning, with the normal row's glyphs", () => {
+    expect(privateWorkStepLabel({ kind: "reasoning", statusType: "running" })).toEqual({
+      label: "Reasoning",
+      state: "thinking",
+    });
+    expect(privateWorkStepLabel({ kind: "reasoning", statusType: "complete" })).toEqual({
+      label: "Reasoning",
+      state: "thought",
+    });
   });
 });
 
 describe("PrivateWorkStep", () => {
-  it("shows the step and its outcome but nothing that opens", () => {
+  it("draws the normal tool row, but nothing that opens", () => {
     const el = render(<PrivateWorkStep kind="tool" toolName="search_tickets" statusType="complete" />);
-    const step = el.querySelector('[data-slot="aui_private-work-step"]');
-    expect(step).not.toBeNull();
-    expect(step?.textContent).toContain("Used tool");
-    expect(step?.getAttribute("data-state")).toBe("success");
+    const row = el.querySelector('[data-slot="tool-fallback-trigger"]');
+    expect(row).not.toBeNull();
+    expect(row?.hasAttribute("data-private")).toBe(true);
+    expect(row?.textContent).toContain("Used tool: search_tickets");
+    expect(row?.querySelector('[data-slot="dot-matrix"]')?.getAttribute("data-state")).toBe("success");
+    expect(row?.className).toContain("pointer-events-none");
+    expect(row?.className).not.toMatch(/hover:|active:/);
     expect(el.querySelector("button")).toBeNull();
     expect(el.querySelector("[aria-expanded]")).toBeNull();
+    expect(el.querySelector(".aui-disclosure-chevron")).toBeNull();
     expect(el.querySelector("details")).toBeNull();
+  });
+
+  it("draws the normal reasoning row, running and done", () => {
+    const running = render(<PrivateWorkStep kind="reasoning" statusType="running" />);
+    const row = running.querySelector('[data-slot="reasoning-trigger"]');
+    expect(row?.textContent).toBe("Reasoning");
+    expect(row?.querySelector('[data-slot="dot-matrix"]')?.getAttribute("data-state")).toBe("thinking");
+    expect(row?.querySelector('[data-slot="reasoning-trigger-label"]')?.className).toContain("shimmer");
+    expect(running.querySelector("button")).toBeNull();
+    expect(running.querySelector(".aui-disclosure-chevron")).toBeNull();
   });
 
   it("shows a failed step as failed", () => {
     const el = render(<PrivateWorkStep kind="tool" toolName="search" statusType="complete" isError />);
     expect(el.textContent).toContain("Failed tool");
     expect(el.querySelector('[data-state="error"]')).not.toBeNull();
-  });
-});
-
-describe("thread.aui private mode wiring", () => {
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "thread.aui.tsx"), "utf8");
-  it("renders tool calls and reasoning as PrivateWorkStep, not null or a disclosure", () => {
-    expect(src).toMatch(/case "reasoning": \{\s*if \(privateMode\) return <PrivateWorkStep kind="reasoning"/);
-    expect(src).toMatch(/case "tool-call":\s*if \(privateMode\) \{[\s\S]{0,200}<PrivateWorkStep\s+kind="tool"/);
-    expect(src).not.toMatch(/if \(privateMode\) return null;/);
-  });
-});
-
-describe("thread.aui private chain", () => {
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "thread.aui.tsx"), "utf8");
-  it("renders the chain flat, with no folding WorkChain header, in a private session", () => {
-    expect(src).toMatch(
-      /if \(privateMode\) \{\s*return \(\s*<div data-slot="aui_chain-of-thought" data-private="">\s*\{children\}/,
-    );
   });
 });

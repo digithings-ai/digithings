@@ -33,7 +33,7 @@ import {
 } from "./scroll-mode";
 import { WorkChain } from "./work-chain";
 import { WorkChainSummary } from "./work-chain-summary";
-import { PrivateWorkStep } from "./private-work-step";
+import { PrivateToolCallStep, PrivateWorkStep } from "./private-work-step";
 import {
   resolveWorkDisclosure,
   type WorkVisibility,
@@ -202,8 +202,9 @@ export type ThreadProps = {
   workVisibility?: WorkVisibility | undefined;
   /**
    * Private session. Reasoning text and tool-call payloads are user data, so
-   * the parts switch drops them entirely — while streaming as well as at
-   * rest. Default off; other hosts are unaffected.
+   * the rows show the step (kind, tool name, state) in the normal chain but
+   * never open — while streaming as well as at rest. Default off; other
+   * hosts are unaffected.
    */
   privateMode?: boolean | undefined;
   /**
@@ -307,12 +308,12 @@ const ThreadGroupDisclosureContext = createContext<ThreadGroupDisclosure>(
 );
 
 /**
- * Private session. Reasoning and tool calls still show as steps in the chain
- * (kind, tool name, finished or failed) but render as `PrivateWorkStep`, which
- * cannot be opened: the reasoning text and tool payloads are stripped server
- * side and must not mount here either. A hard override rather than a
- * disclosure preference: `reasoningMode` / `toolCallsMode` / `workVisibility`
- * decide how much of the work is *disclosed*. Default false, so every skin
+ * Private session. The work renders exactly as in a normal session — the same
+ * "Worked" chain, the same "N tool calls" group, the same rows, labels and
+ * icons, under the same `reasoningMode` / `toolCallsMode` / `workVisibility`
+ * rules — except that each reasoning and tool row is a `PrivateWorkStep`,
+ * which cannot be opened: the reasoning text and tool payloads are stripped
+ * server side and must not mount here either. Default false, so every skin
  * that does not pass `privateMode` renders exactly as before.
  */
 const ThreadPrivateModeContext = createContext(false);
@@ -1288,16 +1289,9 @@ const AssistantMessage: FC = () => {
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
-                // Private session: no folding header. Every step shows flat
-                // as a `PrivateWorkStep` (kind, name, outcome) and nothing in
-                // the chain opens — there is no body to open.
-                if (privateMode) {
-                  return (
-                    <div data-slot="aui_chain-of-thought" data-private="">
-                      {children}
-                    </div>
-                  );
-                }
+                // A private session folds the chain exactly like a normal one:
+                // the same header, the same view rules. Only the rows inside
+                // differ (see `PrivateWorkStep`).
                 // The chain is the one disclosure boundary: every work part
                 // nests under it (see `chainGroupBy`), so the level's fold
                 // rule here reaches a reasoning-only, a tool-only and a
@@ -1333,9 +1327,8 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-tool": {
-                // Private session: the steps show flat inside the chain, with
-                // no per-group disclosure (they have no body to open).
-                if (privateMode) return <>{children}</>;
+                // A private session keeps the "N tool calls" group: opening it
+                // lists the rows, and only the rows themselves stay shut.
                 if (toolCallsMode === "off") return null;
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
@@ -1372,8 +1365,18 @@ const AssistantMessage: FC = () => {
                 );
               }
               case "group-reasoning": {
-                if (privateMode) return <>{children}</>;
                 if (reasoningMode === "off") return null;
+                // Private session: the same "Reasoning" row, but not a
+                // disclosure. The server sends no reasoning text, so there
+                // is no body under it and the parts inside do not render.
+                if (privateMode) {
+                  return (
+                    <PrivateWorkStep
+                      kind="reasoning"
+                      statusType={part.status.type === "running" ? "running" : "complete"}
+                    />
+                  );
+                }
                 if (ReasoningGroup) {
                   return (
                     <ReasoningGroup group={part}>{children}</ReasoningGroup>
@@ -1405,24 +1408,26 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning": {
-                if (privateMode) return <PrivateWorkStep kind="reasoning" statusType={part.status?.type} />;
                 if (reasoningMode === "off") return null;
+                // Private session: the group row stands for it; no body.
+                if (privateMode) return null;
                 return <Reasoning {...part} />;
               }
               case "tool-call":
+                if (toolCallsMode === "off") return null;
+                // Private session: the normal row's look, but it never
+                // opens, and a tool's own renderer is skipped — it would
+                // render the (stripped) arguments and result.
                 if (privateMode) {
-                  const status = part.status as { type?: string; reason?: string } | undefined;
                   return (
-                    <PrivateWorkStep
-                      kind="tool"
+                    <PrivateToolCallStep
                       toolName={part.toolName}
-                      statusType={status?.type}
-                      reason={status?.reason}
+                      status={part.status}
                       isError={part.isError}
+                      result={part.result}
                     />
                   );
                 }
-                if (toolCallsMode === "off") return null;
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
                 // DIG-4459: a backend notice (data-notice, or a data-status
