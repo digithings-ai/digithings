@@ -77,6 +77,15 @@ export const DESKS: DeskDef[] = [
           b("pl-call-trace", "/pipeline/runs/latest/trace", PRO), b("pl-artifacts", "/pipeline/runs/latest/artifacts", PRO),
         ],
       },
+      {
+        // digitrace Traces tab (DIG-2661, ADR-0036 section 9). Gated like the
+        // existing pipeline call trace: the money and content-adjacent reads
+        // are not a free surface.
+        path: "/observability/traces", label: "Traces", ...PRO,
+        blocks: [
+          b("tr-explore", "/traces"), b("tr-cost", "/traces/cost"), b("tr-detail", "/traces/{trace_id}"),
+        ],
+      },
       { path: "/strategies", label: "Strategies", status: "wip", ...PRO, blocks: [b("st-kpis", "/strategies/summary"), b("st-catalog", "/strategies"), b("st-deployments", "/strategies/deployments")] },
       { path: "/strategies/detail", label: "Detail", status: "wip", ...PRO, blocks: [b("st-overview", "/strategies/default"), b("st-parameters", "/strategies/default/parameters"), b("st-track-record", "/strategies/default/performance"), b("st-runs", "/strategies/default/runs")] },
       { path: "/strategies/deploy", label: "Deploy", status: "wip", tier: "desk", blocks: [b("st-targets", "/strategies/targets"), b("st-deploy-flow", "/strategies/deploy-flow"), b("st-deploy-draft", "/strategies/default/deploy-draft")] },

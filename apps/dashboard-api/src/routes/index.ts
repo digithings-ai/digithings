@@ -5,6 +5,7 @@
 
 import { identityTrusted } from "../access";
 import type { Env } from "../index";
+import { registerTraces } from "../traces";
 import { registerDesk } from "./desk";
 import { registerFx } from "./fx";
 import { registerPipeline } from "./pipeline";
@@ -18,6 +19,8 @@ export const ROUTE_MODULES: RouteModule<Env>[] = [
   registerFx,
   registerStrategies,
   registerDesk,
+  // digitrace Traces tab (DIG-2661). Mounted on this worker: no new hostname.
+  registerTraces,
 ];
 
 export function buildRegistry(modules: readonly RouteModule<Env>[] = ROUTE_MODULES): Registry<Env> {
