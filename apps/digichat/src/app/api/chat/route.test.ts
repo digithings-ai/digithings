@@ -3950,6 +3950,25 @@ describe("POST /api/chat limits", () => {
       ],
     };
 
+    // Private mode is a tenant opt-in on the server as well as the client: a
+    // private header from a tenant that did not opt in changes nothing.
+    const privateTenant = {
+      tenantSlug: "private-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "private-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        privateMode: true,
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext;
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(privateTenant);
+    });
+
     function texts(messages: { role: string; parts?: { type: string; text?: string }[] }[]) {
       return messages.map((message) => ({
         role: message.role,
@@ -4036,6 +4055,74 @@ describe("POST /api/chat limits", () => {
       }
     });
 
+    function sseResponse(): Response {
+      const chunks = [
+        { type: "start", messageId: "m1" },
+        { type: "reasoning-start", id: "r1" },
+        { type: "reasoning-delta", id: "r1", delta: "Requester is Priya Nair" },
+        { type: "reasoning-end", id: "r1" },
+        { type: "tool-input-available", toolCallId: "c1", toolName: "search", input: { q: "Priya" } },
+        { type: "tool-output-available", toolCallId: "c1", output: { name: "Priya Nair" } },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "Found one ticket. " },
+        { type: "text-end", id: "t1" },
+        { type: "finish" },
+      ];
+      return new Response(
+        `${chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("")}data: [DONE]\n\n`,
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }
+
+    it("strips reasoning text and tool payloads from the stream for an opted-in tenant", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      vi.mocked(createDigigraphTraceStreamResponse).mockResolvedValueOnce(sseResponse());
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      expect(raw).not.toContain("Priya");
+      expect(raw).toContain('"type":"tool-output-available","toolCallId":"c1","output":{}');
+      expect(raw).toContain('"type":"reasoning-start"');
+      expect(raw).toContain("Found one ticket.");
+    });
+
+    it("ignores the private header for a tenant that did not opt in", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        ...privateTenant,
+        embedConfig: { ...privateTenant.embedConfig, privateMode: false },
+      } as EmbedChatTenantContext);
+      vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+      vi.mocked(createDigigraphTraceStreamResponse).mockResolvedValueOnce(sseResponse());
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("Priya Nair");
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: unknown[];
+      };
+      expect(JSON.stringify(call.messages)).not.toContain("PRIVATE DEMO SESSION");
+    });
+
     it("passes the separate instruction to Foundry and leaves the tool payload alone", async () => {
       vi.mocked(resolveChatTenantContext).mockResolvedValue({
         tenantSlug: "foundry-tenant",
@@ -4048,6 +4135,7 @@ describe("POST /api/chat limits", () => {
           token: "tok",
           backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
           activityDetail: "full",
+          privateMode: true,
         },
       } as EmbedChatTenantContext);
       const res = await POST(

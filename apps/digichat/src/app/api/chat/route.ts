@@ -24,6 +24,7 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
+import { privateTermsFor, privatizeChatResponse } from "@/lib/private-stream";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -442,7 +443,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
+  // Private demo session (`x-digi-private: 1`), honoured only for a tenant
+  // that opted in. The instruction rides the UI messages (below); the stream
+  // wrapper strips tool and reasoning payloads and scrubs obvious identifiers
+  // before anything reaches the browser (`lib/private-stream.ts`).
+  const privateMode =
+    isPrivateMode(req.headers) &&
+    (embedConfig?.privateMode === true || dep?.features?.privateMode === true);
+  const privateTerms = privateMode ? privateTermsFor(embedConfig ?? dep) : [];
+  const finish = (res: Response) =>
+    releaseChatRunLockOnResponseEnd(
+      privateMode ? privatizeChatResponse(res, privateTerms) : res,
+      runLock.release,
+    );
 
   // Deploy `models.available` allowlist (fail closed when non-empty). Resolved
   // before the backend branch so it applies to foundry too, not just digigraph.
@@ -578,10 +591,8 @@ export async function POST(req: Request) {
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
 
-  // Private demo mode: the client sends x-digi-private: 1 when the transcript
-  // may be shown to the party it names, so every turn is told to substitute the
+  // Private demo mode (resolved above): every turn is told to substitute the
   // real names and identifiers it is given.
-  const privateMode = isPrivateMode(req.headers);
   // The instruction is applied to the UI messages here, before the adapter
   // branch, because every path consumes `messages` — including the digigraph
   // trace stream, which is the default and converts them itself. Patching the

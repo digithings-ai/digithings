@@ -104,6 +104,7 @@ import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
+import { privateSessionChrome } from "@/lib/private-chrome";
 import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
@@ -1219,7 +1220,7 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
 
-  const welcomeIntro = useMemo(() => {
+  const tenantWelcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
     if (tenantCfg.welcome) return tenantCfg.welcome;
     if (ungated) {
@@ -1231,9 +1232,19 @@ function EmbedChat({
     );
   }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
-  const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
-  const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
-  const headerTitle = tenantCfg.title;
+  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
+  // Private session: generic support-desk copy, so nothing names the tenant.
+  const {
+    welcome: welcomeIntro,
+    placeholder,
+    suggestions,
+    headerTitle,
+  } = privateSessionChrome(privateMode, {
+    welcome: tenantWelcomeIntro,
+    placeholder: uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…",
+    suggestions: tenantSuggestions,
+    headerTitle: tenantCfg.title,
+  });
 
   // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
   const sendGate = useMemo(

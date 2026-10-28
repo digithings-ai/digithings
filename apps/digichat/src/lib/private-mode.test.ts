@@ -142,3 +142,18 @@ describe("separatePrivateInstructionPayload", () => {
     expect(separatePrivateInstructionPayload(messages)).toEqual(messages);
   });
 });
+
+describe("PRIVATE_MODE_INSTRUCTION content", () => {
+  it("covers tool results and hides the product behind a generic support desk", () => {
+    expect(PRIVATE_MODE_INSTRUCTION).toMatch(/tool results/);
+    expect(PRIVATE_MODE_INSTRUCTION).toMatch(/generic support assistant/);
+    expect(PRIVATE_MODE_INSTRUCTION).toMatch(/Never name the product/);
+    expect(PRIVATE_MODE_INSTRUCTION).toMatch(/never repeat an original value/);
+  });
+
+  it("names no product, tenant or ticketing system itself", () => {
+    for (const name of ["OCC", "Zammad", "digithings", "DigiChat"]) {
+      expect(PRIVATE_MODE_INSTRUCTION.toLowerCase()).not.toContain(name.toLowerCase());
+    }
+  });
+});
