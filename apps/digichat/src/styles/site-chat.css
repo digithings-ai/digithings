@@ -109,6 +109,10 @@
   --primary: var(--ink);
   --primary-foreground: var(--bg);
   --composer-bg: var(--surface);
+  /* Resolved here, above the footer that clears --bg and --surface, so the
+     menus inside it can still reach the palette's canvas and surface. */
+  --site-menu-canvas: var(--bg);
+  --site-menu-surface: var(--surface);
   color: var(--ink);
 }
 
@@ -135,6 +139,36 @@
   --surface: transparent;
   --hair: var(--term-hair);
   background: transparent;
+}
+
+/* The command palette and the composer (settings) menu are positioned inside
+   that footer, so they inherit its cleared --bg and --surface. Their own
+   background is var(--bg), which made both menus see-through on the
+   top-level /chat/occ page in every palette (the welcome painted through
+   them). Only app mode had a --term-bg override (chat-digichat.css), so
+   /chat looked right and OCC did not. --term-bg is not enough on OCC: the
+   composer menu carries its own data-thread-skin, so product-chrome.css
+   re-points --term-bg on the menu element to the embed default (#08090b in
+   dark). --site-menu-canvas and --site-menu-surface are resolved on
+   .digichat-thread and nothing below re-points them: hand both back to the
+   menu and everything inside it. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.aui-composer-trigger-popover, .dc-composer-menu) {
+  --bg: var(--site-menu-canvas);
+  --surface: var(--site-menu-surface);
+  --term-bg: var(--site-menu-canvas);
+  background: var(--site-menu-canvas);
+}
+
+/* The boot loader paints the page canvas, not --surface. On a site chat the
+   chat that replaces it sits straight on --bg, so a --surface overlay read as
+   a lighter (light) or lighter-grey (dark) frame that then jumped to the
+   chat's canvas. Wide embeds keep their transparent overlay (product-chrome.css). */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-embed-wide="1"])
+  [data-stock-product]
+  > .dboot-overlay {
+  background: var(--bg);
 }
 
 /* Embed rails mount on every embed document and hide unless this is the
