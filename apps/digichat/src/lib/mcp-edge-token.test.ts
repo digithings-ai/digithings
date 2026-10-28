@@ -60,6 +60,13 @@ const BFF_IDENTITY: McpEdgeIdentity = {
   subject: "bff:visitor-1",
 };
 
+const API_KEY_ONLY_IDENTITY: McpEdgeIdentity = {
+  digikeyUrl: "http://digikey.test",
+  apiKey: "dgk_live_identity",
+  tenantSlug: "digithings-ai",
+  subject: "bff:visitor-1",
+};
+
 function jwtRows(): McpUpstreamServer[] {
   return [
     {
@@ -253,17 +260,68 @@ describe("minting and caching", () => {
         { id: "digisearch", url: "https://edge/mcp", authScheme: "jwt" },
         { id: "desk", url: "http://desk-mcp:8770/mcp", token: "Token abc" },
       ],
-      { identity: { ...BFF_IDENTITY, apiKey: "dgk_live_identity" } },
+      { identity: API_KEY_ONLY_IDENTITY },
     );
     expect(rows[0]?.token).toBeUndefined();
     expect(rows[1]).toEqual({ id: "desk", url: "http://desk-mcp:8770/mcp", token: "Token abc" });
   });
 
-  it("prefers a dedicated API-key identity when one is configured", async () => {
+  it("mints with the turn's tenant over the API-key identity when both are configured", async () => {
+    // An API-key token carries the key row's tenant, not the turn's. The
+    // services behind the edge scope tenant indexes on that claim, so the BFF
+    // session (which names the turn's tenant) must win.
     const token = fakeJwt(NOW_SEC() + 900);
     const fetchStub = stubDigikey({ token });
     const out = await mintMcpEdgeToken({
+      identity: { ...BFF_IDENTITY, tenantSlug: "invite-tenant", apiKey: "dgk_live_identity" },
+      scopes: ["mcp:digisearch"],
+    });
+    expect(out).toEqual({ ok: true, token });
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const [, init] = fetchStub.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      grant_type: "bff_session",
+      tenant_slug: "invite-tenant",
+      subject: "bff:visitor-1",
+      requested_scopes: ["mcp:digisearch"],
+    });
+    expect(body.api_key).toBeUndefined();
+  });
+
+  it("mints a separate token per tenant, never reusing another tenant's", async () => {
+    const fetchStub = stubDigikey({ token: fakeJwt(NOW_SEC() + 900) });
+    const identity = { ...BFF_IDENTITY, apiKey: "dgk_live_identity" };
+    await mintMcpEdgeToken({ identity, scopes: ["mcp:digisearch"] });
+    await mintMcpEdgeToken({
+      identity: { ...identity, tenantSlug: "invite-tenant" },
+      scopes: ["mcp:digisearch"],
+    });
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    const tenants = fetchStub.mock.calls.map(
+      (c) => (JSON.parse(String(c[1]?.body)) as Record<string, unknown>).tenant_slug,
+    );
+    expect(tenants).toEqual(["digithings-ai", "invite-tenant"]);
+  });
+
+  it("does not fall back to the API key when the BFF exchange is refused", async () => {
+    const fetchStub = stubDigikey({ status: 400, reason: "requested_scopes not allowed for bff session" });
+    const out = await mintMcpEdgeToken({
       identity: { ...BFF_IDENTITY, apiKey: "dgk_live_identity" },
+      scopes: ["mcp:digisearch"],
+    });
+    expect(out).toEqual({ ok: false, reason: "rejected" });
+    for (const call of fetchStub.mock.calls) {
+      const body = JSON.parse(String(call[1]?.body)) as Record<string, unknown>;
+      expect(body.grant_type).toBe("bff_session");
+    }
+  });
+
+  it("uses the API-key identity only when there is no BFF credential", async () => {
+    const token = fakeJwt(NOW_SEC() + 900);
+    const fetchStub = stubDigikey({ token });
+    const out = await mintMcpEdgeToken({
+      identity: API_KEY_ONLY_IDENTITY,
       scopes: ["mcp:digivault"],
     });
     expect(out).toEqual({ ok: true, token });
@@ -275,7 +333,6 @@ describe("minting and caching", () => {
       api_key: "dgk_live_identity",
       requested_scopes: ["mcp:digivault"],
     });
-    // The BFF bearer is not sent when the API key answers for the identity.
     expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
