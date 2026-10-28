@@ -17,7 +17,9 @@
 #   GH_ISSUES_TOKEN              — Issues read/write on digithings-ai/twelve-x only
 #   PRIMEMARKET_SESSION_TOKEN    — desk session, forwarded into the container
 #   TWELVEX_SUPABASE_SERVICE_KEY — ingest writes, forwarded into the container
-#   TWELVEX_SUPABASE_URL         — optional; twelve-x has a code default
+#   TWELVEX_SUPABASE_URL         — required by the /v1 data API on the supabase
+#                                  backend (no default there); the container
+#                                  alone falls back to a twelve-x code default
 #
 # Required by the FX research session route (route "session", the asia,
 # london and new_york clocks). The session runs twelve_x.graph, which calls

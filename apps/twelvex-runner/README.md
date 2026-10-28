@@ -166,7 +166,7 @@ Names only. Never commit values. `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_T
 | `GH_ISSUES_TOKEN` | this Worker. Issues read/write on `digithings-ai/twelve-x` only |
 | `PRIMEMARKET_SESSION_TOKEN` | this Worker, forwarded into the container |
 | `TWELVEX_SUPABASE_SERVICE_KEY` | this Worker, forwarded into the container |
-| `TWELVEX_SUPABASE_URL` | optional. twelve-x has a code default |
+| `TWELVEX_SUPABASE_URL` | required for the `/v1` data API while `DATA_BACKEND` is `supabase` (it has no default). The container alone can do without it: twelve-x has a code default |
 | `CHEAPERINFERENCE_API_KEY` | the session route only. The model key, forwarded into the container as `OPENAI_API_KEY` |
 | `CORE_SUPABASE_SERVICE_KEY` | the session route only. The shared core calendar writes. Removed once `TWELVEX_FORWARD_CORE_KEY = "0"` |
 | `DATA_API_TOKEN` | the `/v1` data API only. Bearer for its callers |
