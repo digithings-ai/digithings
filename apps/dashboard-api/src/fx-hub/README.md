@@ -34,11 +34,14 @@ sb_publishable_…` / `sb_secret_…` because those values are not JWTs.
 ## Mounted
 
 `src/index.ts` sends `FX_HUB_PATHS` to `createFxHubFetch(env)` before the
-dashboard catalog. Those two paths use `X-Sync-Secret`. They are not catalog
-routes, and they do not use `x-digi-user`.
+dashboard catalog, but only when `FX_HUB_WORKER_ROUTES` is exactly `"1"`
+(Supabase exit S2, DIG-2887). Unset, or any other value, answers
+`404 NOT_FOUND` without reading a key, and the Supabase Edge Functions keep
+serving. Those two paths use `X-Sync-Secret`. They are not catalog routes,
+and they do not use `x-digi-user`.
 
 The key dictionaries and `FX_HUB_GRANT_SYNC_SECRET` are still not in
-`wrangler.toml`. Until they are bound on the worker, a request with no
+`wrangler.toml`. With the flag on and nothing bound, a request with no
 secret answers `401 UNAUTHORIZED`. A request that passes the secret and
 finds no key dictionary answers `500 API_KEYS_UNCONFIGURED`. `no-deno.test.ts`
 asserts the entrypoint imports `createFxHubFetch` and `FX_HUB_PATHS`.

@@ -9,7 +9,7 @@
  * the sync secret are worker secrets, not wrangler vars. See README.md.
  */
 
-import type { FxHubEnv } from "./env";
+import { envGet, type FxHubEnv } from "./env";
 import { handleFxHubGrantSync } from "./grant-sync";
 import { json } from "./http";
 import { handleFxHubSession } from "./session";
@@ -20,6 +20,15 @@ export const FX_HUB_PATHS = {
 } as const;
 
 export type FxHubPath = (typeof FX_HUB_PATHS)[keyof typeof FX_HUB_PATHS];
+
+/**
+ * Supabase exit S2 (DIG-2887): the Supabase edge functions stay the default
+ * until cutover. The worker mounts these routes only when
+ * `FX_HUB_WORKER_ROUTES` is exactly `"1"`.
+ */
+export function fxHubWorkerRoutesOn(env: FxHubEnv | undefined): boolean {
+  return envGet(env, "FX_HUB_WORKER_ROUTES") === "1";
+}
 
 /** A module worker export shape: `{ fetch(request) }`. */
 export interface FxHubFetchHandler {
