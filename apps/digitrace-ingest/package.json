@@ -1,6 +1,6 @@
 {
   "name": "digitrace-ingest",
-  "description": "OTLP/HTTP ingest Worker for digitrace: receiver, Queue consumer, R2 archive, Supabase index and Analytics Engine metrics.",
+  "description": "OTLP/HTTP ingest Worker for digitrace: receiver, Queue consumer, R2 archive, D1 index and Analytics Engine metrics.",
   "license": "MIT",
   "homepage": "https://digithings.ai",
   "repository": {

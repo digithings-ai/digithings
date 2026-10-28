@@ -1268,6 +1268,12 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 
 ## Tracing index — migration 144 (DIG-2658, ADR-0036)
 
+> **Moved off this project (DIG-2887 S1).** Migration 144 was never applied here and
+> is removed; the same four tables now live in the D1 database `digitrace`
+> (`apps/digitrace-ingest/migrations/0001_digitrace_index.sql`), where
+> `workspace_id` holds the tenant slug and the trace recompute is one SQL statement
+> in the Worker. The description below is kept for the column semantics.
+
 Four `public` tables holding the **queryable window** over the tracing pipeline.
 They are an index, not the record: span bodies live in the R2 bucket
 `digitrace-archive` and never reach Postgres (ADR-0036 §7). A span carries

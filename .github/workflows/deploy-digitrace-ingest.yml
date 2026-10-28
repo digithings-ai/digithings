@@ -1,7 +1,7 @@
 # Deploys the digitrace OTLP/HTTP ingest Worker (DIG-2657, ADR-0036).
 #
 # One Worker, two entry points: `fetch` is POST /v1/traces, `queue` is the
-# consumer that writes R2, the Supabase index and Analytics Engine. It is not
+# consumer that writes R2, the D1 `digitrace` index and Analytics Engine. It is not
 # tracked by release-please; this workflow is its release.
 #
 # Push to main (path-filtered) or workflow_dispatch. develop is not a deploy
@@ -11,8 +11,12 @@
 #
 # environment: production — a deploy is a human gate. The first deploy also needs
 # the day-one resources and the route, which are human steps: the R2 bucket, the
-# Queue and its dead-letter queue, the KV namespace, the Analytics Engine
-# dataset, the service-role secret, the DNS record and the custom domain.
+# Queue and its dead-letter queue, the KV namespace, the D1 database, the
+# Analytics Engine dataset, the DNS record and the custom domain.
+#
+# Until those exist, wrangler.toml carries all-zero placeholder ids. The
+# `preflight` job reads them and skips the deploy job (no approval prompt, no
+# Cloudflare error 10041) instead of failing on main (DIG-2887 S1).
 name: "Deploy: digitrace-ingest"
 
 on:
@@ -35,7 +39,26 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.ids.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse placeholder resource ids
+        id: ids
+        working-directory: apps/digitrace-ingest
+        run: |
+          if grep -Eq '^(id|database_id) = "0{8}-?0{4}-?0{4}-?0{4}-?0{12}"' wrangler.toml; then
+            echo "::warning title=digitrace-ingest not provisioned::wrangler.toml still has placeholder KV/D1 ids; deploy skipped. Create the resources (human step) and put the ids in wrangler.toml."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -60,6 +83,15 @@ jobs:
         run: npm exec -- wrangler deploy --dry-run --outdir "$RUNNER_TEMP/wrangler-dry-run"
         working-directory: apps/digitrace-ingest
 
+      # Idempotent: wrangler applies only the migrations D1 has not recorded.
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/digitrace-ingest
+          command: d1 migrations apply digitrace --remote
+
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
         with:
@@ -67,7 +99,3 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/digitrace-ingest
           command: deploy
-          secrets: |
-            CORE_SUPABASE_SERVICE_KEY
-        env:
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}

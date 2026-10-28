@@ -105,17 +105,18 @@ A message that cannot parse is acknowledged and logged, never retried.
 Retry policy: `max_retries = 5`, `dead_letter_queue = "digitrace-ingest-dlq"`, and
 a per-message back-off of `min(15s × 2^(attempts−1), 300s)`.
 
-## 5. The index rows (Supabase `core`, schema `public`)
+## 5. The index rows (D1 `digitrace`, binding `INDEX_DB`)
 
-The consumer resolves `workspaces.id` from the verified tenant slug over PostgREST
-and stamps `workspace_id` on every row. **`tenant_slug` is not written** (ADR-0036
-§5): the index has one tenancy column and it is `workspace_id`. The two tenant
-columns the migration declares stay nullable and unset.
+DIG-2887 S1 moved the index from the core Postgres project to its own D1 database.
+`workspace_id` holds the **verified tenant slug** (D1 has no `workspaces` table to
+resolve an id from), and the consumer stamps it on every row. **`tenant_slug` is not
+written** (ADR-0036 §5): the index has one tenancy column and it is `workspace_id`.
+D1 has no row-level security and is reachable only through the binding, so the
+tenant boundary is the `workspace_id` filter in Worker code.
 
 The consumer writes **two** tables. The column names below are those of
-`digiquant/supabase/migrations/prod/144_digitrace_index.sql` (DIG-2658), not an
-independent guess — a name that does not exist there is a runtime 400 on the first
-real batch.
+`migrations/0001_digitrace_index.sql` (the SQLite port of DIG-2658's schema), not
+an independent guess — a name that does not exist there fails the first real batch.
 
 Every row is a pure function of the queue message plus the resolved
 `workspace_id`, so a retried message writes identical rows.
@@ -150,15 +151,14 @@ Span **events** stay in the archive only: the index has no column for them.
 
 Conflict target: `workspace_id,trace_id`.
 
-The row is a **cross-span aggregate**, and a PostgREST upsert replaces it: the
-later message's row wins outright. Two things keep it true:
+The row is a **cross-span aggregate**, and an upsert replaces it: the later
+message's row wins outright. Two things keep it true:
 
 1. `chunkSpans` packs whole traces, so a message boundary does not fall inside a
    trace; a trace that alone exceeds the 56 KiB budget still crosses one and is
    listed in the message's `incompleteTraces`.
-2. After the spans are written, the consumer calls
-   `rpc/refresh_digitrace_trace(p_workspace_id, p_trace_id)` for every trace in
-   the message. That function (migration 144) is **UPDATE-only**, so the insert
+2. After the spans are written, the consumer runs `REFRESH_TRACE_SQL`
+   (`src/d1.ts`) for every trace in the message. It is **UPDATE-only**, so the insert
    from this message is what creates the row; the call then recomputes
    `span_count`, the time window, `duration_ms`, the root `name`, a sticky error
    status and the first `session_id`/`run_id` over **every** row of
@@ -166,43 +166,42 @@ later message's row wins outright. Two things keep it true:
 
 The second step is what makes a split trace and a trace exported across **several
 OTLP requests** converge: each slice inserts its spans, then recomputes from all
-of them, and the advisory lock inside the function serialises two slices that are
-in flight at once. The trade is one PostgREST `rpc` call per trace in a message
-(a message usually carries one trace per OTLP request).
+of them. The recompute is one `UPDATE … FROM` statement and D1 serialises writes,
+so two slices in flight at once cannot interleave inside it. The trade is one
+statement per trace in a message (a message usually carries one trace per OTLP
+request). The span rows of a message are written as one `batch()`, which D1 runs
+as a single transaction.
 
-| Column                 | Source                                                                             |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| `workspace_id`         | resolved                                                                           |
-| `source`               | the token's source — never the client's word                                       |
-| `trace_id`             | hex                                                                                |
-| `name`                 | the root span (`refresh_digitrace_trace`); the insert falls back to the first span |
-| `service_name`         | that span's resource `service.name`                                                |
-| `started_at`           | min start over the trace, **receive time when nothing carries one** (`NOT NULL`)   |
-| `ended_at`             | max end over the trace, `NULL` while any span of it is still open                  |
-| `duration_ms`          | end − start                                                                        |
-| `status`               | `STATUS_CODE_ERROR` when any span failed, else the root's                          |
-| `status_message`       | the first failed span's message (the root's when nothing failed)                   |
-| `session_id`, `run_id` | first correlation id found on the trace                                            |
-| `attributes`           | the root span's allowlisted attributes                                             |
-| `resource`             | the root resource's allowlisted attributes                                         |
-| `span_count`           | spans of the trace, from the recompute (the insert writes this message's count)    |
+| Column                 | Source                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `workspace_id`         | resolved                                                                         |
+| `source`               | the token's source — never the client's word                                     |
+| `trace_id`             | hex                                                                              |
+| `name`                 | the root span (the recompute); the insert falls back to the first span           |
+| `service_name`         | that span's resource `service.name`                                              |
+| `started_at`           | min start over the trace, **receive time when nothing carries one** (`NOT NULL`) |
+| `ended_at`             | max end over the trace, `NULL` while any span of it is still open                |
+| `duration_ms`          | end − start                                                                      |
+| `status`               | `STATUS_CODE_ERROR` when any span failed, else the root's                        |
+| `status_message`       | the first failed span's message (the root's when nothing failed)                 |
+| `session_id`, `run_id` | first correlation id found on the trace                                          |
+| `attributes`           | the root span's allowlisted attributes                                           |
+| `resource`             | the root resource's allowlisted attributes                                       |
+| `span_count`           | spans of the trace, from the recompute (the insert writes this message's count)  |
 
 ### `digitrace_sessions` — not written by this consumer
 
 The table's `trace_count`, `span_count`, `total_tokens` and `total_cost_usd` are
-**cross-batch** aggregates, and a PostgREST upsert can only replace them: the
-second batch of a session would overwrite a larger count with a smaller one. There
-is no increment-through-REST, so the ingest path leaves the table alone rather
-than write numbers that silently shrink. Migration 144 now ships
-`refresh_digitrace_session` for the same reason `refresh_digitrace_trace` exists
-for the trace row, and calling it from this consumer is a separate change: the
-session counters need the same insert-then-recompute treatment, and this ticket
-does not write the table.
+**cross-batch** aggregates, and an upsert can only replace them: the second batch
+of a session would overwrite a larger count with a smaller one. The ingest path
+leaves the table alone rather than write numbers that silently shrink. A session
+recompute (the counterpart of the trace recompute) is a separate change.
 
 ### `digitrace_scores` — not written by this consumer
 
-ADR-0036 §4 and §8 put the score write-back in MLflow: it writes to
-`public.digitrace_scores` through the service role.
+ADR-0036 §4 and §8 put the score write-back in MLflow. The table now lives in D1,
+so that write-back needs a D1 path (a Worker endpoint or the D1 HTTP API); it is
+not wired yet.
 
 ### What may reach `attributes`
 
@@ -239,10 +238,9 @@ write that a retry cannot duplicate is the WAE spike on DIG-2661.
 - [ ] Create the KV namespace, put its id in `wrangler.toml`, and add one record per
       source under `tok:<sha256 of the token>`.
 - [ ] Create the Analytics Engine dataset `digitrace_ingest`.
-- [ ] `wrangler secret put CORE_SUPABASE_SERVICE_KEY`.
-- [ ] Apply migration 144 to the `core` project **before** the first batch: the
-      consumer calls `rpc/refresh_digitrace_trace` for every trace. This is
-      DIG-2658's Chris step; the tables the consumer writes come from the same file.
+- [ ] `wrangler d1 create digitrace` and put its id in `wrangler.toml`. The deploy
+      workflow applies `migrations/` before every deploy, and skips the deploy
+      while any id in `wrangler.toml` is still the all-zero placeholder.
 - [ ] Create the DNS record for `trace.digithings.ai`, uncomment the route in
       `wrangler.toml`, and approve the production deploy.
 
@@ -250,5 +248,5 @@ write that a retry cannot duplicate is the WAE spike on DIG-2661.
 
 - The index migration and the RLS policies: **DIG-2658**.
 - Turning the emitters on: **DIG-2659** (Workers) and **DIG-2660** (GitHub Actions).
-- Hyperdrive: **DIG-2658** decides. This Worker uses PostgREST only.
+- Retention: a 90-day prune of the D1 index needs a cron trigger (human step).
 - The dashboard Traces tab (**DIG-2661**) and `digitrace replay` (**DIG-2662**).

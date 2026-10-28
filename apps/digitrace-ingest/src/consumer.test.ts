@@ -220,7 +220,7 @@ describe("storeMessage", () => {
     } as ConsumerDeps);
 
     const byTable = new Map(recorded.upserts.map((entry) => [entry.table, entry.rows]));
-    // `refresh_digitrace_trace` is UPDATE-only: the insert is what creates the
+    // the trace recompute (`REFRESH_TRACE_SQL`) is UPDATE-only: the insert is what creates the
     // row, and the recompute is what makes it true over every span of the trace
     // rather than this message's slice. Without the row the dashboard has
     // nothing to list for a trace above the message budget.
@@ -251,7 +251,7 @@ describe("storeMessage", () => {
 
     const failing = recordingDeps({
       upsertRows: async (_env, table) => {
-        if (table === "digitrace_spans_index") throw new Error("PostgREST 500");
+        if (table === "digitrace_spans_index") throw new Error("D1_ERROR");
       },
     });
     await expect(
@@ -319,7 +319,7 @@ describe("handleQueue", () => {
   it("retries when the index write fails, after the archive is already stored", async () => {
     const { deps, recorded } = recordingDeps({
       upsertRows: async () => {
-        throw new Error("PostgREST 500: explosion");
+        throw new Error("D1_ERROR: explosion");
       },
     });
     const { batch, retries } = fakeBatch([{ id: "m1", body: message() }]);
@@ -329,12 +329,12 @@ describe("handleQueue", () => {
     expect(retries).toHaveLength(1);
   });
 
-  it("retries when Supabase is not configured, rather than skipping the index silently", async () => {
-    const env = testEnv({ supabaseKey: "" });
-    // Only the archive is stubbed: the real `resolveWorkspaceId` runs, and it is
-    // the missing secret that must surface as a retry.
+  it("retries when the D1 index is not bound, rather than skipping the index silently", async () => {
+    const env = testEnv();
+    // Only the archive is stubbed: the real D1 writers run, and it is the
+    // missing INDEX_DB binding that must surface as a retry.
     const { deps } = recordingDeps();
-    const { resolveWorkspaceId: _omit, ...rest } = deps;
+    const { resolveWorkspaceId: _a, upsertRows: _b, refreshTraceRow: _c, ...rest } = deps;
     const { batch, retries } = fakeBatch([{ id: "m1", body: message() }]);
     await handleQueue(batch, env, rest);
 
