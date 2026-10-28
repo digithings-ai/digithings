@@ -177,8 +177,9 @@ tenant's turn, so a server row with `authScheme: jwt` (no `token`/`tokenEnv`/
 `authHeader`) makes the tool reachable from that chat alone. Once the tenant row
 uses it, `ZAMMAD_MCP_JWT_ONLY = "1"` refuses `ZAMMAD_EDGE_KEY` on both spellings;
 the key can then be rotated away. `ZAMMAD_API_TOKEN` (the Zammad credential) is
-independent and unaffected. Gate: `src/helpdesk-mcp-auth.ts`; the JWKS is read
-through the `DIGIKEY` service binding.
+independent and unaffected. Gate: `src/helpdesk-mcp-auth.ts`; the JWKS comes
+from the shared KV copy (`digikey-jwks`), else live through the `DIGIKEY`
+service binding.
 
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
 `frame-ancestors` — no tokens). Keep it aligned with tenant host keys:

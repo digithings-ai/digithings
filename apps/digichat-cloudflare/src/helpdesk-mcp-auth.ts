@@ -57,6 +57,19 @@ export const DEFAULT_DIGIKEY_AUDIENCE = "digi-ecosystem";
 export const HELPDESK_JWKS_TTL_MS = 5 * 60_000;
 /** Cap on one JWKS fetch. A hung digikey must not hang the MCP request. */
 export const HELPDESK_JWKS_TIMEOUT_MS = 10_000;
+/**
+ * KV key of the last good JWKS, shared with the stack's own MCP edge verifier
+ * (`MCP_EDGE_JWKS_KV_KEY` in apps/digithings-stack-cloudflare/src/mcp-edge-auth.ts).
+ * Same document, same shape: the digikey JWKS body. No TTL on purpose: expiring
+ * it on a timer would re-break the gate whenever the stack sleeps.
+ */
+export const HELPDESK_JWKS_KV_KEY = "digikey-jwks";
+/**
+ * Minimum gap between two live JWKS reads forced by an unknown `kid`, per
+ * isolate. A rotation is picked up within this window; a stream of made-up
+ * kids cannot turn into a stream of container boots.
+ */
+export const HELPDESK_JWKS_FORCE_INTERVAL_MS = 60_000;
 /** Tolerated clock difference on exp/nbf/iat, seconds. */
 export const HELPDESK_CLOCK_SKEW_SEC = 60;
 
@@ -72,6 +85,17 @@ export type HelpdeskMcpEnv = {
    * Cloudflare. Unbound ⇒ a plain fetch of the public JWKS URL.
    */
   DIGIKEY?: Fetcher;
+  /**
+   * The tenant KV namespace, which the stack Worker binds too (as
+   * TENANT_CONFIG). Its `digikey-jwks` key holds the last good JWKS (public
+   * keys only), so a sleeping stack container cannot take this gate down.
+   */
+  DIGICHAT_TENANTS_KV?: JwksKv;
+};
+
+type JwksKv = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
 };
 
 export type HelpdeskMcpGate =
@@ -112,10 +136,14 @@ export function helpdeskJwtOnly(env: HelpdeskMcpEnv): boolean {
 
 type JwksState = { keys: Map<string, CryptoKey>; fetchedAtMs: number; url: string };
 let jwksCache: JwksState | null = null;
+let lastForcedAtMs = Number.NEGATIVE_INFINITY;
+let inflight: Promise<JwksState | null> | null = null;
 
-/** Test-only: forget the cached JWKS. */
+/** Test-only: forget the cached JWKS and the forced-read clock. */
 export function _resetHelpdeskJwksCacheForTests(): void {
   jwksCache = null;
+  lastForcedAtMs = Number.NEGATIVE_INFINITY;
+  inflight = null;
 }
 
 const RSA_ALG = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" } as const;
@@ -166,11 +194,47 @@ async function importJwk(raw: unknown): Promise<[string, CryptoKey] | null> {
   }
 }
 
-async function loadJwks(
+type JwksBody = { keys: unknown[] };
+
+function asJwksBody(value: unknown): JwksBody | null {
+  const keys = (value as { keys?: unknown } | null)?.keys;
+  return Array.isArray(keys) && keys.length ? { keys } : null;
+}
+
+async function importJwks(body: JwksBody, url: string): Promise<JwksState | null> {
+  const keys = new Map<string, CryptoKey>();
+  for (const entry of body.keys) {
+    const imported = await importJwk(entry);
+    if (imported) keys.set(imported[0], imported[1]);
+  }
+  return keys.size ? { keys, fetchedAtMs: Date.now(), url } : null;
+}
+
+/** The last good JWKS from KV, or null. Never throws. */
+async function readKvJwks(env: HelpdeskMcpEnv): Promise<JwksBody | null> {
+  try {
+    const raw = await env.DIGICHAT_TENANTS_KV?.get(HELPDESK_JWKS_KV_KEY);
+    return raw ? asJwksBody(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best effort: a failed write must not fail a request that has keys. */
+async function writeKvJwks(env: HelpdeskMcpEnv, body: JwksBody): Promise<void> {
+  try {
+    await env.DIGICHAT_TENANTS_KV?.put(HELPDESK_JWKS_KV_KEY, JSON.stringify(body));
+  } catch {
+    // caching is an optimisation
+  }
+}
+
+/** One live read of the JWKS. Never throws; null on any failure. */
+async function fetchLiveJwks(
   url: string,
   env: HelpdeskMcpEnv,
   opts: HelpdeskMcpOptions,
-): Promise<JwksState | null> {
+): Promise<JwksBody | null> {
   try {
     const init: RequestInit = {
       headers: { accept: "application/json" },
@@ -182,17 +246,40 @@ async function loadJwks(
         ? await env.DIGIKEY.fetch(url, init)
         : await fetch(url, init);
     if (!res.ok) return null;
-    const body = (await res.json()) as { keys?: unknown } | null;
-    if (!body || !Array.isArray(body.keys)) return null;
-    const keys = new Map<string, CryptoKey>();
-    for (const entry of body.keys) {
-      const imported = await importJwk(entry);
-      if (imported) keys.set(imported[0], imported[1]);
-    }
-    return keys.size ? { keys, fetchedAtMs: Date.now(), url } : null;
+    return asJwksBody(await res.json());
   } catch {
     return null;
   }
+}
+
+/**
+ * Normal read: KV first, the live JWKS only when KV has nothing usable (and
+ * then KV is filled). Forced read (unknown kid): live first, at most once per
+ * HELPDESK_JWKS_FORCE_INTERVAL_MS; a live success refreshes KV.
+ */
+async function loadJwks(
+  url: string,
+  force: boolean,
+  env: HelpdeskMcpEnv,
+  opts: HelpdeskMcpOptions,
+): Promise<JwksState | null> {
+  if (force) {
+    const live = await fetchLiveJwks(url, env, opts);
+    if (!live) return null;
+    const state = await importJwks(live, url);
+    if (state) await writeKvJwks(env, live);
+    return state;
+  }
+  const cached = await readKvJwks(env);
+  if (cached) {
+    const state = await importJwks(cached, url);
+    if (state) return state;
+  }
+  const live = await fetchLiveJwks(url, env, opts);
+  if (!live) return null;
+  const state = await importJwks(live, url);
+  if (state) await writeKvJwks(env, live);
+  return state;
 }
 
 async function jwks(
@@ -201,12 +288,30 @@ async function jwks(
   env: HelpdeskMcpEnv,
   opts: HelpdeskMcpOptions,
 ): Promise<JwksState | null> {
+  const now = Date.now();
   const fresh =
-    jwksCache && jwksCache.url === url && Date.now() - jwksCache.fetchedAtMs < HELPDESK_JWKS_TTL_MS;
-  if (!force && fresh) return jwksCache;
-  const state = await loadJwks(url, env, opts);
-  if (state) jwksCache = state;
-  return state;
+    jwksCache && jwksCache.url === url && now - jwksCache.fetchedAtMs < HELPDESK_JWKS_TTL_MS;
+  if (force) {
+    // Throttled: inside the window the answer is the key set already held.
+    if (now - lastForcedAtMs < HELPDESK_JWKS_FORCE_INTERVAL_MS) return null;
+    lastForcedAtMs = now;
+  } else if (fresh) {
+    return jwksCache;
+  } else if (inflight) {
+    // A burst after a cold start joins one read.
+    return inflight;
+  }
+  const read = loadJwks(url, force, env, opts)
+    .then((state) => {
+      if (state) jwksCache = state;
+      return state;
+    })
+    .catch(() => null)
+    .finally(() => {
+      if (inflight === read) inflight = null;
+    });
+  if (!force) inflight = read;
+  return read;
 }
 
 function trimSlash(value: string): string {
@@ -253,14 +358,15 @@ export async function verifyHelpdeskToken(
   }
 
   const url = (opts.jwksUrl ?? DEFAULT_DIGIKEY_JWKS_URL).trim();
-  let state = await jwks(url, false, env, opts);
+  const state = await jwks(url, false, env, opts);
   if (!state) return { ok: false, status: 401, reason: "jwks_unavailable" };
   let key = state.keys.get(header.kid);
   if (!key) {
-    // One refetch, so a rotated key is picked up without waiting out the TTL.
-    state = await jwks(url, true, env, opts);
-    if (!state) return { ok: false, status: 401, reason: "jwks_unavailable" };
-    key = state.keys.get(header.kid);
+    // One live refetch, so a rotated key is picked up without waiting out the
+    // TTL. Throttled per isolate; inside the window an unknown kid stays
+    // unknown. Never allowed on the strength of a failed read.
+    const refreshed = await jwks(url, true, env, opts);
+    key = refreshed?.keys.get(header.kid);
     if (!key) return { ok: false, status: 401, reason: "unknown_kid" };
   }
 

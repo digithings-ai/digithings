@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  HELPDESK_JWKS_KV_KEY,
   HELPDESK_MCP_SCOPE,
   HELPDESK_MCP_TENANTS,
   _resetHelpdeskJwksCacheForTests,
@@ -378,6 +379,85 @@ describe("ZAMMAD_MCP_JWT_ONLY=1: only the invite-gated chat's token opens it", (
     const out = log.mock.calls.flat().join("\n");
     expect(out).not.toContain(token.split(".")[2]!);
     expect(out).not.toContain(EDGE_KEY);
+  });
+});
+
+describe("JWKS from KV, so a sleeping stack cannot close the gate", () => {
+  function memoryKv(initial?: unknown) {
+    const store = new Map<string, string>();
+    if (initial !== undefined) store.set(HELPDESK_JWKS_KV_KEY, JSON.stringify(initial));
+    return {
+      store,
+      get: vi.fn(async (k: string) => store.get(k) ?? null),
+      put: vi.fn(async (k: string, v: string) => {
+        store.set(k, v);
+      }),
+    };
+  }
+
+  it("verifies from the KV copy without a live read", async () => {
+    const kv = memoryKv({ keys: [signing.jwk] });
+    const gate = await authorizeHelpdeskMcp(
+      req(await bearer()),
+      "/api/mcp/zammad",
+      { ...jwtOnly, DIGICHAT_TENANTS_KV: kv },
+      opts,
+    );
+    expect(gate.kind).toBe("authorized");
+    expect(fetchJwks).not.toHaveBeenCalled();
+  });
+
+  it("fills KV after a live read when KV is empty", async () => {
+    const kv = memoryKv();
+    await authorizeHelpdeskMcp(
+      req(await bearer()),
+      "/api/mcp/zammad",
+      { ...jwtOnly, DIGICHAT_TENANTS_KV: kv },
+      opts,
+    );
+    expect(fetchJwks).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(kv.store.get(HELPDESK_JWKS_KV_KEY)!)).toEqual({ keys: [signing.jwk] });
+  });
+
+  it("still verifies from KV when the live read would fail", async () => {
+    const kv = memoryKv({ keys: [signing.jwk] });
+    const down = vi.fn(async () => new Response("asleep", { status: 503 }));
+    const gate = await authorizeHelpdeskMcp(
+      req(await bearer()),
+      "/api/mcp/zammad",
+      { ...jwtOnly, DIGICHAT_TENANTS_KV: kv },
+      { fetchJwks: down },
+    );
+    expect(gate.kind).toBe("authorized");
+  });
+
+  it("goes live for a rotated kid even when KV is stale, and refreshes KV", async () => {
+    const kv = memoryKv({ keys: [signing.jwk] });
+    served = [signing.jwk, rotated.jwk];
+    const gate = await authorizeHelpdeskMcp(
+      req(await bearer({}, rotated)),
+      "/api/mcp/zammad",
+      { ...jwtOnly, DIGICHAT_TENANTS_KV: kv },
+      opts,
+    );
+    expect(gate.kind).toBe("authorized");
+    expect(fetchJwks).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(kv.store.get(HELPDESK_JWKS_KV_KEY)!).keys).toHaveLength(2);
+  });
+
+  it("throttles live reads forced by unknown kids", async () => {
+    const kv = memoryKv({ keys: [signing.jwk] });
+    const env = { ...jwtOnly, DIGICHAT_TENANTS_KV: kv };
+    for (let i = 0; i < 5; i += 1) {
+      const gate = await authorizeHelpdeskMcp(
+        req(await bearer({}, rotated)),
+        "/api/mcp/zammad",
+        env,
+        opts,
+      );
+      expect(gate).toMatchObject({ kind: "unauthorized", reason: "unknown_kid" });
+    }
+    expect(fetchJwks).toHaveBeenCalledTimes(1);
   });
 });
 
