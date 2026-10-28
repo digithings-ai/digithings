@@ -3429,9 +3429,16 @@ def _human_gate_section(body: str) -> str:
     return rest[: n.start()] if n else rest
 
 
-def _body_requires_human_review(pr: dict[str, Any]) -> bool:
-    """True when the PR body ticks a Human Gate box or asks for Chris's review."""
-    body = str(pr.get("body") or "")
+def _body_requires_human_review(pr: Any) -> bool:
+    """True when the PR body ticks a Human Gate box or asks for Chris's review.
+
+    Accepts either a PR dict (with a ``body`` key) or a body string, so callers
+    and tests can probe the rule directly.
+    """
+    if isinstance(pr, str):
+        body = pr
+    else:
+        body = str((pr or {}).get("body") or "")
     section = _human_gate_section(body)
     if section and _HUMAN_GATE_CHECKED_RE.search(section):
         return True
