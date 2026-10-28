@@ -3,7 +3,11 @@
 import { DIGITHINGS } from "@digithings/hero-banner/definitions";
 import { HeroBanner } from "@digithings/hero-banner/web";
 
-/** Pixel lockup, drawn from the shared hero-banner definition
+/** @deprecated Pages use `BrandWordmark` (the studio 4×4 mask). This still
+ *  draws the hero-banner `DIGITHINGS` cells for anything that has not moved.
+ *  Do not mount it on the digithings hero, nav, or footer.
+ *
+ *  Pixel lockup, drawn from the shared hero-banner definition
  *  (`packages/hero-banner`, `DIGITHINGS`: build 1400 ms, tick 40 ms).
  *  The hero builds on every load (`replayLoading`); the footer is the same
  *  mark at page width and stays blank until `live` flips the first time it

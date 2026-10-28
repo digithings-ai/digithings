@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   exchangeDigikeyApiKey,
   exchangeDigikeyBffSession,
@@ -99,6 +100,20 @@ function writeCache(key: string, ex: DigikeyTokenExchange): DigigraphUpstreamAut
   return auth;
 }
 
+/**
+ * Cache key for an exchanged API key: a SHA-256 of the WHOLE key.
+ *
+ * It must never be built from the key's leading characters. The first 16 are
+ * digikey's public key prefix (printed by the CLI, returned by the admin API,
+ * logged as the trace key prefix), so a prefix-keyed entry would hand the
+ * owner's cached JWT to anyone sending `<prefix><anything>`. Hashing the full
+ * key means only the exact key hits, and the key itself never sits in memory
+ * as a map key.
+ */
+export function apiKeyCacheKey(raw: string): string {
+  return `api_key:sha256:${createHash("sha256").update(raw, "utf8").digest("hex")}`;
+}
+
 /** Test-only: reset in-memory upstream JWT cache. */
 export function _resetUpstreamAuthCacheForTests(): void {
   _upstreamCache.clear();
@@ -121,7 +136,7 @@ export async function resolveDigigraphUpstreamAuth(
   if (authz?.startsWith("Bearer ") && digikeyUrl) {
     const raw = authz.slice(7).trim();
     if (raw && isDigikeyApiKeyMaterial(raw)) {
-      const cacheKey = `api_key:${raw.slice(0, 16)}`;
+      const cacheKey = apiKeyCacheKey(raw);
       const cached = readCache(cacheKey);
       if (cached) return cached;
       const ex = await exchangeDigikeyApiKey(digikeyUrl, raw);

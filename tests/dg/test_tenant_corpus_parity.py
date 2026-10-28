@@ -14,6 +14,8 @@ unknown/empty → ``HTTPException(403)``; set-but-broken → ``503``).
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -41,8 +43,24 @@ _RAW_MAP = (
     '"vaultPathPrefix":"clients/online-compliance-center"}}'
 )
 
+
+def _composed_map() -> str:
+    """The blob plus the Worker's house alias: what the container receives.
+
+    ``withHouseSlugAlias`` in ``src/tenant-config.ts`` adds ``digithings-ai`` at
+    compose time (DIG-5638), so the container map has one more slug than the
+    committed blob. Both services have to resolve it.
+    """
+    parsed = json.loads(_RAW_MAP)
+    parsed["digithings-ai"] = parsed["digithings"]
+    return json.dumps(parsed)
+
+
+_COMPOSED_MAP = _composed_map()
+
 _EXPECTED = {
     "digithings": ("digithings_docs", "clients/digithings"),
+    "digithings-ai": ("digithings_docs", "clients/digithings"),
     "occ": ("occ_help", "clients/online-compliance-center"),
 }
 
@@ -52,11 +70,11 @@ def test_mapped_tenants_resolve_index_and_prefix_on_both_sides(
     slug: str, index: str, prefix: str
 ) -> None:
     """Mapped slugs resolve the same index + prefix through both services."""
-    table = load_tenant_corpus_map(_RAW_MAP)
+    table = load_tenant_corpus_map(_COMPOSED_MAP)
     override = resolve_corpus_override(tenant_slug=slug, corpus_map=table)
     assert (override.digisearch_index, override.vault_path_prefix) == (index, prefix)
-    assert mapped_tenant_path_prefix(slug, raw_map=_RAW_MAP) == prefix
-    assert mapped_tenant_path_prefix(slug, raw_map=_RAW_MAP) == override.vault_path_prefix
+    assert mapped_tenant_path_prefix(slug, raw_map=_COMPOSED_MAP) == prefix
+    assert mapped_tenant_path_prefix(slug, raw_map=_COMPOSED_MAP) == override.vault_path_prefix
 
 
 @pytest.mark.parametrize("slug", ["no-such-tenant", "", None])
@@ -67,10 +85,10 @@ def test_unmapped_slug_asymmetry_is_intentional(slug: str | None) -> None:
     to match the other): digigraph must not fall through to a client-supplied
     index, while digivault refuses the request outright.
     """
-    table = load_tenant_corpus_map(_RAW_MAP)
+    table = load_tenant_corpus_map(_COMPOSED_MAP)
     assert resolve_corpus_override(tenant_slug=slug, corpus_map=table) == TenantCorpusOverride()
     with pytest.raises(HTTPException) as excinfo:
-        mapped_tenant_path_prefix(slug, raw_map=_RAW_MAP)
+        mapped_tenant_path_prefix(slug, raw_map=_COMPOSED_MAP)
     assert excinfo.value.status_code == 403
 
 

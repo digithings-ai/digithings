@@ -317,6 +317,53 @@ describe("a default house turn sends no X-Digi-Model", () => {
   });
 });
 
+// DIG-3585: the invite-gated OCC page is served at a bare /chat/occ (the edge
+// rewrites it to /embed?host=…), so the client's URL has no ?host= while the
+// server rendered with one. The server hands the host down; the client must
+// use it, or it hydrates as a host-less embed and names the wrong host.
+describe("the server-rendered host when the URL has none", () => {
+  beforeEach(() => {
+    capturedTransportConfig = undefined;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("names the server's host on every turn", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(EmbedClient, {
+          initialTenantCfg: HOUSE_TENANT,
+          initialHost: "occ.digithings.ai",
+        }),
+      );
+    });
+    try {
+      const headers = await preparedHeaders();
+      expect(headers.get("X-Embed-Host") ?? "").toContain("occ.digithings.ai");
+      // The client never holds the invite: the edge adds it from the cookie.
+      expect(headers.get("X-Embed-Token")).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("lets the URL's own ?host= win over the server's", () => {
+    const code = codeOnly(embedClientSrc);
+    expect(code).toMatch(
+      /const host = searchParams\.get\("host"\) \?\? \(initialHost \|\| undefined\);/,
+    );
+  });
+});
+
 describe("the free-turn counter charges per outgoing request", () => {
   const code = codeOnly(embedClientSrc);
 

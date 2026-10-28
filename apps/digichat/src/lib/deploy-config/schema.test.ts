@@ -390,7 +390,7 @@ describe("DigichatConfigSchema", () => {
       trialFile,
     );
     expect(trial.deployment?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: true,
@@ -568,7 +568,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.gate.webSearch).toBe(true);
     expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: true,
@@ -586,7 +586,7 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
     expect(occHost?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: false,

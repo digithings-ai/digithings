@@ -23,6 +23,22 @@ test("the fixture API serves the conversation list and one conversation", async 
   }
 });
 
+test("the fixture API counts one capture's reads, not the process's", async () => {
+  const api = await startFixtureApi();
+  try {
+    await fetch(`${api.url}/api/conversations`);
+    expect(api.served()).toBe(1);
+    // What the exporter does before it renders: forget the earlier reads, so
+    // the guard that refuses a live frame counts this capture's requests only.
+    api.resetServed();
+    expect(api.served()).toBe(0);
+    await fetch(`${api.url}/api/conversations/s1`);
+    expect(api.served()).toBe(1);
+  } finally {
+    await api.close();
+  }
+});
+
 test("the fixture API refuses every other route", async () => {
   const api = await startFixtureApi();
   try {

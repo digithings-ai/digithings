@@ -20,3 +20,21 @@ export function inviteRequiredButMissing(
   if (!slug) return false;
   return resolvedSlug !== slug;
 }
+
+/**
+ * True when `host` is invite-only, or `slug` is the tenant of an invite-only
+ * host (an alias or a merged registry row must not reopen it). Such a
+ * deployment is never served without its own invite token (DIG-3585).
+ */
+export function isInviteOnlyDeployment(
+  host: string | null | undefined,
+  slug: string | null | undefined,
+): boolean {
+  const normalized = normalizeEmbedHost(host);
+  if (normalized && INVITE_ONLY_EMBED_HOSTS.has(normalized)) return true;
+  if (!slug) return false;
+  for (const owner of INVITE_ONLY_EMBED_HOSTS.values()) {
+    if (owner === slug) return true;
+  }
+  return false;
+}

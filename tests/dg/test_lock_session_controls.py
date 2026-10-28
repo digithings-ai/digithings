@@ -75,6 +75,7 @@ def _locked_tenant_request() -> SimpleNamespace:
                 subject="",
                 key_prefix=None,
                 tenant_slug="tenant-a",
+                tenant_slug_verified=True,
                 project_id=None,
                 jti=None,
             ),

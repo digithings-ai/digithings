@@ -28,6 +28,7 @@ import {
   takePendingTurnMode,
   takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
+import { privateModeHeaderEntries } from "@/lib/product-slash-commands";
 import {
   shapeUserMessageParts,
   type PageContextMessage,
@@ -407,9 +408,9 @@ export function useEmbedDigiChat({
           // Private mode: the chat route owns the substitution instruction and
           // validates the value. The mode is a session setting, so it rides
           // every request while on and disappears when `/private` turns it off.
-          if (getPrivateMode?.()) {
-            headers["x-digi-private"] = "1";
-          }
+          // Same header the stock home transport sets.
+          const privateHeader = privateModeHeaderEntries(Boolean(getPrivateMode?.()));
+          if (privateHeader) headers[privateHeader[0]] = privateHeader[1];
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;

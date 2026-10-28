@@ -11,14 +11,14 @@ from digisearch.search import add_chunks, query_index
 def test_query_empty_index() -> None:
     """Query on empty index returns no results."""
     q = Query(text="test", top_k=5)
-    response = query_index(q, index_name="__unit_test_empty__")
+    response = query_index(q, index_name="unit_test_empty")
     assert response.results == []
 
 
 @pytest.mark.unit
 def test_add_and_query() -> None:
     """Add chunks and query finds them."""
-    idx = "__unit_test_add_query__"
+    idx = "unit_test_add_query"
     chunk = Chunk(
         id="c1",
         content="Mean reversion strategy uses Bollinger Bands",

@@ -17,26 +17,23 @@ import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
 import { embedOriginHostOf, resolveEmbedClientConfigForPaint } from "@/lib/embed-chat-tenant";
 import { resolveEmbedRenderToken } from "@/lib/embed-token-transport";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
+import {
+  SITE_EMBED_CANVAS_CSS,
+  SITE_RAILS_SCRIPT,
+  embedPalettePinScript,
+  themePinScript,
+} from "@/lib/embed-site-theme";
+import { LayoutLines } from "@digithings/ui";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
-   head scripts so it deliberately wins over them; mirrors [data-theme] onto
-   the .dark/.light classes. No value from the request is interpolated into
-   these strings — the two scripts are complete literals selected by a
-   boolean, so there is no concatenation path for request data to reach the
-   document. */
-const THEME_PIN_SCRIPTS = {
-  light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#f1f0eb')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#121417')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
-} as const;
-
-function themePinScript(theme: "dark" | "light"): string {
-  return theme === "light" ? THEME_PIN_SCRIPTS.light : THEME_PIN_SCRIPTS.dark;
-}
+   head scripts. A top-level page with no ?theme= (the /chat/occ document)
+   leaves themeInitScript's dt-theme / dt-palette paint in place. An iframe
+   or a ?theme= lock still pins the tenant/parent mode. The script bodies
+   live in embed-site-theme.ts and contain no request data. */
 
 const first = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
@@ -123,17 +120,26 @@ export default async function EmbedRouteShell({
             first(params.host) || token
               ? "body.bg-background{background:var(--embed-canvas)}.dc-embed-shell{background:var(--embed-canvas)}"
               : "body.bg-background{background:transparent!important}body *{background:transparent!important}"
-          }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
+          }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}${SITE_EMBED_CANVAS_CSS}`,
         }}
       />
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
+      <script dangerouslySetInnerHTML={{ __html: embedPalettePinScript() }} />
       <script
         dangerouslySetInnerHTML={{
           __html:
             "try{document.documentElement.dataset.embedWide=/[?&]wide=1(?:&|$)/.test(window.location.search)?'1':'0';}catch(e){}",
         }}
       />
-      <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
+      <script dangerouslySetInnerHTML={{ __html: SITE_RAILS_SCRIPT }} />
+      {/* Hidden unless the pre-paint script marked this document top-level,
+          so an iframed dashboard or website embed does not draw a second pair. */}
+      <LayoutLines className="dc-site-rails" />
+      <EmbedClient
+        initialTenantCfg={seededCfg}
+        initialBoot={first(params.boot) ?? null}
+        initialHost={first(params.host) ?? null}
+      />
     </div>
   );
 }

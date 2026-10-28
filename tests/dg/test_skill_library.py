@@ -555,6 +555,7 @@ def test_the_map_reaches_the_request_and_the_graph_state(monkeypatch):
                     subject="",
                     key_prefix=None,
                     tenant_slug=slug,
+                    tenant_slug_verified=True,
                     project_id=None,
                     jti=None,
                 ),

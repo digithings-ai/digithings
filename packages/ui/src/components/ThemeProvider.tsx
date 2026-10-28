@@ -28,7 +28,9 @@ import {
   nextThemeStep,
   readPaintedTheme,
   readThemeState,
+  PALETTE_STORAGE_KEY,
   THEME_CHANGE_EVENT,
+  THEME_STORAGE_KEY,
   type PaletteName,
   type ResolvedTheme,
   type ThemePreference,
@@ -153,6 +155,21 @@ export function ThemeProvider({
     // applyDocumentTheme, which announces the change; re-read so the context
     // and the OS guard below never disagree with what is painted.
     window.addEventListener(THEME_CHANGE_EVENT, sync);
+    // Another tab (the marketing site, the other chat) writes the same keys.
+    // `storage` does not fire in the tab that wrote them; this tab repaints.
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key !== null &&
+        event.key !== THEME_STORAGE_KEY &&
+        event.key !== PALETTE_STORAGE_KEY
+      ) {
+        return;
+      }
+      const next = readThemeState();
+      applyDocumentTheme(next.preference, next.palette, document, { persist: false });
+      sync();
+    };
+    window.addEventListener("storage", onStorage);
     const mq = matchMedia("(prefers-color-scheme: light)");
     const onOS = () => {
       // As before this provider existed: a stored mode means a choice was
@@ -166,6 +183,7 @@ export function ThemeProvider({
     mq.addEventListener("change", onOS);
     return () => {
       window.removeEventListener(THEME_CHANGE_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
       mq.removeEventListener("change", onOS);
     };
   }, [setPreference]);

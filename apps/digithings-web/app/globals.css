@@ -11,6 +11,7 @@
    wins the Lightning CSS last-wins dedupe (wave-2 T1 ruling). */
 @import "tw-animate-css";
 @import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/brand-wordmark.css";
 @import "@digithings/ui/styles/controls-core.css";
 @import "@digithings/ui/styles/controls-overlay.css";
 @import "@digithings/ui/styles/nav-shell.css";

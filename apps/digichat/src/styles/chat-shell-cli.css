@@ -5,6 +5,7 @@
 
 @import "@digithings/design/tokens.css";
 @import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/brand-wordmark.css";
 @import "@digithings/design/app-shell-terminal/styles.css";
 @import "@digithings/ui/styles/chat-core.css";
 @import "@digithings/ui/styles/chat-math.css";

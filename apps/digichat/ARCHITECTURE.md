@@ -1178,7 +1178,7 @@ so config load refuses the key. The shape:
 
 ```yaml
 guardrails:                      # omit the block and every guard is off
-  maxToolCallsPerTurn: 5         # optional, 1–100
+  maxToolCallsPerTurn: 20        # optional, 1–100
   answerAt: 0.7                  # optional; default 0.7 when a TPM is set
   pauseAt: 0.9                   # optional; default 0.9; must be above answerAt
   rateLimit: true                # optional; omit or true keeps the request limiter; false turns it off
@@ -1187,7 +1187,7 @@ guardrails:                      # omit the block and every guard is off
     user: 80000                  # optional; per user id, else server-derived IP
 ```
 
-House (`defaults.yaml`) sets `maxToolCallsPerTurn: 5`, `answerAt: 0.7`,
+House (`defaults.yaml`) sets `maxToolCallsPerTurn: 20`, `answerAt: 0.7`,
 `pauseAt: 0.9`, `rateLimit: true`, and a per-visitor `tokensPerMinute.user` of
 80000. OCC sets `rateLimit: false` and clears the per-visitor minute. The
 tool-call cap and the answer guard stay. The Foundry trial clears the
@@ -1198,8 +1198,8 @@ request limiter. The deployment minute, the tool-call cap, and the answer
 guard stay on for that turn.
 
 `maxToolCallsPerTurn` caps tool calls in one user turn where the backend can
-enforce it, and is notice/best-effort where it cannot (digigraph, langgraph,
-ag-ui). `backend.maxToolCalls` on a Foundry backend is the same setting; the
+enforce it; digigraph enforces it upstream in its tool loop, and langgraph and
+ag-ui are notice/best-effort. `backend.maxToolCalls` on a Foundry backend is the same setting; the
 shared key wins when both are set. `tokensPerMinute.deployment` is the deployment's own limit (an Azure TPM,
 for example), shared by every turn on that deployment. `tokensPerMinute.user`
 is the per-person limit for a public chat. A real user id is the key.
@@ -1261,7 +1261,7 @@ one budget across the turn's main loop and its continuations, and digillm stops
 at the cap and answers tool-free. It is **silent** — no `data-notice`, nothing
 in the UI. a2a reports no tool calls, so the key is refused at config load.
 
-defaults.yaml sets the tool-call cap to 5, the answer guard to 0.7 / 0.9,
+defaults.yaml sets the tool-call cap to 20, the answer guard to 0.7 / 0.9,
 `rateLimit: true`, and a per-visitor minute of 80000 because house is public.
 OCC sets `rateLimit: false` and clears that minute. Local clears the minute
 and keeps the request limiter, the cap, and the answer guard. The Foundry
@@ -1474,8 +1474,9 @@ header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `A
 `#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
 set or override it — only the operator/token pairing on the same YAML row can.
 **`authScheme: jwt` is the chat's own identity.** Instead of a static token the BFF mints a digikey JWT, scoped
-`mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — `DIGICHAT_MCP_IDENTITY_KEY`
-(a `dgk_live_…` key) when configured, else the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`) — and reuses it
+`mcp:<server id>` (`mcp:digisearch`, `mcp:digivault`), through the existing exchange — the BFF credential (`DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN`), whose token names the
+turn's tenant, and `DIGICHAT_MCP_IDENTITY_KEY` (a `dgk_live_…` key) only when there is no BFF credential, because an
+API-key token carries the key row's own tenant and digisearch scopes tenant indexes on that claim — and reuses it
 until 60 s before `exp`, cached per scope set (`lib/mcp-edge-token.ts`). The BFF credential path sends
 `requested_scopes: ["mcp:digisearch", "mcp:digivault"]`, which digikey answers from
 `BFF_SESSION_GRANTABLE_SCOPES` (`digikey/src/digikey/scopes.py`): the default session scopes **plus** those two
@@ -1633,21 +1634,39 @@ Allowlisted attributes are presentation/a11y (`class`, `id`, `role`, `aria-*`,
 `href` with query/hash stripped). Inputs, textareas, and selects are dropped
 entirely so values cannot leak.
 
-**postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
-read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
-`dt-theme` localStorage), pin first paint with `?theme=light|dark` on the iframe
-URL, then post `{ type: "digichat:theme", theme, ts }` on `digichat:ready` and
-whenever the parent theme toggles — no iframe reload. The embed accepts theme
-messages from the same first-party allowlist as seed (`parseThemeMessage` in
-`src/lib/embed-theme-messages.ts`) and applies them via the existing
-`[data-theme]` + `.dark`/`.light` path (MutationObserver still defends against
-OS/`ThemeProvider` overrides). Priority: visitor `/theme` pick > parent
-postMessage > URL `?theme=` > tenant registry theme (`resolveEmbedTheme`).
+**Site theme and rails.** `/chat` (product, `chrome.mode: app`) and `/chat/occ`
+(top-level embed document) use `packages/design/tokens.css` — the same custom
+properties as digithings.ai — and the shared `LayoutLines` rails (`--frame-w`,
+`--page-pad`, `--hair-2`, column width inlined so a host that does not scan the
+kit utility still insets them). The thread portal mirror in `chat-aui.css`
+does not override `--bg` / `--ink` / `--hair` on these documents. `dt-theme` and
+`dt-palette` are painted by
+`themeInitScript` before first paint. A top-level embed with no `?theme=` does
+not pin, so that paint stays (`data-site-theme`). An iframe, or a URL that
+names `?theme=`, still pins. `?palette=` is adopted only when the id is in the
+palette registry. `ThemeProvider` repaints on a `storage` event so another tab
+stays in sync. Framed embeds (dashboard modal, customer hosts) do not mount
+rails and `site-chat.css` puts the digichat theme back, so their canvas is
+unchanged. The website iframe shell, where it still wraps a chat, copies
+`data-theme` and `data-palette` onto the frame `src` before the frame commits.
+
+**postMessage theme.** A parent that still iframes digichat (`ChatEmbedShell`)
+reads the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
+`dt-theme` localStorage), pin first paint with `?theme=` and `?palette=` on the
+iframe URL, then post `{ type: "digichat:theme", theme, ts, palette? }` on
+`digichat:ready` and whenever the parent theme toggles — no iframe reload. The
+embed accepts theme messages from the same first-party allowlist as seed
+(`parseThemeMessage` in `src/lib/embed-theme-messages.ts`) and applies them via
+the existing `[data-theme]` + `.dark`/`.light` path (MutationObserver still
+defends against OS/`ThemeProvider` overrides on a pinned document). Priority:
+visitor `/theme` pick > parent postMessage > URL `?theme=` > site document >
+tenant registry theme (`resolveEmbedTheme`).
 
 **postMessage palette.** The same message carries an optional `palette` field
 (an older parent that sends only `theme` still works). It is a *source*, not a
 second channel: `resolveEmbedPalette` folds it into the palette the embed
-already owns — visitor `/theme` pick > parent palette > default look — and the
+already owns — visitor `/theme` pick > parent palette > `?palette=` > site
+document > default look — and the
 embed's single theme effect is the only writer of `data-palette`
 (`applyEmbedPalette`, which also keeps `theme-color` in step). Decided this way
 because the obvious alternative, painting the parent's palette straight from
@@ -1657,6 +1676,14 @@ a no-op. A message with no palette, or `default`, clears the parent channel; an
 unknown id is dropped on parse, so a typo costs the palette and never the mode.
 `ChatEmbedShell` reads the parent's `[data-palette]` and forwards only a known
 id (`readParentDocumentPalette`).
+
+The app thread's no-palette canvas reset (`product-chrome.css`) is gated with
+`:where(:root:not([data-palette]))`, so a named palette's `--bg`, `--surface`,
+`--ink`, `--accent`, `--hair`, and `--hair-2` stay the values `palettes.css`
+gives digithings.ai. `src/styles/palette-parity.test.ts` walks every id in
+`PALETTE_IDS` for light and dark, on the product document and the top-level
+embed document. An id added to that list without a `palettes.css` block, or a
+chat rule that paints over the block, fails the test.
 
 **`/theme` on embeds (2.6.6).** Every tenant embed lists `/theme` in the command
 palette; the #6122 model/tool/session locks are unchanged. A pick is cosmetic and
@@ -2076,7 +2103,7 @@ Canonical operator config is a Zod-validated YAML file:
 - Examples: `apps/digichat/config/examples/*.yaml` (incl. `skins/<id>.yaml` and `local-cli.yaml`)
 - One config shape per tenant (epic: `docs/plans/digichat-one-config-epic.md`): `apps/digichat/config/digithings.yaml` (the house deployment as deployed, edge MCP URLs included) and `apps/digichat/config/occ.yaml` (OCC) are **full documents, same schema, no `extends`**. OCC's differences live in its own file: `gate.mode: invite` plus the `tokenEnv` ref to the invite key, its own backend index/path, MCP servers and tool lists. Nothing reads either document in production yet — KV `config-yaml` + `embed-tenants` still serve, and `src/lib/deploy-config/tenant-documents.equivalence.test.ts` resolves both documents through the real loader and pins them field for field to that live resolution (the OCC tenant row is pinned in the test).
 - `gate.mode: invite` means the surface requires an invite credential before it renders, and the **edge** enforces it (the Worker/Pages gate), not the app. Inside the app it therefore accounts turns exactly like `ungated`: no free-turn quota and no trial form, because an unauthenticated request never reaches a route handler. `gateMetersTurns()` in `src/lib/deploy-config/schema.ts` is the one place that classification is written down.
-- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 5`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
+- House: `apps/digichat/config/defaults.yaml`. OCC, the Foundry trial, local, and Docker are `extends: defaults` overlays. Objects merge, arrays replace, `embedHosts` unions, `null` deletes a key, and a different `backend.type` replaces the backend. A missing config file loads this document, so a deployment with no overrides looks like digithings.ai (`gate.webSearch: true`, `gate.showContextMeter: true`, per-visitor `guardrails.tokensPerMinute.user: 80000`, `guardrails.rateLimit: true`, `maxToolCallsPerTurn: 20`, `answerAt: 0.7`, `pauseAt: 0.9`). The per-visitor minute and the request limiter are house because house is public. OCC sets `guardrails.rateLimit: false`, clears that minute, the premium cost meter, and the context meter, and inherits the catalog picker. The Foundry trial clears the per-visitor minute, keeps the request limiter, and keeps one shared `tokensPerMinute.deployment` allowance. TODO: the Azure number is not in this repo, so that allowance stays unset. The tool-call cap and the answer guard stay on every overlay. A visitor's own key skips the per-visitor minute and the request limiter. `prompt` and `tokenEnv` stay server-side.
 - Startup: `src/instrumentation.ts` calls `initDigichatConfigAtStartup()` (fail closed)
 
 **Unrendered templates are refused at load (#6023).** The shipped templates

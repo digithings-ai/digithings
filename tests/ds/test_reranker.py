@@ -164,7 +164,7 @@ class TestFetchAllRerankSuppression:
 
         from tests.digi_test_jwt import auth_headers
 
-        idx = "__fetch_all_rerank__"
+        idx = "fetch_all_rerank"
         for i in range(3):
             add_chunks(
                 idx,

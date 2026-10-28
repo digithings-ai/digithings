@@ -92,21 +92,33 @@ const DIGITHINGS_CORPUS_ENTRY: TenantCorpusEntry = {
   vaultPathPrefix: "clients/digithings",
 };
 
+/** True when an entry is a usable corpus, by the same rule the KV projection uses. */
+function hasCorpus(entry: TenantCorpusEntry | undefined): entry is TenantCorpusEntry {
+  return typeof entry?.digisearchIndex === "string" && entry.digisearchIndex.trim() !== "";
+}
+
 /**
  * Give both house slugs the same corpus entry; leave every other key alone.
  *
  * The canonical {@link HOUSE_TENANT_SLUG} entry wins when a map carries both
- * keys, so a stale alias can never widen or narrow the house corpus. When a map
- * carries only the live {@link LIVE_HOUSE_TENANT_SLUG} slug -- the shape the
- * live KV document uses today -- the canonical key is added for old callers.
- * The two keys are emitted together, canonical first, so the serialised map is
- * deterministic whichever slug the source happened to carry.
+ * usable keys, so a stale alias can never widen or narrow the house corpus. An
+ * entry with no `digisearchIndex` is not usable and never shadows one that is,
+ * so an empty-but-valid `{"digithings": {}}` cannot silently narrow the corpus
+ * a good `digithings-ai` entry already provided. When a map carries only the
+ * live {@link LIVE_HOUSE_TENANT_SLUG} slug -- the shape the live KV document
+ * uses today -- the canonical key is added for old callers. The two keys are
+ * emitted together, canonical first, so the serialised map is deterministic
+ * whichever slug the source happened to carry.
  *
- * A map with neither house slug is returned unchanged: this adds an alias, it
- * never invents a tenant.
+ * A map with neither usable house slug is returned unchanged: this adds an
+ * alias, it never invents a tenant.
  */
 export function withHouseSlugAlias(map: TenantCorpusMap): TenantCorpusMap {
-  const house = map[HOUSE_TENANT_SLUG] ?? map[LIVE_HOUSE_TENANT_SLUG];
+  const house = hasCorpus(map[HOUSE_TENANT_SLUG])
+    ? map[HOUSE_TENANT_SLUG]
+    : hasCorpus(map[LIVE_HOUSE_TENANT_SLUG])
+      ? map[LIVE_HOUSE_TENANT_SLUG]
+      : undefined;
   if (house === undefined) return map;
 
   const aliased: TenantCorpusMap = {};

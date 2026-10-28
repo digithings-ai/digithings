@@ -219,14 +219,6 @@ jobs:
       - name: Test digichat-cloudflare
         run: npm run test --workspace digichat-cloudflare
 
-      # digitrace-langfuse (#4930 Phase 1): CF Containers Worker for self-hosted
-      # Langfuse Web+Worker. Same install-input / web-lane cover as digichat.
-      - name: Typecheck digitrace-langfuse
-        run: npm run typecheck --workspace digitrace-langfuse
-
-      - name: Test digitrace-langfuse
-        run: npm run test --workspace digitrace-langfuse
-
       # dashboard-api (#4651) is the central read-only dashboard Worker. Until now
       # its path was in ci.yml's `ruff_and_scripts` filter and nowhere else, so it
       # declared `test`/`typecheck` with no lane invoking either: its vitest suite

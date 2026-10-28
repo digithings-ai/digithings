@@ -24,7 +24,6 @@ WORKER_APPS = [
     "digithings-cron",
     "dashboard-api",
     "digiquant-runner",
-    "digitrace-langfuse",
     "digichat-cloudflare",
     "digithings-stack-cloudflare",
 ]

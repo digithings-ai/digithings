@@ -6,8 +6,8 @@ are unchanged). Two mechanisms, both fail-soft:
 
 1. Explicit spans: :func:`trace_run` decorates the workflow entry points in
    ``workflow.py``; :func:`trace_node` wraps the plain-function graph nodes in
-   ``graph/graph.py``. Each emits a LangSmith run AND an OTel span (Langfuse)
-   via ``digitrace.trace``. The compiled research subgraph is deliberately NOT
+   ``graph/graph.py``. Each emits a LangSmith run AND an OTel span (in-house
+   digitrace) via ``digitrace.trace``. The compiled research subgraph is deliberately NOT
    wrapped — it must stay a native runnable so ``graph.stream(...,
    subgraphs=True)`` custom events keep flowing.
 2. Auto-instrumentation: :func:`configure_langgraph_tracing` defaults
@@ -71,8 +71,6 @@ def configure_langgraph_tracing() -> dict[str, bool]:
     otel = any(
         (os.environ.get(key) or "").strip()
         for key in (
-            "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
-            "LANGFUSE_OTLP_ENDPOINT",
             "DIGI_OTEL_ENDPOINT",
             "OTEL_EXPORTER_OTLP_ENDPOINT",
         )

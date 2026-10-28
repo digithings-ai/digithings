@@ -409,17 +409,24 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--term-ink);
 }
 
+/* Site canvas. site-chat.css repeats this at higher specificity so a named
+   palette and the light token both stay on var(--bg), not the terminal hex. */
 body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #08090b;
+  background: var(--bg);
 }
 
-:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #f1f0eb;
-}
-
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread__footer,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread-list {
+/* Named palettes keep --bg, --surface, and --hair from palettes.css.
+   :where() adds no specificity, so this reset applies only while no
+   data-palette is set, and a later sheet of equal weight can still retie it. */
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread,
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread__footer,
+:where(:root:not([data-palette]))
+  [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]
+  .digichat-thread-list {
   --bg: transparent;
   --surface: transparent;
   --hair: var(--term-hair);

@@ -62,7 +62,6 @@ _RESERVED_TOOL_NAMES = frozenset(
 )
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
-_HEADER_TENANT = "x-digi-tenant"
 # Every entry key this parser understands — the camelCase and the snake_case
 # spelling of each known field. An entry key outside this set is *ignored*
 # (forward compatibility: a newer map may carry fields this build predates),
@@ -353,12 +352,11 @@ def resolve_corpus_override(
     """
     hdr_index = _header(headers, _HEADER_CORPUS_INDEX)
     hdr_prefix = _header(headers, _HEADER_VAULT_PREFIX)
-    hdr_tenant = _header(headers, _HEADER_TENANT)
-    # Prefer the verified auth tenant (caller passes tenant_from_auth). The
-    # unsigned X-Digi-Tenant header is only a routing hint when auth did not
-    # supply a slug — never used to *authorize* a mapped corpus when auth
-    # already named a different tenant (see digivault tenant_scope / #2303).
-    slug = (tenant_slug or hdr_tenant or "").strip().lower() or None
+    # The tenant is the verified auth tenant only (the caller passes
+    # tenant_from_auth). The unsigned X-Digi-Tenant header is never read: with
+    # a map set, a token with no tenant claim gets no tenant corpus instead of
+    # whichever tenant the header names (#2303, DIG-3585).
+    slug = (tenant_slug or "").strip().lower() or None
 
     table = corpus_map if corpus_map is not None else load_tenant_corpus_map()
     if table:

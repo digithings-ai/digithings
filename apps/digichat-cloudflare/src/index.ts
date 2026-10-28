@@ -5,7 +5,9 @@
  *
  * Website paths (different chats, same Container):
  *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
- *   digithings.ai/chat/occ  → Pages iframe → /embed?host=occ.digithings.ai
+ *   digithings.ai/chat/occ  → invite gate (this Worker) → the app's /chat/embed,
+ *                             OCC tenant; its /chat/api/* calls are bound to the
+ *                             invite here too (see bindOccApiCall)
  */
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
@@ -20,7 +22,16 @@ import {
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
-import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
+import {
+  bindOccApiCall,
+  isChatApiPath,
+  isOccShellPath,
+  occEmbedGate,
+  occGate,
+  occInviteMaxAgeSeconds,
+  type OccCookiePolicy,
+  withoutInviteCookie,
+} from "./occ-gate";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import {
@@ -105,11 +116,10 @@ export class DigiChatContainer extends Container {
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
-    // The chat's own MCP identity (digikey API key). Without this the container
-    // falls back to the BFF session, which is tenant-scoped: the house tenant
-    // mints, and any other tenant (OCC, trials) gets no token, so every
-    // `authScheme: jwt` server is dropped for it. Forwarding it is what makes
-    // the identity tenant-independent.
+    // The chat's API-key MCP identity (digikey). The container mints edge
+    // tokens from the BFF session first, because that token names the turn's
+    // tenant; this key is only the fallback for a deployment without
+    // DIGIKEY_BFF_TOKEN (its token carries the key's own tenant).
     DIGICHAT_MCP_IDENTITY_KEY: workerVars.DIGICHAT_MCP_IDENTITY_KEY ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
@@ -253,10 +263,23 @@ export class DigiChatContainer extends Container {
   }
 }
 
+/** The `occ_invite` cookie lifetime from the non-secret var (default 30 days). */
+function occCookiePolicy(env: Env): OccCookiePolicy {
+  return { maxAgeSeconds: occInviteMaxAgeSeconds(env.OCC_INVITE_MAX_AGE_DAYS) };
+}
+
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
-  /** DIG-1210 invite key gating the /chat/occ Pages shell. Worker-only. */
+  /**
+   * DIG-1210 invite key gating /chat/occ and binding the OCC page's
+   * /chat/api/* calls to the invite. Worker-only; never forwarded.
+   */
   OCC_INVITE_KEY?: string;
+  /**
+   * Non-secret: how many days an `occ_invite` cookie is honoured after the
+   * invite link set it (whole days, 1-365; default 30). Worker-only.
+   */
+  OCC_INVITE_MAX_AGE_DAYS?: string;
   /**
    * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
    * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
@@ -314,8 +337,30 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    // Computed before the invite gate because /chat/occ is served by the same
+    // container as /chat: the gate validates, then proxies there. The id is
+    // derived from the deploy's rev, never hand-pinned.
+    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
     if (isOccShellPath(url.pathname)) {
-      return occGate(request, workerEnv.OCC_INVITE_KEY);
+      // One gate, one secret, one path: the invite is checked here and the
+      // request goes to the container's own embed route. Nothing is fetched
+      // from this Worker's own URL, and Pages is not in the chain.
+      //
+      // The upstream is wrapped exactly like the /chat proxy above, so a
+      // draining slot or a dropped connection on this path answers the same
+      // retryable 503 / inline HTML `/chat` answers, instead of a raw 5xx.
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return occGate(
+        request,
+        workerEnv.OCC_INVITE_KEY,
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
+      );
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
@@ -323,9 +368,7 @@ export default {
     if (embedGate) return embedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
-    // it destroys is the same derived id the proxy below addresses, computed
-    // once here from the deploy's rev.
-    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
+    // it destroys is the same derived id the proxy below addresses.
     if (url.pathname === DIGICHAT_ADMIN_RESET_PATH) {
       return digichatContainerReset(
         request,
@@ -405,6 +448,22 @@ export default {
     // routes are moved under it and the canonical /chat paths are passed
     // through unchanged.
     const containerRequest = withContainerPath(request, url.pathname);
+    // DIG-3585: the OCC page's API calls. After the invite link's 302 the
+    // browser holds the invite only as the occ_invite cookie, so the edge is
+    // what makes a /chat/api/* call from /chat/occ an OCC call — and the only
+    // thing that can: the client's own tenant headers are dropped on those
+    // calls, and a house page's calls are never upgraded by the cookie.
+    // Judged on the path the container sees, so a legacy /api/* alias is bound
+    // the same way as its /chat/api/* target.
+    if (isChatApiPath(new URL(containerRequest.url).pathname)) {
+      await bindOccApiCall(
+        containerRequest,
+        workerEnv.OCC_INVITE_KEY,
+        occCookiePolicy(workerEnv),
+      );
+    }
+    // The invite cookie stops at the edge on every path, like the edge key.
+    withoutInviteCookie(containerRequest.headers);
     // The edge key stops at the edge: the container never sees it. The header
     // is dropped from the COPY, so the original request still carries it.
     containerRequest.headers.delete(MCP_KEY_HEADER);

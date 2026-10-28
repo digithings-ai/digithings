@@ -33,28 +33,27 @@ A **bearer capability, not authentication** — the same model as a Stripe publi
 iframe `src`. It says "this embed was provisioned by us", not "this caller is staff". It is not
 issued per user, has no expiry of its own, and cannot be attributed to a person.
 
-- **Lives in three production copies, and two of them are gates** (the Keychain custody copy and
-  the local host secret store hold it too — see [Custody](#custody)):
+- **Lives in two production copies** (the Keychain custody copy and the local host secret store
+  hold it too — see [Custody](#custody)):
   1. the `token` field of the `occ.digithings.ai` entry inside the digichat Worker secret
-     `DIGICHAT_EMBED_TENANTS` (`apps/digichat-cloudflare/src/index.ts:207`) — the registry copy the
-     Container reads;
-  2. the digichat Worker secret `OCC_INVITE_KEY` (`apps/digichat-cloudflare/src/index.ts:188`,
-     documented in `apps/digichat-cloudflare/wrangler.toml:125` as "Worker-only /chat/occ gate;
-     never forwarded to the container"), which the route gate compares at
-     `apps/digichat-cloudflare/src/index.ts:245`. Since 2.6.8 the same copy also gates
-     `/embed?host=occ.digithings.ai` (`occEmbedGate`): a request without the key gets the site
-     404 at the Worker. The gate keys on the embed **surface**, not on one path spelling, so it
-     covers every route that renders the embed shell: `/embed`, `/chat/embed` (the base-path
-     spelling the app is served under since DIG-5121) and `/chat/?mode=embed`. With this secret
-     unset the OCC embed fails closed at the Worker, and a value that differs from copy 1 404s
-     every invited embed, so rotate both together;
-  3. the Cloudflare Pages secret `OCC_INVITE_KEY` on project `digithings-ai`, which the `/chat/occ`
-     shell gate compares (`apps/digithings-web/functions/chat/occ/[[path]].ts:25`).
+     `DIGICHAT_EMBED_TENANTS` — the registry copy the Container reads;
+  2. the digichat Worker secret `OCC_INVITE_KEY`, which the edge gates compare: `/chat/occ`
+     (`occGate`) and `/embed?host=occ.digithings.ai` (`occEmbedGate`). A request without the key
+     gets the site 404 at the Worker. The gate keys on the embed **surface**, not on one path
+     spelling, so it covers every route that renders the embed shell: `/embed`, `/chat/embed`
+     (the base-path spelling the app is served under since DIG-5121) and `/chat/?mode=embed`.
+     With this secret unset the OCC surface fails closed at the Worker, and a value that differs
+     from copy 1 404s every invited request, so rotate both together.
+
+  Until 2026-10-27 there was a **third** copy: the Cloudflare Pages secret on project
+  `digithings-ai`, compared by a Pages twin gate for the `/chat/occ` shell. That shell and its
+  twin gate were removed when `/chat/occ` moved into the app, and the Pages secret is no longer
+  read by anything. Delete it on the next rotation; do not maintain it.
 
   The registry field is **required** by the registry validator
-  (`apps/digichat/src/lib/embed-tenants.ts:570`), so it cannot simply be omitted. **All three
-  production copies must hold the same value**: a one-sided change opens the shell and refuses the
-  tenant, or the tenant admits the caller and the shell answers 404. A rotation must also refresh
+  (`apps/digichat/src/lib/embed-tenants.ts:570`), so it cannot simply be omitted. **Both
+  production copies must hold the same value**: a one-sided change opens the gate and refuses the
+  tenant, or the tenant admits the caller and the gate answers 404. A rotation must also refresh
   the Keychain custody copy and the local host secret store, or the next
   [restore](#custody) reinstalls a dead key as the sanctioned copy.
 - The 404 the gate answers is the **site's own** 404, passed through untouched (`siteNotFound` in
@@ -62,10 +61,35 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   does not exist — same status, same headers, same body. Do not "fix" it by adding
   `cache-control: no-store` or any other marker: that would make the gated address
   distinguishable from a plain 404.
-- **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`, read once
-  in a mount effect (`apps/digithings-web/lib/inviteToken.ts`, only because
-  `app/chat/occ/page.tsx` sets `acceptsInviteToken`), and forwarded to digichat as the
-  `X-Embed-Token` request header.
+- **Entered by the browser as** `?token=<key>` on `https://digithings.ai/chat/occ`. The Worker
+  validates it, answers a 302 to the tokenless page URL `/chat/occ/` (trailing slash) with the `occ_invite` session cookie
+  (HttpOnly, Secure, SameSite=Strict, Path=/chat), moves the key to the `X-Embed-Token` request
+  header and drops `?token=` before proxying to the Container's `/chat/embed` route. The key never
+  reaches the Container URL, the HTML or the flight payload, and the cookie itself is stripped
+  before any request reaches the Container.
+- **The page's API calls** (`/chat/api/*`) carry no key of their own: the browser sends the
+  `/chat`-scoped cookie and the Worker (`bindOccApiCall` in `occ-gate.ts`) sets `X-Embed-Token`
+  and `X-Embed-Host: occ.digithings.ai` only when that cookie is valid **and** the Referer is the
+  `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent),
+  and, when the browser sends them, `Sec-Fetch-Site` is `same-origin` and `Origin` is ours.
+  The Referer check only tells an OCC call from a house one. Same-origin script can set
+  any same-origin referrer, so the HttpOnly cookie is the actual boundary.
+- **The cookie is not the key, and it expires.** It holds `v2.<issued-at>.<mac>`, where
+  `<issued-at>` is unix seconds and `<mac>` is `HMAC-SHA256(key, "digichat/occ_invite/v2|<issued-at>")`
+  (base64url), checked in constant time. A leaked cookie does not work as `?token=`.
+  - **Max age:** the Worker refuses a cookie older than `OCC_INVITE_MAX_AGE_DAYS` (a non-secret
+    `[vars]` entry in `apps/digichat-cloudflare/wrangler.toml`, whole days 1-365, default 30;
+    an invalid value falls back to 30 and a larger one is capped at 365). An issued-at more than
+    five minutes in the future is refused too. The cookie itself carries no `Max-Age`, so the
+    browser still drops it with the session.
+  - **Renewal:** only a valid `?token=` hit issues a new cookie (fresh issued-at). A page load
+    with the cookie re-sets the same value and never extends it.
+  - **Refusal:** an expired, tampered (issued-at or MAC), old-format (v1) or raw-key cookie gets
+    the site 404 on `/chat/occ`, and an API call carrying one is not bound to the OCC tenant.
+  - **Rotation:** rotating the key retires every cookie, so open browsers need the new link.
+  From that page the client's own `X-Embed-Token` / `X-Embed-Host` are always dropped, and a
+  client-sent `X-Digi-Tenant` is dropped on every `/chat/api/*` call. A house page's calls are
+  never upgraded by the cookie.
 - **Compared with** `tokenMatches` in `apps/digichat/src/lib/embed-chat-tenant.ts:87`.
 - **Not authentication** means: it must be treated as revocable-but-shareable. Anyone holding it
   reaches the OCC tenant. There is no second factor, no per-user identity and no audit trail of
@@ -81,7 +105,7 @@ risk `R19`) and the paragraph in `docs/repo-split/secrets-access-inventory.md`.
 |---|---|---|
 | **sanctioned custody copy** | macOS Keychain, service `digithings.occ-invite-key`, account `DIG-1474` | Security, on Chris's Mac |
 | local host secret store | `~/.config/digithings/secrets/consolidated.env` and `~/.config/digithings/secrets/digichat-embed-tenants.deploy.json` (mode 600) | the seat that composes the registry, on Chris's Mac |
-| production copies | Worker secret `OCC_INVITE_KEY`, Pages secret `OCC_INVITE_KEY`, the OCC `token` in `DIGICHAT_EMBED_TENANTS` | write-only; nobody can read them back |
+| production copies | Worker secret `OCC_INVITE_KEY`, the OCC `token` in `DIGICHAT_EMBED_TENANTS` | write-only; nobody can read them back |
 
 The host store path `digichat-embed-tenants.deploy.json` is the one the repo knows:
 `scripts/digichat_tenant_registry.py:222-224` reads it as the default `--live-from`, and
@@ -276,14 +300,8 @@ is **not** discoverable from the client projection, i.e. the browser is not give
      | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OCC_INVITE_KEY
    ```
 
-   ```bash
-   # c) the Pages gate secret (project digithings-ai)
-   (cd apps/digithings-web && printf '%s' "$OCC_INVITE_KEY" \
-     | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 pages secret put OCC_INVITE_KEY --project-name digithings-ai)
-   ```
-
-   `scripts/build-digithings.sh:157` puts the same secret at build time; a manual rotation uses
-   the command above.
+   There is no third copy to update: the Pages secret and its twin gate were removed with the
+   2026-10-27 consolidation. If one still exists on the Pages project, delete it.
 
    The **KV copy carries no value to change**: the OCC entry in `embed-tenants` holds the
    credential *reference* `tokenEnv: "OCC_INVITE_KEY"`, which the Worker resolves from the Worker
@@ -378,15 +396,17 @@ of this table is `apps/digichat/src/lib/embed-occ-invite-key.test.ts`.
 
 One check the script cannot do: that a **staff user** gets a working chat session at
 `https://digithings.ai/chat/occ?token=<key>` — a real message round-trip. That is a browser step
-and it is the only proof that the whole chain (Pages route → `readInviteToken` → `X-Embed-Token`
-→ digichat → Container → model) works end to end. When it is run, do it by hand, once, and
-record the outcome in [Rotation log](SECRETS_ROTATION.md#rotation-log).
+and it is the only proof that the whole chain (Worker `occGate` → `/chat/embed` +
+`X-Embed-Token` → Container → model) works end to end. `scripts/smoke_occ_invite_gate.sh` covers
+the HTTP half when `OCC_INVITE_KEY` is set; the message round-trip stays manual. When it is run,
+do it by hand, once, and record the outcome in
+[Rotation log](SECRETS_ROTATION.md#rotation-log).
 
 **Browser check — closed by decision on 2026-10-21 (this file updated 2026-10-22).** On 2026-10-21
 Chris answered the DIG-4810 card with *the machine proof is enough* (card `9cbd759c`), so the OCC
 end-to-end proof stands on the machine half: `scripts/verify_occ_invite_key.sh` with `EXPECT_B2=1` →
-PASS 7/7, and the Pages gate answering 308 → `/chat/occ/` → **200** on
-`GET /chat/occ?token=<key>`. The step above stays the way to prove the chain end to end for a
+PASS 7/7, and the Worker gate answering **200** on `GET /chat/occ?token=<key>` with the chat
+served directly (no iframe). The step above stays the way to prove the chain end to end for a
 person, and a future rotation should still run it — but it is not outstanding on DIG-4810.
 
 **A person does this step, not an agent.** The key rides in the URL, so an agent driving the
@@ -408,9 +428,7 @@ printf '%s' "$JSON" \
   | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_EMBED_TENANTS
 printf '%s' "$OCC_INVITE_KEY" \
   | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OCC_INVITE_KEY
-# and the Pages gate secret
-(cd apps/digithings-web && printf '%s' "$OCC_INVITE_KEY" \
-  | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 pages secret put OCC_INVITE_KEY --project-name digithings-ai)
+# no Pages secret: it was removed with the Pages shell on 2026-10-27
 # the two local copies: the custody copy and the host store the next restore reads
 security add-generic-password -U -s digithings.occ-invite-key -a DIG-1474 \
   -l "digithings occ-invite-key" -w          # paste the new value at the echo-off prompt
@@ -440,13 +458,26 @@ and live customer PII anyway.
 
 ## Known limits
 
-- **The key travels in a URL query string** and `apps/digithings-web` never strips it — there is
-  no `history.replaceState` anywhere in that app. It therefore stays in browser history and in the
-  Cloudflare zone's request log for that page load. `Referrer-Policy: no-referrer` on
-  `/chat/occ*` (`apps/digithings-web/public/_headers:27-29`, live since DIG-1210) stops it being
-  carried onward to anything else, and `/chat/occ*` is served by Cloudflare Pages, which has no
-  `[observability]` block, so it is not in Workers log metadata. Fixing the history leak is a
-  separate change — it alters user-facing behaviour, which is outside Act B1's scope.
+- **The key travels in a URL query string on the very first hop only.** The Worker answers
+  `?token=<key>` with a 302 to the same URL with `token` removed, plus the `occ_invite` cookie, so
+  the browser's address bar and history never keep it. The follow-up request is authenticated by
+  the cookie; the Worker then removes the query token, moves the key to `x-embed-token` and drops
+  it before proxying, so it does not reach the app's render or its HTML.
+  The Worker reads the key out of its own request URL, and it answers the 302 before any app code
+  runs: nothing in the Worker logs the URL (`index.test.ts` pins that a token hit produces no
+  console output and never reaches the container). The platform's own **invocation log** does
+  record the request URL, and the digichat Worker keeps Workers Logs on
+  (`[observability] enabled = true` in `apps/digichat-cloudflare/wrangler.toml`), so the Worker
+  also sets `redact_query_string = true` there: query strings are dropped from its logs and
+  traces, for `/chat/occ?token=` and the legacy `/embed?...&token=` door alike (pinned by
+  `occ-route.contract.test.ts`). This takes effect on the next Worker deploy; invocation logs
+  written before it may still hold a first-hop URL until Workers Logs retention (7 days) ages
+  them out. The legacy `/embed` door still passes its URL to the container, whose app does not
+  log request URLs. One limit remains: the `Referrer-Policy: no-referrer`
+  rule on `/chat/occ*` (`apps/digithings-web/public/_headers:27-29`) no longer applies: the
+  response is now the container's, whose baked policy is `strict-origin-when-cross-origin`
+  (`apps/digichat/src/lib/security-headers-bake.ts:40`), which strips the query for cross-origin
+  requests and keeps it only for same-origin ones.
 - **No analytics surface exists to leak into.** `apps/digithings-web` contains no beacon, tag or
   analytics client of any kind, and the only `console` output on the embed-tenant path prints
   **host names**, never tokens (`apps/digichat/src/lib/embed-tenants.ts:791`).
@@ -517,6 +548,6 @@ A rotation is Act B1, but **Act B2 has since landed** (see [Status](#status--202
 the gate is already on, and `occ.digithings.ai` is not in `FIRST_PARTY_EMBED_HOSTS` any more
 (`apps/digichat/src/lib/embed-first-party.ts:4-8`). A rotation today therefore **revokes
 every outstanding invite link at once** — see [Revocation](#revocation--this-is-the-act-b2-rollback) —
-and it must replace the value in **all five places** — the legacy registry `token`, the Worker gate
-secret, the Pages gate secret, the Keychain custody copy and the local host secret store — or the
+and it must replace the value in **all four places** — the legacy registry `token`, the Worker gate
+secret, the Keychain custody copy and the local host secret store — or the
 chain breaks in one direction or the other, and the copies that were skipped keep a dead key.

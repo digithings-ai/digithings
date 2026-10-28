@@ -227,6 +227,15 @@ describe("digithings.ai — config/digithings.yaml equals today's house resoluti
     expect(actual.tokenEnv).toBe(expected.tokenEnv);
     expect(actual.tokenEnv).toBe("DIGICHAT_HOST_DIGITHINGS_AI_TOKEN");
   });
+
+  // DIG-5715: the house tool-call cap is 20 calls per turn. It lives in
+  // `config/defaults.yaml` and is repeated in `config/digithings.yaml`; pin the
+  // resolved number so a later edit cannot quietly restore the old 5. The live
+  // KV `config-yaml` still carries 5 until the operator write in DIG-5715, so
+  // `guardrails` stays out of the doc-to-live comparison above on purpose.
+  it("keeps the house tool-call cap at 20 calls per turn", () => {
+    expect(actual.guardrails?.maxToolCallsPerTurn).toBe(20);
+  });
 });
 
 describe("occ.digithings.ai — config/occ.yaml equals today's live tenant", () => {

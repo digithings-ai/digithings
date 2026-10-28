@@ -43,10 +43,12 @@ class DigiAuthContext(BaseModel):
     tenant_slug: str = ""
     tenant_slug_verified: bool = False
     """True only when tenant_slug came from the decoded, signature-verified JWT
-    claim. False when empty, or when filled in from the unsigned X-Digi-Tenant /
-    X-Digichat-Tenant header fallback (see service_middleware.jwt_context).
-    Consumers doing real tenant *authorization* (not just routing/logging) must
-    check this before trusting tenant_slug. See #2303."""
+    claim. False when empty. service_middleware.jwt_context no longer fills
+    tenant_slug from the unsigned X-Digi-Tenant / X-Digichat-Tenant headers
+    (#2303, DIG-3585), so a non-empty tenant_slug from the middleware is always
+    verified; consumers doing real tenant *authorization* (not just
+    routing/logging) still check this flag, so a context built any other way
+    cannot be trusted by accident."""
     project_id: str | None = None
     project_config_ref: str | None = None
     profile_id: str | None = None

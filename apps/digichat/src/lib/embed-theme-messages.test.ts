@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   THEME_MESSAGE_TYPE,
   MAX_THEME_AGE_MS,
+  parseEmbedPaletteParam,
   parseEmbedThemeParam,
   buildThemeMessage,
   parseThemeMessage,
@@ -270,6 +271,25 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(resolveEmbedTheme({ pick: null, parent: null, url: null, tenant: undefined })).toBe(
       "dark",
     );
+    // A top-level site document beats the tenant default. A pin (no site) does not.
+    expect(
+      resolveEmbedTheme({
+        pick: null,
+        parent: null,
+        url: null,
+        tenant: "light",
+        site: "dark",
+      }),
+    ).toBe("dark");
+    expect(
+      resolveEmbedTheme({
+        pick: null,
+        parent: null,
+        url: "light",
+        tenant: "dark",
+        site: "dark",
+      }),
+    ).toBe("light");
     // Dropping the pick (/theme auto) returns to the tenant theme.
     expect(
       resolveEmbedTheme({
@@ -281,6 +301,14 @@ describe("embed /theme pick (2.6.6)", () => {
     ).toBe("light");
   });
 
+  it("reads ?palette= only when it is the default or a registry id", () => {
+    expect(parseEmbedPaletteParam(null)).toBeNull();
+    expect(parseEmbedPaletteParam("")).toBeNull();
+    expect(parseEmbedPaletteParam("nope")).toBeNull();
+    expect(parseEmbedPaletteParam("default")).toBe("default");
+    expect(parseEmbedPaletteParam("Dracula")).toBe("dracula");
+  });
+
   it("resolves the one palette channel: pick > parent > default", () => {
     const pick = { mode: "dark" as const, palette: "aura" as const };
     expect(resolveEmbedPalette({ pick, parent: "nord" })).toBe("aura");
@@ -289,6 +317,21 @@ describe("embed /theme pick (2.6.6)", () => {
     // A default-palette pick still beats the parent, so /theme "default" works.
     expect(
       resolveEmbedPalette({ pick: { mode: "dark", palette: "default" }, parent: "nord" }),
+    ).toBe("default");
+    // No parent message yet: the URL, then the site document, can still paint.
+    expect(
+      resolveEmbedPalette({ pick: null, parent: null, url: "dracula", site: "nord" }),
+    ).toBe("dracula");
+    expect(resolveEmbedPalette({ pick: null, parent: null, site: "nord" })).toBe("nord");
+    // A parent message that names no palette clears back to the default look.
+    expect(
+      resolveEmbedPalette({
+        pick: null,
+        parent: null,
+        parentSeen: true,
+        url: "dracula",
+        site: "nord",
+      }),
     ).toBe("default");
   });
 

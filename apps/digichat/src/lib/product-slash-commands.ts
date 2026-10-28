@@ -4,6 +4,11 @@
  */
 
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
+
+/** Slash row plus the current setting the palette draws on the right. */
+export type ProductSlashCommand = Unstable_SlashCommand & {
+  value?: string;
+};
 import {
   commandOpensPane,
   isEffortCode,
@@ -86,6 +91,23 @@ export function setPrivateMode(on: boolean): void {
 
 export function togglePrivateMode(): void {
   setPrivateMode(!privateMode);
+}
+
+/**
+ * Seed the session from the tenant opt-in and `?private=1`.
+ *
+ * Availability is applied first: a tenant that did not opt in cannot enter,
+ * and turning availability off clears a live flag. The URL only turns the
+ * mode on. `/private` is what turns it off again.
+ */
+export function seedPrivateMode(opts: { tenantOptIn: boolean; urlPrivate: boolean }): void {
+  setPrivateModeAvailable(opts.tenantOptIn);
+  if (opts.urlPrivate && opts.tenantOptIn) setPrivateMode(true);
+}
+
+/** The header both chat transports set while private mode is on. Exact value `1`. */
+export function privateModeHeaderEntries(on: boolean): readonly [name: string, value: string] | null {
+  return on ? ["X-Digi-Private", "1"] : null;
 }
 
 /** `useSyncExternalStore` subscription for the embed's session state. */
@@ -222,26 +244,18 @@ export function applyThemePick(api: EmbedChatPrefsApi, preference: ThemePreferen
   else applyDocumentTheme(preference, palette);
 }
 
-function toggleHint(on: boolean, onText: string, offText: string): string {
-  return on ? `On · ${onText}` : `Off · ${offText}`;
-}
-
-/** Friendly /models hint. Preset tokens stay words; a concrete pick stays its id. */
-function modelChoiceLabel(model: string | undefined): string {
+/** Raw model id. Empty and the auto preset both read `auto`. */
+function modelChoiceValue(model: string | undefined): string {
   const value = model?.trim() ?? "";
-  if (!value) return "";
-  if (value === "auto" || value === "preset:auto") return "Auto";
-  if (value.startsWith("preset:")) {
-    const id = value.slice("preset:".length);
-    return id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
-  }
+  if (!value || value === "auto" || value === "preset:auto") return "auto";
+  if (value.startsWith("preset:")) return value.slice("preset:".length);
   return value;
 }
 
 /** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
-): Unstable_SlashCommand[] {
+): ProductSlashCommand[] {
   return FEATURED_LANGUAGE_CODES.map((code) => {
     const label = languageLabel(code);
     return {
@@ -253,11 +267,11 @@ export function featuredLanguageCommands(
   });
 }
 
-export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
+export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashCommand[] {
   const vis = visibilityFromPrefs(api);
   const { prefs } = api;
   const extra = extraSlashDefs(api);
-  const rows: Unstable_SlashCommand[] = [];
+  const rows: ProductSlashCommand[] = [];
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
     if (def.id === "search-engine" && !vis.webSearch) continue;
@@ -268,31 +282,27 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if (def.id === "mcp" && vis.mcp === false) continue;
     if (def.id === "tools" && vis.tools === false) continue;
     if (def.id === "theme" && vis.theme === false) continue;
+    if (def.id === "private" && !isPrivateModeAvailable()) continue;
 
-    let description = def.hint;
-    if (def.id === "view") {
-      description = `View: ${prefs.view}`;
-    } else if (def.id === "density") {
-      description = `Density: ${prefs.density}`;
-    } else if (def.id === "theme") {
+    // The sentence stays the description. The right-hand column is the
+    // current setting, so opening the palette reads the session at a glance.
+    const description = def.hint;
+    let value = "";
+    if (def.id === "view") value = prefs.view;
+    else if (def.id === "density") value = prefs.density;
+    else if (def.id === "theme") {
       const state = currentThemeState(api);
-      description = matchThemeStep(state.preference, state.palette, state.resolved).label;
-    } else if (def.id === "thinking") {
-      description = `Thinking: ${prefs.thinking}`;
-    } else if (def.id === "lang") {
-      description = `Reply language (${languageLabel(prefs.language)})`;
-    } else if (def.id === "models") {
-      description = modelChoiceLabel(prefs.model) || def.hint;
-    } else if (def.id === "toolbar") {
-      description = toggleHint(prefs.toolbar, "visible", "hidden");
-    } else if (def.id === "scrollbar") {
-      description = prefs.scrollbars === "always" ? "always visible" : "on scroll";
-    } else if (def.id === "effort") {
-      description = prefs.effort || "medium";
-    } else if (def.id === "search-engine") {
-      description = prefs.searchEngine || "auto";
-    } else if (def.id === "export") {
-      description = "Markdown file of this thread";
+      value = matchThemeStep(state.preference, state.palette, state.resolved).label;
+    } else if (def.id === "thinking") value = prefs.thinking;
+    else if (def.id === "lang") value = prefs.language;
+    else if (def.id === "models") value = modelChoiceValue(prefs.model);
+    else if (def.id === "toolbar") value = prefs.toolbar ? "on" : "off";
+    else if (def.id === "scrollbar") value = prefs.scrollbars === "always" ? "always" : "auto";
+    else if (def.id === "effort") value = prefs.effort || "medium";
+    else if (def.id === "search-engine") value = prefs.searchEngine || "auto";
+    else if (def.id === "private") value = isPrivateMode() ? "on" : "off";
+    else if (def.id === "tools" && api.tenantAllowsWeb) {
+      value = prefs.webSearch ? "on" : "off";
     }
 
     const id = def.id === "lang" ? "language" : def.id;
@@ -301,6 +311,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       id,
       label: insertName,
       description,
+      ...(value ? { value } : {}),
       execute: () => {
         executeSlashDef(def, "", api);
       },
@@ -309,13 +320,14 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       rows.push({
         id: "export-html",
         label: "/export html",
-        description: "Rendered HTML of this chat",
+        description: "Download this chat as HTML.",
         execute: () => {},
       });
     }
   }
 
   rows.push(...featuredLanguageCommands(api.setLanguage));
+  rememberSlashValues(rows);
   return rows;
 }
 
@@ -523,6 +535,21 @@ type SlashAdapterLike = {
   categoryItems?: (categoryId: string) => readonly unknown[];
 };
 
+/**
+ * Current values for the `/` typeahead. The assistant-ui adapter copies
+ * label and description only, so the palette's value column would be empty
+ * there. `buildProductSlashCommands` records the values; the prefix adapter
+ * puts them back on each row as `metadata.value`.
+ */
+const slashValueById = new Map<string, string>();
+
+function rememberSlashValues(rows: readonly ProductSlashCommand[]): void {
+  slashValueById.clear();
+  for (const row of rows) {
+    if (row.value) slashValueById.set(row.id, row.value);
+  }
+}
+
 /** Prefix-match only — no category folders, so `/` is a navigable item list. */
 export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
   return {
@@ -531,7 +558,14 @@ export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
     categoryItems: () => [],
     search: (query: string) => {
       const raw = inner.search?.(query) ?? [];
-      return raw.filter((item) => slashItemPrefixMatch(item, query));
+      return raw
+        .filter((item) => slashItemPrefixMatch(item, query))
+        .map((item) => {
+          const value = slashValueById.get(item.id);
+          if (!value) return item;
+          const metadata = (item as { metadata?: Record<string, unknown> }).metadata;
+          return { ...item, metadata: { ...metadata, value } };
+        });
     },
   } as T;
 }

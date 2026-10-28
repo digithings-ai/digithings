@@ -13,9 +13,9 @@
  * reads that header and forwards to the compose service.
  *
  * Contract:
- * - Resolution is keyed on (className, containerPort), never on port alone.
- *   `DigiChatContainer` and `LangfuseWebContainer` both default to 3000, so a
- *   port-only table would be ambiguous.
+ * - Resolution is keyed on (className, containerPort), never on port alone: the
+ *   same container port means different services per class, so a port-only
+ *   table would be ambiguous.
  * - An unmapped (class, port) returns HTTP 503 naming the class, the port and
  *   the compose service that must be added. It never hangs and never throws an
  *   opaque 500.
@@ -94,16 +94,6 @@ export const SELF_HOST_CLASSES: Readonly<
 		ports: {},
 		neededService: "digiquant-runner",
 		note: "infra/docker/Dockerfile.digiquant-runner exposes 8080 in-container; compose publishes no 8080.",
-	},
-	LangfuseWebContainer: {
-		ports: {},
-		neededService: "digitrace-langfuse-web",
-		note: "apps/digitrace-langfuse/docker-compose.local.yml has only clickhouse and redis.",
-	},
-	LangfuseWorkerContainer: {
-		ports: {},
-		neededService: "digitrace-langfuse-worker",
-		note: "No compose service; the worker has no public HTTP surface in prod either.",
 	},
 };
 

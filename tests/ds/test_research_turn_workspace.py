@@ -26,7 +26,7 @@ def client() -> TestClient:
 
 @pytest.mark.unit
 def test_run_research_turn_scopes_to_workspace() -> None:
-    idx = "__agent_turn_ws__"
+    idx = "agent_turn_ws"
     add_chunks(
         idx,
         [
@@ -61,7 +61,7 @@ def test_run_research_turn_scopes_to_workspace() -> None:
 
 @pytest.mark.unit
 def test_api_v1_research_turn_scopes_to_workspace(client: TestClient) -> None:
-    idx = "__agent_http_ws__"
+    idx = "agent_http_ws"
     add_chunks(
         idx,
         [

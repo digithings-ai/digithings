@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
+import {
+  bindOccApiCall,
+  occInviteCookieValue,
+} from "../../../../../digichat-cloudflare/src/occ-gate";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 
 vi.mock("@/lib/request-auth", () => ({
@@ -278,6 +282,31 @@ vi.mocked(createFoundryStreamResponse).mockClear();
 
       expect(res.status).toBe(503);
       expect(await res.json()).toMatchObject({ error: "embed_disabled" });
+    });
+
+    it("needs the install token on a non-embed call to a tokened single install (DIG-3585)", async () => {
+      // A single-install client container: a YAML `deployment`, no hosts map.
+      // A call without X-Embed-Host and without an /embed Referer used to be
+      // served anonymously whatever the install token said.
+      process.env.DIGICHAT_CONFIG_YAML = "version: 1\n";
+      setDigichatConfigForTests(
+        parseDigichatConfig({
+          version: 1,
+          deployment: {
+            slug: "client-install",
+            backend: { type: "digigraph" },
+            token: "install-secret",
+          },
+        }),
+      );
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(streamText).mockClear();
+
+      expect((await POST(chatRequest({}))).status).toBe(401);
+      expect((await POST(chatRequest({ "x-embed-token": "wrong" }))).status).toBe(401);
+      expect(vi.mocked(streamText)).not.toHaveBeenCalled();
+      const ok = await POST(chatRequest({ "x-embed-token": "install-secret" }));
+      expect(ok.status).toBe(200);
     });
 
     it("leaves the authenticated branch on the session tenant", async () => {
@@ -2035,6 +2064,23 @@ vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   it("passes maxToolCalls from the foundry backend to the adapter", async () => {
+    // The shared `guardrails` key wins over this Foundry alias, so resolve a
+    // deployment that sets only the alias. House defaults set the shared key.
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        hosts: {
+          "foundry-tenant.digithings.ai": {
+            slug: "foundry-tenant",
+            backend: {
+              type: "foundry",
+              projectEndpoint: "https://x/",
+              agentName: "fixture-agent",
+            },
+          },
+        },
+      }),
+    );
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "foundry-tenant",
       ownerUserSub: "embed:anonymous",
@@ -2072,6 +2118,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     };
     expect(call?.maxToolCalls).toBe(5);
     expect(call && "guard" in call).toBe(true);
+    resetDigichatConfigForTests();
   });
 
   it.each([
@@ -3312,6 +3359,192 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     });
   });
 
+  describe("DIG-3585: the OCC page's turn is OCC only through the edge-bound invite cookie", () => {
+    // These drive the real embed tenant resolution with a request shaped the
+    // way the digichat Worker hands it to the container: the browser on
+    // /chat/occ holds the invite only as the occ_invite cookie (no ?token=,
+    // no ?host= in its URL), and the Worker's bindOccApiCall decides — from
+    // the cookie AND the Referer — whether the call is the OCC tenant's.
+    const OCC_HOST = "occ.digithings.ai";
+    /** A test fixture, not a credential. */
+    const INVITE = "occ-invite-fixture-not-a-secret";
+    const OCC_PAGE = "https://digithings.ai/chat/occ";
+
+    function installOcc(): void {
+      setDigichatConfigForTests(
+        loadDigichatConfig({
+          fileContents: [
+            "version: 1",
+            "hosts:",
+            `  ${OCC_HOST}:`,
+            "    slug: occ",
+            `    token: ${INVITE}`,
+            "    backend:",
+            "      type: digigraph",
+            '      digisearchIndex: "tenant_help,tenant-tickets"',
+            "      vaultPathPrefix: clients/occ-fixture",
+            "",
+          ].join("\n"),
+          env: {
+            DIGICHAT_EMBED_TENANTS: JSON.stringify({
+              [OCC_HOST]: {
+                slug: "occ",
+                token: INVITE,
+                gateMode: "ungated",
+                backend: {
+                  type: "digigraph",
+                  digisearchIndex: "tenant_help,tenant-tickets",
+                  vaultPathPrefix: "clients/occ-fixture",
+                },
+              },
+            }),
+          },
+        }),
+      );
+    }
+
+    /** What the browser on a page sends, before the edge touches it. */
+    function browserTurn(referer: string, headers: Record<string, string> = {}): Request {
+      return new Request("https://digithings.ai/chat/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          referer,
+          origin: "https://digithings.ai",
+          // The client's own guess at its host when the URL names none.
+          "x-embed-host": "https://digithings.ai",
+          ...headers,
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    /** The same turn after the Worker's edge binding. */
+    async function throughEdge(req: Request): Promise<Request> {
+      await bindOccApiCall(req, INVITE);
+      return req;
+    }
+
+    /** The cookie the edge set when the invite link was opened. */
+    let COOKIE = "";
+
+    function lastUpstreamHeaders(): Record<string, string> | undefined {
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as
+        | { headers?: Record<string, string> }
+        | undefined;
+      return call?.headers;
+    }
+
+    /** Never the OCC tenant, its corpus or its vault, whatever the status. */
+    async function expectNotOcc(res: Response): Promise<void> {
+      if (res.status !== 200) {
+        expect(res.status).toBeGreaterThanOrEqual(400);
+        expect(vi.mocked(streamText)).not.toHaveBeenCalled();
+        return;
+      }
+      const h = lastUpstreamHeaders() ?? {};
+      expect(h["X-Digi-Tenant"]).not.toBe("occ");
+      expect(h["X-Digi-Corpus-Index"] ?? "").not.toMatch(/occ/);
+      expect(h["X-Digi-Vault-Prefix"] ?? "").not.toMatch(/occ/);
+    }
+
+    beforeEach(async () => {
+      vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+      vi.mocked(streamText).mockClear();
+      installOcc();
+      COOKIE = await occInviteCookieValue(INVITE);
+    });
+
+    afterEach(() => {
+      resetDigichatConfigForTests();
+    });
+
+    it("resolves a cookie-only turn from /chat/occ to the OCC tenant", async () => {
+      const res = await POST(await throughEdge(browserTurn(OCC_PAGE, { cookie: `occ_invite=${COOKIE}` })));
+      expect(res.status).toBe(200);
+      const h = lastUpstreamHeaders();
+      expect(h?.["X-Digi-Tenant"]).toBe("occ");
+      expect(h?.["X-Digi-Corpus-Index"]).toBe("tenant_help,tenant-tickets");
+      expect(h?.["X-Digi-Vault-Prefix"]).toBe("clients/occ-fixture");
+    });
+
+    it("never resolves OCC from /chat/occ without the cookie", async () => {
+      await expectNotOcc(await POST(await throughEdge(browserTurn(OCC_PAGE))));
+    });
+
+    it("never resolves OCC from /chat/occ with a wrong cookie and forged headers", async () => {
+      await expectNotOcc(
+        await POST(
+          await throughEdge(
+            browserTurn(OCC_PAGE, {
+              cookie: "occ_invite=guess",
+              "x-embed-token": "guess",
+              "x-embed-host": `https://${OCC_HOST}`,
+              "x-digi-tenant": "occ",
+            }),
+          ),
+        ),
+      );
+    });
+
+    it("never upgrades a house turn that carries the cookie", async () => {
+      await expectNotOcc(
+        await POST(
+          await throughEdge(
+            browserTurn("https://digithings.ai/chat", {
+              cookie: `occ_invite=${COOKIE}`,
+              "x-digi-tenant": "occ",
+            }),
+          ),
+        ),
+      );
+    });
+
+    describe("a tokenless turn never selects the invite-only deployment", () => {
+      // The blocker the review found: with no token and no embed marker, the
+      // turn fell to resolveAnonymousDeploymentChat, which picked the
+      // deployment from Origin / X-Forwarded-Host and only checked
+      // `auth: anonymous`. Both the app path and the legacy alias are covered.
+      const PATHS = ["https://digithings.ai/chat/api/chat", "https://digithings.ai/api/chat"];
+      const FORMS: Array<[string, Record<string, string>]> = [
+        ["Origin", { origin: `https://${OCC_HOST}` }],
+        ["Referer", { referer: `https://${OCC_HOST}/` }],
+        ["X-Forwarded-Host", { "x-forwarded-host": OCC_HOST }],
+        ["Host", { host: OCC_HOST }],
+        [
+          "X-Forwarded-Host with a house Origin",
+          { origin: "https://digithings.ai", "x-forwarded-host": OCC_HOST },
+        ],
+      ];
+
+      function directTurn(url: string, headers: Record<string, string>): Request {
+        return new Request(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        });
+      }
+
+      for (const url of PATHS) {
+        for (const [name, headers] of FORMS) {
+          it(`refuses ${new URL(url).pathname} with only ${name}`, async () => {
+            const res = await POST(directTurn(url, headers));
+            await expectNotOcc(res);
+            expect(res.status).toBe(401);
+          });
+
+          it(`refuses ${new URL(url).pathname} with only ${name} after the edge`, async () => {
+            await expectNotOcc(await POST(await throughEdge(directTurn(url, headers))));
+          });
+        }
+      }
+    });
+  });
+
   describe("trace stream (the production default)", () => {
     // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
     // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`
@@ -3695,5 +3928,154 @@ describe("POST /api/chat limits", () => {
     expect(vi.mocked(streamText).mock.calls.length).toBe(streamCalls);
     expect(vi.mocked(createDigigraphTraceStreamResponse).mock.calls.length).toBe(traceCalls);
     expect(vi.mocked(createFoundryStreamResponse)).not.toHaveBeenCalled();
+  });
+
+  describe("private mode", () => {
+    const question = "What about Priya Nair at Initech?";
+    const toolPart = {
+      type: "tool-search",
+      toolCallId: "c1",
+      state: "output-available",
+      input: { q: "ACME-1" },
+      output: { id: "ACME-1", name: "John Smith" },
+    };
+    const body = {
+      messages: [
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ticket ACME-1 is John Smith" }, toolPart],
+        },
+        { id: "u1", role: "user", parts: [{ type: "text", text: question }] },
+      ],
+    };
+
+    function texts(messages: { role: string; parts?: { type: string; text?: string }[] }[]) {
+      return messages.map((message) => ({
+        role: message.role,
+        text: (message.parts ?? [])
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join(""),
+      }));
+    }
+
+    it("keeps the instruction off the typed text on the digigraph trace path and the legacy streamText path", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const traced = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digichat-trace": "1",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(traced.status).toBe(200);
+      const trace = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: {
+          id?: string;
+          role: string;
+          parts: { type: string; text?: string; output?: unknown }[];
+        }[];
+      };
+      const rows = texts(trace.messages);
+      expect(rows.at(-1)).toEqual({ role: "user", text: question });
+      expect(rows.at(-2)?.text).toContain("PRIVATE DEMO SESSION");
+      expect(rows.at(-2)?.text).not.toContain("Priya Nair");
+      expect(rows.at(-1)?.text).not.toContain("PRIVATE DEMO SESSION");
+      const assistant = trace.messages.find((message) => message.role === "assistant");
+      expect(assistant?.parts.find((part) => part.type === "tool-search")).toEqual(toolPart);
+
+      process.env.DIGICHAT_TRACE_UI = "0";
+      vi.mocked(streamText).mockClear();
+      const legacy = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-digi-private": "1" },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(legacy.status).toBe(200);
+      const legacyCall = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        messages: { role: string; parts?: { type: string; text?: string }[] }[];
+      };
+      const legacyRows = texts(legacyCall.messages);
+      expect(legacyRows.at(-1)).toEqual({ role: "user", text: question });
+      expect(legacyRows.some((row) => row.text.includes("PRIVATE DEMO SESSION"))).toBe(true);
+      expect(legacyRows.filter((row) => row.text.includes(question))).toEqual([
+        { role: "user", text: question },
+      ]);
+    });
+
+    it("does not add the instruction when the private header is absent or not 1", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      for (const header of [undefined, "0", "true"] as const) {
+        vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+        const headers: Record<string, string> = {
+          "content-type": "application/json",
+          "x-digichat-trace": "1",
+        };
+        if (header) headers["x-digi-private"] = header;
+        const res = await POST(
+          new Request("http://localhost/api/chat", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+          }),
+        );
+        expect(res.status).toBe(200);
+        const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+          messages: { parts?: { text?: string }[] }[];
+        };
+        const blob = JSON.stringify(call.messages);
+        expect(blob).not.toContain("PRIVATE DEMO SESSION");
+        expect(blob).toContain(question);
+      }
+    });
+
+    it("passes the separate instruction to Foundry and leaves the tool payload alone", async () => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "foundry-tenant",
+        ownerUserSub: "embed:anonymous",
+        embedConfig: {
+          slug: "foundry-tenant",
+          gateMode: "ungated",
+          theme: "light",
+          attribution: false,
+          token: "tok",
+          backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+          activityDetail: "full",
+        },
+      } as EmbedChatTenantContext);
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-embed-host": "https://foundry-tenant.digithings.ai",
+            "x-digi-private": "1",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: {
+          role: string;
+          parts: { type: string; text?: string; output?: unknown }[];
+        }[];
+      };
+      const rows = texts(call.messages);
+      expect(rows.at(-1)).toEqual({ role: "user", text: question });
+      expect(rows.at(-2)?.text).toBe(
+        rows.find((row) => row.text.includes("PRIVATE DEMO SESSION"))?.text,
+      );
+      expect(call.messages.find((message) => message.role === "assistant")?.parts).toContainEqual(
+        toolPart,
+      );
+    });
   });
 });

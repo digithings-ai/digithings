@@ -13,6 +13,8 @@ import {
   isPrivateMode,
   isPrivateModeAvailable,
   prefixSlashAdapter,
+  privateModeHeaderEntries,
+  seedPrivateMode,
   setPrivateMode,
   setPrivateModeAvailable,
   slashItemPrefixMatch,
@@ -404,10 +406,14 @@ describe("/toolbar and /scrollbar", () => {
     expect(ids).toContain("scrollbar");
   });
 
-  it("describes the current values", () => {
+  it("puts the current values in the value column", () => {
     const on = new Map(buildProductSlashCommands(chrome()).map((c) => [c.id, c]));
-    expect(on.get("toolbar")?.description).toBe("On · visible");
-    expect(on.get("scrollbar")?.description).toBe("always visible");
+    expect(on.get("toolbar")?.value).toBe("on");
+    expect(on.get("toolbar")?.description).toBe("Show or hide the composer toolbar.");
+    expect(on.get("scrollbar")?.value).toBe("always");
+    expect(on.get("scrollbar")?.description).toBe(
+      "Show scrollbars always or while scrolling.",
+    );
 
     const off = new Map(
       buildProductSlashCommands(chrome({ toolbar: false, scrollbars: "auto" })).map((c) => [
@@ -415,8 +421,8 @@ describe("/toolbar and /scrollbar", () => {
         c,
       ]),
     );
-    expect(off.get("toolbar")?.description).toBe("Off · hidden");
-    expect(off.get("scrollbar")?.description).toBe("on scroll");
+    expect(off.get("toolbar")?.value).toBe("off");
+    expect(off.get("scrollbar")?.value).toBe("auto");
   });
 
   it("flips the visible toolbar off", () => {
@@ -462,6 +468,55 @@ describe("private mode availability", () => {
     executeSlashDef(def, "", api());
     expect(isPrivateMode()).toBe(true);
     expect(slashSubmitAction("/export")).toMatchObject({ kind: "block" });
+  });
+
+  it("turns on from ?private=1 only when the tenant opted in", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    expect(isPrivateModeAvailable()).toBe(true);
+    expect(isPrivateMode()).toBe(true);
+    expect(privateModeHeaderEntries(isPrivateMode())).toEqual(["X-Digi-Private", "1"]);
+
+    seedPrivateMode({ tenantOptIn: false, urlPrivate: true });
+    expect(isPrivateMode()).toBe(false);
+    expect(privateModeHeaderEntries(isPrivateMode())).toBeNull();
+
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: false });
+    expect(isPrivateModeAvailable()).toBe(true);
+    expect(isPrivateMode()).toBe(false);
+  });
+
+  it("toggles /private off and on, and the palette value follows", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(false);
+    expect(buildProductSlashCommands(api()).find((c) => c.id === "private")?.value).toBe("off");
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(true);
+    const row = buildProductSlashCommands(api()).find((c) => c.id === "private");
+    expect(row?.label).toBe("/private");
+    expect(row?.value).toBe("on");
+    expect(row?.description).toBe("Ask the model to use stand-in names in its replies.");
+  });
+
+  it("hides /private until the tenant opts in", () => {
+    seedPrivateMode({ tenantOptIn: false, urlPrivate: true });
+    expect(buildProductSlashCommands(api()).some((c) => c.id === "private")).toBe(false);
+  });
+
+  it("puts the current value back on the typeahead row", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    buildProductSlashCommands(api());
+    const wrapped = prefixSlashAdapter({
+      search: () => [{ id: "private", label: "private", description: "sentence." }],
+    });
+    expect(wrapped.search?.("pri")).toEqual([
+      {
+        id: "private",
+        label: "private",
+        description: "sentence.",
+        metadata: { value: "on" },
+      },
+    ]);
   });
 
   it("drops a live session flag when the tenant stops offering the mode", () => {

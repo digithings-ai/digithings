@@ -206,19 +206,19 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain('!current.includes("token=")');
   });
 
-  it("opts /chat/occ into the invite key and leaves /chat out", async () => {
-    const { readFileSync } = await import("node:fs");
+  it("serves OCC from the app, not a Pages shell (2026-10-27 consolidation)", async () => {
+    const { existsSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
-    const occ = readFileSync(
-      fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url)),
-      "utf8",
-    );
-    const chat = readFileSync(
-      fileURLToPath(new URL("../app/chat/page.tsx", import.meta.url)),
-      "utf8",
-    );
-    expect(occ).toContain("acceptsInviteToken");
-    expect(chat).not.toContain("acceptsInviteToken");
+    // The OCC shell and its Pages twin gate are gone: /chat/occ is the app's
+    // own embed route, gated once at the Worker and proxied to the container.
+    // A reappearing Pages copy would reintroduce the second secret and the
+    // second deploy surface this change removed.
+    expect(
+      existsSync(fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url))),
+    ).toBe(false);
+    expect(
+      existsSync(fileURLToPath(new URL("../functions/chat/occ/[[path]].ts", import.meta.url))),
+    ).toBe(false);
   });
 
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {
@@ -231,6 +231,9 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
+    // First embed request carries the parent palette, not only light/dark.
+    expect(shellSrc).toContain("EMBED_FRAME_THEME_SCRIPT");
+    expect(shellSrc).toContain("url.searchParams.set('palette',palette)");
     // The transparent overlay is the banner cover now, not the tool-chain rows.
     expect(shellSrc).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
     expect(shellSrc).toContain('background: "transparent"');

@@ -22,6 +22,13 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "packages" / "brand" / "studio"
 DEST = ROOT / "apps" / "digiweb" / "public" / "brand" / "studio"
 ASSET_SUFFIXES = {".svg", ".json"}
+# The shared wordmark masks this file. It is not under public/brand: the
+# marketing site must not ship the studio kit (see test_kit_is_not_on_the_marketing_site).
+WORDMARK_DESTS = (
+    ROOT / "apps" / "digithings-web" / "public" / "wordmark-mask.svg",
+    ROOT / "apps" / "digiweb" / "public" / "wordmark-mask.svg",
+    ROOT / "apps" / "digichat" / "public" / "wordmark-mask.svg",
+)
 
 
 def assets() -> list[Path]:
@@ -44,16 +51,19 @@ def check() -> int:
             ok = False
     if DEST.exists():
         for target in sorted(DEST.iterdir()):
-            if (
-                target.is_file()
-                and target.suffix in ASSET_SUFFIXES
-                and target.name not in expected
-            ):
+            if target.is_file() and target.suffix in ASSET_SUFFIXES and target.name not in expected:
                 print(
                     f"❌  {target.relative_to(ROOT)} has no source — remove it",
                     file=sys.stderr,
                 )
                 ok = False
+    source = SRC / "wordmark-mask.svg"
+    for target in WORDMARK_DESTS:
+        if not target.exists() or not filecmp.cmp(source, target, shallow=False):
+            print(
+                f"❌  {target.relative_to(ROOT)} is stale — re-run build-studio.py", file=sys.stderr
+            )
+            ok = False
     if ok:
         print(f"✅  brand studio mirror is current ({len(expected)} files)")
     return 0 if ok else 1
@@ -70,6 +80,11 @@ def write() -> int:
         if target.is_file() and target.suffix in ASSET_SUFFIXES and target.name not in expected:
             target.unlink()
             print(f"removed stale {target.relative_to(ROOT)}")
+    source = SRC / "wordmark-mask.svg"
+    for target in WORDMARK_DESTS:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        print(f"wrote {target.relative_to(ROOT)}")
     return 0
 
 

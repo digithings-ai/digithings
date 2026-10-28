@@ -17,6 +17,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -86,8 +87,7 @@ import {
 import { takePendingForceTool } from "@/lib/pending-chat-headers";
 import {
   isPrivateMode,
-  setPrivateMode,
-  setPrivateModeAvailable,
+  seedPrivateMode,
   subscribePrivateMode,
 } from "@/lib/product-slash-commands";
 
@@ -129,6 +129,7 @@ import {
   applyEmbedPalette,
   embedThemePrefs,
   embedUserThemeKey,
+  parseEmbedPaletteParam,
   parseEmbedThemeParam,
   parseEmbedUserTheme,
   parseThemeMessage,
@@ -140,7 +141,7 @@ import {
   type EmbedTheme,
   type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
-import type { PaletteName } from "@digithings/ui/theme";
+import { applyDocumentTheme, readPaintedTheme, readThemeState, type PaletteName } from "@digithings/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,
@@ -237,17 +238,31 @@ export function readTrialProofMessage(
  * read from the params by the *server* component in page.tsx, where the prop
  * does work, and arrives here already resolved. The client still re-reads the
  * params itself for everything else.
+ *
+ * `initialHost` is the `host` the server rendered with. It matters only when
+ * the address bar does not carry it: the invite-gated OCC page (DIG-3585) is
+ * served at a bare `/chat/occ`, rewritten at the edge to `/embed?host=…`, so
+ * the server saw the host and the client's URL (Next keeps `window.location`
+ * as the canonical URL) does not. Without the fallback the client would
+ * hydrate as a host-less embed — a mismatch with the server's paint. The URL's
+ * own `?host=` always wins.
  */
 export default function EmbedClient({
   initialTenantCfg,
   initialBoot,
+  initialHost,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
   initialBoot?: string | null;
+  initialHost?: string | null;
 }) {
   return (
     <Suspense fallback={null}>
-      <EmbedPageInner initialTenantCfg={initialTenantCfg} initialBoot={initialBoot} />
+      <EmbedPageInner
+        initialTenantCfg={initialTenantCfg}
+        initialBoot={initialBoot}
+        initialHost={initialHost}
+      />
     </Suspense>
   );
 }
@@ -255,14 +270,16 @@ export default function EmbedClient({
 function EmbedPageInner({
   initialTenantCfg,
   initialBoot,
+  initialHost,
 }: {
   initialTenantCfg: EmbedTenantClientConfig;
   initialBoot?: string | null;
+  initialHost?: string | null;
 }) {
   const searchParams = useSearchParams();
   const accent = resolveAccent(searchParams.get("accent"));
   const token = searchParams.get("token") ?? undefined;
-  const host = searchParams.get("host") ?? undefined;
+  const host = searchParams.get("host") ?? (initialHost || undefined);
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
 
   // Warm-up on load: wake sleeping services; chat sends wait on the gate.
@@ -287,10 +304,19 @@ function EmbedPageInner({
   }, [tenantCfg]);
 
   const urlTheme = parseEmbedThemeParam(searchParams.get("theme"));
+  const urlPalette = parseEmbedPaletteParam(searchParams.get("palette"));
   const [parentTheme, setParentTheme] = useState<EmbedTheme | null>(null);
   // The parent's palette rides the same message; it never writes data-palette
   // itself (that would fight the theme effect below).
   const [parentPalette, setParentPalette] = useState<PaletteName | null>(null);
+  // False until a digichat:theme message arrives, so a null parent palette
+  // does not wipe the URL or the site palette during the first paint.
+  const [parentSeen, setParentSeen] = useState(false);
+  // Top-level site chat: the painted dt-theme / dt-palette, mirrored into
+  // React so the wrapper class matches the document before the browser paints.
+  const [siteFollow, setSiteFollow] = useState<{ mode: EmbedTheme; palette: PaletteName } | null>(
+    null,
+  );
   // The visitor's own /theme pick: this tab only, per embed host (2.6.6).
   const userThemeKey = embedUserThemeKey(tenantCfg.slug);
   const userThemeRaw = useSyncExternalStore(
@@ -305,18 +331,24 @@ function EmbedPageInner({
     },
     [userThemeKey],
   );
-  // /theme pick > parent postMessage > ?theme= URL pin > tenant registry (default dark).
+  // /theme pick > parent postMessage > ?theme= > site document > tenant.
   const effectiveTheme: EmbedTheme = resolveEmbedTheme({
     pick: userTheme,
     parent: parentTheme,
     url: urlTheme,
     tenant: tenantCfg.theme,
+    site: siteFollow?.mode ?? null,
   });
-  // /theme pick > parent postMessage > default look. One channel, one writer
-  // (the theme effect below), so a parent palette cannot be reverted mid-tick.
+  // /theme pick > parent message > ?palette= > site document > default.
+  // One writer (the theme effect below), so a parent palette cannot be
+  // reverted mid-tick. Until the parent has spoken, the URL and the site
+  // paint stay.
   const effectivePalette = resolveEmbedPalette({
     pick: userTheme,
     parent: parentPalette,
+    parentSeen,
+    url: urlPalette,
+    site: siteFollow?.palette ?? null,
   });
 
   // Plan proof (#3662): the dashboard parent sends a Supabase access_token via
@@ -401,6 +433,7 @@ function EmbedPageInner({
       // A message without a palette clears the parent channel, so the pick or
       // the default look takes over again.
       setParentPalette(parsed.palette ?? null);
+      setParentSeen(true);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -417,8 +450,32 @@ function EmbedPageInner({
   // embed today. The MutationObserver stays as a guard: anything else that
   // rewrites <html data-theme> (an OS-flip listener, a stray script) cannot
   // silently override the effective theme (#1434).
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = document.documentElement;
+    const followSite =
+      el.getAttribute("data-site-theme") === "1" && !userTheme && !parentSeen && !urlTheme;
+    if (followSite) {
+      // themeInitScript already painted dt-theme / dt-palette. A cleared
+      // /theme pick can leave the tenant or the pick on the document; put
+      // the stored site theme back, then mirror it into React. The setState
+      // is the mirror of that external paint, before the browser paints.
+      const stored = readThemeState();
+      const painted = readPaintedTheme();
+      if (painted.resolved !== stored.resolved || painted.palette !== stored.palette) {
+        applyDocumentTheme(stored.preference, stored.palette, document, { persist: false });
+      }
+      const read = () => {
+        const mode: EmbedTheme = el.getAttribute("data-theme") === "light" ? "light" : "dark";
+        const next = parseEmbedPaletteParam(el.getAttribute("data-palette")) ?? "default";
+        setSiteFollow((prev) =>
+          prev && prev.mode === mode && prev.palette === next ? prev : { mode, palette: next },
+        );
+      };
+      read();
+      const observer = new MutationObserver(read);
+      observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+      return () => observer.disconnect();
+    }
     const desired = effectiveTheme;
     const palette = effectivePalette === "default" ? null : effectivePalette;
     const apply = () => {
@@ -434,7 +491,7 @@ function EmbedPageInner({
     const observer = new MutationObserver(apply);
     observer.observe(el, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
     return () => observer.disconnect();
-  }, [effectiveTheme, effectivePalette]);
+  }, [effectiveTheme, effectivePalette, parentSeen, urlTheme, userTheme]);
 
   // The embedding site can theme the widget to its own brand by passing
   // `?accent=#rrggbb` (+ optional `?accentForeground=`), the same override
@@ -610,13 +667,13 @@ function EmbedChat({
   const getPrivateMode = useCallback(() => privateModeRef.current, []);
   // Availability first, then the seed, so the two can never disagree: a tenant
   // that did not opt in leaves `?private=1` inert, and a tenant that stops
-  // opting in drops the session flag through setPrivateModeAvailable(false).
+  // opting in drops the session flag. The URL only turns the mode on.
   useEffect(() => {
-    setPrivateModeAvailable(tenantCfg.privateMode === true);
-  }, [tenantCfg.privateMode]);
-  useEffect(() => {
-    if (uiParams.privateMode && tenantCfg.privateMode === true) setPrivateMode(true);
-  }, [uiParams.privateMode, tenantCfg.privateMode]);
+    seedPrivateMode({
+      tenantOptIn: tenantCfg.privateMode === true,
+      urlPrivate: uiParams.privateMode === true,
+    });
+  }, [tenantCfg.privateMode, uiParams.privateMode]);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in

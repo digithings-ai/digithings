@@ -921,3 +921,32 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Embed-Trial-Proof (D
     unmount();
   });
 });
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Private", () => {
+  it("sets the header from the getter at send time and does not rewrite stored messages", async () => {
+    let on = false;
+    const { unmount } = renderHookLocally(() =>
+      useEmbedDigiChat(baseEmbedOptions({ getPrivateMode: () => on })),
+    );
+    const config = readCapturedTransportConfig();
+    if (!config) {
+      throw new Error("AssistantChatTransport was never constructed by useEmbedDigiChat");
+    }
+    const stored = [
+      { id: "u1", role: "user" as const, parts: [{ type: "text" as const, text: "John Smith" }] },
+    ];
+
+    const off = await config.prepareSendMessagesRequest({ messages: stored, body: undefined });
+    expect(new Headers(off.headers).has("X-Digi-Private")).toBe(false);
+    expect(JSON.stringify(off.body)).not.toContain("PRIVATE DEMO SESSION");
+
+    on = true;
+    const yes = await config.prepareSendMessagesRequest({ messages: stored, body: undefined });
+    expect(new Headers(yes.headers).get("X-Digi-Private")).toBe("1");
+    expect(JSON.stringify(yes.body)).toContain("John Smith");
+    expect(JSON.stringify(yes.body)).not.toContain("PRIVATE DEMO SESSION");
+    expect(stored[0]?.parts[0]?.text).toBe("John Smith");
+
+    unmount();
+  });
+});

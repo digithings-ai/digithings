@@ -184,12 +184,6 @@ workers:
     workers_dev: true
     durable_objects: []
     contract_vars: true
-  - name: digitrace-langfuse
-    file: apps/digitrace-langfuse/wrangler.toml
-    containers: [LangfuseWebContainer, LangfuseWorkerContainer]
-    durable_objects: [LANGFUSE_WEB, LANGFUSE_WORKER]
-    r2_buckets: [LANGFUSE_EVENTS]
-    contract_vars: true
   - name: digithings-cron
     file: apps/digithings-cron/wrangler.toml
     workers_dev: true

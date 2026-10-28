@@ -182,6 +182,23 @@ describe("withHouseSlugAlias", () => {
     const input = { occ: { digisearchIndex: "occ_help" } };
     expect(withHouseSlugAlias(input)).toBe(input);
   });
+
+  it("does not let an empty canonical entry shadow a usable live entry", () => {
+    const aliased = withHouseSlugAlias({
+      digithings: {},
+      "digithings-ai": { digisearchIndex: "digithings_docs", vaultPathPrefix: "clients/digithings" },
+    });
+    expect(aliased.digithings).toEqual({
+      digisearchIndex: "digithings_docs",
+      vaultPathPrefix: "clients/digithings",
+    });
+    expect(aliased["digithings-ai"]).toEqual(aliased.digithings);
+  });
+
+  it("leaves an unusable house entry alone when no usable one exists", () => {
+    const input = { digithings: {} };
+    expect(withHouseSlugAlias(input)).toBe(input);
+  });
 });
 
 describe("parseCorpusMapJson", () => {

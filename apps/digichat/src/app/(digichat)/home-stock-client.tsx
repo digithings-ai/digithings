@@ -19,6 +19,7 @@ import {
   ProductStockShell,
   buildProductRuntimeAdapters,
 } from "@/components/stock/product-shell";
+import { SiteRails } from "@/components/stock/site-rails";
 import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-sidebar";
 import {
   ArtifactsPanel,
@@ -36,7 +37,11 @@ import {
   takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
-import { isPrivateMode } from "@/lib/product-slash-commands";
+import {
+  isPrivateMode,
+  privateModeHeaderEntries,
+  seedPrivateMode,
+} from "@/lib/product-slash-commands";
 import {
   SessionMemoryThreadListAdapter,
   memoryThreadStorageKey,
@@ -124,7 +129,8 @@ function useShellThreadRuntime(
           h.set("X-Digi-Run-Id", crypto.randomUUID());
           // Read at send time, not captured at mount: the transport is frozen on
           // first render (#1339) and `/private` may flip the flag afterwards.
-          if (isPrivateMode()) h.set("X-Digi-Private", "1");
+          const privateHeader = privateModeHeaderEntries(isPrivateMode());
+          if (privateHeader) h.set(privateHeader[0], privateHeader[1]);
           const lang = getLanguage().trim();
           if (lang && lang !== "en") h.set("X-Digi-Language", lang);
           const model = getModel()?.trim();
@@ -253,6 +259,7 @@ function HomeStockClientSingle({
         data-chrome-mode={mode}
         data-persistence="none"
       >
+        <SiteRails mode={mode} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}
@@ -371,6 +378,7 @@ function HomeStockClientMemory({
         data-chrome-mode={mode}
         data-persistence="memory"
       >
+        <SiteRails mode={mode} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}
@@ -399,6 +407,17 @@ export function HomeStockClient({
   clientConfig: DigichatClientConfig;
   userId?: string;
 }) {
+  // The embed seeds this from the tenant config. The stock shell has to as
+  // well, or `/private` and `?private=1` never reach the chat header.
+  useEffect(() => {
+    const urlPrivate =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("private") === "1";
+    seedPrivateMode({
+      tenantOptIn: clientConfig.features.privateMode === true,
+      urlPrivate,
+    });
+  }, [clientConfig.features.privateMode]);
   if (
     clientConfig.persistence === "memory" &&
     !skinOwnsPageChrome(clientConfig.chrome.skin)

@@ -1,16 +1,2 @@
-/**
- * The canonical digithings wordmark.
- *
- * Same 4×4 mask the brand studio composes and exports
- * (`/brand/studio/wordmark-mask.svg`), drawn in `currentColor`. Static on
- * purpose: the animated build belongs to the studio, not to a page header.
- */
-export function BrandWordmark({ className }: { className?: string }) {
-  return (
-    <span
-      className={className ? `brand-wordmark ${className}` : "brand-wordmark"}
-      role="img"
-      aria-label="digithings"
-    />
-  );
-}
+/** Re-export of the shared studio wordmark. The mask file is `/wordmark-mask.svg`. */
+export { BrandWordmark } from "@digithings/ui";

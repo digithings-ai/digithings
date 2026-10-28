@@ -69,6 +69,10 @@ export async function captureChatThread(options?: {
   let setup: Awaited<ReturnType<typeof testRender>> | null = null;
   try {
     const { App } = await import("./app");
+    // Count only the reads this capture makes: the fixture server is
+    // process-wide, so a running total would prove only that some earlier
+    // capture read it, not that this frame did.
+    api.resetServed();
     setup = await testRender(<App />, { width, height });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -80,7 +84,7 @@ export async function captureChatThread(options?: {
     }
     if (api.served() === 0) {
       throw new Error(
-        "the digichat client did not read from the fixture API; the recorded frame would be live data",
+        "the digichat client did not read from the fixture API during this capture; the recorded frame would be live data",
       );
     }
     const cropped = cropChatPane(captured, {

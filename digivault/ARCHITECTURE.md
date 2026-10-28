@@ -263,8 +263,8 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `request.state.digi_auth.tenant_slug` (the same verified claim
   `_require_tool_scope` already reads `.scopes` off of — `digikey` populates
   it on every token its own `/v1/oauth/token` issues; see `tenant_scope.py`'s
-  module docstring for a known, tracked residual dependency on that claim's
-  trustworthiness, #2303) and checks it against `DIGI_TENANT_CORPUS_MAP`
+  module docstring: since DIG-3585 the claim is never filled from the
+  unsigned `X-Digi-Tenant` header, #2303) and checks it against `DIGI_TENANT_CORPUS_MAP`
   (the same env var digigraph's own `corpus_routing.py` reads, parsed
   independently here so digivault stays installable standalone). It is a
   no-op when that map is genuinely unset — single-tenant deployments (local

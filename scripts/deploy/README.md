@@ -9,7 +9,6 @@ install a launchd job.
 |---|---|---|---|
 | `stack` | `stack-vX.Y.Z` | `apps/digithings-stack-cloudflare` | `digithings-stack` |
 | `digichat` | `digichat-vX.Y.Z` | `apps/digichat-cloudflare` | `digithings-digichat` |
-| `langfuse` | `langfuse-vX.Y.Z` | `apps/digitrace-langfuse` | `digitrace-langfuse` |
 | `cron` | `cron-vX.Y.Z` | `apps/digithings-cron` | `digithings-cron` |
 | `runner` | `runner-vX.Y.Z` | `apps/digiquant-runner` | `digiquant-runner` |
 | `dashboard-api` | `dashboard-api-vX.Y.Z` | `apps/dashboard-api` | `dashboard-api` |

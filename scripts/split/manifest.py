@@ -8,7 +8,7 @@ Target repos (docs/repo-split, PR #5695):
   R2 digiquant-stack (priv)         production backend (runner, desk API, schema, pipeline)
   R3 digiquant-web (priv)           Brief desk (apps/dashboard) + digiquant.io
   R4 digithings-web (priv)          digithings.ai, digibook, brand
-  R5 digithings-stack (priv)        shared prod platform (stack, digichat Worker, langfuse, cron)
+  R5 digithings-stack (priv)        shared prod platform (stack, digichat Worker, cron)
   R6 digichat-tenants (priv)        client corpora + rollout tooling (writes KV/R2)
   R7 twelve-x (exists, priv)        client desk + digidata-api
   delete                            paths that move nowhere (replaced tooling)
@@ -171,7 +171,6 @@ RULES: list[tuple[str, str, str]] = [
     ),
     ("apps/digithings-stack-cloudflare/", "R5", "stack Worker + container"),
     ("apps/digichat-cloudflare/", "R5", "digichat Worker"),
-    ("apps/digitrace-langfuse/", "R5", "langfuse"),
     ("apps/digitrace-ingest/", "R5", "telemetry ingest Worker (platform)"),
     ("apps/digithings-cron/", "R5", "cron"),
     ("apps/corpus-index/", "R5", "corpus indexer Worker (provisional; indexes tenant corpora - confirm in file:line plan table)"),
@@ -182,8 +181,6 @@ RULES: list[tuple[str, str, str]] = [
     ("config/litellm.omniroute.yaml", "R5", "litellm config"),
     ("infra/docker/Dockerfile.digithings-stack-cloudflare", "R5", "stack image"),
     ("infra/docker/Dockerfile.digichat-cloudflare", "R5", "digichat image"),
-    ("infra/docker/Dockerfile.digitrace-langfuse-web", "R5", "langfuse image"),
-    ("infra/docker/Dockerfile.digitrace-langfuse-worker", "R5", "langfuse image"),
     # ---- R6: client corpora + rollout tooling ----
     ("docs/projects/online-compliance-center/", "R6", "client corpus"),
     ("docs/ops/OCC_INVITE_KEY.md", "R6", "rollout tooling doc"),
@@ -289,9 +286,9 @@ RULES: list[tuple[str, str, str]] = [
     ("docs/ops/*-aca.md", "R5", "vendor ACA runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("docs/ops/digifetch-post-deploy-verification.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digiquant-digikey-service-key.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
+    ("docs/ops/digitrace-langfuse.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digiquant-runner.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digithings-cron.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
-    ("docs/ops/digitrace-langfuse.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/gloomberb-session-cookie.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/local-deploy-parity.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/paperclip-routine-watch.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),

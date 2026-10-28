@@ -6,6 +6,7 @@ import { DtNav } from "@/components/DtNav";
 
 import { PRINT_CSS } from "@/lib/book/printCss";
 import { BOOK_READER_CSS } from "@/lib/book/readerCss";
+import { SHARE_IMAGE } from "@/lib/share";
 
 
 export const metadata: Metadata = {
@@ -14,6 +15,8 @@ export const metadata: Metadata = {
     "digibook: a short, philosophical book on why self-hosted AI infrastructure matters, how it " +
     "scales, and what it costs. Read on screen or print it.",
   alternates: { canonical: "/book" },
+  openGraph: { images: [SHARE_IMAGE] },
+  twitter: { card: "summary_large_image", images: [SHARE_IMAGE.url] },
 };
 
 /**

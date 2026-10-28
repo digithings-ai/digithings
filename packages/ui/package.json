@@ -22,6 +22,7 @@
     "./cn": "./src/lib/utils.ts",
     "./base-path": "./src/lib/base-path.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
+    "./styles/brand-wordmark.css": "./src/styles/brand-wordmark.css",
     "./styles/docs.css": "./src/styles/docs.css",
     "./styles/diagrams.css": "./src/styles/diagrams.css",
     "./styles/nav-shell.css": "./src/styles/nav-shell.css",

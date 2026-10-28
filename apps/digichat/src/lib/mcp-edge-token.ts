@@ -20,11 +20,16 @@
  *
  * Credential precedence:
  *
- * 1. `DIGICHAT_MCP_IDENTITY_KEY` when it is digikey API-key material
- *    (`dgk_live_…`) — a dedicated identity whose scopes are its own, which is
- *    the tightest form of "the chat's own identity".
- * 2. the existing BFF credential (`DIGIKEY_BFF_TOKEN` + `DIGIKEY_URL`), the
- *    same exchange digichat already uses for digigraph.
+ * 1. the BFF credential (`DIGIKEY_BFF_TOKEN` + `DIGIKEY_URL`), the same
+ *    exchange digichat already uses for digigraph, whenever the turn has a
+ *    tenant and a subject. Its token carries the TURN's tenant, which is what
+ *    the services behind the edge scope on: digisearch refuses a
+ *    tenant-scoped index to any other tenant (`tenant_index_scope.py`), so a
+ *    token stamped with one fixed tenant would lock every other tenant out of
+ *    its own index and could open that tenant's index to the rest.
+ * 2. `DIGICHAT_MCP_IDENTITY_KEY` (`dgk_live_…`) only when there is no BFF
+ *    credential. An API-key token carries the key row's own tenant, not the
+ *    turn's, so it is the fallback for a deployment without a BFF secret.
  *
  * Both go through `digikey-exchange.ts`; both request explicit
  * `requested_scopes`, so the minted token is narrower than the credential.
@@ -146,8 +151,27 @@ export async function mintMcpEdgeToken(opts: {
   const cached = tokenCache.get(key);
   if (cached && cached.expiresAtMs > Date.now()) return { ok: true, token: cached.token };
 
+  const bffToken = identity.bffToken?.trim() ?? "";
+  const tenantSlug = identity.tenantSlug.trim();
+  const subject = identity.subject.trim();
+  if (bffToken && tenantSlug && subject) {
+    // No fallback to the API key when this fails: that token names another
+    // tenant, so it would either be refused or reach the wrong tenant's data.
+    const outcome = await exchangeDigikeyBffSession(
+      identity.digikeyUrl,
+      bffToken,
+      tenantSlug,
+      subject,
+      scopes,
+    );
+    if (!outcome.ok) {
+      return { ok: false, reason: outcome.reason === "unreachable" ? "unreachable" : "rejected" };
+    }
+    return storeToken(key, outcome.exchange.accessToken);
+  }
+
   const apiKey = identity.apiKey?.trim() ?? "";
-  if (apiKey && isDigikeyApiKeyMaterial(apiKey)) {
+  if (!bffToken && apiKey && isDigikeyApiKeyMaterial(apiKey)) {
     try {
       const exchange = await exchangeDigikeyApiKey(identity.digikeyUrl, apiKey, scopes);
       if (!exchange) return { ok: false, reason: "rejected" };
@@ -160,20 +184,7 @@ export async function mintMcpEdgeToken(opts: {
       return { ok: false, reason: "unreachable" };
     }
   }
-
-  const bffToken = identity.bffToken?.trim() ?? "";
-  if (!bffToken) return { ok: false, reason: "no_identity" };
-  const outcome = await exchangeDigikeyBffSession(
-    identity.digikeyUrl,
-    bffToken,
-    identity.tenantSlug,
-    identity.subject,
-    scopes,
-  );
-  if (!outcome.ok) {
-    return { ok: false, reason: outcome.reason === "unreachable" ? "unreachable" : "rejected" };
-  }
-  return storeToken(key, outcome.exchange.accessToken);
+  return { ok: false, reason: "no_identity" };
 }
 
 /**
