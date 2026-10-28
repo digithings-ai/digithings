@@ -29,7 +29,7 @@ import { adaptOnGet } from "./adapters";
 import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
 import type { FxHubEnv } from "./fx-hub/env";
-import { createFxHubFetch, FX_HUB_PATHS } from "./fx-hub/router";
+import { createFxHubFetch, FX_HUB_PATHS, fxHubWorkerRoutesOn } from "./fx-hub/router";
 import { tryHandleLedger } from "./ledger";
 import { tryHandleTables } from "./tables";
 import { registerBriefRoutes } from "./brief";
@@ -74,11 +74,18 @@ export interface Env {
   TWELVEX_SUPABASE_URL?: string;
   TWELVEX_SUPABASE_SERVICE_KEY?: string;
   /**
-   * FX Hub module secrets. Unset until they are bound on the worker: the
-   * mounted routes still answer, and refuse (401 / API_KEYS_UNCONFIGURED).
+   * FX Hub module secrets. Unset until they are bound on the worker: with
+   * FX_HUB_WORKER_ROUTES on, the routes answer and refuse (401 /
+   * API_KEYS_UNCONFIGURED).
    * Not wrangler `[vars]` — values stay out of the repo.
    */
   FX_HUB_GRANT_SYNC_SECRET?: string;
+  /**
+   * Supabase exit S2 (DIG-2887): the FX Hub routes on this worker stay off
+   * until cutover, and the Supabase edge functions keep serving. `"1"` mounts
+   * them. Anything else, or unset, answers 404 without reading a key.
+   */
+  FX_HUB_WORKER_ROUTES?: string;
   SUPABASE_SECRET_KEYS?: string;
   SUPABASE_PUBLISHABLE_KEYS?: string;
   /**
@@ -299,6 +306,15 @@ export default {
     // FX Hub authenticates with X-Sync-Secret inside the module. Dispatch
     // before the catalog so POST does not fall through to routeWrite.
     if (FX_HUB_ROUTE_PATHS.has(path)) {
+      if (!fxHubWorkerRoutesOn(env as FxHubEnv)) {
+        return withCors(
+          new Response(JSON.stringify({ ok: false, code: "NOT_FOUND" }), {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          }),
+          cors,
+        );
+      }
       return withCors(await createFxHubFetch(env as FxHubEnv).fetch(request), cors);
     }
     const res =
