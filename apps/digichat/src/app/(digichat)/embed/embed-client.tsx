@@ -104,6 +104,7 @@ import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
 import { useEmbedSuggestions } from "@/hooks/use-embed-suggestions";
+import { privateSessionChrome } from "@/lib/private-chrome";
 import {
   useEmbedTenantConfig,
   type EmbedTenantClientConfig,
@@ -668,12 +669,21 @@ function EmbedChat({
   // Availability first, then the seed, so the two can never disagree: a tenant
   // that did not opt in leaves `?private=1` inert, and a tenant that stops
   // opting in drops the session flag. The URL only turns the mode on.
+  // The store is seeded after paint, so until the first seed the chrome reads
+  // the same inputs the seed uses: a `?private=1` page for an opted-in tenant
+  // never flashes the tenant's own welcome, placeholder or title.
+  const privateSeededRef = useRef(false);
   useEffect(() => {
     seedPrivateMode({
       tenantOptIn: tenantCfg.privateMode === true,
       urlPrivate: uiParams.privateMode === true,
     });
+    privateSeededRef.current = true;
   }, [tenantCfg.privateMode, uiParams.privateMode]);
+  // eslint-disable-next-line react-hooks/refs -- read-only first-paint guard, see above
+  const privateChrome = privateSeededRef.current
+    ? privateMode
+    : privateMode || (tenantCfg.privateMode === true && uiParams.privateMode === true);
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at mount, so `/lang`
   // would never reach the outgoing header (#2103 / #3418). Mutate the ref in
@@ -1219,7 +1229,7 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
 
-  const welcomeIntro = useMemo(() => {
+  const tenantWelcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
     if (tenantCfg.welcome) return tenantCfg.welcome;
     if (ungated) {
@@ -1231,9 +1241,19 @@ function EmbedChat({
     );
   }, [uiParams.welcome, tenantCfg.welcome, ungated]);
 
-  const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
-  const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
-  const headerTitle = tenantCfg.title;
+  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
+  // Private session: generic support-desk copy, so nothing names the tenant.
+  const {
+    welcome: welcomeIntro,
+    placeholder,
+    suggestions,
+    headerTitle,
+  } = privateSessionChrome(privateChrome, {
+    welcome: tenantWelcomeIntro,
+    placeholder: uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…",
+    suggestions: tenantSuggestions,
+    headerTitle: tenantCfg.title,
+  });
 
   // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
   const sendGate = useMemo(
