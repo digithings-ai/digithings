@@ -4123,6 +4123,93 @@ describe("POST /api/chat limits", () => {
       expect(JSON.stringify(call.messages)).not.toContain("PRIVATE DEMO SESSION");
     });
 
+    it("keeps full tool results server side and gives them back to the model on the next turn", async () => {
+      delete process.env.DIGICHAT_TRACE_UI;
+      const callId = "call_9b1e77c0d2";
+      const turn1 = [
+        { type: "start", messageId: "m1" },
+        { type: "tool-input-start", toolCallId: callId, toolName: "zammad_search" },
+        {
+          type: "tool-input-available",
+          toolCallId: callId,
+          toolName: "zammad_search",
+          input: { q: "Priya" },
+        },
+        { type: "tool-output-available", toolCallId: callId, output: { name: "Priya Nair" } },
+        { type: "finish" },
+      ];
+      vi.mocked(createDigigraphTraceStreamResponse).mockResolvedValueOnce(
+        new Response(turn1.map((c) => `data: ${JSON.stringify(c)}\n\n`).join(""), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        ...privateTenant,
+        embedConfig: {
+          ...privateTenant.embedConfig,
+          mcp: { servers: [{ id: "zammad", url: "https://mcp.example/zammad" }] },
+        },
+      } as EmbedChatTenantContext);
+      const headers = {
+        "content-type": "application/json",
+        "x-digichat-trace": "1",
+        "x-digi-private": "1",
+      };
+      const first = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "find Priya" }] }],
+          }),
+        }),
+      );
+      const browser = await first.text();
+      expect(browser).not.toContain("Priya");
+      expect(browser).not.toContain("zammad");
+
+      // Turn 2: the browser sends back only the stripped step.
+      vi.mocked(createDigigraphTraceStreamResponse).mockClear();
+      const second = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [
+              { id: "u1", role: "user", parts: [{ type: "text", text: "find Priya" }] },
+              {
+                id: "a1",
+                role: "assistant",
+                parts: [
+                  {
+                    type: "tool-search",
+                    toolCallId: callId,
+                    state: "output-available",
+                    input: {},
+                    output: {},
+                  },
+                ],
+              },
+              { id: "u2", role: "user", parts: [{ type: "text", text: "and her tickets?" }] },
+            ],
+          }),
+        }),
+      );
+      expect(second.status).toBe(200);
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0] as {
+        messages: { role: string; parts: Record<string, unknown>[] }[];
+      };
+      const tool = call.messages
+        .flatMap((m) => m.parts)
+        .find((p) => p.toolCallId === callId);
+      expect(tool).toMatchObject({
+        type: "tool-zammad_search",
+        input: { q: "Priya" },
+        output: { name: "Priya Nair" },
+      });
+    });
+
     it("passes the separate instruction to Foundry and leaves the tool payload alone", async () => {
       vi.mocked(resolveChatTenantContext).mockResolvedValue({
         tenantSlug: "foundry-tenant",

@@ -113,7 +113,7 @@ export class PrivateTextScrubber {
   }
 }
 
-type Chunk = Record<string, unknown> & { type?: unknown };
+export type Chunk = Record<string, unknown> & { type?: unknown };
 
 /** Parts whose payload is the work itself and is never sent in a private session. */
 const DROP_TYPES = new Set([
@@ -124,7 +124,15 @@ const DROP_TYPES = new Set([
 ]);
 
 /** Data parts that carry no user content and may pass. */
-const KEEP_DATA_TYPES = new Set(["data-connection", "data-notice"]);
+const KEEP_DATA_TYPES = new Set([
+  "data-connection",
+  "data-notice",
+  // The upstream conversation id (opaque). The embed stores it and sends it
+  // back as X-External-Conversation, so dropping it would start every
+  // private turn in a fresh upstream conversation.
+  "data-conversation",
+  "data-externalConversation",
+]);
 
 /**
  * Rewrite one UI message stream chunk for a private session. Returns `null`
@@ -188,6 +196,8 @@ function splitAtLastBoundary(text: string): [ready: string, rest: string] {
  */
 export function createPrivateStreamTransform(
   terms: readonly string[] = [],
+  /** Sees each raw chunk before it is stripped (server-side tool memory). */
+  onRawChunk?: (chunk: Chunk) => void,
 ): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   const scrubber = new PrivateTextScrubber(terms);
@@ -229,6 +239,13 @@ export function createPrivateStreamTransform(
     if (!chunk || typeof chunk !== "object") {
       emit(controller, chunk);
       return;
+    }
+    if (onRawChunk) {
+      try {
+        onRawChunk(chunk);
+      } catch {
+        // Memory for the next turn must never break this one.
+      }
     }
     if (chunk.type === "text-delta") {
       const id = String(chunk.id ?? "");
@@ -274,10 +291,14 @@ export function createPrivateStreamTransform(
 }
 
 /** Wrap a streamed chat response for a private session. JSON and empty bodies pass. */
-export function privatizeChatResponse(res: Response, terms: readonly string[] = []): Response {
+export function privatizeChatResponse(
+  res: Response,
+  terms: readonly string[] = [],
+  onRawChunk?: (chunk: Chunk) => void,
+): Response {
   const contentType = res.headers.get("content-type") ?? "";
   if (!res.body || !contentType.includes("text/event-stream")) return res;
-  return new Response(res.body.pipeThrough(createPrivateStreamTransform(terms)), {
+  return new Response(res.body.pipeThrough(createPrivateStreamTransform(terms, onRawChunk)), {
     status: res.status,
     statusText: res.statusText,
     headers: res.headers,

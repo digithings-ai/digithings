@@ -138,6 +138,10 @@ describe("privatizeChunk", () => {
       data: { status: "tool", label: `Searching ${PRIVATE_TERM_LABEL}` },
     });
     expect(privatizeChunk({ type: "data-notice", data: { text: "x" } }, s)).not.toBeNull();
+    // The upstream conversation id must survive, or every private turn
+    // starts a fresh upstream conversation.
+    const conv = { type: "data-conversation", data: { conversationId: "conv_1" } };
+    expect(privatizeChunk(conv, s)).toEqual(conv);
   });
 });
 
