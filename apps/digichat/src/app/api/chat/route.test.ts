@@ -4128,11 +4128,11 @@ describe("POST /api/chat limits", () => {
       const callId = "call_9b1e77c0d2";
       const turn1 = [
         { type: "start", messageId: "m1" },
-        { type: "tool-input-start", toolCallId: callId, toolName: "zammad_search" },
+        { type: "tool-input-start", toolCallId: callId, toolName: "helpdesk_search" },
         {
           type: "tool-input-available",
           toolCallId: callId,
-          toolName: "zammad_search",
+          toolName: "helpdesk_search",
           input: { q: "Priya" },
         },
         { type: "tool-output-available", toolCallId: callId, output: { name: "Priya Nair" } },
@@ -4148,7 +4148,7 @@ describe("POST /api/chat limits", () => {
         ...privateTenant,
         embedConfig: {
           ...privateTenant.embedConfig,
-          mcp: { servers: [{ id: "zammad", url: "https://mcp.example/zammad" }] },
+          mcp: { servers: [{ id: "helpdesk", url: "https://mcp.example/helpdesk" }] },
         },
       } as EmbedChatTenantContext);
       const headers = {
@@ -4167,7 +4167,7 @@ describe("POST /api/chat limits", () => {
       );
       const browser = await first.text();
       expect(browser).not.toContain("Priya");
-      expect(browser).not.toContain("zammad");
+      expect(browser).not.toContain("helpdesk");
 
       // Turn 2: the browser sends back only the stripped step.
       vi.mocked(createDigigraphTraceStreamResponse).mockClear();
@@ -4204,7 +4204,7 @@ describe("POST /api/chat limits", () => {
         .flatMap((m) => m.parts)
         .find((p) => p.toolCallId === callId);
       expect(tool).toMatchObject({
-        type: "tool-zammad_search",
+        type: "tool-helpdesk_search",
         input: { q: "Priya" },
         output: { name: "Priya Nair" },
       });

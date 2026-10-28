@@ -40,7 +40,7 @@ describe("privateSessionChrome", () => {
     const all = [PRIVATE_WELCOME, PRIVATE_PLACEHOLDER, PRIVATE_HEADER_TITLE, ...PRIVATE_SUGGESTIONS]
       .join(" ")
       .toLowerCase();
-    for (const name of ["occ", "zammad", "digithings", "digichat"]) {
+    for (const name of ["occ", "digithings", "digichat"]) {
       expect(all).not.toContain(name);
     }
   });

@@ -71,7 +71,7 @@ export class PrivateTextScrubber {
 
   constructor(terms: readonly string[] = []) {
     const words = terms.filter(Boolean).map(escapeRegExp);
-    // Also catch the term glued to a tool prefix: `zammad_search_tickets`.
+    // Also catch the term glued to a tool prefix: `helpdesk_search_tickets`.
     this.termRe = words.length
       ? new RegExp(`(?<![A-Za-z0-9])(?:${words.join("|")})(?![A-Za-z0-9])`, "gi")
       : null;
@@ -102,7 +102,7 @@ export class PrivateTextScrubber {
     return out;
   }
 
-  /** A tool name with the tenant's own names removed: `zammad_search_tickets` → `search_tickets`. */
+  /** A tool name with the tenant's own names removed: `helpdesk_search_tickets` → `search_tickets`. */
   toolName(name: string): string {
     if (!this.termRe || !name) return name;
     const stripped = name

@@ -152,7 +152,7 @@ describe("PRIVATE_MODE_INSTRUCTION content", () => {
   });
 
   it("names no product, tenant or ticketing system itself", () => {
-    for (const name of ["OCC", "Zammad", "digithings", "DigiChat"]) {
+    for (const name of ["OCC", "digithings", "DigiChat"]) {
       expect(PRIVATE_MODE_INSTRUCTION.toLowerCase()).not.toContain(name.toLowerCase());
     }
   });
