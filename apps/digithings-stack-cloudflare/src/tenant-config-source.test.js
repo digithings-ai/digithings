@@ -66,14 +66,14 @@ function digithingsEmbedEntry() {
 }
 
 describe("tenant-config: the digithings-only constant is the only copy left", () => {
-  it("composes the split [vars] pair in index.ts (non-vacuity)", () => {
+  it("composes the house var and the private secret in index.ts (non-vacuity)", () => {
     // Without this the assertions below could pass on a source that simply says
     // nothing about the corpus map at all.
     const entry = corpusMapEntry();
     expect(entry).not.toBeNull();
     expect(entry).toContain("composeCorpusMap(");
     expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP");
-    expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP_EXTRA");
+    expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP_PRIVATE");
   });
 
   it("carries no tenant corpus map in index.ts", () => {

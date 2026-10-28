@@ -1,13 +1,12 @@
 """Unit tests for scripts/check_tenant_corpus_map.py (refs #3854).
 
-The tenant corpus map is carried in two blobs that must stay identical: the
-``DIGICHAT_EMBED_TENANTS`` JSON in the profile-a compose override and the
-wrangler ``[vars]`` PAIR ``DIGI_TENANT_CORPUS_MAP`` + ``DIGI_TENANT_CORPUS_MAP_EXTRA``
-(split on 2026-10-25 because one Cloudflare text binding may not exceed 5.1 kB;
-the single value was 5285 bytes and failed the deploy with code 10054). This
-drift check compares key sets AND per-key ``digisearchIndex``/``vaultPathPrefix``
-values across them, and separately refuses an inline corpus map or a dropped half
-in ``src/index.ts``, which is what the retired ``??`` fallback literal used to be.
+The house tenant's corpus entry is carried in two blobs that must stay identical:
+the ``DIGICHAT_EMBED_TENANTS`` JSON in the profile-a compose override and the
+wrangler ``[vars]`` ``DIGI_TENANT_CORPUS_MAP``. Every other tenant is client config
+held in the ``DIGI_TENANT_CORPUS_MAP_PRIVATE`` Worker secret (DIG-3585), so the
+gate refuses any non-house tenant -- or the retired ``DIGI_TENANT_CORPUS_MAP_EXTRA``
+var -- in the public wrangler.toml, and separately refuses an inline corpus map or
+a dropped half in ``src/index.ts``.
 """
 
 from __future__ import annotations
@@ -44,12 +43,12 @@ def ccm() -> Any:
 _CORPUS_A = {"digisearchIndex": "digithings_docs", "vaultPathPrefix": "clients/digithings"}
 _CORPUS_B = {"digisearchIndex": "occ_help", "vaultPathPrefix": "clients/online-compliance-center"}
 
-#: What ``src/index.ts`` must contain: both halves named, composed by name.
+#: What ``src/index.ts`` must contain: house var + private secret, composed by name.
 _INDEX_WIRING = (
     "const x = {\n"
     "  DIGI_TENANT_CORPUS_MAP: composeCorpusMap(\n"
     "    env.DIGI_TENANT_CORPUS_MAP,\n"
-    "    env.DIGI_TENANT_CORPUS_MAP_EXTRA,\n"
+    "    env.DIGI_TENANT_CORPUS_MAP_PRIVATE,\n"
     "  ),\n"
     "};\n"
 )
@@ -66,7 +65,7 @@ def _tenants(extra: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def _split_corpus(corpus: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The house entry in the unsuffixed var, every other tenant in the extra one."""
+    """The house entry (public var) and every other tenant (private secret)."""
     primary = {"digithings": corpus["digithings"]}
     extra = {slug: entry for slug, entry in corpus.items() if slug != "digithings"}
     return primary, extra
@@ -77,7 +76,8 @@ def _write_blobs(
     tenants: dict[str, Any],
     corpus: dict[str, Any],
     *,
-    drop_extra: bool = False,
+    with_retired_extra: bool = False,
+    primary_override: dict[str, Any] | None = None,
     index_ts_source: str = _INDEX_WIRING,
 ) -> tuple[Path, Path, Path]:
     compose = tmp_path / "compose.override.yml"
@@ -92,10 +92,12 @@ def _write_blobs(
         encoding="utf-8",
     )
     primary, extra = _split_corpus(corpus)
+    if primary_override is not None:
+        primary = primary_override
     wrangler = tmp_path / "wrangler.toml"
     escaped = json.dumps(primary).replace("\\", "\\\\").replace('"', '\\"')
     body = f'[vars]\nDIGI_TENANT_CORPUS_MAP = "{escaped}"\n'
-    if not drop_extra:
+    if with_retired_extra:
         extra_escaped = json.dumps(extra).replace("\\", "\\\\").replace('"', '\\"')
         body += f'DIGI_TENANT_CORPUS_MAP_EXTRA = "{extra_escaped}"\n'
     wrangler.write_text(body, encoding="utf-8")
@@ -136,9 +138,10 @@ def test_loaders_agree_on_tmp_blobs(ccm: Any, tmp_path: Path) -> None:
         "occ": dict(_CORPUS_B),
     }
     assert ccm.load_embed_map(compose) == expected
-    # The pair is joined, not just the first half: a loader that read only
-    # DIGI_TENANT_CORPUS_MAP would answer with the house tenant alone.
-    assert ccm.load_wrangler_map(wrangler) == expected
+    # wrangler carries the house tenant only; the rest is a Worker secret.
+    assert ccm.load_wrangler_map(wrangler) == ccm.house_only(expected)
+    assert ccm.house_only(ccm.load_embed_map(compose)) == ccm.load_wrangler_map(wrangler)
+    assert ccm.check_wrangler_private_tenants(wrangler) == []
     assert ccm.check_index_ts_wiring(index_ts) == []
 
 
@@ -205,7 +208,7 @@ def test_index_ts_wiring_refuses_a_dropped_half(ccm: Any, tmp_path: Path) -> Non
         encoding="utf-8",
     )
     problems = ccm.check_index_ts_wiring(index_ts)
-    assert any("does not compose the [vars] pair" in problem for problem in problems), problems
+    assert any("does not compose the house var" in problem for problem in problems), problems
 
 
 def test_compare_maps_passes_when_all_agree(ccm: Any) -> None:
@@ -254,42 +257,57 @@ def test_main_exit_nonzero_with_unified_diff_on_drift(
     ccm: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     tenants = _tenants()
-    tenants["occ.digithings.ai"] = {
-        "slug": "occ",
-        "backend": {"type": "digigraph", **_CORPUS_B, "digisearchIndex": "occ_stale"},
+    tenants["digithings.ai"] = {
+        "slug": "digithings",
+        "backend": {"type": "digigraph", **_CORPUS_A, "digisearchIndex": "house_stale"},
     }
     compose, wrangler, index_ts = _write_blobs(
         tmp_path, tenants, {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)}
     )
     assert ccm.main(_args(compose, wrangler, index_ts)) == 1
     out = capsys.readouterr().out
-    assert "occ_stale" in out
+    assert "house_stale" in out
     assert "---" in out and "+++" in out
 
 
-def test_main_exit_nonzero_when_the_extra_half_is_dropped(
+def test_main_refuses_the_retired_extra_var(
     ccm: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The vars are one map in two bindings, not two independent opts-in."""
+    """DIG-3585: the client half may not come back as a public [vars] value."""
     compose, wrangler, index_ts = _write_blobs(
         tmp_path,
         _tenants(),
         {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)},
-        drop_extra=True,
+        with_retired_extra=True,
     )
     assert ccm.main(_args(compose, wrangler, index_ts)) == 1
-    assert "occ" in capsys.readouterr().out
+    assert "DIGI_TENANT_CORPUS_MAP_EXTRA" in capsys.readouterr().out
+
+
+def test_main_refuses_a_client_tenant_in_the_house_var(
+    ccm: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A non-house tenant folded into the public var is the same leak."""
+    compose, wrangler, index_ts = _write_blobs(
+        tmp_path,
+        _tenants(),
+        {"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)},
+        primary_override={"digithings": dict(_CORPUS_A), "occ": dict(_CORPUS_B)},
+    )
+    assert ccm.main(_args(compose, wrangler, index_ts)) == 1
+    assert "non-house tenant" in capsys.readouterr().out
 
 
 def test_real_repo_blobs_agree(ccm: Any) -> None:
     """The real blobs agree at this commit — the drift gate has a green baseline."""
     report = ccm.compare_maps(
         [
-            ("embed", ccm.load_embed_map(ccm.default_compose_file())),
-            ("wrangler", ccm.load_wrangler_map(ccm.default_wrangler_file())),
+            ("embed", ccm.house_only(ccm.load_embed_map(ccm.default_compose_file()))),
+            ("wrangler", ccm.house_only(ccm.load_wrangler_map(ccm.default_wrangler_file()))),
         ]
     )
     assert report["ok"] is True, f"repo blobs drifted: {report['problems']}"
+    assert ccm.check_wrangler_private_tenants(ccm.default_wrangler_file()) == []
     assert ccm.check_index_ts_wiring(ccm.default_index_ts_file()) == []
 
 
@@ -299,7 +317,8 @@ def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
     The drift gate deliberately compares only ``digisearchIndex``/``vaultPathPrefix``
     (sibling keys such as the OCC ``researchSystemPrompt`` are out of its scope),
     so prompt parity is pinned here instead: the compose override's stack-service
-    value and the wrangler ``[vars]`` pair, joined. ``index.ts`` is no longer a
+    value and the wrangler ``[vars]`` house value. Non-house prompts live in the
+    private Worker secret (DIG-3585) and are not in the repo to compare. ``index.ts`` is no longer a
     blob — it composes the pair, and `corpus-map-compose.test.js` in the app
     asserts the composed value is byte-identical to the compose one.
     """
@@ -313,22 +332,6 @@ def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
         "compose": json.loads(compose_raw),
         "wrangler": ccm.compose_corpus_vars(primary, extra),
     }
-
-
-def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
-    """Each map's occ entry carries the same researchSystemPrompt (#4717 follow-up 2).
-
-    Task 6 wired the OCC prompt into the deployed wrangler map only; the two
-    dev-path maps (the app's fallback, local compose) must carry byte-identical
-    prompt text — decoded comparison, so per-file escaping may differ.
-    """
-    raw = _load_raw_corpus_maps(ccm)
-    prompts = {name: blob["occ"].get("researchSystemPrompt") for name, blob in raw.items()}
-    assert all(isinstance(p, str) and p.strip() for p in prompts.values()), (
-        f"occ researchSystemPrompt missing/empty in: "
-        f"{sorted(n for n, p in prompts.items() if not (isinstance(p, str) and p.strip()))}"
-    )
-    assert len(set(prompts.values())) == 1, "occ researchSystemPrompt drifted across maps"
 
 
 def test_real_blobs_digithings_prompt_parity(ccm: Any) -> None:

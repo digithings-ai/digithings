@@ -427,7 +427,6 @@
         "DIGI_LLM_MODE": "var",
         "DIGI_SESSION_MODEL_ALLOWLIST": "var",
         "DIGI_TENANT_CORPUS_MAP": "var",
-        "DIGI_TENANT_CORPUS_MAP_EXTRA": "var",
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
