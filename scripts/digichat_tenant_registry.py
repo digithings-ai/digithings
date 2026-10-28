@@ -128,6 +128,8 @@ ALLOWED_OVERLAY_KEYS = frozenset(
         "llmAccess",
         "gate",
         "requiredPlanTier",
+        # Display-side private session (stand-in names, closed tool steps).
+        "privateMode",
     ]
 )
 

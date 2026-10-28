@@ -235,6 +235,14 @@ python3 scripts/digichat_tenant_registry.py apply \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
 ```
 
+### Live KV change log
+
+- **28 Oct 2026, 15:10-15:11 Rome** (Chris approved): the live `embed-tenants`
+  KV key was edited by hand for `occ.digithings.ai` only. `welcome` became
+  `Ask about OCC.` and `privateMode` was added as `true`. No other tenant or
+  field changed. A backup of the previous value is kept off-repo in the host
+  secret store. `DIG-4488-occ-tenant-overlay.json` records the new state.
+
 The compose refuses, and names the reason: an overlay that drops a tenant, an
 overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
 live registry does not have, an overlay key the runtime does not read, and a

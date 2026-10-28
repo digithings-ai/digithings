@@ -206,6 +206,19 @@ def test_the_occ_only_overlay_sets_only_the_picker_on_the_kv_copy():
     assert composed["occ.digithings.ai"]["tokenEnv"] == "OCC_INVITE_KEY"
 
 
+def test_the_occ_only_overlay_records_the_live_welcome_and_private_mode():
+    """The overlay matches the live KV edit of 28 Oct 2026 and composes."""
+    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
+    entry = overlay["occ.digithings.ai"]
+    assert entry["welcome"] == "Ask about OCC."
+    assert entry["privateMode"] is True
+    composed, _ = registry.compose_registry(LIVE, overlay)
+    assert composed["occ.digithings.ai"]["privateMode"] is True
+    composed_kv, _ = registry.compose_kv_registry(KV_LIVE, overlay)
+    assert composed_kv["occ.digithings.ai"]["welcome"] == "Ask about OCC."
+    assert composed_kv["occ.digithings.ai"]["privateMode"] is True
+
+
 def test_overlay_with_a_token_is_refused():
     with pytest.raises(registry.RegistryRefusal) as refusal:
         registry.compose_registry(LIVE, {"digithings.ai": {"token": "from-the-repo"}})
