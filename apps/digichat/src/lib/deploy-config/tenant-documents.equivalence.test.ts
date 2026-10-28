@@ -126,7 +126,7 @@ const EMBED_TENANTS_KV = `
       ]
     },
     "webSearch": false,
-    "welcome": "Ask about Online Compliance Center policies, procedures, and help articles."
+    "welcome": "Ask about OCC."
   }
 }
 `;
