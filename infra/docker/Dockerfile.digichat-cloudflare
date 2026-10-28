@@ -16,6 +16,10 @@ ARG DIGICHAT_ASSET_PREFIX="/_dtchat"
 # (apps/digichat-cloudflare/src/paths.ts), and the contract test pins the two
 # values together so the edge and the image cannot drift.
 ARG DIGICHAT_BASE_PATH="/chat"
+# The public origin for absolute og:image / twitter:image URLs
+# (apps/digichat/src/lib/public-origin.ts). Without it Next bakes
+# http://localhost:<port> into the link-preview tags.
+ARG DIGICHAT_PUBLIC_ORIGIN="https://digithings.ai"
 
 FROM node:22-alpine AS deps
 WORKDIR /app
@@ -45,6 +49,8 @@ ENV NEXT_PUBLIC_DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 ARG DIGICHAT_BASE_PATH
 ENV DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
 ENV NEXT_PUBLIC_DIGICHAT_BASE_PATH=$DIGICHAT_BASE_PATH
+ARG DIGICHAT_PUBLIC_ORIGIN
+ENV NEXT_PUBLIC_DIGICHAT_PUBLIC_ORIGIN=$DIGICHAT_PUBLIC_ORIGIN
 # An EMPTY base path is a broken image, not a default: Next would then serve
 # the app at "/" while the Worker asks for "/chat", and every request would
 # 404 behind a green build. Fail the build instead. (An empty value can be
