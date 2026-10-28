@@ -30,6 +30,12 @@ import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
 import type { FxHubEnv } from "./fx-hub/env";
 import { createFxHubFetch, FX_HUB_PATHS, fxHubWorkerRoutesOn } from "./fx-hub/router";
+import type { PricesLiveEnv } from "./prices-live/env";
+import {
+  createPricesLiveFetch,
+  PRICES_LIVE_PATHS,
+  pricesLiveWorkerRoutesOn,
+} from "./prices-live/router";
 import { tryHandleLedger } from "./ledger";
 import { tryHandleTables } from "./tables";
 import { registerBriefRoutes } from "./brief";
@@ -86,6 +92,22 @@ export interface Env {
    * them. Anything else, or unset, answers 404 without reading a key.
    */
   FX_HUB_WORKER_ROUTES?: string;
+  /**
+   * Supabase exit S4 (DIG-2887). `PRICES_LIVE_WORKER_ROUTES = "1"` mounts the
+   * ported prices-live routes (off by default; the edge function and pg_cron
+   * keep serving). `PRICES_LIVE_BACKEND = "kv"` writes quotes to the
+   * `PRICES_LIVE_KV` namespace instead of `prices_live`. `PRICES_LIVE_CRON_TOKEN`
+   * is the bearer the cron call sends; unset refuses every refresh.
+   * `PRICES_LIVE_TICKERS` (comma list) replaces the core ticker view read.
+   */
+  PRICES_LIVE_WORKER_ROUTES?: string;
+  PRICES_LIVE_BACKEND?: string;
+  PRICES_LIVE_CRON_TOKEN?: string;
+  PRICES_LIVE_TICKERS?: string;
+  PRICES_LIVE_KV?: {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  };
   SUPABASE_SECRET_KEYS?: string;
   SUPABASE_PUBLISHABLE_KEYS?: string;
   /**
@@ -102,6 +124,9 @@ export interface Env {
 
 /** Exact paths the ported FX Hub module owns. Not dashboard catalog routes. */
 const FX_HUB_ROUTE_PATHS: ReadonlySet<string> = new Set(Object.values(FX_HUB_PATHS));
+
+/** Exact paths the ported prices-live module owns, mounted only behind its flag. */
+const PRICES_LIVE_ROUTE_PATHS: ReadonlySet<string> = new Set(Object.values(PRICES_LIVE_PATHS));
 
 // Section 1/2 primitives live in ./errors and ./responses: this module is the
 // worker entrypoint and may export only `default` (see the header of ./responses).
@@ -316,6 +341,9 @@ export default {
         );
       }
       return withCors(await createFxHubFetch(env as FxHubEnv).fetch(request), cors);
+    }
+    if (PRICES_LIVE_ROUTE_PATHS.has(path) && pricesLiveWorkerRoutesOn(env as PricesLiveEnv)) {
+      return withCors(await createPricesLiveFetch(env as PricesLiveEnv).fetch(request), cors);
     }
     const res =
       path === MCP_PATH ? await handleMcp(request, env, (req) => routeGet(req, env)) : await routeGet(request, env);

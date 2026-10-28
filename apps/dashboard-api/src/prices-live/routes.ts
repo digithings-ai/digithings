@@ -18,6 +18,7 @@
  *   nothing).
  */
 
+import { createKvPricesLive, KvNotBoundError, pricesLiveBackend } from "./kv-store";
 import { envFirst, type PricesLiveEnv } from "./env";
 import { json } from "./http";
 import {
@@ -81,6 +82,17 @@ export async function handlePricesLive(
 
   // 3) Data layer. Missing Supabase env is a 500 with the edge's exact body.
   let admin = deps.admin;
+  if (!admin && pricesLiveBackend(env) === "kv") {
+    try {
+      admin = createKvPricesLive(env, () => at);
+    } catch (err) {
+      if (err instanceof KvNotBoundError) {
+        console.error("prices-live: PRICES_LIVE_BACKEND=kv but PRICES_LIVE_KV is not bound");
+        return json({ error: "prices-live kv not bound" }, 500);
+      }
+      throw err;
+    }
+  }
   if (!admin) {
     try {
       admin = createPostgrestPricesLive(env);

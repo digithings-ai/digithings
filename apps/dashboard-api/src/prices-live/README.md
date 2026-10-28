@@ -39,17 +39,34 @@ implementation, which also matches the existing house pattern in
 `src/supabase.ts`. A later leaf that moves the tables to D1 replaces that one
 file; the handler does not change.
 
-## Not wired, on purpose
+## Mounted behind flags (Supabase exit S4, DIG-2887)
 
-`createPricesLiveFetch` is not mounted in `src/index.ts`. Mounting it means
-binding `FINNHUB_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` as Worker secrets,
-which is a production change and is Chris's call under the supabase-exit
-epic. A test pins this: `no-deno.test.ts` asserts the dashboard-api
-entrypoint does not reference `prices-live`.
+`src/index.ts` mounts the router only when `PRICES_LIVE_WORKER_ROUTES` is
+`"1"`. Off (the default), the paths fall through to the catalog and the edge
+function plus pg_cron keep serving. With the flag on:
 
-No `wrangler.toml` was edited, no `[vars]` key or secret was added, and the
-Supabase Edge Function is untouched. It stays live as the two-week rollback
-while the Worker path is exercised.
+| Var / binding | Effect |
+| --- | --- |
+| `PRICES_LIVE_CRON_TOKEN` (secret) | `POST /prices-live` needs `Authorization: Bearer <token>`. Unset refuses every call (401). The edge path was anon-callable behind the lease; on the worker the cron call is the only caller. |
+| `PRICES_LIVE_BACKEND = "kv"` | `kv-store.ts` replaces PostgREST: lease and quotes live in KV. Anything else keeps `prices_live` in Supabase. |
+| `PRICES_LIVE_KV` (KV binding) | The namespace for the kv backend. Missing with `kv` set answers 500 `prices-live kv not bound`. |
+| `PRICES_LIVE_TICKERS` | Comma list that replaces the core `public_portfolio_positions` read. Unset reads the view if Supabase is configured, else majors only. |
+| `FINNHUB_API_KEY` (secret) | Unchanged: unset answers `{ dormant: true }`. |
+
+`GET /prices-live/quotes` returns the KV snapshot `{ updated_at, rows }`
+(public quotes, the data the Realtime channel broadcast). It answers 404 on
+the Supabase backend.
+
+The KV lease is a best-effort window, not the Postgres row lock: KV has no
+compare-and-set. It holds because the bearer gate leaves one caller, the
+per-minute cron. A Durable Object would make it atomic if a second caller
+ever appears.
+
+Not in this change, each a Cloudflare-side step that needs Chris's go: the KV
+namespace and binding, the two secrets, the digithings-cron row that POSTs
+the refresh every minute in market hours, re-pointing the browser tickers from
+Realtime to the quotes read (or an SSE Durable Object), and disabling the two
+pg_cron prices jobs.
 
 ## The rate guard survives the port
 
