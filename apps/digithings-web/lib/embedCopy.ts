@@ -43,7 +43,7 @@ export const EMBED_SHELL_COPY: Record<
     ],
   },
   [OCC_CHAT_EMBED_HOST]: {
-    welcome: "Ask about Online Compliance Center",
+    welcome: "Ask about OCC.",
     suggestions: [
       "How do I file a support ticket?",
       "Search the help articles for onboarding",
