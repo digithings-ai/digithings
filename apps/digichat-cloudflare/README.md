@@ -168,6 +168,18 @@ it needs `ZAMMAD_API_TOKEN` (and optionally `ZAMMAD_BASE_URL`) as Container
 secrets. They are resolved server-side and stripped by the browser projections
 (see `apps/digichat/ARCHITECTURE.md`).
 
+**Scoped token instead of the shared key (DIG-3585).** The route also accepts
+`Authorization: Bearer <digikey JWT>` when the token verifies against the
+digikey JWKS (RS256, `iss`, `aud`, `exp`) and carries the exact scope
+`mcp:zammad` from a chat principal (`api_key`, or a `bff_session` of an
+invite-gated tenant). The chat asks for that scope only on the invite-gated
+tenant's turn, so a server row with `authScheme: jwt` (no `token`/`tokenEnv`/
+`authHeader`) makes the tool reachable from that chat alone. Once the tenant row
+uses it, `ZAMMAD_MCP_JWT_ONLY = "1"` refuses `ZAMMAD_EDGE_KEY` on both spellings;
+the key can then be rotated away. `ZAMMAD_API_TOKEN` (the Zammad credential) is
+independent and unaffected. Gate: `src/helpdesk-mcp-auth.ts`; the JWKS is read
+through the `DIGIKEY` service binding.
+
 `DIGICHAT_EMBED_HOSTS` is already set in `wrangler.toml` `[vars]` (CSP
 `frame-ancestors` — no tokens). Keep it aligned with tenant host keys:
 

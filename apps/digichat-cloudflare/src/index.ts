@@ -19,7 +19,8 @@ import {
   shouldProxyToDigiChat,
   withContainerPath,
 } from "./paths";
-import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
+import { MCP_KEY_HEADER } from "./mcp-gate";
+import { authorizeHelpdeskMcp } from "./helpdesk-mcp-auth";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
 import {
@@ -323,6 +324,17 @@ export interface Env {
   /** Worker-only gate for /api/mcp/zammad*; never forwarded to the container. */
   ZAMMAD_EDGE_KEY?: string;
   /**
+   * DIG-3585: "1" refuses ZAMMAD_EDGE_KEY on /api/mcp/zammad*, so only a
+   * digikey JWT with the `mcp:zammad` scope opens it (src/helpdesk-mcp-auth.ts).
+   * Unset/anything else keeps the key working. Worker-only.
+   */
+  ZAMMAD_MCP_JWT_ONLY?: string;
+  /**
+   * Service binding to the Worker serving key.digithings.ai, for the digikey
+   * JWKS read. Unbound ⇒ a plain fetch of the public JWKS URL.
+   */
+  DIGIKEY?: Fetcher;
+  /**
    * Key for the digithings-stack `/_stack/mcp/<id>` edge (digisearch/digivault);
    * forwarded to the container as `x-digi-mcp-key`. Same value as the stack
    * Worker's MCP_EDGE_KEY secret; set with `wrangler secret put`.
@@ -407,16 +419,17 @@ export default {
     // that recognises them also maps the base-path spelling back onto the
     // container-local one, so the unauthenticated copy is never reached.
     //
-    // The verdict comes from the gate module (src/mcp-gate.ts), not from an
-    // inline comparison: a gate that can only be READ cannot be proven
-    // fail-closed, and the contract test executes this one.
-    const mcpGate = evaluateMcpGate(
-      url.pathname,
-      request.headers.get(MCP_KEY_HEADER),
-      workerEnv.ZAMMAD_EDGE_KEY,
-    );
+    // The verdict comes from the gate modules (src/helpdesk-mcp-auth.ts over
+    // src/mcp-gate.ts), not from an inline comparison: a gate that can only be
+    // READ cannot be proven fail-closed, and the tests execute this one.
+    //
+    // DIG-3585: besides the shared edge key, the gate accepts a digikey JWT
+    // carrying the exact `mcp:zammad` scope, which the chat mints only on the
+    // invite-gated tenant's turn. ZAMMAD_MCP_JWT_ONLY="1" refuses the shared
+    // key, so afterwards only that chat reaches the helpdesk tools.
+    const mcpGate = await authorizeHelpdeskMcp(request, url.pathname, workerEnv);
     if (mcpGate.kind === "unauthorized") {
-      return new Response("digithings-digichat: unauthorized", { status: 401 });
+      return new Response("digithings-digichat: unauthorized", { status: mcpGate.status });
     }
     if (mcpGate.kind === "not-mcp") {
       if (isContainerInternalPath(url.pathname)) {
@@ -468,6 +481,9 @@ export default {
     // The edge key stops at the edge: the container never sees it. The header
     // is dropped from the COPY, so the original request still carries it.
     containerRequest.headers.delete(MCP_KEY_HEADER);
+    // The helpdesk token stops here too: zammad-mcp needs no caller identity,
+    // and a bearer the edge has already judged has no business further in.
+    if (mcpGate.kind === "authorized") containerRequest.headers.delete("authorization");
     return frameSafeErrorResponse(
       containerRequest,
       await fetchContainerWithRetry(containerRequest, (req) => container.fetch(req)),
