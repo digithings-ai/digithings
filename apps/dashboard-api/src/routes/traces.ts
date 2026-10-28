@@ -33,10 +33,10 @@
  * says so in `cost_source`/`cost_caveat` rather than implying it is the record.
  */
 
-import { buildProvenance, errorResponse, type Provenance } from './errors';
-import { HOUSE_WORKSPACE_ID } from './supabase';
-import { tableRows, type TableReadEnv } from './table-read';
-import type { RouteCtx, RouteModule } from './registry';
+import { buildProvenance, errorResponse, type Provenance } from "../errors";
+import { HOUSE_WORKSPACE_ID } from "../supabase";
+import { tableRows, type TableReadEnv } from "../table-read";
+import type { RouteCtx, RouteModule } from "./registry";
 
 export type TracesEnv = TableReadEnv & {
   /**
@@ -60,23 +60,25 @@ const MAX_COST_ROWS = 5000;
 
 /** The one place the tenant is resolved. Never returns null, never widens. */
 export function tenantWorkspace(env: TracesEnv): string {
-  const v = (env.DASHBOARD_WORKSPACE_ID ?? '').trim();
+  const v = (env.DASHBOARD_WORKSPACE_ID ?? "").trim();
   return UUID_RE.test(v) ? v.toLowerCase() : HOUSE_WORKSPACE_ID;
 }
 
 /** Rows that belong to the caller's workspace only. Exported for the M6 test. */
 export function onlyWorkspace(rows: readonly Row[], workspace: string): Row[] {
   const want = workspace.toLowerCase();
-  return rows.filter((r) => typeof r.workspace_id === 'string' && r.workspace_id.toLowerCase() === want);
+  return rows.filter(
+    (r) => typeof r.workspace_id === "string" && r.workspace_id.toLowerCase() === want,
+  );
 }
 
 function str(v: unknown): string | null {
-  return typeof v === 'string' && v.length > 0 ? v : null;
+  return typeof v === "string" && v.length > 0 ? v : null;
 }
 
 function num(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
@@ -84,14 +86,24 @@ function num(v: unknown): number | null {
 }
 
 function pinOf(req: Request): { pin: string | null } | { error: Response } {
-  const pin = new URL(req.url).searchParams.get('retrieval_pin');
+  const pin = new URL(req.url).searchParams.get("retrieval_pin");
   if (pin !== null && pin.length > 128) {
-    return { error: errorResponse('bad_request', 'retrieval_pin exceeds 128 characters', null, { max_length: 128 }) };
+    return {
+      error: errorResponse("bad_request", "retrieval_pin exceeds 128 characters", null, {
+        max_length: 128,
+      }),
+    };
   }
   return { pin };
 }
 
-function ok(data: unknown, source: string, pin: string | null, asOf: string | null, marks: Provenance['marks'] = 'stored'): Response {
+function ok(
+  data: unknown,
+  source: string,
+  pin: string | null,
+  asOf: string | null,
+  marks: Provenance["marks"] = "stored",
+): Response {
   return Response.json({
     data,
     as_of: asOf,
@@ -142,13 +154,13 @@ export interface SpanRow {
 export type SpanNode = SpanRow;
 
 const TRACE_SELECT =
-  'workspace_id,trace_id,name,source,service_name,started_at,ended_at,duration_ms,status,status_message,session_id,run_id,span_count';
+  "workspace_id,trace_id,name,source,service_name,started_at,ended_at,duration_ms,status,status_message,session_id,run_id,span_count";
 const SPAN_SELECT =
-  'workspace_id,trace_id,span_id,parent_span_id,name,kind,started_at,ended_at,duration_ms,status,status_message,model,provider,input_tokens,output_tokens,total_tokens,cost_usd,input_hash,output_hash';
+  "workspace_id,trace_id,span_id,parent_span_id,name,kind,started_at,ended_at,duration_ms,status,status_message,model,provider,input_tokens,output_tokens,total_tokens,cost_usd,input_hash,output_hash";
 
 export function traceRow(r: Row): TraceRow {
   return {
-    trace_id: str(r.trace_id) ?? '',
+    trace_id: str(r.trace_id) ?? "",
     name: str(r.name),
     source: str(r.source),
     service_name: str(r.service_name),
@@ -165,7 +177,7 @@ export function traceRow(r: Row): TraceRow {
 
 export function spanRow(r: Row): SpanRow {
   return {
-    span_id: str(r.span_id) ?? '',
+    span_id: str(r.span_id) ?? "",
     parent_span_id: str(r.parent_span_id),
     name: str(r.name),
     kind: str(r.kind),
@@ -199,7 +211,7 @@ export function spanRow(r: Row): SpanRow {
 export function buildSpanTree(spans: readonly SpanRow[]): SpanNode[] {
   const byId = new Map<string, SpanRow>();
   for (const s of spans) {
-    if (s.span_id === '' || byId.has(s.span_id)) continue;
+    if (s.span_id === "" || byId.has(s.span_id)) continue;
     byId.set(s.span_id, { ...s, children: [] });
   }
   const cyclic = new Set<string>();
@@ -249,7 +261,7 @@ export function listQuery(p: ListParams): string {
   const parts = [
     `select=${TRACE_SELECT}`,
     `workspace_id=eq.${p.workspace}`,
-    'order=started_at.desc',
+    "order=started_at.desc",
     `limit=${p.limit}`,
   ];
   if (p.since !== null) parts.push(`started_at=gte.${p.since}T00:00:00Z`);
@@ -259,50 +271,78 @@ export function listQuery(p: ListParams): string {
   if (p.runId !== null) parts.push(`run_id=eq.${encodeURIComponent(p.runId)}`);
   if (p.q !== null) {
     if (TRACE_ID_RE.test(p.q)) parts.push(`trace_id=eq.${p.q.toLowerCase()}`);
-    else parts.push(`or=(name.ilike.*${encodeURIComponent(p.q)}*,service_name.ilike.*${encodeURIComponent(p.q)}*)`);
+    else
+      parts.push(
+        `or=(name.ilike.*${encodeURIComponent(p.q)}*,service_name.ilike.*${encodeURIComponent(p.q)}*)`,
+      );
   }
-  return parts.join('&');
+  return parts.join("&");
 }
 
-function parseList(req: Request, env: TracesEnv, pin: string | null): { params: ListParams } | { error: Response } {
+function parseList(
+  req: Request,
+  env: TracesEnv,
+  pin: string | null,
+): { params: ListParams } | { error: Response } {
   const u = new URL(req.url).searchParams;
-  const q = u.get('q');
+  const q = u.get("q");
   if (q !== null && !SEARCH_RE.test(q)) {
-    return { error: errorResponse('bad_request', 'q must be 1-120 characters of letters, digits, space, . _ : @ / -', pin, { q }) };
+    return {
+      error: errorResponse(
+        "bad_request",
+        "q must be 1-120 characters of letters, digits, space, . _ : @ / -",
+        pin,
+        { q },
+      ),
+    };
   }
-  for (const key of ['since', 'until'] as const) {
+  for (const key of ["since", "until"] as const) {
     const v = u.get(key);
     if (v !== null && !DAY_RE.test(v)) {
-      return { error: errorResponse('bad_request', `${key} must be YYYY-MM-DD`, pin, { [key]: v }) };
+      return {
+        error: errorResponse("bad_request", `${key} must be YYYY-MM-DD`, pin, { [key]: v }),
+      };
     }
   }
-  const rawLimit = u.get('limit');
+  const rawLimit = u.get("limit");
   let limit = 50;
   if (rawLimit !== null) {
     const n = Number(rawLimit);
     if (!Number.isInteger(n) || n < 1 || n > MAX_LIST_LIMIT) {
-      return { error: errorResponse('bad_request', `limit must be an integer 1-${MAX_LIST_LIMIT}`, pin, { limit: rawLimit }) };
+      return {
+        error: errorResponse("bad_request", `limit must be an integer 1-${MAX_LIST_LIMIT}`, pin, {
+          limit: rawLimit,
+        }),
+      };
     }
     limit = n;
   }
-  const status = u.get('status');
+  const status = u.get("status");
   if (status !== null && !SEARCH_RE.test(status)) {
-    return { error: errorResponse('bad_request', 'status is not a valid status value', pin, { status }) };
+    return {
+      error: errorResponse("bad_request", "status is not a valid status value", pin, { status }),
+    };
   }
-  const sessionId = u.get('session_id');
+  const sessionId = u.get("session_id");
   if (sessionId !== null && !SEARCH_RE.test(sessionId)) {
-    return { error: errorResponse('bad_request', 'session_id is not a valid id', pin, { session_id: sessionId }) };
+    return {
+      error: errorResponse("bad_request", "session_id is not a valid id", pin, {
+        session_id: sessionId,
+      }),
+    };
   }
-  const runId = u.get('run_id');
+  const runId = u.get("run_id");
   if (runId !== null && !SEARCH_RE.test(runId)) {
-    return { error: errorResponse('bad_request', 'run_id is not a valid id', pin, { run_id: runId }) };
+    return {
+      error: errorResponse("bad_request", "run_id is not a valid id", pin, { run_id: runId }),
+    };
   }
   return {
     params: {
       workspace: tenantWorkspace(env),
-      q: q === null || q.trim() === '' ? null : q.trim(),
-      since: u.get('since'),
-      until: u.get('until'),
+      q: q === null || q.trim() === "" ? null : q.trim(),
+      since: u.get("since"),
+      until: u.get("until"),
       status,
       sessionId,
       runId,
@@ -316,12 +356,17 @@ function parseList(req: Request, env: TracesEnv, pin: string | null): { params: 
 /** GET /traces — list and search the caller's traces, newest first. */
 async function list(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
   const pinR = pinOf(req);
-  if ('error' in pinR) return pinR.error;
+  if ("error" in pinR) return pinR.error;
   const pR = parseList(req, ctx.env, pinR.pin);
-  if ('error' in pR) return pR.error;
+  if ("error" in pR) return pR.error;
   const p = pR.params;
-  const out = await tableRows(ctx.env, { table: 'digitrace_traces', query: listQuery(p), allowEmpty: true, retrievalPin: pinR.pin });
-  if ('error' in out) return out.error;
+  const out = await tableRows(ctx.env, {
+    table: "digitrace_traces",
+    query: listQuery(p),
+    allowEmpty: true,
+    retrievalPin: pinR.pin,
+  });
+  if ("error" in out) return out.error;
   const rows = onlyWorkspace(out.rows, p.workspace);
   const traces = rows.map(traceRow);
   return ok(
@@ -333,7 +378,7 @@ async function list(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
       // An empty window is an honest empty, not an error: a quiet tenant has no traces.
       empty: traces.length === 0,
     },
-    'core:digitrace_traces',
+    "core:digitrace_traces",
     pinR.pin,
     traces.length > 0 ? traces[0]!.started_at : null,
   );
@@ -342,47 +387,51 @@ async function list(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
 /** GET /traces/{trace_id} — one trace, its span tree and its scores. */
 async function detail(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
   const pinR = pinOf(req);
-  if ('error' in pinR) return pinR.error;
-  const traceId = (ctx.params.trace_id ?? '').trim().toLowerCase();
+  if ("error" in pinR) return pinR.error;
+  const traceId = (ctx.params.trace_id ?? "").trim().toLowerCase();
   if (!TRACE_ID_RE.test(traceId)) {
-    return errorResponse('bad_request', 'trace_id must be 32 hex characters', pinR.pin, { trace_id: traceId });
+    return errorResponse("bad_request", "trace_id must be 32 hex characters", pinR.pin, {
+      trace_id: traceId,
+    });
   }
   const ws = tenantWorkspace(ctx.env);
   const traceOut = await tableRows(ctx.env, {
-    table: 'digitrace_traces',
+    table: "digitrace_traces",
     query: `select=${TRACE_SELECT}&workspace_id=eq.${ws}&trace_id=eq.${traceId}&limit=1`,
     allowEmpty: true,
     retrievalPin: pinR.pin,
   });
-  if ('error' in traceOut) return traceOut.error;
+  if ("error" in traceOut) return traceOut.error;
   const traceRows = onlyWorkspace(traceOut.rows, ws);
   if (traceRows.length === 0) {
-    return errorResponse('not_found', 'trace not found in this workspace', pinR.pin, { trace_id: traceId });
+    return errorResponse("not_found", "trace not found in this workspace", pinR.pin, {
+      trace_id: traceId,
+    });
   }
   const trace = traceRow(traceRows[0]!);
 
   const [spanOut, scoreOut] = await Promise.all([
     tableRows(ctx.env, {
-      table: 'digitrace_spans_index',
+      table: "digitrace_spans_index",
       query: `select=${SPAN_SELECT}&workspace_id=eq.${ws}&trace_id=eq.${traceId}&order=started_at.asc&limit=${MAX_SPANS}`,
       allowEmpty: true,
       retrievalPin: pinR.pin,
     }),
     tableRows(ctx.env, {
-      table: 'digitrace_scores',
+      table: "digitrace_scores",
       query: `select=workspace_id,span_id,name,value,value_text,source,created_at&workspace_id=eq.${ws}&trace_id=eq.${traceId}&limit=200`,
       allowEmpty: true,
       retrievalPin: pinR.pin,
     }),
   ]);
-  if ('error' in spanOut) return spanOut.error;
-  if ('error' in scoreOut) return scoreOut.error;
+  if ("error" in spanOut) return spanOut.error;
+  if ("error" in scoreOut) return scoreOut.error;
 
   const spans = onlyWorkspace(spanOut.rows, ws).map(spanRow);
   const tree = buildSpanTree(spans);
   const scores = onlyWorkspace(scoreOut.rows, ws).map((r) => ({
-    span_id: str(r.span_id) ?? '',
-    name: str(r.name) ?? '',
+    span_id: str(r.span_id) ?? "",
+    name: str(r.name) ?? "",
     value: num(r.value),
     value_text: str(r.value_text),
     source: str(r.source),
@@ -402,7 +451,7 @@ async function detail(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response>
       token_total: spans.reduce((n, s) => n + (s.total_tokens ?? 0), 0),
       cost_total_usd: spans.reduce((n, s) => n + (s.cost_usd ?? 0), 0),
     },
-    'core:digitrace_spans_index',
+    "core:digitrace_spans_index",
     pinR.pin,
     trace.started_at,
   );
@@ -424,10 +473,18 @@ export function foldCost(rows: readonly Row[]): CostBucket[] {
   for (const r of rows) {
     const model = str(r.model);
     const provider = str(r.provider);
-    const key = `${provider ?? ''}\u0000${model ?? ''}`;
+    const key = `${provider ?? ""}\u0000${model ?? ""}`;
     let b = byKey.get(key);
     if (b === undefined) {
-      b = { model, provider, spans: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 };
+      b = {
+        model,
+        provider,
+        spans: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0,
+      };
       byKey.set(key, b);
     }
     b.spans += 1;
@@ -442,27 +499,32 @@ export function foldCost(rows: readonly Row[]): CostBucket[] {
 /** GET /traces/cost — tokens and cost per model over a window, from the index. */
 async function cost(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
   const pinR = pinOf(req);
-  if ('error' in pinR) return pinR.error;
+  if ("error" in pinR) return pinR.error;
   const u = new URL(req.url).searchParams;
-  for (const key of ['since', 'until'] as const) {
+  for (const key of ["since", "until"] as const) {
     const v = u.get(key);
     if (v !== null && !DAY_RE.test(v)) {
-      return errorResponse('bad_request', `${key} must be YYYY-MM-DD`, pinR.pin, { [key]: v });
+      return errorResponse("bad_request", `${key} must be YYYY-MM-DD`, pinR.pin, { [key]: v });
     }
   }
-  const since = u.get('since');
-  const until = u.get('until');
+  const since = u.get("since");
+  const until = u.get("until");
   const ws = tenantWorkspace(ctx.env);
   const parts = [
-    'select=workspace_id,model,provider,input_tokens,output_tokens,total_tokens,cost_usd',
+    "select=workspace_id,model,provider,input_tokens,output_tokens,total_tokens,cost_usd",
     `workspace_id=eq.${ws}`,
-    'order=started_at.desc',
+    "order=started_at.desc",
     `limit=${MAX_COST_ROWS}`,
   ];
   if (since !== null) parts.push(`started_at=gte.${since}T00:00:00Z`);
   if (until !== null) parts.push(`started_at=lte.${until}T23:59:59.999Z`);
-  const out = await tableRows(ctx.env, { table: 'digitrace_spans_index', query: parts.join('&'), allowEmpty: true, retrievalPin: pinR.pin });
-  if ('error' in out) return out.error;
+  const out = await tableRows(ctx.env, {
+    table: "digitrace_spans_index",
+    query: parts.join("&"),
+    allowEmpty: true,
+    retrievalPin: pinR.pin,
+  });
+  if ("error" in out) return out.error;
   const rows = onlyWorkspace(out.rows, ws);
   const buckets = foldCost(rows);
   const totals = buckets.reduce(
@@ -488,19 +550,19 @@ async function cost(req: Request, ctx: RouteCtx<TracesEnv>): Promise<Response> {
        * guarantee, and the WAE spike has not run. Until it has, this is the
        * index's own figure and is labelled as such.
        */
-      cost_source: 'index',
+      cost_source: "index",
       cost_caveat:
-        'summed from digitrace_spans_index; the Workers Analytics Engine aggregate is the source of record and the AI Gateway logs are the cross-check',
+        "summed from digitrace_spans_index; the Workers Analytics Engine aggregate is the source of record and the AI Gateway logs are the cross-check",
       truncated: rows.length >= MAX_COST_ROWS,
     },
-    'core:digitrace_spans_index',
+    "core:digitrace_spans_index",
     pinR.pin,
     null,
   );
 }
 
 export const registerTraces: RouteModule<TracesEnv> = (reg) => {
-  reg.get('/traces', list);
-  reg.get('/traces/cost', cost);
-  reg.get('/traces/{trace_id}', detail);
+  reg.get("/traces", list);
+  reg.get("/traces/cost", cost);
+  reg.get("/traces/{trace_id}", detail);
 };

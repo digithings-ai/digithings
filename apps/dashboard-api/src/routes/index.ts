@@ -5,12 +5,12 @@
 
 import { identityTrusted } from "../access";
 import type { Env } from "../index";
-import { registerTraces } from "../traces";
 import { registerDesk } from "./desk";
 import { registerFx } from "./fx";
 import { registerPipeline } from "./pipeline";
 import { registerPortfolio } from "./portfolio";
 import { registerStrategies } from "./strategies";
+import { registerTraces } from "./traces";
 import { Registry, type RouteModule } from "./registry";
 
 export const ROUTE_MODULES: RouteModule<Env>[] = [
