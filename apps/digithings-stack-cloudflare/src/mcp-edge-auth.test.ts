@@ -553,6 +553,42 @@ describe("JWKS sources", () => {
     expect(put).toHaveBeenCalledWith(MCP_EDGE_JWKS_KV_KEY, expect.stringContaining("kid-1"));
   });
 
+  it("prefers the stack's own STACK_CACHE over TENANT_CONFIG when both are bound", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network must not be used when KV has the keys");
+      }),
+    );
+    const tenantGet = vi.fn(async () => body(primary));
+    const tenantPut = vi.fn(async () => {});
+    const env = {
+      ...ENV,
+      TENANT_CONFIG: { get: tenantGet, put: tenantPut },
+      STACK_CACHE: { get: async () => body(primary), put: async () => {} },
+    };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(tenantGet).not.toHaveBeenCalled();
+    expect(tenantPut).not.toHaveBeenCalled();
+  });
+
+  it("writes a fetched JWKS to STACK_CACHE, never to the tenant namespace", async () => {
+    const token = await signJwt(primary, claimsFor("mcp:digisearch"));
+    const stackPut = vi.fn(async () => {});
+    const tenantPut = vi.fn(async () => {});
+    const bound = vi.fn(async () => new Response(body(primary), { status: 200 }));
+    const env = {
+      ...ENV,
+      DIGIKEY_SELF: { fetch: bound },
+      TENANT_CONFIG: { get: async () => body(primary), put: tenantPut },
+      STACK_CACHE: { get: async () => null, put: stackPut },
+    };
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(stackPut).toHaveBeenCalledWith(MCP_EDGE_JWKS_KV_KEY, expect.stringContaining("kid-1"));
+    expect(tenantPut).not.toHaveBeenCalled();
+  });
+
   it("refuses when neither KV nor the network yields keys", async () => {
     const token = await signJwt(primary, claimsFor("mcp:digisearch"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));

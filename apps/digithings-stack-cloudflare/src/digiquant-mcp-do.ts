@@ -16,6 +16,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { type CacheStore, handleDigiQuantMcp, type R2BucketLike } from "./digiquant-mcp";
+import type { JwksCacheKv } from "./mcp-edge-auth";
 
 export interface DigiQuantMcpEnv {
   /** Same archive bucket `/v1/market/*` reads (`digithings-archive`). */
@@ -37,10 +38,9 @@ export interface DigiQuantMcpEnv {
    * Read-through KV cache for the public JWKS, so a cold digikey cannot 401
    * every MCP call (`MCP_EDGE_JWKS_KV_KEY` in ./mcp-edge-auth).
    */
-  TENANT_CONFIG?: {
-    get(key: string): Promise<string | null>;
-    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-  };
+  TENANT_CONFIG?: JwksCacheKv;
+  /** The stack's own KV; preferred over TENANT_CONFIG when bound. */
+  STACK_CACHE?: JwksCacheKv;
 }
 
 export class DigiQuantMcpAgent extends DurableObject<DigiQuantMcpEnv> {
@@ -60,6 +60,7 @@ export class DigiQuantMcpAgent extends DurableObject<DigiQuantMcpEnv> {
         // digikey. Without both, the JWT path fails closed on every call.
         DIGIKEY_SELF: this.env.DIGIKEY_SELF,
         TENANT_CONFIG: this.env.TENANT_CONFIG,
+        STACK_CACHE: this.env.STACK_CACHE,
       },
       cache: this.cache,
     });
