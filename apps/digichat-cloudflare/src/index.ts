@@ -85,8 +85,13 @@ function isRealError(value: unknown): boolean {
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
-  /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "1m";
+  /**
+   * Idle tail: each wake bills for the whole sleepAfter window. 5m (was 1m),
+   * matching the stack: short enough that an idle or old-rev instance frees
+   * its slot quickly, long enough that a reader pausing between turns does not
+   * pay a cold start each time (t1702u).
+   */
+  sleepAfter = "5m";
   /**
    * Runtime env for the digichat Node process. Secrets come from
    * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.

@@ -121,10 +121,10 @@ instances but not stop one, and the REST API exposes only listing and SSH.
 
 ## Why it happens
 
-`max_instances = 2` (`apps/digichat-cloudflare/wrangler.toml`, DIG-4487), so
-one bad instance still leaves a slot for a cold start; **two** bad instances
-are the entire capacity, and then the pool is exhausted. The only reaper is
-`sleepAfter = "1m"` via the base `onActivityExpired()`, which calls `stop()` —
+`max_instances = 10` (`apps/digichat-cloudflare/wrangler.toml`, DIG-4487; was 2
+until t1702u), so bad instances still leave slots for a cold start; only ten
+bad instances exhaust the pool. The only reaper is
+`sleepAfter = "5m"` via the base `onActivityExpired()`, which calls `stop()` —
 and `stop()` is a no-op unless the container is `running`.
 
 **Hypothesis, not yet proven:** `isActivityExpired()` returns false while
