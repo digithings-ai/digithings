@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { faviconThemeScript, themeInitScript } from "@digithings/ui";
@@ -98,24 +97,26 @@ export default async function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
     >
+      {/* Pre-paint theme: plain inline <head> scripts, like digithings.ai.
+          next/script "beforeInteractive" in the App Router does not run
+          inline: it queues the body into self.__next_s and the Next runtime
+          runs it only after its chunks load. Until then the page painted
+          the server default (data-theme="dark", no palette), and the boot
+          loader and the chat could each paint a different theme. These run
+          before <body> parses, so a saved dt-theme / dt-palette (shared with
+          digithings.ai, same origin) or the OS scheme holds from the first
+          frame. The embed route's own pin scripts run later, in <body>. */}
+      <head>
+        <script id="digichat-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script id="digichat-favicon-theme" dangerouslySetInnerHTML={{ __html: faviconInit }} />
+        <script
+          id="digichat-theme-class-sync"
+          dangerouslySetInnerHTML={{ __html: themeClassSyncScript }}
+        />
+      </head>
       <body
         className={`${inter.className} accent-digichat flex min-h-full flex-col bg-background text-foreground`}
       >
-        <Script
-          id="digichat-theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeInitScript }}
-        />
-        <Script
-          id="digichat-favicon-theme"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: faviconInit }}
-        />
-        <Script
-          id="digichat-theme-class-sync"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeClassSyncScript }}
-        />
         <Providers
           session={session}
           localBootstrapEnabled={localBootstrapEnabled}
