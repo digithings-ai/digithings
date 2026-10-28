@@ -15,7 +15,9 @@ With ``--base-ref`` the baseline itself is also compared with the baseline at
 the tip of the base branch, and a baseline that grew (a new path or a higher
 count) fails: the fix for new usage is to put it on Cloudflare (D1, KV, R2, a
 Worker route), never to allowlist it. A base branch without the baseline file
-is the introducing change and is not compared.
+is the introducing change and is not compared. A file that git sees as
+renamed (``git diff -M``) keeps its old path's allowance, so moving code
+between apps is not new usage as long as its count does not grow.
 
 Shrinking is the point. When a change removes usage, regenerate the baseline
 with ``--write-baseline`` so the allowance follows it down.
@@ -167,13 +169,30 @@ def baseline_growth(root: Path, base_ref: str, head: dict[str, int]) -> list[str
     if not _git(root, ["ls-tree", sha, "--", BASELINE_REL]).strip():
         return []  # the change that introduces the baseline
     base = load_entries(_git(root, ["show", f"{sha}:{BASELINE_REL}"]), f"{base_ref}:{BASELINE_REL}")
+    moves = renames(root, sha)
     out = []
     for path in sorted(head):
         if path not in base:
+            src = moves.get(path)
+            # A file moved by git (rename detection) keeps its allowance, as
+            # long as the old path left the baseline and the count did not grow.
+            if src in base and src not in head and head[path] <= base[src]:
+                continue
             out.append(f"BASELINE-NEW {path}: added to the freeze baseline")
         elif head[path] > base[path]:
             out.append(f"BASELINE-GREW {path}: {base[path]} -> {head[path]}")
     return out
+
+
+def renames(root: Path, base_sha: str) -> dict[str, str]:
+    """``{new_path: old_path}`` for files git sees as renamed since the base."""
+    raw = _git(root, ["diff", "--name-status", "-M50%", base_sha, "HEAD"])
+    moved = {}
+    for line in raw.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and parts[0].startswith("R"):
+            moved[parts[2]] = parts[1]
+    return moved
 
 
 def render(entries: dict[str, int]) -> str:

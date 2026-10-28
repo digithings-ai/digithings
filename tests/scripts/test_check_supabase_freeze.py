@@ -141,6 +141,26 @@ def test_allowlisting_new_usage_is_refused(repo: Path, capsys):
     assert f"BASELINE-NEW {NEW}" in capsys.readouterr().out
 
 
+def test_moved_file_keeps_its_allowance(repo: Path, capsys):
+    _git(repo, "mv", OLD, NEW)
+    _git(repo, "add", "-A")
+    assert main(["--root", str(repo), "--write-baseline"]) == 0
+    _commit(repo)
+    assert main(["--root", str(repo), "--base-ref", "develop~1"]) == 0
+    assert "BASELINE-NEW" not in capsys.readouterr().out
+
+
+def test_moved_file_that_grew_is_refused(repo: Path, capsys):
+    _git(repo, "mv", OLD, NEW)
+    text = (repo / NEW).read_text()
+    _write(repo, NEW, text + "const again = env.SUPABASE_URL;\n")
+    _git(repo, "add", "-A")
+    assert main(["--root", str(repo), "--write-baseline"]) == 0
+    _commit(repo)
+    assert main(["--root", str(repo), "--base-ref", "develop~1"]) == 1
+    assert f"BASELINE-NEW {NEW}" in capsys.readouterr().out
+
+
 def test_malformed_baseline_fails_closed(repo: Path):
     (repo / BASELINE_REL).write_text("{not json")
     assert main(["--root", str(repo)]) == 2
