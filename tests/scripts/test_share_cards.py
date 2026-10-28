@@ -50,3 +50,52 @@ def test_digiquant_and_chat_point_at_og_png() -> None:
     assert 'url: "/og.png"' in chat
     assert 'images: ["/og.png"]' in chat
     assert "faviconThemeScript" in chat
+
+
+def test_chat_metadata_has_a_production_base() -> None:
+    chat = _text("apps/digichat/src/app/(digichat)/layout.tsx")
+    assert "metadataBase: PUBLIC_ORIGIN" in chat
+    docker = _text("infra/docker/Dockerfile.digichat-cloudflare")
+    assert 'ARG DIGICHAT_PUBLIC_ORIGIN="https://digithings.ai"' in docker
+    assert "ENV NEXT_PUBLIC_DIGICHAT_PUBLIC_ORIGIN=$DIGICHAT_PUBLIC_ORIGIN" in docker
+    assert "localhost" not in chat
+
+
+def _studio():
+    import importlib.util
+    import sys
+
+    path = REPO_ROOT / "packages" / "brand" / "studio_compose.py"
+    spec = importlib.util.spec_from_file_location("studio_compose", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["studio_compose"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_pixel_wordmark_draws_the_studio_mask_shape() -> None:
+    import re
+
+    studio = _studio()
+    cells = set(studio.pixel_cells("DIGITHINGS", studio.pixel_font()))
+    mask = _text("packages/brand/studio/wordmark-mask.svg")
+    drawn = {
+        (int(float(x)), int(float(y)))
+        for x, y in re.findall(r'<rect x="([\d.]+)" y="([\d.]+)"', mask)
+    }
+    assert cells == drawn
+
+
+def test_digiquant_card_is_the_pixel_wordmark_over_a_chart() -> None:
+    studio = _studio()
+    glyphs = studio.pixel_font("digiquant")
+    # The module's own Q and A, not the family font's.
+    assert glyphs["Q"][-1] == ".######"
+    inner, width, height = studio.pixel_wordmark_inner(
+        "DIGIQUANT", "#fff", module="digiquant", seed=1
+    )
+    assert (width, height) == (79.0, 10.0)
+    assert inner.count("<rect") == 16 * len(studio.pixel_cells("DIGIQUANT", glyphs))
+    svg = _text("packages/brand/og/digiquant-og.svg")
+    assert "Pixel wordmark over the digiquant hero chart" in svg
+    assert "<polyline" in svg

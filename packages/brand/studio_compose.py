@@ -166,3 +166,87 @@ def frame(width: int, height: int, *parts: str, comment: str) -> str:
         f'viewBox="0 0 {width} {height}" shape-rendering="crispEdges">'
         f"<!-- {comment} -->{body}</svg>\n"
     )
+
+
+# --- pixel wordmarks -------------------------------------------------------
+#
+# The 4×4 wordmark is the hero-banner pixel font with every font pixel split
+# into 16 sub-pixels. Each font pixel takes one brightness step, and each
+# sub-pixel jitters ±0.05 around it, rounded to 0.05. That is how
+# ``wordmark-mask.svg`` (DIGITHINGS) is drawn; ``pixel_wordmark_inner`` draws
+# any module word the same way, from the same font and the module's own glyph
+# overrides, so a DIGIQUANT card is the same mark family, not a redraw.
+
+HERO_BANNER = Path(__file__).resolve().parents[1] / "hero-banner" / "src"
+# DIGITHINGS' animation steps (packages/hero-banner/src/definitions/index.ts).
+WORDMARK_STEPS = (0.36, 0.5, 0.66, 0.82, 1.0)
+SUBPIXELS = 4
+GLYPH_GAP = 2
+
+_GLYPH_LINE = re.compile(r'^\s*"?([A-Z0-9])"?:\s*\[([^\]]*)\]', re.M)
+
+
+def _glyph_rows(block: str) -> dict[str, list[str]]:
+    return {key: re.findall(r'"([.#]+)"', rows) for key, rows in _GLYPH_LINE.findall(block)}
+
+
+def pixel_font(module: str | None = None) -> dict[str, list[str]]:
+    """The 7×10 family font, with ``module``'s glyph overrides applied."""
+    glyphs = _glyph_rows((HERO_BANNER / "font.ts").read_text(encoding="utf-8"))
+    if module:
+        source = (HERO_BANNER / "definitions" / "index.ts").read_text(encoding="utf-8")
+        match = re.search(
+            rf"export const {module.upper()}: BannerDefinition = \{{([\s\S]*?)\n\}};", source
+        )
+        if match is None:
+            raise SystemExit(f"no {module.upper()} banner definition in hero-banner")
+        overrides = re.search(r"glyphs:\s*\{([\s\S]*?)\n\s*\},", match.group(1))
+        if overrides:
+            glyphs.update(_glyph_rows(overrides.group(1)))
+    for key, rows in glyphs.items():
+        if len(rows) != 10 or any(len(row) != 7 for row in rows):
+            raise SystemExit(f"glyph {key!r} is not 7×10")
+    return glyphs
+
+
+def pixel_cells(text: str, glyphs: dict[str, list[str]]) -> list[tuple[int, int]]:
+    """Lit font pixels (column, row) for ``text`` with a two-pixel gap."""
+    cells = []
+    for index, char in enumerate(text):
+        rows = glyphs.get(char)
+        if rows is None:
+            raise SystemExit(f"{char!r} is not in the pixel font")
+        for row, line in enumerate(rows):
+            for col, value in enumerate(line):
+                if value == "#":
+                    cells.append((index * (7 + GLYPH_GAP) + col, row))
+    return cells
+
+
+def _lcg(seed: int):
+    state = seed & 0xFFFFFFFF
+    while True:
+        state = (1664525 * state + 1013904223) & 0xFFFFFFFF
+        yield state / 0x100000000
+
+
+def pixel_wordmark_inner(
+    text: str, ink: str, *, module: str | None = None, seed: int
+) -> tuple[str, float, float]:
+    """``text`` as a 4×4 sub-pixel mask, the same shape as ``wordmark-mask.svg``."""
+    glyphs = pixel_font(module)
+    width = len(text) * 7 + (len(text) - 1) * GLYPH_GAP
+    rand = _lcg(seed)
+    step = 1 / SUBPIXELS
+    rects = []
+    for col, row in pixel_cells(text, glyphs):
+        base = WORDMARK_STEPS[int(next(rand) * len(WORDMARK_STEPS))]
+        for sy in range(SUBPIXELS):
+            for sx in range(SUBPIXELS):
+                jitter = (next(rand) - 0.5) * 0.1
+                alpha = min(1.0, max(0.05, round((base + jitter) / 0.05) * 0.05))
+                rects.append(
+                    f'<rect x="{col + sx * step:g}" y="{row + sy * step:g}" '
+                    f'width="{step:g}" height="{step:g}" fill="{ink}" opacity="{alpha:.2f}"/>'
+                )
+    return "".join(rects), float(width), 10.0
