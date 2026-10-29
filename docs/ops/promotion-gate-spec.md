@@ -78,7 +78,7 @@ If any change in the batch has a ticked Human Gate box, the promotion needs **Ch
 
 Failure text: `Human Gate: needs Chris's APPROVED review on head <sha12>` (or `... latest review is CHANGES_REQUESTED`, or `... approval is on <old sha12>, not the head`).
 
-> Known limit, recorded so it isn't forgotten: agents and the queue also act as `chrizefan` today (plan P0-2), so this rule proves *a* `chrizefan` approval on the head, not that Chris clicked it. It holds as long as no agent ever submits an `APPROVED` review on a promotion PR. The rules card should forbid that, and the gate should move to Chris's own identity once agents leave the shared login.
+> Known limit and its mitigation: agents and the queue also act as `chrizefan` today (plan P0-2), so this rule proves *a* `chrizefan` approval on the head, not that Chris clicked it. **Mitigation: no agent ever submits an approving review on a promotion PR (into `develop` or `main`); only Chris approves those. This is a hard rule, decided by Chris 2026-10-29 15:12 Rome.** The gate should still move to Chris's own identity once agents leave the shared login.
 
 ## 3. Verdict storage that survives the Forgejo-to-GitHub hop
 
@@ -302,7 +302,7 @@ Build fixtures from the recorded GitHub data for #6543, #6567, #6635, #6616, #66
 
 These are defaults so the gate and `sctl promote` can be built now. Each one stands until One or Chris overrides it.
 
-1. **Human Gate approval (G5): decided by Chris** (29 Oct 2026, 15:03 Rome, via One). G5 passes only on a `chrizefan` `APPROVED` review whose `commit_id` is the current head; the latest `chrizefan` verdict wins, and any push re-requires approval (§2 G5).
+1. **Human Gate approval (G5): decided by Chris** (29 Oct 2026, 15:03 Rome, via One). G5 passes only on a `chrizefan` `APPROVED` review whose `commit_id` is the current head; the latest `chrizefan` verdict wins, and any push re-requires approval (§2 G5). Hard rule (Chris, 2026-10-29 15:12 Rome): no agent ever submits an approving review on a promotion PR into `develop` or `main`; only Chris approves those. This is the mitigation for the shared `chrizefan` login.
 2. **`Source-Session` trailer.** Every commit carries `Source-Session: <platform>:<session id>` next to `Source-Platform:`, added by the harness, not typed by the agent. For G1, a same-platform verdict counts only when its reviewer session differs from every `Source-Session` in its `range`. A commit with no `Source-Session` can only be cleared by a reviewer on a different platform.
 3. **git notes.** Push `refs/notes/verdicts` with every promotion, written only by the promotion identity. The manifest stays the primary copy. The gate reads the notes only when Forgejo is unreachable, and a notes copy whose digest differs from the manifest fails G1.
 4. **Promotion identity.** A GitHub App (or bot account) that Chris creates himself; agents never create it or hold its credentials outside the promote job. Until it exists, the gate logs `promotion identity: unchecked` and stays report-only, and the push restriction on `develop` waits for it.
