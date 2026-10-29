@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TENANT = ROOT / "tenant"
 DOC = TENANT / "digichat.yaml"
 R0 = Path(os.environ.get("DIGITHINGS_DIR", ROOT.parent / "digithings"))
-# Slug rule from tenant/SCHEMA-NOTES.md §2. Switch to U5a's shared R0 helper once it lands.
+# Slug rule from tenant/SCHEMA-NOTES.md §2: R0's TENANT_PATH_SLUG (U5a #6680,
+# apps/digichat/src/lib/deploy-config/tenant-chrome.ts). Keep the two identical.
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
@@ -36,6 +37,20 @@ def test_tenant_doc_shape() -> None:
     (row,) = doc["hosts"].values()
     assert SLUG_RE.fullmatch(row["slug"])
     assert "token" not in row, "tokens are env names (tokenEnv), never values"
+
+
+def test_tenant_doc_chat_slug_lives_at_chrome_slug() -> None:
+    (row,) = _doc()["hosts"].values()
+    chrome = row["chrome"]
+    assert SLUG_RE.fullmatch(chrome["slug"]), "chrome.slug must be a plain lowercase slug"
+    # New docs write the slug only: no legacy full path, and no flat registry-row names.
+    assert "pathPrefix" not in chrome and "pathPrefix" not in row
+    assert "chatSlug" not in row and "chatSlug" not in chrome
+    assert "productChat" not in row, "productChat lives at chrome.productChat"
+    if "productChat" in chrome:
+        assert isinstance(chrome["productChat"], bool)
+    # access.invite is written by the deploy from tenant/env/, server-only (SCHEMA-NOTES §1).
+    assert "access" not in row
 
 
 

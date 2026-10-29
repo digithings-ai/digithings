@@ -7,6 +7,9 @@ hosts:
   example.digithings.ai:
     slug: example
     chrome:
+      # Chat slug: R0 serves this tenant's chat at /chat/<slug> (registry row: chatSlug).
+      # Slug only, never a path; see tenant/SCHEMA-NOTES.md §0 and §2.
+      slug: example
       mode: app
       theme: light
       skin: base
