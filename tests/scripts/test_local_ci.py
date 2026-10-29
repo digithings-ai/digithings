@@ -641,6 +641,124 @@ class BunSuiteGateTest(unittest.TestCase):
         self.assertIn('summary["bun"]', src)
 
 
+class ScopedPytestGateTest(unittest.TestCase):
+    """local-ci runs the pytest suite of every module a PR touches (DIG-3605)."""
+
+    def _real_root(self):
+        return os.path.abspath(os.path.join(_SCRIPTS, "..", ".."))
+
+    def _modules(self, files, root=None):
+        return [m for m, _hit in _mod.pytest_suites_for(files, root or self._real_root())]
+
+    def test_a_docs_only_change_runs_no_suite(self):
+        self.assertEqual(self._modules(["docs/README.md", "apps/digichat/src/a.ts"]), [])
+
+    def test_a_module_change_runs_only_that_module(self):
+        self.assertEqual(self._modules(["digikey/src/digikey/jwt.py"]), ["digikey"])
+        self.assertEqual(self._modules(["tests/dg/test_x.py"]), ["digigraph"])
+
+    def test_triggers_come_from_ci_paths_yaml(self):
+        """config/** is digigraph's trigger in ci_paths.yaml, so it fires digigraph."""
+        mods = self._modules(["config/model_modes.yaml"])
+        self.assertIn("digigraph", mods)
+        self.assertNotIn("digikey", mods)
+
+    def test_gate_code_runs_the_scripts_suite(self):
+        self.assertEqual(self._modules(["scripts/local-ci/local_ci.py"]), ["scripts"])
+
+    def test_a_root_pytest_input_runs_every_suite(self):
+        for f in ("uv.lock", "pytest.ini", "conftest.py", "digibase/pyproject.toml"):
+            self.assertEqual(self._modules([f]), list(_mod.PYTEST_SUITES), f)
+
+    def test_patterns_fall_back_to_the_module_dir(self):
+        root = tempfile.mkdtemp(prefix="wt-py-")
+        self.addCleanup(shutil.rmtree, root, True)
+        self.assertEqual(_mod.pytest_suite_patterns(root, "digikey"), ["digikey/**"])
+        self.assertIn("scripts/**", _mod.pytest_suite_patterns(root, "scripts"))
+
+    def test_every_suite_path_exists_in_the_tree(self):
+        root = self._real_root()
+        for module, args in _mod.PYTEST_SUITES.items():
+            for a in args:
+                if not a.startswith("-") and "/" in a:
+                    self.assertTrue(os.path.exists(os.path.join(root, a)), f"{module}: {a}")
+
+    def test_unit_marker_keeps_network_and_paid_tests_out(self):
+        for module, args in _mod.PYTEST_SUITES.items():
+            if module in ("digillm", "digifetch"):
+                # Offline by construction and unmarked (test-digillm.yml).
+                self.assertNotIn("-m", args)
+            else:
+                self.assertIn("-m", args, module)
+                self.assertIn("unit", args[args.index("-m") + 1], module)
+
+    def test_env_scrubs_every_credential_and_the_paid_inference_base(self):
+        env = _mod.pytest_env({"PATH": "/bin", "CHEAPERINFERENCE_API_KEY": "x",
+                               "CHEAPERINFERENCE_API_BASE": "https://example.invalid",
+                               "OPENAI_API_KEY": "x", "GH_TOKEN": "x",
+                               "SOME_SECRET": "x", "HOME": "/h"})
+        self.assertEqual(env, {"PATH": "/bin", "HOME": "/h"})
+
+    def test_gate_fails_closed_when_the_file_list_cannot_be_read(self):
+        saved = _mod.gh
+        try:
+            _mod.gh = lambda *a: None
+            self.assertEqual(_mod.pytest_gate({"number": 7}, "/nonexistent-wt"), (None, None))
+        finally:
+            _mod.gh = saved
+
+    def _run(self, suites, fail_on=()):
+        calls, fails = [], []
+
+        def step(name, cmd, timeout=1800, cwd=None, env=None):
+            calls.append((name, cmd, env))
+            if name in fail_on:
+                fails.append(name)
+                return False
+            return True
+        ran = _mod.run_pytest_suites(self._real_root(), step, io.StringIO(), fails, suites)
+        return ran, calls, fails
+
+    def test_every_selected_suite_runs_even_after_a_red_one(self):
+        suites = [("digikey", ("digikey/**", "digikey/a.py")),
+                  ("digibase", ("digibase/**", "digibase/a.py"))]
+        ran, calls, fails = self._run(suites, fail_on=("pytest:digikey",))
+        self.assertEqual(ran, ["digikey", "digibase"])
+        self.assertEqual(fails, ["pytest:digikey"])
+        self.assertIn("pytest tests/dk -m unit", calls[0][1])
+        self.assertIn("uv run --frozen --no-sync", calls[0][1])
+        self.assertNotIn("OPENAI_API_KEY", calls[0][2])
+
+    def test_a_suite_with_no_test_path_fails_by_name(self):
+        saved = dict(_mod.PYTEST_SUITES)
+        _mod.PYTEST_SUITES["ghost"] = ["tests/no-such-dir", "-m", "unit"]
+        try:
+            ran, calls, fails = self._run([("ghost", ("ghost/**", "ghost/a.py"))])
+        finally:
+            _mod.PYTEST_SUITES.clear()
+            _mod.PYTEST_SUITES.update(saved)
+        self.assertEqual(ran, [])
+        self.assertEqual(calls, [])
+        self.assertEqual(fails, ["pytest:ghost (no test path)"])
+
+    def test_receipt_names_the_pytest_suites(self):
+        desc = _mod.success_desc(4, {"ran": []}, {"ran": ["digikey", "scripts"]})
+        self.assertIn("pytest 2/2: digikey, scripts", desc)
+        self.assertIn("bun: none", desc)
+        self.assertNotIn(_mod.GATED_NOTE, desc)
+
+    def test_receipt_says_pytest_none_when_nothing_ran(self):
+        desc = _mod.success_desc(2, None, None)
+        self.assertIn("pytest: none", desc)
+        self.assertNotIn("pytest/audits not gated", desc)
+
+    def test_run_checks_wires_the_gate_and_the_summary(self):
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("run_pytest_suites(WT, step, out, fails, py_suites)", src)
+        self.assertIn('summary["pytest"]', src)
+        self.assertIn('summary.get("pytest")', src)
+
+
 class StaticGateWiringTest(unittest.TestCase):
     """The R0 client-literal scan runs in the local-ci static gates (DIG-4043)."""
 
@@ -705,7 +823,7 @@ class StaticGateWiringTest(unittest.TestCase):
         saved = {name: getattr(_mod, name) for name in (
             "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
             "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate",
-            "bun_gate")}
+            "bun_gate", "pytest_gate")}
         commands: list[str] = []
 
         def fake_sh(cmd, cwd=None, timeout=None, out=None, name=None, env=None):
@@ -728,6 +846,7 @@ class StaticGateWiringTest(unittest.TestCase):
             _mod.ruff_paths_fallback = lambda wt: None
             _mod.worker_gate = lambda pr, wt: (None, None)
             _mod.bun_gate = lambda pr, wt: (0, None)
+            _mod.pytest_gate = lambda pr, wt: (0, [])
             pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
                   "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
             fails = _mod.run_checks(pr, io.StringIO())

@@ -6,13 +6,14 @@ memory is critically low or the disk guard pauses worktrees. Logs: ~/.config/dig
 Never prints secrets.
 A swap/disk-guard skip posts `failure` on the queued PRs, never silence, so merges block
 loudly (DIG-3660 must-fix 5). Fork code never executes on this Mac: fork PRs get a `failure`
-naming the maintainer re-push path. Static gates only, plus two path-gated lanes:
+naming the maintainer re-push path. Static gates, plus three path-gated lanes:
 PR title, PR template,
 gitleaks, PII scan, R0 client-literal scan,
-guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated)
-and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203).
+guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated),
+the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203)
+and the pytest suite of every Python module the PR touches (path-gated, DIG-3605).
 NOT gated (DIG-3605 owns the
-rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
+rest): compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
 Also judges same-repo develop->main promotion PRs with the same logic
 ci-review-coverage.yml runs via scripts/check_review_coverage.py (DIG-3743),
@@ -227,7 +228,7 @@ METADATA_GATES = frozenset({"pr-title", "pr-template"})
 # undocumented (web unreachable to verify), so it is logged for tuning, never
 # gated on.
 FORK_DESC = "fork code never runs on this Mac; maintainer: re-push to a same-repo branch"
-GATED_NOTE = "static gates passed (pytest/audits not gated, see DIG-3605)"
+GATED_NOTE = "static gates passed (audits not gated, see DIG-3605)"
 TYPES = "feat|fix|docs|chore|refactor|perf|test|ci|build|revert|style"
 
 # Ruff path list used by the lint gate. The gate reads the list from the tree
@@ -282,6 +283,52 @@ BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digi
 BUN_PIN = "1.4.2"
 BUN_INSTALL_TIMEOUT = 600
 BUN_TEST_TIMEOUT = 300
+# --- scoped pytest (DIG-3605) ------------------------------------------------
+# The required `local-ci` check ran no Python test at all: the per-module
+# GitHub lanes (test-<module>.yml) stopped with Actions, so a PR could change
+# digigraph and merge green without tests/dg ever running. The gate below runs
+# the suite of every module whose paths the PR touches, and only those, so a
+# docs-only PR pays nothing and a one-module PR pays for one module.
+#
+# Trigger paths come from the module's own block in scripts/ci_paths.yaml (the
+# same block the retired lane was filtered on), with `<module>/**` as the
+# fallback. The pytest arguments mirror each retired workflow's test step,
+# marker included: digillm and digifetch run unfiltered because their suites
+# carry no `unit` marker (see test-digillm.yml), and `-m unit` everywhere else
+# keeps network, Docker and paid-provider tests out of the gate.
+PYTEST_SUITES = {
+    "digibase": ["tests/db", "tests/integration/test_request_id_hops.py", "-m", "unit"],
+    "digikey": ["tests/dk", "-m", "unit"],
+    "digitrace": ["tests/dsm", "-m", "unit"],
+    "digivault": ["tests/dv", "-m", "unit"],
+    "digibot": ["tests/dc", "-m", "unit"],
+    "digivoice": ["tests/dvo", "-m", "unit"],
+    "digiquant": ["tests/dq", "-m", "unit"],
+    "digisearch": ["tests/ds", "-m", "unit"],
+    "digigraph": ["tests/dg", "tests/contracts", "-m", "unit"],
+    "digillm": ["digillm/tests"],
+    "digifetch": ["digifetch/tests"],
+    # The repo's own tooling, including this runner and the merge queue: the
+    # gate code is the code most often merged without a test run (P0-5). Same
+    # selection as ci.yml's scripts step.
+    "scripts": ["tests/scripts", "tests/config", "tests/agents",
+                "tests/integration/test_request_id_hops.py", "tests/baseline",
+                "-m", "unit or baseline", "--ignore=tests/baseline/test_cli.py"],
+}
+# `scripts` has no ci_paths.yaml block (adding one would change ci.yml's
+# generated filter block), so its triggers live here.
+PYTEST_EXTRA_PATTERNS = {
+    "scripts": ["scripts/**", "tests/scripts/**", "tests/config/**",
+                "tests/agents/**", "tests/baseline/**", "config/**"],
+}
+# A change to one of these changes how every suite collects or what it
+# imports, so it runs every suite.
+PYTEST_ALL_PATTERNS = ("pytest.ini", "conftest.py", "tests/conftest.py",
+                       "pyproject.toml", "uv.lock", "*/pyproject.toml")
+# Paid inference must never be reachable from a gate run. Unit suites mock
+# every provider, and the environment is scrubbed as well, so a test that
+# forgot its mock fails on a missing key instead of spending money.
+PYTEST_SCRUB_SUBSTRINGS = ("API_KEY", "CHEAPERINFERENCE", "_TOKEN", "SECRET")
 # --- how many independent gates run at once --------------------------------
 # Every gate below is its own process with its own temp paths, its own cwd and
 # its own report file, so nothing about them needs the others to have finished.
@@ -364,6 +411,9 @@ STEP_BUDGETS = {
     # Bun suites (DIG-5203): install from the committed lockfile, then run.
     "bun-install:*": 600,
     "bun:*": 300,
+    # Scoped pytest (DIG-3605): one run per touched module. digiquant's unit
+    # suite is the largest (~1,000 tests), so the family gets 15 minutes.
+    "pytest:*": 900,
 }
 # A step is attempted at most this many times, and the attempts share the one
 # budget: a timeout kill spends it, so a stalled step is not retried into a
@@ -1103,6 +1153,92 @@ def bun_gate(pr, wt):
     return len(files), path_gate_hit(files, bun_suite_patterns(wt))
 
 
+def pytest_env(base=None):
+    """The gate environment for pytest: ENV without any credential-looking key.
+
+    Removes every variable whose name contains one of PYTEST_SCRUB_SUBSTRINGS
+    (provider keys, the paid inference base, tokens, secrets), so a unit test
+    that lost its mock cannot reach a paid API from the Mac (DIG-3605).
+    """
+    env = dict(ENV if base is None else base)
+    for k in list(env):
+        if any(sub in k.upper() for sub in PYTEST_SCRUB_SUBSTRINGS):
+            env.pop(k, None)
+    return env
+
+
+def pytest_suite_patterns(wt, module):
+    """Trigger globs for one module's suite: its ci_paths.yaml block (or
+    `<module>/**`), plus PYTEST_EXTRA_PATTERNS for modules with no block."""
+    try:
+        with open(os.path.join(wt, "scripts", "ci_paths.yaml")) as f:
+            pats = parse_ci_paths_block(f.read(), module)
+    except OSError:
+        pats = []
+    extra = PYTEST_EXTRA_PATTERNS.get(module, [])
+    if not pats and not extra:
+        pats = [f"{module}/**"]
+    return list(pats) + [p for p in extra if p not in pats]
+
+
+def pytest_suites_for(files, wt):
+    """Modules whose suite this change must run, in PYTEST_SUITES order.
+
+    Returns [(module, (pattern, path))]. A hit on PYTEST_ALL_PATTERNS runs
+    every suite: a root conftest, pytest.ini or lockfile edit changes how
+    every suite collects or what it imports.
+    """
+    every = path_gate_hit(files, PYTEST_ALL_PATTERNS)
+    out = []
+    for module in PYTEST_SUITES:
+        hit = every or path_gate_hit(files, pytest_suite_patterns(wt, module))
+        if hit is not None:
+            out.append((module, hit))
+    return out
+
+
+def pytest_gate(pr, wt):
+    """Path gate for the scoped pytest suites. Returns (n_files, [(module, hit)]),
+    or (None, None) when the file list is unusable (the caller fails closed)."""
+    raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
+    try:
+        files = changed_file_names(json.loads(raw or ""))
+    except ValueError:
+        files = None
+    if files is None:
+        return None, None
+    return len(files), pytest_suites_for(files, wt)
+
+
+def run_pytest_suites(wt, step, out, fails, suites, runner="uv run --frozen --no-sync "):
+    """Run each selected module's suite, one after another; return the names run.
+
+    Serial on purpose: the suites share the one .venv and several write
+    sqlite or tmp fixtures under fixed names. Every suite runs even after an
+    earlier one failed, so one red module cannot hide another's verdict. A
+    suite whose test paths are all missing from the tree is recorded in
+    `fails` by name instead of passing over zero collected tests; `step`
+    records a red or overrun run the same way it does for every other gate.
+    """
+    ran = []
+    env = pytest_env()
+    for module, hit in suites:
+        args = PYTEST_SUITES[module]
+        paths = [a for a in args if not a.startswith("-") and "/" in a]
+        out.write(f"\n===== pytest:{module}\ngate hit: {hit[0]} <- {hit[1]}\n")
+        missing = [p for p in paths if not os.path.exists(os.path.join(wt, p))]
+        if missing and len(missing) == len(paths):
+            fails.append(f"pytest:{module} (no test path)")
+            out.write(f"pytest:{module} FAIL: no test path exists ({', '.join(missing)})\n")
+            continue
+        present = [a for a in args if a not in missing]
+        cmd = runner + "pytest " + " ".join(
+            a if " " not in a else f'"{a}"' for a in present) + " -q --tb=short -p no:cacheprovider"
+        step(f"pytest:{module}", cmd, 900, env=env)
+        ran.append(module)
+    return ran
+
+
 def bun_bin():
     """Absolute path of the bun the suites run with, or None when the host has none.
 
@@ -1543,27 +1679,38 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
-def success_desc(mins, bun=None):
-    """The success description: the verdict, then what the bun gate did (DIG-5203).
+def success_desc(mins, bun=None, pytest=None):
+    """The success description: the verdict, then what the bun and pytest
+    gates did (DIG-5203, DIG-3605).
 
     A commit status description is capped at 140 characters (`status_fields`
     keeps 139), so the suite names are dropped before they can be cut in half:
     a receipt that names three suites and half of a fourth is worse than one
     that names none, and the run log always names every suite in full.
 
-    "gates passed" rather than GATED_NOTE when the suites ran: the receipt is no
+    "gates passed" rather than GATED_NOTE when any suite ran: the receipt is no
     longer a static-only receipt, and claiming it was would be the same false
-    green this gate exists to remove. When no `bun_suites` path changed, the
-    static note stays and the receipt says so: `bun: none` is the skip made
-    visible, not a silence.
+    green this gate exists to remove. When no suite path changed, the static
+    note stays and the receipt says so: `bun: none` and `pytest: none` are the
+    skips made visible, not a silence.
     """
     tail = f" ({mins:.0f}m)"
     ran = (bun or {}).get("ran") or []
-    if not ran:
-        return f"{GATED_NOTE}; bun: none{tail}"
-    head = f"gates passed; bun {len(ran)}/{len(ran)}: {', '.join(ran)}"
+    py = (pytest or {}).get("ran") or []
+    if not ran and not py:
+        return f"{GATED_NOTE}; bun: none; pytest: none{tail}"
+
+    def part(label, names, full):
+        if not names:
+            return f"{label}: none"
+        if full:
+            return f"{label} {len(names)}/{len(names)}: {', '.join(names)}"
+        return f"{label} {len(names)}/{len(names)}"
+
+    head = f"gates passed; {part('bun', ran, True)}; {part('pytest', py, True)}"
     if len(head + tail) > 139:
-        head = f"gates passed; bun {len(ran)}/{len(ran)} (suites in the log)"
+        head = (f"gates passed; {part('bun', ran, False)}; {part('pytest', py, False)}"
+                " (suites in the log)")
     return head + tail
 
 
@@ -2038,6 +2185,21 @@ def run_checks(pr, out, summary=None):
         ran_bun = run_bun_suites(WT, step, out, fails)
     if summary is not None:
         summary["bun"] = {"hit": bun_hit[0] if bun_hit else None, "ran": ran_bun}
+    # Scoped pytest (DIG-3605): the suite of every Python module the PR
+    # touches, with the same selection the retired per-module lane used. It
+    # needs the venv, so a failed uv-sync is already the verdict and no suite
+    # runs over a half-installed environment.
+    ran_py = []
+    n_py, py_suites = pytest_gate(pr, WT)
+    if n_py is None:
+        out.write("\n===== pytest\nchanged-files fetch failed; failing closed\n")
+        fails.append("pytest: changed-files fetch failed")
+    elif py_suites and step_failed(fails, "uv-sync"):
+        out.write("\n===== pytest\nuv-sync failed; no suite ran\n")
+    elif py_suites:
+        ran_py = run_pytest_suites(WT, step, out, fails, py_suites)
+    if summary is not None:
+        summary["pytest"] = {"ran": ran_py}
     return fails
 
 def process(pr, dry):
@@ -2066,7 +2228,7 @@ def process(pr, dry):
     # line names the suites so a PR with no bun path says `bun: none` instead of
     # reading like the suites passed (DIG-5203).
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
-    else: st, desc = "success", success_desc(mins, summary.get("bun"))
+    else: st, desc = "success", success_desc(mins, summary.get("bun"), summary.get("pytest"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
     if not dry:
         if metadata_failure_gates(desc) is not None:

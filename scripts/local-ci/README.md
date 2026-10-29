@@ -429,10 +429,20 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   moves on to the next step. Every step also writes
   `step=<name> seconds=<n> rc=<n>` to its log, so the next investigation reads
   the duration table instead of re-measuring by hand (2026-10-26).
-- **Static gates, plus two path-gated lanes.** The worker dry-run build and the
-  bun suites run only for the paths that need them. Per-package pytest suites,
-  compose validation, npm and pip audit, token canary, secret staleness,
-  invite-key rollout and cron dispatch are not gated here (DIG-3605 owns the rest).
+- **Static gates, plus three path-gated lanes.** The worker dry-run build, the
+  bun suites and the scoped pytest suites run only for the paths that need them.
+  Scoped pytest (DIG-3605) runs the suite of each Python module the PR touches:
+  the module's `scripts/ci_paths.yaml` block decides the trigger and
+  `PYTEST_SUITES` in `local_ci.py` holds the arguments, copied from the retired
+  `test-<module>.yml` lane (`-m unit` except digillm and digifetch). A change to
+  `scripts/**` or `tests/scripts/**` runs the repo-tooling suite, and a change to
+  `pytest.ini`, a `conftest.py`, a `pyproject.toml` or `uv.lock` runs every
+  suite. Suites run one after another with every credential-looking variable
+  removed from the environment, so no test can reach a paid inference API. The
+  receipt names the suites (`pytest 2/2: digikey, scripts`) or says
+  `pytest: none`. Compose validation, npm and pip audit, token canary, secret
+  staleness, invite-key rollout and cron dispatch are not gated here (DIG-3605
+  owns the rest).
 
 ## Copyright and secrets
 
