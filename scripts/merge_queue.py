@@ -2701,18 +2701,22 @@ def _covers_head(verdict: PostedVerdict, head: str) -> bool:
 def verdict_applies_to_head(verdict: PostedVerdict, head: str) -> bool:
     """True when a verdict is a statement about the head the PR stands at.
 
-    A review verdict is a statement about one commit. A verdict naming another
-    commit is a statement about code the PR has left: it must not hold this
-    head, and it must not clear a block on it either. That is the #6263
-    handback — approved at 01:01 on `177278b680f4`, handed back at 01:05
-    because a `changes_requested` against `a87fc55760e9` still stood — and it
-    is a staleness bug, not a reason to ask the same seat to review a head it
-    never read.
+    A review verdict is a statement about one commit. This answers which commit
+    that is; it does not decide whether a block is spent. An approve naming
+    another commit still clears nothing on this head. A block naming another
+    commit is NOT spent by the branch moving (T4, from #6399): a push, a
+    rebase or a merge from develop is something the author does, and every seat
+    pushes under one GitHub login, so letting the push retire the block let the
+    author retire a security block without answering it. The block stands
+    until the seat that posted it posts a verdict on the current head
+    (`_standing_seat_blocks`), or — for a block whose seat cannot be read — a
+    newer verdict naming the current head replaces it (clause 2 of
+    `_verdict_value_reason`). The #6263 handback is answered by the same seat
+    re-reviewing the head, which clears its own older block with no
+    `Withdraws:` line.
 
     A verdict that names no head at all is not stale: there is nothing to be
-    stale against, so it keeps the treatment it had before this rule and
-    counts. Refusing to read it would be a review-softening change, not this
-    one.
+    stale against, so it counts.
     """
     if not verdict.bindings:
         return True
@@ -2731,9 +2735,10 @@ def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
 
     The line names the block by the head it names, or — for a block that names
     no head — by naming none itself. A line naming a head that is not the
-    block's spends nothing. A block on a head the PR has left is already spent
-    by the branch moving (`verdict_applies_to_head`), so "a new head and a fresh
-    approve" needs no withdrawal.
+    block's spends nothing. A block on a head the PR has left is not spent by
+    the branch moving (T4); the same seat's approve naming the new head clears
+    it with no withdrawal line (`_seat_clears`), so "a new head and a fresh
+    approve from the seat that blocked" is still a way out.
     """
     if block is None:
         return True
@@ -2750,6 +2755,29 @@ def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
     )
 
 
+def _seat_clears(approve: PostedVerdict, block: PostedVerdict | None, head: str) -> bool:
+    """True when the blocking seat's own `approve` clears its `block` at `head`.
+
+    The approve has to name the head the PR stands at: an approve on any other
+    commit says nothing about this one. Then:
+
+    * a block naming another commit is cleared — the seat has posted a verdict
+      on the current head, which is the #6263 handback answered by the seat
+      that blocked rather than by the push;
+    * a block naming this same head is cleared only by a `Withdraws:` line
+      naming it (`_withdraws`, DIG-5246);
+    * a block naming no head is cleared only by a bare `Withdraws:` line
+      (DIG-5630), because no head can be "another commit" for it.
+    """
+    if block is None:
+        return True
+    if not _covers_head(approve, head):
+        return False
+    if block.bindings and not _covers_head(block, head):
+        return True
+    return _withdraws(approve, block)
+
+
 def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocks the seats who posted them have not cleared, oldest first.
 
@@ -2761,12 +2789,13 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     security desk's `changes requested` on the branch, because the code
     reviewer's later approve on the head was the newest readable verdict.
 
-    An approve on the same, unchanged head as the seat's own block clears it
-    only when the approve carries a `Withdraws:` line naming that block
-    (`_withdraws`, DIG-5246). The head moving does the clearing on its own:
-    every verdict is first scoped to the head it names
-    (`verdict_applies_to_head`), and a seat that blocked a commit the PR has
-    left has not asked for changes to the head it stands at now.
+    The head moving clears nothing (T4, from #6399). A block on a commit the PR
+    has left still stands, because the push that left it is the author's act,
+    not the reviewer's. The blocking seat clears it by approving the head the
+    PR stands at now, with no `Withdraws:` line needed (`_seat_clears`). An
+    approve on the same, unchanged head as the seat's own block clears it only
+    when the approve carries a `Withdraws:` line naming that block
+    (`_withdraws`, DIG-5246).
 
     A verdict whose seat cannot be read is not judged here: the seat is
     unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
@@ -2786,9 +2815,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
                 # unchanged head only one that withdraws it. An approve naming
                 # another head says nothing about this one and leaves the block
                 # alone.
-                if _covers_head(verdict, head) and _withdraws(verdict, block):
+                if _seat_clears(verdict, block, head):
                     block = None
-            elif verdict_applies_to_head(verdict, head):
+            else:
+                # A block stands whatever head it names: the branch moving does
+                # not spend it (T4).
                 block = verdict
         if block is not None:
             standing.append(block)
@@ -2836,16 +2867,16 @@ def _unbound_block_clearance(head_text: str) -> str:
 def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocking verdicts that still speak for the head the PR stands at.
 
-    A block naming another commit is spent by the branch moving
-    (`verdict_applies_to_head`): it is not a `changes_requested` this gate can
-    clear, and it asks no seat for anything. A block that names no head is not
-    stale, so it is counted.
+    Every readable block counts, whatever head it names: the branch moving does
+    not spend a block (T4, from #6399), so an approve that clears one has to
+    pass the same non-author check whether the block named this head or an
+    older one. `head` is kept for the callers' signature.
     """
+    del head
     return [
         verdict
         for verdict in _readable_verdicts(pr)
         if verdict.verdict in BLOCKING_VERDICTS
-        and verdict_applies_to_head(verdict, head)
     ]
 
 
@@ -2926,25 +2957,29 @@ def _verdict_value_reason(
     answer then was to count a block on any ancestor of the head; #6263 showed
     what that costs — a block on a head the PR has left holds it indefinitely,
     and only the posting seat can clear it, by re-reviewing code it never read.
-    A verdict is now scoped to the head it names (`verdict_applies_to_head`), so
-    the branch list still does not decide this gate and neither does an old
-    verdict: a block on the current head stands, an old one does not hold it, and
-    an old approve clears nothing.
+    #6399 then scoped every verdict to the head it names, which let any push
+    retire a standing block — the security desk's included — and the PR merged
+    on coverage evidence alone (T4). The branch list still does not decide this
+    gate, but a push no longer does either: a block stands until the seat that
+    posted it posts a verdict on the current head, and an old approve clears
+    nothing.
 
     The rule reads the verdict now, not the branch, and it is one scoping step
     and two clauses, in this order. It is written down once, in
     `docs/MERGE_QUEUE.md` ("The verdict rule"), so no two seats read it
     differently:
 
-    0. **Every verdict is scoped to the head it names.** A verdict naming another
-       commit is about code the PR has left: it does not block the current head
-       and it clears nothing on it. One that names no head at all cannot be
-       stale, so it blocks as before.
+    0. **A push spends nothing.** An approve counts only when it names the head
+       the PR stands at. A block counts whatever head it names (T4): it is
+       answered by a reviewer, never by the branch moving.
 
     1. **A seat's own block stands until that seat clears it.** A blocking
        verdict belongs to the seat that posted it. That seat's later approve
        naming the head the PR stands at clears it; an approve naming another
-       head does not, and no other seat's approve does either. When the approve
+       head does not, and no other seat's approve does either. A block on an
+       older commit is cleared by that seat's approve naming the current head
+       with no `Withdraws:` line — the #6263 handback, answered by the seat that
+       blocked rather than by the push. When the approve
        names the same, unchanged head the block names, it clears the block only
        when it carries a `Withdraws:` line naming it (DIG-5246, `#6280`): an
        approve is a statement about the code, and the queue does not read it as
@@ -2957,9 +2992,8 @@ def _verdict_value_reason(
        moving leaves nothing behind, so the clearing comment is the seat's
        approve naming the current head plus a `Withdraws:` line with no sha.
     2. **Everything else is judged by the newest readable verdict.** The newest
-       readable verdict is the one that counts: a blocking verdict blocks when
-       it names the head the PR stands at (or names no head at all, which
-       cannot be stale); an approve clears only when it names the head the PR
+       readable verdict is the one that counts: a blocking verdict blocks
+       whatever head it names (T4); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
        clearance. A clearance of a `changes_requested` on the current head must
        also name a non-author seat: an approve with no provenance seat, or one
@@ -2990,11 +3024,17 @@ def _verdict_value_reason(
     where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
     if latest.verdict in BLOCKING_VERDICTS:
         if not verdict_applies_to_head(latest, head):
-            # A block written against another head is not a statement about this
-            # one (#6263): it neither holds this head nor asks for a fresh review
-            # of it. The coverage gate still decides whether this PR has review
-            # evidence on the head it stands at.
-            return []
+            # T4 (from #6399): a block written against another head is not
+            # spent by the push that left it. It is the newest readable verdict,
+            # so nothing has answered it; it holds until a newer verdict names
+            # the head the PR stands at.
+            return [
+                f"PR #{pr.get('number')}: the latest review verdict is "
+                f"'{latest.verdict}' ({latest.source}, posted by {latest.author} "
+                f"in {where}), naming `{latest.bindings[0][:12]}`, and the PR "
+                f"now stands at {head_text}. A push does not spend a block: it "
+                f"stands until a later verdict names {head_text}"
+            ]
         if latest.scope:
             scope_text = f", scoped to `{latest.scope[:12]}`"
         elif latest.bindings:
@@ -3084,6 +3124,14 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
             f"({block.source}, in {where}){scope_text}, and the PR now stands at "
             f"{head_text}; a blocking verdict stands until that seat clears it. "
             f"{_unbound_block_clearance(head_text)}"
+        )
+    if not _covers_head(block, head):
+        return (
+            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+            f"{head_text}. A push does not spend a block (T4): it stands until "
+            f"seat {block.seat} posts a verdict naming {head_text}; another "
+            "seat's approve does not clear it"
         )
     return (
         f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
@@ -3188,21 +3236,27 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
 
 
 def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
-    """True when a native `CHANGES_REQUESTED` review names the head, or no head.
+    """True when GitHub reports a native `CHANGES_REQUESTED` that still stands.
 
-    GitHub's `reviewDecision` is not scoped to a commit: it keeps saying
-    `CHANGES_REQUESTED` after the branch moves, and every seat here pushes under
-    one login, so the login that posted the block is also the only login that
-    could approve — a stale native block is permanent. The review itself does
-    name its head, in `commit.oid`, so the gate reads that.
-
-    A review with no readable commit cannot be shown stale, and a payload with
-    no review list at all is a missing signal, not a clearance: both keep the
-    block, exactly as `reviewDecision` did before this rule.
+    T4 (from #6399). `reviewDecision` keeps saying `CHANGES_REQUESTED` after the
+    branch moves, and that is the behaviour the queue wants: a native change
+    request is answered by the reviewer (a new review on the head) or by a
+    dismissal, which GitHub records with who dismissed it and why. A push is
+    neither. So the review's `commit.oid` no longer decides whether the block
+    stands; it only shapes the refusal (`_native_block_reason`). `head` is kept
+    for the callers' signature.
     """
+    del head
+    return str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED"
+
+
+def _native_block_reason(pr: dict[str, Any], head: str) -> str:
+    """The refusal for a native change request, naming a stale commit if any."""
+    base = "review has outstanding change requests"
     reviews = pr.get("reviews")
     if not head or not isinstance(reviews, list):
-        return True
+        return base
+    stale: list[str] = []
     for review in reviews:
         if not isinstance(review, Mapping):
             continue
@@ -3211,8 +3265,15 @@ def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
         commit = review.get("commit")
         oid = str(commit.get("oid") or "") if isinstance(commit, Mapping) else ""
         if not oid or _binds_head(oid, head):
-            return True
-    return False
+            return base
+        stale.append(oid)
+    if not stale:
+        return base
+    return (
+        f"{base}: a native CHANGES_REQUESTED review on `{stale[0][:12]}` still "
+        f"stands at `{head[:12]}`; a push does not dismiss it, so it needs a "
+        "dismissal or a new review on the head"
+    )
 
 
 def _gate_review(
@@ -3238,15 +3299,16 @@ def _gate_review(
     configuration and provenance reader the coverage gate uses (item 3 of
     DIG-4990).
 
-    Both arms are scoped to the head the PR stands at. `reviewDecision` is an
-    aggregate GitHub keeps after the branch moves, and a posted verdict keeps
-    its own scope; neither may hold a head it was not made against (#6263).
+    Neither arm is spent by the branch moving (T4, from #6399).
+    `reviewDecision` is an aggregate GitHub keeps after a push until the
+    review is dismissed or the reviewer reviews again, and a posted block
+    stands until the seat that posted it (or, unseated, a newer verdict) names
+    the head the PR stands at.
     """
     reasons: list[str] = []
     head = str(pr.get("headRefOid") or "")
-    if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
-        if _native_block_on_head(pr, head):
-            reasons.append("review has outstanding change requests")
+    if _native_block_on_head(pr, head):
+        reasons.append(_native_block_reason(pr, head))
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
     reasons.extend(_verdict_value_reason(pr, cfg, prov))
