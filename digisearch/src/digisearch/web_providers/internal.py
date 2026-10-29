@@ -43,6 +43,7 @@ class InternalWebProvider(BaseWebProvider):
                 exclude_domains=req.exclude_domains,
                 max_results=req.max_results,
                 recency_days=req.recency_days,
+                page_corpus=req.page_corpus,
             )
         )
         # `provider` names the *vendor* across the unified surface; the

@@ -98,9 +98,15 @@
   }
 }
 
+/* The stock assistant-ui thread radius as a theme token, so the base skin's
+   `rounded-thread` (user bubble) is a real utility. Plain @theme (not inline):
+   the utility reads var(--radius-thread), so skin scopes that zero it still win. */
+@theme {
+  --radius-thread: 1.5rem;
+}
+
 :root {
   --radius: 0.625rem;
-  --radius-thread: 1.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);

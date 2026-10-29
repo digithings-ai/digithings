@@ -13,6 +13,7 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
@@ -158,6 +159,8 @@ export type EmbedTenantConfig = {
   /** Which vendored assistant-ui Thread to mount. */
   skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
+  /** Heading and body faces, as font variables only (src/lib/tenant-fonts.ts). */
+  fonts?: TenantFonts;
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
   title?: string;
@@ -653,6 +656,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     accent = { color: a.color, foreground: a.foreground };
   }
 
+  const fonts = parseTenantFonts(v.fonts, ctx);
+
   if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
     throw new Error(`${ctx}: aliases must be an array of strings`);
   }
@@ -993,6 +998,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         aliases: v.aliases as string[] | undefined,
       }),
     accent,
+    ...(fonts ? { fonts } : {}),
     attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,

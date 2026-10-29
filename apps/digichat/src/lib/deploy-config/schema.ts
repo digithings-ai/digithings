@@ -5,6 +5,7 @@
  * same shape for migration. Spec: digichat deploy config plan + ARCHITECTURE.md.
  */
 
+import { TenantFontsSchema } from "@/lib/tenant-fonts";
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
@@ -242,6 +243,8 @@ export const ChromeSchema = z
     suggestions: z.array(z.string()).optional(),
     placeholder: z.string().optional(),
     accent: AccentSchema.optional(),
+    /** Heading and body faces, font variables only (src/lib/tenant-fonts.ts). */
+    fonts: TenantFontsSchema.optional(),
     attribution: z.boolean().optional(),
     /** Curated reply-language default (see languages.ts). */
     defaultLanguage: z
