@@ -27,7 +27,7 @@ Source-Platform: <platform>
 
 The value is one of the four names above. Each harness adds the trailer at commit time, and it is kept through squash — the squash commit message must keep it. Reviewers and tooling read the trailer from the commit, not from the PR body.
 
-Today, commits carry `Paperclip-Agent-Id:` and `Paperclip-Run-Id:` per seat. Those stay, and stay readable by the merge queue's authorship checks until that queue is migrated. They are not the attribution record.
+Today, commits carry `Paperclip-Agent-Id:` and `Paperclip-Run-Id:` per seat. Those stay, and stay readable by the merge queue's authorship checks. They are not the attribution record.
 
 Example block:
 
@@ -37,6 +37,19 @@ docs(ops): fix a link
 Signed-off-by: ...
 Source-Platform: grokbot
 ```
+
+### `Source-Session:` (pending #6667)
+
+[#6667](https://github.com/digithings-ai/digithings/pull/6667) (draft, in progress, owned by Platform) adds a second trailer next to `Source-Platform:`:
+
+```
+Source-Platform: <platform>
+Source-Session: <session-id>
+```
+
+It identifies the session that wrote the commit, on platforms other than Paperclip. A Paperclip commit names its session with `Paperclip-Run-Id:` instead. In #6667 the value is one token matching `^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$` (8 to 128 characters). A value with a placeholder word such as `placeholder` is rejected.
+
+The merge queue reads it to decide independence. The sessions that wrote a PR come from its `Source-Session:` and `Paperclip-Run-Id:` trailers, plus the author seat's Paperclip runs that cover a commit. A review counts when its marker names the current head and a session not in that set, so a fresh session on the same platform is independent. A trailer naming an unknown platform or a placeholder session makes the author unidentifiable, and the PR waits. Until the harnesses emit `Source-Session:`, a same-platform review of a non-Paperclip PR is refused (fail-closed); a review from a different platform still counts. This trailer is pending #6667 merging and the harnesses emitting it.
 
 ## Labels
 
@@ -75,9 +88,9 @@ The `reviewed:agent` and `reviewed:owner` labels are retired (Chris, 2026-10-29)
 
 The review record names the reviewer's platform and the head SHA it approved. A review done in a fresh session — new context, not the authoring session or its subagent — on the same platform counts as independent.
 
-This changes the unit of independence from seat to session. Today the merge queue still judges independence by seat: it drops a review marker from the seat named in the commits' `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` trailers (see [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence)). Until the queue is migrated, a same-platform review still has to satisfy that seat rule to count there. The migration to platform-level review checks is **in progress, owned by Platform**, in Platform's own draft PR (none open as of 2026-10-29 14:45 CET; link it here once it exists).
+This changes the unit of independence from seat to session. On `develop` today the merge queue still judges independence by seat: it drops a review marker from the seat named in the commits' `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` trailers (see [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence)). Until the queue is migrated, a same-platform review still has to satisfy that seat rule to count there. The migration to platform-level attribution with session-level independence is **in progress, owned by Platform**, in [#6667](https://github.com/digithings-ai/digithings/pull/6667). In #6667 a non-Paperclip review marker reads `<!-- digithings-review platform=<claude|cursor|grokbot> session=<id> head=<sha> -->`; a Paperclip marker keeps `agent=<seat> run=<run>`. The coverage check no longer needs `reviewed:agent`, and `reviewed:owner` is read only as legacy evidence for historical `main` commits.
 
-This doc does not delete the labels. `scripts/check_review_coverage.py`, `scripts/merge_queue.py` and `scripts/readiness.py` still read them, and the main-promotion check "Every commit reaching main was reviewed" still accepts them. Moving the tooling off them is part of Platform's in-progress merge-queue migration (above); deleting the labels from the repo is follow-up work.
+This doc does not delete the labels. `scripts/check_review_coverage.py`, `scripts/merge_queue.py` and `scripts/readiness.py` still read them, and the main-promotion check "Every commit reaching main was reviewed" still accepts them. Moving the tooling off them is part of Platform's in-progress migration in #6667 (above); deleting the labels from the repo is follow-up work.
 
 ## Promotion PRs
 
@@ -96,6 +109,7 @@ Hard rule (Chris, 2026-10-29): no agent ever submits an approving GitHub review 
 - Label rename/create: `exec:cursor` → `src:cursor`, `exec:claude` → `src:claude`, plus new `src:grokbot` and `src:paperclip`.
 - PR template: add the auto-filled `Source: <platform>` line.
 - sctl: validate `--owner` against the four platform names in digiforge.
-- Merge queue and `check_review_coverage.py`: migrate off the `reviewed:*` labels and the per-seat `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` independence check onto the platform and the `Source-Platform:` trailer. **In progress, owned by Platform**, in Platform's own draft PR (none open as of 2026-10-29 14:45 CET; link it here once it exists).
-- `.github/required-contexts.txt`: bring it in line with live branch protection (it still lists the Actions-era contexts; see [BRANCH_PROTECTION.md § Known drift](../BRANCH_PROTECTION.md#known-drift-in-the-tooling)). **In progress, owned by Platform**, in the same draft PR.
+- Merge queue and `check_review_coverage.py`: migrate off the `reviewed:*` labels and the per-seat `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` independence check onto the platform, the `Source-Platform:` trailer and the new `Source-Session:` trailer. **In progress, owned by Platform**, in [#6667](https://github.com/digithings-ai/digithings/pull/6667).
+- Harness `Source-Session:` emission: each non-Paperclip harness adds `Source-Session:` at commit time. Until then a same-platform review of its PRs is refused.
+- `.github/required-contexts.txt`: bring it in line with live branch protection. On `develop` it still lists the Actions-era contexts; #6667 sets it to `local-ci` only (see [BRANCH_PROTECTION.md § Known drift](../BRANCH_PROTECTION.md#known-drift-in-the-tooling)). **In progress, owned by Platform**, in [#6667](https://github.com/digithings-ai/digithings/pull/6667), pending merge.
 - QA gate: check that 100% of merged commits carry the trailer.

@@ -80,6 +80,8 @@ reference until this card is adopted; where they disagree, they win until then.
 - Ownership is recorded by platform only: `claude`, `cursor`, `grokbot`, `paperclip`. Paperclip
   has no per-seat breakdown.
 - Every commit carries `Source-Platform: <platform>`. Keep it through squash.
+- Pending [#6667](https://github.com/digithings-ai/digithings/pull/6667): non-Paperclip commits also carry
+  `Source-Session: <session-id>`. Without it, a same-platform review is refused.
 - `src:<platform>` labels are applied by tooling from the trailer, never by hand.
 - The owner of a GitHub PR is the platform that pushes it. A promotion PR lists the platforms it
   carries.
