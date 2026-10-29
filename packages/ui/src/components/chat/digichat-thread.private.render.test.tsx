@@ -83,10 +83,10 @@ const VIEWS: View[] = [
   { name: "all off", workVisibility: "quiet", reasoningMode: "off", toolCallsMode: "off" },
 ];
 
-async function mount(view: View, privateMode: boolean) {
+async function mount(view: View, privateMode: boolean, messages?: ThreadMessageLike[]) {
   function Harness() {
     const runtime = useLocalRuntime(adapter, {
-      initialMessages: privateMode ? PRIVATE : NORMAL,
+      initialMessages: messages ?? (privateMode ? PRIVATE : NORMAL),
     });
     return (
       <AssistantRuntimeProvider runtime={runtime}>
@@ -239,6 +239,92 @@ describe("private rows do not open", () => {
     await click(row);
     expect(normal.host.querySelector('[data-slot="tool-fallback-content"]')).not.toBeNull();
     expect(normal.host.textContent).toContain(`${MARK}-args`);
+    normal.unmount();
+  });
+});
+
+/**
+ * The shape of the live OCC private turn on 29 Oct 2026 (promo-d-live turn 2):
+ * three tool calls, no reasoning, every input and output stripped to `{}`,
+ * the second call finishing after the third, under the default quiet view.
+ * The same stream is replayed as a normal session, so the two are compared on
+ * identical parts.
+ */
+const LIVE_TOOLS_ONLY: ThreadMessageLike[] = [
+  {
+    role: "assistant",
+    content: [
+      { type: "tool-call", toolCallId: "ptc_1", toolName: "help", args: {}, argsText: "{}", result: {} },
+      { type: "tool-call", toolCallId: "ptc_2", toolName: "search_notes", args: {}, argsText: "{}", result: {} },
+      { type: "tool-call", toolCallId: "ptc_3", toolName: "get_note", args: {}, argsText: "{}", result: {} },
+      { type: "text", text: "A customer resets their password from the Forgot password page." },
+    ],
+  },
+];
+
+/** Click the visible summary text the way a person does: on the label, not the button box. */
+async function clickSummaryText(host: HTMLElement) {
+  const trig = host.querySelector('[data-slot="aui_work-chain-trigger"]');
+  const label = [...(trig?.querySelectorAll("*") ?? [])].find(
+    (el) => el.children.length === 0 && /used \d+ tools?/i.test(el.textContent ?? ""),
+  );
+  await click(label ?? trig);
+}
+
+describe("live shape: tools only, no reasoning, {} payloads, quiet view", () => {
+  const quiet = VIEWS[0]!;
+
+  it("shows the same collapsed summary in normal and private", async () => {
+    const normal = await mount(quiet, false, LIVE_TOOLS_ONLY);
+    const priv = await mount(quiet, true, LIVE_TOOLS_ONLY);
+    const trig = priv.host.querySelector('[data-slot="aui_work-chain-trigger"]');
+    expect(trig?.getAttribute("aria-expanded")).toBe("false");
+    // The DOM says "Used 3 tools"; the skin lowercases it on screen.
+    expect(trig?.textContent).toMatch(/Used 3 tools/);
+    expect(signature(priv.host)).toEqual(signature(normal.host));
+    priv.unmount();
+    normal.unmount();
+  });
+
+  for (const privateMode of [false, true]) {
+    it(`summary expands and the 3 rows show (${privateMode ? "private" : "normal"})`, async () => {
+      const m = await mount(quiet, privateMode, LIVE_TOOLS_ONLY);
+      await clickSummaryText(m.host);
+      const trig = m.host.querySelector('[data-slot="aui_work-chain-trigger"]');
+      expect(trig?.getAttribute("aria-expanded")).toBe("true");
+      expect(m.host.textContent).toContain("3 tool calls");
+      await openGroup(m.host);
+      expect(m.host.querySelector('[data-slot="tool-group-root"]')?.hasAttribute("data-open")).toBe(true);
+      expect(m.host.querySelectorAll('[data-slot="tool-fallback-trigger"]').length).toBe(3);
+      expect(m.host.querySelectorAll('[data-slot="reasoning-trigger"]').length).toBe(0);
+      m.unmount();
+    });
+  }
+
+  it("matches normal at every step and the private rows never open", async () => {
+    const normal = await mount(quiet, false, LIVE_TOOLS_ONLY);
+    const priv = await mount(quiet, true, LIVE_TOOLS_ONLY);
+    await clickSummaryText(normal.host);
+    await clickSummaryText(priv.host);
+    expect(signature(priv.host)).toEqual(signature(normal.host));
+    await openGroup(normal.host);
+    await openGroup(priv.host);
+    expect(signature(priv.host)).toEqual(signature(normal.host));
+
+    for (const row of priv.host.querySelectorAll('[data-slot="tool-fallback-trigger"]')) {
+      expect(row.closest("button")).toBeNull();
+      expect(row.hasAttribute("aria-expanded")).toBe(false);
+      await click(row);
+      await click(row.querySelector('[data-slot$="-label"]'));
+    }
+    expect(priv.host.querySelector(BODIES)).toBeNull();
+
+    // On the same stream a normal row is still a control and opens.
+    const normalRow = normal.host.querySelector('[data-slot="tool-fallback-trigger"]');
+    expect(normalRow?.tagName).toBe("BUTTON");
+    await click(normalRow);
+    expect(normal.host.querySelector('[data-slot="tool-fallback-content"]')).not.toBeNull();
+    priv.unmount();
     normal.unmount();
   });
 });
