@@ -670,7 +670,7 @@ the account-wide token.
 
 | Phase | What | Gate |
 |---|---|---|
-| **C0** template + epic docs | This doc update; the generic [`client-template/`](client-template/) in R0 and as the Forgejo template repo `clients/client-template`; template CI (`.woodpecker.yml`, digiforge job) | draft PRs, local Forgejo only |
+| **C0** template + epic docs | This doc update; the generic [`client-template/`](client-template/) in R0 and as the Forgejo template repo `clients/client-template`; template CI (`.woodpecker.yml`). For Forgejo-hosted client repos, Woodpecker runs the repo's own `.woodpecker.yml` and posts its statuses to Forgejo; that waits on Chris's admin step to enable each repo in Woodpecker (the digiforge runner is GitHub-only) | draft PRs, local Forgejo only |
 | **C1** first client repo | A new client's demo runs from its own `client-<slug>` repo against pinned R0; generic mechanisms it needs land in R0 first | owner merges the R0 PRs; staging deploy needs the generic invite gate and a scoped token |
 | **C2** make the upstream generic | Generic invite gate, tenant MCP proxy route, tenant recrawl job, skills-directory loader, and tenant-config-driven front-end pieces, each a draft PR into develop; the matching client-literal baseline entries are deleted in the same PRs | owner merges; an equivalence test proves each existing tenant's effective deployment is unchanged |
 | **C3** existing tenants into client repos | Fresh repos (D-C12) assembled from the move lists; staging proof from KV/R2 written by the client's `deploy.sh`; prod cut-over on a signed tag; then an R0 PR deletes the moved paths | owner signed tag |
