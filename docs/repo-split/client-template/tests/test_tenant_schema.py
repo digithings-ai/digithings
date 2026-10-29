@@ -65,6 +65,16 @@ def test_slug_rule_refuses(slug: str) -> None:
     assert not SLUG_RE.fullmatch(slug)
 
 
+def test_example_tenant_keeps_the_product_chat_safe_default() -> None:
+    # SCHEMA-NOTES §0: meter on, TPM limit on, picker off. The template writes no opt-out.
+    (row,) = _doc()["hosts"].values()
+    models = row.get("models") or {}
+    assert models.get("allowPicker") is not True
+    assert "occPicker" not in models, "legacy alias; write models.allowPicker if anything"
+    assert models.get("premiumMeter") is not False
+    assert (row.get("guardrails") or {}).get("tpmLimit") is not False
+
+
 # The Woodpecker Python `test` step sets this: the R0 schema check runs in the
 # Node-image `r0-schema` step instead (.woodpecker.yml), not in a step with no Node.
 OWN_STEP_ENV = "R0_SCHEMA_CHECK_STEP"

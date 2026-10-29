@@ -28,6 +28,13 @@ on a checkout with Node deps; without them it skips locally and fails in CI. Aft
 `make bump SHA=<develop sha with U5a>`.
 `make bump` past U5a must also remove that `xfail` marker from `test_tenant_doc_passes_the_r0_schema` (strict: the bump makes it XPASS, which fails the run).
 
+Product-chat safe default (U5a #6680): a new `chrome.productChat` row gets the premium
+meter on, the tokens-per-minute limit on and the model picker off. The example tenant
+keeps that default and writes no opt-out. The opt-out fields are `models.allowPicker: true`,
+`models.premiumMeter: false` and `guardrails.tpmLimit: false` (`models.occPicker` is a
+legacy alias of `allowPicker`). A client repo that needs legacy-row behaviour must write
+these explicitly; R0 never applies them to a new row.
+
 ## 1. `access.invite` is server-only
 
 - The invite settings (`access.invite`: mode, how the invite key is stored, cookie name,
