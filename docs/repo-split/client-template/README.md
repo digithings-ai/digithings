@@ -14,7 +14,7 @@ AGENTS.md            agent rules for this client (CLAUDE.md is a symlink)
 VERSION, CHANGELOG.md  release version; tags are ${REPO_NAME}-vX.Y.Z
 client/              profile.md, scope.md, decisions.md, comms/ (references only)
 tenant/              digichat.yaml (one deployment doc), corpus-map.json, env/{local,staging,prod}.yaml,
-                     SCHEMA-NOTES.md (server-only access.invite, pathPrefix rules, fail closed)
+                     SCHEMA-NOTES.md (server-only access.invite, slug rules, fail closed)
 tools/               site-graph/, skills/<skill>/SKILL.md, mcp/<server>/
 corpus/              crawled public pages (markdown with url: front matter) + manifest
 deploy/              deploy.sh and its README (what each step touches, rollback)

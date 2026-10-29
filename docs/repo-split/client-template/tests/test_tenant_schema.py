@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TENANT = ROOT / "tenant"
 DOC = TENANT / "digichat.yaml"
 R0 = Path(os.environ.get("DIGITHINGS_DIR", ROOT.parent / "digithings"))
+# Slug rule from tenant/SCHEMA-NOTES.md §2. Switch to U5a's shared R0 helper once it lands.
+SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 def _doc() -> dict:
@@ -32,8 +34,19 @@ def test_tenant_doc_shape() -> None:
     assert doc["version"] == 1
     assert len(doc["hosts"]) == 1, "one deployment per client repo"
     (row,) = doc["hosts"].values()
-    assert re.fullmatch(r"[a-z0-9-]+", row["slug"])
+    assert SLUG_RE.fullmatch(row["slug"])
     assert "token" not in row, "tokens are env names (tokenEnv), never values"
+
+
+
+@pytest.mark.parametrize("slug", ["example", "example-b"])
+def test_slug_rule_accepts(slug: str) -> None:
+    assert SLUG_RE.fullmatch(slug)
+
+
+@pytest.mark.parametrize("slug", ["-x", "x-", "a--b"])
+def test_slug_rule_refuses(slug: str) -> None:
+    assert not SLUG_RE.fullmatch(slug)
 
 
 def test_tenant_doc_passes_the_r0_schema() -> None:

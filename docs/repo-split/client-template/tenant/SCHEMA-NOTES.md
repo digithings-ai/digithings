@@ -40,6 +40,8 @@ The tenant writer refuses a doc when:
 Collision and house-route checks compare **whole path segments**, not raw strings:
 `/chat/abc` and `/chat/abcd` do not collide, while `/chat` and `/chat/x` overlap.
 
+Legacy fallback (one release, until P-exit): a full `pathPrefix` of the form `/chat/<slug>` is still accepted; the slug is taken from it, any other shape is refused, the built path must be byte-identical to today's, and there is no live config migration.
+
 ## 3. Gated tenants fail closed
 
 - If a tenant's doc is **missing, unreadable or invalid** (schema error, bad slug,
