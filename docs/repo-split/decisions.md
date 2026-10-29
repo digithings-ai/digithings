@@ -67,7 +67,7 @@ earlier row, that row is kept as the record and marked superseded below.
 |---|---|---|---|
 | **D-C1** [scope] | Home of the private repos | **Local Forgejo (digiforge) for all private repos**, private GitHub as backup | Supersedes the 14 Oct Origin direction for R1–R5 and the client repos. D-O1 (R0 GitHub-primary) is unchanged. D-O2/D-O4 (Origin namespace and identity) no longer apply to new repos; each agent platform has its own Forgejo identity and token. |
 | **D-C2** [scope] | Replace R6 `digichat-tenants` with one repo per client? | **Yes** | R6 is superseded. Each client gets `client-<slug>`, created from the template ([client-template/](client-template/)). |
-| **D-C3** [scope] | Client repo as the source of the tenant doc, with the deploy writing KV | **Yes** | Reverses call (b) of 01:26 ("KV only, no repo files synced to KV") for client repos. KV stays the runtime store; the repo is the source; the deploy writes KV versioned by tag. |
+| **D-C3** [scope] | Client repo as the source of the tenant doc, with the deploy writing KV | **Yes** | Chris's decision of 2026-10-29: reverses the earlier "KV only, no repo files synced to KV" ruling (refactor 1.7 in migration-plan.md) for client repos. KV stays the runtime store; the repo is the source; the deploy writes KV versioned by tag. |
 | **D-C4** [scope] | Naming | **Forgejo org `clients`, repos `client-<slug>`, GitHub backups `digithings-ai/client-<slug>` (private)** | The backup is pushed only at releases. No Actions, Packages or Pages on it (fits D-X2). |
 | **D-C5** [scope] | PyPI distribution names | **`digithings-<module>`** (import names unchanged) | One module name is already taken on PyPI by an unrelated project, so the prefix is used for all modules. Replaces D-P1's "current names". |
 | **D-C6** [scope] | Registries | **Stable: PyPI and npmjs `@digithings-ai`. Dev and private builds: the Forgejo registry.** | The owner sets up the PyPI trusted publisher and the npm token. |
@@ -80,7 +80,7 @@ earlier row, that row is kept as the record and marked superseded below.
 | **D-C13** [scope] | Trial-tenant configs now in R0 | **Yes, a client repo for them too** | Third client repo after the first two. |
 
 Superseded by this section: the Origin rows (D-O2, D-O4) for new private repos; R6 in the
-target table; call (b) of 01:26 for client repos; D-T2 and D-R5 for client-specific MCP
+target table; the refactor 1.7 "KV only" ruling for client repos; D-T2 and D-R5 for client-specific MCP
 servers; D-P1's naming.
 
 ## Changed recommendations

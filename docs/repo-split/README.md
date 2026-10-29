@@ -33,6 +33,8 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 
 Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). D-O1, D-O2, D-O4, D-O5 answered the same day (R0 stays GitHub-primary, agents on Chris's account); D-O3 (Buildkite) STRUCK 23:36, runner is local-ci; D-G6 mandatory since 23:18. D-G5 / D-G6 answered 2026-10-14 17:40 CEST (deploys + CI on Chris's Mac under his normal user, Cloudflare Worker as fallback; signed tags mandatory, D-G6). Nothing has moved yet.
 
+**Update 2026-10-29:** the private homes changed from Cursor Origin to Forgejo (digiforge), and per-client repos replace R6. See [2026-10-29: client repos, Forgejo homes, package releases](#2026-10-29-client-repos-forgejo-homes-package-releases-d-c1--d-c13). The `clients` org and the `client-template` repo exist on Forgejo; no monorepo code has moved yet.
+
 ## 2026-10-29: client repos, Forgejo homes, package releases (D-C1 … D-C13)
 
 Answered by the owner on 2026-10-29 (22:29 Rome). Full register: [decisions.md](decisions.md#client-repos-and-forgejo-homes--answered-2026-10-29);
@@ -44,7 +46,7 @@ phases: [migration-plan.md](migration-plan.md#client-repos-epic-2026-10-29-phase
 - **R6 `digichat-tenants` is superseded** by one `client-<slug>` repo per client in the
   Forgejo `clients` org, created from the [`client-template`](client-template/) (D-C2, D-C4).
 - **The client repo is the source of its tenant config**; its deploy writes the tenant doc
-  to KV, which stays the runtime store (D-C3). This reverses call (b) of 01:26 for client repos.
+  to KV, which stays the runtime store (D-C3). Per Chris's decision of 2026-10-29, this reverses the earlier "KV only, no repo sync" ruling (refactor 1.7 in [migration-plan.md](migration-plan.md)) for client repos.
 - **Packages:** Python modules release to PyPI as `digithings-<module>`, JS packages to npmjs
   `@digithings-ai/*`, at each promotion the owner approves; dev builds go to the Forgejo
   registry (D-C5, D-C6, D-C8).

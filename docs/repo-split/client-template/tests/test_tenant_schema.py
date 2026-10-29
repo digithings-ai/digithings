@@ -90,3 +90,20 @@ def test_no_secret_looking_values() -> None:
             and p.suffix in {".json", ".yaml", ".yml", ".md", ".sh", ".py", ".ts", ".mjs", ".toml"}
         ):
             assert not pat.search(p.read_text(errors="ignore")), p
+
+
+def test_env_example_has_names_only_and_covers_tenant_secrets() -> None:
+    lines = [
+        ln.strip()
+        for ln in (ROOT / ".env.example").read_text().splitlines()
+        if ln.strip() and not ln.lstrip().startswith("#")
+    ]
+    names = set()
+    for ln in lines:
+        m = re.fullmatch(r"([A-Z][A-Z0-9_]*)=", ln)
+        assert m, f".env.example must hold NAME= lines with no value: {ln!r}"
+        names.add(m.group(1))
+    for env_file in sorted((ROOT / "tenant" / "env").glob("*.yaml")):
+        secrets = yaml.safe_load(env_file.read_text()).get("secrets") or {}
+        missing = set(secrets.values()) - names
+        assert not missing, f"{env_file.name}: secret names missing from .env.example: {missing}"

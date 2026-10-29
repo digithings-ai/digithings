@@ -17,7 +17,8 @@ version pinned in [`digithings.lock`](digithings.lock).
   CI refuses vendored R0 files.
 - If this client needs a new mechanism, build it **generically** in R0 first: an R0
   pull request through digiforge, with `example.com` fixtures and no client name.
-  When it lands, bump `digithings.lock` here (`make bump`, or by hand) and use it.
+  When it lands, bump `digithings.lock` here with `make bump SHA=<40-char develop sha>`
+  (rewrites the pin, then runs `make test`) and use it.
 - During development, `make link` points this repo at a local R0 checkout;
   `make unlink` restores the pins. Never commit a linked state.
 
@@ -43,7 +44,9 @@ version pinned in [`digithings.lock`](digithings.lock).
 
 - `origin` = Forgejo (`clients/${REPO_NAME}`). All daily work: branch, pull request,
   Woodpecker checks, review, merge to `main`.
-- `github` = private backup on GitHub. Pushed **only** by `make release`, never by hand.
+- `github` = private backup on GitHub. Pushed **only by the owner**, at a release, never by
+  an agent. `make release` only bumps `VERSION` and `CHANGELOG.md` and prints the
+  tag-and-push command for the owner to run.
 
 ## 6. Deploys
 

@@ -2,9 +2,10 @@
 # in the template (see deploy/README.md).
 SHELL := /bin/bash
 DIGITHINGS_DIR ?= ../digithings
+REPO ?= $(notdir $(CURDIR))
 COMPOSE := docker compose -f compose/docker-compose.yml
 
-.PHONY: help up dev down link unlink test qa release deploy-staging deploy-prod
+.PHONY: help up dev down link unlink bump test qa release deploy-staging deploy-prod
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -25,6 +26,16 @@ link: ## work against a local R0 checkout (writes the gitignored .link file)
 unlink: ## restore the pins from digithings.lock
 	@rm -f .link && echo "unlinked; using digithings.lock"
 
+bump: ## pin digithings.lock to SHA=<40-char sha on R0 develop>, then run make test
+	@[[ "$(SHA)" =~ ^[0-9a-f]{40}$$ ]] || { echo "usage: make bump SHA=<40-char sha on R0 develop>"; exit 1; }
+	@if git -C "$(DIGITHINGS_DIR)" rev-parse --git-dir >/dev/null 2>&1; then \
+	  git -C "$(DIGITHINGS_DIR)" merge-base --is-ancestor "$(SHA)" origin/develop \
+	    || { echo "bump: $(SHA) is not on origin/develop in $(DIGITHINGS_DIR) (git fetch first?)"; exit 1; }; \
+	fi
+	@sed -i.bak -e 's/^kind=.*/kind=git-sha/' -e 's/^ref=.*/ref=develop/' -e 's/^sha=.*/sha=$(SHA)/' digithings.lock && rm -f digithings.lock.bak
+	@echo "digithings.lock -> $(SHA)"
+	$(MAKE) test
+
 test: ## offline checks: lock, tenant schema, corpus, tools (no model calls)
 	scripts/check_lock.sh
 	source scripts/env.sh && cd "$$DIGITHINGS_DIR" && uv run pytest -q "$$CLIENT_DIR/tests" -p no:cacheprovider
@@ -32,11 +43,12 @@ test: ## offline checks: lock, tenant schema, corpus, tools (no model calls)
 qa: ## golden questions on FREE models only; QID=Q1 for one; stops on the first 429 round
 	tests/run_qa.sh $(or $(QID),all)
 
-release: ## bump VERSION + CHANGELOG and print the tag command (the owner cuts and signs the tag)
+release: ## bump VERSION + CHANGELOG and print the tag-and-push command (owner runs it; agents never push the github backup)
 	@test -n "$(V)" || { echo "usage: make release V=X.Y.Z"; exit 1; }
 	@echo "$(V)" > VERSION
 	@sed -i.bak "s/^## Unreleased/## Unreleased\n\n## $(V) - $$(date +%F)/" CHANGELOG.md && rm -f CHANGELOG.md.bak
-	@echo "Next (owner only): git tag -s client-<slug>-v$(V) -m 'client-<slug> v$(V)' && git push origin main --tags && git push github main --tags"
+	@echo "VERSION and CHANGELOG.md bumped to $(V). Commit and merge to main, then the OWNER runs:"
+	@echo "  git tag -s $(REPO)-v$(V) -m '$(REPO) v$(V)' && git push origin $(REPO)-v$(V) && git push github main $(REPO)-v$(V)"
 
 deploy-staging: ## stub: refuses until deploy/deploy.sh is wired with a scoped token
 	deploy/deploy.sh staging

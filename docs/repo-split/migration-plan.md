@@ -634,7 +634,7 @@ per-environment overlays with host, gate and secret **names**. `deploy/deploy.sh
 doc against the pinned R0 schema, uploads seeds and skills to R2, writes the doc to KV under the
 environment's key (versioned by tag), and deploys the client's own `client-<slug>-*` Workers if it
 has any. It never redeploys the shared stack. Rollback is the same script at the previous tag.
-This replaces refactor 1.7's "KV only, no repo sync" ruling and 4.1's `kv-sync`.
+Per Chris's decision of 2026-10-29, this replaces refactor 1.7's "KV only, no repo sync" ruling and 4.1's `kv-sync`.
 
 ### Package release strategy (D-C5, D-C6, D-C8)
 

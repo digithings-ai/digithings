@@ -22,7 +22,7 @@ digithings.lock      the ONE pin file for R0
 tests/               schema test, questions.json, run_qa.sh, tools/ unit tests
 .woodpecker.yml      Forgejo CI (owned by QA)
 .env.example         variable names only
-Makefile             up / dev / link / unlink / test / qa / release / deploy-staging / deploy-prod
+Makefile             up / dev / link / unlink / bump / test / qa / release / deploy-staging / deploy-prod
 ```
 
 ## Run it locally
@@ -38,9 +38,10 @@ make qa QID=Q1                # one golden question on a free model; stops on th
 
 ## Release and deploy
 
-- `make release` bumps `VERSION` and `CHANGELOG.md` and prints the tag command.
+- `make bump SHA=<sha>` re-pins `digithings.lock` to an R0 develop sha and runs `make test`.
+- `make release` bumps `VERSION` and `CHANGELOG.md` and prints the tag-and-push command.
   The owner cuts and signs the tag, then pushes `main` and tags to the private
-  GitHub backup.
+  GitHub backup (owner only; agents never push `github`).
 - `make deploy-staging` / `make deploy-prod` are **stubs that refuse** in the
   template. A client repo wires `deploy/deploy.sh` once a scoped Cloudflare token
   exists. Prod needs a signed tag.
