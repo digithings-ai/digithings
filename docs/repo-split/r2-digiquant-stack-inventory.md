@@ -5,7 +5,7 @@ Measured against `github/develop` = `d227b6ed526202aaa095b8e645804ef308dde813`
 Tree census: `git ls-tree -r` = 6615 paths, 6615 unique.
 
 Plan under review: PR #5695 `docs(root): repo split review and phased migration plan`
-(branch `DIG-3518-repo-split-plan`) plus `~/Code/occ-backups/repo-split-docs/repo-split.md`.
+(branch `DIG-3518-repo-split-plan`) plus `~/Code/<client-slug>-backups/repo-split-docs/repo-split.md`.
 Parent epic: DIG-3518, owner Software Architect (`c3bf0d65`), currently `blocked`.
 
 **Scope of this document.** Inventory only. No repository was created, no history moved, no
@@ -226,13 +226,13 @@ anchored tip:
 | `digiquant/scripts/plot_sdca_tearsheet.py` | R1 | SDCA tearsheet plot |
 | `digiquant/src/digiquant/optimize.py` | split | SDCA parts R1, generic shell R2 |
 | `digiquant/scripts/generate_tearsheets.py` | R2 | after the SDCA imports move to the plugin hook |
-| `scripts/verify_occ_invite_key.sh` | R6 | |
-| `scripts/occ_invite_key_fixture_server.mjs` | R6 | |
-| `scripts/occ_invite_key_rollout.sh` | R6 | write-secret and KV half, after refactor 1.9 |
-| `scripts/check_occ_rollout_auth_guard.py` | R6 | |
-| `scripts/index_occ_tickets.py` | R6 | |
-| `scripts/test_occ_rollout_scope_guard.sh` | R6 | |
-| `docs/ops/OCC_INVITE_KEY.md` | R6 | |
+| `scripts/verify_<client-slug>_invite_key.sh` | R6 | |
+| `scripts/<client-slug>_invite_key_fixture_server.mjs` | R6 | |
+| `scripts/<client-slug>_invite_key_rollout.sh` | R6 | write-secret and KV half, after refactor 1.9 |
+| `scripts/check_<client-slug>_rollout_auth_guard.py` | R6 | |
+| `scripts/index_<client-slug>_tickets.py` | R6 | |
+| `scripts/test_<client-slug>_rollout_scope_guard.sh` | R6 | |
+| `docs/ops/<CLIENT_SLUG>_INVITE_KEY.md` | R6 | |
 | `apps/digithings-stack-cloudflare/container/seed_chroma.sh` | R5 | |
 
 **Two corrections to the send-back's paths.**
@@ -262,7 +262,7 @@ declared. Measured outcome:
   which is why block 4 is marked "split" and not "R2" in section 1.
 * **489 does not reproduce from any artefact I can reach.** `r2.paths` is not a path in the
   repository, not one of the six files in PR #5695, and not a token in
-  `~/Code/occ-backups/repo-split-docs/repo-split.md`. The three candidate sums are 423 (the plan's
+  `~/Code/<client-slug>-backups/repo-split-docs/repo-split.md`. The three candidate sums are 423 (the plan's
   R2 rows), 440 (this document's six blocks) and 480 (the six blocks plus the 40 core pipeline
   files). 489 equals none of them.
 

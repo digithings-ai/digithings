@@ -37,7 +37,7 @@ Answered by Chris on 2026-10-14.
 | **D-O2** [scope] | Which Origin namespace owns R1–R7? The name **cannot be changed during beta**. | **Chris's existing personal namespace.** | R1–R7 are private repos in that namespace, shared by collaborator invite. No Teams plan, so no `internal` visibility and no team bypass actors. |
 | **D-O3** [money] [external] | CI for Origin repos. | ~~**Buildkite**, Origin as repository provider, **self-hosted agents**~~ **STRUCK 23:18 — runner is local-ci on Chris's Mac** (DIG-3561 dispatcher + N §5); no Buildkite org, no CloneKit (`clone-fast` fails on Ultra — Matrix finding 6). Queues are local-ci job config, not Buildkite queues. |
 | **D-O4** [money] [security] | Which identity do agents use on Origin? | **Agents keep using Chris's account.** | 23:18 revision: the 'advisory' reading is struck — rulesets that must hold are **`active`**, and the agent identity is **not** a bypass actor (no agent seat holds bypass; Chris alone does). D-G6 is now mandatory (below), so the deploy control is technical (local-ci `verify-tag`), not merely procedural. No second Cursor plan. |
-| **D-O5** [client] [security] | twelve-x on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the twelve-x desk moves** — P4.7 struck, no detach scheduled. twelve-x stays as-is (GitHub private + existing inbound mirror). |
+| **D-O5** [client] [security] | `<client-slug>` on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the `<client-slug>` desk moves** — P4.7 struck, no detach scheduled. `<client-slug>` stays as-is (GitHub private + existing inbound mirror). |
 
 Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac instead of a dedicated host (Buildkite struck 23:36). D-G6 is MANDATORY everywhere since 23:18 (Origin has no signed-tag rule type, so the check lives in local-ci `verify-tag`; an unsigned tag is refused).
 
@@ -70,7 +70,7 @@ Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac in
 D-1 (R5 and R6 separate) · D-Q1 (3 digiquant repos) · D-Q3 (`@digiquant/contract` from R2) ·
 D-Q4 (dashboard/profiles open) · D-Q5 (skills/templates open, research config private) ·
 D-S3 (SDCA optimiser → R1) · D-T1 (tenant map in KV, fallback = digithings) · D-T2 (zammad MCP open) ·
-D-X1 (twelve-x desk → R7, pluggable gate) · D-W1 (site + book private) · D-6 (brand private) ·
+D-X1 (`<client-slug>` desk → R7, pluggable gate) · D-W1 (site + book private) · D-6 (brand private) ·
 D-7 (hero-banner public) · D-8 (digiquant-tui open) · D-9 (digibot stays out) · D-14 (refactor on develop, promote, then split).
 
 ## Informational (no answer needed unless Chris disagrees)

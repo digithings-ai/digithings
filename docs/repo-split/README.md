@@ -24,7 +24,7 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 | R4 | `digithings-web` | private (Origin) | digithings.ai, digibook, brand |
 | R5 | `digithings-stack` | private (Origin) | shared production platform (stack, digichat Worker, cron) |
 | R6 | `digichat-tenants` | private (Origin) | client tenant corpora + rollout tooling (writes KV/R2) |
-| R7 | `twelve-x` (exists) | private (Origin) | client desk + digidata-api |
+| R7 | `<client-slug>` (exists) | private (Origin) | client desk + digidata-api |
 
 ## Status
 

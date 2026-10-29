@@ -23,7 +23,7 @@ one branch), no remotes. Nothing pushed; clones deleted after the run.
 | R4 digithings-web | 369 | 269 | 2,520,452 | 474,041 | 0 |
 | R5 digithings-stack | 743 | 176 | 1,423,835 | 861,870 | 0 |
 | R6 digichat-tenants | 275 | 38 | 566,035 | 287,969 | 0 |
-| R7 twelve-x | HELD | HELD | HELD | HELD | HELD |
+| R7 `<client-slug>` | HELD | HELD | HELD | HELD | HELD |
 
 Sizes are logical bytes, not disk: content = HEAD blob bytes
 (`git cat-file --batch-check`); history = reachable-object bytes present
@@ -31,7 +31,7 @@ locally (a floor — a partial clone may lack some historical blobs, which are
 skipped, never fetched). This supersedes rev 2's `du` figures, which
 double-counted hardlinked/promisor packs and read a uniform ~150 MB everywhere.
 Count controls: R3's 122 cross-checked at source (19 digiquant-web + 40
-dashboard-net touching commits); twelve-x leftovers 0; R2 net 515 = doc 480 +
+dashboard-net touching commits); `<client-slug>` leftovers 0; R2 net 515 = doc 480 +
 rev-1 §1.7 root items (Dockerfile, root ops scripts, config jsons).
 
 ## Gitleaks findings (rule + file + line only — no values recorded)
@@ -39,7 +39,7 @@ rev-1 §1.7 root items (Dockerfile, root ops scripts, config jsons).
 11 hits, all `generic-api-key` in test/fixture/example files. Values were never
 compared against live secrets (handling them is forbidden); none is assessed as
 a live credential here. All sit in extracted *history*; J rev 2 verified the
-OCC test files clean at tip (runtime-generated keys), and R2 §5.5 makes two
+Client-tenant test files clean at tip (runtime-generated keys), and R2 §5.5 makes two
 fixtures runtime-generated — the tip direction is set, the history rows below
 are the record, not new exposure.
 
