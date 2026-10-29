@@ -120,7 +120,7 @@ describe("base skin light links", () => {
     const sel = rule![1].trim();
     expect(sel.split(",")).toHaveLength(1);
     expect(sel).toMatch(/^:root:not\(\.dark\)/);
-    expect(sel).toMatch(/\.aui-thread-root:not\(\.dark \*\) \.aui-md-a$/);
+    expect(sel).toMatch(/:not\(:has\(\.dark\)\) \.aui-thread-root \.aui-md-a$/);
     expect(sel).toMatch(/:not\(\[data-site-theme="1"\]\)/);
     expect(sel).toMatch(/:not\(:has\(\[data-chrome-mode="app"\]\)\)/);
   });
