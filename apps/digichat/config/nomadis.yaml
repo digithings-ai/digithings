@@ -12,7 +12,8 @@ hosts:
       mode: app
       theme: light
       skin: base
-      title: Site assistant
+      # No title: the embed draws no top bar (the header row only renders
+      # when a title is set); the footer keeps the attribution.
       welcome:
         title: Ask about the platform
         body:
