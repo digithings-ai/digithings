@@ -68,12 +68,17 @@ The body follows §4, and the gate parses it.
 
 If any change in the batch has a ticked Human Gate box, the promotion needs **Chris's recorded approval on the promotion PR, at its current head**. Human Gate areas: auth or crypto, live trading, new JWT scopes, the code-exec gate, new network exposure, a new external service, `SECURITY.md`, or a novel architecture pattern. The gate also infers a Human Gate from the paths the change touches (§6.2), because a box nobody ticked is exactly the #6603 and #6601 failure.
 
-> **OPEN QUESTION for One:** the exact mechanism for "Chris's recorded approval". `reviewed:owner` is retired and must not be used. Three options, none decided:
-> 1. A GitHub `APPROVED` review on the promotion PR whose `commit_id` is the head. The problem: Chris and the queue share the `chrizefan` identity today (plan P0-2), so this does not prove that a human approved.
-> 2. A signed approval: a Forgejo approval by Chris's own account, or an SSH-signed `Human-Gate-Approved: <head>` statement checked against a key only Chris holds.
-> 3. A decision card in the Grok Bot or Paperclip flow that writes the approval with Chris's identity and the head SHA.
->
-> Until this is decided, the gate treats **any** Human Gate batch as failing with "Human Gate: awaiting Chris's recorded approval (mechanism TBD)". Such a batch cannot be promoted through the gate.
+**Decided (Chris, 29 Oct 2026, 15:03 Rome, via One): "Record my Human Gate as my approving GitHub review on the promotion PR's latest commit."** `reviewed:owner` and every other label stay retired. The rule:
+
+1. Read `GET /repos/{owner}/{repo}/pulls/{n}/reviews` (all pages) and `head.sha` from `GET /repos/{owner}/{repo}/pulls/{n}`.
+2. Keep only reviews whose `user.login` is `chrizefan` and whose state is a verdict (`APPROVED`, `CHANGES_REQUESTED` or `DISMISSED`; `COMMENTED` and `PENDING` change nothing). Order them by `submitted_at`, then by review `id`.
+3. **The latest of those wins.** G5 passes only when it is `APPROVED` and its `commit_id` equals the current head SHA. A later `CHANGES_REQUESTED` or a dismissal cancels an earlier approve.
+4. **An approval of an older commit does not count.** Any new push to the promotion branch re-requires Chris's approval, in line with §3.4.5.
+5. If the reviews can't be read, G5 fails closed with the reason. It never passes on an unreadable record.
+
+Failure text: `Human Gate: needs Chris's APPROVED review on head <sha12>` (or `... latest review is CHANGES_REQUESTED`, or `... approval is on <old sha12>, not the head`).
+
+> Known limit, recorded so it isn't forgotten: agents and the queue also act as `chrizefan` today (plan P0-2), so this rule proves *a* `chrizefan` approval on the head, not that Chris clicked it. It holds as long as no agent ever submits an `APPROVED` review on a promotion PR. The rules card should forbid that, and the gate should move to Chris's own identity once agents leave the shared login.
 
 ## 3. Verdict storage that survives the Forgejo-to-GitHub hop
 
@@ -163,7 +168,7 @@ local-ci (batch head): <status url>
 
 Batch needs Chris: yes | no
 Changes with a Human Gate: <list, or "none">
-Chris's approval: <link, or "pending">   <!-- mechanism: open question, §2 G5 -->
+Chris's approval: <link to his APPROVED review on the head, or "pending">   <!-- rule: §2 G5 -->
 
 ## Open threads and change requests
 
@@ -201,7 +206,7 @@ These promotions shipped bodies with the batch list and the evidence trimmed awa
 
 Both PRs had a Human Gate box ticked, and nothing enforced it. The template check only asks whether the question is answered. The other human signal, `reviewed:owner`, is a label any agent can add, and 20 of 38 develop merges since 27 Oct carry it, some added after the merge. Fixes:
 
-- G5 requires Chris's recorded approval at the promotion head. Labels never satisfy it, and the mechanism is an open question.
+- G5 requires Chris's `APPROVED` GitHub review on the promotion head (§2 G5). Labels never satisfy it, and an approval of an older commit does not count.
 - §6.2 infers the Human Gate from paths, so an unticked box does not escape.
 - On task PRs, `pr-template` keeps the Human Gate blocking and now also fails a ticked box answered "No" (branch `qa/pr-template-warn`).
 
@@ -257,7 +262,12 @@ Every external read (GitHub REST, Forgejo, git) is injected, the same way `revie
 | U19 | the manifest digest does not match the Forgejo record (edited verdict) | fail G4 |
 | U20 | Forgejo unreachable; the notes copy matches the digest | pass with a "source not re-checked" log line |
 | U21 | Forgejo unreachable and no notes | fail closed |
-| U22 | Human Gate box ticked (the #6603 and #6601 shape) | fail G5 "awaiting Chris's recorded approval" |
+| U22 | Human Gate box ticked (the #6603 and #6601 shape), no review | fail G5 "needs Chris's APPROVED review on head" |
+| U22a | Human Gate batch, `chrizefan` APPROVED on the head | pass G5 |
+| U22b | `chrizefan` APPROVED on an older commit only | fail G5 (approval not on the head) |
+| U22c | `chrizefan` APPROVED on the head, then CHANGES_REQUESTED or DISMISSED later | fail G5 (latest review wins) |
+| U22d | APPROVED on the head by another login only | fail G5 |
+| U22e | reviews endpoint errors | fail G5 closed |
 | U23 | a `digikey/` path touched with no box ticked | fail G5 (path inference) |
 | U24 | a `reviewed:owner` label is present and nothing else | the label is ignored; the result is the same as without it |
 | U25 | the promotion head moves after a pass | the old status is not read for the new head; the gate re-runs |
@@ -281,7 +291,7 @@ Build fixtures from the recorded GitHub data for #6543, #6567, #6635, #6616, #66
 
 ## 8. Open questions and dependencies
 
-1. **The Human Gate approval mechanism** (G5). **This is for One. It blocks enabling G5 for real.**
+1. ~~The Human Gate approval mechanism (G5).~~ Decided by Chris on 29 Oct 2026: his `APPROVED` GitHub review on the head (§2 G5).
 2. `Source-Session` trailer: G1's same-platform independence needs a session id on every commit. W7 (Docs) owns the trailer spec, and this spec asks W7 to add `Source-Session:` alongside `Source-Platform:`.
 3. Whether to push `refs/notes/verdicts` (§3.3).
 4. The promotion identity (plan P0-2 and decision A): a GitHub App or bot account. Until it exists, "pushed by the promotion identity" in §6.1 cannot be checked.
@@ -292,7 +302,7 @@ Build fixtures from the recorded GitHub data for #6543, #6567, #6635, #6616, #66
 
 These are defaults so the gate and `sctl promote` can be built now. Each one stands until One or Chris overrides it.
 
-1. **Human Gate approval (G5): pending Chris via One.** Proposed: Chris approves the batch head with his own Forgejo account, and `sctl promote` copies that approval into the manifest as an SSH-signed `Human-Gate-Approved: <head>` line checked against a key only Chris holds. Until Chris picks a mechanism, G5 keeps failing closed as §2 G5 says.
+1. **Human Gate approval (G5): decided by Chris** (29 Oct 2026, 15:03 Rome, via One). G5 passes only on a `chrizefan` `APPROVED` review whose `commit_id` is the current head; the latest `chrizefan` verdict wins, and any push re-requires approval (§2 G5).
 2. **`Source-Session` trailer.** Every commit carries `Source-Session: <platform>:<session id>` next to `Source-Platform:`, added by the harness, not typed by the agent. For G1, a same-platform verdict counts only when its reviewer session differs from every `Source-Session` in its `range`. A commit with no `Source-Session` can only be cleared by a reviewer on a different platform.
 3. **git notes.** Push `refs/notes/verdicts` with every promotion, written only by the promotion identity. The manifest stays the primary copy. The gate reads the notes only when Forgejo is unreachable, and a notes copy whose digest differs from the manifest fails G1.
 4. **Promotion identity.** A GitHub App (or bot account) that Chris creates himself; agents never create it or hold its credentials outside the promote job. Until it exists, the gate logs `promotion identity: unchecked` and stays report-only, and the push restriction on `develop` waits for it.
