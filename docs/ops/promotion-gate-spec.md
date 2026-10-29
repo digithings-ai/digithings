@@ -287,3 +287,14 @@ Build fixtures from the recorded GitHub data for #6543, #6567, #6635, #6616, #66
 4. The promotion identity (plan P0-2 and decision A): a GitHub App or bot account. Until it exists, "pushed by the promotion identity" in §6.1 cannot be checked.
 5. W4 `stack-verify` must emit a run id, a head SHA and a result in a machine-readable form, so G2 can read them.
 6. `sctl promote` must not squash or rebase (§3.1), and the promotion PR must merge with a merge commit.
+
+## 9. Proposed defaults for the open questions
+
+These are defaults so the gate and `sctl promote` can be built now. Each one stands until One or Chris overrides it.
+
+1. **Human Gate approval (G5): pending Chris via One.** Proposed: Chris approves the batch head with his own Forgejo account, and `sctl promote` copies that approval into the manifest as an SSH-signed `Human-Gate-Approved: <head>` line checked against a key only Chris holds. Until Chris picks a mechanism, G5 keeps failing closed as §2 G5 says.
+2. **`Source-Session` trailer.** Every commit carries `Source-Session: <platform>:<session id>` next to `Source-Platform:`, added by the harness, not typed by the agent. For G1, a same-platform verdict counts only when its reviewer session differs from every `Source-Session` in its `range`. A commit with no `Source-Session` can only be cleared by a reviewer on a different platform.
+3. **git notes.** Push `refs/notes/verdicts` with every promotion, written only by the promotion identity. The manifest stays the primary copy. The gate reads the notes only when Forgejo is unreachable, and a notes copy whose digest differs from the manifest fails G1.
+4. **Promotion identity.** A GitHub App (or bot account) that Chris creates himself; agents never create it or hold its credentials outside the promote job. Until it exists, the gate logs `promotion identity: unchecked` and stays report-only, and the push restriction on `develop` waits for it.
+5. **Smoke result format.** W4 `stack-verify` writes a `stack-verify.json` artifact (`schema: digithings.stack-verify/v1`, `run_id`, `head`, `result: pass|fail`, per-suite pass/fail counts, image digests) and posts a `stack-verify` commit status on the head, with the run id in its description. G2 passes only when the JSON's `head` equals the commit and `result` is `pass`.
+6. **Merge-commit-only promotions.** A promotion PR merges into `develop` with a merge commit only. The gate fails a promotion PR whose recorded merge method is squash or rebase, and `sctl promote` never squashes, rebases or cherry-picks (§3.1). Changing the repository's allowed merge methods stays Chris's call.
