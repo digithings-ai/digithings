@@ -11,7 +11,7 @@ hosts:
       # Full-page product chat, like /chat/occ.
       mode: app
       theme: light
-      skin: chatgpt
+      skin: base
       title: Site assistant
       welcome:
         title: Ask about the platform
@@ -42,7 +42,8 @@ hosts:
       sources: true
       privateMode: false
     models:
-      occPicker: true
+      # No model chip in the composer (the catalog skins hide theirs too).
+      allowPicker: false
     backend:
       type: digigraph
     tools:
