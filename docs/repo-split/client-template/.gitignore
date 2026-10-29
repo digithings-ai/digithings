@@ -1,0 +1,5 @@
+.env
+.link
+__pycache__/
+tests/qa/runs/*
+!tests/qa/runs/.gitkeep

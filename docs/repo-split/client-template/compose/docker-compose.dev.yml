@@ -1,0 +1,11 @@
+# Override for upstream work: build the images from a local R0 checkout instead of
+# pulling the pinned ones. Usage: make dev (DIGITHINGS_DIR defaults to ../digithings).
+services:
+  digichat:
+    build:
+      context: ${DIGITHINGS_DIR:-../../digithings}
+      dockerfile: apps/digichat/Dockerfile
+  stack:
+    build:
+      context: ${DIGITHINGS_DIR:-../../digithings}
+      dockerfile: infra/docker/Dockerfile.digithings-stack-cloudflare

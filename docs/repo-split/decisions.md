@@ -1,5 +1,8 @@
 # Repo split: decision register
 
+> **2026-10-29:** private repos move to Forgejo and R6 becomes one repo per client. See
+> [Client repos and Forgejo homes](#client-repos-and-forgejo-homes--answered-2026-10-29).
+
 Decisions Chris must take, with the recommended default. The proposal's own decisions
 (D-1 … D-14) are kept; where this review changes the recommendation the ID carries a `′`.
 New decisions from the review are D-G*, D-P*, D-Q7, D-R3, D-L1.
@@ -52,6 +55,33 @@ Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac in
 | **D-R5-1..D-R5-6** [scope] | R5 image/parity/zammad/dead-rows/build/dispatch questions (+ added cron-transport item), asked on card `cd158e1f` (DIG-3566). | **Answered 2026-10-14T20:14:46Z, all six**: keep producing + build locally + non-GitHub registry; parity homes in R5 with R0-published contract; zammad private; delete both dead rows (follow-up H1); shared local-ci pipeline with repo arg; re-point 30 dispatch rows off GHA (new). Follow-ups H1–H6 routed incl. F15 (R0 digillm lane). |
 | **D-2318-1..5** [scope] | Send-back review (Chris 23:18, per DIG-3660 critique): R0-detach ban, P4.7 strike, Buildkite strike, no-fallback statement, order gates, local-ci merge rule. | **Applied same night**: R0 sentence added + P4.7 struck (§3 rewritten); Buildkite/`clone-fast`/'advisory' struck (§4 CI, §7 rulesets, D-O3/D-O4 rows); dark-Mac-blocks-merges stated; DIG-3605-before-DIG-3608 + develop-first + KV-proof gates added; skip-posts-failure + fork path + gated-lane list added. |
 | **D-N-1..D-5** | Deploy-map open items (DIG-3571 §7): corpus-index owner, Pages project names, dashboard actor, Mac always-on, repo names. | **Open** — recorded in §10; each needs Chris or the named seat. No code Cloudflare change is part of this wave. |
+
+## Client repos and Forgejo homes — answered 2026-10-29
+
+Epic: client project repos plus the repo split as one piece of work. Asked as D1–D13 on the
+epic plan; recorded here as **D-C1 … D-C13** so they do not collide with the proposal's
+D-1 … D-14. Answered by the owner on 2026-10-29 at 22:29 Rome. Where an answer changes an
+earlier row, that row is kept as the record and marked superseded below.
+
+| ID | Question | **Answer** | Consequence for the plan |
+|---|---|---|---|
+| **D-C1** [scope] | Home of the private repos | **Local Forgejo (digiforge) for all private repos**, private GitHub as backup | Supersedes the 14 Oct Origin direction for R1–R5 and the client repos. D-O1 (R0 GitHub-primary) is unchanged. D-O2/D-O4 (Origin namespace and identity) no longer apply to new repos; each agent platform has its own Forgejo identity and token. |
+| **D-C2** [scope] | Replace R6 `digichat-tenants` with one repo per client? | **Yes** | R6 is superseded. Each client gets `client-<slug>`, created from the template ([client-template/](client-template/)). |
+| **D-C3** [scope] | Client repo as the source of the tenant doc, with the deploy writing KV | **Yes** | Reverses call (b) of 01:26 ("KV only, no repo files synced to KV") for client repos. KV stays the runtime store; the repo is the source; the deploy writes KV versioned by tag. |
+| **D-C4** [scope] | Naming | **Forgejo org `clients`, repos `client-<slug>`, GitHub backups `digithings-ai/client-<slug>` (private)** | The backup is pushed only at releases. No Actions, Packages or Pages on it (fits D-X2). |
+| **D-C5** [scope] | PyPI distribution names | **`digithings-<module>`** (import names unchanged) | One module name is already taken on PyPI by an unrelated project, so the prefix is used for all modules. Replaces D-P1's "current names". |
+| **D-C6** [scope] | Registries | **Stable: PyPI and npmjs `@digithings-ai`. Dev and private builds: the Forgejo registry.** | The owner sets up the PyPI trusted publisher and the npm token. |
+| **D-C7** [scope] | Where released images go | **Open** | Recommended: the Forgejo registry now, public GHCR from R0 at cutover. |
+| **D-C8** [scope] | Release cadence | **A release train at each develop→main promotion the owner approves**, plus automatic dev builds to Forgejo | Release-please manifest mode on R0 `main` (extends D-R3). |
+| **D-C9** [security] | Client deploys | **Manual `make deploy-<env>` now (option A); a Woodpecker job on a signed tag later (option B)** | One `deploy/deploy.sh` serves both. D-G6 (signed tags) applies to client prod deploys. |
+| **D-C10** [security] | Client-specific MCP servers and tooling | **Fully private**: a client's MCP server and all of its tooling move to its client repo | Settles the D-T2 / D-R5 conflict as private for client tooling. R0 keeps only generic mechanisms (tenant MCP proxy route, invite gate, recrawl job, skills loader). |
+| **D-C11** [security] | May agents deploy a client's staging host without asking? | **Yes.** Prod still needs the owner's signed tag. | Recorded per client in `client/decisions.md`. |
+| **D-C12** [scope] | History for extracted client repos | **Fresh repos, no history** | History stays in the archived mono. |
+| **D-C13** [scope] | Trial-tenant configs now in R0 | **Yes, a client repo for them too** | Third client repo after the first two. |
+
+Superseded by this section: the Origin rows (D-O2, D-O4) for new private repos; R6 in the
+target table; call (b) of 01:26 for client repos; D-T2 and D-R5 for client-specific MCP
+servers; D-P1's naming.
 
 ## Changed recommendations
 

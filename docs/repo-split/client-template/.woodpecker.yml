@@ -1,0 +1,8 @@
+# TODO(QA): placeholder. QA owns this file and is building it, together with the
+# digiforge ci/jobs/client-*.json entry. Planned checks: tenant schema, tests,
+# gitleaks, digithings.lock pin check, no-vendored-R0 check.
+steps:
+  - name: placeholder
+    image: alpine:3
+    commands:
+      - echo "client-template CI placeholder (QA owns .woodpecker.yml)"

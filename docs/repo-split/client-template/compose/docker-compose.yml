@@ -1,0 +1,22 @@
+# Pinned R0 images with this client's tenant/, tools/ and corpus/ mounted.
+# Image tags/digests come from digithings.lock (set as env by the Makefile).
+services:
+  digichat:
+    image: ${DIGICHAT_IMAGE:?set from digithings.lock}
+    ports: ["3471:3000"]
+    env_file: [../.env]
+    environment:
+      DIGICHAT_CONFIG_PATH: /client/tenant/digichat.yaml
+    volumes:
+      - ../tenant:/client/tenant:ro
+  stack:
+    image: ${STACK_IMAGE:?set from digithings.lock}
+    env_file: [../.env]
+    environment:
+      DIGIGRAPH_WEB_SEARCH_SITES_DIR: /client/tools/site-graph
+      # Skills directory loader: planned upstream mechanism, not on develop yet.
+      DIGIGRAPH_SKILLS_DIR: /client/tools/skills
+      DIGISEARCH_PAGE_CORPUS_DIR: /client/corpus
+    volumes:
+      - ../tools:/client/tools:ro
+      - ../corpus:/client/corpus:ro

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "Q1",
+    "topic": "overview",
+    "question": "What does Example Co do?",
+    "expect_urls": ["https://example.com/about"],
+    "expect_claims": ["placeholder company"]
+  },
+  {
+    "id": "Q2",
+    "topic": "support",
+    "question": "How do I contact support?",
+    "expect_urls": ["https://example.com/support"],
+    "expect_claims": []
+  }
+]

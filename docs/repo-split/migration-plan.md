@@ -29,6 +29,13 @@ Origin mirror only. **Detach is forbidden for R0**, and **no twelve-x detach is 
 top priority (local-ci, Cloudflare crons) — the suggestion to keep GitHub primary until 1 Nov
 was NOT taken.
 
+**Revised again 2026-10-29 (owner, D-C1 … D-C13 in [decisions.md](decisions.md#client-repos-and-forgejo-homes--answered-2026-10-29)):**
+private repos live on **local Forgejo** with a private GitHub backup, not on Cursor Origin;
+**R6 is superseded** by one `client-<slug>` repo per client; the client repo is the source of its
+tenant doc and its deploy writes KV. Where this plan still says Origin for R1–R5, read Forgejo;
+where it says R6 or `kv-sync`, read the client repos' `deploy.sh`. New phases C0–C6 are in
+[Client repos epic](#client-repos-epic-2026-10-29-phases-c0c6).
+
 Naming used below:
 - **mono** = today's `digithings-ai/digithings`. It stays public and keeps its name until the
   cutover in P3, where it is renamed `digithings-ai/digithings-mono` and made private.
@@ -602,6 +609,74 @@ Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is 
 The `develop`→`main` promotion and repo cleanup (PR pile closed or retargeted, stale branches and worktrees pruned) happen before any extraction. No filter-repo push runs while the PR pile is open.
 
 ---
+
+## Client repos epic (2026-10-29): phases C0–C6
+
+Runs alongside P0–P6 and changes three things in them: the private home (Forgejo), R6
+(replaced by client repos) and the tenant-config source (the client repo, D-C3).
+
+### Hosting and backup
+
+- **Primary:** local Forgejo (digiforge). Client repos in the `clients` org; R1–R5 in a private org
+  (name chosen when they move). One Forgejo identity and token per agent platform; tokens stay in
+  the keychain.
+- **Daily loop:** branch → Forgejo pull request → Woodpecker checks → recorded review → merge to
+  `main` on Forgejo. Nothing goes to GitHub.
+- **Release:** `make release` bumps `VERSION`/`CHANGELOG.md`; the owner cuts and signs
+  `client-<slug>-vX.Y.Z` (D-G6) and pushes `main` + tags to the private GitHub backup.
+- **Mac loss:** the GitHub backup is as fresh as the last release. A nightly encrypted Forgejo dump
+  to R2 covers work between releases (Guard).
+
+### Tenant config from the repo (D-C3)
+
+A client repo holds one deployment doc (`tenant/digichat.yaml`, R0 schema), its corpus map, and
+per-environment overlays with host, gate and secret **names**. `deploy/deploy.sh` validates the
+doc against the pinned R0 schema, uploads seeds and skills to R2, writes the doc to KV under the
+environment's key (versioned by tag), and deploys the client's own `client-<slug>-*` Workers if it
+has any. It never redeploys the shared stack. Rollback is the same script at the previous tag.
+This replaces refactor 1.7's "KV only, no repo sync" ruling and 4.1's `kv-sync`.
+
+### Package release strategy (D-C5, D-C6, D-C8)
+
+| Artifact | Stable | Dev | Client repo pins |
+|---|---|---|---|
+| App and stack images | tagged image per release (registry: D-C7, open) | Forgejo registry `:<ver>-dev.<n>` | `digithings.lock` tag + digest |
+| Python modules | PyPI `digithings-<module>` (imports unchanged), trusted publishing from R0 `main` tags `<module>-vX.Y.Z` | Forgejo PyPI `X.Y.Z.devN` | `digithings.lock` |
+| JS packages | npmjs `@digithings-ai/*` (built `exports`, `private: false`), incl. a tenant schema package | Forgejo npm `-dev.N` | only for custom UI builds |
+
+- SemVer per module, release-please manifest mode on R0 `main` (extends D-R3). The tenant schema
+  carries `version: 1`; a breaking change bumps the schema package's major.
+- **Train:** each develop→main promotion the owner approves ends with the pending release PR, so
+  packages ship at promotion cadence. Dev builds publish to Forgejo on every develop publish.
+- **Interim:** until the first publish, client repos pin R0 by a git SHA that is on `develop`
+  (never a feature branch). `make link` / `make unlink` switch to a local checkout and back; CI
+  refuses a lock that points at a path, a branch or a dirty SHA.
+- **Pin bumps:** a bot opens a bump PR in each client repo when a release lands; that repo's QA
+  set must pass before merge.
+
+### Deploy options
+
+| Option | How | When |
+|---|---|---|
+| **A** | `make deploy-<env>` on the Mac, `deploy/deploy.sh` with a scoped Cloudflare token from the keychain | **Now** (D-C9) |
+| **B** | the same script as a Woodpecker job on a signed tag, behind the deploy gate (repo allowlist, tag shape, tag commit = built commit, `git verify-tag`) | Once the gate is proven (P2) |
+| C / D | Cloudflare builds or GitHub Actions on the backup | Not used (auto-deploy on push; violates D-X2) |
+
+Agents may run `deploy-staging` (D-C11). Prod needs the owner's signed tag. Guard issues one
+Cloudflare token per scope (tenant KV namespace, the R2 seeds prefix, `client-*` Workers), never
+the account-wide token.
+
+### Phases
+
+| Phase | What | Gate |
+|---|---|---|
+| **C0** template + epic docs | This doc update; the generic [`client-template/`](client-template/) in R0 and as the Forgejo template repo `clients/client-template`; template CI (`.woodpecker.yml`, digiforge job) | draft PRs, local Forgejo only |
+| **C1** first client repo | A new client's demo runs from its own `client-<slug>` repo against pinned R0; generic mechanisms it needs land in R0 first | owner merges the R0 PRs; staging deploy needs the generic invite gate and a scoped token |
+| **C2** make the upstream generic | Generic invite gate, tenant MCP proxy route, tenant recrawl job, skills-directory loader, and tenant-config-driven front-end pieces, each a draft PR into develop; the matching client-literal baseline entries are deleted in the same PRs | owner merges; an equivalence test proves each existing tenant's effective deployment is unchanged |
+| **C3** existing tenants into client repos | Fresh repos (D-C12) assembled from the move lists; staging proof from KV/R2 written by the client's `deploy.sh`; prod cut-over on a signed tag; then an R0 PR deletes the moved paths | owner signed tag |
+| **C4** releases and packages | tsup builds and `exports` for `packages/*`, scope `@digithings-ai`, the tenant schema package, release-please for all modules; dev publish to Forgejo | owner sets up PyPI trusted publishing and the npm token |
+| **C5** rest of the split | P0–P6 above, re-homed to Forgejo (R1 → R2 → R5 → R3 → R4), then the R0 cutover | order gate §12 unchanged |
+| **C6** backups and routine | private GitHub backups per client repo; nightly Forgejo dump; a "new client" playbook | owner creates or approves the backups |
 
 ## Tracking
 

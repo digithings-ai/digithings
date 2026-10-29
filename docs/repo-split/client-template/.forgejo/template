@@ -1,0 +1,5 @@
+# Forgejo template expansion: files whose ${REPO_NAME} / ${REPO_OWNER} placeholders
+# are filled when a repo is generated from this template.
+AGENTS.md
+README.md
+CHANGELOG.md
