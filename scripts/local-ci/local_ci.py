@@ -1543,7 +1543,7 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
-def success_desc(mins, bun=None):
+def success_desc(mins, bun=None, template_warnings=0):
     """The success description: the verdict, then what the bun gate did (DIG-5203).
 
     A commit status description is capped at 140 characters (`status_fields`
@@ -1557,7 +1557,8 @@ def success_desc(mins, bun=None):
     static note stays and the receipt says so: `bun: none` is the skip made
     visible, not a silence.
     """
-    tail = f" ({mins:.0f}m)"
+    warn = f"; template: {template_warnings} warning(s)" if template_warnings else ""
+    tail = f"{warn} ({mins:.0f}m)"
     ran = (bun or {}).get("ran") or []
     if not ran:
         return f"{GATED_NOTE}; bun: none{tail}"
@@ -1936,7 +1937,8 @@ def run_checks(pr, out, summary=None):
             or re.match(rf"^({TYPES})\([^)]+\)!?: .+", title)):
         fails.append("pr-title"); out.write(f"pr-title FAIL: {title!r}\n")
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
-    # its workflow removal rides on DIG-3845)
+    # its workflow removal rides on DIG-3845). Warning-only since plan P1-2,
+    # except the Human Gate.
     if pr_template is None:
         # A missing checker is a runner defect, not author metadata: the name
         # keeps it out of METADATA_GATES, so the row stays terminal instead of
@@ -1949,11 +1951,23 @@ def run_checks(pr, out, summary=None):
             # What this gate judges, so the queue can tell a corrected title or
             # body from the same failed one (DIG-5695).
             summary["metadata_revision"] = metadata_revision(title, body)
-        ok, reasons = pr_template.check_template(body or "")
-        if not ok:
+        _ok, reasons = pr_template.check_template(body or "")
+        # Only the Human Gate blocks (plan P1-2): every other template finding
+        # is a warning in the log and a count on the receipt, so paperwork no
+        # longer throws away a CI run. A checker without split_findings is an
+        # old install: every finding stays blocking, as before.
+        if hasattr(pr_template, "split_findings"):
+            blocking, warns = pr_template.split_findings(reasons)
+        else:
+            blocking, warns = list(reasons), []
+        if blocking:
             fails.append("pr-template")
-        for r in reasons:
+        for r in blocking:
             out.write(f"pr-template FAIL: {r}\n")
+        for r in warns:
+            out.write(f"pr-template WARN: {r}\n")
+        if summary is not None:
+            summary["template_warnings"] = len(warns)
     rep = f"{LOGD}/gitleaks-{sha[:12]}.json"
     opts = gitleaks_log_opts(base, sha, out)
     if opts is None:
@@ -2066,7 +2080,7 @@ def process(pr, dry):
     # line names the suites so a PR with no bun path says `bun: none` instead of
     # reading like the suites passed (DIG-5203).
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
-    else: st, desc = "success", success_desc(mins, summary.get("bun"))
+    else: st, desc = "success", success_desc(mins, summary.get("bun"), summary.get("template_warnings", 0))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
     if not dry:
         if metadata_failure_gates(desc) is not None:

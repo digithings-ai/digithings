@@ -641,6 +641,54 @@ class BunSuiteGateTest(unittest.TestCase):
         self.assertIn('summary["bun"]', src)
 
 
+class TemplateWarningTest(unittest.TestCase):
+    """pr-template paperwork warns; only the Human Gate fails (plan P1-2)."""
+
+    def _run(self, body):
+        saved = {name: getattr(_mod, name) for name in (
+            "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
+            "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate", "bun_gate")}
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        out, summary = io.StringIO(), {}
+        try:
+            _mod.WT = tmp
+            _mod.sh = lambda *a, **k: (0, "")
+            _mod._guard = lambda: None
+            _mod.wt_is_ours = lambda path: True
+            _mod.pr_body = lambda pr: body
+            _mod.gitleaks_log_opts = lambda base, sha, out: "--no-walk"
+            _mod.ruff_paths_for_tree = lambda wt: (["tests"], "fixture")
+            _mod.ruff_paths_fallback = lambda wt: None
+            _mod.worker_gate = lambda pr, wt: (0, None)
+            _mod.bun_gate = lambda pr, wt: (0, None)
+            pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+                  "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
+            fails = _mod.run_checks(pr, out, summary)
+        finally:
+            for name, value in saved.items():
+                setattr(_mod, name, value)
+        return fails, out.getvalue(), summary
+
+    def test_paperwork_only_body_is_green_with_warnings(self):
+        body = "## Human Gate\n\n**Is human review required?** No\n"
+        fails, log, summary = self._run(body)
+        self.assertNotIn("pr-template", fails)
+        self.assertIn("pr-template WARN: linked-issue", log)
+        self.assertGreater(summary["template_warnings"], 0)
+
+    def test_unanswered_human_gate_is_red(self):
+        fails, log, _summary = self._run("Fixes #1\n")
+        self.assertIn("pr-template", fails)
+        self.assertIn("pr-template FAIL: human-gate", log)
+
+    def test_receipt_counts_template_warnings(self):
+        desc = _mod.success_desc(3, {"ran": []}, template_warnings=4)
+        self.assertIn("template: 4 warning(s)", desc)
+        self.assertLessEqual(len(desc), 139)
+        self.assertNotIn("template:", _mod.success_desc(3, {"ran": []}))
+
+
 class StaticGateWiringTest(unittest.TestCase):
     """The R0 client-literal scan runs in the local-ci static gates (DIG-4043)."""
 
