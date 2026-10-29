@@ -13,13 +13,9 @@ const configDir = resolve(__dirname, "../../../config");
  * the same behaviour they ship today: default rhythm, medium effort, toolbar
  * on, scrollbars always, no named palette.
  */
-/** Draft demo configs that pick a palette and hide the toolbar on purpose. */
-const OPTED_IN = new Set(["nomadis.yaml"]);
-
 const SHIPPED = [
   // Every per-client config at the top of config/ (the trial configs today).
-  // A config that sets palette keys on purpose is listed in OPTED_IN instead.
-  ...readdirSync(configDir).filter((name) => name.endsWith(".yaml") && !OPTED_IN.has(name)),
+  ...readdirSync(configDir).filter((name) => name.endsWith(".yaml")),
   "examples/occ-embed.yaml",
   "examples/digithings-ai-embed.yaml",
 ];

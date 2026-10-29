@@ -94,6 +94,9 @@ _KNOWN_ENTRY_KEYS = frozenset(
         # Domains this tenant's web_search may reach. Absent: unpinned.
         "webSearchDomains",
         "web_search_domains",
+        # Pre-crawled page text served when a pinned page is a bot challenge.
+        "webSearchPageCorpus",
+        "web_search_page_corpus",
     }
 )
 
@@ -159,6 +162,29 @@ def _parse_web_search_domains(raw: Any, slug: str) -> list[str] | None:
         )
         return []
     return out
+
+
+_PAGE_CORPUS_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def _parse_page_corpus(raw: Any, slug: str, pinned: bool) -> str | None:
+    """Validate ``webSearchPageCorpus``: ``true`` (the tenant slug) or a corpus id.
+
+    Only a pinned tenant gets one: the corpus stands in for pages on the pinned
+    site, so it means nothing for an open-web search. Anything else is ``None``.
+    """
+    if raw is None or raw is False:
+        return None
+    if not pinned:
+        logger.warning(
+            "%s[%s]: webSearchPageCorpus ignored without webSearchDomains", _ENV_VAR, slug
+        )
+        return None
+    value = slug if raw is True else raw
+    if isinstance(value, str) and _PAGE_CORPUS_ID.match(value.strip()):
+        return value.strip()
+    logger.warning("%s[%s]: skip invalid webSearchPageCorpus", _ENV_VAR, slug)
+    return None
 
 
 def _parse_skill_ids(raw: Any, slug: str) -> list[str] | None:
@@ -232,9 +258,15 @@ class TenantCorpusOverride(BaseModel):
     )
     web_search_site: str | None = Field(
         default=None,
-        description="Id of the repo-shipped site graph appended to this tenant's "
-        "web_search tool description (web_search_sites/<id>.md). Set "
-        "only for a pinned tenant whose slug has a file there; never from the client.",
+        description="Id of the site graph appended to this tenant's web_search tool "
+        "description (<DIGIGRAPH_WEB_SEARCH_SITES_DIR>/<id>.md). Set only for a pinned "
+        "tenant whose slug has a file there; never from the client.",
+    )
+    web_search_page_corpus: str | None = Field(
+        default=None,
+        description="Page-corpus id digisearch falls back to when a pinned page is a "
+        "bot challenge or fails to fetch (webSearchPageCorpus). Pinned tenants only; "
+        "never from the client.",
     )
 
 
@@ -347,6 +379,11 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
                     normalized_slug
                     if web_domains and has_web_search_site_graph(normalized_slug)
                     else None
+                ),
+                web_search_page_corpus=_parse_page_corpus(
+                    value.get("webSearchPageCorpus", value.get("web_search_page_corpus")),
+                    normalized_slug,
+                    bool(web_domains),
                 ),
             )
         except Exception as exc:
@@ -484,6 +521,7 @@ def resolve_corpus_override(
             skills=mapped.skills,
             web_search_domains=mapped.web_search_domains,
             web_search_site=mapped.web_search_site,
+            web_search_page_corpus=mapped.web_search_page_corpus,
         )
 
     # Single-tenant (map unset): headers may select corpus.

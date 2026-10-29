@@ -69,8 +69,10 @@ class WorkflowState(TypedDict, total=False):
     skills: list[str] | None
     # Tenant map webSearchDomains: hostnames web_search is pinned to (None: unpinned).
     web_search_domains: list[str] | None
-    # Site graph id for the web_search tool description (web_search_sites/<id>.md).
+    # Site graph id for the web_search tool description (DIGIGRAPH_WEB_SEARCH_SITES_DIR/<id>.md).
     web_search_site: str | None
+    # Tenant map webSearchPageCorpus: digisearch page-corpus fallback id (None: off).
+    web_search_page_corpus: str | None
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None

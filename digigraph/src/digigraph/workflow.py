@@ -387,6 +387,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     # Tenant web_search pin. Unconditional, same reason: never sticks across turns.
     initial["web_search_domains"] = req.web_search_domains
     initial["web_search_site"] = req.web_search_site
+    initial["web_search_page_corpus"] = req.web_search_page_corpus
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool

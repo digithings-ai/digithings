@@ -24,16 +24,32 @@ from digigraph.orchestration.web_search_tools import (
 )
 from digigraph.web_search_sites import (
     MAX_SITE_GRAPH_BYTES,
-    WEB_SEARCH_SITES_DIR,
+    WEB_SEARCH_SITES_DIR_ENV,
     has_web_search_site_graph,
     load_web_search_site_graph,
 )
 
-from digigraph import web_search_sites
-
 pytestmark = pytest.mark.unit
 
 PINS = ["example.com", "social.example/company/acme"]
+
+# A made-up site graph in the format operators keep outside the repo.
+EXAMPLE_GRAPH = "Every page is https://example.com + the path below.\n\n" + "\n".join(
+    f"/page-{i}/ - example page {i}" for i in range(60)
+)
+
+
+@pytest.fixture
+def sites_dir(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """An external site-graph dir holding ``acme.md``, wired via the env var."""
+    (tmp_path / "acme.md").write_text(EXAMPLE_GRAPH + "\n")
+    monkeypatch.setenv(WEB_SEARCH_SITES_DIR_ENV, str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _no_sites_dir_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(WEB_SEARCH_SITES_DIR_ENV, raising=False)
 
 
 def _context(**state: Any) -> ToolContext:
@@ -104,27 +120,56 @@ def test_map_entry_with_only_pins_parses() -> None:
     assert snake["acme"].web_search_domains == ["example.com"]
 
 
-def test_site_graph_only_for_a_pinned_slug_with_a_file() -> None:
-    pinned = load_tenant_corpus_map('{"nomadis":{"webSearchDomains":["example.com"]}}')
-    assert pinned["nomadis"].web_search_site == "nomadis"
-    unpinned = load_tenant_corpus_map('{"nomadis":{"digisearchIndex":"x_docs"}}')
-    assert unpinned["nomadis"].web_search_domains is None
-    assert unpinned["nomadis"].web_search_site is None
-    refused = load_tenant_corpus_map('{"nomadis":{"webSearchDomains":[]}}')
-    assert refused["nomadis"].web_search_domains == []
-    assert refused["nomadis"].web_search_site is None
+def test_site_graph_only_for_a_pinned_slug_with_a_file(sites_dir: Any) -> None:
+    pinned = load_tenant_corpus_map('{"acme":{"webSearchDomains":["example.com"]}}')
+    assert pinned["acme"].web_search_site == "acme"
+    unpinned = load_tenant_corpus_map('{"acme":{"digisearchIndex":"x_docs"}}')
+    assert unpinned["acme"].web_search_domains is None
+    assert unpinned["acme"].web_search_site is None
+    refused = load_tenant_corpus_map('{"acme":{"webSearchDomains":[]}}')
+    assert refused["acme"].web_search_domains == []
+    assert refused["acme"].web_search_site is None
+    nofile = load_tenant_corpus_map('{"other":{"webSearchDomains":["example.com"]}}')
+    assert nofile["other"].web_search_site is None
 
 
-def test_resolve_passes_pin_to_its_tenant_only() -> None:
+def test_no_site_graph_when_the_dir_is_unset() -> None:
+    table = load_tenant_corpus_map('{"acme":{"webSearchDomains":["example.com"]}}')
+    assert table["acme"].web_search_site is None
+
+
+def test_resolve_passes_pin_to_its_tenant_only(sites_dir: Any) -> None:
     table = load_tenant_corpus_map(
-        '{"nomadis":{"webSearchDomains":["example.com"]},"other":{"digisearchIndex":"o_docs"}}'
+        '{"acme":{"webSearchDomains":["example.com"],"webSearchPageCorpus":true},'
+        '"other":{"digisearchIndex":"o_docs"}}'
     )
-    out = resolve_corpus_override(headers={}, tenant_slug="nomadis", corpus_map=table)
+    out = resolve_corpus_override(headers={}, tenant_slug="acme", corpus_map=table)
     assert out.web_search_domains == ["example.com"]
-    assert out.web_search_site == "nomadis"
+    assert out.web_search_site == "acme"
+    assert out.web_search_page_corpus == "acme"
     other = resolve_corpus_override(headers={}, tenant_slug="other", corpus_map=table)
     assert other.web_search_domains is None
     assert other.web_search_site is None
+    assert other.web_search_page_corpus is None
+
+
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        ('{"webSearchDomains":["example.com"],"webSearchPageCorpus":true}', "acme"),
+        ('{"webSearchDomains":["example.com"],"webSearchPageCorpus":"acme-pages"}', "acme-pages"),
+        ('{"webSearchDomains":["example.com"],"web_search_page_corpus":"acme-2"}', "acme-2"),
+        ('{"webSearchDomains":["example.com"],"webSearchPageCorpus":false}', None),
+        ('{"webSearchDomains":["example.com"],"webSearchPageCorpus":"../x"}', None),
+        ('{"webSearchDomains":["example.com"],"webSearchPageCorpus":"Acme"}', None),
+        ('{"webSearchDomains":["example.com"]}', None),
+        ('{"webSearchPageCorpus":true}', None),
+        ('{"webSearchDomains":[],"webSearchPageCorpus":true}', None),
+    ],
+)
+def test_page_corpus_from_tenant_map(entry: str, expected: str | None) -> None:
+    table = load_tenant_corpus_map('{"acme":' + entry + "}")
+    assert table["acme"].web_search_page_corpus == expected
 
 
 # --- include_domains clamp and URL check -----------------------------------
@@ -223,19 +268,23 @@ def test_unpinned_call_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "url_filter" not in kw
 
 
-def test_pinned_tenant_with_site_names_its_page_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pinned_tenant_sends_its_page_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeSearch()
     _patch_search(monkeypatch, fake)
-    ctx = _context(web_search_domains=PINS, web_search_site="acme")
+    ctx = _context(web_search_domains=PINS, web_search_page_corpus="acme-pages")
     web_search_tools._handle_web_search({"query": "q"}, ctx)
-    assert fake.calls[0]["page_corpus"] == "acme"
+    assert fake.calls[0]["page_corpus"] == "acme-pages"
 
 
-def test_no_page_corpus_without_pin_or_site(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_page_corpus_without_pin_or_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeSearch()
     _patch_search(monkeypatch, fake)
-    web_search_tools._handle_web_search({"query": "q"}, _context(web_search_site="acme"))
+    web_search_tools._handle_web_search({"query": "q"}, _context(web_search_page_corpus="acme"))
     web_search_tools._handle_web_search({"query": "q"}, _context(web_search_domains=PINS))
+    # The site graph id alone no longer selects a corpus.
+    web_search_tools._handle_web_search(
+        {"query": "q"}, _context(web_search_domains=PINS, web_search_site="acme")
+    )
     assert all("page_corpus" not in kw for kw in fake.calls)
 
 
@@ -337,58 +386,65 @@ def test_loader_unknown_id_is_none() -> None:
     assert load_web_search_site_graph("no-such-site") is None
 
 
-def test_shipped_site_graph_loads() -> None:
-    assert (WEB_SEARCH_SITES_DIR / "nomadis.md").is_file()
-    text = load_web_search_site_graph("nomadis")
-    assert text
+def test_unset_dir_has_no_site_graphs() -> None:
+    assert load_web_search_site_graph("acme") is None
+    assert not has_web_search_site_graph("acme")
+
+
+def test_external_site_graph_loads(sites_dir: Any) -> None:
+    assert has_web_search_site_graph("acme")
+    text = load_web_search_site_graph("acme")
+    assert text == EXAMPLE_GRAPH
     assert len(text.encode()) <= MAX_SITE_GRAPH_BYTES
-    paths = [ln for ln in text.splitlines() if ln.startswith("/")]
-    assert len(paths) > 50
-    assert all(" - " in ln for ln in paths)  # every page carries a description
 
 
-def test_oversized_or_empty_file_is_ignored(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(web_search_sites, "WEB_SEARCH_SITES_DIR", tmp_path)
-    (tmp_path / "big.md").write_text("x" * (MAX_SITE_GRAPH_BYTES + 1))
-    (tmp_path / "blank.md").write_text("  \n")
-    (tmp_path / "ok.md").write_text("/ - home\n")
-    load_web_search_site_graph.cache_clear()
-    try:
-        assert load_web_search_site_graph("big") is None
-        assert load_web_search_site_graph("blank") is None
-        assert load_web_search_site_graph("ok") == "/ - home"
-    finally:
-        load_web_search_site_graph.cache_clear()
+def test_edited_site_graph_is_reread(sites_dir: Any) -> None:
+    import os
+
+    assert load_web_search_site_graph("acme") == EXAMPLE_GRAPH
+    path = sites_dir / "acme.md"
+    path.write_text("/ - home\n")
+    st = path.stat()
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    assert load_web_search_site_graph("acme") == "/ - home"
+
+
+def test_oversized_or_empty_file_is_ignored(sites_dir: Any) -> None:
+    (sites_dir / "big.md").write_text("x" * (MAX_SITE_GRAPH_BYTES + 1))
+    (sites_dir / "blank.md").write_text("  \n")
+    (sites_dir / "ok.md").write_text("/ - home\n")
+    assert load_web_search_site_graph("big") is None
+    assert load_web_search_site_graph("blank") is None
+    assert load_web_search_site_graph("ok") == "/ - home"
 
 
 # --- tool description --------------------------------------------------------
 
 
-def test_unpinned_tenant_keeps_shared_definition() -> None:
-    assert web_search_tool_for_tenant(None, "nomadis") is None
-    assert web_search_tool_for_tenant([], "nomadis") is None
+def test_unpinned_tenant_keeps_shared_definition(sites_dir: Any) -> None:
+    assert web_search_tool_for_tenant(None, "acme") is None
+    assert web_search_tool_for_tenant([], "acme") is None
 
 
-def test_pinned_definition_is_a_copy_with_pins_and_graph() -> None:
+def test_pinned_definition_is_a_copy_with_pins_and_graph(sites_dir: Any) -> None:
     before = WEB_SEARCH_TOOL["function"]["description"]
-    tool = web_search_tool_for_tenant(PINS, "nomadis")
+    tool = web_search_tool_for_tenant(PINS, "acme")
     assert tool is not None
     fn = tool["function"]
     assert fn["name"] == WEB_SEARCH_TOOL_NAME
     for pin in PINS:
         assert pin in fn["description"]
         assert pin in fn["parameters"]["properties"]["include_domains"]["description"]
-    assert (load_web_search_site_graph("nomadis") or "")[:200] in fn["description"]
+    assert EXAMPLE_GRAPH[:200] in fn["description"]
     assert "provider" not in fn["parameters"]["properties"]
     assert WEB_SEARCH_TOOL["function"]["description"] == before
     assert "provider" in WEB_SEARCH_TOOL["function"]["parameters"]["properties"]
 
 
-def test_pinned_definition_without_graph() -> None:
+def test_pinned_definition_without_graph(sites_dir: Any) -> None:
     tool = web_search_tool_for_tenant(PINS, None)
     assert tool is not None
-    graph = load_web_search_site_graph("nomadis") or ""
-    assert graph[:200] not in tool["function"]["description"]
+    assert EXAMPLE_GRAPH[:200] not in tool["function"]["description"]
 
 
 # --- proxied web_search ------------------------------------------------------

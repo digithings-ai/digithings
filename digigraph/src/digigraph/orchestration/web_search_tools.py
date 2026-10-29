@@ -65,8 +65,8 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
 
     Same name and parameters as :data:`WEB_SEARCH_TOOL`; only the description
     changes. It states the pin (enforced in :func:`_handle_web_search`, so the
-    text is guidance, not the guard) and appends the tenant's repo-shipped site
-    graph (``digigraph/web_search_sites/<id>.md``) when one exists. An unpinned
+    text is guidance, not the guard) and appends the tenant's site graph
+    (``$DIGIGRAPH_WEB_SEARCH_SITES_DIR/<id>.md``) when one exists. An unpinned
     tenant keeps the shared definition: ``None``.
     """
     pin_list = _as_str_list(pins)
@@ -396,12 +396,12 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         # still cannot hand a pinned tenant an off-pin row: it is dropped before
         # the summary is built, so neither its URL nor its snippet survives.
         search_kwargs["url_filter"] = lambda u: url_within_pins(u, pinned)
-        # The tenant's site id doubles as its page-corpus id (digisearch
-        # page_corpus): a live page behind a bot challenge falls back to the
-        # pre-crawled copy. Unpinned tenants never send one.
-        site = context.state.get("web_search_site")
-        if isinstance(site, str) and site.strip():
-            search_kwargs["page_corpus"] = site.strip()
+        # Tenant map webSearchPageCorpus (digisearch page_corpus): a live page
+        # behind a bot challenge falls back to the pre-crawled copy. Unpinned
+        # tenants never send one.
+        corpus = context.state.get("web_search_page_corpus")
+        if isinstance(corpus, str) and corpus.strip():
+            search_kwargs["page_corpus"] = corpus.strip()
     try:
         summary, urls = digifetch_web_search("", query, **search_kwargs)
     except RuntimeError as exc:

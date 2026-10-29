@@ -234,9 +234,17 @@ class WorkflowRequest(BaseModel):
     web_search_site: str | None = Field(
         None,
         description=(
-            "Id of the repo-shipped site graph for this tenant's web_search tool "
-            "description. Overwritten server-side from the tenant map, never trusted "
-            "from the client."
+            "Id of the site graph (DIGIGRAPH_WEB_SEARCH_SITES_DIR) for this tenant's "
+            "web_search tool description. Overwritten server-side from the tenant map, "
+            "never trusted from the client."
+        ),
+    )
+    web_search_page_corpus: str | None = Field(
+        None,
+        description=(
+            "Tenant map webSearchPageCorpus: page-corpus id digisearch falls back to "
+            "when a pinned page is a bot challenge. Overwritten server-side from the "
+            "tenant map, never trusted from the client."
         ),
     )
     lock_session_controls: bool = Field(
