@@ -46,7 +46,9 @@ version pinned in [`digithings.lock`](digithings.lock).
   Woodpecker checks, review, merge to `main`.
 - `github` = private backup on GitHub. Pushed **only by the owner**, at a release, never by
   an agent. `make release` only bumps `VERSION` and `CHANGELOG.md` and prints the
-  tag-and-push command for the owner to run.
+  tag-and-push command for the owner to run. It refuses unless the Forgejo repo is
+  private and `github` is an existing private repo under `GITHUB_OWNER`
+  (`scripts/check_github_private.sh`, `gh api`, fails closed).
 
 ## 6. Deploys
 

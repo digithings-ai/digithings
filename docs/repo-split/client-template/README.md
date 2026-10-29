@@ -42,6 +42,8 @@ make qa QID=Q1                # one golden question on a free model; stops on th
 
 - `make bump SHA=<sha>` re-pins `digithings.lock` to an R0 develop sha and runs `make test`.
 - `make release` bumps `VERSION` and `CHANGELOG.md` and prints the tag-and-push command.
+  It first refuses unless the Forgejo repo is private and the `github` remote is an
+  existing private repo under `GITHUB_OWNER` (Makefile, default `digithings-ai`).
   The owner cuts and signs the tag, then pushes `main` and tags to the private
   GitHub backup (owner only; agents never push `github`).
 - `make deploy-staging` / `make deploy-prod` are **stubs that refuse** in the
@@ -60,6 +62,8 @@ make qa QID=Q1                # one golden question on a free model; stops on th
    the corpus and `tests/questions.json`.
 4. Pin `digithings.lock` to a commit on R0 `develop` and run `make test`.
 5. Add the private GitHub backup remote as `github` (owner only, at the first release).
+   Create the GitHub repo as **private** first: `make release` refuses when the repo is
+   missing, public or under another owner, so the first push can never create it.
 
 A `make new-client` helper that asks for the slug, domain and skin is planned; until
 then, do steps 2–3 by hand.
