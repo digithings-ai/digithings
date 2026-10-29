@@ -12,6 +12,7 @@
  * also runtime (lazy cache on first `getEmbedTenantRegistry()`).
  */
 
+import { parseBrandSkin, type BrandSkin } from "@/lib/brand-skin";
 import type { ActivityDetail } from "@/lib/chat-activity";
 import {
   GuardrailsSchema,
@@ -158,6 +159,8 @@ export type EmbedTenantConfig = {
   /** Which vendored assistant-ui Thread to mount. */
   skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
+  /** Fonts, extra brand colours and control shape (src/lib/brand-skin.ts). */
+  brand?: BrandSkin;
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
   title?: string;
@@ -653,6 +656,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     accent = { color: a.color, foreground: a.foreground };
   }
 
+  const brand = parseBrandSkin(v.brand, ctx);
+
   if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
     throw new Error(`${ctx}: aliases must be an array of strings`);
   }
@@ -993,6 +998,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         aliases: v.aliases as string[] | undefined,
       }),
     accent,
+    ...(brand ? { brand } : {}),
     attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,

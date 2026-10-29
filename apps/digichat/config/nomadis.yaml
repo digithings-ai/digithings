@@ -1,0 +1,69 @@
+version: 1
+# Prospect demo tenant (draft). Local-first: nothing reads this file in
+# production, and no KV row, secret, route or gate exists for it.
+#
+# Copy here is deliberately neutral; the demo's own welcome text and
+# suggestions live in the local tenant row, not in this public file.
+hosts:
+  nomadis.digithings.ai:
+    slug: nomadis
+    chrome:
+      # Full-page product chat, like /chat/occ.
+      mode: app
+      theme: light
+      skin: digichat
+      title: Site assistant
+      welcome:
+        title: Ask about the platform
+        body:
+          - Modules, industries, integrations, security and case studies, with sources.
+      placeholder: Ask a question
+      suggestions:
+        - Which modules fit a remote site?
+        - How does it integrate with HR and access control?
+        - Where is the data hosted?
+        - Show me a case study
+      accent:
+        color: "#F56125"
+        foreground: "#FFFFFF"
+      # Tenant brand skin (src/lib/brand-skin.ts): self-hosted fonts, the
+      # second brand colour for links, charcoal text and a peach chip fill,
+      # and pill-shaped controls. Dark mode keeps the accent and derives the
+      # chip fill from it; ink and tint are light-mode only.
+      brand:
+        fonts:
+          heading: cabin
+          body: mulish
+        colors:
+          secondary: "#38848D"
+          ink: "#2B2B2B"
+          tint: "#FFEDDD"
+        shape: pill
+      defaultLanguage: en
+      attribution: true
+    features:
+      attachments: false
+      sources: true
+      privateMode: false
+    models:
+      occPicker: true
+    backend:
+      type: digigraph
+    tools:
+      allowUserToggle: false
+    mcp:
+      allowUserServers: false
+      allowAddForm: false
+      servers: []
+    gate:
+      # Local demo only. Access control is decided before any deploy.
+      mode: ungated
+      activityDetail: full
+      llmAccess: free_then_byok
+      showByok: false
+      lockSessionControls: true
+      # The built-in digisearch web search; per-tenant domain scoping is stage 2.
+      webSearch: true
+      searchEngine: internal
+    # A name, never a value: resolved from the environment at load.
+    tokenEnv: NOMADIS_EMBED_TOKEN

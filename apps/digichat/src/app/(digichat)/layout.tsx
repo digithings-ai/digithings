@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
+import { Cabin, Geist_Mono, IBM_Plex_Mono, Inter, Mulish } from "next/font/google";
 import "./globals.css";
 import { faviconThemeScript, themeInitScript } from "@digithings/ui";
 import { p } from "@/lib/base-path";
@@ -26,6 +26,24 @@ const ibmPlexMono = IBM_Plex_Mono({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+});
+
+/**
+ * Tenant brand fonts (src/lib/brand-skin.ts BRAND_FONTS). Self-hosted by
+ * next/font, so CSP `font-src 'self'` holds. preload: false — only a tenant
+ * page whose brand names the font makes the browser fetch it.
+ */
+const brandCabin = Cabin({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-brand-cabin",
+  preload: false,
+});
+
+const brandMulish = Mulish({
+  subsets: ["latin"],
+  variable: "--font-brand-mulish",
+  preload: false,
 });
 
 const faviconInit = faviconThemeScript({
@@ -95,7 +113,7 @@ export default async function RootLayout({
       lang="en"
       data-theme={theme}
       suppressHydrationWarning
-      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
+      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${brandCabin.variable} ${brandMulish.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
     >
       {/* Pre-paint theme: plain inline <head> scripts, like digithings.ai.
           next/script "beforeInteractive" in the App Router does not run

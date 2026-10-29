@@ -87,6 +87,7 @@ export function clientConfigFromEmbedTenant(
       suggestions: embed.suggestions ?? base.chrome.suggestions,
       placeholder: embed.placeholder ?? base.chrome.placeholder,
       accent: embed.accent,
+      ...(embed.brand ? { brand: embed.brand } : {}),
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
       toolbar: embed.toolbar ?? base.chrome.toolbar,

@@ -100,6 +100,7 @@ import {
 } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
+import { BRAND_SKIN_CSS, brandSkinAttrs, brandSkinStyle } from "@/lib/brand-skin";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -511,6 +512,9 @@ function EmbedPageInner({
   // When a brand hex is active, drop the named `.accent-*` class so the inline
   // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
+  // Tenant brand skin: fonts, extra colours and shape, scoped by data-brand.
+  const brandStyle = brandSkinStyle(tenantCfg.brand);
+  const brandAttrs = brandSkinAttrs(tenantCfg.brand);
 
   // ?wide=1 also means "the embedder wants to show its own page background
   // through" (digithings.ai /chat, /chat/occ — see ChatEmbedShell). The shell
@@ -527,10 +531,12 @@ function EmbedPageInner({
   return (
     <>
       <style>{ACCENT_CSS}</style>
+      {brandAttrs ? <style>{BRAND_SKIN_CSS}</style> : null}
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
         className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
-        style={accentStyle}
+        style={brandStyle ? { ...accentStyle, ...brandStyle } : accentStyle}
+        {...brandAttrs}
       >
         <EmbedChat
           accent={accent}

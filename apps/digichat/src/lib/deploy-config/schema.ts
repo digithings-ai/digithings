@@ -5,6 +5,7 @@
  * same shape for migration. Spec: digichat deploy config plan + ARCHITECTURE.md.
  */
 
+import { BrandSkinSchema } from "@/lib/brand-skin";
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
@@ -242,6 +243,8 @@ export const ChromeSchema = z
     suggestions: z.array(z.string()).optional(),
     placeholder: z.string().optional(),
     accent: AccentSchema.optional(),
+    /** Tenant brand skin: fonts, extra colours, control shape (src/lib/brand-skin.ts). */
+    brand: BrandSkinSchema.optional(),
     attribution: z.boolean().optional(),
     /** Curated reply-language default (see languages.ts). */
     defaultLanguage: z
