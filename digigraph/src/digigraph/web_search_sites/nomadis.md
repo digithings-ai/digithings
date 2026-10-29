@@ -1,4 +1,4 @@
-Site graph for this tenant's website. Every page is https://nomadis.co + the path below; /fr/, /es/ and /en-au/ mirror it in French, Spanish and Australian English. Pick the page whose line matches the question, search for it, and cite its URL.
+Site graph for this tenant's website. Every page is https://nomadis.co + the path below. /en-au/ mirrors these paths in Australian English. French (/fr/) and Spanish (/es/) pages use translated slugs, so never build them by prefixing an English path: use the French list at the end, or a /fr/ or /es/ URL returned by the search. Pick the page whose line matches the question, search for it, and cite its URL.
 
 Company
 / - home: the human logistics platform for travel, lodging and site logistics
@@ -119,6 +119,33 @@ Insights: company news and events
 /insights/nomadis-at-imarc-meet-our-ceo-in-australia/ - IMARC, Australia
 /insights/nomadis-to-attend-wa-mining-conference-and-exhibition-2025/ - WA Mining 2025
 /insights/nomadis-to-exhibit-at-aqsarniit-2025-in-ottawa/ - Aqsarniit 2025, Ottawa
+
+
+French pages (translated slugs)
+/fr/ - accueil en français
+/fr/a-propos-de-nomadis/ - à propos
+/fr/pourquoi-nos-clients-choisissent-nomadis/ - pourquoi nos clients nous choisissent
+/fr/carrieres/ - carrières
+/fr/contactez-nous/ - nous joindre, demande de démo
+/fr/solutions/ - solutions
+/fr/solutions/logistique-de-personnel/ - logistique de personnel
+/fr/solutions/logistique-de-soins-de-sante/ - logistique de soins de santé
+/fr/modules/ - modules
+/fr/modules/planification-de-main-doeuvre/ - planification de main-d'oeuvre
+/fr/modules/gestion-des-deplacements/ - gestion des déplacements
+/fr/modules/hebergement/ - hébergement
+/fr/modules/aviation/ - aviation nolisée
+/fr/modules/transport-terrestre/ - transport terrestre
+/fr/modules/application-mobile/ - application mobile
+/fr/industries/ - industries
+/fr/industries/mines-ressources-et-energie/ - mines, ressources et énergie
+/fr/industries/ingenierie-et-construction/ - ingénierie et construction
+/fr/industries/services-de-sante/ - services de santé
+/fr/industries/gouvernement/ - gouvernement
+/fr/integrations/ - intégrations
+/fr/etudes-de-cas/ - études de cas
+/fr/blogue/ - blogue
+Spanish: /es/ is the Spanish home and /es/contacto/ the Spanish contact page.
 
 Elsewhere
 https://www.linkedin.com/company/nomadis - company LinkedIn page: news and posts
