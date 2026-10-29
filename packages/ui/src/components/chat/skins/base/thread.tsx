@@ -45,6 +45,7 @@ import {
   SelectionToolbar,
 } from "./elements/quote.aui";
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
+import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarMorePrimitive,
@@ -523,13 +524,17 @@ const Composer: FC = () => {
     iconMap: slashIconMap,
     fallbackIcon: SlashIcon,
   });
+  // Host-wired product palette (SkinPaletteBridge): it owns the trigger root
+  // and the `/` and `@` menus, so the demo commands step aside. A nested root
+  // here would shadow it.
+  const productPalette = useSkinPaletteOptional();
   const { placeholder } = useComposerCopy(
     "How can I help you today?",
     "Send a message... (@ to mention, / for commands)",
   );
 
   return (
-    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+    <DemoTriggerRoot enabled={!productPalette}>
       <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
@@ -547,17 +552,35 @@ const Composer: FC = () => {
           </div>
         </ComposerPrimitive.AttachmentDropzone>
 
-        <ComposerTriggerPopover char="@" {...mention} />
+        {productPalette ? null : (
+          <ComposerTriggerPopover char="@" {...mention} />
+        )}
 
-        <ComposerTriggerPopover
-          char="/"
-          {...slash}
-          emptyItemsLabel="No matching commands"
-        />
+        {productPalette ? null : (
+          <ComposerTriggerPopover
+            char="/"
+            {...slash}
+            emptyItemsLabel="No matching commands"
+          />
+        )}
       </ComposerPrimitive.Root>
-    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+    </DemoTriggerRoot>
   );
 };
+
+/** The demo palette's own trigger root; skipped under the product palette. */
+const DemoTriggerRoot: FC<{ enabled: boolean; children: ReactNode }> = ({
+  enabled,
+  children,
+}) =>
+  enabled ? (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      {children}
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+  ) : (
+    <>{children}</>
+  );
+
 
 const ComposerAction: FC = () => {
   return (

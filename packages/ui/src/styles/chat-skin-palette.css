@@ -1,0 +1,88 @@
+/*
+ * Skin-agnostic product palette (`/` commands, `@` tools, and the panes they
+ * open) for every skin that is not digichat. SkinPaletteBridge marks the
+ * thread composer form with [data-skin-palette-composer] and portals the
+ * popovers into it.
+ *
+ * Colours come only from the shared shadcn tokens (--popover, --border,
+ * --muted-foreground; light at :root, dark under .dark), so the
+ * palette follows each skin's light/dark theme without per-skin rules. The
+ * digichat surface tokens the popover and panes read (--ink, --bg, --hair, …)
+ * are pointed at those shared tokens on the palette elements only. The
+ * doubled classes outrank the digichat stylesheet when both are loaded.
+ */
+
+[data-skin-palette-composer] {
+  position: relative;
+}
+
+[data-skin-palette-composer] :is(.skin-palette, .dc-composer-menu) {
+  --ink: var(--popover-foreground, CanvasText);
+  --ink-mute: var(--muted-foreground, GrayText);
+  --bg: var(--popover, Canvas);
+  --surface: var(--popover, Canvas);
+  --surface-2: var(--popover, Canvas);
+  --term-bg: var(--popover, Canvas);
+  --hair: var(--border, color-mix(in oklab, CanvasText 15%, transparent));
+}
+
+[data-skin-palette-composer] :is(.skin-palette, .dc-composer-menu):is(.skin-palette, .dc-composer-menu) {
+  margin-bottom: 0.375rem;
+  border: 1px solid var(--hair);
+  border-radius: 0.75rem;
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow:
+    0 8px 24px -8px rgb(0 0 0 / 0.18),
+    0 2px 6px -2px rgb(0 0 0 / 0.08);
+  font-family: inherit;
+  text-align: start;
+}
+
+[data-skin-palette-composer] .skin-palette.skin-palette [data-slot="composer-trigger-popover-item"],
+[data-skin-palette-composer] .skin-palette.skin-palette [role="option"] {
+  margin-inline: 0.25rem;
+  width: calc(100% - 0.5rem);
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  color: var(--ink);
+  background: transparent;
+}
+
+/* A neutral wash mixed from the popover's own colours. --accent is not used:
+   brand accent themes repoint it to a saturated colour. */
+[data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted] {
+  background: color-mix(in oklab, var(--ink) 9%, var(--bg));
+  color: var(--ink);
+  outline: none;
+}
+
+[data-skin-palette-composer] .skin-palette.skin-palette :is([data-slot="palette-value"], [data-slot="palette-detail"]),
+[data-skin-palette-composer] .skin-palette.skin-palette .text-ink-mute {
+  color: var(--ink-mute);
+}
+
+/* The digichat chevron cursor belongs to the digichat look; here the
+   highlighted row is marked by the shared accent wash instead. */
+[data-skin-palette-composer] .skin-palette.skin-palette .aui-menu-cursor {
+  display: none;
+}
+
+/* Pane scroll indicator (the digichat stylesheet only loads with that skin). */
+[data-skin-palette-composer] .dc-composer-menu .dc-composer-menu-scroll {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+}
+
+[data-skin-palette-composer] .dc-composer-menu .dc-composer-menu-thumb {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
+  pointer-events: auto;
+}

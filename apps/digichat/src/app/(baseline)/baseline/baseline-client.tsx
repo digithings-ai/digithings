@@ -131,11 +131,11 @@ function BaselineClientInner() {
     root.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
-  // The `digichat` skin's `/` command palette and @-mention menu are gated on the
+  // The `/` command palette and @-mention menu (every skin) are gated on the
   // embed chat prefs (`useEmbedChatPrefsOptional`). Mount the same prefs host the
   // embed/product shells use, with the least-privilege default config, so the
   // catalog renders the same composer chrome as digithings.ai/chat instead of
-  // each surface having to re-implement the gate. Other catalog skins ignore it.
+  // each surface having to re-implement the gate.
   const { prefsApi, panes } = useStockChatPrefs({
     config: toStockChatPrefsConfig(resolveRouteClientConfig({ mode: "catalog" })),
     deps: PREFS_DEPS,
