@@ -371,6 +371,89 @@ class Dig4990StaleHeadPassTest(unittest.TestCase):
         self.assertIn("no review pass", message)
 
 
+class HeadReviewExistsTest(unittest.TestCase):
+    """Plan P1-3: review-applied waits until a review of the head exists, and the
+    verdict it then judges is bound to the head SHA, never to a label."""
+
+    HEAD = "eeacc41a87acf3cdfdf10ddb7550c1ec46c49c53"
+    OLD = "8c43d62fbc236ea69c79e89e377361391b8c89b0"
+
+    def _rest(self, reviews=(), comments=(), labels=()):
+        self.paths = []
+
+        def run_rest(path):
+            self.paths.append(path)
+            if "/reviews" in path:
+                return list(reviews)
+            if "/issues/" in path and "/comments" in path:
+                return list(comments)
+            return {"head": {"sha": self.HEAD}, "user": {"login": "chrizefan"},
+                    "body": "", "commits": [],
+                    "labels": [{"name": n} for n in labels]}
+        return run_rest
+
+    def _review(self, state, commit):
+        return {"user": {"login": "reviewer"}, "state": state, "body": "",
+                "commit_id": commit, "submitted_at": "2026-10-29T10:00:00Z"}
+
+    def _marker(self, head=None):
+        prov = "<!-- digithings-review run=r1%s -->" % (" head=" + head if head else "")
+        return {"user": {"login": "digiforge-board"},
+                "body": "%s\n%s\n\nReview verdict: approve\n" % (_mod.AGENT_REVIEW_MARKER, prov),
+                "created_at": "2026-10-29T10:00:00Z"}
+
+    def _exists(self, **kw):
+        return _mod.head_review_exists(1, self.HEAD, "o/r", self._rest(**kw))
+
+    def test_no_review_at_all_is_false(self):
+        self.assertIs(self._exists(), False)
+
+    def test_a_review_of_the_head_is_true(self):
+        for state in ("APPROVED", "CHANGES_REQUESTED", "COMMENTED"):
+            self.assertIs(self._exists(reviews=[self._review(state, self.HEAD)]), True, state)
+
+    def test_a_review_of_an_earlier_head_is_false(self):
+        self.assertIs(self._exists(reviews=[self._review("APPROVED", self.OLD)]), False)
+
+    def test_a_pending_review_is_not_a_review(self):
+        self.assertIs(self._exists(reviews=[self._review("PENDING", self.HEAD)]), False)
+
+    def test_a_marker_naming_the_head_is_true(self):
+        self.assertIs(self._exists(comments=[self._marker(self.HEAD[:12])]), True)
+        self.assertIs(self._exists(comments=[self._marker()]), True)
+
+    def test_a_marker_naming_another_head_is_false(self):
+        self.assertIs(self._exists(comments=[self._marker(self.OLD)]), False)
+
+    def test_an_unreadable_record_is_none(self):
+        self.assertIsNone(_mod.head_review_exists(1, self.HEAD, "o/r", lambda path: None))
+
+    def test_reviewed_labels_are_never_read(self):
+        """reviewed:* labels are retired: a label is not a review, and the
+        check never asks for labels."""
+        self.assertIs(self._exists(labels=["reviewed:owner", "reviewed:agent"]), False)
+        _mod._PR_CONTEXT.clear()
+        passes = _mod.fetch_review_passes(
+            1, "o/r", lambda argv: None, self._rest(labels=["reviewed:owner"]))
+        self.assertEqual(passes, [])
+        self.assertFalse([p for p in self.paths if "label" in p], self.paths)
+
+    def test_an_approve_of_an_earlier_head_is_not_a_pass(self):
+        """#6543, #6567, #6635: the approve predates the head that merged."""
+        _mod._PR_CONTEXT.clear()
+        passes = _mod.fetch_review_passes(
+            1, "o/r", lambda argv: None,
+            self._rest(reviews=[self._review("APPROVED", self.OLD)]))
+        self.assertEqual(passes, [])
+
+    def test_an_approve_of_the_head_is_a_pass(self):
+        _mod._PR_CONTEXT.clear()
+        passes = _mod.fetch_review_passes(
+            1, "o/r", lambda argv: None,
+            self._rest(reviews=[self._review("APPROVED", self.HEAD)]))
+        self.assertEqual([p["kind"] for p in passes], ["human"])
+
+
 class Dig4631ReviewPassTest(unittest.TestCase):
     """DIG-4631: evidence that must not count as a review pass.
 
