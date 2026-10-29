@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MCP_EDGE_JWKS_KV_KEY,
+  MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT,
   MCP_EDGE_JWKS_TTL_MS,
   MCP_EDGE_MAX_INSPECT_BYTES,
   _resetMcpEdgeJwksCacheForTests,
@@ -18,6 +19,7 @@ import {
   mcpScopeForServer,
   mcpWriteScopeForTool,
   scopeGrants,
+  mcpEdgeJwksKvTtlSec,
   verifyDigikeyJwt,
 } from "./mcp-edge-auth";
 
@@ -519,7 +521,11 @@ describe("JWKS sources", () => {
     vi.stubGlobal("fetch", fetchStub);
     const env = {
       ...ENV,
-      TENANT_CONFIG: { get: async () => body(primary), put: async () => {} },
+      TENANT_CONFIG: {
+        get: async () =>
+          JSON.stringify({ ...JSON.parse(body(primary)), fetchedAt: Date.now() - 1_000 }),
+        put: async () => {},
+      },
     };
     expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
     expect(fetchStub).not.toHaveBeenCalled();
@@ -550,7 +556,11 @@ describe("JWKS sources", () => {
       TENANT_CONFIG: { get: async () => null, put },
     };
     expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
-    expect(put).toHaveBeenCalledWith(MCP_EDGE_JWKS_KV_KEY, expect.stringContaining("kid-1"));
+    expect(put).toHaveBeenCalledWith(
+      MCP_EDGE_JWKS_KV_KEY,
+      expect.stringContaining("kid-1"),
+      expect.anything(),
+    );
   });
 
   it("refuses when neither KV nor the network yields keys", async () => {
@@ -741,5 +751,189 @@ describe("write tools need their own scope", () => {
       env: ENV,
     });
     expect(decision.ok).toBe(true);
+  });
+});
+
+/**
+ * The KV copy of the JWKS expires and is never read on a forced refetch
+ * (#6649). Each test drives a real in-memory KV and a stubbed live JWKS
+ * behind `DIGIKEY_SELF`, so the number of live fetches is observable.
+ */
+describe("KV JWKS freshness (#6649)", () => {
+  const HOUR = 3_600_000;
+
+  function jwks(keys: Keypair[]): string {
+    return JSON.stringify({
+      keys: keys.map((k) => ({ ...k.jwk, kid: k.kid, use: "sig", alg: "RS256" })),
+    });
+  }
+
+  /** A live JWKS serving whatever `served` holds, and a Map-backed KV. */
+  function rig(served: Keypair[], seed?: { keys: Keypair[]; fetchedAt?: number }) {
+    const kv = new Map<string, string>();
+    if (seed) {
+      const entry: Record<string, unknown> = JSON.parse(jwks(seed.keys));
+      if (seed.fetchedAt !== undefined) entry.fetchedAt = seed.fetchedAt;
+      kv.set(MCP_EDGE_JWKS_KV_KEY, JSON.stringify(entry));
+    }
+    const get = vi.fn(async (k: string) => kv.get(k) ?? null);
+    const put = vi.fn(async (k: string, v: string, _opts?: { expirationTtl?: number }) => {
+      kv.set(k, v);
+    });
+    const live = vi.fn(async () => new Response(jwks(served), { status: 200 }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("global fetch must not be used when the binding is bound");
+      }),
+    );
+    const env = { ...ENV, TENANT_CONFIG: { get, put }, DIGIKEY_SELF: { fetch: live } };
+    return { kv, get, put, live, env };
+  }
+
+  /** A token that outlives every clock jump below. */
+  const longLived = (k: Keypair, now = Date.now()) =>
+    signJwt(
+      k,
+      claimsFor("mcp:digisearch", {
+        iat: Math.floor(now / 1000),
+        exp: Math.floor(now / 1000) + 48 * 3600,
+      }),
+    );
+
+  function at(ms: number) {
+    return vi.spyOn(Date, "now").mockReturnValue(ms);
+  }
+
+  it("clamps the configurable KV TTL to 60..3600 s, default 600", () => {
+    expect(MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT).toBe(600);
+    expect(mcpEdgeJwksKvTtlSec({})).toBe(600);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: "120" })).toBe(120);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: 900 })).toBe(900);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: "5" })).toBe(60);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: "86400" })).toBe(3_600);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: "soon" })).toBe(600);
+    expect(mcpEdgeJwksKvTtlSec({ MCP_EDGE_JWKS_KV_TTL_SEC: "-1" })).toBe(600);
+  });
+
+  it("writes fetchedAt and the KV expirationTtl on a live fetch", async () => {
+    const { kv, put, env } = rig([primary]);
+    const token = await longLived(primary);
+    expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(put.mock.calls[0]?.[2]).toEqual({ expirationTtl: 600 });
+    const stored = JSON.parse(kv.get(MCP_EDGE_JWKS_KV_KEY) ?? "{}");
+    expect(typeof stored.fetchedAt).toBe("number");
+    expect(stored.keys.map((k: { kid: string }) => k.kid)).toEqual(["kid-1"]);
+  });
+
+  it("honours a configured TTL in the KV write", async () => {
+    const { put, env } = rig([primary]);
+    const token = await longLived(primary);
+    expect((await verifyDigikeyJwt(token, { ...env, MCP_EDGE_JWKS_KV_TTL_SEC: "120" })).ok).toBe(
+      true,
+    );
+    expect(put.mock.calls[0]?.[2]).toEqual({ expirationTtl: 120 });
+  });
+
+  // Regression for the review repro: an undated (pre-#6649) entry holding a
+  // rotated-out key used to be trusted forever and to shadow the live JWKS.
+  it("regression: rotation with a stale KV entry costs one live fetch, then the new kid is accepted", async () => {
+    const old = await makeKeypair("kid-old");
+    const fresh = await makeKeypair("kid-new");
+    const { kv, live, env } = rig([fresh], { keys: [old] });
+
+    const good = await longLived(fresh);
+    expect((await verifyDigikeyJwt(good, env)).ok).toBe(true);
+    expect(live).toHaveBeenCalledTimes(1);
+    expect(kv.get(MCP_EDGE_JWKS_KV_KEY)).toContain("kid-new");
+    expect(kv.get(MCP_EDGE_JWKS_KV_KEY)).not.toContain("kid-old");
+
+    // The rotated-out key is refused, on this isolate and on a cold one.
+    const removed = await longLived(old);
+    expect(await verifyDigikeyJwt(removed, env)).toMatchObject({
+      ok: false,
+      reason: "unknown_kid",
+    });
+    _resetMcpEdgeJwksCacheForTests();
+    expect(await verifyDigikeyJwt(removed, env)).toMatchObject({
+      ok: false,
+      reason: "unknown_kid",
+    });
+  });
+
+  it("never reads a fresh-but-stale KV entry on the forced refetch", async () => {
+    const fresh = await makeKeypair("kid-new");
+    // KV is inside its TTL but predates the rotation: it only knows kid-1.
+    const { kv, get, live, env } = rig([primary, fresh], {
+      keys: [primary],
+      fetchedAt: Date.now() - 60_000,
+    });
+    // Prime the isolate from KV: no live fetch.
+    expect((await verifyDigikeyJwt(await longLived(primary), env)).ok).toBe(true);
+    expect(live).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(1);
+
+    // The new kid forces a refetch, which must go live, not back to KV.
+    expect((await verifyDigikeyJwt(await longLived(fresh), env)).ok).toBe(true);
+    expect(live).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(kv.get(MCP_EDGE_JWKS_KV_KEY)).toContain("kid-new");
+  });
+
+  it("ignores an expired KV entry and goes live", async () => {
+    const { live, env } = rig([primary], {
+      keys: [primary],
+      fetchedAt: Date.now() - (MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT + 1) * 1000,
+    });
+    expect((await verifyDigikeyJwt(await longLived(primary), env)).ok).toBe(true);
+    expect(live).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a KV entry dated in the future", async () => {
+    const { live, env } = rig([primary], { keys: [primary], fetchedAt: Date.now() + HOUR });
+    expect((await verifyDigikeyJwt(await longLived(primary), env)).ok).toBe(true);
+    expect(live).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses when the KV entry is expired and digikey is unreachable", async () => {
+    const { live, env } = rig([primary], {
+      keys: [primary],
+      fetchedAt: Date.now() - 2 * HOUR,
+    });
+    live.mockImplementation(async () => new Response("down", { status: 503 }));
+    expect(await verifyDigikeyJwt(await longLived(primary), env)).toMatchObject({ ok: false });
+  });
+
+  it("rejects a key removed from the live JWKS once the KV TTL has run out", async () => {
+    const old = await makeKeypair("kid-old");
+    const t0 = Date.now();
+    const served: Keypair[] = [old, primary];
+    const { live, env } = rig(served);
+    const token = await longLived(old, t0);
+
+    const clock = at(t0);
+    try {
+      expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+      // digikey drops kid-old.
+      served.splice(0, 1);
+      // Inside both TTLs the edge has not looked again yet.
+      clock.mockReturnValue(t0 + 60_000);
+      expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+      // A new isolate inside the KV TTL loads from KV, still without kid-old's removal.
+      _resetMcpEdgeJwksCacheForTests();
+      clock.mockReturnValue(t0 + (MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT - 30) * 1000);
+      expect((await verifyDigikeyJwt(token, env)).ok).toBe(true);
+      // The isolate that loaded that copy must not outlive the copy's own
+      // TTL, even though its 5-minute in-isolate TTL has not run out.
+      clock.mockReturnValue(t0 + MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT * 1000 + 1_000);
+      expect(await verifyDigikeyJwt(token, env)).toMatchObject({
+        ok: false,
+        reason: "unknown_kid",
+      });
+      expect(live.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

@@ -162,7 +162,7 @@ could mint a token.
 | house deployment | KV `config-yaml` | KV → `[vars]`/secret `DIGICHAT_CONFIG_YAML` → file `DIGICHAT_CONFIG_PATH` → `defaults.yaml` |
 | tenants (OCC, trials) | KV `embed-tenants` | KV host row (after `tokenEnv` refs resolve) → legacy secret → host dropped |
 | MCP credentials | Worker secrets, referenced by name (`tokenEnv`) | never in KV |
-| digikey JWKS | KV `digikey-jwks` | KV → `DIGIKEY_SELF` fetch → 401 |
+| digikey JWKS | KV `digikey-jwks` (`{keys, fetchedAt}`, TTL `MCP_EDGE_JWKS_KV_TTL_SEC`, default 600 s) | KV if fresh → `DIGIKEY_SELF` fetch → 401; an unknown `kid` skips KV and fetches live |
 | corpus routing | `DIGI_TENANT_CORPUS_MAP` + `_EXTRA` | primary wins on slug collision |
 
 Config is read **once per container boot**, not per request
