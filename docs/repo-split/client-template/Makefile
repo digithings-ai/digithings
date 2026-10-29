@@ -5,8 +5,9 @@
 SHELL := /bin/bash
 DIGITHINGS_DIR ?= ../digithings
 REPO ?= $(notdir $(CURDIR))
-# The only GitHub owner the `github` backup remote may point at.
-GITHUB_OWNER ?= digithings-ai
+# The only GitHub owner the `github` backup remote may point at. `override` pins it: neither
+# the environment nor `make GITHUB_OWNER=...` can change it; the script takes it as its argument.
+override GITHUB_OWNER := digithings-ai
 # What `make bump` runs after re-pinning; CI tests override it with an offline check.
 BUMP_TEST ?= $(MAKE) test
 COMPOSE := docker compose -f compose/docker-compose.yml
@@ -53,7 +54,7 @@ check-private: ## refuse unless the Forgejo origin repo reads as private (API + 
 	scripts/check_forgejo_private.sh
 
 check-github-private: ## refuse unless the `github` remote is an existing private repo under GITHUB_OWNER (gh api; fails closed)
-	GITHUB_OWNER='$(GITHUB_OWNER)' scripts/check_github_private.sh
+	scripts/check_github_private.sh '$(GITHUB_OWNER)'
 
 release: check-private check-github-private ## bump VERSION + CHANGELOG and print the tag-and-push command (owner runs it; agents never push the github backup)
 	@test -n "$(V)" || { echo "usage: make release V=X.Y.Z"; exit 1; }

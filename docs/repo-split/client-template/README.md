@@ -43,7 +43,8 @@ make qa QID=Q1                # one golden question on a free model; stops on th
 - `make bump SHA=<sha>` re-pins `digithings.lock` to an R0 develop sha and runs `make test`.
 - `make release` bumps `VERSION` and `CHANGELOG.md` and prints the tag-and-push command.
   It first refuses unless the Forgejo repo is private and the `github` remote is an
-  existing private repo under `GITHUB_OWNER` (Makefile, default `digithings-ai`).
+  existing private repo under `GITHUB_OWNER` (pinned in the Makefile to `digithings-ai`; env and
+  command-line overrides are ignored).
   The owner cuts and signs the tag, then pushes `main` and tags to the private
   GitHub backup (owner only; agents never push `github`).
 - `make deploy-staging` / `make deploy-prod` are **stubs that refuse** in the

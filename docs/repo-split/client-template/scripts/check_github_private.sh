@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Refuse unless this repo's `github` backup remote is an EXISTING, PRIVATE repo owned by
-# GITHUB_OWNER. Fails closed: no `github` remote, a URL that is not github.com/<owner>/<name>,
+# the expected owner (argument). Fails closed: no `github` remote, a URL that is not github.com/<owner>/<name>,
 # the wrong owner, no `gh`, a gh error (including 404: the repo must already exist, so the
 # owner's first push can never create one), or any answer other than exactly `true` refuses.
 #
-# Env:
-#   GITHUB_OWNER  required; the only owner the backup may live under. Set once in the
-#                 Makefile (GITHUB_OWNER ?= digithings-ai); unset or empty refuses.
+# Usage: check_github_private.sh <expected-owner>
+#   The expected owner comes only from the argument, which the Makefile passes from its
+#   pinned `override GITHUB_OWNER := digithings-ai`. The environment is never read for it,
+#   so an exported GITHUB_OWNER cannot swap the owner. A missing or empty argument refuses.
 set -euo pipefail
 refuse() { echo "refused: $*" >&2; exit 1; }
 
-want="${GITHUB_OWNER:-}"
-[ -n "$want" ] || refuse "GITHUB_OWNER is not set (the Makefile sets it)"
+[ "$#" -eq 1 ] || refuse "usage: check_github_private.sh <expected-owner> (the Makefile passes it)"
+want="$1"
+[[ "$want" =~ ^[A-Za-z0-9-]+$ ]] || refuse "expected owner argument is empty or not a GitHub owner name"
 
 url="$(git remote get-url github 2>/dev/null)" || refuse "no git remote 'github' (add the private backup first)"
 url="${url%/}"
@@ -26,7 +28,7 @@ else
 fi
 name="${name%.git}"
 [ -n "$name" ] && [ "$name" != . ] && [ "$name" != .. ] || refuse "github remote has no repo name"
-[ "$owner" = "$want" ] || refuse "github remote owner '$owner' is not GITHUB_OWNER '$want'"
+[ "$owner" = "$want" ] || refuse "github remote owner '$owner' is not the expected owner '$want'"
 
 command -v gh >/dev/null 2>&1 || refuse "no 'gh' CLI to read the GitHub repo's private flag"
 flag="$(GH_PROMPT_DISABLED=1 gh api "repos/$owner/$name" --jq .private 2>/dev/null)" \
