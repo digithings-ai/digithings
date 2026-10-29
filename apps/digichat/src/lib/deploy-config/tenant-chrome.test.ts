@@ -618,6 +618,35 @@ describe("Guard: the last-good gated claims are deduped on write", () => {
     expect(inviteRequiredButMissing(HOST_A, "other")).toBe(true);
   });
 
+  it("the shared claims list is frozen at runtime; a caller cannot change it", () => {
+    rememberGatedTenantDocs([{ slug: "example", chatSlug: "example", host: HOST_A, gated: true }]);
+    const claims = gatedTenantClaims();
+    const before = JSON.stringify(claims);
+    expect(Object.isFrozen(claims)).toBe(true);
+    for (const claim of claims) expect(Object.isFrozen(claim)).toBe(true);
+    const mine = claims.find((c) => c.host === HOST_A);
+    if (!mine) throw new Error("no claim");
+    // ES modules run in strict mode: writes to a frozen object throw.
+    expect(() => (claims as unknown as Array<unknown>).push({ slug: "x", chatSlug: "x" })).toThrow(TypeError);
+    expect(() => (claims as unknown as Array<unknown>).pop()).toThrow(TypeError);
+    expect(() => {
+      (mine as { host?: string }).host = "attacker.example.net";
+    }).toThrow(TypeError);
+    expect(() => {
+      (mine as { chatSlug: string }).chatSlug = "other";
+    }).toThrow(TypeError);
+    expect(JSON.stringify(gatedTenantClaims())).toBe(before);
+    expect(gatedTenantClaims()).toBe(claims);
+    expect(inviteRequiredButMissing(HOST_A, "other")).toBe(true);
+    expect(classifyTenantChatPath("/chat/example", null).kind).toBe("gated-unknown");
+  });
+
+  it("the caller's own doc objects are not frozen by remembering them", () => {
+    const doc = { slug: "example", chatSlug: "example", host: HOST_A, gated: true };
+    rememberGatedTenantDocs([doc]);
+    expect(Object.isFrozen(doc)).toBe(false);
+  });
+
   it("direct repeated writes of the same claim store it once", () => {
     const doc = { slug: "example", chatSlug: "example", host: HOST_A, gated: true };
     for (let i = 0; i < 10; i += 1) rememberGatedTenantDocs([doc, doc]);

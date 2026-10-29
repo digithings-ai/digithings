@@ -243,26 +243,31 @@ function claimKey(claim: GatedTenantClaim): string {
   return `${claim.chatSlug}|${claim.host ?? ""}`;
 }
 
-/** Append `claims` to `into`, skipping any key already present. */
+/**
+ * Append `claims` to `into`, skipping any key already present. The result is
+ * frozen at runtime, array and every claim (a frozen copy, so the caller's
+ * objects are left alone): the cached list is shared by every caller, so no
+ * caller can add, drop or rewrite a gated claim.
+ */
 function mergeClaims(
-  into: readonly GatedTenantClaim[],
-  claims: readonly GatedTenantClaim[],
-): GatedTenantClaim[] {
-  const out = [...into];
+  into: readonly Readonly<GatedTenantClaim>[],
+  claims: readonly Readonly<GatedTenantClaim>[],
+): readonly Readonly<GatedTenantClaim>[] {
+  const out: Readonly<GatedTenantClaim>[] = [...into];
   const seen = new Set(out.map(claimKey));
   for (const claim of claims) {
     const key = claimKey(claim);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(claim);
+    out.push(Object.isFrozen(claim) ? claim : Object.freeze({ ...claim }));
   }
-  return out;
+  return Object.freeze(out);
 }
 
-/** Last-good claims, deduped on write, so repeated loads cannot grow it. */
-let lastGoodGatedClaims: GatedTenantClaim[] = [];
+/** Last-good claims, deduped on write, so repeated loads cannot grow it. Frozen. */
+let lastGoodGatedClaims: readonly Readonly<GatedTenantClaim>[] = Object.freeze([]);
 /** Legacy seed + last-good claims, rebuilt only when the last-good list changes. */
-let gatedClaimsView: readonly GatedTenantClaim[] = mergeClaims([], LEGACY_GATED_TENANTS);
+let gatedClaimsView: readonly Readonly<GatedTenantClaim>[] = mergeClaims([], LEGACY_GATED_TENANTS);
 
 /**
  * Record the gated tenants of every registry that parsed cleanly, so a later
@@ -284,7 +289,7 @@ export function rememberGatedTenantDocs(docs: readonly TenantChromeDoc[]): void 
 
 /** Test-only reset of the last-good cache. */
 export function resetGatedTenantCacheForTests(): void {
-  lastGoodGatedClaims = [];
+  lastGoodGatedClaims = Object.freeze([]);
   gatedClaimsView = mergeClaims([], LEGACY_GATED_TENANTS);
 }
 
@@ -298,7 +303,7 @@ export function lastGoodGatedClaimCountForTests(): number {
  * registry, deduped by `chatSlug|host`. Independent of the current document,
  * by design. Cached: rebuilt only when a load adds a new claim.
  */
-export function gatedTenantClaims(): readonly GatedTenantClaim[] {
+export function gatedTenantClaims(): readonly Readonly<GatedTenantClaim>[] {
   return gatedClaimsView;
 }
 
