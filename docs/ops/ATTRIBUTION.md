@@ -75,9 +75,9 @@ The `reviewed:agent` and `reviewed:owner` labels are retired (Chris, 2026-10-29)
 
 The review record names the reviewer's platform and the head SHA it approved. A review done in a fresh session — new context, not the authoring session or its subagent — on the same platform counts as independent.
 
-This changes the unit of independence from seat to session. Today the merge queue still judges independence by seat: it drops a review marker from the seat named in the commits' `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` trailers (see [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence)). Until the queue is migrated, a same-platform review still has to satisfy that seat rule to count there.
+This changes the unit of independence from seat to session. Today the merge queue still judges independence by seat: it drops a review marker from the seat named in the commits' `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` trailers (see [MERGE_QUEUE.md § Reviewer independence](../MERGE_QUEUE.md#reviewer-independence)). Until the queue is migrated, a same-platform review still has to satisfy that seat rule to count there. The migration to platform-level review checks is **in progress, owned by Platform**, in Platform's own draft PR (none open as of 2026-10-29 14:45 CET; link it here once it exists).
 
-This doc does not delete the labels. `scripts/check_review_coverage.py`, `scripts/merge_queue.py` and `scripts/readiness.py` still read them, and the main-promotion check "Every commit reaching main was reviewed" still accepts them. Removing them from tooling and from the repo is follow-up work.
+This doc does not delete the labels. `scripts/check_review_coverage.py`, `scripts/merge_queue.py` and `scripts/readiness.py` still read them, and the main-promotion check "Every commit reaching main was reviewed" still accepts them. Moving the tooling off them is part of Platform's in-progress merge-queue migration (above); deleting the labels from the repo is follow-up work.
 
 ## Promotion PRs
 
@@ -92,5 +92,6 @@ In the target flow, agents commit and review on the local Forgejo (digiforge), c
 - Label rename/create: `exec:cursor` → `src:cursor`, `exec:claude` → `src:claude`, plus new `src:grokbot` and `src:paperclip`.
 - PR template: add the auto-filled `Source: <platform>` line.
 - sctl: validate `--owner` against the four platform names in digiforge.
-- Merge queue and `check_review_coverage.py`: migrate off the `reviewed:*` labels and the `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` trailers onto the platform and the `Source-Platform:` trailer.
+- Merge queue and `check_review_coverage.py`: migrate off the `reviewed:*` labels and the per-seat `Paperclip-Agent-Id:` / `Paperclip-Run-Id:` independence check onto the platform and the `Source-Platform:` trailer. **In progress, owned by Platform**, in Platform's own draft PR (none open as of 2026-10-29 14:45 CET; link it here once it exists).
+- `.github/required-contexts.txt`: bring it in line with live branch protection (it still lists the Actions-era contexts; see [BRANCH_PROTECTION.md § Known drift](../BRANCH_PROTECTION.md#known-drift-in-the-tooling)). **In progress, owned by Platform**, in the same draft PR.
 - QA gate: check that 100% of merged commits carry the trailer.

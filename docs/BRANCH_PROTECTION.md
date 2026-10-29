@@ -1,6 +1,6 @@
 # Branch protection (`digithings-ai/digithings`)
 
-> **PENDING ROLLOUT.** The "Target state" below is not live. It is the target decided for the dev-flow upgrade (2026-10-29). Applying it is a repository-settings change that only Chris makes. Until then, "Live settings" is what GitHub enforces.
+> **PENDING ROLLOUT.** The "Target state" below is not fully live (the `main` admin-enforcement step is live as of the 2026-10-29 14:45 CET read; the `develop` steps are not). It is the target decided for the dev-flow upgrade (2026-10-29). Applying it is a repository-settings change that Chris makes or approves. Until then, "Live settings" is what GitHub enforces.
 
 ## Target state (PENDING ROLLOUT)
 
@@ -13,7 +13,7 @@
 ### `main`
 
 - Required status check: `Every commit reaching main was reviewed` (from `.github/workflows/ci-review-coverage.yml`, `scripts/check_review_coverage.py`).
-- Enforced for admins (`enforce_admins: true`): an admin can no longer merge past a failing required check.
+- Enforced for admins (`enforce_admins: true`): an admin can no longer merge past a failing required check. **Live**: Platform reports applying it at 14:41 CET on 2026-10-29; the 14:45 read below confirms it (it was off at 14:38).
 
 ### Rollout order
 
@@ -26,12 +26,12 @@
    ```
 
 3. Create the promotion identity, then restrict pushes on `develop` to it.
-4. Turn on `enforce_admins` for `main`.
+4. ~~Turn on `enforce_admins` for `main`.~~ Done (Platform, reported 14:41 CET, 2026-10-29; confirmed at the 14:45 read).
 5. Re-read the settings and replace "Live settings" below with the new read.
 
 Note that a commit status can be posted by anyone with a write token, so `merge-queue` stops accidental bypass, not deliberate bypass; the push restriction is the stronger control.
 
-## Live settings as of 2026-10-29 14:38 CET (UTC+1)
+## Live settings as of 2026-10-29 14:45 CET (UTC+1)
 
 Read-only, through the GitHub branches and repository API (`GET /repos/digithings-ai/digithings/branches/{branch}` and `GET /repos/digithings-ai/digithings`). Nothing was changed.
 
@@ -40,11 +40,11 @@ Read-only, through the GitHub branches and repository API (`GET /repos/digithing
 | Protected | yes | yes |
 | Head at read | `67310448` | `986051dc` |
 | Required status checks | `local-ci` (commit status, no app bound) | `Every commit reaching main was reviewed` (bound to the GitHub Actions app, id 15368) |
-| Required checks apply to admins (`enforcement_level`) | yes (`everyone`) | no (`non_admins`) |
+| Required checks apply to admins (`enforcement_level`) | yes (`everyone`) | yes (`everyone`); was `non_admins` at the 14:38 read |
 
 Repository: public; default branch `develop`; merge commits, squash and rebase merges all allowed; auto-merge off; head branches deleted on merge; "update branch" suggestion off.
 
-**Not readable in this read** (the branch summary does not expose them, and there was no read path for the full protection or rulesets endpoints): `strict` (up-to-date requirement), required approving reviews, push restrictions, rulesets (including the `module-branch-protection` ruleset AGENTS.md describes), and GitHub's native merge queue. Secondary reports, not verified here: PR #6558 (27 Oct) records develop as `strict: false`, `enforce_admins: true`, no rulesets; the dev-flow plan (29 Oct) records develop strict off with 0 approvals and main with admins not enforced and 0 approvals. Verify with:
+**Not readable in this read** (the branch summary does not expose them, and there was no read path for the full protection or rulesets endpoints): `strict` (up-to-date requirement), required approving reviews, push restrictions, rulesets (including the `module-branch-protection` ruleset AGENTS.md describes), and GitHub's native merge queue. Secondary reports, not verified here: PR #6558 (27 Oct) records develop as `strict: false`, `enforce_admins: true`, no rulesets; the dev-flow plan (29 Oct, before the 14:41 change) records develop strict off with 0 approvals and main with admins not enforced and 0 approvals. Verify with:
 
 ```
 gh api repos/digithings-ai/digithings/branches/develop/protection
@@ -58,12 +58,14 @@ gh api repos/digithings-ai/digithings/rulesets
 |---|---|---|
 | `develop` required checks | `local-ci` | `local-ci`, `merge-queue` |
 | `develop` push restriction | not readable in this read | promotion identity only |
-| `main` admins | not enforced | enforced |
+| `main` admins | enforced (confirmed 14:45 CET) | enforced (gap closed) |
 
 ## Known drift in the tooling
 
 - `.github/required-contexts.txt`, which `scripts/set-branch-protection.sh` applies and `scripts/check_required_policy_checks.py` reads, still lists the Actions-era contexts `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey`. Live develop requires `local-ci` only. Running `scripts/set-branch-protection.sh` as-is would not produce the live or the target state; do not run it until the snapshot is updated in the same change as the protection.
 - Previous versions of this doc described those three contexts with `strict: true` as live; that is no longer true.
+- **In progress, owned by Platform:** updating `.github/required-contexts.txt` to match live (and the target), in Platform's own draft PR (none open as of 2026-10-29 14:45 CET; link it here once it exists).
+- **In progress, owned by Platform:** migrating `scripts/merge_queue.py` and `scripts/check_review_coverage.py` from per-seat reviewer independence and the `reviewed:*` labels to platform-level review checks (see [ops/ATTRIBUTION.md](ops/ATTRIBUTION.md)), in the same Platform draft PR.
 
 ## Ownership of develop's required contexts
 
@@ -79,7 +81,7 @@ A workflow skipped by `paths` / `paths-ignore` / `branches` filters reports no c
 
 ## Emergency bypass
 
-Today admins can merge `main` past its required check, because the check is not enforced for admins. Use that only for a genuine emergency and open a follow-up issue linked to the bypassed PR. Once the target state lands there is no admin bypass on `main`. Never disable protection; fix the check instead.
+As of the 2026-10-29 14:45 CET read there is no admin bypass on `main`: its required check applies to admins too. Never disable protection to get past it; fix the check instead, and if Chris does lift protection for a genuine emergency, open a follow-up issue linked to the bypassed PR.
 
 ## Other repos
 
