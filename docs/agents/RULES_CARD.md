@@ -44,6 +44,11 @@ reference until this card is adopted; where they disagree, they win until then.
   bypass, or re-argue them. Exits 69 and 70 are not refusals and are not a reason to fall back
   to the host credential. If a task truly needs the access, say so in the run report.
 - No PR outside the `digithings-ai` org.
+- No agent ever submits an approving GitHub review on a promotion PR, whether into `develop` or
+  `main` (new, Chris, 2026-10-29). Chris's Human Gate is his own approving review on the promotion
+  PR's head commit, and agents share his `chrizefan` login, so an agent approval would look like
+  his. Record reviews as comments (section 5). See
+  [#6659](https://github.com/digithings-ai/digithings/pull/6659) for the promotion-gate spec.
 - Do not route review through the CodeRabbit Cursor plugin.
 
 ## 3. Branches and PRs

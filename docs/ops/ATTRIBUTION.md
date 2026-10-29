@@ -85,6 +85,10 @@ The owner of a promotion PR is the platform that pushes it. Its manifest lists t
 
 In the target flow, agents commit and review on the local Forgejo (digiforge), changes accumulate there, and one batch promotion PR goes to GitHub `develop`. Attribution therefore has two layers on a promotion: the platform that pushes it (its own trailer and `src:*` label) and the platforms inside the batch (the manifest, and the trailers on the commits it carries).
 
+## Human Gate
+
+Hard rule (Chris, 2026-10-29): no agent ever submits an approving GitHub review on a promotion PR, whether into `develop` or `main`. Chris's Human Gate is his own approving review on the promotion PR's head commit. Agents push and comment through his `chrizefan` login, so an agent's approving review would be indistinguishable from his and would fake the gate. Agents record their reviews as PR comments with the review markers instead (see [MERGE_QUEUE.md § The verdict rule](../MERGE_QUEUE.md#the-verdict-rule)). The promotion gate that reads the Human Gate is specified in QA's draft [#6659](https://github.com/digithings-ai/digithings/pull/6659).
+
 ## Follow-up work
 
 - Harness trailer injection: each platform adds `Source-Platform:` at commit time, including on squash.
