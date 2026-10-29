@@ -35,6 +35,12 @@ hosts:
       privateMode: false
     models:
       allowPicker: false
+    guardrails:
+      # Example value: each client sets its own. Keeps the tokens-per-minute limit on (the
+      # safe default). A chrome.productChat row is refused without a positive whole number
+      # here (deployment or user); see tenant/SCHEMA-NOTES.md §0.
+      tokensPerMinute:
+        deployment: 60000
     backend:
       type: digigraph
     tools:

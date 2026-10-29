@@ -33,7 +33,10 @@ meter on, the tokens-per-minute limit on and the model picker off. The example t
 keeps that default and writes no opt-out. The opt-out fields are `models.allowPicker: true`,
 `models.premiumMeter: false` and `guardrails.tpmLimit: false` (`models.occPicker` is a
 legacy alias of `allowPicker`). A client repo that needs legacy-row behaviour must write
-these explicitly; R0 never applies them to a new row.
+these explicitly; R0 never applies them to a new row. With the limit on, R0 refuses a
+`chrome.productChat` row unless it sets a positive whole-number `guardrails.tokensPerMinute`
+(`deployment` or `user`) or opts out with `guardrails.tpmLimit: false`. The example tenant
+writes `guardrails.tokensPerMinute.deployment` as an example value; each client sets its own.
 
 ## 1. `access.invite` is server-only
 

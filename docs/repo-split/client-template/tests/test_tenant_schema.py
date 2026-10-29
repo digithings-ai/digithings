@@ -72,7 +72,12 @@ def test_example_tenant_keeps_the_product_chat_safe_default() -> None:
     assert models.get("allowPicker") is not True
     assert "occPicker" not in models, "legacy alias; write models.allowPicker if anything"
     assert models.get("premiumMeter") is not False
-    assert (row.get("guardrails") or {}).get("tpmLimit") is not False
+    guardrails = row.get("guardrails") or {}
+    assert guardrails.get("tpmLimit") is not False
+    # With the limit on, R0 refuses a productChat row without a positive whole-number TPM.
+    tpm = guardrails.get("tokensPerMinute") or {}
+    values = [v for v in (tpm.get("deployment"), tpm.get("user")) if v is not None]
+    assert values and all(type(v) is int and v > 0 for v in values)
 
 
 # The Woodpecker Python `test` step sets this: the R0 schema check runs in the
