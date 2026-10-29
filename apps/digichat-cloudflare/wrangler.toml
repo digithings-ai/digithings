@@ -203,6 +203,12 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
 #   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
 #   DIGICHAT_ADMIN_KEY       # Worker-only /_digichat-admin container reset lever; never forwarded
+#   DIGICHAT_INVITE_PAGES    # optional JSON of invite-only /chat/<slug> pages beyond OCC (slug ->
+#                            # host + keyEnv NAME; src/invite-pages.ts). Not secret, but kept out
+#                            # of this public file and out of [vars] so tenant names never land in
+#                            # the repo and a deploy cannot drop it. Forwarded so the app knows
+#                            # which hosts are invite-only.
+#   <keyEnv of each page>    # one Worker-only invite key per configured page, e.g. EXAMPLE_INVITE_KEY
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to
