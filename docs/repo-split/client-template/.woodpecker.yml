@@ -38,11 +38,26 @@ steps:
       - python3 scripts/check_no_vendored_r0.py --client . --r0 /woodpecker/r0
 
   # 5. Tenant schema + tool tests inside the pinned R0 environment. No network beyond package install.
+  #    This image has no Node, so the R0 schema check is left to step 6 (it fails, never skips, in CI).
   - name: test
     image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248
     environment:
       DIGITHINGS_DIR: /woodpecker/r0
+      R0_SCHEMA_CHECK_STEP: r0-schema
     commands:
       - unset OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY CHEAPER_INFERENCE_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY || true
       - make test
       - cd "$CI_WORKSPACE" && uv run --no-project --with pytest python -m pytest -q tests/ci -p no:cacheprovider
+
+  # 6. R0 schema check: the tenant doc through the pinned R0's `config:check` (tsx), with R0's
+  #    Node deps from its lockfile (npm ci, no install scripts). Offline after package install.
+  #    xfail(strict) until digithings.lock is past U5a (#6680); see tenant/SCHEMA-NOTES.md §0.
+  - name: r0-schema
+    image: node:22.23.4-bookworm@sha256:18a6d90fd60542269850c80ca03b29b1d9b14d6b221ac7ee8e35b0d33ef904bd
+    environment:
+      DIGITHINGS_DIR: /woodpecker/r0
+    commands:
+      - unset OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY CHEAPER_INFERENCE_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY || true
+      - apt-get update -qq && apt-get install -y -qq --no-install-recommends python3-pytest python3-yaml >/dev/null
+      - cd /woodpecker/r0 && npm ci --ignore-scripts --no-audit --no-fund --workspace apps/digichat --include-workspace-root
+      - cd "$CI_WORKSPACE" && python3 -m pytest -q -rxX -p no:cacheprovider tests/test_tenant_schema.py::test_tenant_doc_passes_the_r0_schema

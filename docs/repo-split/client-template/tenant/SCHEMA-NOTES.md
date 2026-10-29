@@ -23,8 +23,10 @@ New docs write `chrome.slug` only. Neither the doc nor the row ever stores a bui
 
 `chrome.slug` needs an R0 that includes U5a: R0's `ChromeSchema` is strict, so an R0
 without #6680 refuses the key (`config:check`: unrecognized key `slug`). Until #6680 is on
-R0 `develop`, `make test`'s R0 schema check fails on a checkout with Node deps (it skips
-without them); after it lands, `make bump SHA=<develop sha with U5a>`.
+R0 `develop`, `make test`'s R0 schema check is an expected failure (`xfail(strict=True)`)
+on a checkout with Node deps; without them it skips locally and fails in CI. After it lands,
+`make bump SHA=<develop sha with U5a>`.
+`make bump` past U5a must also remove that `xfail` marker from `test_tenant_doc_passes_the_r0_schema` (strict: the bump makes it XPASS, which fails the run).
 
 ## 1. `access.invite` is server-only
 

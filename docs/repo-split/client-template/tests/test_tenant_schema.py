@@ -2,7 +2,9 @@
 
 Run: make test (runs inside the pinned R0 checkout's environment, so the R0
 loaders are importable). The schema itself is R0's: the tenant doc is validated
-by R0's `config:check` script when Node deps are installed there.
+by R0's `config:check` script when Node deps are installed there. Locally that
+check skips without Node deps; in CI (`CI` set) it fails instead, and it runs in
+its own Node-image Woodpecker step (`r0-schema`).
 """
 
 from __future__ import annotations
@@ -53,7 +55,6 @@ def test_tenant_doc_chat_slug_lives_at_chrome_slug() -> None:
     assert "access" not in row
 
 
-
 @pytest.mark.parametrize("slug", ["example", "example-b"])
 def test_slug_rule_accepts(slug: str) -> None:
     assert SLUG_RE.fullmatch(slug)
@@ -64,10 +65,44 @@ def test_slug_rule_refuses(slug: str) -> None:
     assert not SLUG_RE.fullmatch(slug)
 
 
+# The Woodpecker Python `test` step sets this: the R0 schema check runs in the
+# Node-image `r0-schema` step instead (.woodpecker.yml), not in a step with no Node.
+OWN_STEP_ENV = "R0_SCHEMA_CHECK_STEP"
+
+
+def _r0_schema_check_missing(r0: Path) -> str | None:
+    """What stops R0's config:check from running here, or None if it can run."""
+    if not (r0 / "apps" / "digichat" / "scripts" / "check-config.ts").exists():
+        return f"no R0 checkout with apps/digichat/scripts/check-config.ts at {r0}"
+    if not (r0 / "node_modules").exists():
+        return f"R0 Node deps not installed (no {r0 / 'node_modules'})"
+    if not shutil.which("npx"):
+        return "npx is not on PATH"
+    return None
+
+
+def _require_r0_schema_check(r0: Path) -> Path:
+    """Skip locally when the check can't run; in CI, fail with the reason."""
+    if os.environ.get(OWN_STEP_ENV):
+        pytest.skip(f"R0 schema check runs in the {os.environ[OWN_STEP_ENV]} CI step")
+    missing = _r0_schema_check_missing(r0)
+    if missing:
+        if os.environ.get("CI"):
+            pytest.fail(
+                f"R0 schema check cannot run in CI: {missing}. Install R0's Node deps "
+                "(npm ci in the R0 checkout) and Node in this step; CI never skips it.",
+                pytrace=False,
+            )
+        pytest.skip(f"{missing} (make link / setup; skipped locally only)")
+    return r0 / "apps" / "digichat" / "scripts" / "check-config.ts"
+
+
+# Remove with the lock bump past U5a (#6680, chrome.slug): the bump makes this XPASS,
+# and strict turns that into a failure (SCHEMA-NOTES §0). raises=AssertionError keeps a
+# CI "cannot run" failure (pytest.fail) a real failure instead of an expected one.
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="needs R0 >= U5a")
 def test_tenant_doc_passes_the_r0_schema() -> None:
-    script = R0 / "apps" / "digichat" / "scripts" / "check-config.ts"
-    if not script.exists() or not (R0 / "node_modules").exists() or not shutil.which("npx"):
-        pytest.skip("R0 checkout with node deps not available (make link / setup)")
+    script = _require_r0_schema_check(R0)
     out = subprocess.run(
         ["npx", "tsx", str(script), str(DOC)],
         cwd=R0 / "apps" / "digichat",
@@ -76,6 +111,48 @@ def test_tenant_doc_passes_the_r0_schema() -> None:
         timeout=120,
     )
     assert out.returncode == 0, out.stderr[-2000:]
+
+
+def test_r0_schema_check_fails_in_ci_without_node_deps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "apps" / "digichat" / "scripts").mkdir(parents=True)
+    (tmp_path / "apps" / "digichat" / "scripts" / "check-config.ts").write_text("")
+    monkeypatch.delenv(OWN_STEP_ENV, raising=False)
+    monkeypatch.setenv("CI", "woodpecker")
+    with pytest.raises(pytest.fail.Exception, match="cannot run in CI: R0 Node deps"):
+        _require_r0_schema_check(tmp_path)
+    monkeypatch.delenv("CI")
+    with pytest.raises(pytest.skip.Exception, match="skipped locally only"):
+        _require_r0_schema_check(tmp_path)
+
+
+def test_r0_schema_check_fails_in_ci_without_an_r0_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(OWN_STEP_ENV, raising=False)
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="cannot run in CI: no R0 checkout"):
+        _require_r0_schema_check(tmp_path / "absent")
+
+
+def test_r0_schema_xfail_does_not_hide_a_ci_failure() -> None:
+    (mark,) = [m for m in test_tenant_doc_passes_the_r0_schema.pytestmark if m.name == "xfail"]
+    assert mark.kwargs == {"strict": True, "raises": AssertionError, "reason": "needs R0 >= U5a"}
+    assert not issubclass(pytest.fail.Exception, AssertionError)
+
+
+def test_woodpecker_runs_the_r0_schema_check_in_a_node_step() -> None:
+    steps = {s["name"]: s for s in yaml.safe_load((ROOT / ".woodpecker.yml").read_text())["steps"]}
+    names = list(steps)
+    assert names.index("fetch-r0") < names.index("r0-schema")
+    node = steps["r0-schema"]
+    assert node["image"].startswith("node:22") and "@sha256:" in node["image"]
+    assert OWN_STEP_ENV not in (node.get("environment") or {}), "r0-schema must not skip itself"
+    cmds = "\n".join(node["commands"])
+    assert "npm ci" in cmds and "--ignore-scripts" in cmds
+    assert "tests/test_tenant_schema.py::test_tenant_doc_passes_the_r0_schema" in cmds
+    assert steps["test"]["environment"][OWN_STEP_ENV] == "r0-schema"
 
 
 def test_corpus_map_names_the_tenant_slug() -> None:
