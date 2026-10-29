@@ -6,11 +6,13 @@ memory is critically low or the disk guard pauses worktrees. Logs: ~/.config/dig
 Never prints secrets.
 A swap/disk-guard skip posts `failure` on the queued PRs, never silence, so merges block
 loudly (DIG-3660 must-fix 5). Fork code never executes on this Mac: fork PRs get a `failure`
-naming the maintainer re-push path. Static gates only, plus two path-gated lanes:
+naming the maintainer re-push path. Static gates only, plus three path-gated lanes:
 PR title, PR template,
 gitleaks, PII scan, R0 client-literal scan,
-guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated)
-and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203).
+guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated),
+the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203)
+and the npm workspace suites (`npm run test --workspace <ws>`) for every root npm
+workspace the PR touches or that depends on one it touches (path-gated).
 NOT gated (DIG-3605 owns the
 rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
@@ -31,6 +33,7 @@ the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
 import concurrent.futures
+import glob
 import hashlib
 import io
 import json
@@ -282,6 +285,39 @@ BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digi
 BUN_PIN = "1.4.2"
 BUN_INSTALL_TIMEOUT = 600
 BUN_TEST_TIMEOUT = 300
+# --- npm workspace suites (changed workspaces) --------------------------------
+# develop's green came from this runner alone, and this runner ran no npm test:
+# the vitest suites lived in test-digichat.yml, test-dashboard.yml and
+# test-web.yml, which ci.yml calls and which have not run on develop since
+# 14 Oct. Three digichat tests went red on develop with every check green.
+# The gate below runs `npm run test --workspace <ws>` for every root npm
+# workspace a PR touches, plus every workspace that depends on one it touches.
+#
+# What a path maps to:
+# - a file under a workspace directory (`apps/<x>/`, `packages/<x>/`) is that
+#   workspace, and every workspace that depends on it (dependencies,
+#   devDependencies, peer and optional, transitively) is touched too;
+# - a root install input (NPM_ROOT_INPUTS) touches every workspace;
+# - any other path that one of the NPM_LANES blocks in scripts/ci_paths.yaml
+#   lists (a lane's own workflow file, a Dockerfile a test re-reads, a Python
+#   file a pin reads) touches every workspace that lane lists, which is what
+#   the retired lane ran for the same change.
+# A workspace whose test script is `bun test` is left to the bun lane, and one
+# with no test script has nothing to run. When the mapping itself cannot be
+# computed (unreadable manifest, missing ci_paths.yaml block) every workspace
+# runs: the gate fails closed, never open.
+NPM_LANES = ("digichat", "dashboard", "web")
+NPM_ROOT_INPUTS = ("package.json", "package-lock.json", ".npmrc", ".nvmrc",
+                   "eslint.base.mjs")
+NPM_DEP_FIELDS = ("dependencies", "devDependencies", "peerDependencies",
+                  "optionalDependencies")
+NPM_TEST_TIMEOUT = 600
+# Two suites at once: each vitest run already uses one worker per core.
+NPM_POOL = 2
+# Paid inference must never be reachable from a gate run. Same rule as the
+# pytest lane: a test that lost its mock fails on a missing key instead of
+# spending money.
+NPM_SCRUB_SUBSTRINGS = ("API_KEY", "CHEAPERINFERENCE", "_TOKEN", "SECRET")
 # --- how many independent gates run at once --------------------------------
 # Every gate below is its own process with its own temp paths, its own cwd and
 # its own report file, so nothing about them needs the others to have finished.
@@ -364,6 +400,9 @@ STEP_BUDGETS = {
     # Bun suites (DIG-5203): install from the committed lockfile, then run.
     "bun-install:*": 600,
     "bun:*": 300,
+    # npm workspace suites: one root install, then one vitest run per workspace.
+    "npm-ci": 600,
+    "npm-test:*": 600,
 }
 # A step is attempted at most this many times, and the attempts share the one
 # budget: a timeout kill spends it, so a stalled step is not retried into a
@@ -1207,6 +1246,206 @@ def run_bun_suites(wt, step, out, fails):
     return ran
 
 
+class NpmPlanError(Exception):
+    """The path-to-workspace mapping could not be computed; run every workspace."""
+
+
+def npm_workspaces(wt):
+    """The root npm workspaces: {dir: {"name", "test", "deps"}}, in dir order.
+
+    `deps` holds the names of other workspaces this one declares in any of
+    NPM_DEP_FIELDS. Raises NpmPlanError when the root manifest names no
+    workspaces or a workspace manifest is unreadable: a mapping built from a
+    partial list would under-cover without saying so.
+    """
+    globs = root_workspace_globs(wt)
+    if not globs:
+        raise NpmPlanError("root package.json names no workspaces")
+    dirs = set()
+    for g in globs:
+        for m in glob.glob(os.path.join(wt, g, "package.json")):
+            dirs.add(os.path.relpath(os.path.dirname(m), wt).replace(os.sep, "/"))
+    if not dirs:
+        raise NpmPlanError("no workspace manifest matched " + ", ".join(globs))
+    raw = {}
+    for d in sorted(dirs):
+        try:
+            with open(os.path.join(wt, d, "package.json")) as f:
+                pkg = json.load(f)
+        except (OSError, ValueError) as exc:
+            raise NpmPlanError(f"{d}/package.json unreadable ({exc})") from exc
+        if not isinstance(pkg, dict) or not isinstance(pkg.get("name"), str):
+            raise NpmPlanError(f"{d}/package.json has no name")
+        raw[d] = pkg
+    names = {pkg["name"] for pkg in raw.values()}
+    out = {}
+    for d, pkg in raw.items():
+        deps = set()
+        for field in NPM_DEP_FIELDS:
+            block = pkg.get(field) or {}
+            if isinstance(block, dict):
+                deps.update(k for k in block if k in names and k != pkg["name"])
+        test = (pkg.get("scripts") or {}).get("test")
+        out[d] = {"name": pkg["name"], "test": test if isinstance(test, str) else None,
+                  "deps": sorted(deps)}
+    return out
+
+
+def npm_lane_patterns(wt):
+    """{lane: patterns} for NPM_LANES from scripts/ci_paths.yaml.
+
+    Raises NpmPlanError when the file or a lane block is missing: the lane
+    blocks are where the non-workspace triggers live, so without them a change
+    could miss a suite and the caller runs every workspace instead.
+    """
+    try:
+        with open(os.path.join(wt, "scripts", "ci_paths.yaml")) as f:
+            text = f.read()
+    except OSError as exc:
+        raise NpmPlanError(f"scripts/ci_paths.yaml unreadable ({exc})") from exc
+    out = {}
+    for lane in NPM_LANES:
+        pats = parse_ci_paths_block(text, lane)
+        if not pats:
+            raise NpmPlanError(f"scripts/ci_paths.yaml has no `{lane}:` block")
+        out[lane] = pats
+    return out
+
+
+def npm_dependents(workspaces, touched):
+    """`touched` plus every workspace that depends on one of them, transitively."""
+    by_name = {w["name"]: d for d, w in workspaces.items()}
+    users = {d: set() for d in workspaces}
+    for d, w in workspaces.items():
+        for dep in w["deps"]:
+            users[by_name[dep]].add(d)
+    seen, todo = set(touched), list(touched)
+    while todo:
+        for u in users.get(todo.pop(), ()):
+            if u not in seen:
+                seen.add(u)
+                todo.append(u)
+    return seen
+
+
+def npm_plan(files, wt):
+    """Which workspaces this change must test.
+
+    Returns (plan, why, error): `plan` is a list of (dir, name) in dir order,
+    restricted to workspaces with a non-bun test script; `why` maps each dir to
+    the first reason it was selected; `error` is None, or the reason the
+    mapping failed and every workspace was selected (fail closed).
+    """
+    error = None
+    why = {}
+    try:
+        ws = npm_workspaces(wt)
+        lanes = npm_lane_patterns(wt)
+        root = path_gate_hit(files, NPM_ROOT_INPUTS)
+        if root is not None:
+            for d in ws:
+                why.setdefault(d, f"root install input {root[1]}")
+        direct = set()
+        for f in files:
+            for d in ws:
+                if f.startswith(d + "/"):
+                    direct.add(d)
+                    why.setdefault(d, f"touched {f}")
+        for d in sorted(npm_dependents(ws, direct) - direct):
+            why.setdefault(d, "depends on a touched workspace")
+        rest = [f for f in files
+                if not any(f.startswith(d + "/") for d in ws) and f not in NPM_ROOT_INPUTS]
+        for lane, pats in lanes.items():
+            lane_ws = [d for d in ws if f"{d}/**" in pats]
+            hit = path_gate_hit(rest, pats)
+            if hit is not None:
+                for d in lane_ws:
+                    why.setdefault(d, f"{lane} lane path {hit[1]}")
+    except (NpmPlanError, OSError, ValueError, KeyError, TypeError) as exc:
+        error = str(exc) or type(exc).__name__
+        ws = npm_workspaces_tolerant(wt)
+        why = {d: "mapping failed; running every workspace" for d in ws}
+    plan = [(d, ws[d]["name"]) for d in sorted(why)
+            if d in ws and ws[d]["test"] and not ws[d]["test"].startswith("bun ")]
+    return plan, why, error
+
+
+def npm_workspaces_tolerant(wt):
+    """Every `apps/*` and `packages/*` manifest that can be read, for the
+    fail-closed path. The strict reader already failed, so this one keeps
+    whatever it can; a manifest it cannot read also breaks the `npm ci` that
+    runs before any suite, so that workspace still turns the verdict red."""
+    out = {}
+    for m in sorted(glob.glob(os.path.join(wt, "apps", "*", "package.json"))
+                    + glob.glob(os.path.join(wt, "packages", "*", "package.json"))):
+        d = os.path.relpath(os.path.dirname(m), wt).replace(os.sep, "/")
+        try:
+            with open(m) as f:
+                pkg = json.load(f)
+            name = pkg["name"]
+            test = (pkg.get("scripts") or {}).get("test")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        out[d] = {"name": name, "test": test if isinstance(test, str) else None, "deps": []}
+    return out
+
+
+def npm_env(base=None):
+    """The gate environment for npm suites: ENV without any credential-looking
+    key, with CI set so no runner starts in watch mode."""
+    env = dict(ENV if base is None else base)
+    for k in list(env):
+        if any(sub in k.upper() for sub in NPM_SCRUB_SUBSTRINGS):
+            env.pop(k, None)
+    env["CI"] = "1"
+    return env
+
+
+def npm_gate(pr, wt):
+    """Path gate for the npm workspace suites. Returns (n_files, plan, why, error),
+    or (None, None, None, None) when the file list is unusable (the caller fails closed)."""
+    raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
+    try:
+        files = changed_file_names(json.loads(raw or ""))
+    except ValueError:
+        files = None
+    if files is None:
+        return None, None, None, None
+    plan, why, error = npm_plan(files, wt)
+    return len(files), plan, why, error
+
+
+def short_workspace_name(name):
+    """Receipt name of a workspace: `@digithings/ui` -> `ui`."""
+    return name.rsplit("/", 1)[-1]
+
+
+def run_npm_suites(wt, step, out, fails, plan, installed=None, pool=None):
+    """Run `npm run test --workspace <name>` for every planned workspace.
+
+    `installed` is True when this tick's worker build already ran a good
+    `npm ci` in `wt`, False when that install failed (no suite can run over
+    it), and None when nothing installed yet. Every suite runs even after an
+    earlier one failed, so one red workspace cannot hide another's verdict.
+    Returns the receipt names of the suites that started.
+    """
+    if not plan:
+        return []
+    if installed is False:
+        fails.append("npm-suites: npm ci failed")
+        out.write("npm-suites FAIL: the worker-build npm ci failed; no suite ran\n")
+        return []
+    if installed is None and not step("npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
+        return []
+    env = npm_env()
+    specs = [gate_spec(f"npm-test:{short_workspace_name(name)}",
+                       ["npm", "run", "test", "--workspace", name],
+                       NPM_TEST_TIMEOUT, wt, env, ())
+             for _, name in plan]
+    fails.extend((pool or run_step_pool)(specs, out, limit=NPM_POOL))
+    return [short_workspace_name(name) for _, name in plan]
+
+
 def buildable_worker_apps(wt):
     """The WORKER_APPS this tree still has a ``wrangler.toml`` for.
 
@@ -1543,27 +1782,38 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
-def success_desc(mins, bun=None):
-    """The success description: the verdict, then what the bun gate did (DIG-5203).
+def success_desc(mins, bun=None, npm=None):
+    """The success description: the verdict, then what the bun and npm gates
+    did (DIG-5203, npm workspace suites).
 
     A commit status description is capped at 140 characters (`status_fields`
     keeps 139), so the suite names are dropped before they can be cut in half:
     a receipt that names three suites and half of a fourth is worse than one
     that names none, and the run log always names every suite in full.
 
-    "gates passed" rather than GATED_NOTE when the suites ran: the receipt is no
+    "gates passed" rather than GATED_NOTE when any suite ran: the receipt is no
     longer a static-only receipt, and claiming it was would be the same false
-    green this gate exists to remove. When no `bun_suites` path changed, the
-    static note stays and the receipt says so: `bun: none` is the skip made
-    visible, not a silence.
+    green this gate exists to remove. When no suite path changed, the static
+    note stays and the receipt says so: `bun: none` and `npm: none` are the
+    skips made visible, not a silence.
     """
     tail = f" ({mins:.0f}m)"
     ran = (bun or {}).get("ran") or []
-    if not ran:
-        return f"{GATED_NOTE}; bun: none{tail}"
-    head = f"gates passed; bun {len(ran)}/{len(ran)}: {', '.join(ran)}"
+    js = (npm or {}).get("ran") or []
+    if not ran and not js:
+        return f"{GATED_NOTE}; bun: none; npm: none{tail}"
+
+    def part(label, names, full):
+        if not names:
+            return f"{label}: none"
+        if full:
+            return f"{label} {len(names)}/{len(names)}: {', '.join(names)}"
+        return f"{label} {len(names)}/{len(names)}"
+
+    head = f"gates passed; {part('bun', ran, True)}; {part('npm', js, True)}"
     if len(head + tail) > 139:
-        head = f"gates passed; bun {len(ran)}/{len(ran)} (suites in the log)"
+        head = (f"gates passed; {part('bun', ran, False)}; {part('npm', js, False)}"
+                " (suites in the log)")
     return head + tail
 
 
@@ -2022,6 +2272,10 @@ def run_checks(pr, out, summary=None):
     elif hit is not None:
         out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
         fails.extend(worker_build(WT, step, out=out))
+    # The worker build's `npm ci` is the same root install the npm suites need,
+    # so a tick that already paid for it does not pay twice.
+    npm_installed = (None if hit is None
+                     else not step_failed(fails, "worker-build:npm-ci"))
     # Bun suites (DIG-5203): the required check has to prove a clients/** or
     # packages/** change, not report green over a suite nobody ran. The paths
     # come from the same `bun_suites` block the retired lane used, and a hit
@@ -2038,6 +2292,26 @@ def run_checks(pr, out, summary=None):
         ran_bun = run_bun_suites(WT, step, out, fails)
     if summary is not None:
         summary["bun"] = {"hit": bun_hit[0] if bun_hit else None, "ran": ran_bun}
+    # npm workspace suites: `npm run test --workspace <ws>` for every root
+    # workspace the PR touches and every workspace that depends on one. The
+    # retired test-digichat/-dashboard/-web lanes ran these, and nothing has
+    # since 14 Oct. A mapping error runs every workspace (fail closed).
+    ran_npm = []
+    n_npm, npm_suites, npm_why, npm_error = npm_gate(pr, WT)
+    if n_npm is None:
+        out.write("\n===== npm-suites\nchanged-files fetch failed; failing closed\n")
+        fails.append("npm-suites: changed-files fetch failed")
+    else:
+        out.write("\n===== npm-suites\n")
+        if npm_error:
+            out.write(f"mapping failed ({npm_error}); running every workspace\n")
+        for d, _ in npm_suites:
+            out.write(f"{d}: {npm_why[d]}\n")
+        if not npm_suites:
+            out.write("no npm workspace touched\n")
+        ran_npm = run_npm_suites(WT, step, out, fails, npm_suites, installed=npm_installed)
+    if summary is not None:
+        summary["npm"] = {"ran": ran_npm, "error": npm_error}
     return fails
 
 def process(pr, dry):
@@ -2066,7 +2340,7 @@ def process(pr, dry):
     # line names the suites so a PR with no bun path says `bun: none` instead of
     # reading like the suites passed (DIG-5203).
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
-    else: st, desc = "success", success_desc(mins, summary.get("bun"))
+    else: st, desc = "success", success_desc(mins, summary.get("bun"), summary.get("npm"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
     if not dry:
         if metadata_failure_gates(desc) is not None:
