@@ -31,7 +31,7 @@ import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 import { isPrivateUrlParam, privateFirstPaintTenant } from "@/lib/private-chrome";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
-   head scripts. A top-level page with no ?theme= (the /chat/occ document)
+   head scripts. A top-level page with no ?theme= (a /chat/<slug> tenant document)
    leaves themeInitScript's dt-theme / dt-palette paint in place. An iframe
    or a ?theme= lock still pins the tenant/parent mode. The script bodies
    live in embed-site-theme.ts and contain no request data. */
@@ -60,7 +60,7 @@ export default async function EmbedRouteShell({
     requestedHost,
     embedOriginHostOf(hdrs),
   );
-  // Invite-only hosts (OCC, DIG-1210): no valid invite token -> the standard
+  // Invite-only hosts (DIG-1210; claims in embed-invite-only.ts): no valid invite token -> the standard
   // 404, no hint, no branding, no chat.
   if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
     notFound();

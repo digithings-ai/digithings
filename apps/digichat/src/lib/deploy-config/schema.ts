@@ -19,6 +19,17 @@ import {
   VIEW_MODES,
 } from "@/lib/view-modes";
 import { HEX_COLOR } from "@/lib/hex-color";
+import {
+  LEGACY_GATED_TENANT_HOST,
+  LEGACY_GATED_TENANT_PRODUCT_CHAT,
+  LEGACY_GATED_TENANT_SLUG,
+} from "./legacy-tenant-defaults";
+import {
+  TenantAccessSchema,
+  TenantChatSlugSchema,
+  resolveTenantChatSlug,
+  validateTenantChatSlug,
+} from "./tenant-chrome";
 import { premiumIdsFromGroups, resolveModelCatalog } from "@/lib/model-picker-catalog";
 import { limitSupport } from "@/lib/limits/matrix";
 import {
@@ -239,7 +250,28 @@ export const ChromeSchema = z
     launcher: LauncherSchema.optional(),
     title: z.string().optional(),
     welcome: z.preprocess(coerceWelcomeCopy, WelcomeCopySchema.optional()),
+    /** Suggestion pool for the empty thread. Omitted: the house pool. */
     suggestions: z.array(z.string()).optional(),
+    /**
+     * Tenant chat slug. The document stores only the slug; R0 builds the
+     * path `/chat/<slug>` (`tenantChatPath`). Validated by
+     * `validateTenantChatSlug` (tenant-chrome.ts).
+     */
+    slug: TenantChatSlugSchema.optional(),
+    /**
+     * TODO(P-exit): legacy stored full path, `/chat/<slug>` only. Normalised
+     * onto `slug` and dropped; must agree with `slug` when both are set.
+     */
+    pathPrefix: z.string().optional(),
+    /**
+     * A tenant product chat. Safe by default: premium meter on, the row's
+     * tokens-per-minute limit kept, no catalog picker. A row opts out only
+     * with explicit fields: `models.allowPicker: true` (picker),
+     * `models.premiumMeter: false` (meter), `guardrails.tpmLimit: false`
+     * (TPM). Omitted: not a product chat (legacy fallback aside, see
+     * legacy-tenant-defaults.ts).
+     */
+    productChat: z.boolean().optional(),
     placeholder: z.string().optional(),
     accent: AccentSchema.optional(),
     attribution: z.boolean().optional(),
@@ -250,7 +282,19 @@ export const ChromeSchema = z
       .default(DEFAULT_LANGUAGE_CODE),
     transcript: TranscriptSchema.default({ userAlign: "right" }),
   })
-  .strict();
+  .strict()
+  .superRefine((chrome, ctx) => {
+    const result = resolveTenantChatSlug(chrome);
+    if (!result.ok) ctx.addIssue({ code: "custom", message: result.detail, path: ["pathPrefix"] });
+  })
+  .transform((chrome) => {
+    if (chrome.pathPrefix === undefined) return chrome;
+    // TODO(P-exit): fold the legacy full path onto the slug.
+    const result = resolveTenantChatSlug(chrome);
+    const next = { ...chrome, slug: result.ok ? result.slug : chrome.slug };
+    delete next.pathPrefix;
+    return next;
+  });
 
 /**
  * Legacy `features.reasoning` / `features.toolCalls` disclosure keys fold
@@ -371,13 +415,19 @@ export const ModelsSchema = z
      */
     catalog: z.boolean().optional(),
     /**
-     * OCC visitor picker. On unless false, after Chris's sign-off (21 Oct
-     * 2026, 19:19 Rome): "Yes, enable the model picker on OCC for 2.6.6, I
-     * sign off on overriding the DIG-4488 lock". `false` keeps the operator
-     * model. A row that only shares the slug stays locked unless the flag
-     * is true. Tool and MCP locks stay closed.
+     * Legacy alias of `allowPicker` for the gated tenant, kept one release.
+     * TODO(P-exit): drop once tenant documents write `allowPicker`.
+     * On the legacy host it keeps its old rule: on unless false (`false`
+     * keeps the operator model); a row that only shares the slug stays
+     * locked unless true. Tool and MCP locks stay closed.
      */
     occPicker: z.boolean().optional(),
+    /**
+     * Tenant product chat only (`chrome.productChat`). The premium meter is on
+     * by default: the row's `costPerWindow`, else the house window. `false`
+     * opts the row out and drops any `costPerWindow`. Ignored elsewhere.
+     */
+    premiumMeter: z.boolean().optional(),
     /**
      * USD per million output tokens for the standard tier. The same number as
      * `limits.models.standard.maxOutputUsdPerMillion` when both are set.
@@ -429,6 +479,7 @@ export type ModelOffer = {
   allowPicker?: boolean;
   catalog?: boolean;
   occPicker?: boolean;
+  premiumMeter?: boolean;
   priceCapUsdPerMillion?: number;
   premiumCapUsdPerMillion?: number;
   costPerWindow?: { usd: number; windowSeconds?: number };
@@ -875,9 +926,15 @@ export const GuardrailsSchema = z
       .strict()
       .optional(),
     /**
+     * Tenant product chat only (`chrome.productChat`). The row's
+     * `tokensPerMinute` is kept by default; `false` opts the row out and
+     * drops it. Ignored elsewhere.
+     */
+    tpmLimit: z.boolean().optional(),
+    /**
      * Chat request limiter for this deployment. Omit or true keeps the
      * process default (per visitor, and per IP for anonymous embed).
-     * `false` turns it off. OCC does that. The tool-call cap and the
+     * `false` turns it off; the gated tenant does that. The tool-call cap and the
      * answer guard are separate and stay on.
      */
     rateLimit: z.boolean().optional(),
@@ -896,6 +953,29 @@ export const GuardrailsSchema = z
   });
 
 export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
+
+/**
+ * A tenant product chat keeps its tokens-per-minute limit unless it opts out
+ * (`guardrails.tpmLimit: false`). "On" with no number would be unlimited, so
+ * such a row is refused: it must write a positive `tokensPerMinute`
+ * (`deployment` or `user`) or opt out explicitly. Only rows that set
+ * `chrome.productChat: true` are checked; the legacy gated row (no
+ * `chrome.productChat`) keeps its legacy defaults (legacy-tenant-defaults.ts).
+ */
+export function productChatTpmIssue(
+  productChatFlag: boolean | undefined,
+  guardrails: Pick<GuardrailsConfig, "tpmLimit" | "tokensPerMinute"> | undefined,
+): string | null {
+  if (productChatFlag !== true) return null;
+  if (guardrails?.tpmLimit === false) return null;
+  const positive = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0;
+  const tpm = guardrails?.tokensPerMinute;
+  if (positive(tpm?.deployment) || positive(tpm?.user)) return null;
+  return (
+    "chrome.productChat needs a positive guardrails.tokensPerMinute (deployment or user), " +
+    "or guardrails.tpmLimit: false to opt out of the TPM limit"
+  );
+}
 
 /** Omitted means the request limiter is on. `false` is the per-deployment off switch. */
 export function deploymentRateLimitEnabled(
@@ -967,6 +1047,11 @@ export const DeploymentSchema = z
      * does not copy it. House puts the digithings corpus prompt here.
      */
     prompt: z.string().min(1).optional(),
+    /**
+     * Server-only access block (invite cookie + key reference). Never
+     * projected to the browser: the client config is an allowlist.
+     */
+    access: TenantAccessSchema.optional(),
   })
   .strict()
   .superRefine((dep, ctx) => {
@@ -984,6 +1069,10 @@ export const DeploymentSchema = z
             ? ["guardrails", "maxToolCallsPerTurn"]
             : ["backend", "maxToolCalls"],
       });
+    }
+    const tpmIssue = productChatTpmIssue(dep.chrome?.productChat, dep.guardrails);
+    if (tpmIssue) {
+      ctx.addIssue({ code: "custom", message: tpmIssue, path: ["guardrails", "tokensPerMinute"] });
     }
     if (dep.guardrails && dep.limits) {
       const disagree = limitsDisagree(dep.guardrails, dep.limits);
@@ -1060,7 +1149,7 @@ export const DigichatConfigSchema = z
     /** Single-install product shape (typical client deploy). */
     deployment: DeploymentSchema.optional(),
     /**
-     * Multi-host registry (digithings’ own container serving digithings.ai + OCC).
+     * Multi-host registry (digithings’ own container serving digithings.ai + tenant hosts).
      * Keys are hostnames / origins; aliases may also be listed on each entry.
      */
     hosts: z.record(z.string(), DeploymentSchema).optional(),
@@ -1072,6 +1161,21 @@ export const DigichatConfigSchema = z
         code: z.ZodIssueCode.custom,
         message: "digichat config requires deployment or at least one hosts entry",
       });
+    }
+    // Two tenants may not use the same chat slug (rows of one tenant may).
+    const claims: { tenant: string; chatSlug: string }[] = [];
+    for (const [host, dep] of Object.entries(val.hosts ?? {})) {
+      const chatSlug = dep.chrome?.slug;
+      if (!chatSlug) continue;
+      const result = validateTenantChatSlug(chatSlug, { tenant: dep.slug, others: claims });
+      if (!result.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.detail,
+          path: ["hosts", host, "chrome", "slug"],
+        });
+      }
+      claims.push({ tenant: dep.slug, chatSlug });
     }
   });
 
@@ -1175,23 +1279,113 @@ export function premiumModelsHeader(
 
 type CatalogModels = DigichatDeployment["models"];
 
-const OCC_EMBED_HOST = "occ.digithings.ai";
+/**
+ * TODO(P-exit): host/slug sniffing for the gated tenant, kept one release so
+ * its live row (which does not carry `chrome.productChat` yet) behaves
+ * byte-identically. New tenants set `chrome.productChat` instead.
+ */
+function isLegacyGatedHost(host: string | undefined): boolean {
+  return host === LEGACY_GATED_TENANT_HOST;
+}
 
-function isOccHost(host: string | undefined, slug: string | undefined): boolean {
-  return host === OCC_EMBED_HOST || slug === "occ";
+function isLegacyGatedTenant(host: string | undefined, slug: string | undefined): boolean {
+  return isLegacyGatedHost(host) || slug === LEGACY_GATED_TENANT_SLUG;
 }
 
 const HOUSE_EMBED_HOSTS: ReadonlySet<string> = new Set(["digithings.ai", "www.digithings.ai"]);
 
 /**
- * The two product chats are named by their host key, never by slug: a
- * customer row may carry any slug, and these rules grant a picker.
+ * Which product chat a host row is. The house is named by host; a tenant
+ * product chat by its document (`chrome.productChat`). A customer row may
+ * carry any slug, and these rules grant a picker, so the slug never decides.
  */
-function productChat(host: string, dep: DigichatDeployment): "occ" | "house" | null {
+export function productChat(host: string, dep: DigichatDeployment): "tenant" | "house" | null {
   if (dep.backend?.type === "foundry") return null;
-  if (host === OCC_EMBED_HOST) return "occ";
   if (HOUSE_EMBED_HOSTS.has(host)) return "house";
+  const flag = dep.chrome?.productChat;
+  if (flag === true) return "tenant";
+  if (flag === false) return null;
+  // TODO(P-exit): legacy fallback for the gated tenant's live row.
+  if (isLegacyGatedHost(host)) return "tenant";
   return null;
+}
+
+/** TODO(P-exit): the gated tenant's live row, before it sets `chrome.productChat`. */
+function isLegacyProductRow(host: string, dep: DigichatDeployment): boolean {
+  return dep.chrome?.productChat === undefined && isLegacyGatedHost(host);
+}
+
+/**
+ * Whether a tenant product chat keeps the operator model. A document that
+ * set `chrome.productChat` reads `allowPicker`, with `occPicker` accepted as
+ * its alias for one release. The legacy row keeps its old rule exactly:
+ * only `occPicker: false` locks it.
+ */
+function tenantModelsLocked(host: string, dep: DigichatDeployment): boolean {
+  if (isLegacyProductRow(host, dep)) {
+    // TODO(P-exit): legacy rule, from legacy-tenant-defaults.ts.
+    return LEGACY_GATED_TENANT_PRODUCT_CHAT.picker ? dep.models?.occPicker === false : true;
+  }
+  return (dep.models?.allowPicker ?? dep.models?.occPicker) === false;
+}
+
+/**
+ * A tenant product chat gets the catalog picker only when its document asks
+ * for it (`models.allowPicker: true`, or the `occPicker` alias). The legacy
+ * row keeps its picker on (legacy-tenant-defaults.ts).
+ */
+function tenantPickerRequested(host: string, dep: DigichatDeployment): boolean {
+  if (isLegacyProductRow(host, dep)) return LEGACY_GATED_TENANT_PRODUCT_CHAT.picker;
+  return (dep.models?.allowPicker ?? dep.models?.occPicker) === true;
+}
+
+/**
+ * Premium meter and tokens-per-minute limit of a tenant product chat. Both
+ * stay on unless the document opts out (`models.premiumMeter: false`,
+ * `guardrails.tpmLimit: false`). With the meter on and an open picker, a row
+ * that writes no window gets the house window, where the backend can meter.
+ * The legacy row keeps today's values (legacy-tenant-defaults.ts).
+ */
+function withTenantProductLimits(
+  host: string,
+  dep: DigichatDeployment,
+  models: CatalogModels,
+): { models: CatalogModels; guardrails: DigichatDeployment["guardrails"] } {
+  const legacy = isLegacyProductRow(host, dep);
+  const meterOn = legacy
+    ? LEGACY_GATED_TENANT_PRODUCT_CHAT.premiumMeter
+    : dep.models?.premiumMeter !== false;
+  const tpmOn = legacy
+    ? LEGACY_GATED_TENANT_PRODUCT_CHAT.tpmLimit
+    : dep.guardrails?.tpmLimit !== false;
+  let next = models;
+  if (next && !meterOn && next.costPerWindow) {
+    next = { ...next };
+    delete next.costPerWindow;
+  } else if (
+    next &&
+    meterOn &&
+    !next.costPerWindow &&
+    next.allowPicker === true &&
+    limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) !== "unsupported"
+  ) {
+    next = { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
+  }
+  return { models: next, guardrails: tpmOn ? dep.guardrails : withoutTpm(dep.guardrails) };
+}
+
+/**
+ * `occPicker` folded onto `allowPicker` for a document that set
+ * `chrome.productChat` (TODO(P-exit): alias, one release). The legacy row is
+ * left exactly as it is.
+ */
+function withAllowPickerAlias(host: string, dep: DigichatDeployment): CatalogModels {
+  const models = dep.models;
+  if (isLegacyProductRow(host, dep)) return models;
+  if (!models || models.allowPicker !== undefined || typeof models.occPicker !== "boolean") {
+    return models;
+  }
+  return { ...models, allowPicker: models.occPicker };
 }
 
 /** Presets both product chats open with. The router stays off (2.6.6). */
@@ -1204,25 +1398,25 @@ const PRODUCT_PICKER_PRESETS = ["auto", "reasoning", "fast", "light"] as const;
 const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
 
 /**
- * Picker defaults for the two product chats. A registry row that names no
+ * Picker defaults for the product chats. A registry row that names no
  * model policy used to fall back to "no list, no picker" after #6193, which
- * hid the model chip on digithings.ai and OCC. Both now open with the catalog
- * picker unless the row turns it off (`allowPicker: false`, or
- * `occPicker: false` on OCC). A hand-written list is left alone.
+ * hid the model chip on the product chats. They now open with the catalog
+ * picker unless the row turns it off (`allowPicker: false`, or its legacy
+ * alias). A hand-written list is left alone.
  *
- * The house always keeps a premium window. OCC never carries one: Chris,
- * 21 Oct 2026 22:51 Rome, "OCC has no token limits and no premium meter".
+ * The house always keeps a premium window. A tenant product chat's meter
+ * and tokens-per-minute limit are set by `withTenantProductLimits`.
  */
-function withProductPickerDefaults(models: CatalogModels, kind: "occ" | "house"): CatalogModels {
+function withProductPickerDefaults(
+  models: CatalogModels,
+  kind: "tenant" | "house",
+): CatalogModels {
   const base: NonNullable<CatalogModels> = models ?? { available: [] };
   const limits = (next: NonNullable<CatalogModels>): NonNullable<CatalogModels> => {
     if (kind === "house") {
       return next.costPerWindow ? next : { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
     }
-    if (!next.costPerWindow) return next;
-    const open = { ...next };
-    delete open.costPerWindow;
-    return open;
+    return next;
   };
   if (base.allowPicker === false) return limits(base);
   if ((base.available?.length ?? 0) > 0 && base.catalog !== true) return limits(base);
@@ -1239,7 +1433,7 @@ function withProductPickerDefaults(models: CatalogModels, kind: "occ" | "house")
   });
 }
 
-/** OCC has no token-per-minute limit. The tool-call cap and answer guard stay. */
+/** A tenant product chat has no token-per-minute limit. The tool-call cap and answer guard stay. */
 function withoutTpm(
   guardrails: DigichatDeployment["guardrails"],
 ): DigichatDeployment["guardrails"] {
@@ -1249,8 +1443,8 @@ function withoutTpm(
   return next;
 }
 
-/** OCC with `occPicker: false` keeps the operator model: no list, no picker. */
-function lockOccModels(models: CatalogModels): CatalogModels {
+/** A locked tenant product chat keeps the operator model: no list, no picker. */
+function lockTenantModels(models: CatalogModels): CatalogModels {
   if (!models) return models;
   const next: CatalogModels = { ...models, available: [], allowPicker: false };
   delete next.picker;
@@ -1309,29 +1503,47 @@ function applyCatalogConfig(
   const hosts = config.hosts
     ? Object.fromEntries(
         Object.entries(config.hosts).map(([host, dep]) => {
-          // Chris signed off the OCC picker (21 Oct 2026, 19:19 Rome), so the
-          // OCC host is on unless its row says `occPicker: false`. Another row
-          // that only shares the slug keeps the old rule: locked unless true.
           const kind = productChat(host, dep);
-          const occLocked =
-            kind === "occ"
-              ? dep.models?.occPicker === false
-              : isOccHost(host, dep.slug) && dep.models?.occPicker !== true;
-          if (occLocked && kind === "occ") {
-            // OCC with the picker off: the operator model, and still no meter or TPM.
-            const locked = lockOccModels(dep.models);
-            if (locked?.costPerWindow) delete locked.costPerWindow;
+          const tenantLocked =
+            kind === "tenant"
+              ? tenantModelsLocked(host, dep)
+              : // TODO(P-exit): a non-product row that shares the legacy slug.
+                isLegacyGatedTenant(host, dep.slug) && dep.models?.occPicker !== true;
+          if (tenantLocked && kind === "tenant") {
+            // Picker off: the operator model. Meter and TPM per the document.
+            const limited = withTenantProductLimits(host, dep, lockTenantModels(dep.models));
             return [
               host,
               {
                 ...dep,
                 features: { ...dep.features, modelPicker: false },
-                guardrails: withoutTpm(dep.guardrails),
-                models: locked,
+                guardrails: limited.guardrails,
+                models: limited.models,
               },
             ];
           }
-          if (occLocked) {
+          if (kind === "tenant" && !tenantPickerRequested(host, dep)) {
+            // Safe default: no catalog picker unless the document asks for
+            // one. The row's own model list stays the allowlist.
+            const models = applyModelCatalog(
+              dep.models,
+              `${ctx} hosts.${host}`,
+              openRouterConfigured,
+            );
+            const closed = models ? { ...models, allowPicker: false } : models;
+            if (closed) delete closed.picker;
+            const limited = withTenantProductLimits(host, dep, closed);
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: false },
+                guardrails: limited.guardrails,
+                models: limited.models,
+              },
+            ];
+          }
+          if (tenantLocked) {
             // A non-product row that shares the slug: withhold the picker, keep
             // its own model list so the chat route still enforces it.
             const models = applyModelCatalog(
@@ -1347,25 +1559,34 @@ function applyCatalogConfig(
             ];
           }
           const models = applyModelCatalog(
-            kind ? withProductPickerDefaults(dep.models, kind) : dep.models,
+            kind
+              ? withProductPickerDefaults(
+                  kind === "tenant" ? withAllowPickerAlias(host, dep) : dep.models,
+                  kind,
+                )
+              : dep.models,
             `${ctx} hosts.${host}`,
             openRouterConfigured,
           );
-          if (kind) {
-            const open = models?.allowPicker === true;
+          if (kind === "tenant") {
+            const limited = withTenantProductLimits(host, dep, models);
             return [
               host,
               {
                 ...dep,
-                features: { ...dep.features, modelPicker: open },
-                ...(kind === "occ" ? { guardrails: withoutTpm(dep.guardrails) } : {}),
-                models,
+                features: { ...dep.features, modelPicker: limited.models?.allowPicker === true },
+                guardrails: limited.guardrails,
+                models: limited.models,
               },
             ];
           }
-          if (isOccHost(host, dep.slug)) {
-            // A non-product row that only shares the OCC slug keeps the
-            // pre-2.6.8 rule: its own occPicker opens the picker.
+          if (kind) {
+            const open = models?.allowPicker === true;
+            return [host, { ...dep, features: { ...dep.features, modelPicker: open }, models }];
+          }
+          if (isLegacyGatedTenant(host, dep.slug)) {
+            // TODO(P-exit): a non-product row that only shares the legacy
+            // slug keeps the pre-2.6.8 rule: its own occPicker opens the picker.
             return [host, { ...dep, features: { ...dep.features, modelPicker: true }, models }];
           }
           return [host, { ...dep, models }];
