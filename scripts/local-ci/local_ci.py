@@ -312,8 +312,10 @@ NPM_ROOT_INPUTS = ("package.json", "package-lock.json", ".npmrc", ".nvmrc",
 NPM_DEP_FIELDS = ("dependencies", "devDependencies", "peerDependencies",
                   "optionalDependencies")
 NPM_TEST_TIMEOUT = 600
-# Two suites at once: each vitest run already uses one worker per core.
-NPM_POOL = 2
+# One suite at a time: each vitest run already uses one worker per core, and
+# two at once oversubscribed the CPU until 5s test timeouts fired (digichat
+# product-shell.suggestions, 3 of 3 pooled runs). Serial was green and faster.
+NPM_POOL = 1
 # Paid inference must never be reachable from a gate run. Same rule as the
 # pytest lane: a test that lost its mock fails on a missing key instead of
 # spending money.

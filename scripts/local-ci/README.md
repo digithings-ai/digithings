@@ -397,7 +397,8 @@ prove:
 If the mapping cannot be computed (an unreadable manifest, a missing lane
 block, no `workspaces` in the root manifest) every workspace runs: the gate
 fails closed. One `npm ci` serves every suite, and a tick whose worker build
-already installed reuses that install. Suites run two at a time with every
+already installed reuses that install. Suites run one at a time (each vitest
+run already fills every core; two at once tripped 5s test timeouts) with every
 credential-looking variable removed and `CI=1` set, so no test can reach a paid
 inference API. The log names each selected workspace and why; the receipt
 names the suites (`npm 2/2: digichat, ui`) or says `npm: none`.
