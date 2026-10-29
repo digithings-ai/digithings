@@ -155,5 +155,5 @@ export const BRAND_SKIN_CSS = `
 [data-brand-shape="pill"] .digichat-thread :is(.aui-thread-welcome-suggestion, .aui-composer-send) { border-radius: 9999px; }
 [data-brand-shape="pill"] .digichat-thread .aui-user-message-content-wrapper { border-radius: 1.25rem; }
 [data-brand-shape="pill"] .digichat-thread .aui-composer-root > .border-hair { border-radius: 1.75rem; padding-inline: 0.5rem; }
-.light[data-brand] .digichat-thread .aui-composer-root > .border-hair { background: #fff; }
+.light[data-brand] .digichat-thread .aui-composer-root > .border-hair { background: #fff; /* canon-allow: brand skin pins a white composer on the light peach page; no token for it */ }
 `;

@@ -224,6 +224,21 @@ class WorkflowRequest(BaseModel):
             "never trusted from the client. None means no skills."
         ),
     )
+    web_search_domains: list[str] | None = Field(
+        None,
+        description=(
+            "Tenant map webSearchDomains: hostnames web_search is pinned to. "
+            "Overwritten server-side from the tenant map, never trusted from the client."
+        ),
+    )
+    web_search_site: str | None = Field(
+        None,
+        description=(
+            "Id of the repo-shipped site graph for this tenant's web_search tool "
+            "description. Overwritten server-side from the tenant map, never trusted "
+            "from the client."
+        ),
+    )
     lock_session_controls: bool = Field(
         False,
         description=(

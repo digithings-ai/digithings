@@ -384,6 +384,9 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     # would hand one tenant's skill documents to the next request on it.
     initial["skill_pack"] = req.skill_pack
     initial["skills"] = req.skills
+    # Tenant web_search pin. Unconditional, same reason: never sticks across turns.
+    initial["web_search_domains"] = req.web_search_domains
+    initial["web_search_site"] = req.web_search_site
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool

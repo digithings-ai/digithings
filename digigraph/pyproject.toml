@@ -70,7 +70,7 @@ where = ["src"]
 # SKILL.md folders ship with the package, the same way digiquant ships its
 # skills/**/*.md (see issue #486 there): a pip-install must be self-contained
 # or an installed digigraph silently has no skills to serve.
-digigraph = ["schemas/*.json", "skill_library/*/*.md"]
+digigraph = ["schemas/*.json", "skill_library/*/*.md", "web_search_sites/*.md"]
 
 [tool.ruff]
 line-length = 100

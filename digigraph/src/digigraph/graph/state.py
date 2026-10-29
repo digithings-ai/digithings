@@ -67,6 +67,10 @@ class WorkflowState(TypedDict, total=False):
     # the digisearch_index comment above; same LangGraph dropped-key pitfall.
     skill_pack: str | None
     skills: list[str] | None
+    # Tenant map webSearchDomains: hostnames web_search is pinned to (None: unpinned).
+    web_search_domains: list[str] | None
+    # Site graph id for the web_search tool description (web_search_sites/<id>.md).
+    web_search_site: str | None
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None
