@@ -48,6 +48,9 @@ function row(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** A product chat row needs a TPM (or an explicit `guardrails.tpmLimit: false`). */
+const TPM = { tokensPerMinute: { user: 80_000 } };
+
 function registry(rows: Record<string, unknown>) {
   return JSON.stringify(rows);
 }
@@ -254,6 +257,7 @@ describe("Guard: the client config is an allowlist (access.invite never leaks)",
       title: "Example chat",
       chatSlug: "example",
       productChat: true,
+      guardrails: TPM,
       gateMode: "invite",
       access: {
         invite: { cookieName: "example_invite", label: "Example invite", keyRef: INVITE_REF },
@@ -388,11 +392,15 @@ describe("Guard: gated tenants fail closed (claims live outside the doc)", () =>
 describe("chrome.productChat and the models.allowPicker alias", () => {
   const picker = (models: Record<string, unknown>) =>
     hostDeployment(HOST_A, {
-      [HOST_A]: row({ productChat: true, models: { available: ["model-a"], default: "model-a", ...models } }),
+      [HOST_A]: row({
+        productChat: true,
+        guardrails: TPM,
+        models: { available: ["model-a"], default: "model-a", ...models },
+      }),
     });
 
   it("productChat comes from the tenant doc, not the host", () => {
-    const dep = hostDeployment(HOST_A, { [HOST_A]: row({ productChat: true }) });
+    const dep = hostDeployment(HOST_A, { [HOST_A]: row({ productChat: true, guardrails: TPM }) });
     expect(dep.chrome.productChat).toBe(true);
     expect(productChat(HOST_A, dep)).toBe("tenant");
     const plain = hostDeployment(HOST_A, { [HOST_A]: row() });
@@ -459,7 +467,7 @@ describe("chrome.productChat: safe by default, explicit opt-outs", () => {
   });
 
   it("a bare productChat row gets no catalog picker", () => {
-    const dep = hostDeployment(HOST_A, { [HOST_A]: row({ productChat: true }) });
+    const dep = hostDeployment(HOST_A, { [HOST_A]: row({ productChat: true, guardrails: TPM }) });
     expect(dep.features.modelPicker).toBe(false);
     expect(dep.models.allowPicker).toBe(false);
     expect(dep.models.catalog).toBeUndefined();
@@ -495,13 +503,17 @@ describe("chrome.productChat: safe by default, explicit opt-outs", () => {
 
   it("an opened catalog picker with no written window gets the house meter", () => {
     const dep = hostDeployment(HOST_A, {
-      [HOST_A]: row({ productChat: true, models: { allowPicker: true } }),
+      [HOST_A]: row({ productChat: true, guardrails: TPM, models: { allowPicker: true } }),
     });
     expect(dep.features.modelPicker).toBe(true);
     expect(dep.models.catalog).toBe(true);
     expect(dep.models.costPerWindow?.usd).toBeGreaterThan(0);
     const optedOut = hostDeployment(HOST_A, {
-      [HOST_A]: row({ productChat: true, models: { allowPicker: true, premiumMeter: false } }),
+      [HOST_A]: row({
+        productChat: true,
+        guardrails: TPM,
+        models: { allowPicker: true, premiumMeter: false },
+      }),
     });
     expect(optedOut.models.costPerWindow).toBeUndefined();
   });
@@ -510,6 +522,82 @@ describe("chrome.productChat: safe by default, explicit opt-outs", () => {
     expect(() =>
       parseEmbedTenants(registry({ [HOST_A]: row({ models: { premiumMeter: "no" } }) })),
     ).toThrow(/premiumMeter must be a boolean/);
+  });
+});
+
+describe("chrome.productChat: TPM on with no number is refused", () => {
+  const productRow = (guardrails?: Record<string, unknown>) =>
+    row({ productChat: true, chatSlug: "example", ...(guardrails ? { guardrails } : {}) });
+  const deploymentDoc = (guardrails?: Record<string, unknown>) => ({
+    slug: "example",
+    chrome: { productChat: true },
+    backend: { type: "digigraph" },
+    ...(guardrails ? { guardrails } : {}),
+  });
+
+  it("a new productChat row with no tokensPerMinute is refused by the schema check", () => {
+    for (const g of [undefined, {}, { tpmLimit: true }, { tokensPerMinute: {} }]) {
+      const res = DeploymentSchema.safeParse(deploymentDoc(g));
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.issues.map((i) => i.message).join("\n")).toMatch(
+          /chrome\.productChat needs a positive guardrails\.tokensPerMinute/,
+        );
+      }
+    }
+  });
+
+  it("the registry loader refuses the same row, and the tenant fails closed", async () => {
+    expect(() => parseEmbedTenants(registry({ [HOST_A]: productRow() }))).toThrow(
+      /chrome\.productChat needs a positive guardrails\.tokensPerMinute/,
+    );
+    expect(() =>
+      loadDigichatConfig({ env: { DIGICHAT_EMBED_TENANTS: registry({ [HOST_A]: productRow() }) } }),
+    ).toThrow(/tokensPerMinute/);
+
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", registry({ [HOST_A]: productRow() }));
+    expect(() => getEmbedTenantRegistry()).toThrow(/tokensPerMinute/);
+    // No valid doc: the tenant path is gated-unknown, never the house default.
+    expect(classifyTenantChatPath("/chat/example", null)).toEqual({
+      kind: "gated-unknown",
+      chatSlug: "example",
+    });
+    const res = await tenantConfigGET(
+      new Request("http://127.0.0.1/api/embed/tenant-config", {
+        headers: { "x-embed-host": `https://${HOST_A}` },
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain("example");
+  });
+
+  it("the same row with guardrails.tpmLimit: false loads", () => {
+    expect(DeploymentSchema.safeParse(deploymentDoc({ tpmLimit: false })).success).toBe(true);
+    const dep = hostDeployment(HOST_A, { [HOST_A]: productRow({ tpmLimit: false }) });
+    expect(productChat(HOST_A, dep)).toBe("tenant");
+    expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
+  });
+
+  it("the same row with a positive tokensPerMinute loads and keeps that number", () => {
+    expect(
+      DeploymentSchema.safeParse(deploymentDoc({ tokensPerMinute: { deployment: 120_000 } })).success,
+    ).toBe(true);
+    const dep = hostDeployment(HOST_A, {
+      [HOST_A]: productRow({ tokensPerMinute: { deployment: 120_000, user: 40_000 } }),
+    });
+    expect(dep.guardrails?.tokensPerMinute).toEqual({ deployment: 120_000, user: 40_000 });
+  });
+
+  it("a zero, negative or non-numeric tokensPerMinute is refused", () => {
+    for (const bad of [0, -1, "80000", Number.NaN, 1.5]) {
+      const g = { tokensPerMinute: { user: bad } };
+      expect(DeploymentSchema.safeParse(deploymentDoc(g)).success).toBe(false);
+      expect(() => parseEmbedTenants(registry({ [HOST_A]: productRow(g) }))).toThrow();
+    }
+  });
+
+  it("a row that is not a product chat needs no TPM", () => {
+    expect(() => parseEmbedTenants(registry({ [HOST_A]: row() }))).not.toThrow();
   });
 });
 

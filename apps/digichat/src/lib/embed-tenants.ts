@@ -16,6 +16,7 @@ import type { ActivityDetail } from "@/lib/chat-activity";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
+  productChatTpmIssue,
   toolCallCapIssue,
   type GuardrailsConfig,
   type ModelOffer,
@@ -986,6 +987,11 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     }
     guardrails = parsed.data;
   }
+  const tpmIssue = productChatTpmIssue(
+    typeof v.productChat === "boolean" ? v.productChat : undefined,
+    guardrails,
+  );
+  if (tpmIssue) throw new Error(`${ctx}: ${tpmIssue}`);
   const capIssue = toolCallCapIssue(
     backendCfg.type,
     guardrails?.maxToolCallsPerTurn ??

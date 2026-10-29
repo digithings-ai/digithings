@@ -954,6 +954,29 @@ export const GuardrailsSchema = z
 
 export type GuardrailsConfig = z.infer<typeof GuardrailsSchema>;
 
+/**
+ * A tenant product chat keeps its tokens-per-minute limit unless it opts out
+ * (`guardrails.tpmLimit: false`). "On" with no number would be unlimited, so
+ * such a row is refused: it must write a positive `tokensPerMinute`
+ * (`deployment` or `user`) or opt out explicitly. Only rows that set
+ * `chrome.productChat: true` are checked; the legacy gated row (no
+ * `chrome.productChat`) keeps its legacy defaults (legacy-tenant-defaults.ts).
+ */
+export function productChatTpmIssue(
+  productChatFlag: boolean | undefined,
+  guardrails: Pick<GuardrailsConfig, "tpmLimit" | "tokensPerMinute"> | undefined,
+): string | null {
+  if (productChatFlag !== true) return null;
+  if (guardrails?.tpmLimit === false) return null;
+  const positive = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0;
+  const tpm = guardrails?.tokensPerMinute;
+  if (positive(tpm?.deployment) || positive(tpm?.user)) return null;
+  return (
+    "chrome.productChat needs a positive guardrails.tokensPerMinute (deployment or user), " +
+    "or guardrails.tpmLimit: false to opt out of the TPM limit"
+  );
+}
+
 /** Omitted means the request limiter is on. `false` is the per-deployment off switch. */
 export function deploymentRateLimitEnabled(
   guardrails: { rateLimit?: boolean } | null | undefined,
@@ -1046,6 +1069,10 @@ export const DeploymentSchema = z
             ? ["guardrails", "maxToolCallsPerTurn"]
             : ["backend", "maxToolCalls"],
       });
+    }
+    const tpmIssue = productChatTpmIssue(dep.chrome?.productChat, dep.guardrails);
+    if (tpmIssue) {
+      ctx.addIssue({ code: "custom", message: tpmIssue, path: ["guardrails", "tokensPerMinute"] });
     }
     if (dep.guardrails && dep.limits) {
       const disagree = limitsDisagree(dep.guardrails, dep.limits);
