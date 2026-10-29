@@ -34,9 +34,21 @@
  * compose/self-host compat credential, and its write surface stays gated by the
  * server's own env flag (`DIGIVAULT_MCP_WRITE`).
  *
+ * Identity, not just scope (#6648). A JWT must carry a tenant claim
+ * (`tenant_slug`): a claimless token has no tenant for the server behind the
+ * edge to bind its data to, so it is refused (401 `missing_tenant`). A bare
+ * `*` grant is refused too (403 `wildcard_scope`) unless the token belongs to
+ * the house tenant: `*` is what a CLI-default API key used to carry, and it
+ * must not open another tenant's MCP server by accident. The servers behind the
+ * edge still re-read the tenant from the token and bind their data to it
+ * (digisearch `tenant_index_scope`, digivault `mcp_tenant`); the edge check is
+ * the first of the two layers, not the only one.
+ *
  * Never log the token, a prefix of it, or the key. The decision log carries the
  * server id, which credential path won, the scope and a fixed reason string.
  */
+
+import { HOUSE_TENANT_SLUG, LIVE_HOUSE_TENANT_SLUG } from "./tenant-config";
 
 /**
  * Scope each edge server requires to be reached at all. One entry per
@@ -66,6 +78,16 @@ export const MCP_EDGE_SCOPES: Record<string, string> = {
 export const MCP_EDGE_WRITE_SCOPES: Record<string, Record<string, string>> = {
   digivault: { create_note: "mcp:digivault:write" },
 };
+
+/**
+ * Tenants whose tokens may use a bare `*` grant at the edge. Both house slugs:
+ * the corpus map keys the house as `digithings` and the live chat resolves it
+ * as `digithings-ai` (see `tenant-config.ts`).
+ */
+export const MCP_EDGE_WILDCARD_TENANTS: ReadonlySet<string> = new Set([
+  HOUSE_TENANT_SLUG,
+  LIVE_HOUSE_TENANT_SLUG,
+]);
 
 /** The scope a caller must hold to reach `serverId`, or "" when unmapped. */
 export function mcpScopeForServer(serverId: string): string {
@@ -130,8 +152,8 @@ export type McpEdgeAuthResult =
       ok: false;
       status: 400 | 401 | 403;
       /**
-       * Fixed, token-free reason. `missing_scope` is the only 403; everything
-       * else is a 401, except `uninspectable_body`, a 400.
+       * Fixed, token-free reason. `missing_scope` and `wildcard_scope` are
+       * the 403s; everything else is a 401, except `uninspectable_body`, a 400.
        */
       reason:
         | "no_credential"
@@ -147,6 +169,8 @@ export type McpEdgeAuthResult =
         | "wrong_issuer"
         | "wrong_audience"
         | "missing_scope"
+        | "missing_tenant"
+        | "wildcard_scope"
         | "uninspectable_body";
     };
 
@@ -160,6 +184,7 @@ type Claims = {
   iat?: unknown;
   scope?: unknown;
   scopes?: unknown;
+  tenant_slug?: unknown;
 };
 
 type JwksState = { keys: Map<string, CryptoKey>; fetchedAtMs: number };
@@ -395,7 +420,7 @@ export function scopeGrants(granted: readonly string[], required: string): boole
 }
 
 type VerifyResult =
-  | { ok: true; scopes: string[] }
+  | { ok: true; scopes: string[]; tenant: string }
   | { ok: false; reason: Extract<McpEdgeAuthResult, { ok: false }>["reason"] };
 
 /**
@@ -489,7 +514,8 @@ export async function verifyDigikeyJwt(
     return { ok: false, reason: "wrong_audience" };
   }
 
-  return { ok: true, scopes: tokenScopes(claims) };
+  const tenant = typeof claims.tenant_slug === "string" ? claims.tenant_slug.trim() : "";
+  return { ok: true, scopes: tokenScopes(claims), tenant };
 }
 
 /**
@@ -637,6 +663,24 @@ export async function authorizeMcpEdge(opts: {
   if (!verified.ok) {
     logDecision({ serverId, ok: false, status: 401, reason: verified.reason });
     return { ok: false, status: 401, reason: verified.reason };
+  }
+
+  // A token with no tenant claim has no tenant for the server to bind its
+  // data to: refuse it rather than let the server guess (#6648).
+  if (!verified.tenant) {
+    logDecision({ serverId, ok: false, status: 401, reason: "missing_tenant" });
+    return { ok: false, status: 401, reason: "missing_tenant" };
+  }
+
+  // A bare `*` opens every server and every write tool. Only the house may
+  // present one here; any other tenant needs the explicit `mcp:<serverId>`
+  // (or `mcp:*`) grant (#6648).
+  if (
+    verified.scopes.some((s) => s.trim() === "*") &&
+    !MCP_EDGE_WILDCARD_TENANTS.has(verified.tenant.toLowerCase())
+  ) {
+    logDecision({ serverId, ok: false, status: 403, reason: "wildcard_scope" });
+    return { ok: false, status: 403, reason: "wildcard_scope" };
   }
 
   const required = mcpScopeForServer(serverId);
