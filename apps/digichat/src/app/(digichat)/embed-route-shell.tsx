@@ -24,6 +24,7 @@ import {
   themePinScript,
 } from "@/lib/embed-site-theme";
 import { LayoutLines } from "@digithings/ui";
+import { skinShowsSiteRails } from "@digithings/ui/chat/skins";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
@@ -139,8 +140,9 @@ export default async function EmbedRouteShell({
       />
       <script dangerouslySetInnerHTML={{ __html: SITE_RAILS_SCRIPT }} />
       {/* Hidden unless the pre-paint script marked this document top-level,
-          so an iframed dashboard or website embed does not draw a second pair. */}
-      <LayoutLines className="dc-site-rails" />
+          so an iframed dashboard or website embed does not draw a second pair.
+          The lines are the house look: only a skin that carries them mounts them. */}
+      {skinShowsSiteRails(seededCfg.skin) ? <LayoutLines className="dc-site-rails" /> : null}
       <EmbedClient
         initialTenantCfg={seededCfg}
         initialBoot={first(params.boot) ?? null}

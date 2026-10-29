@@ -32,6 +32,8 @@ export {
   parseThreadSkin,
 
   skinOwnsPageChrome,
+  skinShowsSiteRails,
+  SITE_RAILS_SKINS,
   threadSkinChoices,
   type CloneSkin,
   type FramedChromeMode,
