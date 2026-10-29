@@ -15,6 +15,7 @@ import {
   toStockChatPrefsConfig,
 } from "@/lib/route-client-config";
 import { p } from "@/lib/base-path";
+import { catalogHref } from "./catalog-href";
 import { cn } from "@/lib/utils";
 import {
   parseThreadSkin,
@@ -144,14 +145,6 @@ function BaselineClientInner() {
     redo: noop,
   });
 
-  const hrefFor = (nextSkin: string, nextTheme: string) => {
-    const qs = new URLSearchParams();
-    if (nextSkin !== "base") qs.set("skin", nextSkin);
-    if (nextTheme === "dark") qs.set("theme", "dark");
-    const query = qs.toString();
-    return query ? `/baseline?${query}` : "/baseline";
-  };
-
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className={cn("flex h-dvh flex-col", theme === "dark" && "dark")}>
@@ -160,7 +153,7 @@ function BaselineClientInner() {
           className="flex shrink-0 flex-wrap items-center gap-1 border-b border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400"
         >
           {THREAD_SKINS.map((id) => {
-            const href = hrefFor(id, theme);
+            const href = catalogHref(id, theme);
             const active = skin === id;
             return (
               <a
@@ -176,7 +169,7 @@ function BaselineClientInner() {
             );
           })}
           <a
-            href={hrefFor(skin, theme === "dark" ? "light" : "dark")}
+            href={catalogHref(skin, theme === "dark" ? "light" : "dark")}
             className="ml-auto rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
           >
             {theme === "dark" ? "light" : "dark"}
