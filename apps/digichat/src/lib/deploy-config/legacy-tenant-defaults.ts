@@ -26,3 +26,21 @@ export const LEGACY_GATED_TENANTS: ReadonlyArray<{
     host: LEGACY_GATED_TENANT_HOST,
   },
 ];
+
+/**
+ * TODO(P-exit): the product-chat settings the gated tenant's live row has
+ * today, applied only to that row while it does not set `chrome.productChat`.
+ * Every other product chat starts safe: premium meter on, tokens-per-minute
+ * limit kept, no catalog picker unless `models.allowPicker: true`. When the
+ * client repo writes the new fields it writes these values explicitly
+ * (`models.premiumMeter: false`, `guardrails.tpmLimit: false`,
+ * `models.allowPicker: true`) and this block goes.
+ */
+export const LEGACY_GATED_TENANT_PRODUCT_CHAT = {
+  /** No premium meter. */
+  premiumMeter: false,
+  /** No tokens-per-minute limit. */
+  tpmLimit: false,
+  /** Catalog picker on unless the row writes `models.occPicker: false`. */
+  picker: true,
+} as const;

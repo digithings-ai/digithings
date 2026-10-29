@@ -21,6 +21,7 @@ import {
 import { HEX_COLOR } from "@/lib/hex-color";
 import {
   LEGACY_GATED_TENANT_HOST,
+  LEGACY_GATED_TENANT_PRODUCT_CHAT,
   LEGACY_GATED_TENANT_SLUG,
 } from "./legacy-tenant-defaults";
 import {
@@ -263,9 +264,12 @@ export const ChromeSchema = z
      */
     pathPrefix: z.string().optional(),
     /**
-     * A tenant product chat: catalog picker by default, no premium meter, no
-     * tokens-per-minute limit. Omitted: not a product chat (legacy fallback
-     * aside, see legacy-tenant-defaults.ts).
+     * A tenant product chat. Safe by default: premium meter on, the row's
+     * tokens-per-minute limit kept, no catalog picker. A row opts out only
+     * with explicit fields: `models.allowPicker: true` (picker),
+     * `models.premiumMeter: false` (meter), `guardrails.tpmLimit: false`
+     * (TPM). Omitted: not a product chat (legacy fallback aside, see
+     * legacy-tenant-defaults.ts).
      */
     productChat: z.boolean().optional(),
     placeholder: z.string().optional(),
@@ -419,6 +423,12 @@ export const ModelsSchema = z
      */
     occPicker: z.boolean().optional(),
     /**
+     * Tenant product chat only (`chrome.productChat`). The premium meter is on
+     * by default: the row's `costPerWindow`, else the house window. `false`
+     * opts the row out and drops any `costPerWindow`. Ignored elsewhere.
+     */
+    premiumMeter: z.boolean().optional(),
+    /**
      * USD per million output tokens for the standard tier. The same number as
      * `limits.models.standard.maxOutputUsdPerMillion` when both are set.
      */
@@ -469,6 +479,7 @@ export type ModelOffer = {
   allowPicker?: boolean;
   catalog?: boolean;
   occPicker?: boolean;
+  premiumMeter?: boolean;
   priceCapUsdPerMillion?: number;
   premiumCapUsdPerMillion?: number;
   costPerWindow?: { usd: number; windowSeconds?: number };
@@ -915,6 +926,12 @@ export const GuardrailsSchema = z
       .strict()
       .optional(),
     /**
+     * Tenant product chat only (`chrome.productChat`). The row's
+     * `tokensPerMinute` is kept by default; `false` opts the row out and
+     * drops it. Ignored elsewhere.
+     */
+    tpmLimit: z.boolean().optional(),
+    /**
      * Chat request limiter for this deployment. Omit or true keeps the
      * process default (per visitor, and per IP for anonymous embed).
      * `false` turns it off; the gated tenant does that. The tool-call cap and the
@@ -1266,6 +1283,11 @@ export function productChat(host: string, dep: DigichatDeployment): "tenant" | "
   return null;
 }
 
+/** TODO(P-exit): the gated tenant's live row, before it sets `chrome.productChat`. */
+function isLegacyProductRow(host: string, dep: DigichatDeployment): boolean {
+  return dep.chrome?.productChat === undefined && isLegacyGatedHost(host);
+}
+
 /**
  * Whether a tenant product chat keeps the operator model. A document that
  * set `chrome.productChat` reads `allowPicker`, with `occPicker` accepted as
@@ -1273,11 +1295,56 @@ export function productChat(host: string, dep: DigichatDeployment): "tenant" | "
  * only `occPicker: false` locks it.
  */
 function tenantModelsLocked(host: string, dep: DigichatDeployment): boolean {
-  if (dep.chrome?.productChat === undefined && isLegacyGatedHost(host)) {
-    // TODO(P-exit): legacy rule.
-    return dep.models?.occPicker === false;
+  if (isLegacyProductRow(host, dep)) {
+    // TODO(P-exit): legacy rule, from legacy-tenant-defaults.ts.
+    return LEGACY_GATED_TENANT_PRODUCT_CHAT.picker ? dep.models?.occPicker === false : true;
   }
   return (dep.models?.allowPicker ?? dep.models?.occPicker) === false;
+}
+
+/**
+ * A tenant product chat gets the catalog picker only when its document asks
+ * for it (`models.allowPicker: true`, or the `occPicker` alias). The legacy
+ * row keeps its picker on (legacy-tenant-defaults.ts).
+ */
+function tenantPickerRequested(host: string, dep: DigichatDeployment): boolean {
+  if (isLegacyProductRow(host, dep)) return LEGACY_GATED_TENANT_PRODUCT_CHAT.picker;
+  return (dep.models?.allowPicker ?? dep.models?.occPicker) === true;
+}
+
+/**
+ * Premium meter and tokens-per-minute limit of a tenant product chat. Both
+ * stay on unless the document opts out (`models.premiumMeter: false`,
+ * `guardrails.tpmLimit: false`). With the meter on and an open picker, a row
+ * that writes no window gets the house window, where the backend can meter.
+ * The legacy row keeps today's values (legacy-tenant-defaults.ts).
+ */
+function withTenantProductLimits(
+  host: string,
+  dep: DigichatDeployment,
+  models: CatalogModels,
+): { models: CatalogModels; guardrails: DigichatDeployment["guardrails"] } {
+  const legacy = isLegacyProductRow(host, dep);
+  const meterOn = legacy
+    ? LEGACY_GATED_TENANT_PRODUCT_CHAT.premiumMeter
+    : dep.models?.premiumMeter !== false;
+  const tpmOn = legacy
+    ? LEGACY_GATED_TENANT_PRODUCT_CHAT.tpmLimit
+    : dep.guardrails?.tpmLimit !== false;
+  let next = models;
+  if (next && !meterOn && next.costPerWindow) {
+    next = { ...next };
+    delete next.costPerWindow;
+  } else if (
+    next &&
+    meterOn &&
+    !next.costPerWindow &&
+    next.allowPicker === true &&
+    limitSupport(dep.backend.type, { kind: "cost", scope: "user" }) !== "unsupported"
+  ) {
+    next = { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
+  }
+  return { models: next, guardrails: tpmOn ? dep.guardrails : withoutTpm(dep.guardrails) };
 }
 
 /**
@@ -1287,7 +1354,7 @@ function tenantModelsLocked(host: string, dep: DigichatDeployment): boolean {
  */
 function withAllowPickerAlias(host: string, dep: DigichatDeployment): CatalogModels {
   const models = dep.models;
-  if (dep.chrome?.productChat === undefined && isLegacyGatedHost(host)) return models;
+  if (isLegacyProductRow(host, dep)) return models;
   if (!models || models.allowPicker !== undefined || typeof models.occPicker !== "boolean") {
     return models;
   }
@@ -1310,8 +1377,8 @@ const HOUSE_PREMIUM_WINDOW = { usd: 0.0125565, windowSeconds: 86_400 } as const;
  * picker unless the row turns it off (`allowPicker: false`, or its legacy
  * alias). A hand-written list is left alone.
  *
- * The house always keeps a premium window. A tenant product chat never
- * carries one, nor a tokens-per-minute limit (owner decision, 21 Oct 2026).
+ * The house always keeps a premium window. A tenant product chat's meter
+ * and tokens-per-minute limit are set by `withTenantProductLimits`.
  */
 function withProductPickerDefaults(
   models: CatalogModels,
@@ -1322,10 +1389,7 @@ function withProductPickerDefaults(
     if (kind === "house") {
       return next.costPerWindow ? next : { ...next, costPerWindow: { ...HOUSE_PREMIUM_WINDOW } };
     }
-    if (!next.costPerWindow) return next;
-    const open = { ...next };
-    delete open.costPerWindow;
-    return open;
+    return next;
   };
   if (base.allowPicker === false) return limits(base);
   if ((base.available?.length ?? 0) > 0 && base.catalog !== true) return limits(base);
@@ -1419,16 +1483,36 @@ function applyCatalogConfig(
               : // TODO(P-exit): a non-product row that shares the legacy slug.
                 isLegacyGatedTenant(host, dep.slug) && dep.models?.occPicker !== true;
           if (tenantLocked && kind === "tenant") {
-            // Picker off: the operator model, and still no meter or TPM.
-            const locked = lockTenantModels(dep.models);
-            if (locked?.costPerWindow) delete locked.costPerWindow;
+            // Picker off: the operator model. Meter and TPM per the document.
+            const limited = withTenantProductLimits(host, dep, lockTenantModels(dep.models));
             return [
               host,
               {
                 ...dep,
                 features: { ...dep.features, modelPicker: false },
-                guardrails: withoutTpm(dep.guardrails),
-                models: locked,
+                guardrails: limited.guardrails,
+                models: limited.models,
+              },
+            ];
+          }
+          if (kind === "tenant" && !tenantPickerRequested(host, dep)) {
+            // Safe default: no catalog picker unless the document asks for
+            // one. The row's own model list stays the allowlist.
+            const models = applyModelCatalog(
+              dep.models,
+              `${ctx} hosts.${host}`,
+              openRouterConfigured,
+            );
+            const closed = models ? { ...models, allowPicker: false } : models;
+            if (closed) delete closed.picker;
+            const limited = withTenantProductLimits(host, dep, closed);
+            return [
+              host,
+              {
+                ...dep,
+                features: { ...dep.features, modelPicker: false },
+                guardrails: limited.guardrails,
+                models: limited.models,
               },
             ];
           }
@@ -1457,17 +1541,21 @@ function applyCatalogConfig(
             `${ctx} hosts.${host}`,
             openRouterConfigured,
           );
-          if (kind) {
-            const open = models?.allowPicker === true;
+          if (kind === "tenant") {
+            const limited = withTenantProductLimits(host, dep, models);
             return [
               host,
               {
                 ...dep,
-                features: { ...dep.features, modelPicker: open },
-                ...(kind === "tenant" ? { guardrails: withoutTpm(dep.guardrails) } : {}),
-                models,
+                features: { ...dep.features, modelPicker: limited.models?.allowPicker === true },
+                guardrails: limited.guardrails,
+                models: limited.models,
               },
             ];
+          }
+          if (kind) {
+            const open = models?.allowPicker === true;
+            return [host, { ...dep, features: { ...dep.features, modelPicker: open }, models }];
           }
           if (isLegacyGatedTenant(host, dep.slug)) {
             // TODO(P-exit): a non-product row that only shares the legacy

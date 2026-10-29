@@ -10,6 +10,8 @@ import {
   HOUSE_ROUTE_SEGMENTS,
   classifyTenantChatPath,
   pathsOverlap,
+  gatedTenantClaims,
+  lastGoodGatedClaimCountForTests,
   rememberGatedTenantDocs,
   resetGatedTenantCacheForTests,
   resolveTenantChatSlug,
@@ -424,20 +426,114 @@ describe("chrome.productChat and the models.allowPicker alias", () => {
     expect(dep.models.available).toEqual(["model-a"]);
   });
 
-  it("a product tenant chat has no premium meter and no tokens-per-minute limit", () => {
-    const dep = hostDeployment(HOST_A, {
+});
+
+describe("chrome.productChat: safe by default, explicit opt-outs", () => {
+  const limited = (extra: Record<string, unknown> = {}, models: Record<string, unknown> = {}) =>
+    hostDeployment(HOST_A, {
       [HOST_A]: row({
         productChat: true,
         guardrails: { tokensPerMinute: { deployment: 100_000, user: 80_000 } },
         models: {
           available: ["model-a"],
+          default: "model-a",
           priceCapUsdPerMillion: 3,
           costPerWindow: { usd: 1, windowSeconds: 60 },
+          ...models,
         },
+        ...extra,
       }),
     });
-    expect(dep.models.costPerWindow).toBeUndefined();
-    expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
+
+  it("pins the default for a new productChat row: meter on, TPM on, picker off", () => {
+    const dep = limited();
+    expect(productChat(HOST_A, dep)).toBe("tenant");
+    expect(dep.models.costPerWindow).toEqual({ usd: 1, windowSeconds: 60 });
+    expect(dep.guardrails?.tokensPerMinute).toEqual({ deployment: 100_000, user: 80_000 });
+    expect(dep.features.modelPicker).toBe(false);
+    expect(dep.models.allowPicker).toBe(false);
+    expect(dep.models.picker).toBeUndefined();
+    expect(dep.models.catalog).toBeUndefined();
+    // The row's own list stays the allowlist.
+    expect(dep.models.available).toEqual(["model-a"]);
+  });
+
+  it("a bare productChat row gets no catalog picker", () => {
+    const dep = hostDeployment(HOST_A, { [HOST_A]: row({ productChat: true }) });
+    expect(dep.features.modelPicker).toBe(false);
+    expect(dep.models.allowPicker).toBe(false);
+    expect(dep.models.catalog).toBeUndefined();
+    expect(dep.models.picker).toBeUndefined();
+  });
+
+  it("the opt-outs work: allowPicker, premiumMeter: false, guardrails.tpmLimit: false", () => {
+    const meterOff = limited({}, { premiumMeter: false });
+    expect(meterOff.models.costPerWindow).toBeUndefined();
+    expect(meterOff.guardrails?.tokensPerMinute).toEqual({ deployment: 100_000, user: 80_000 });
+
+    const tpmOff = limited({
+      guardrails: { tpmLimit: false, tokensPerMinute: { deployment: 100_000, user: 80_000 } },
+    });
+    expect(tpmOff.guardrails?.tokensPerMinute).toBeUndefined();
+    expect(tpmOff.models.costPerWindow).toEqual({ usd: 1, windowSeconds: 60 });
+
+    const pickerOn = limited({}, { allowPicker: true });
+    expect(pickerOn.features.modelPicker).toBe(true);
+    expect(pickerOn.models.costPerWindow).toEqual({ usd: 1, windowSeconds: 60 });
+
+    const aliasOn = limited({}, { occPicker: true });
+    expect(aliasOn.features.modelPicker).toBe(true);
+
+    const allOff = limited(
+      { guardrails: { tpmLimit: false, tokensPerMinute: { deployment: 100_000, user: 80_000 } } },
+      { allowPicker: true, premiumMeter: false },
+    );
+    expect(allOff.features.modelPicker).toBe(true);
+    expect(allOff.models.costPerWindow).toBeUndefined();
+    expect(allOff.guardrails?.tokensPerMinute).toBeUndefined();
+  });
+
+  it("an opened catalog picker with no written window gets the house meter", () => {
+    const dep = hostDeployment(HOST_A, {
+      [HOST_A]: row({ productChat: true, models: { allowPicker: true } }),
+    });
+    expect(dep.features.modelPicker).toBe(true);
+    expect(dep.models.catalog).toBe(true);
+    expect(dep.models.costPerWindow?.usd).toBeGreaterThan(0);
+    const optedOut = hostDeployment(HOST_A, {
+      [HOST_A]: row({ productChat: true, models: { allowPicker: true, premiumMeter: false } }),
+    });
+    expect(optedOut.models.costPerWindow).toBeUndefined();
+  });
+
+  it("the registry refuses a non-boolean premiumMeter", () => {
+    expect(() =>
+      parseEmbedTenants(registry({ [HOST_A]: row({ models: { premiumMeter: "no" } }) })),
+    ).toThrow(/premiumMeter must be a boolean/);
+  });
+});
+
+describe("Guard: the last-good gated claims are deduped on write", () => {
+  it("loading the same registry N times leaves the claim count unchanged", () => {
+    const gated = { [HOST_A]: row({ gateMode: "invite", chatSlug: "example" }) };
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", registry(gated));
+    getEmbedTenantRegistry();
+    const once = lastGoodGatedClaimCountForTests();
+    const claims = gatedTenantClaims().length;
+    expect(once).toBe(1);
+    for (let i = 0; i < 25; i += 1) {
+      resetEmbedTenantRegistryForTests();
+      getEmbedTenantRegistry();
+    }
+    expect(lastGoodGatedClaimCountForTests()).toBe(once);
+    expect(gatedTenantClaims().length).toBe(claims);
+    expect(inviteRequiredButMissing(HOST_A, "other")).toBe(true);
+  });
+
+  it("direct repeated writes of the same claim store it once", () => {
+    const doc = { slug: "example", chatSlug: "example", host: HOST_A, gated: true };
+    for (let i = 0; i < 10; i += 1) rememberGatedTenantDocs([doc, doc]);
+    expect(lastGoodGatedClaimCountForTests()).toBe(1);
   });
 });
 

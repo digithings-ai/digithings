@@ -238,40 +238,68 @@ export type TenantChromeDoc = {
 /** A gated claim, recorded outside the document. */
 export type GatedTenantClaim = { slug: string; chatSlug: string; host?: string };
 
-let lastGoodGatedClaims: GatedTenantClaim[] = [];
-
-/**
- * Record the gated tenants of every registry that parsed cleanly, so a later
- * missing, empty or unreadable registry still keeps them gated. Claims only
- * accumulate (process-local): a doc that disappears is indistinguishable from
- * a doc that failed to load, so un-gating a tenant needs a restart.
- */
-export function rememberGatedTenantDocs(docs: readonly TenantChromeDoc[]): void {
-  const next = docs
-    .filter((d) => d.gated && (d.chatSlug || d.host))
-    .map((d) => ({ slug: d.slug, chatSlug: d.chatSlug ?? "", host: d.host }));
-  lastGoodGatedClaims = [...lastGoodGatedClaims, ...next];
+/** The key `gatedTenantClaims` dedupes on. */
+function claimKey(claim: GatedTenantClaim): string {
+  return `${claim.chatSlug}|${claim.host ?? ""}`;
 }
 
-/** Test-only reset of the last-good cache. */
-export function resetGatedTenantCacheForTests(): void {
-  lastGoodGatedClaims = [];
-}
-
-/**
- * The R0-side list of gated claims: the legacy seed plus the last good
- * registry. Independent of the current document, by design.
- */
-export function gatedTenantClaims(): GatedTenantClaim[] {
-  const out: GatedTenantClaim[] = [];
-  const seen = new Set<string>();
-  for (const claim of [...LEGACY_GATED_TENANTS, ...lastGoodGatedClaims]) {
-    const key = `${claim.chatSlug}|${claim.host ?? ""}`;
+/** Append `claims` to `into`, skipping any key already present. */
+function mergeClaims(
+  into: readonly GatedTenantClaim[],
+  claims: readonly GatedTenantClaim[],
+): GatedTenantClaim[] {
+  const out = [...into];
+  const seen = new Set(out.map(claimKey));
+  for (const claim of claims) {
+    const key = claimKey(claim);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(claim);
   }
   return out;
+}
+
+/** Last-good claims, deduped on write, so repeated loads cannot grow it. */
+let lastGoodGatedClaims: GatedTenantClaim[] = [];
+/** Legacy seed + last-good claims, rebuilt only when the last-good list changes. */
+let gatedClaimsView: readonly GatedTenantClaim[] = mergeClaims([], LEGACY_GATED_TENANTS);
+
+/**
+ * Record the gated tenants of every registry that parsed cleanly, so a later
+ * missing, empty or unreadable registry still keeps them gated. Claims only
+ * accumulate (process-local): a doc that disappears is indistinguishable from
+ * a doc that failed to load, so un-gating a tenant needs a restart. Each claim
+ * is stored once per `chatSlug|host`, so loading the same registry again adds
+ * nothing. Persistence across restarts is U1's.
+ */
+export function rememberGatedTenantDocs(docs: readonly TenantChromeDoc[]): void {
+  const next = docs
+    .filter((d) => d.gated && (d.chatSlug || d.host))
+    .map((d) => ({ slug: d.slug, chatSlug: d.chatSlug ?? "", host: d.host }));
+  const merged = mergeClaims(lastGoodGatedClaims, next);
+  if (merged.length === lastGoodGatedClaims.length) return;
+  lastGoodGatedClaims = merged;
+  gatedClaimsView = mergeClaims(mergeClaims([], LEGACY_GATED_TENANTS), lastGoodGatedClaims);
+}
+
+/** Test-only reset of the last-good cache. */
+export function resetGatedTenantCacheForTests(): void {
+  lastGoodGatedClaims = [];
+  gatedClaimsView = mergeClaims([], LEGACY_GATED_TENANTS);
+}
+
+/** Test-only: how many claims the last-good cache holds. */
+export function lastGoodGatedClaimCountForTests(): number {
+  return lastGoodGatedClaims.length;
+}
+
+/**
+ * The R0-side list of gated claims: the legacy seed plus the last good
+ * registry, deduped by `chatSlug|host`. Independent of the current document,
+ * by design. Cached: rebuilt only when a load adds a new claim.
+ */
+export function gatedTenantClaims(): readonly GatedTenantClaim[] {
+  return gatedClaimsView;
 }
 
 /** True when `host` belongs to a gated claim (legacy seed or last good doc). */

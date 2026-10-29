@@ -214,6 +214,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
         : {}),
       ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
       ...(typeof cfg.models?.occPicker === "boolean" ? { occPicker: cfg.models.occPicker } : {}),
+      ...(typeof cfg.models?.premiumMeter === "boolean"
+        ? { premiumMeter: cfg.models.premiumMeter }
+        : {}),
       ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
         : {}),

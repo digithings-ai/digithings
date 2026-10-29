@@ -11,6 +11,7 @@ import {
 import {
   LEGACY_GATED_TENANTS,
   LEGACY_GATED_TENANT_HOST,
+  LEGACY_GATED_TENANT_PRODUCT_CHAT,
   LEGACY_GATED_TENANT_SLUG,
 } from "./legacy-tenant-defaults";
 import {
@@ -97,7 +98,9 @@ describe("legacy fallback equivalence", () => {
         chatSlug: LEGACY_GATED_TENANT_SLUG,
         productChat: true,
         suggestions: [...LEGACY_POOL],
-        models: { allowPicker: true },
+        // The explicit opt-outs that replace LEGACY_GATED_TENANT_PRODUCT_CHAT.
+        guardrails: { tpmLimit: false },
+        models: { allowPicker: true, premiumMeter: false },
       }),
     );
     const strip = (dep: typeof legacy) => {
@@ -107,7 +110,12 @@ describe("legacy fallback equivalence", () => {
       delete chrome.suggestions;
       const models = { ...dep.models };
       delete models.occPicker;
-      return { ...dep, chrome, models };
+      delete models.premiumMeter;
+      const guardrails = dep.guardrails ? { ...dep.guardrails } : undefined;
+      if (guardrails) delete guardrails.tpmLimit;
+      const rest = { ...dep, chrome, models };
+      delete (rest as { guardrails?: unknown }).guardrails;
+      return { ...rest, guardrailsOut: guardrails && Object.keys(guardrails).length ? guardrails : undefined };
     };
     expect(strip(migrated)).toEqual(strip(legacy));
   });
@@ -118,6 +126,32 @@ describe("legacy fallback equivalence", () => {
     expect(locked.models.available).toEqual([]);
     const open = legacyDeployment(legacyRow());
     expect(open.features.modelPicker).toBe(true);
+  });
+
+  it("pins the legacy row's current behaviour: no meter, no TPM, picker on", () => {
+    expect(LEGACY_GATED_TENANT_PRODUCT_CHAT).toEqual({
+      premiumMeter: false,
+      tpmLimit: false,
+      picker: true,
+    });
+    const dep = legacyDeployment(
+      legacyRow({
+        guardrails: { tokensPerMinute: { deployment: 100_000, user: 80_000 } },
+        models: {
+          occPicker: true,
+          priceCapUsdPerMillion: 3,
+          costPerWindow: { usd: 1, windowSeconds: 60 },
+        },
+      }),
+    );
+    expect(dep.features.modelPicker).toBe(true);
+    expect(dep.models.allowPicker).toBe(true);
+    expect(dep.models.catalog).toBe(true);
+    expect(dep.models.costPerWindow).toBeUndefined();
+    expect(dep.guardrails?.tokensPerMinute).toBeUndefined();
+    const bare = legacyDeployment(legacyRow({ models: {} }));
+    expect(bare.features.modelPicker).toBe(true);
+    expect(bare.models.costPerWindow).toBeUndefined();
   });
 
   it("a row without suggestions keeps the legacy pool", () => {
