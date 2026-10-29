@@ -527,7 +527,9 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
   });
 
-  it("skips the request limiter when the visitor brings their own key", async () => {
+  // #6217: an own key used to skip every request limiter. The header is
+  // client-set and never validated, so `X-BYOK-Key: x` was a public bypass.
+  it("still rate-limits a visitor who brings their own key", async () => {
     vi.mocked(checkBffRateLimit).mockClear();
     vi.mocked(checkEmbedIpRateLimit).mockClear();
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
@@ -546,9 +548,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }),
       }),
     );
-    expect(res.status).toBe(200);
-    expect(checkBffRateLimit).not.toHaveBeenCalled();
-    expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
   });
 
   it("still rate-limits a blank own-key header", async () => {
@@ -568,13 +569,15 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(checkBffRateLimit).toHaveBeenCalled();
   });
 
-  it("skips both request limiters and the per-visitor minute for an anonymous own key", async () => {
+  // #6217: an anonymous own key keeps both request limiters. It skips only the
+  // per-visitor token minute, and the house-paid tool calls still count.
+  it("counts an anonymous own key per IP and spares only the per-visitor minute", async () => {
     resetGuardrailStoreForTests();
     vi.mocked(clientIpForRateLimit).mockReturnValue("203.0.113.9");
     vi.mocked(checkBffRateLimit).mockClear();
     vi.mocked(checkEmbedIpRateLimit).mockClear();
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true });
     const spentAt = Date.now();
     activeGuardrailStore().commit("tpm:user:public:203.0.113.9", "seed", 900, spentAt);
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
@@ -618,8 +621,8 @@ vi.mocked(createFoundryStreamResponse).mockClear();
         }),
       );
       expect(res.status).toBe(200);
-      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
-      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      expect(checkEmbedIpRateLimit).toHaveBeenCalledTimes(1);
+      expect(checkBffRateLimit).toHaveBeenCalledWith("chat:public:embed:anonymous");
       const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
         guard?: {
           toolCap?: number;
@@ -652,6 +655,87 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     } finally {
       resetGuardrailStoreForTests();
       vi.mocked(clientIpForRateLimit).mockReturnValue("127.0.0.1");
+    }
+  });
+
+  it("returns 429 for an anonymous own key over the per-IP limit", async () => {
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(createFoundryStreamResponse).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "public",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "public",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "foundry",
+          projectEndpoint: "https://x/",
+          agentName: "fixture-agent",
+        },
+        guardrails: { maxToolCallsPerTurn: 5, rateLimit: true },
+        activityDetail: "full",
+      },
+    } as EmbedChatTenantContext);
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://public.digithings.ai",
+          // Any value: the route never validates the key before the limiter.
+          "x-byok-key": "x",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("45");
+    expect(checkEmbedIpRateLimit).toHaveBeenCalledTimes(1);
+    expect(createFoundryStreamResponse).not.toHaveBeenCalled();
+  });
+
+  it("keeps the request limiter off for an own key on a rateLimit false deployment", async () => {
+    setDigichatConfigForTests(
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "occ",
+          backend: { type: "digigraph" },
+          guardrails: { rateLimit: false, maxToolCallsPerTurn: 5 },
+        },
+      }),
+    );
+    vi.mocked(checkBffRateLimit).mockClear();
+    vi.mocked(checkEmbedIpRateLimit).mockClear();
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-byok-key": "sk-or-v1-test",
+            "x-byok-provider": "openrouter",
+            "x-byok-model": "openai/gpt-4o-mini",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(checkBffRateLimit).not.toHaveBeenCalled();
+      expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+    } finally {
+      resetDigichatConfigForTests();
     }
   });
 

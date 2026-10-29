@@ -142,7 +142,7 @@ export async function POST(req: Request) {
   const embedConfig = embedConfigOf(tenantCtx);
 
   // Resolve the deployment before the request limiter. The limiter is
-  // per deployment (`guardrails.rateLimit`), and an own key skips it.
+  // per deployment (`guardrails.rateLimit`). An own key does not skip it.
   let dep: DigichatDeployment | null = null;
   // A config read error must keep failing closed for an explicit model, so
   // track it separately from "no deployment matched this host".
@@ -172,9 +172,14 @@ export async function POST(req: Request) {
   }
 
   const spendGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
-  // Own key: not our inference budget. OCC sets rateLimit false for everyone.
-  const skipOurRequestLimit =
-    byokKey.length > 0 || !deploymentRateLimitEnabled(spendGuardrails);
+  // Only the deployment turns the request limiter off (OCC sets rateLimit
+  // false for everyone on its invite-only page). An own key does not: the
+  // header is client-set and never validated here, so `X-BYOK-Key: x` used
+  // to skip every request limit while the turn still ran house-paid tools
+  // and web search (#6217). An own key pays for the model's tokens only, so
+  // it skips the per-visitor token minute below (`omitUserTpm`) and nothing
+  // else. The per-IP and per-visitor request limits stay.
+  const skipOurRequestLimit = !deploymentRateLimitEnabled(spendGuardrails);
 
   // Anonymous embed requests all share one bucket below (tenantSlug=embed,
   // ownerUserSub=embed:anonymous) — gate per-IP first so one visitor can't
@@ -649,7 +654,8 @@ export async function POST(req: Request) {
     userId: ownerUserSub,
     ip: clientIp,
     // A visitor's own key is not our spend, so a BYOK turn keeps the user TPM
-    // out of the guard. The deployment TPM, tool cap and answer guard stay.
+    // out of the guard. The deployment TPM, tool cap and answer guard stay,
+    // and the request limiters above still counted this turn (#6217).
     omitUserTpm: byokKey.length > 0,
     ...(admission.summarize ? { summarize: { notice: admission.summarize.notice } } : {}),
   });
