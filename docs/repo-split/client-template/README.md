@@ -13,14 +13,16 @@ Created from the Forgejo template repo `clients/client-template`. Agent rules:
 AGENTS.md            agent rules for this client (CLAUDE.md is a symlink)
 VERSION, CHANGELOG.md  release version; tags are ${REPO_NAME}-vX.Y.Z
 client/              profile.md, scope.md, decisions.md, comms/ (references only)
-tenant/              digichat.yaml (one deployment doc), corpus-map.json, env/{local,staging,prod}.yaml
+tenant/              digichat.yaml (one deployment doc), corpus-map.json, env/{local,staging,prod}.yaml,
+                     SCHEMA-NOTES.md (server-only access.invite, pathPrefix rules, fail closed)
 tools/               site-graph/, skills/<skill>/SKILL.md, mcp/<server>/
 corpus/              crawled public pages (markdown with url: front matter) + manifest
 deploy/              deploy.sh and its README (what each step touches, rollback)
 compose/             docker-compose.yml (pinned R0 images) + docker-compose.dev.yml (build from ../digithings)
 digithings.lock      the ONE pin file for R0
-tests/               schema test, questions.json, run_qa.sh, tools/ unit tests
-.woodpecker.yml      Forgejo CI (owned by QA)
+scripts/             env.sh, check_lock.sh, check_no_vendored_r0.py (CI: no file copied from R0)
+tests/               schema test, questions.json, run_qa.sh, tools/ unit tests, ci/ (CI script + make bump tests)
+.woodpecker.yml      Forgejo CI, owned by QA: lock, gitleaks, fetch pinned R0, no-vendored-r0, make test + tests/ci
 .env.example         variable names only
 Makefile             up / dev / link / unlink / bump / test / qa / release / deploy-staging / deploy-prod
 ```

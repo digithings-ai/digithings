@@ -3,6 +3,8 @@
 SHELL := /bin/bash
 DIGITHINGS_DIR ?= ../digithings
 REPO ?= $(notdir $(CURDIR))
+# What `make bump` runs after re-pinning; CI tests override it with an offline check.
+BUMP_TEST ?= $(MAKE) test
 COMPOSE := docker compose -f compose/docker-compose.yml
 
 .PHONY: help up dev down link unlink bump test qa release deploy-staging deploy-prod
@@ -34,7 +36,7 @@ bump: ## pin digithings.lock to SHA=<40-char sha on R0 develop>, then run make t
 	fi
 	@sed -i.bak -e 's/^kind=.*/kind=git-sha/' -e 's/^ref=.*/ref=develop/' -e 's/^sha=.*/sha=$(SHA)/' digithings.lock && rm -f digithings.lock.bak
 	@echo "digithings.lock -> $(SHA)"
-	$(MAKE) test
+	$(BUMP_TEST)
 
 test: ## offline checks: lock, tenant schema, corpus, tools (no model calls)
 	scripts/check_lock.sh

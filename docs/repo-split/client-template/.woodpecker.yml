@@ -1,8 +1,48 @@
-# TODO(QA): placeholder. QA owns this file and is building it, together with the
-# digiforge ci/jobs/client-*.json entry. Planned checks: tenant schema, tests,
-# gitleaks, digithings.lock pin check, no-vendored-R0 check.
+# client-<slug> CI (Forgejo + Woodpecker 3). Owner: QA.
+# Images are pinned by digest (tag kept for readability); bump tag and digest together.
+# Offline only: no model, search, fetch-to-client-site or deploy calls, and no secrets
+# are mounted. `make qa` (golden questions) is NOT run here; it runs by hand on free models.
+when:
+  - event: [push, pull_request, manual]
+
 steps:
-  - name: placeholder
-    image: alpine:3
+  # 1. digithings.lock must be a real pin: full 40-char sha on develop/main, or release artifacts.
+  - name: lock
+    image: bash:5.2.37@sha256:e900b34300c5bca37879a980687da197234b65325044647e76198a4cd3c0abb7
     commands:
-      - echo "client-template CI placeholder (QA owns .woodpecker.yml)"
+      - test ! -e .link || { echo ".link is committed; run make unlink" >&2; exit 1; }
+      - scripts/check_lock.sh
+
+  # 2. Secrets: full history, not just the diff, so a secret added then removed still fails.
+  - name: gitleaks
+    image: zricethezav/gitleaks:v8.21.2@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46
+    commands:
+      - gitleaks git --redact --no-banner --exit-code 1 .
+
+  # 3. Fetch the pinned R0 tree (public repo, exact sha, no submodules).
+  - name: fetch-r0
+    image: alpine/git:2.45.2@sha256:16ad8e788e1d3b0c30f18da8dde5c0ace3b187445a62d8af893b003ca1e70592
+    commands:
+      - SHA="$(sed -n 's/^sha=//p' digithings.lock)"
+      - REPO="$(sed -n 's/^repo=//p' digithings.lock)"
+      - test -n "$SHA" || { echo "release pins: R0 tree check uses the release tag in step 4 (TODO when kind=release lands)"; exit 0; }
+      - git init -q /woodpecker/r0 && cd /woodpecker/r0
+      - git fetch -q --depth 1 "$REPO" "$SHA" && git checkout -q FETCH_HEAD
+      - test "$(git rev-parse HEAD)" = "$SHA"
+
+  # 4. Build-on rule: no file in this repo may be a byte-for-byte copy of a file in the pinned R0 tree.
+  - name: no-vendored-r0
+    image: python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
+    commands:
+      - apt-get update -qq && apt-get install -y -qq git >/dev/null
+      - python3 scripts/check_no_vendored_r0.py --client . --r0 /woodpecker/r0
+
+  # 5. Tenant schema + tool tests inside the pinned R0 environment. No network beyond package install.
+  - name: test
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:85d4cb1afa769a7338e095b927bee941cf5ec92266c7424b3f6c0f2748567248
+    environment:
+      DIGITHINGS_DIR: /woodpecker/r0
+    commands:
+      - unset OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY CHEAPER_INFERENCE_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY || true
+      - make test
+      - cd "$CI_WORKSPACE" && uv run --no-project --with pytest python -m pytest -q tests/ci -p no:cacheprovider

@@ -5,7 +5,7 @@
 kind=git-sha
 repo=https://github.com/digithings-ai/digithings.git
 ref=develop
-sha=0000000000000000000000000000000000000000
+sha=673104483b98ee4f331c533f80804dadb3fed48e
 #
 # After the first release, switch to versions (one line per artifact):
 # kind=release
