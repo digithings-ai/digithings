@@ -32,7 +32,15 @@
 # Until the PAT lands, a hand edit of branch protection that nobody followed
 # with the `--live` read stays invisible — so the runbook above is the story.
 # See docs/BRANCH_PROTECTION.md § Keeping the snapshot true.
+#
+# 2026-10-29: re-read live (read-only GET of the endpoint above): develop
+# requires exactly one context, `local-ci`, a commit status the local CI runner
+# posts — no workflow produces it, so it is declared under `external_contexts:`
+# in .github/policy-checks.yml. The three GitHub Actions contexts this file
+# used to list (`Required checks passed`, `doc-links + agents-init`,
+# `mypy — digibase + digikey`) are no longer in the live gate.
+# `merge-queue` is deliberately NOT listed: set-branch-protection.sh applies
+# this file exactly, and requiring a context only the queue posts would lock
+# develop.
 
-Required checks passed
-doc-links + agents-init
-mypy — digibase + digikey
+local-ci

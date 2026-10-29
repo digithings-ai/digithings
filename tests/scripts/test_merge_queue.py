@@ -3785,9 +3785,9 @@ def test_a_claimed_review_without_its_findings_comment_is_refused() -> None:
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
-    assert any(
-        "reviewed:agent" in reason and "in-session-review" in reason for reason in verdict.reasons
-    )
+    # No label is needed any more (Chris, 2026-10-29); the refusal names the
+    # missing findings marker, which is the one thing left to do.
+    assert any("in-session-review" in reason for reason in verdict.reasons)
 
 
 def test_a_claimed_review_whose_comments_cannot_be_read_is_refused() -> None:
@@ -6382,8 +6382,8 @@ def test_a_marker_from_the_author_seat_is_not_review_coverage(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "reviewer independence" in reason
-    assert "author's own seat" in reason
-    assert "a review from a different seat" in reason
+    assert "author's own session" in reason
+    assert "a review from a different session" in reason
 
 
 def test_the_reviewed_agent_label_does_not_carry_the_author_seats_own_review(
@@ -6422,9 +6422,9 @@ def test_the_shipped_gate_refuses_an_author_lane_write_up(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "reviewer independence" in reason
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
     assert AUTHOR_AGENT[:8] in reason
-    assert "a review from a different seat" in reason
+    assert "a review from a different session" in reason
 
 
 def test_the_shipped_gate_refuses_a_write_up_with_no_seat_marker(
@@ -6444,8 +6444,8 @@ def test_the_shipped_gate_refuses_a_write_up_with_no_seat_marker(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "reviewer independence" in reason
-    assert "carries neither a seat nor a run" in reason
-    assert "a review from a different seat" in reason
+    assert "carries neither a session nor a run" in reason
+    assert "a review from a different session" in reason
 
 
 def test_a_placeholder_house_marker_is_not_real_ids(
@@ -6486,7 +6486,7 @@ def test_a_non_author_seats_pass_on_the_head_is_review_coverage(
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_the_seat_that_wrote_the_code_is_the_author_without_a_trailer(
@@ -6506,7 +6506,7 @@ def test_the_seat_that_wrote_the_code_is_the_author_without_a_trailer(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
     assert AUTHOR_AGENT[:8] in reason
 
 
@@ -6530,7 +6530,7 @@ def test_the_seat_that_owns_the_ticket_is_not_the_author(
     pr = _reviewed_pr([_provenance_comment(agent=OTHER_AGENT, run=REVIEWER_RUN)])
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert OTHER_AGENT[:8] in verdict.review_evidence
+    assert f"session `{REVIEWER_RUN[:8]}`" in verdict.review_evidence
 
 
 def test_a_reviewer_woken_on_the_ticket_while_the_author_pushes_is_not_the_author(
@@ -6578,7 +6578,7 @@ def test_a_reviewer_woken_on_the_ticket_while_the_author_pushes_is_not_the_autho
     )
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_a_seat_that_pushed_one_of_the_commits_is_an_author(
@@ -6635,7 +6635,7 @@ def test_a_seat_that_pushed_one_of_the_commits_is_an_author(
     )
     verdict = _judge(own, prov)
     assert not verdict.eligible
-    assert "author's own seat" in " ".join(verdict.reasons)
+    assert "author's own session" in " ".join(verdict.reasons)
 
     # A seat that wrote nothing on the branch still reviews.
     third = _paperclip(
@@ -6661,7 +6661,7 @@ def test_a_seat_that_pushed_one_of_the_commits_is_an_author(
     )
     verdict = _judge(outside, third)
     assert verdict.eligible, verdict.reasons
-    assert OTHER_AGENT[:8] in verdict.review_evidence
+    assert "session `cccccccc`" in verdict.review_evidence
 
 
 def test_a_merge_commit_does_not_make_the_merging_seat_the_author(
@@ -6704,7 +6704,7 @@ def test_a_merge_commit_does_not_make_the_merging_seat_the_author(
     )
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_a_rebased_commit_is_attributed_to_its_author_not_to_the_rebasing_seat(
@@ -6748,7 +6748,7 @@ def test_a_rebased_commit_is_attributed_to_its_author_not_to_the_rebasing_seat(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
     assert AUTHOR_AGENT[:8] in reason
 
 
@@ -6783,7 +6783,7 @@ def test_a_rebase_outside_every_run_window_leaves_the_pr_reviewable(
     )
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_a_commit_with_no_author_date_is_not_attributed_to_anyone(
@@ -6815,7 +6815,7 @@ def test_a_commit_with_no_author_date_is_not_attributed_to_anyone(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "authoring seat could not be identified" in reason
+    assert "author could not be identified" in reason
 
 
 def test_a_run_trailer_names_the_author_exactly(
@@ -6849,7 +6849,7 @@ def test_a_run_trailer_names_the_author_exactly(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
     assert AUTHOR_AGENT[:8] in reason
 
 
@@ -6868,7 +6868,7 @@ def test_a_pr_with_no_author_evidence_is_unverifiable(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "authoring seat could not be identified" in reason
+    assert "author could not be identified" in reason
 
 
 def test_a_marker_from_another_seat_on_the_current_head_is_review_coverage(
@@ -6886,7 +6886,7 @@ def test_a_marker_from_another_seat_on_the_current_head_is_review_coverage(
     assert "in-session review" in verdict.review_evidence
     # The evidence names the seat and the head it checked, so the audit trail
     # says which review carried the PR.
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
     assert "a" * 12 in verdict.review_evidence
 
 
@@ -6922,7 +6922,7 @@ def test_a_marker_from_the_author_seat_during_its_own_run_is_not_review_coverage
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
     assert "still active" in reason
     assert AUTHOR_RUN[:8] in reason
 
@@ -6965,7 +6965,7 @@ def test_a_review_from_another_seat_inside_the_author_run_window_counts(
     )
     verdict = _judge(pr, prov)
     assert verdict.eligible, verdict.reasons
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_a_marker_that_names_an_older_head_is_not_review_coverage(
@@ -7007,7 +7007,7 @@ def test_a_marker_that_names_a_short_prefix_of_the_head_counts(
     )
     verdict = _judge(pr, prov)
     assert verdict.eligible
-    assert REVIEWER_AGENT[:8] in verdict.review_evidence
+    assert "platform `paperclip`" in verdict.review_evidence
 
 
 def test_a_marker_that_names_too_few_characters_binds_no_head(
@@ -7091,7 +7091,7 @@ def test_a_self_review_marker_last_does_not_fall_back_to_an_earlier_review(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "reviewer independence" in reason
-    assert "author's own seat" in reason
+    assert "author's own session" in reason
 
 
 def test_a_marker_without_provenance_is_not_review_coverage(
@@ -7108,7 +7108,7 @@ def test_a_marker_without_provenance_is_not_review_coverage(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "carries neither a seat nor a run" in reason
+    assert "carries neither a session nor a run" in reason
     assert "names no head SHA" in reason
 
 
@@ -7173,7 +7173,7 @@ def test_a_marker_quoted_in_prose_is_not_a_claim(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "could not be read" not in reason
-    assert "carries neither a seat nor a run" in reason
+    assert "carries neither a session nor a run" in reason
     assert prov.asked_runs == []
 
 
@@ -7365,7 +7365,7 @@ def test_a_marker_in_a_quoted_reply_is_not_a_claim(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "could not be read" not in reason
-    assert "carries neither a seat nor a run" in reason
+    assert "carries neither a session nor a run" in reason
     assert prov.asked_runs == []
 
 
@@ -7407,7 +7407,7 @@ def test_a_marker_with_text_after_it_on_its_line_is_not_a_claim(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "carries neither a seat nor a run" in reason
+    assert "carries neither a session nor a run" in reason
     assert prov.asked_runs == []
 
 
@@ -7439,7 +7439,7 @@ def test_a_ticket_the_api_does_not_know_is_not_a_crash(
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
     assert "reviewer independence" in reason
-    assert "authoring seat could not be identified" in reason
+    assert "author could not be identified" in reason
 
 
 def test_an_api_that_cannot_be_read_defers_the_pr_and_publishes_no_gate(
@@ -7690,7 +7690,7 @@ def test_a_commit_whose_run_trailer_is_not_a_run_id_refuses_the_pr(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "authoring seat could not be identified" in reason
+    assert "author could not be identified" in reason
     assert "names a run id that is not one" in reason
     assert prov.asked_runs == []
 
@@ -7718,7 +7718,7 @@ def test_a_commit_whose_seat_trailer_is_not_a_seat_id_refuses_the_pr(
     verdict = _judge(pr, prov)
     assert not verdict.eligible
     reason = " ".join(verdict.reasons)
-    assert "authoring seat could not be identified" in reason
+    assert "author could not be identified" in reason
     assert "names a seat id that is not one" in reason
 
 
@@ -8383,7 +8383,7 @@ def test_shadow_mode_records_the_refusal_and_does_not_count_it(
     assert "reviewer independence" in " ".join(verdict.reasons)
     text = log.read_text(encoding="utf-8")
     assert "would refuse" in text
-    assert "author's own seat" in text
+    assert "author's own session" in text
 
 
 def test_the_gate_off_reads_no_provenance_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -8590,3 +8590,372 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
     assert "reports no commit" in written, written
+
+
+# --- platform-level attribution, session-level independence (2026-10-29) ----
+#
+# Chris, 2026-10-29: PR and review attribution is by platform only (Claude,
+# Cursor, Grok Bot, the Paperclip board), with no per-seat breakdown, and a
+# fresh-session review on the SAME platform counts as independent. The gate
+# therefore asks one question of a review marker: did the session that posted
+# it write the PR? It stays fail-closed when that cannot be shown.
+
+#: A fresh run of the author's own seat: it covers no commit of the PR.
+FRESH_AUTHOR_RUN = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+AUTHOR_SESSION = "claude-sess-author-0001"
+REVIEW_SESSION = "claude-sess-review-0002"
+
+
+def _session_comment(
+    *,
+    platform: str,
+    session: str,
+    head: str = "a" * 40,
+    login: str = "chrizefan",
+) -> dict[str, Any]:
+    """A non-Paperclip review: the in-session marker naming platform and session."""
+    return {
+        "id": "IC_kwDOsession_9001",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "createdAt": "2026-10-20T10:00:00Z",
+        "url": "https://github.com/digithings-ai/digithings/pull/9001#issuecomment-2",
+        "body": (
+            "<!-- in-session-review -->\n"
+            f"<!-- digithings-review platform={platform} session={session} head={head} -->\n\n"
+            "## Verdict: approve\n\n0 blockers.\n"
+        ),
+    }
+
+
+def _source_commits(platform: str, session: str | None) -> list[dict[str, Any]]:
+    """One commit written outside Paperclip, carrying its attribution trailers."""
+    body = f"Source-Platform: {platform}\n"
+    if session is not None:
+        body += f"Source-Session: {session}\n"
+    return [
+        {
+            "oid": "a" * 40,
+            "messageHeadline": "fix: the work",
+            "authoredDate": COMMIT_AT,
+            "committedDate": COMMIT_AT,
+            "messageBody": body,
+        }
+    ]
+
+
+def test_a_fresh_run_of_the_author_seat_is_an_independent_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same platform, same seat, different session: it counts (Chris, 2026-10-29)."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[
+            _paperclip_run(
+                FRESH_AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+                context_issue="issue-review",
+            )
+        ],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=AUTHOR_AGENT, run=FRESH_AUTHOR_RUN)], label=False
+    )
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+    assert "platform `paperclip`" in verdict.review_evidence
+    assert f"session `{FRESH_AUTHOR_RUN[:8]}`" in verdict.review_evidence
+
+
+def test_a_later_run_of_the_author_seat_on_the_ticket_that_wrote_nothing_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run on the ticket is an authoring session only if it covers a commit."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[
+            _paperclip_run(AUTHOR_RUN, AUTHOR_AGENT),
+            _paperclip_run(
+                FRESH_AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+            ),
+        ],
+    )
+    pr = _reviewed_pr([_provenance_comment(agent=AUTHOR_AGENT, run=FRESH_AUTHOR_RUN)])
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+
+
+def test_the_author_seat_with_no_known_authoring_run_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed: the seat wrote the PR and nothing says in which run."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[],
+        runs=[_paperclip_run(FRESH_AUTHOR_RUN, AUTHOR_AGENT)],
+    )
+    pr = _reviewed_pr(
+        [_provenance_comment(agent=AUTHOR_AGENT, run=FRESH_AUTHOR_RUN)],
+        commits=[
+            {
+                "oid": "a" * 40,
+                "messageHeadline": "fix: the work",
+                "authoredDate": COMMIT_AT,
+                "committedDate": COMMIT_AT,
+                "messageBody": f"Paperclip-Agent-Id: {AUTHOR_AGENT}\n",
+            }
+        ],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "session that wrote it could not be identified" in reason
+
+
+def test_a_session_marker_from_another_session_on_the_same_platform_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="claude", session=REVIEW_SESSION)],
+        label=False,
+        commits=_source_commits("claude", AUTHOR_SESSION),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert verdict.eligible, verdict.reasons
+    assert "platform `claude`" in verdict.review_evidence
+    assert REVIEW_SESSION[:12] in verdict.review_evidence
+
+
+def test_a_session_marker_from_the_authoring_session_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="claude", session=AUTHOR_SESSION)],
+        commits=_source_commits("claude", AUTHOR_SESSION),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    reason = " ".join(verdict.reasons)
+    assert "author's own session" in reason
+    assert "a review from a different session" in reason
+
+
+def test_a_session_marker_on_the_author_platform_with_no_known_session_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed: the review may be from the very session that wrote the PR."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="claude", session=REVIEW_SESSION)],
+        commits=_source_commits("claude", None),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any("Source-Session:" in reason for reason in verdict.reasons)
+
+
+def test_a_session_marker_from_another_platform_counts_without_a_source_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Cursor session cannot be the Claude session that wrote the PR."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="cursor", session="cursor-sess-0003")],
+        commits=_source_commits("claude", None),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert verdict.eligible, verdict.reasons
+    assert "platform `cursor`" in verdict.review_evidence
+
+
+@pytest.mark.parametrize(
+    ("platform", "session", "expected"),
+    [
+        ("claude", "your-session-id", "not a session id"),
+        ("claude", "xxxxxxxxxxxx", "not a session id"),
+        ("gemini", REVIEW_SESSION, "not one of"),
+        ("paperclip", REVIEW_SESSION, "instead of a run"),
+        ("claude", "", "but no session"),
+    ],
+)
+def test_a_session_marker_that_cannot_be_checked_is_refused(
+    monkeypatch: pytest.MonkeyPatch, platform: str, session: str, expected: str
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform=platform, session=session)],
+        commits=_source_commits("cursor", "cursor-sess-author-01"),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any(expected in reason for reason in verdict.reasons), verdict.reasons
+
+
+def test_a_session_marker_on_a_stale_head_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="cursor", session="cursor-sess-0003", head="b" * 40)],
+        commits=_source_commits("claude", AUTHOR_SESSION),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any("while this PR stands at" in reason for reason in verdict.reasons)
+
+
+def test_a_session_marker_posted_by_another_platforms_identity_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Forgejo user `cursor` cannot post a review that claims to be Claude."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="claude", session=REVIEW_SESSION, login="cursor")],
+        commits=_source_commits("grokbot", "grokbot-sess-author-01"),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any("which is platform `cursor`" in reason for reason in verdict.reasons)
+
+
+def test_a_commit_naming_an_unknown_platform_makes_the_pr_unverifiable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(
+        [_session_comment(platform="cursor", session="cursor-sess-0003")],
+        commits=_source_commits("gemini", AUTHOR_SESSION),
+    )
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any("author could not be identified" in reason for reason in verdict.reasons)
+
+
+def test_a_missing_review_still_refuses_with_no_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed for a genuinely missing review: no comment, no label, no merge."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr([], label=False, commits=_source_commits("claude", AUTHOR_SESSION))
+    verdict = _judge(pr, _paperclip(author_runs=[]))
+    assert not verdict.eligible
+    assert any("review coverage" in reason for reason in verdict.reasons), verdict.reasons
+
+
+def test_no_reviewed_label_is_needed_for_an_independent_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)],
+    )
+    pr = _reviewed_pr([_provenance_comment()], label=False)
+    assert "labels" not in pr or not pr["labels"]
+    verdict = _judge(pr, prov)
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_fresh_run_of_the_author_seat_clears_a_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clearance follows the same rule: a fresh session of the author seat may clear."""
+    head = "d" * 40
+    block = _seat_verdict_comment(
+        seat="", verdict="changes_requested", head_sha=head, created="2026-10-20T09:10:00Z"
+    )
+    approve = {
+        "id": "IC_kwDOfresh_9001",
+        "author": {"login": "chrizefan"},
+        "createdAt": "2026-10-20T09:40:00Z",
+        "body": (
+            f"<!-- digithings-review agent={AUTHOR_AGENT} run={FRESH_AUTHOR_RUN} head={head} -->\n"
+            f"<!-- opencode-power-pack:code-review verdict=approve scope=@{head} -->\n\n"
+            "Review verdict: approve\n"
+        ),
+    }
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[
+            _paperclip_run(
+                FRESH_AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+            )
+        ],
+    )
+    reasons = _clearance_reasons(monkeypatch, [block, approve], head=head, prov=prov)
+    assert reasons == []
+    # The authoring run itself still cannot clear it.
+    same = dict(approve, body=approve["body"].replace(FRESH_AUTHOR_RUN, AUTHOR_RUN))
+    reasons = _clearance_reasons(monkeypatch, [block, same], head=head, prov=prov)
+    assert any("cannot clear the block" in reason for reason in reasons), reasons
+
+
+def test_the_shipped_policy_maps_identities_to_platforms() -> None:
+    cfg = mq.load_policy().review_independence
+    assert set(cfg.platforms) == set(mq.PLATFORMS)
+    assert mq.platform_for(cfg, "forgejo_users", "grokbot") == "grokbot"
+    assert mq.platform_for(cfg, "forgejo_users", "Claude") == "claude"
+    assert mq.platform_for(cfg, "github_logins", "cursor[bot]") == "cursor"
+    assert mq.platform_for(cfg, "paperclip_seats", AUTHOR_AGENT) == "paperclip"
+    # The shared org login cannot say which platform wrote anything.
+    assert mq.platform_for(cfg, "github_logins", "chrizefan") == ""
+
+
+def test_an_exact_seat_wins_over_the_paperclip_wildcard(tmp_path: Path) -> None:
+    raw = {
+        "review_independence": {
+            "mode": "enforce",
+            "platforms": {
+                "paperclip": {"paperclip_seats": ["*"]},
+                "grokbot": {"paperclip_seats": [AUTHOR_AGENT]},
+            },
+        }
+    }
+    cfg = mq._load_review_independence(raw, tmp_path / "p.json")
+    assert mq.platform_for(cfg, "paperclip_seats", AUTHOR_AGENT) == "grokbot"
+    assert mq.platform_for(cfg, "paperclip_seats", REVIEWER_AGENT) == "paperclip"
+
+
+@pytest.mark.parametrize(
+    "platforms",
+    [
+        {"gemini": {"forgejo_users": ["gemini"]}},
+        {"claude": {"emails": ["c@x"]}},
+        {"claude": {"forgejo_users": "claude"}},
+        {"claude": {"forgejo_users": [""]}},
+        {"claude": {"forgejo_users": ["bot"]}, "cursor": {"forgejo_users": ["bot"]}},
+        ["claude"],
+    ],
+)
+def test_a_malformed_platform_mapping_stops_the_queue(
+    tmp_path: Path, platforms: Any
+) -> None:
+    raw = {"review_independence": {"mode": "enforce", "platforms": platforms}}
+    with pytest.raises(mq.QueueError):
+        mq._load_review_independence(raw, tmp_path / "p.json")
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        ("claude-sess-0001", True),
+        ("0123456789abcdef", True),
+        ("your-session-id", False),
+        ("short", False),
+        ("aaaaaaaaaaaa", False),
+        ("has space here", False),
+    ],
+)
+def test_session_ids_are_judged_by_shape(value: str, ok: bool) -> None:
+    assert mq._is_session_id(value) is ok

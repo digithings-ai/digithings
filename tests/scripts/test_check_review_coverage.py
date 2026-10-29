@@ -114,14 +114,12 @@ def test_nothing_at_all_is_not_a_review() -> None:
     assert "no completed agent review" in why
 
 
-def test_a_marker_comment_without_the_label_names_the_missing_label() -> None:
-    """A near miss must not be reported as "no review at all".
+def test_a_marker_comment_without_the_label_is_a_review() -> None:
+    """The findings comment is the evidence on its own (Chris, 2026-10-29).
 
-    On 2026-10-27 the promotion gate said "no completed agent review (… in-session)"
-    about PRs that *did* carry an in-session review comment and were missing only
-    the label that accepts it. The operator read that as a broken detector, went
-    looking for a bug that was not there, and only found the real gap by reading
-    the source. The refusal has to name the one thing left to do.
+    The `reviewed:agent` label that used to accept it was retired with the move
+    to platform-level attribution, so a PR carrying an in-session findings
+    comment and no label is reviewed.
     """
     reviewed, why = crc.verdict_for(
         _state(
@@ -132,10 +130,9 @@ def test_a_marker_comment_without_the_label_names_the_missing_label() -> None:
             }
         )
     )
-    assert not reviewed
-    assert "in-session review comment exists" in why
-    assert crc.AGENT_REVIEW_LABEL in why
-    assert "no completed agent review" not in why
+    assert reviewed
+    assert "in-session review by chrizefan" in why
+    assert crc.AGENT_REVIEW_LABEL not in why
 
 
 def test_an_unreadable_review_index_is_loud_and_still_fails_closed(monkeypatch, capsys) -> None:
@@ -1954,17 +1951,17 @@ def test_the_review_must_carry_the_marker_and_not_merely_quote_the_sha(
     )
 
 
-def test_the_label_has_to_be_on_the_thing_carrying_the_comment(
+def test_a_direct_push_review_needs_no_label_on_the_thing_carrying_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert (
-        _hatch(
-            monkeypatch,
-            body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}: reviewed",
-            labels=["risk:low", "component:root"],
-        )
-        is None
+    """The `reviewed:agent` label was retired on 2026-10-29: marker plus sha is the review."""
+    found = _hatch(
+        monkeypatch,
+        body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}: reviewed",
+        labels=["risk:low", "component:root"],
     )
+    assert found is not None
+    assert found["on"] == 3256
 
 
 def test_a_full_sha_in_the_comment_also_satisfies_the_short_sha_requirement(
@@ -2077,3 +2074,31 @@ def test_the_failure_guidance_tells_you_how_to_hatch_a_direct_push() -> None:
     src = SCRIPT.read_text(encoding="utf-8")
     assert "it has no PR at all" in src
     assert "no merged source pull request" in src
+
+
+def test_an_in_session_comment_is_read_without_the_label() -> None:
+    """2026-10-29: the findings comment is collected whatever the labels say."""
+    state = {"labels": set(), "agent_review": None}
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=[],
+        checks=[],
+        comments=[
+            {
+                "author": {"login": "chrizefan"},
+                "body": f"{crc.AGENT_REVIEW_MARKER}\n## Verdict: approve\n",
+                "createdAt": "2026-10-29T10:00:00Z",
+                "url": "https://github.com/o/r/pull/1#issuecomment-9",
+            }
+        ],
+    )
+    assert state["agent_review"] is not None
+    reviewed, _why = crc.verdict_for({**_state(), **state})
+    assert reviewed
+
+
+def test_reviewed_owner_is_still_read_on_history() -> None:
+    """Legacy evidence: commits promoted under `reviewed:owner` stay reviewed."""
+    reviewed, why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}))
+    assert reviewed
+    assert crc.OWNER_REVIEW_LABEL in why

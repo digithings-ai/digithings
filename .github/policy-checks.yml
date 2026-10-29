@@ -87,15 +87,41 @@ tracked_workflows:
   - security-gitleaks.yml
   - security-workflow-secret-refs.yml
 
+# ── required contexts no workflow produces ──────────────────────────────────
+#
+# A context in develop's live gate that comes from outside `.github/workflows/`.
+# The guard cannot read such a producer's triggers, so it cannot prove it
+# reports on every PR; it can refuse to let the gate go undeclared, and it
+# reports an entry here that the live gate no longer requires
+# (`policy.stale-external`). Each entry names its producer, owner and reason.
+external_contexts:
+  - context: local-ci
+    producer: >-
+      the local CI runner (see scripts/local-ci/), which posts a `local-ci`
+      commit status on each PR head
+    owner: DevOps
+    reason: >-
+      The one context develop's live branch protection requires (read
+      2026-10-29: contexts ["local-ci"], strict false). The GitHub Actions
+      checks below still run and report, but none of them is required, so the
+      merge gate is the local runner.
+      `merge-queue` is deliberately NOT required: set-branch-protection.sh
+      applies this snapshot exactly, and requiring a context only the queue
+      posts would lock develop.
+
 checks:
-  # ── develop's merge gate ────────────────────────────────────────────────────
+  # ── formerly develop's merge gate (advisory since 2026-10-29) ──────────────
 
   - context: Required checks passed
     workflow: ci.yml
     job: required-checks
-    enforcement: required
+    enforcement: advisory
     owner: DevOps
+    review_by: 2026-11-30
     reason: >-
+      DEMOTED 2026-10-29: develop's live protection requires only `local-ci`
+      (read-only GET of branches/develop/protection), so this check is no longer
+      a merge gate on develop.
       The single stable required name on develop. Every other ci.yml job is
       individually path-gated, so none of them can be required directly — a PR
       that does not touch a component reports no status for that job at all,
@@ -104,9 +130,13 @@ checks:
   - context: doc-links + agents-init
     workflow: ci-docs.yml
     job: docs-and-agents-init
-    enforcement: required
+    enforcement: advisory
     owner: DevOps
+    review_by: 2026-11-30
     reason: >-
+      DEMOTED 2026-10-29: develop's live protection requires only `local-ci`
+      (read-only GET of branches/develop/protection), so this check is no longer
+      a merge gate on develop.
       Internal markdown link validation plus `agents-init --check`. Its
       `pull_request:` trigger is deliberately unfiltered so the check posts on
       every PR; see the comment in ci-docs.yml.
@@ -114,9 +144,13 @@ checks:
   - context: mypy — digibase + digikey
     workflow: ci-type-check.yml
     job: mypy
-    enforcement: required
+    enforcement: advisory
     owner: DevOps
+    review_by: 2026-11-30
     reason: >-
+      DEMOTED 2026-10-29: develop's live protection requires only `local-ci`
+      (read-only GET of branches/develop/protection), so this check is no longer
+      a merge gate on develop.
       Type checking for digibase/digikey. Same unfiltered `pull_request:`
       trigger, for the same reason as ci-docs.yml.
 
@@ -194,7 +228,10 @@ checks:
     job: frontend-canon
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: Path-gated lane, folded into `Required checks passed`.
 
   - context: actionlint
@@ -202,7 +239,10 @@ checks:
     job: actionlint
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: Path-gated lane, folded into `Required checks passed`.
 
   - context: GLOOMBERB deployed-config guard
@@ -210,7 +250,10 @@ checks:
     job: gloomberb-ci-guard
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
@@ -221,7 +264,10 @@ checks:
     job: vendor-content-gate
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
@@ -232,7 +278,10 @@ checks:
     job: example-credentials-guard
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
@@ -243,7 +292,10 @@ checks:
     job: plaintext-credential-guard
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
@@ -254,7 +306,10 @@ checks:
     job: r0-client-literals-baseline-growth
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional on a PR (`if: github.event_name == 'pull_request'`), folded
       into `Required checks passed` (in its `needs:`), where a failure blocks
@@ -272,7 +327,10 @@ checks:
     job: supabase-freeze
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       DIG-2887 S0. Pull-request only, folded into `Required checks passed` (in
       its `needs:`), where a failure blocks the merge, same shape as the R0
@@ -284,7 +342,10 @@ checks:
     job: workflow-secret-refs
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`), where a failure blocks the merge — the aggregator is the gate.
@@ -328,7 +389,10 @@ checks:
     job: worker-build
     enforcement: advisory
     owner: DevOps
-    gated_by: Required checks passed
+    # Was `gated_by: Required checks passed`; that context left develop's
+    # live gate (only `local-ci` is required, read 2026-10-29), so the claim
+    # stopped being true. Dated instead, until the gate is decided.
+    review_by: 2026-11-30
     reason: >-
       Path-gated lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports only on PRs

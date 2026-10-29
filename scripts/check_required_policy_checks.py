@@ -163,6 +163,25 @@ DEFAULT_PR_TYPES = ("opened", "synchronize", "reopened")
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 
+@dataclass(frozen=True)
+class ExternalContext:
+    """A required context no GitHub workflow produces.
+
+    develop's live protection requires `local-ci`, a commit status posted by the
+    local CI runner (docs/ops, `scripts/local-ci/`), not by any file under
+    `.github/workflows/`. The guard cannot parse that producer, so it cannot
+    run the reachability analysis on it; what it can do is refuse to let such a
+    gate go undeclared. An external context therefore names its producer, an
+    owner, and a reason, and it must really be in the live gate: an external
+    entry that nothing requires is a stale declaration, and is reported.
+    """
+
+    context: str
+    producer: str
+    owner: str
+    reason: str
+
+
 class GuardError(RuntimeError):
     """Raised when an input cannot be read at all, as opposed to mismatching."""
 
@@ -404,6 +423,58 @@ def scan_untracked_workflows(
     return facts, findings
 
 
+def load_external_contexts(path: Path = INVENTORY_PATH) -> list[ExternalContext]:
+    """The inventory's `external_contexts:` list. Raises on a malformed entry.
+
+    Absent means none. Every entry needs `context`, `producer`, `owner` and
+    `reason`, and a context may not be declared both here and under `checks:`:
+    it is produced by a workflow or by something else, not both.
+    """
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise GuardError(f"{path} is not parseable YAML: {exc}") from exc
+    raw = (doc or {}).get("external_contexts") if isinstance(doc, dict) else None
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise GuardError(f"{path}: 'external_contexts' must be a list")
+    workflow_contexts = {
+        str(entry.get("context"))
+        for entry in (doc.get("checks") or [])
+        if isinstance(entry, dict)
+    }
+    out: list[ExternalContext] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(raw):
+        where = f"{path}: external_contexts[{index}]"
+        if not isinstance(entry, dict):
+            raise GuardError(f"{where} is not a mapping")
+        missing = [
+            k for k in ("context", "producer", "owner", "reason") if not str(entry.get(k) or "").strip()
+        ]
+        if missing:
+            raise GuardError(f"{where} is missing required key(s): {', '.join(missing)}")
+        context = str(entry["context"]).strip()
+        if context in seen:
+            raise GuardError(f"{where}: duplicate context {context!r}")
+        if context in workflow_contexts:
+            raise GuardError(
+                f"{where}: {context!r} is also declared under 'checks' — a context is "
+                "produced by a workflow or externally, not both"
+            )
+        seen.add(context)
+        out.append(
+            ExternalContext(
+                context=context,
+                producer=" ".join(str(entry["producer"]).split()),
+                owner=str(entry["owner"]).strip(),
+                reason=" ".join(str(entry["reason"]).split()),
+            )
+        )
+    return out
+
+
 def load_inventory(path: Path = INVENTORY_PATH) -> tuple[list[PolicyCheck], list[str]]:
     """Read the declared policy inventory. Raises on a malformed inventory.
 
@@ -638,9 +709,11 @@ def reconcile(
     branch: str,
     untracked_facts: dict[str, WorkflowFacts] | None = None,
     workflows_dir: Path | None = None,
+    external: list[ExternalContext] | None = None,
 ) -> list[Finding]:
     """The three-way reconciliation. Returns every disagreement found."""
     findings: list[Finding] = []
+    external_contexts = {entry.context for entry in external or []}
     by_context = {check.context: check for check in inventory}
     live = list(required_contexts)
     root = workflows_dir or WORKFLOWS_DIR
@@ -767,8 +840,21 @@ def reconcile(
                 )
             )
 
+    for entry in external or []:
+        if entry.context not in live:
+            findings.append(
+                Finding(
+                    "policy.stale-external",
+                    entry.context,
+                    f"is declared as an external context (producer: {entry.producer}) "
+                    f"but is not in {branch}'s required status-check contexts. An "
+                    "external declaration exists only to account for a live gate; "
+                    "drop it, or put the context back in the gate",
+                )
+            )
+
     for context in live:
-        if context in declared_contexts:
+        if context in declared_contexts or context in external_contexts:
             continue
         findings.append(
             Finding(
@@ -795,7 +881,9 @@ def reconcile(
     for context in live:
         produced = produce(context)
         if produced is None:
-            continue  # already reported as policy.undeclared-gate
+            # Already reported as policy.undeclared-gate, or declared external:
+            # no workflow here produces it, so there is no trigger to analyse.
+            continue
         facts, _job_id, is_tracked = produced
         if not is_tracked:
             findings.append(
@@ -912,6 +1000,7 @@ def report(
     inventory: list[PolicyCheck],
     live: list[str],
     today: date | None = None,
+    external: list[ExternalContext] | None = None,
 ) -> str:
     """Human-readable summary: what is gated, what is not, and what broke."""
     lines: list[str] = []
@@ -928,6 +1017,10 @@ def report(
     for context, enforcement, owner, follow_up in ungated:
         hook = f" [{follow_up}]" if follow_up else ""
         lines.append(f"  ungated ({enforcement}, owner {owner}{hook}): {context}")
+    for entry in external or []:
+        lines.append(
+            f"  external gate (owner {entry.owner}, producer: {entry.producer}): {entry.context}"
+        )
     stale = stale_advisories(inventory, today)
     if stale:
         lines.append("")
@@ -967,6 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         inventory, tracked = load_inventory(args.inventory)
+        external = load_external_contexts(args.inventory)
         contexts = (
             read_live_contexts(args.repo, args.branch)
             if args.live
@@ -986,7 +1080,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     findings = untracked_findings + reconcile(
-        inventory, tracked, facts_by_workflow, contexts, args.branch, untracked_facts
+        inventory,
+        tracked,
+        facts_by_workflow,
+        contexts,
+        args.branch,
+        untracked_facts,
+        external=external,
     )
     # The writer check always reads the snapshot, even under --live: the coupling
     # is a property of the two committed files, not of the API.
@@ -997,7 +1097,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"check_required_policy_checks: {exc}", file=sys.stderr)
         return 2
     findings += check_writer_coupling(snapshot, writer, WRITER_SCRIPT.name)
-    print(report(findings, inventory, contexts))
+    print(report(findings, inventory, contexts, external=external))
     print(f"{VERDICT_PREFIX} {'drift' if findings else 'agree'}")
     return 1 if findings else 0
 

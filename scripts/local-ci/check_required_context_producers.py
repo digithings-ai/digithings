@@ -4,11 +4,10 @@
 THE RULE (one answer, recorded 2026-10-20): a commit reaches main reviewed
 when the repo's own gate script says so
 (`scripts/check_review_coverage.py`). That script's in-session arm accepts
-the `reviewed:agent` label TOGETHER WITH a comment carrying the
-`<!-- in-session-review -->` marker. The label alone is not evidence - it is
-applied automatically as soon as any marker appears, including a
-changes-requested verdict - so the evidence is the marker comment plus the
-label, and the label on its own satisfies nothing.
+a comment carrying the `<!-- in-session-review -->` marker; the
+`reviewed:agent` label it once also required was retired on 2026-10-29
+(attribution by platform, independence by session). The label on its own
+never satisfied anything.
 
 THE DEFECT THIS GUARDS: two implementations published the same required
 context name on digithings-ai/digithings - the repo workflow
