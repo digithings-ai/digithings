@@ -47,6 +47,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from digigraph.skill_library.loader import SKILL_NAME_RE, known_skill_names
+from digigraph.web_search_sites import has_web_search_site_graph
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,100 @@ _KNOWN_ENTRY_KEYS = frozenset(
         # (``skill_library/<slug>/``) is the set. An unmapped tenant gets none.
         "skills",
         "skill_ids",
+        # Domains this tenant's web_search may reach. Absent: unpinned.
+        "webSearchDomains",
+        "web_search_domains",
+        # Pre-crawled page text served when a pinned page is a bot challenge.
+        "webSearchPageCorpus",
+        "web_search_page_corpus",
     }
 )
+
+# One pin: a hostname, optionally followed by a path prefix. Lowercase labels,
+# at least one dot, no scheme, port, query or wildcard. ``example.com`` also
+# admits its subdomains; ``example.com/company/acme`` admits only URLs on that
+# host (or a subdomain) whose path sits under ``/company/acme``.
+_DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+_PIN_PATH = re.compile(r"^(/[a-z0-9._~%!$&'()*+,;=:@-]+)+$")
+# digisearch's WebSearchRequest takes at most five include_domains.
+_MAX_PIN_HOSTS = 5
+
+
+def _normalize_web_search_pin(value: Any) -> str | None:
+    """``host`` or ``host/path`` in canonical form, or ``None`` when invalid."""
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().lower()
+    if not candidate or "://" in candidate or "?" in candidate or "#" in candidate:
+        return None
+    host, sep, path = candidate.partition("/")
+    host = host.rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    if not _DOMAIN.match(host):
+        return None
+    path = ("/" + path).rstrip("/") if sep else ""
+    if path and not _PIN_PATH.match(path):
+        return None
+    return host + path
+
+
+def _parse_web_search_domains(raw: Any, slug: str) -> list[str] | None:
+    """Validate ``webSearchDomains``: a list of ``host`` / ``host/path`` pins, or nothing.
+
+    ``None`` (key absent) leaves web_search unpinned. A key that is present but
+    unusable fails *closed* to an empty list, which refuses web_search for the
+    tenant: widening to the open web after an operator tried to pin it would be
+    the one outcome they set the key to prevent. More than five distinct hosts
+    also fails closed: digisearch accepts at most five ``include_domains``.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        logger.warning("%s[%s]: webSearchDomains must be a list of hostnames", _ENV_VAR, slug)
+        return []
+    out: list[str] = []
+    for value in raw:
+        pin = _normalize_web_search_pin(value)
+        if pin is None:
+            logger.warning("%s[%s]: skip invalid webSearchDomains entry", _ENV_VAR, slug)
+            continue
+        if pin not in out:
+            out.append(pin)
+    if len({p.split("/", 1)[0] for p in out}) > _MAX_PIN_HOSTS:
+        logger.warning(
+            "%s[%s]: webSearchDomains names more than %d hosts; web_search refused",
+            _ENV_VAR,
+            slug,
+            _MAX_PIN_HOSTS,
+        )
+        return []
+    return out
+
+
+_PAGE_CORPUS_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def _parse_page_corpus(raw: Any, slug: str, pinned: bool) -> str | None:
+    """Validate ``webSearchPageCorpus``: ``true`` (the tenant slug) or a corpus id.
+
+    Only a pinned tenant gets one: the corpus stands in for pages on the pinned
+    site, so it means nothing for an open-web search. Anything else is ``None``.
+    """
+    if raw is None or raw is False:
+        return None
+    if not pinned:
+        logger.warning(
+            "%s[%s]: webSearchPageCorpus ignored without webSearchDomains", _ENV_VAR, slug
+        )
+        return None
+    value = slug if raw is True else raw
+    if isinstance(value, str) and _PAGE_CORPUS_ID.match(value.strip()):
+        return value.strip()
+    logger.warning("%s[%s]: skip invalid webSearchPageCorpus", _ENV_VAR, slug)
+    return None
 
 
 def _parse_skill_ids(raw: Any, slug: str) -> list[str] | None:
@@ -156,6 +249,24 @@ class TenantCorpusOverride(BaseModel):
         description="Skill document ids this tenant may read (DIG-2637). None means "
         "the tenant's own pack (skill_library/<slug>/); a list narrows that pack, "
         "and an empty list means no skills at all.",
+    )
+    web_search_domains: list[str] | None = Field(
+        default=None,
+        description="Pins this tenant's web_search is held to: ``host`` (admits its "
+        "subdomains) or ``host/path`` (only URLs under that path). None leaves "
+        "web_search unpinned; an empty list refuses it.",
+    )
+    web_search_site: str | None = Field(
+        default=None,
+        description="Id of the site graph appended to this tenant's web_search tool "
+        "description (<DIGIGRAPH_WEB_SEARCH_SITES_DIR>/<id>.md). Set only for a pinned "
+        "tenant whose slug has a file there; never from the client.",
+    )
+    web_search_page_corpus: str | None = Field(
+        default=None,
+        description="Page-corpus id digisearch falls back to when a pinned page is a "
+        "bot challenge or fails to fetch (webSearchPageCorpus). Pinned tenants only; "
+        "never from the client.",
     )
 
 
@@ -241,6 +352,9 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
             value.get("digisearchTools") or value.get("digisearch_tools"), normalized_slug
         )
         skills = _parse_skill_ids(value.get("skills", value.get("skill_ids")), normalized_slug)
+        web_domains = _parse_web_search_domains(
+            value.get("webSearchDomains", value.get("web_search_domains")), normalized_slug
+        )
         if not isinstance(lock, bool):
             # A known key carrying a bad value is a safety problem, not a
             # forward-compatibility problem: fail closed to LOCKED for this
@@ -260,6 +374,17 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
                 lock_session_controls=lock,
                 digisearch_tools=tools,
                 skills=skills,
+                web_search_domains=web_domains,
+                web_search_site=(
+                    normalized_slug
+                    if web_domains and has_web_search_site_graph(normalized_slug)
+                    else None
+                ),
+                web_search_page_corpus=_parse_page_corpus(
+                    value.get("webSearchPageCorpus", value.get("web_search_page_corpus")),
+                    normalized_slug,
+                    bool(web_domains),
+                ),
             )
         except Exception as exc:
             logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
@@ -394,6 +519,9 @@ def resolve_corpus_override(
             lock_session_controls=mapped.lock_session_controls,
             digisearch_tools=mapped.digisearch_tools,
             skills=mapped.skills,
+            web_search_domains=mapped.web_search_domains,
+            web_search_site=mapped.web_search_site,
+            web_search_page_corpus=mapped.web_search_page_corpus,
         )
 
     # Single-tenant (map unset): headers may select corpus.

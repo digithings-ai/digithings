@@ -1440,6 +1440,9 @@ def api_orchestrator_invoke(
         # clean ok:False, never a silent fallback to another provider.
         if args.get("provider") is not None:
             web_kwargs["provider"] = str(args["provider"])
+        if args.get("page_corpus") is not None:
+            # Validated by the model (id pattern); only the in-house engine reads it.
+            web_kwargs["page_corpus"] = str(args["page_corpus"])
         if args.get("purpose") is not None:
             web_kwargs["purpose"] = str(args["purpose"])
         if args.get("effort") is not None:

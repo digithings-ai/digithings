@@ -32,6 +32,16 @@ import {
   type OccCookiePolicy,
   withoutInviteCookie,
 } from "./occ-gate";
+import {
+  INVITE_PAGES_VAR,
+  bindInvitePageApiCall,
+  invitePageEmbedGate,
+  invitePageFor,
+  invitePageGate,
+  invitePageKey,
+  parseInvitePages,
+  withoutInvitePageCookies,
+} from "./invite-pages";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
 import {
@@ -114,6 +124,10 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
+    // Non-secret: which tenant hosts are invite-only beyond OCC (slug, host and
+    // the NAME of each key). The app uses it so an invite-only host never falls
+    // back to a generic chat; the key values are not in it.
+    DIGICHAT_INVITE_PAGES: workerVars.DIGICHAT_INVITE_PAGES ?? "",
     // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
     // at boot and overwritten below; this var is the seam for `wrangler dev`
     // and for a deploy that pins the document in `[vars]`.
@@ -286,6 +300,12 @@ export interface Env {
    */
   OCC_INVITE_MAX_AGE_DAYS?: string;
   /**
+   * Non-secret JSON: invite-only tenant pages beyond OCC,
+   * `{"<slug>": {"host": "<host>", "keyEnv": "<SECRET_NAME>"}}`. Each
+   * `keyEnv` names a Worker secret; see src/invite-pages.ts.
+   */
+  DIGICHAT_INVITE_PAGES?: string;
+  /**
    * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
    * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
    * Container (see `sharedDigichatContainerId`), so the Worker reads it and
@@ -367,10 +387,32 @@ export default {
         occCookiePolicy(workerEnv),
       );
     }
+    // Configured invite-only pages (/chat/<slug>), gated like /chat/occ.
+    const invitePages = parseInvitePages(workerEnv[INVITE_PAGES_VAR]);
+    const secrets = workerEnv as unknown as Record<string, unknown>;
+    const invitePage = invitePageFor(invitePages, url.pathname);
+    if (invitePage) {
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return invitePageGate(
+        invitePage,
+        invitePages,
+        request,
+        invitePageKey(invitePage, secrets),
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
+      );
+    }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
     const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
     if (embedGate) return embedGate;
+    const pageEmbedGate = await invitePageEmbedGate(request, invitePages, secrets);
+    if (pageEmbedGate) return pageEmbedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
     // it destroys is the same derived id the proxy below addresses.
@@ -466,9 +508,11 @@ export default {
         workerEnv.OCC_INVITE_KEY,
         occCookiePolicy(workerEnv),
       );
+      await bindInvitePageApiCall(containerRequest, invitePages, secrets, occCookiePolicy(workerEnv));
     }
-    // The invite cookie stops at the edge on every path, like the edge key.
+    // The invite cookies stop at the edge on every path, like the edge key.
     withoutInviteCookie(containerRequest.headers);
+    withoutInvitePageCookies(containerRequest.headers, invitePages);
     // The edge key stops at the edge: the container never sees it. The header
     // is dropped from the COPY, so the original request still carries it.
     containerRequest.headers.delete(MCP_KEY_HEADER);

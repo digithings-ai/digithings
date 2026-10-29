@@ -495,3 +495,41 @@ describe("boot loader paints the chat canvas on a site chat", () => {
     },
   );
 });
+
+/**
+ * Stock skins on the embed route sit in a wrapper that carries shadcn's
+ * `.dark` class and paints bg-background. `.dark` redeclares --background as
+ * zinc, so with a named palette the base skin's chat area showed near-black
+ * instead of the palette canvas (lucent-orng dark: #2a1a15). The wrapper's
+ * --background must resolve to the palette's dark --bg for every palette, and
+ * stay on the shadcn zinc when no palette is set.
+ */
+function embedWrapperBackground(id: string | null): string {
+  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.setAttribute("data-site-theme", "1");
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  document.body.className = "accent-digichat bg-background";
+  document.body.innerHTML = `<div class="dc-embed-shell bg-background"><div class="dark accent-digichat bg-background"><div data-stock-product data-thread-skin="base" data-chrome-mode="embed"></div></div></div>`;
+  const shell = document.querySelector(".dc-embed-shell")!;
+  const wrapper = shell.firstElementChild!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, shell, wrapper]);
+  document.body.className = "";
+  return (maps[maps.length - 1]["--background"] ?? "").toLowerCase();
+}
+
+describe("base skin embed wrapper paints the palette canvas in dark", () => {
+  it.each(PALETTE_IDS.map((id) => [id] as const))("%s dark: wrapper --background is the palette --bg", (id) => {
+    const declared = declaredBg(id, "dark");
+    expect(declared, `${id} dark is missing from palettes.css`).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+    expect(embedWrapperBackground(id)).toBe(declared!.toLowerCase());
+  });
+
+  it("lucent-orng dark resolves to its brown canvas, not the zinc", () => {
+    expect(embedWrapperBackground("lucent-orng")).toBe("#2a1a15");
+  });
+
+  it("no palette: the wrapper keeps the shadcn dark background", () => {
+    expect(embedWrapperBackground(null)).toBe("oklch(0.141 0.005 285.823)");
+  });
+});

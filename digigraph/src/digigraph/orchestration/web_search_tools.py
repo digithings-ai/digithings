@@ -60,6 +60,44 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
 }
 
 
+def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None:
+    """The ``web_search`` tool definition for a pinned tenant, or ``None``.
+
+    Same name and parameters as :data:`WEB_SEARCH_TOOL`; only the description
+    changes. It states the pin (enforced in :func:`_handle_web_search`, so the
+    text is guidance, not the guard) and appends the tenant's site graph
+    (``$DIGIGRAPH_WEB_SEARCH_SITES_DIR/<id>.md``) when one exists. An unpinned
+    tenant keeps the shared definition: ``None``.
+    """
+    pin_list = _as_str_list(pins)
+    if pins is None or not pin_list:
+        return None
+    import copy
+
+    from digigraph.web_search_sites import load_web_search_site_graph
+
+    tool = copy.deepcopy(WEB_SEARCH_TOOL)
+    fn = tool["function"]
+    parts = [
+        "Search this tenant's own public web presence with the first-party digisearch "
+        "web_search tool. Results are restricted server-side to: "
+        + ", ".join(pin_list)
+        + ". Other domains and other search engines are refused; include_domains "
+        "can only narrow this list. Cite the page URL of every fact you use."
+    ]
+    graph = load_web_search_site_graph(site_id) if isinstance(site_id, str) else None
+    if graph:
+        parts.append(graph)
+    fn["description"] = "\n\n".join(parts)
+    props = fn["parameters"]["properties"]
+    props.pop("provider", None)
+    props["include_domains"] = {
+        **props["include_domains"],
+        "description": "Optional narrowing within: " + ", ".join(pin_list) + ".",
+    }
+    return tool
+
+
 class DigisearchHubError(RuntimeError):
     """The digisearch hub call itself failed (#4106).
 
@@ -97,6 +135,83 @@ def _as_str_list(value: Any) -> list[str]:
     return []
 
 
+#: Search window for a pinned tenant. digisearch defaults to the last 7 days,
+#: which suits news but finds almost nothing on a company website whose pages
+#: change a few times a year; 365 is the widest window digisearch accepts.
+PINNED_RECENCY_DAYS = 365
+
+
+def _domain_within(domain: str, pin: str) -> bool:
+    return domain == pin or domain.endswith("." + pin)
+
+
+def _split_pin(pin: str) -> tuple[str, str]:
+    """``host/path`` -> ``(host, "/path")``; a bare host has an empty path."""
+    host, sep, path = pin.strip().lower().rstrip("/").partition("/")
+    host = host.rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    return host, ("/" + path if sep and path else "")
+
+
+def _pin_hosts(pinned: Any) -> list[str]:
+    hosts: list[str] = []
+    for pin in _as_str_list(pinned):
+        host, _ = _split_pin(pin)
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
+
+
+def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
+    """Clamp a model's ``include_domains`` to the hosts of the tenant's pins.
+
+    No request: every pinned host. A request: only the requested domains that
+    sit inside a pinned host (equal or a subdomain). Anything else is dropped,
+    so the result is never wider than the pin; when nothing the model asked for
+    survives, the pin itself is used. Path prefixes are not expressible as
+    engine domains, so :func:`url_within_pins` enforces them on the results.
+    """
+    hosts = _pin_hosts(pinned)
+    if not hosts:
+        return []
+    wanted = []
+    for raw in _as_str_list(requested):
+        d = raw.lower().split("://", 1)[-1].split("/", 1)[0].rstrip(".")
+        if d.startswith("www."):
+            d = d[4:]
+        if d and any(_domain_within(d, h) for h in hosts) and d not in wanted:
+            wanted.append(d)
+    # digisearch accepts at most five include_domains.
+    return (wanted or hosts)[:5]
+
+
+def url_within_pins(url: Any, pins: Any) -> bool:
+    """True when ``url`` falls inside one pin: host equal or a subdomain, and,
+    for a ``host/path`` pin, a path equal to or under that path."""
+    if not isinstance(url, str):
+        return False
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https"):
+        return False
+    host = (parts.hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    path = (parts.path or "/").lower().rstrip("/")
+    for pin in _as_str_list(pins):
+        pin_host, pin_path = _split_pin(pin)
+        if not pin_host or not _domain_within(host, pin_host):
+            continue
+        if not pin_path or path == pin_path or path.startswith(pin_path + "/"):
+            return True
+    return False
+
+
 def call_digisearch_web_search(
     query: str,
     include_domains: list[str] | None = None,
@@ -106,6 +221,7 @@ def call_digisearch_web_search(
     provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
+    page_corpus: str | None = None,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
@@ -125,6 +241,7 @@ def call_digisearch_web_search(
         provider=provider,
         context=context,
         timeout=timeout,
+        page_corpus=page_corpus,
     )
 
 
@@ -137,6 +254,7 @@ def _call_digisearch_web_search(
     provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
+    page_corpus: str | None = None,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -170,6 +288,10 @@ def _call_digisearch_web_search(
         # and an explicit in-house name (internal) still forwards (#4722).
         # Unknown names are the hub's call to reject (no digigraph registry).
         arguments["provider"] = provider_arg
+    if page_corpus:
+        # Pinned tenant with a pre-crawled corpus: digisearch still fetches the
+        # live page first and uses the corpus only for a challenge or a failure.
+        arguments["page_corpus"] = page_corpus
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
@@ -235,6 +357,18 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
                 "Enable via X-Digi-Enable-Web-Search / enable_web_search."
             ),
         }
+    include_domains = args.get("include_domains")
+    pinned = context.state.get("web_search_domains")
+    if pinned is not None:
+        # Tenant pin (corpus map webSearchDomains): the model may narrow it,
+        # never widen it. A pin that leaves nothing refuses the call.
+        include_domains = pinned_include_domains(pinned, include_domains)
+        if not include_domains:
+            return {
+                "error": "tool_not_allowed",
+                "tool": WEB_SEARCH_TOOL_NAME,
+                "message": "web_search is not available for this tenant.",
+            }
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
@@ -244,15 +378,38 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
     # Tool path needs no model — "" keeps the (model, query) shape for callers.
     # The model's per-call engine wins; the session default covers silence (#4722).
     provider = args.get("provider") or context.state.get("web_search_provider")
-    summary, urls = digifetch_web_search(
-        "",
-        query,
-        include_domains=args.get("include_domains"),
-        exclude_domains=args.get("exclude_domains"),
-        max_results=int(args.get("max_results", 4)),
-        provider=provider,
-        context=context,
-    )
+    if pinned is not None:
+        # A pinned tenant's engine is the operator's choice (gate.searchEngine),
+        # never the model's: it cannot switch a free tenant onto a paid engine.
+        provider = context.state.get("web_search_provider")
+    search_kwargs: dict[str, Any] = {
+        "include_domains": include_domains,
+        "exclude_domains": args.get("exclude_domains"),
+        "max_results": int(args.get("max_results", 4)),
+        "provider": provider,
+        "context": context,
+    }
+    if pinned is not None:
+        # A pinned tenant searches its own site, not the news: widen the window.
+        search_kwargs["recency_days"] = PINNED_RECENCY_DAYS
+        # An engine that ignores include_domains, or a pin with a path prefix,
+        # still cannot hand a pinned tenant an off-pin row: it is dropped before
+        # the summary is built, so neither its URL nor its snippet survives.
+        search_kwargs["url_filter"] = lambda u: url_within_pins(u, pinned)
+        # Tenant map webSearchPageCorpus (digisearch page_corpus): a live page
+        # behind a bot challenge falls back to the pre-crawled copy. Unpinned
+        # tenants never send one.
+        corpus = context.state.get("web_search_page_corpus")
+        if isinstance(corpus, str) and corpus.strip():
+            search_kwargs["page_corpus"] = corpus.strip()
+    try:
+        summary, urls = digifetch_web_search("", query, **search_kwargs)
+    except RuntimeError as exc:
+        if pinned is None or "returned no rows" not in str(exc):
+            raise
+        # Pinned and nothing on-site matched: an honest empty answer, not a
+        # tool failure the model would retry against the open web.
+        summary, urls = "", []
     results: list[dict[str, Any]] = []
     for i, url in enumerate(urls[:8]):
         if not isinstance(url, str) or not url.strip():

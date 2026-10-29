@@ -557,6 +557,14 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
         from digigraph.orchestration.web_search_tools import web_search_disabled_payload
 
         return web_search_disabled_payload(name)
+    if is_proxied_web_search_tool(name) and context.state.get("web_search_domains") is not None:
+        # A pinned tenant (corpus map webSearchDomains) searches only through the
+        # native web_search, which enforces the pin; a proxied engine would not.
+        return {
+            "error": "tool_not_allowed",
+            "tool": name,
+            "message": "This tenant's web search is pinned; use the web_search tool.",
+        }
     if context.allowed_tool_names is not None and name not in context.allowed_tool_names:
         from digigraph.audit import audit_log
 
