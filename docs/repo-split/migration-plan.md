@@ -234,7 +234,7 @@ each PR is independently shippable. Lane in brackets (operating rules).
 | 1.9 (DIG-3697) | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, **local-ci only (call 01:26: no "same file runs on GitHub-hosted" — deploy jobs run on the Mac `deploy` job without an environment).** Retire manual `wrangler deploy`; `<client-slug>_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
 | 1.10 (DIG-3698) | Rotate any secret found by P0 gitleaks; move deploy tokens to per-target scoped Cloudflare tokens. | all | S |
 | 1.11 (DIG-3700) | Guard workflow `moved-paths-guard`: fails a PR touching a path whose manifest destination is already extracted (populated in P4). | P4 | S |
-| 1.12 (DIG-3689) | R0 client-name scrub before D-12′: remove client-identifying names/paths from the R0 allowlist so the fresh public repo never carries them. | R0 | S |
+| 1.12 (DIG-3689) | R0 client-name scrub before D-12′: remove client-identifying names/paths from the R0 allowlist so the fresh public repo never carries them. Scope includes `docs/repo-split/` (current text scrubbed to the `<client-slug>` pattern in #6679; older mono history stays out of R0 because the export starts fresh, with no force-push to mono). | R0 | S |
 
 Exit check: manifest has zero unassigned paths; no import crosses a repo boundary
 (`scripts/split/check_boundaries.py`: Python imports, TS relative imports, Dockerfile COPY, workflow `paths`);
