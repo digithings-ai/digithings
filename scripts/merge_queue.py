@@ -2684,6 +2684,11 @@ class PostedVerdict:
     # The Paperclip run (the session) the provenance marker names, when it is a
     # run id. Read so a fresh run of the author's own seat can clear a block.
     run: str = ""
+    # The platform and session a non-Paperclip verdict names
+    # (`platform=<p> session=<id>`). The platform is the verdict's identity
+    # when it carries no seat: attribution is by platform (Chris, 2026-10-29).
+    platform: str = ""
+    session: str = ""
     # A `Withdraws:` line in this comment, and the heads it names. Read only on
     # an approve, and only against the seat's own standing block (DIG-5246).
     withdrawal: bool = False
@@ -2705,6 +2710,29 @@ def _comment_run(provenance: Mapping[str, str]) -> str:
     """The Paperclip run this comment names, or "" when it names none."""
     run = str(provenance.get("run") or "").strip().lower()
     return run if run and _UUID_RE.match(run) else ""
+
+
+def _verdict_identity(verdict: PostedVerdict) -> str:
+    """Who a verdict belongs to, for the sticky-block rule, or "".
+
+    A Paperclip verdict belongs to its seat. A verdict from outside Paperclip
+    belongs to the platform its `platform=` marker names: attribution is by
+    platform with no per-seat breakdown (Chris, 2026-10-29), so a block a
+    Cursor session posted is Cursor's, and only Cursor clears it. A verdict
+    that names neither is judged by the newest-verdict rule.
+    """
+    if verdict.seat:
+        return verdict.seat
+    if verdict.platform in PLATFORMS and verdict.platform != "paperclip":
+        return f"platform:{verdict.platform}"
+    return ""
+
+
+def _identity_text(verdict: PostedVerdict) -> str:
+    """The identity a refusal names: `seat <uuid>` or `platform `<p>``."""
+    if verdict.seat:
+        return f"seat {verdict.seat}"
+    return f"platform `{verdict.platform}`"
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2771,6 +2799,8 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         at=str(comment.get("createdAt") or ""),
         seat=_comment_seat(provenance),
         run=_comment_run(provenance),
+        platform=str(provenance.get("platform") or "").strip().lower(),
+        session=str(provenance.get("session") or "").strip(),
         withdrawal=withdrawal,
         withdrawn_heads=withdrawn_heads,
     )
@@ -2918,8 +2948,10 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """
     by_seat: dict[str, list[PostedVerdict]] = {}
     for verdict in _readable_verdicts(pr):
-        if verdict.seat:
-            by_seat.setdefault(verdict.seat, []).append(verdict)
+        # The seat, or outside Paperclip the platform (`_verdict_identity`).
+        identity = _verdict_identity(verdict)
+        if identity:
+            by_seat.setdefault(identity, []).append(verdict)
     standing: list[PostedVerdict] = []
     for verdicts in by_seat.values():
         block: PostedVerdict | None = None
@@ -3017,6 +3049,14 @@ def _clearance_seat_reason(
     reading it as the author refused the ticket owner's review on #6145
     (DIG-4809).
 
+    Since #6667 the question is the session, not the seat (Chris,
+    2026-10-29): another seat's approve clears; an author seat's approve
+    clears only from a fresh run (`_fresh_author_session`); an approve that
+    names `platform=` and `session=` is judged exactly as a review marker is
+    (`_marker_problems`); an approve that names neither clears nothing once
+    anything says who wrote the PR. This runs after the sticky rule, so a
+    clearing approve has to be the blocker's own identity AND independent.
+
     "" is the answer whenever the gate cannot ask the question: `off` reads no
     provenance at all, and `shadow` measures the reviewer gate without refusing;
     a Paperclip read that failed says nothing about the branch either. The
@@ -3031,25 +3071,23 @@ def _clearance_seat_reason(
         ctx = _author_context(pr, reader)
     except (_PaperclipUnavailable, _AuthorUnidentified):
         return ""
-    authors = ctx.seats
-    if not authors:
+    if not ctx.identified():
+        # Nothing says who wrote the PR; the reviewer-independence gate refuses
+        # that, so this gate does not add a second reason.
         return ""
+    authors = ctx.seats
     head = str(pr.get("headRefOid") or "")
     head_text = f"`{head[:12]}`" if head else "an unknown head"
     where = f"comment {approve.comment_id}" if approve.comment_id else "a comment"
-    if not approve.seat:
-        return (
-            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
-            f"'changes_requested' verdict on it, and the newest approve "
-            f"({approve.source}, posted by {approve.author} in {where}) names no "
-            "reviewer seat, so it cannot clear the block: a clearance needs the "
-            "provenance marker's `agent=` to name a seat that did not write the PR"
-        )
-    if approve.seat in authors and _fresh_author_session(approve, ctx, reader):
-        # Chris, 2026-10-29: a fresh session of the author's own seat is an
-        # independent reviewer, so its approve clears the block like any other.
-        return ""
-    if approve.seat in authors:
+    if approve.seat:
+        if approve.seat not in authors:
+            # Another seat: another run, so another session.
+            return ""
+        if _fresh_author_session(approve, ctx, reader):
+            # Chris, 2026-10-29: a fresh session of the author's own seat is an
+            # independent reviewer, so its approve clears the block like any
+            # other.
+            return ""
         return (
             f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
             f"'changes_requested' verdict on it, and the newest approve "
@@ -3058,7 +3096,42 @@ def _clearance_seat_reason(
             "block: only a session that did not write the PR can (a fresh run of "
             "that seat, named by the marker's `run=`, counts)"
         )
-    return ""
+    if approve.platform or approve.session:
+        # A non-Paperclip approve is judged exactly as a review marker is: it
+        # clears only from a session that did not write the PR (#6667). The
+        # sticky rule (#6665) has already asked whether it is the blocker's
+        # own platform.
+        marker = ReviewMarker(
+            comment_id=approve.comment_id,
+            at=approve.at,
+            agent="",
+            run="",
+            head=head,
+            platform=approve.platform,
+            session=approve.session,
+            login=approve.author if approve.author != "?" else "",
+        )
+        problems, _reviewer = _marker_problems(
+            marker, head=head, ctx=ctx, prov=reader, cfg=cfg
+        )
+        if not problems:
+            return ""
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) names "
+            f"platform `{approve.platform[:16] or '?'}` session "
+            f"`{approve.session[:24] or '?'}`, so it cannot clear the block: it "
+            + "; ".join(problems)
+        )
+    return (
+        f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+        f"'changes_requested' verdict on it, and the newest approve "
+        f"({approve.source}, posted by {approve.author} in {where}) names no "
+        "reviewer seat or session, so it cannot clear the block: a clearance "
+        "needs the provenance marker to name a session that did not write the "
+        "PR (`agent=` and `run=`, or `platform=` and `session=`)"
+    )
 
 
 def _fresh_author_session(
@@ -3115,7 +3188,9 @@ def _verdict_value_reason(
        answered by a reviewer, never by the branch moving.
 
     1. **A seat's own block stands until that seat clears it.** A blocking
-       verdict belongs to the seat that posted it. That seat's later approve
+       verdict belongs to the seat that posted it — or, for a verdict from
+       outside Paperclip, to the platform its `platform=` names
+       (`_verdict_identity`; attribution is by platform, Chris 2026-10-29). That seat's later approve
        naming the head the PR stands at clears it; an approve naming another
        head does not, and no other seat's approve does either. A block on an
        older commit is cleared by that seat's approve naming the current head
@@ -3137,9 +3212,11 @@ def _verdict_value_reason(
        whatever head it names (T4); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
        clearance. A clearance of a `changes_requested` on the current head must
-       also name a non-author seat: an approve with no provenance seat, or one
-       from a seat that wrote the PR, clears nothing (`_clearance_seat_reason`,
-       item 3 of DIG-4990).
+       also come from a session that did not write the PR: an approve that
+       names no seat or session, the authoring run of an author seat, or a
+       session that wrote a commit clears nothing (`_clearance_seat_reason`,
+       item 3 of DIG-4990; session-level since #6667). The same check runs on
+       the approve that clause 1 accepted, so the two rules compose.
 
     Clause 1 needs the seat, and the seat is written only in the provenance
     marker (`agent=`): every seat pushes under one GitHub login, so a comment's
@@ -3226,7 +3303,8 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
     later = [
         verdict
         for verdict in _readable_verdicts(pr)
-        if verdict.seat == block.seat and verdict.at > block.at
+        if _verdict_identity(verdict) == _verdict_identity(block)
+        and verdict.at > block.at
     ]
     approve = later[-1] if later else None
     if (
@@ -3241,7 +3319,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         if block.bindings:
             withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
             return (
-                f"PR #{pr.get('number')}: seat {block.seat} posted "
+                f"PR #{pr.get('number')}: {_identity_text(block)} posted "
                 f"'{block.verdict}' ({block.source}, in {where}){scope_text} and "
                 f"then approved the same head {head_text} (comment "
                 f"{approve.comment_id or 'a comment'}); an approve on an unchanged "
@@ -3253,7 +3331,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         # remedy — every head is outside it, and only the bare withdrawal spends
         # it. A line naming a sha spends nothing here (`_withdraws`).
         return (
-            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
             f"({block.source}, in {where}){scope_text}, and that seat's later "
             f"approve of {head_text} (comment "
             f"{approve.comment_id or 'a comment'}) does not clear the block it "
@@ -3261,21 +3339,21 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         )
     if not block.bindings:
         return (
-            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
             f"({block.source}, in {where}){scope_text}, and the PR now stands at "
             f"{head_text}; a blocking verdict stands until that seat clears it. "
             f"{_unbound_block_clearance(head_text)}"
         )
     if not _covers_head(block, head):
         return (
-            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
             f"({block.source}, in {where}){scope_text}, and the PR now stands at "
             f"{head_text}. A push does not spend a block (T4): it stands until "
-            f"seat {block.seat} posts a verdict naming {head_text}; another "
-            "seat's approve does not clear it"
+            f"{_identity_text(block)} posts a verdict naming {head_text}; "
+            "another seat's or platform's approve does not clear it"
         )
     return (
-        f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+        f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
         f"({block.source}, in {where}){scope_text}, and the PR now stands at "
         f"{head_text}; a blocking verdict stands until that seat posts a later "
         f"approve naming the head it covers"

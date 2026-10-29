@@ -199,6 +199,18 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    an approve clears only when it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
 
+**Identity and independence compose (#6665 with #6667).** Clause 1's "seat" is the
+verdict's identity: its Paperclip seat (`agent=`), or, for a verdict from outside
+Paperclip, the platform its provenance marker names (`platform=claude|cursor|grokbot`;
+attribution is by platform, Chris 2026-10-29). A Cursor session's block is cleared only by a
+Cursor verdict on the current head. The clearing approve, whichever clause accepted it, must
+also come from a session that did not write the PR, judged as in [Reviewer
+independence](#reviewer-independence): another seat clears; an author seat clears only from a
+fresh run; a `platform=`/`session=` approve clears only from a session no commit names (and
+not at all on the author's platform when its authoring session is unknown); an approve that
+names no seat or session clears nothing once anything says who wrote the PR. So a stale
+block needs the **same identity** and an **independent session**.
+
 **A clearance names a seat that did not write the PR.** When a `changes_requested` (on the
 current head or, since T4, an older one) would be cleared by the newest approve, that approve must carry the
 provenance marker's `agent=`, and that seat must not be one of the seats that wrote the

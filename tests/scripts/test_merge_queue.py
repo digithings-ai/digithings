@@ -8959,3 +8959,382 @@ def test_a_malformed_platform_mapping_stops_the_queue(
 )
 def test_session_ids_are_judged_by_shape(value: str, ok: bool) -> None:
     assert mq._is_session_id(value) is ok
+
+
+# --- sticky blocks (#6665) composed with session-level independence --------
+#
+# Two rules meet in the value gate. #6665: a block on an older commit is not
+# spent by a push; it stands until the SAME identity that posted it posts a
+# verdict on the current head. #6667: an approve counts only when it comes
+# from a session that did not write the PR. Both apply to the clearing
+# approve: it has to be the blocker's own identity AND an independent session.
+# The identity of a Paperclip verdict is its seat; outside Paperclip it is the
+# platform its `platform=` marker names (attribution is by platform, Chris
+# 2026-10-29).
+
+STALE_HEAD = "e" * 40
+NEW_HEAD = "f" * 40
+SECOND_FRESH_RUN = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+SECURITY_RUN = "99999999-9999-4999-8999-999999999999"
+CURSOR_SESSION = "cursor-sess-block-0003"
+CURSOR_SESSION_2 = "cursor-sess-review-0004"
+
+
+def _run_verdict_comment(
+    *,
+    verdict: str,
+    head_sha: str,
+    created: str,
+    seat: str = "",
+    run: str = "",
+    platform: str = "",
+    session: str = "",
+    login: str = "chrizefan",
+) -> dict[str, Any]:
+    """A verdict comment whose provenance names a run, or a platform session."""
+    fields = []
+    if seat:
+        fields.append(f"agent={seat}")
+    if run:
+        fields.append(f"run={run}")
+    if platform:
+        fields.append(f"platform={platform}")
+    if session:
+        fields.append(f"session={session}")
+    fields.append(f"head={head_sha}")
+    return {
+        "id": f"IC_kwDOverdict_{created}",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "createdAt": created,
+        "body": (
+            f"<!-- digithings-review {' '.join(fields)} -->\n"
+            f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{head_sha} -->\n\n"
+            f"Review verdict: {verdict.replace('_', ' ')}\n"
+        ),
+    }
+
+
+def _sticky_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    comments: list[dict[str, Any]],
+    *,
+    prov: Any = None,
+    commits: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """The value gate on a PR that moved from STALE_HEAD to NEW_HEAD."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(comments, head_sha=NEW_HEAD, commits=commits)
+    return mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="enforce"), prov or _paperclip()
+    )
+
+
+def _author_seat_prov() -> Any:
+    """The author seat wrote the PR in AUTHOR_RUN; two later runs wrote nothing."""
+    return _paperclip(
+        runs=[
+            _paperclip_run(
+                FRESH_AUTHOR_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T09:30:00Z",
+                finished="2026-10-20T10:30:00Z",
+                context_issue="issue-review",
+            ),
+            _paperclip_run(
+                SECOND_FRESH_RUN,
+                AUTHOR_AGENT,
+                started="2026-10-20T11:00:00Z",
+                finished="2026-10-20T11:30:00Z",
+                context_issue="issue-review",
+            ),
+            _paperclip_run(REVIEWER_RUN, REVIEWER_AGENT, context_issue="issue-review"),
+            _paperclip_run(SECURITY_RUN, SECURITY_SEAT, context_issue="issue-security"),
+        ]
+    )
+
+
+def test_a_stale_security_block_stands_after_a_push_under_platform_independence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An independent reviewer's approve on B does not spend security's block on A."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                seat=REVIEWER_AGENT,
+                run=REVIEWER_RUN,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        prov=_author_seat_prov(),
+    )
+    assert any(SECURITY_SEAT in r and STALE_HEAD[:12] in r for r in reasons), reasons
+
+
+def test_the_blocking_seats_own_approve_on_the_new_head_clears_its_stale_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same identity re-reviews the head, and it did not write the PR: cleared."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        prov=_author_seat_prov(),
+    )
+    assert reasons == []
+
+
+def test_the_author_seats_stale_block_is_not_cleared_by_its_authoring_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same seat, but the clearing approve comes from the run that wrote the PR.
+
+    The sticky rule is satisfied (the blocker's own seat names the new head),
+    the independence rule is not: the authoring session cannot clear a block.
+    """
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                seat=AUTHOR_AGENT,
+                run=FRESH_AUTHOR_RUN,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:40:00Z",
+            ),
+            _run_verdict_comment(
+                seat=AUTHOR_AGENT,
+                run=AUTHOR_RUN,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T10:40:00Z",
+            ),
+        ],
+        prov=_author_seat_prov(),
+    )
+    assert any("authoring seat" in r and "cannot clear" in r for r in reasons), reasons
+
+
+def test_the_author_seats_stale_block_is_cleared_by_a_fresh_run_of_that_seat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same seat AND a session that wrote nothing: both rules hold, so it clears."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                seat=AUTHOR_AGENT,
+                run=FRESH_AUTHOR_RUN,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:40:00Z",
+            ),
+            _run_verdict_comment(
+                seat=AUTHOR_AGENT,
+                run=SECOND_FRESH_RUN,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T11:10:00Z",
+            ),
+        ],
+        prov=_author_seat_prov(),
+    )
+    assert reasons == []
+
+
+def test_an_independent_other_seat_cannot_clear_the_author_seats_stale_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Independence is not identity: another seat's approve leaves the block."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                seat=AUTHOR_AGENT,
+                run=FRESH_AUTHOR_RUN,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:40:00Z",
+            ),
+            _run_verdict_comment(
+                seat=REVIEWER_AGENT,
+                run=REVIEWER_RUN,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T10:40:00Z",
+            ),
+        ],
+        prov=_author_seat_prov(),
+    )
+    assert any(AUTHOR_AGENT in r and STALE_HEAD[:12] in r for r in reasons), reasons
+
+
+def test_a_platform_block_on_an_old_head_stands_against_another_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Outside Paperclip the identity is the platform: Claude cannot spend Cursor's block."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                platform="cursor",
+                session=CURSOR_SESSION,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                platform="claude",
+                session=REVIEW_SESSION,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        commits=_source_commits("grokbot", "grokbot-sess-author-0005"),
+    )
+    assert any(
+        "`cursor`" in r and STALE_HEAD[:12] in r for r in reasons
+    ), reasons
+
+
+def test_a_fresh_session_on_the_blocking_platform_clears_its_stale_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cursor blocked A; another Cursor session approves B; Cursor wrote nothing."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                platform="cursor",
+                session=CURSOR_SESSION,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                platform="cursor",
+                session=CURSOR_SESSION_2,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        commits=_source_commits("grokbot", "grokbot-sess-author-0005"),
+    )
+    assert reasons == []
+
+
+def test_the_authoring_session_cannot_clear_its_platforms_stale_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claude blocked A; the Claude session that wrote the PR approves B: refused."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                platform="claude",
+                session=REVIEW_SESSION,
+                verdict="changes_requested",
+                head_sha=STALE_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                platform="claude",
+                session=AUTHOR_SESSION,
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        commits=_source_commits("claude", AUTHOR_SESSION),
+    )
+    assert any("cannot clear" in r and "session" in r for r in reasons), reasons
+
+
+def test_an_unmarked_approve_cannot_clear_a_block_on_a_non_paperclip_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed: an approve that names neither seat nor session proves nothing."""
+    reasons = _sticky_reasons(
+        monkeypatch,
+        [
+            _run_verdict_comment(
+                verdict="changes_requested",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _run_verdict_comment(
+                verdict="approve",
+                head_sha=NEW_HEAD,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        # No Paperclip seat wrote the PR: only its trailers name the author.
+        prov=_paperclip(author_runs=[]),
+        commits=_source_commits("claude", AUTHOR_SESSION),
+    )
+    assert any("cannot clear the block" in r for r in reasons), reasons
+
+
+def test_sticky_and_independent_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`evaluate`: security blocks A, the authoring run approves B, then security does."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    block = _run_verdict_comment(
+        seat=SECURITY_SEAT,
+        run=SECURITY_RUN,
+        verdict="changes_requested",
+        head_sha=STALE_HEAD,
+        created="2026-10-20T09:10:00Z",
+    )
+    author_approve = _run_verdict_comment(
+        seat=AUTHOR_AGENT,
+        run=AUTHOR_RUN,
+        verdict="approve",
+        head_sha=NEW_HEAD,
+        created="2026-10-20T09:20:00Z",
+    )
+    review = _provenance_comment(head=NEW_HEAD, created="2026-10-20T09:25:00Z")
+    pr = _reviewed_pr([block, author_approve, review], head_sha=NEW_HEAD, label=False)
+    verdict = _judge(pr, _author_seat_prov())
+    assert not verdict.eligible
+    assert any(SECURITY_SEAT in r for r in verdict.reasons), verdict.reasons
+
+    security_approve = _run_verdict_comment(
+        seat=SECURITY_SEAT,
+        run=SECURITY_RUN,
+        verdict="approve",
+        head_sha=NEW_HEAD,
+        created="2026-10-20T09:30:00Z",
+    )
+    # The newest review comment governs coverage, so the security desk's
+    # re-review carries its findings marker, as the fleet posts it.
+    security_approve["body"] = "<!-- in-session-review -->\n" + security_approve["body"]
+    pr = _reviewed_pr(
+        [block, author_approve, review, security_approve],
+        head_sha=NEW_HEAD,
+        label=False,
+    )
+    verdict = _judge(pr, _author_seat_prov())
+    assert verdict.eligible, verdict.reasons

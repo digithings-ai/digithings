@@ -42,10 +42,12 @@ encoding that here is how the gate started blocking already-reviewed work).
      findings comment, or check ``success``), Claude ``/code-review`` check
      ``success``, or a submitted review from another bot in ``REVIEW_BOTS``.
      A skip, rate-limit, failure, or "PR is closed" notice is NOT a review;
-  4. the label ``reviewed:agent`` PLUS a comment carrying ``AGENT_REVIEW_MARKER`` —
-     an in-session review ran against the diff and posted its findings. The
-     label without the comment is REFUSED;
-  5. the label ``reviewed:owner`` — "I read this myself." The verdict names who
+  4. a comment carrying ``AGENT_REVIEW_MARKER`` — an in-session review ran
+     against the diff and posted its findings. No ``reviewed:*`` label is
+     needed (Chris, 2026-10-29); the merge queue additionally requires the
+     comment to come from a session that did not write the PR;
+  5. the label ``reviewed:owner`` — read only as legacy evidence, so commits
+     already on history that carried it stay reviewed. The verdict names who
      applied it and when.
 
 All five hang off a pull request, so a commit pushed **straight to a branch** can
