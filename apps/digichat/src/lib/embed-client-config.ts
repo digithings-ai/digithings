@@ -1,5 +1,5 @@
-import type { BrandSkin } from "@/lib/brand-skin";
 import { constantTimeEqual } from "@/lib/constant-time-equal";
+import type { TenantFonts } from "@/lib/tenant-fonts";
 import { mcpSubTools } from "@/lib/deploy-config/client-projection";
 /**
  * The client-safe projection of an embed tenant, and the two ways to obtain it.
@@ -42,8 +42,8 @@ export type EmbedTenantClientConfig = {
   /** assistant-ui Thread layout. See thread-skins.ts */
   skin?: ThreadSkin;
   accent: { color: string; foreground: string } | null;
-  /** Tenant brand skin (src/lib/brand-skin.ts); null when the tenant sets none. */
-  brand: BrandSkin | null;
+  /** Tenant heading/body faces (src/lib/tenant-fonts.ts); null when unset. */
+  fonts: TenantFonts | null;
   attribution: boolean;
   title?: string;
   welcome?: string;
@@ -147,7 +147,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   skin: BASELINE_EMBED_SKIN,
   accent: null,
-  brand: null,
+  fonts: null,
   attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
@@ -176,7 +176,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     theme: cfg.theme,
     skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug }),
     accent: cfg.accent ?? null,
-    brand: cfg.brand ?? null,
+    fonts: cfg.fonts ?? null,
     attribution: cfg.attribution,
     title: cfg.title,
     welcome: cfg.welcome,

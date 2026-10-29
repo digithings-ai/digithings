@@ -11,7 +11,7 @@ hosts:
       # Full-page product chat, like /chat/occ.
       mode: app
       theme: light
-      skin: digichat
+      skin: chatgpt
       title: Site assistant
       welcome:
         title: Ask about the platform
@@ -26,19 +26,15 @@ hosts:
       accent:
         color: "#F56125"
         foreground: "#FFFFFF"
-      # Tenant brand skin (src/lib/brand-skin.ts): self-hosted fonts, the
-      # second brand colour for links, charcoal text and a peach chip fill,
-      # and pill-shaped controls. Dark mode keeps the accent and derives the
-      # chip fill from it; ink and tint are light-mode only.
-      brand:
-        fonts:
-          heading: cabin
-          body: mulish
-        colors:
-          secondary: "#38848D"
-          ink: "#2B2B2B"
-          tint: "#FFEDDD"
-        shape: pill
+      # Colours and fonts only, on the stock skin as-is: a design-kit palette
+      # (closest to the brand orange), the accent hex, and two self-hosted
+      # faces applied as font variables (src/lib/tenant-fonts.ts).
+      palette: lucent-orng
+      fonts:
+        heading: cabin
+        body: mulish
+      # Hides the composer footer row (model / provider / language).
+      toolbar: false
       defaultLanguage: en
       attribution: true
     features:

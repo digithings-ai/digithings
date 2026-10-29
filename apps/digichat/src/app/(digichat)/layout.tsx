@@ -29,9 +29,9 @@ const geistMono = Geist_Mono({
 });
 
 /**
- * Tenant brand fonts (src/lib/brand-skin.ts BRAND_FONTS). Self-hosted by
+ * Tenant fonts (src/lib/tenant-fonts.ts TENANT_FONTS). Self-hosted by
  * next/font, so CSP `font-src 'self'` holds. preload: false — only a tenant
- * page whose brand names the font makes the browser fetch it.
+ * page whose fonts name the face makes the browser fetch it.
  */
 const brandCabin = Cabin({
   subsets: ["latin"],
