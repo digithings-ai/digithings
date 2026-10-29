@@ -31,7 +31,7 @@ was NOT taken.
 
 **Revised again 2026-10-29 (owner, D-C1 … D-C13 in [decisions.md](decisions.md#client-repos-and-forgejo-homes--answered-2026-10-29)):**
 private repos live on **local Forgejo** with a private GitHub backup, not on Cursor Origin;
-**R6 is superseded** by one `client-<slug>` repo per client; the client repo is the source of its
+**R6 is superseded** by one `digithings-ai/<client-slug>` repo per client; the client repo is the source of its
 tenant doc and its deploy writes KV. Where this plan still says Origin for R1–R5, read Forgejo;
 where it says R6 or `kv-sync`, read the client repos' `deploy.sh`. New phases C0–C6 are in
 [Client repos epic](#client-repos-epic-2026-10-29-phases-c0c6).
@@ -617,13 +617,14 @@ Runs alongside P0–P6 and changes three things in them: the private home (Forge
 
 ### Hosting and backup
 
-- **Primary:** local Forgejo (digiforge). Client repos in the `clients` org; R1–R5 in a private org
+- **Primary:** local Forgejo (digiforge). Client repos in the `digithings-ai` org, private, named by
+  client slug (`digithings-ai/<client-slug>`, template `digithings-ai/client-template`); R1–R5 in a private org
   (name chosen when they move). One Forgejo identity and token per agent platform; tokens stay in
   the keychain.
 - **Daily loop:** branch → Forgejo pull request → Woodpecker checks → recorded review → merge to
   `main` on Forgejo. Nothing goes to GitHub.
 - **Release:** `make release` bumps `VERSION`/`CHANGELOG.md`; the owner cuts and signs
-  `client-<slug>-vX.Y.Z` (D-G6) and pushes `main` + tags to the private GitHub backup.
+  `<client-slug>-vX.Y.Z` (D-G6; the repo name) and pushes `main` + tags to the private GitHub backup.
 - **Mac loss:** the GitHub backup is as fresh as the last release. A nightly encrypted Forgejo dump
   to R2 covers work between releases (Guard).
 
@@ -632,7 +633,7 @@ Runs alongside P0–P6 and changes three things in them: the private home (Forge
 A client repo holds one deployment doc (`tenant/digichat.yaml`, R0 schema), its corpus map, and
 per-environment overlays with host, gate and secret **names**. `deploy/deploy.sh` validates the
 doc against the pinned R0 schema, uploads seeds and skills to R2, writes the doc to KV under the
-environment's key (versioned by tag), and deploys the client's own `client-<slug>-*` Workers if it
+environment's key (versioned by tag), and deploys the client's own `client-<client-slug>-*` Workers if it
 has any. It never redeploys the shared stack. Rollback is the same script at the previous tag.
 Per Chris's decision of 2026-10-29, this replaces refactor 1.7's "KV only, no repo sync" ruling and 4.1's `kv-sync`.
 
@@ -670,8 +671,8 @@ the account-wide token.
 
 | Phase | What | Gate |
 |---|---|---|
-| **C0** template + epic docs | This doc update; the generic [`client-template/`](client-template/) in R0 and as the Forgejo template repo `clients/client-template`; template CI (`.woodpecker.yml`). For Forgejo-hosted client repos, Woodpecker runs the repo's own `.woodpecker.yml` and posts its statuses to Forgejo; that waits on Chris's admin step to enable each repo in Woodpecker (the digiforge runner is GitHub-only) | draft PRs, local Forgejo only |
-| **C1** first client repo | A new client's demo runs from its own `client-<slug>` repo against pinned R0; generic mechanisms it needs land in R0 first | owner merges the R0 PRs; staging deploy needs the generic invite gate and a scoped token |
+| **C0** template + epic docs | This doc update; the generic [`client-template/`](client-template/) in R0 and as the Forgejo template repo `digithings-ai/client-template`; template CI (`.woodpecker.yml`). For Forgejo-hosted client repos, Woodpecker runs the repo's own `.woodpecker.yml` and posts its statuses to Forgejo; that waits on Chris's admin step to enable each repo in Woodpecker (the digiforge runner is GitHub-only) | draft PRs, local Forgejo only |
+| **C1** first client repo | A new client's demo runs from its own `digithings-ai/<client-slug>` repo against pinned R0; generic mechanisms it needs land in R0 first | owner merges the R0 PRs; staging deploy needs the generic invite gate and a scoped token |
 | **C2** make the upstream generic | Generic invite gate, tenant MCP proxy route, tenant recrawl job, skills-directory loader, and tenant-config-driven front-end pieces, each a draft PR into develop; the matching client-literal baseline entries are deleted in the same PRs | owner merges; an equivalence test proves each existing tenant's effective deployment is unchanged |
 | **C3** existing tenants into client repos | Fresh repos (D-C12) assembled from the move lists; staging proof from KV/R2 written by the client's `deploy.sh`; prod cut-over on a signed tag; then an R0 PR deletes the moved paths | owner signed tag |
 | **C4** releases and packages | tsup builds and `exports` for `packages/*`, scope `@digithings-ai`, the tenant schema package, release-please for all modules; dev publish to Forgejo | owner sets up PyPI trusted publishing and the npm token |

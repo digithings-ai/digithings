@@ -42,7 +42,7 @@ version pinned in [`digithings.lock`](digithings.lock).
 
 ## 5. Remotes
 
-- `origin` = Forgejo (`clients/${REPO_NAME}`). All daily work: branch, pull request,
+- `origin` = Forgejo (`${REPO_OWNER}/${REPO_NAME}`, that is `digithings-ai/<client-slug>`, private). All daily work: branch, pull request,
   Woodpecker checks, review, merge to `main`.
 - `github` = private backup on GitHub. Pushed **only by the owner**, at a release, never by
   an agent. `make release` only bumps `VERSION` and `CHANGELOG.md` and prints the
@@ -55,7 +55,7 @@ version pinned in [`digithings.lock`](digithings.lock).
 - `make deploy-prod`: only from a release tag `${REPO_NAME}-vX.Y.Z` cut and **signed**
   by the owner. Agents never cut or sign tags.
 - A deploy writes this client's tenant doc to KV, its seeds and skills to R2, and
-  (optionally) its own `${REPO_NAME}-*` Workers. It never redeploys the shared stack.
+  (optionally) its own `client-${REPO_NAME}-*` Workers. It never redeploys the shared stack.
 
 ## 7. Org operating rules
 

@@ -41,6 +41,7 @@ Collision and house-route checks compare **whole path segments**, not raw string
 `/chat/abc` and `/chat/abcd` do not collide, while `/chat` and `/chat/x` overlap.
 
 Legacy fallback (one release, until P-exit): a full `pathPrefix` of the form `/chat/<slug>` is still accepted; the slug is taken from it, any other shape is refused, the built path must be byte-identical to today's, and there is no live config migration.
+If a doc has both a `slug` and a legacy `pathPrefix` and the two disagree, the doc is refused and the tenant stays closed.
 
 ## 3. Gated tenants fail closed
 

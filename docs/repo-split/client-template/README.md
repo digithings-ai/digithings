@@ -4,7 +4,7 @@ Private repo for one digithings client. It holds only the client's data and
 tooling (tenant config, tools, skills, corpus, QA set, deploy script) and
 consumes digithings (R0) at the versions pinned in [`digithings.lock`](digithings.lock).
 
-Created from the Forgejo template repo `clients/client-template`. Agent rules:
+Created from the Forgejo template repo `digithings-ai/client-template`. Agent rules:
 [AGENTS.md](AGENTS.md). Client facts: [client/profile.md](client/profile.md).
 
 ## Layout
@@ -50,9 +50,11 @@ make qa QID=Q1                # one golden question on a free model; stops on th
 
 ## Starting a new client from this template
 
-1. On Forgejo: **New repository → from template `clients/client-template`**, name it
-   `client-<slug>` in the `clients` org, private, with "git content" and "template
-   expansion" ticked (`.forgejo/template` lists the expanded files).
+1. On Forgejo: **New repository → from template `digithings-ai/client-template`**, owner
+   `digithings-ai`, name it `<client-slug>` (no prefix), **private**, with "git content" and
+   "template expansion" ticked (`.forgejo/template` lists the expanded files). Add it to the
+   org team that lists client repos explicitly, never to an all-repositories team.
+   `make deploy-*` and `make release` refuse unless the Forgejo repo reads as private.
 2. Fill `client/profile.md` and `client/scope.md`; log the first decisions.
 3. Replace the `example` tenant in `tenant/` (slug, host, skin, accent), the site graph,
    the corpus and `tests/questions.json`.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Client deploy: validate -> upload R2 seeds -> write the KV tenant doc -> (own Workers) wrangler deploy.
 # TEMPLATE STUB: refuses to run. A client repo wires each step once Guard has issued
-# a scoped Cloudflare token (KV tenant namespace + R2 seeds prefix + client-<slug>-* Workers).
+# a scoped Cloudflare token (KV tenant namespace + R2 seeds prefix + client-<client-slug>-* Workers).
 set -euo pipefail
 env="${1:-}"
 case "$env" in staging|prod) ;; *) echo "usage: deploy/deploy.sh staging|prod" >&2; exit 2;; esac

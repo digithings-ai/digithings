@@ -9,7 +9,7 @@ flowchart TB
     R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload on Chris-cut web tag"]
     R4["<b>R4 digithings-web</b><br/>digithings.ai, digibook, brand<br/>Pages direct upload on Chris-cut web tag"]
     R5["<b>R5 digithings-stack</b><br/>stack Worker + container, digichat Worker<br/>cron, corpus-index · tag-gated deploys"]
-    R6["<b>R6 digichat-tenants</b><br/>client tenant corpora + seeds, kv-sync<br/>writes KV/R2/secrets, never deploys Workers"]
+    R6["<b><s>R6 digichat-tenants</s></b> superseded 2026-10-29<br/>one private digithings-ai/&lt;client-slug&gt; repo per client<br/>(Forgejo, from digithings-ai/client-template)<br/>its deploy.sh writes KV/R2, never the shared stack"]
     R7["<b>R7 twelve-x</b> (exists)<br/>+ twelve-x desk surface<br/>+ digidata-api"]
   end
   MONO["digithings-mono on GitHub (archived, private)<br/>full original history, rollback source<br/>split source for R0 and R1–R7"]

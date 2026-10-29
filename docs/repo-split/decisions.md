@@ -66,9 +66,9 @@ earlier row, that row is kept as the record and marked superseded below.
 | ID | Question | **Answer** | Consequence for the plan |
 |---|---|---|---|
 | **D-C1** [scope] | Home of the private repos | **Local Forgejo (digiforge) for all private repos**, private GitHub as backup | Supersedes the 14 Oct Origin direction for R1–R5 and the client repos. D-O1 (R0 GitHub-primary) is unchanged. D-O2/D-O4 (Origin namespace and identity) no longer apply to new repos; each agent platform has its own Forgejo identity and token. |
-| **D-C2** [scope] | Replace R6 `digichat-tenants` with one repo per client? | **Yes** | R6 is superseded. Each client gets `client-<slug>`, created from the template ([client-template/](client-template/)). |
+| **D-C2** [scope] | Replace R6 `digichat-tenants` with one repo per client? | **Yes** | R6 is superseded. Each client gets `digithings-ai/<client-slug>`, created from the template `digithings-ai/client-template` ([client-template/](client-template/)). Naming revised 2026-10-29 22:56 (below); was `clients/client-<slug>`. |
 | **D-C3** [scope] | Client repo as the source of the tenant doc, with the deploy writing KV | **Yes** | Chris's decision of 2026-10-29: reverses the earlier "KV only, no repo files synced to KV" ruling (refactor 1.7 in migration-plan.md) for client repos. KV stays the runtime store; the repo is the source; the deploy writes KV versioned by tag. |
-| **D-C4** [scope] | Naming | **Forgejo org `clients`, repos `client-<slug>`, GitHub backups `digithings-ai/client-<slug>` (private)** | The backup is pushed only at releases. No Actions, Packages or Pages on it (fits D-X2). |
+| **D-C4** [scope] | Naming | **Forgejo org `digithings-ai`, private repos `<client-slug>` (no prefix), template `digithings-ai/client-template`; GitHub backups `digithings-ai/client-<slug>` (private)** | Revised 2026-10-29 22:56 (below); the first answer was Forgejo org `clients`, repos `client-<slug>`. The backup is pushed only at releases. No Actions, Packages or Pages on it (fits D-X2). |
 | **D-C5** [scope] | PyPI distribution names | **`digithings-<module>`** (import names unchanged) | One module name is already taken on PyPI by an unrelated project, so the prefix is used for all modules. Replaces D-P1's "current names". |
 | **D-C6** [scope] | Registries | **Stable: PyPI and npmjs `@digithings-ai`. Dev and private builds: the Forgejo registry.** | The owner sets up the PyPI trusted publisher and the npm token. |
 | **D-C7** [scope] | Where released images go | **Open** | Recommended: the Forgejo registry now, public GHCR from R0 at cutover. |
@@ -78,6 +78,8 @@ earlier row, that row is kept as the record and marked superseded below.
 | **D-C11** [security] | May agents deploy a client's staging host without asking? | **Yes.** Prod still needs the owner's signed tag. | Recorded per client in `client/decisions.md`. |
 | **D-C12** [scope] | History for extracted client repos | **Fresh repos, no history** | History stays in the archived mono. |
 | **D-C13** [scope] | Trial-tenant configs now in R0 | **Yes, a client repo for them too** | Third client repo after the first two. |
+
+**2026-10-29 22:56 Rome, Chris:** client repos live directly in the `digithings-ai` org, named by client slug (`digithings-ai/<client-slug>`), with the template at `digithings-ai/client-template`. This replaces D-C2's `clients/client-<slug>` and the separate `clients` org. Forgejo registry references move with it, to owner `digithings-ai`. Client Workers keep the `client-<client-slug>-*` prefix so a scoped Cloudflare token can match them.
 
 Superseded by this section: the Origin rows (D-O2, D-O4) for new private repos; R6 in the
 target table; the refactor 1.7 "KV only" ruling for client repos; D-T2 and D-R5 for client-specific MCP

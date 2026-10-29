@@ -1,5 +1,6 @@
-# client-<slug> targets. Every target is safe to run locally; deploy targets refuse
-# in the template (see deploy/README.md).
+# <client-slug> targets (Forgejo repo digithings-ai/<client-slug>). Every target is safe to run
+# locally; deploy targets refuse in the template (see deploy/README.md). deploy-* and release
+# first check that the Forgejo repo is private (scripts/check_forgejo_private.sh, fails closed).
 SHELL := /bin/bash
 DIGITHINGS_DIR ?= ../digithings
 REPO ?= $(notdir $(CURDIR))
@@ -7,7 +8,7 @@ REPO ?= $(notdir $(CURDIR))
 BUMP_TEST ?= $(MAKE) test
 COMPOSE := docker compose -f compose/docker-compose.yml
 
-.PHONY: help up dev down link unlink bump test qa release deploy-staging deploy-prod
+.PHONY: help up dev down link unlink bump test qa check-private release deploy-staging deploy-prod
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -45,15 +46,18 @@ test: ## offline checks: lock, tenant schema, corpus, tools (no model calls)
 qa: ## golden questions on FREE models only; QID=Q1 for one; stops on the first 429 round
 	tests/run_qa.sh $(or $(QID),all)
 
-release: ## bump VERSION + CHANGELOG and print the tag-and-push command (owner runs it; agents never push the github backup)
+check-private: ## refuse unless the Forgejo origin repo reads as private (API + keychain token; fails closed)
+	scripts/check_forgejo_private.sh
+
+release: check-private ## bump VERSION + CHANGELOG and print the tag-and-push command (owner runs it; agents never push the github backup)
 	@test -n "$(V)" || { echo "usage: make release V=X.Y.Z"; exit 1; }
 	@echo "$(V)" > VERSION
 	@sed -i.bak "s/^## Unreleased/## Unreleased\n\n## $(V) - $$(date +%F)/" CHANGELOG.md && rm -f CHANGELOG.md.bak
 	@echo "VERSION and CHANGELOG.md bumped to $(V). Commit and merge to main, then the OWNER runs:"
 	@echo "  git tag -s $(REPO)-v$(V) -m '$(REPO) v$(V)' && git push origin $(REPO)-v$(V) && git push github main $(REPO)-v$(V)"
 
-deploy-staging: ## stub: refuses until deploy/deploy.sh is wired with a scoped token
+deploy-staging: check-private ## stub: refuses until deploy/deploy.sh is wired with a scoped token
 	deploy/deploy.sh staging
 
-deploy-prod: ## stub: refuses; prod needs a release tag signed by the owner
+deploy-prod: check-private ## stub: refuses; prod needs a release tag signed by the owner
 	deploy/deploy.sh prod
