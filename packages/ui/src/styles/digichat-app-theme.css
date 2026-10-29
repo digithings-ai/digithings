@@ -184,6 +184,16 @@
   --accent: var(--foreground);
 }
 
+/* In light, the same base-skin link inherits the digichat pink (#e2708a),
+   3.04:1 on white. Give it a darker pink of the same hue (#b64a65, 5.05:1 on
+   white, 4.6:1 on zinc-100) so it meets AA. Scoped to the base thread root
+   (.aui-thread-root) on framed and catalog surfaces in light only: the other
+   catalog skins, site chats, app mode and the digichat skin (its own link
+   colour) are untouched, and the dark rule above keeps dark. */
+:root:not(.dark):not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) .aui-thread-root:not(.dark *) .aui-md-a {
+  --accent: #b64a65;
+}
+
 @layer base {
   * {
     @apply border-border;
