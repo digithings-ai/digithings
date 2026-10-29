@@ -323,6 +323,7 @@ def digifetch_web_search(
     context: Any | None = None,
     recency_days: int | None = None,
     url_filter: Callable[[str], bool] | None = None,
+    page_corpus: str | None = None,
 ) -> tuple[str, list[str]]:
     """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
@@ -334,6 +335,8 @@ def digifetch_web_search(
     ``ToolContext.state["digi_bearer"]``). ``recency_days`` is forwarded only
     when set (digisearch keeps its own default otherwise). ``url_filter`` drops
     rows before the summary is built, so a dropped row leaves no trace in it.
+    ``page_corpus`` (forwarded only when set) names the pre-crawled page text
+    digisearch may use when a live page fetch is a bot challenge or fails.
     """
     del model, usage_kind
     from digigraph.orchestration.web_search_tools import call_digisearch_web_search
@@ -346,6 +349,7 @@ def digifetch_web_search(
         provider=provider,
         context=context,
         **({"recency_days": recency_days} if recency_days is not None else {}),
+        **({"page_corpus": page_corpus} if page_corpus else {}),
     )
     rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []
     if url_filter is not None:

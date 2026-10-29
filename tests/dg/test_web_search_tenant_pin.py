@@ -223,6 +223,22 @@ def test_unpinned_call_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "url_filter" not in kw
 
 
+def test_pinned_tenant_with_site_names_its_page_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeSearch()
+    _patch_search(monkeypatch, fake)
+    ctx = _context(web_search_domains=PINS, web_search_site="acme")
+    web_search_tools._handle_web_search({"query": "q"}, ctx)
+    assert fake.calls[0]["page_corpus"] == "acme"
+
+
+def test_no_page_corpus_without_pin_or_site(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeSearch()
+    _patch_search(monkeypatch, fake)
+    web_search_tools._handle_web_search({"query": "q"}, _context(web_search_site="acme"))
+    web_search_tools._handle_web_search({"query": "q"}, _context(web_search_domains=PINS))
+    assert all("page_corpus" not in kw for kw in fake.calls)
+
+
 def test_empty_pin_refuses_without_searching(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeSearch()
     _patch_search(monkeypatch, fake)
@@ -288,6 +304,16 @@ def test_recency_forwarded_only_when_set(monkeypatch: pytest.MonkeyPatch) -> Non
     seen = _patch_hub(monkeypatch, [{"doc_id": "https://example.com/a", "content": "x"}])
     digifetch_web_search("", "q")
     assert "recency_days" not in seen[0]
+
+
+def test_page_corpus_forwarded_only_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digigraph.llm_client import digifetch_web_search
+
+    seen = _patch_hub(monkeypatch, [{"doc_id": "https://example.com/a", "content": "x"}])
+    digifetch_web_search("", "q")
+    digifetch_web_search("", "q", page_corpus="acme")
+    assert "page_corpus" not in seen[0]
+    assert seen[1]["page_corpus"] == "acme"
 
 
 def test_url_filter_dropping_everything_is_no_rows(monkeypatch: pytest.MonkeyPatch) -> None:

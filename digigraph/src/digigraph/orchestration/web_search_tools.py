@@ -221,6 +221,7 @@ def call_digisearch_web_search(
     provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
+    page_corpus: str | None = None,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
@@ -240,6 +241,7 @@ def call_digisearch_web_search(
         provider=provider,
         context=context,
         timeout=timeout,
+        page_corpus=page_corpus,
     )
 
 
@@ -252,6 +254,7 @@ def _call_digisearch_web_search(
     provider: str | None = None,
     context: ToolContext | None = None,
     timeout: float = 120.0,
+    page_corpus: str | None = None,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -285,6 +288,10 @@ def _call_digisearch_web_search(
         # and an explicit in-house name (internal) still forwards (#4722).
         # Unknown names are the hub's call to reject (no digigraph registry).
         arguments["provider"] = provider_arg
+    if page_corpus:
+        # Pinned tenant with a pre-crawled corpus: digisearch still fetches the
+        # live page first and uses the corpus only for a challenge or a failure.
+        arguments["page_corpus"] = page_corpus
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
@@ -389,6 +396,12 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         # still cannot hand a pinned tenant an off-pin row: it is dropped before
         # the summary is built, so neither its URL nor its snippet survives.
         search_kwargs["url_filter"] = lambda u: url_within_pins(u, pinned)
+        # The tenant's site id doubles as its page-corpus id (digisearch
+        # page_corpus): a live page behind a bot challenge falls back to the
+        # pre-crawled copy. Unpinned tenants never send one.
+        site = context.state.get("web_search_site")
+        if isinstance(site, str) and site.strip():
+            search_kwargs["page_corpus"] = site.strip()
     try:
         summary, urls = digifetch_web_search("", query, **search_kwargs)
     except RuntimeError as exc:
