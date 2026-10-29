@@ -23,18 +23,18 @@ puts them in KV. They come from the Guard review of 2026-10-29.
   deploy writes them into the server-only `access.invite` block in whichever form is
   confirmed.
 
-## 2. `chrome.pathPrefix` is validated by the tenant writer
+## 2. The tenant slug is validated by the tenant writer
 
-`chrome.pathPrefix` has exactly one allowed shape: `/chat/<slug>`, where `<slug>` matches
-`^[a-z0-9]+(-[a-z0-9]+)*$`. The full path therefore matches
-`^/chat/[a-z0-9]+(-[a-z0-9]+)*$` (for example `/chat/example`, `/chat/example-b`): one
-slug segment, no trailing slash, no `..`, no uppercase, no encoded characters.
+The tenant doc stores **only the slug**, which must match `^[a-z0-9]+(-[a-z0-9]+)*$`
+(lowercase, one segment, no slash, no `..`, no encoded characters; for example `example`,
+`example-b`). The doc never stores a full path. R0 builds the served path `/chat/<slug>`
+with one shared helper, which U1 imports (see U5a).
 
 The tenant writer refuses a doc when:
 
-- `chrome.pathPrefix` has any other shape, including a bare `/chat` or any other house
-  route (`/api`, `/embed`, `/_dtchat`, `/_digichat`, `/_digichat-admin`, `/healthz` and any
-  route R0 adds later; the list lives in R0 and the writer reads it from there);
+- the slug is a reserved house name (for example `api`, `embed`, `_dtchat`, `_digichat`,
+  `_digichat-admin`, `healthz`, or any name R0 reserves later; the list lives in R0 and
+  the writer reads it from there);
 - the slug is already used by another tenant.
 
 Collision and house-route checks compare **whole path segments**, not raw strings:
@@ -42,12 +42,12 @@ Collision and house-route checks compare **whole path segments**, not raw string
 
 ## 3. Gated tenants fail closed
 
-- If a tenant's doc is **missing, unreadable or invalid** (schema error, bad
-  `pathPrefix`, missing invite secret name or value), a gated tenant (`gate.mode: invite`)
-  is **denied**, not served ungated and not served with defaults.
-- Gated hosts and paths are also recorded somewhere that survives without the doc: either
-  an R0-side claims list or the last-known-good copy of the doc. A missing or unreadable
-  doc for a claimed host or path is denied. Which store to use is still open for U1.
+- If a tenant's doc is **missing, unreadable or invalid** (schema error, bad slug,
+  missing or unusable invite key material), a gated tenant (`gate.mode: invite`) is
+  **denied**, not served ungated and not served with defaults.
+- Gated paths come from an **R0-side claims list**, seeded from today's live value, with
+  the last-known-good copy of the doc as backup (see U5a). A missing doc on a claimed path
+  is denied.
 - Ungated (house) defaults never apply to a host or path that a gated tenant claims.
 - The deny is a plain 403/404 with no tenant detail in the body. The reason goes only to
   the server log.
