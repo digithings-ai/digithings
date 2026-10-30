@@ -100,7 +100,7 @@ import {
 } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
-import { tenantFontStyle } from "@/lib/tenant-fonts";
+import { TENANT_HEADING_FONT_CSS, tenantFontStyle } from "@/lib/tenant-fonts";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -529,11 +529,12 @@ function EmbedPageInner({
 
   return (
     <>
-      <style>{ACCENT_CSS}</style>
+      <style>{tenantCfg.fonts?.heading ? ACCENT_CSS + TENANT_HEADING_FONT_CSS : ACCENT_CSS}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
         className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={fontStyle ? { ...accentStyle, ...fontStyle } : accentStyle}
+        data-tenant-heading-font={tenantCfg.fonts?.heading ? "" : undefined}
       >
         <EmbedChat
           accent={accent}
