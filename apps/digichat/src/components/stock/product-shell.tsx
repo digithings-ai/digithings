@@ -13,6 +13,7 @@
  */
 
 import { startWarmup, getWarmupServiceNames } from "@/lib/warmup-gate";
+import { usePaintsNamedPalette } from "@/lib/use-painted-palette";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
@@ -369,6 +370,10 @@ export function ProductStockShell({
   });
   const chips = suggestionCycle.visible;
 
+  // The brand accent is the default look: a painted palette brings its own.
+  const paintsPalette = usePaintsNamedPalette();
+  const brandAccent = paintsPalette ? null : cfg.chrome.accent;
+
   const skinChrome = useMemo<SkinChromeValue>(
     () => ({
       skin: cfg.chrome.skin,
@@ -379,7 +384,7 @@ export function ProductStockShell({
       welcomeBody: cfg.chrome.welcomeBody ?? [],
       placeholder: placeholder?.trim() || cfg.chrome.placeholder,
       suggestions: chips,
-      accent: cfg.chrome.accent,
+      accent: brandAccent,
       modelPicker: features.modelPicker || cfg.models.allowPicker,
       pageContext: features.pageContext,
       attribution: cfg.chrome.attribution,
@@ -392,7 +397,7 @@ export function ProductStockShell({
       cfg.chrome.welcome,
       cfg.chrome.welcomeBody,
       cfg.chrome.placeholder,
-      cfg.chrome.accent,
+      brandAccent,
       cfg.chrome.attribution,
       features.modelPicker,
       features.pageContext,
@@ -443,10 +448,10 @@ export function ProductStockShell({
   );
 
   const ownsPage = skinOwnsPageChrome(cfg.chrome.skin);
-  const accentStyle = cfg.chrome.accent
+  const accentStyle = brandAccent
     ? ({
-        ["--accent" as string]: cfg.chrome.accent.color,
-        ["--accent-foreground" as string]: cfg.chrome.accent.foreground,
+        ["--accent" as string]: brandAccent.color,
+        ["--accent-foreground" as string]: brandAccent.foreground,
       } as const)
     : undefined;
 

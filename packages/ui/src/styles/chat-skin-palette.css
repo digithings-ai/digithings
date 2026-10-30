@@ -51,7 +51,8 @@
 
 /* A neutral wash mixed from the popover's own colours. --accent is not used:
    brand accent themes repoint it to a saturated colour. */
-[data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted] {
+[data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted],
+[data-skin-palette-composer] .dc-composer-menu [data-cursor="true"] {
   background: color-mix(in oklab, var(--ink) 9%, var(--bg));
   color: var(--ink);
   outline: none;
@@ -60,12 +61,6 @@
 [data-skin-palette-composer] .skin-palette.skin-palette :is([data-slot="palette-value"], [data-slot="palette-detail"]),
 [data-skin-palette-composer] .skin-palette.skin-palette .text-ink-mute {
   color: var(--ink-mute);
-}
-
-/* The digichat chevron cursor belongs to the digichat look; here the
-   highlighted row is marked by the shared accent wash instead. */
-[data-skin-palette-composer] .skin-palette.skin-palette .aui-menu-cursor {
-  display: none;
 }
 
 /* Pane scroll indicator (the digichat stylesheet only loads with that skin). */

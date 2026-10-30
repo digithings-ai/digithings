@@ -19,9 +19,10 @@ import {
 } from "@digithings/ui/chat/stock";
 import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
-/** Navigated row: the user-message chevron on the left. */
-function hasChevron(row: HTMLElement): boolean {
-  return (row.querySelector(".aui-menu-cursor")?.childElementCount ?? 0) > 0;
+/** Navigated row: marked by data-cursor (the lighter wash); no chevron glyph on any row. */
+function isCursorRow(row: HTMLElement): boolean {
+  expect(row.querySelector(".aui-menu-cursor")).toBeNull();
+  return row.getAttribute("data-cursor") === "true";
 }
 
 /** Configured value: the 3x3 cube diamond on the right. */
@@ -112,27 +113,27 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const selected = await screen.findByRole("menuitemradio", { name: "alpha" });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.textContent).not.toMatch(/\bon\b/i);
-    // The cursor row always carries the chevron; a checked row also keeps its
+    // The cursor row always carries the cursor wash; a checked row also keeps its
     // diamond on the right, so the two marks never share a side.
-    expect(hasChevron(selected)).toBe(true);
+    expect(isCursorRow(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     const other = screen.getByRole("menuitemradio", { name: "beta" });
-    expect(hasChevron(other)).toBe(false);
+    expect(isCursorRow(other)).toBe(false);
     expect(hasDiamond(other)).toBe(false);
 
-    // The chevron follows hover / arrow keys; the configured value keeps its
+    // The cursor wash follows hover / arrow keys; the configured value keeps its
     // diamond, so the two marks mean different things.
     await user.hover(other);
-    expect(hasChevron(other)).toBe(true);
-    expect(hasChevron(selected)).toBe(false);
+    expect(isCursorRow(other)).toBe(true);
+    expect(isCursorRow(selected)).toBe(false);
     expect(hasDiamond(selected)).toBe(true);
     expect(hasDiamond(other)).toBe(false);
 
-    // Navigating back to the checked row restores the chevron beside the
+    // Navigating back to the checked row restores the cursor wash beside the
     // diamond; the diamond still marks the configured value.
     await user.hover(selected);
-    expect(hasChevron(selected)).toBe(true);
+    expect(isCursorRow(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     await user.click(other);
@@ -195,7 +196,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const english = await screen.findByRole("menuitemradio", { name: /en\s+English/i });
     expect(english).toHaveAttribute("aria-checked", "true");
     expect(english.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(english)).toBe(true);
+    expect(isCursorRow(english)).toBe(true);
     expect(hasDiamond(english)).toBe(true);
 
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
@@ -204,7 +205,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("closes search-engine pick on click and marks the current engine with the chevron", async () => {
+  it("closes search-engine pick on click and marks the current engine as the cursor row", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "auto" } });
     const onClose = vi.fn();
@@ -816,11 +817,11 @@ describe("EmbedComposerMenu current value", () => {
     await user.click(await screen.findByRole("menuitem", { name: /\/view/ }));
 
     const balanced = await screen.findByRole("menuitemradio", { name: /\/view balanced/ });
-    expect(hasChevron(balanced)).toBe(true);
+    expect(isCursorRow(balanced)).toBe(true);
     // `quiet` is a level that is not the current value, so it carries no
     // cursor. It was `hidden` before #6079 retired that level; the assertion
     // is the same, on a level the ladder still has.
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setView).toHaveBeenCalledWith("balanced");
@@ -842,8 +843,8 @@ describe("EmbedComposerMenu current value", () => {
 
     // The effort is "medium", the second row: the cursor is not the top one.
     const medium = await screen.findByRole("menuitemradio", { name: /\/effort medium/ });
-    expect(hasChevron(medium)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/effort low/ }))).toBe(false);
+    expect(isCursorRow(medium)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/effort low/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setEffort).toHaveBeenCalledWith("medium");
@@ -861,8 +862,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const dutch = await screen.findByRole("menuitemradio", { name: /nl\s+Dutch/i });
-    expect(hasChevron(dutch)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /en\s+English/i }))).toBe(false);
+    expect(isCursorRow(dutch)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /en\s+English/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setLanguage).toHaveBeenCalledWith("nl");
@@ -880,8 +881,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const collapsed = await screen.findByRole("menuitemradio", { name: /thinking collapsed/i });
-    expect(hasChevron(collapsed)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /thinking auto/i }))).toBe(false);
+    expect(isCursorRow(collapsed)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /thinking auto/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setThinking).toHaveBeenCalledWith("collapsed");
@@ -899,8 +900,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const exa = await screen.findByRole("menuitemradio", { name: /search-engine exa/i });
-    expect(hasChevron(exa)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /search-engine auto/i }))).toBe(false);
+    expect(isCursorRow(exa)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /search-engine auto/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
@@ -918,8 +919,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const alpha = await screen.findByRole("menuitemradio", { name: "alpha" });
-    expect(hasChevron(alpha)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: "beta" }))).toBe(false);
+    expect(isCursorRow(alpha)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: "beta" }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setModel).toHaveBeenCalledWith("alpha");
@@ -958,9 +959,9 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const anthropic = await screen.findByRole("menuitemradio", { name: /\/anthropic/ });
-    expect(hasChevron(anthropic)).toBe(true);
+    expect(isCursorRow(anthropic)).toBe(true);
     expect(hasDiamond(anthropic)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
   });
 
   it("keeps the cursor on the clear row when no provider is connected", async () => {
@@ -972,8 +973,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const clear = await screen.findByRole("menuitemradio", { name: /\/cheaperinference/ });
-    expect(hasChevron(clear)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
+    expect(isCursorRow(clear)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
   });
 
   it("comes back from the key form on the provider row the user opened", async () => {
@@ -995,7 +996,7 @@ describe("EmbedComposerMenu current value", () => {
     await user.keyboard("{Escape}");
 
     const openai = await screen.findByRole("menuitemradio", { name: /\/openai/ });
-    expect(hasChevron(openai)).toBe(true);
+    expect(isCursorRow(openai)).toBe(true);
   });
 
   it("closes a model pick when the composer writer is not bound", async () => {

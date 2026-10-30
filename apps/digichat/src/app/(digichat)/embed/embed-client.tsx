@@ -512,10 +512,16 @@ function EmbedPageInner({
   // left style=null after SSR/hydration while location.search still had the hex
   // (DataTap terracotta #b5562b regression).
   const urlColors = useEmbedUiParams();
-  const accentStyle = buildEmbedAccentStyle(
-    urlColors.accent ?? tenantCfg.accent?.color,
-    urlColors.accentForeground ?? tenantCfg.accent?.foreground,
-  );
+  // A named palette (a /theme pick, a parent's or ?palette=) brings its own
+  // accent. The brand hex is the default look only, so it steps aside while a
+  // palette is painted, the same way the tenant colours do (tenant-colors.ts).
+  const accentStyle =
+    effectivePalette === "default"
+      ? buildEmbedAccentStyle(
+          urlColors.accent ?? tenantCfg.accent?.color,
+          urlColors.accentForeground ?? tenantCfg.accent?.foreground,
+        )
+      : undefined;
   // When a brand hex is active, drop the named `.accent-*` class so the inline
   // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
@@ -539,7 +545,7 @@ function EmbedPageInner({
       <style>{tenantCfg.fonts?.heading ? ACCENT_CSS + TENANT_HEADING_FONT_CSS : ACCENT_CSS}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive || effectivePalette !== "default" ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={fontStyle ? { ...accentStyle, ...fontStyle } : accentStyle}
         data-tenant-heading-font={tenantCfg.fonts?.heading ? "" : undefined}
       >

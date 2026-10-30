@@ -23,7 +23,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
 import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
@@ -2144,14 +2143,9 @@ export function EmbedComposerMenu({
                     }}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
-                    {/* The user-message chevron marks the cursor on every page,
-                        including a checked radio row; the value mark (diamond)
-                        stays on the right, so the two never collide. */}
-                    {selected ? (
-                      <span className="aui-menu-cursor" aria-hidden>
-                        <DotMatrix state="user" className="size-3.5" />
-                      </span>
-                    ) : null}
+                    {/* The cursor row is marked by the lighter background on
+                        every page (data-cursor, styled per skin), the same as
+                        the slash palette; the value mark stays on the right. */}
                     {row.branch ? (
                       <span
                         data-slot="tools-tree-branch"

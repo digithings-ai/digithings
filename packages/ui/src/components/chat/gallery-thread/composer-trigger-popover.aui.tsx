@@ -9,7 +9,6 @@ import {
   type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import { cn } from "./cn";
-import { DotMatrix } from "../DotMatrix";
 import { OverlayScrollbar } from "../overlay-scrollbar";
 
 type IconComponent = FC<{ className?: string }>;
@@ -100,11 +99,6 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               className="group flex w-full cursor-pointer flex-col items-stretch px-2 py-1 text-start text-sm outline-none"
             >
               <span className="flex w-full items-center gap-2">
-              {/* Same mark language as the composer menu: the highlighted
-                  row gets the user-message chevron and shifts right. */}
-              <span className="aui-menu-cursor" aria-hidden>
-                <DotMatrix state="user" decorative className="size-3.5" />
-              </span>
               <span className="shrink-0 font-medium">{item.label}</span>
               {value ? (
                 <span
