@@ -25,15 +25,22 @@
  * with the standalone Worker is pinned separately in
  * `apps/digithings-stack-cloudflare/src/digichat-mount.test.js`.
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   EXIT_DEPLOYED_UNVERIFIED,
+  IMAGE_INPUTS_CHECK,
+  IMAGE_INPUTS_REBUILD,
+  IMAGE_INPUTS_TIMEOUT_MS,
   META_URL,
   REV_LEN,
   REV_VAR,
   SHA_RE,
   buildVarArg,
   buildWranglerArgs,
+  checkImageInputs,
   expectedContainerId,
   metaMatchesDeploy,
   resolveDeployRev,
@@ -219,5 +226,109 @@ describe("post-deploy verdict", () => {
 
   it("uses an exit code distinct from wrangler's own non-zero", () => {
     expect(EXIT_DEPLOYED_UNVERIFIED).toBe(2);
+  });
+});
+describe("stale image-packages/ refuses the deploy before wrangler runs", () => {
+  it("runs the generator's own npm-scoped content check", () => {
+    expect(IMAGE_INPUTS_CHECK).toEqual([
+      "scripts/package_r5_image_inputs.py",
+      "--check-only",
+      "--npm-only",
+    ]);
+    // The flags must exist in the generator, or the check would exit non-zero
+    // for a reason that is not staleness.
+    const generator = readFileSync(
+      resolvePath(dirname(fileURLToPath(import.meta.url)), "../../..", IMAGE_INPUTS_CHECK[0]),
+      "utf8",
+    );
+    expect(generator).toContain('"--check-only"');
+    expect(generator).toContain('"--npm-only"');
+  });
+
+  it("passes only on exit 0 and hands back the check's output", () => {
+    let seen = null;
+    const out = checkImageInputs((args) => {
+      seen = args;
+      return { status: 0, stdout: "ok: image-packages provenance matches 6 packaged input(s)\n" };
+    });
+    expect(seen).toEqual(IMAGE_INPUTS_CHECK);
+    expect(out).toContain("ok: image-packages provenance matches");
+  });
+
+  it("refuses stale, missing, unrunnable and empty answers, with the rebuild command", () => {
+    const arms = [
+      ["stale", () => ({ status: 1, stdout: "ABORT: image-packages/ is stale\n  changed: @digithings/ui" })],
+      ["no provenance (dir missing)", () => ({ status: 2, stdout: "ABORT: cannot read usable provenance" })],
+      ["python3 not found", () => ({ status: null, error: new Error("spawnSync python3 ENOENT") })],
+      ["killed by a signal", () => ({ status: null, signal: "SIGTERM" })],
+      ["spawn returned nothing", () => undefined],
+      ["exit 0 but spawn error", () => ({ status: 0, error: new Error("weird") })],
+      [
+        "timed out",
+        () => ({
+          status: null,
+          signal: "SIGTERM",
+          error: Object.assign(new Error("spawnSync python3 ETIMEDOUT"), { code: "ETIMEDOUT" }),
+        }),
+      ],
+    ];
+    for (const [label, run] of arms) {
+      let thrown = null;
+      try {
+        checkImageInputs(run);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown, `arm "${label}" must refuse`).not.toBeNull();
+      expect(thrown.message).toContain("REFUSED");
+      expect(thrown.message).toContain(IMAGE_INPUTS_REBUILD);
+    }
+  });
+
+  it("surfaces which package drifted", () => {
+    expect(() =>
+      checkImageInputs(() => ({ status: 1, stdout: "ABORT: stale\n  changed: @digithings/ui" })),
+    ).toThrow(/changed: @digithings\/ui/);
+  });
+});
+
+describe("the freshness check is bounded, consistent and wired", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const deploySource = readFileSync(resolvePath(here, "../scripts/deploy.mjs"), "utf8");
+
+  it("bounds the python3 check with a timeout and names it when it fires", () => {
+    expect(IMAGE_INPUTS_TIMEOUT_MS).toBe(120_000);
+    expect(deploySource).toMatch(
+      /spawnSync\("python3", args, \{[^}]*timeout: IMAGE_INPUTS_TIMEOUT_MS/,
+    );
+    expect(() =>
+      checkImageInputs(() => ({
+        status: null,
+        signal: "SIGTERM",
+        error: Object.assign(new Error("ETIMEDOUT"), { code: "ETIMEDOUT" }),
+      })),
+    ).toThrow(/did not finish within 120s/);
+  });
+
+  it("prints the same rebuild command as the python generator", () => {
+    const generator = readFileSync(resolvePath(here, "../../..", IMAGE_INPUTS_CHECK[0]), "utf8");
+    const m = generator.match(/^REMEDIATION = "([^"]+)"$/m);
+    expect(m, "generator must define REMEDIATION").not.toBeNull();
+    expect(IMAGE_INPUTS_REBUILD).toBe(m[1]);
+  });
+
+  it("main() runs checkImageInputs() after resolving the rev and before wrangler", () => {
+    const start = deploySource.indexOf("async function main(");
+    expect(start, "main() must exist").toBeGreaterThan(-1);
+    const body = deploySource.slice(start);
+    const rev = body.indexOf("resolveDeployRev()");
+    const check = body.indexOf("checkImageInputs()");
+    const wrangler = body.indexOf('spawnSync("npm"');
+    expect(rev, "main() resolves the rev").toBeGreaterThan(-1);
+    expect(check, "main() must call checkImageInputs()").toBeGreaterThan(rev);
+    expect(wrangler, "main() spawns wrangler via npm").toBeGreaterThan(check);
+    // The call must be live code, not commented out.
+    const line = body.slice(body.lastIndexOf("\n", check) + 1, check);
+    expect(line).not.toMatch(/\/\/|\/\*/);
   });
 });
