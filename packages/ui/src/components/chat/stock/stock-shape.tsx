@@ -27,3 +27,13 @@ export function useStockShape(): boolean {
 export function stockRadius(stock: boolean, upstream: string, house = "rounded-none"): string {
   return stock ? upstream : house;
 }
+
+/**
+ * Marks a portaled stock surface (a dialog) rendered from inside the stock
+ * Thread, so chat-aui.css's `bg-surface-2` utility paints in it. The thread
+ * root carries `data-stock-thread`; a portal leaves that subtree, so it
+ * carries this instead. Outside the provider it adds nothing.
+ */
+export function stockPortalProps(stock: boolean): { "data-stock-portal"?: "" } {
+  return stock ? { "data-stock-portal": "" } : {};
+}

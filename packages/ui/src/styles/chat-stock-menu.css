@@ -2,10 +2,10 @@
  * Stock skin "…" menu and its side panels (expo-react-native,
  * webpage-assistant, product-page-assistant).
  *
- * The menu's classes ask for `bg-surface-2`. The theme bridge (chat-aui.css)
- * declares `--color-surface-2` (on a page with a stock thread), but these
- * rules stay unlayered so the panel keeps its border, shadow and row
- * highlight whichever sheet loads first. The menu is portaled to <body>, so
+ * The menu's classes ask for `bg-surface-2`. chat-aui.css emits that utility
+ * only inside the stock thread and its marked portals; this menu is portaled
+ * unmarked and paints its own fill from `--surface-2` below. These rules stay unlayered so the
+ * panel keeps its border, shadow and row highlight whichever sheet loads first. The menu is portaled to <body>, so
  * it reads the page-level tokens, which follow the light/dark theme.
  *
  * Selector is the stock menu's own class pair, so other skins' menus
@@ -29,8 +29,8 @@
 }
 
 /* Keyboard focus: a visible ring on the focused row (the tint alone is under
-   3:1 against the panel). --ink-soft on --surface-2 is well above 3:1 in both
-   themes. */
+   3:1 against the panel). --ink-soft on the panel measures 5.53:1 in light
+   and 6.61:1 in dark. */
 .aui-action-bar-more-content.bg-surface-2 .aui-action-bar-more-item:focus-visible {
   outline: 2px solid var(--ink-soft, var(--ink, CanvasText));
   outline-offset: -2px;

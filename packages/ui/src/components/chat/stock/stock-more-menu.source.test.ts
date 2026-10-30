@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The stock skin's "…" menu is portaled to <body>. chat-aui.css's theme
-// bridge declares --color-surface-2, switched on only on a page that holds a
-// stock thread (so `bg-surface-2` paints there and nowhere else), and chat-stock-menu.css gives the menu its background, border,
-// shadow and keyboard focus ring. These pin the pieces those rules depend on.
+// The stock skin's "…" menu is portaled to <body>. chat-aui.css emits
+// `bg-surface-2` only inside the stock thread and its marked portals, so
+// chat-stock-menu.css gives the menu its own background, border, shadow and
+// keyboard focus ring. These pin the pieces those rules depend on.
 const thread = readFileSync(join(__dirname, "thread.aui.tsx"), "utf8");
 const css = readFileSync(join(__dirname, "../../../styles/chat-stock-menu.css"), "utf8");
 const bridge = readFileSync(join(__dirname, "../../../styles/chat-aui.css"), "utf8");
@@ -43,15 +43,16 @@ describe("stock skin More menu", () => {
     expect(`${menu} ${item}`).not.toContain("rounded-none");
   });
 
-  it("declares the surface-2 colour in the theme bridge", () => {
+  it("emits bg-surface-2 only inside the stock thread and its portals", () => {
+    // Other skins and host chrome reuse stock parts that ask for bg-surface-2
+    // and keep their own background; outside the scope the class matches no
+    // declaration. Never page-wide (DIG-6110), no theme colour, no :has().
     const theme = bridge.slice(bridge.indexOf("@theme inline {"), bridge.indexOf("}", bridge.indexOf("@theme inline {")));
-    expect(theme).toMatch(/--color-surface-2:\s*var\(--stock-surface-2-on\) var\(--surface-2\);/);
-  });
-
-  it("switches surface-2 on only on a page that holds a stock thread", () => {
-    // Other skins reuse stock parts that ask for bg-surface-2 and are tuned
-    // transparent; the colour stays invalid (transparent) until the switch.
-    expect(bridge).toMatch(/html:has\(\[data-stock-thread\]\) \{\s*--stock-surface-2-on: ;\s*\}/);
+    expect(theme).not.toMatch(/--color-surface-2/);
+    expect(bridge).toMatch(
+      /@utility bg-surface-\* \{\s*&:where\(\[data-stock-thread\], \[data-stock-thread\] \*, \[data-stock-portal\], \[data-stock-portal\] \*\) \{\s*--stock-surface-step: --value\("2"\);\s*background-color: var\(--surface-2\);/,
+    );
+    expect(bridge).not.toMatch(/:has\([^)]*data-stock/);
     expect(thread).toMatch(/aui-thread-root[^"]*"\s*data-stock-thread=""/);
   });
 
