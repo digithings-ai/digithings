@@ -692,6 +692,15 @@ function EmbedChat({
   const setComposerDraft = useCallback((text: string) => {
     draftSink.current(text);
   }, []);
+  const exportSink = useRef<((format: "md" | "html") => void) | null>(null);
+  const [threadExportBound, setThreadExportBound] = useState(false);
+  const bindThreadExport = useCallback((run: (format: "md" | "html") => void) => {
+    exportSink.current = run;
+    setThreadExportBound(true);
+  }, []);
+  const exportThread = useCallback((format: "md" | "html") => {
+    exportSink.current?.(format);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   // ?private=1 resolves once at mount (ON-only, like ?wide=1) into the session
@@ -1570,6 +1579,9 @@ function EmbedChat({
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
     }),
     [
@@ -1608,6 +1620,9 @@ function EmbedChat({
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
       stockClient.features.effort,
       stockClient.gate.searchEngine,

@@ -24,7 +24,15 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button, Input, Label } from "@digithings/ui/ui";
-import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
+import {
+  EXPORT_CHOICES,
+  nextPaletteIndex,
+  optionDraft,
+  paneDraftForId,
+  submenuRows,
+  VIEW_LABELS,
+} from "@digithings/digichat-ui";
+import { chatExportStrings } from "@digithings/ui/chat/transcript";
 import {
   committedChatPrefs,
   slashRowPreview,
@@ -102,7 +110,8 @@ export type ComposerMenuKind =
   | "theme"
   | "thinking"
   | "provider"
-  | "help";
+  | "help"
+  | "export";
 
 type MenuView =
   | "main"
@@ -120,7 +129,8 @@ type MenuView =
   | "provider"
   | "provider-key"
   | "provider-model"
-  | "help";
+  | "help"
+  | "export";
 
 export type MenuRow = {
   id: string;
@@ -317,6 +327,7 @@ const MENU_PARENT: Record<MenuView, MenuView | null> = {
   "provider-key": "provider",
   "provider-model": "provider",
   help: "main",
+  export: "main",
 };
 
 /** Escape from a pane writes the command without the trailing space. */
@@ -333,6 +344,7 @@ const PANE_BACK_TOKEN: Partial<Record<MenuView, string>> = {
   mcp: "/mcp",
   provider: "/provider",
   help: "/help",
+  export: "/export",
 };
 
 const EFFORTS = ["low", "medium", "high"] as const;
@@ -388,6 +400,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "mcp") return "mcp";
   if (kind === "provider") return "provider";
   if (kind === "help") return "help";
+  if (kind === "export") return "export";
   return "main";
 }
 
@@ -726,10 +739,13 @@ export function EmbedComposerMenu({
       "search-engine": "search-engine",
       byok: "provider",
       help: "help",
+      export: "export",
     };
     return [
       ...buildProductSlashCommands(api)
         .filter((command) => command.id !== "settings")
+        // Private session: the stored thread still holds the real typed text.
+        .filter((command) => !(privateOn && command.id === "export"))
         .map((command) => {
           const node = NODE_BY_ID[command.id];
           const draft = node ? paneDraftForId(command.id) : null;
@@ -971,6 +987,33 @@ export function EmbedComposerMenu({
         },
       })),
     [api],
+  );
+
+  // The whole conversation, in either format. The rows run and close the
+  // menu; the skin's runner (`bindThreadExport`) does the download.
+  const exportStrings = useMemo(
+    () => chatExportStrings(api.prefs.language),
+    [api.prefs.language],
+  );
+  const exportRows = useMemo(
+    (): MenuRow[] =>
+      // Private session: no format rows either, even if `/export ` is typed.
+      privateOn
+        ? []
+        : EXPORT_CHOICES.map((choice) => ({
+            id: `export-${choice.value}`,
+            label: choice.value === "html" ? exportStrings.html : exportStrings.markdown,
+            value: "",
+            detail: exportStrings.conversationHint,
+            insert: optionDraft("/export", choice.value),
+            token: choice.value,
+            activate: () => {
+              if (!privateOn) api.exportThread?.(choice.value === "html" ? "html" : "md");
+              if (api.composerDraftBound) api.setComposerDraft?.("");
+              onClose();
+            },
+          })),
+    [api, exportStrings, onClose, privateOn],
   );
 
   const densityRows = useMemo(
@@ -1408,7 +1451,9 @@ export function EmbedComposerMenu({
                                 ? engineRows
                                 : view === "help"
                                   ? []
-                                  : modelRows;
+                                  : view === "export"
+                                    ? exportRows
+                                    : modelRows;
   const paletteFilter =
     view === "main" ||
     view === "help" ||
@@ -1450,7 +1495,9 @@ export function EmbedComposerMenu({
                         ? "/search-engine"
                         : view === "help"
                           ? "/help"
-                          : "Settings";
+                          : view === "export"
+                            ? "/export"
+                            : "Settings";
 
   const safeCursor = shown.length ? Math.min(cursor, shown.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);

@@ -152,6 +152,12 @@ export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] =
   { id: "setup", label: "Setup" },
 ];
 
+/** `/export` formats. Values are the typed argument. */
+export const EXPORT_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "md", label: "Markdown (.md)" },
+  { value: "html", label: "HTML (.html)" },
+];
+
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
     id: "mcp",
@@ -353,9 +359,11 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "export",
     names: ["/export"],
     needsArg: false,
-    hint: "Download this chat as a file.",
+    hint: "Download this conversation as a file.",
     kind: "client",
     category: "actions",
+    // A pane: `/export ` lists the formats, `/export md|html` runs one.
+    choiceOptions: EXPORT_CHOICES,
   },
   {
     id: "help",
