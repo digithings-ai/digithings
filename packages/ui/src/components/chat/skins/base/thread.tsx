@@ -98,7 +98,7 @@ import {
   LexicalComposerInput,
   type DirectiveChipProps,
 } from "@assistant-ui/react-lexical";
-import { useState, type FC, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 import { ModelSelector } from "./elements/model-selector.aui";
 import { docsModelOptions } from "./docs-model-options";
 import { DEFAULT_MODEL_ID } from "./model";
@@ -147,6 +147,78 @@ const ModelPicker: FC = () => {
       size="sm"
       className="h-7 rounded-full"
     />
+    </div>
+  );
+};
+
+/**
+ * The tenant's chat languages, as a chip beside the model chip. It drives the
+ * same session language as `/language`, so the two always agree. Renders only
+ * when the host lists two or more languages.
+ */
+const LanguageChip: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const options = prefs?.languageOptions;
+  if (!prefs || !options || options.length < 2) return null;
+  const current = prefs.prefs.language;
+  const active = options.find((o) => o.code === current);
+  return (
+    <div ref={rootRef} data-deploy-language-picker className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="aui-language-chip text-muted-foreground hover:text-foreground h-7 gap-1 rounded-full px-2.5 text-xs"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Chat language"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={active?.label ?? current}
+      >
+        <span>{active?.short ?? current.toUpperCase()}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+      </Button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Chat language"
+          className="aui-language-menu bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 min-w-36 rounded-xl border p-1 shadow-md"
+        >
+          {options.map((o) => (
+            <button
+              key={o.code}
+              type="button"
+              role="option"
+              aria-selected={o.code === current}
+              className="hover:bg-accent flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs"
+              onClick={() => {
+                prefs.setLanguage(o.code);
+                setOpen(false);
+              }}
+            >
+              <span>{o.label}</span>
+              <span className="text-muted-foreground">{o.short}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -623,6 +695,7 @@ const ComposerAction: FC = () => {
       <div className="flex items-center gap-1">
         <ComposerAddAttachment />
         <ModelPicker />
+        <LanguageChip />
       </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>

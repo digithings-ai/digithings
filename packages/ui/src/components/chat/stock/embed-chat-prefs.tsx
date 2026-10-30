@@ -214,6 +214,13 @@ export type EmbedChatPrefsApi = {
   setMcpConfig: (config: SkinMcpServerConfig, previousId?: string) => void;
   removeMcpConfig: (id: string) => void;
   setLanguage: (code: string) => void;
+  /**
+   * The tenant's chat languages, for the composer language chip. Absent (or
+   * fewer than two) means no chip; `/language` is unchanged either way.
+   */
+  languageOptions?: { code: string; short: string; label: string }[];
+  /** Footer credit in the session language: `${lead} digithings ${tail}`. */
+  credit?: { lead: string; tail: string };
   setView: (mode: ViewMode) => void;
   setThinking: (value: ThinkingMode) => void;
   setModel: (id: string) => void;

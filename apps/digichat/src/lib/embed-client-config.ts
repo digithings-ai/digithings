@@ -1,3 +1,4 @@
+import type { TenantLocales } from "@/lib/tenant-locales";
 import { constantTimeEqual } from "@/lib/constant-time-equal";
 import type { TenantFonts } from "@/lib/tenant-fonts";
 import type { TenantColors } from "@/lib/tenant-colors";
@@ -53,6 +54,8 @@ export type EmbedTenantClientConfig = {
   welcomeBody?: string[];
   suggestions?: string[];
   placeholder?: string;
+  /** Chat languages and their copy (composer language chip). Omit = no chip. */
+  locales?: TenantLocales;
   /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
   attachments?: boolean;
   /**
@@ -196,6 +199,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     welcomeBody: cfg.welcomeBody?.length ? cfg.welcomeBody : undefined,
     suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
     placeholder: cfg.placeholder,
+    ...(cfg.locales ? { locales: cfg.locales } : {}),
     lockedContact: cfg.lockedContact,
     attachments: cfg.attachments === true,
     dictation: cfg.dictation === true ? true : undefined,

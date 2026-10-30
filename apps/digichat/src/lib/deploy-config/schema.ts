@@ -5,6 +5,7 @@
  * same shape for migration. Spec: digichat deploy config plan + ARCHITECTURE.md.
  */
 
+import { parseTenantLocales, type TenantLocales } from "@/lib/tenant-locales";
 import { TenantFontsSchema } from "@/lib/tenant-fonts";
 import { TenantColorsSchema } from "@/lib/tenant-colors";
 import { z } from "zod";
@@ -44,6 +45,16 @@ import {
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
+
+/** Validated by the same parser the embed registry uses. */
+export const TenantLocalesSchema = z.unknown().transform((value, ctx): TenantLocales | undefined => {
+  try {
+    return parseTenantLocales(value, "chrome");
+  } catch (error) {
+    ctx.addIssue({ code: "custom", message: (error as Error).message });
+    return z.NEVER;
+  }
+});
 
 export const ChromeModeSchema = z.enum(["app", "embed", "modal", "sidebar"]);
 export const PersistenceSchema = z.enum(["none", "memory", "server"]);
@@ -275,6 +286,8 @@ export const ChromeSchema = z
      */
     productChat: z.boolean().optional(),
     placeholder: z.string().optional(),
+    /** Chat languages and their copy (src/lib/tenant-locales.ts). */
+    locales: TenantLocalesSchema.optional(),
     accent: AccentSchema.optional(),
     /** Heading and body faces, font variables only (src/lib/tenant-fonts.ts). */
     fonts: TenantFontsSchema.optional(),

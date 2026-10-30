@@ -112,6 +112,13 @@ import {
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
 import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
+import {
+  languageChoiceKey,
+  localizeTenantCopy,
+  resolveTenantLanguage,
+  tenantCredit,
+  tenantLanguageOptions,
+} from "@/lib/tenant-locales";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   buildReadyMessage,
@@ -627,6 +634,24 @@ function EmbedChat({
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  // Tenant chat languages (the composer chip): a stored explicit choice wins,
+  // else the browser's languages. Applied after mount so the first render
+  // matches the server. Resets (/new, /clear, /compact) keep the language.
+  const tenantLocales = tenantCfg.locales;
+  const languageSeedRef = useRef(tenantLanguage);
+  useEffect(() => {
+    if (!tenantLocales) return;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(languageChoiceKey(tenantCfg.slug));
+    } catch {
+      stored = null;
+    }
+    const lang = resolveTenantLanguage(tenantLocales, stored, window.navigator.languages);
+    languageSeedRef.current = lang;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount sync: the server cannot see the browser languages or storage.
+    setChatPrefs((p) => (p.language === lang ? p : { ...p, language: lang }));
+  }, [tenantLocales, tenantCfg.slug]);
   useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -1233,9 +1258,14 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
 
+  // The tenant's copy in the session language (the row's own copy without locales).
+  const copyCfg = useMemo(
+    () => localizeTenantCopy(tenantCfg, chatPrefs.language),
+    [tenantCfg, chatPrefs.language],
+  );
   const tenantWelcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
+    if (copyCfg.welcome) return copyCfg.welcome;
     if (ungated) {
       return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
     }
@@ -1243,9 +1273,9 @@ function EmbedChat({
       "the first few turns are free",
       `the first ${EMBED_FREE_TURN_LIMIT} are free`,
     );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+  }, [uiParams.welcome, copyCfg.welcome, ungated]);
 
-  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
+  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, copyCfg);
   // Private session: generic support-desk copy, so nothing names the tenant.
   const {
     welcome: welcomeIntro,
@@ -1254,7 +1284,7 @@ function EmbedChat({
     headerTitle,
   } = privateSessionChrome(privateChrome, {
     welcome: tenantWelcomeIntro,
-    placeholder: uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…",
+    placeholder: uiParams.placeholder ?? copyCfg.placeholder ?? "ask digichat…",
     suggestions: tenantSuggestions,
     headerTitle: tenantCfg.title,
   });
@@ -1322,6 +1352,8 @@ function EmbedChat({
     featureModelPicker: stockClient.features.modelPicker,
     available: stockClient.models.available,
   });
+  const languageOptions = useMemo(() => tenantLanguageOptions(tenantLocales), [tenantLocales]);
+  const credit = tenantCredit(tenantLocales, chatPrefs.language);
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1343,8 +1375,19 @@ function EmbedChat({
         })),
       setLanguage: (code) => {
         const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        if (tenantLocales) {
+          // An explicit pick (chip or /language) is remembered over the browser.
+          languageSeedRef.current = resolved;
+          try {
+            window.localStorage.setItem(languageChoiceKey(tenantCfg.slug), resolved);
+          } catch {
+            // storage blocked: the choice lasts for this page only
+          }
+        }
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      ...(languageOptions ? { languageOptions } : {}),
+      ...(credit ? { credit } : {}),
       setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
@@ -1363,7 +1406,7 @@ function EmbedChat({
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1460,7 +1503,7 @@ function EmbedChat({
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1478,7 +1521,7 @@ function EmbedChat({
       compactThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1547,6 +1590,10 @@ function EmbedChat({
       stockClient.gate.searchEngine,
       stockClient.chrome.toolbar,
       stockClient.chrome.scrollbars,
+      tenantLocales,
+      tenantCfg.slug,
+      languageOptions,
+      credit,
     ],
   );
 
