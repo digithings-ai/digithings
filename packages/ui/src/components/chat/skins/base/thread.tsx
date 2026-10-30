@@ -47,6 +47,7 @@ import {
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
 import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
 import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
+import { useViewDisclosure } from "../../stock/deploy-ui-context";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarMorePrimitive,
@@ -755,6 +756,7 @@ const AssistantWorkingIndicator: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
+  const disclosure = useViewDisclosure();
   // reserves space for action bar and compensates with `-mb` for consistent msg spacing
   // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
   // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
@@ -784,7 +786,11 @@ const AssistantMessage: FC = () => {
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
                 return (
-                  <ToolGroupRoot variant="ghost">
+                  <ToolGroupRoot
+                    key={disclosure.key}
+                    variant="ghost"
+                    defaultOpen={disclosure.toolGroupOpen}
+                  >
                     <ToolGroupTrigger
                       count={part.indices.length}
                       active={part.status.type === "running"}
@@ -795,7 +801,10 @@ const AssistantMessage: FC = () => {
               case "group-reasoning": {
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot defaultOpen={running}>
+                  <ReasoningRoot
+                    key={disclosure.key}
+                    defaultOpen={disclosure.reasoningOpen(running)}
+                  >
                     <ReasoningTrigger active={running} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -816,7 +825,10 @@ const AssistantMessage: FC = () => {
                   (part.approval != null || part.interrupt != null) ? (
                     <ApprovalToolFallback {...part} />
                   ) : (
-                    <ToolFallback {...part} />
+                    <ToolFallback
+                      key={disclosure.key}
+                      {...part}
+                    />
                   ))
                 );
               case "indicator":

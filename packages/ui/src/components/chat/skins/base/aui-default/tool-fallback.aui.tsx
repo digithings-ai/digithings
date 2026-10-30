@@ -1,5 +1,6 @@
 "use client";
 
+import { useViewDisclosure } from "../../../stock/deploy-ui-context";
 import { memo, useCallback, useRef, useState } from "react";
 import { AlertCircleIcon, CheckIcon, ChevronDownIcon, LoaderIcon, XCircleIcon } from "lucide-react";
 import {
@@ -248,9 +249,13 @@ function ToolFallbackError({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({ toolName, argsText, result, status }) => {
   const isCancelled = status?.type === "incomplete" && status.reason === "cancelled";
+  // /view verbose opens the cards (the base and chatgpt skins key them by view level).
+  const { toolCardOpen } = useViewDisclosure();
 
   return (
-    <ToolFallbackRoot className={cn(isCancelled && "border-muted-foreground/30 bg-muted/30")}>
+    <ToolFallbackRoot
+      defaultOpen={toolCardOpen}
+      className={cn(isCancelled && "border-muted-foreground/30 bg-muted/30")}>
       <ToolFallbackTrigger toolName={toolName} status={status} />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
