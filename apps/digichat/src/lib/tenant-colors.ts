@@ -74,8 +74,10 @@ export function tenantColorVars(set: TenantColorSet): [string, string][] {
     if (value) for (const n of names) out.push([n, value]);
   };
   add(["--bg", "--embed-canvas", "--background", "--term-bg", "--chat-skin-canvas"], set.background);
-  add(["--surface", "--surface-2", "--card", "--popover", "--composer-bg", "--term-fill"], set.surface);
-  add(["--ink", "--ink-soft", "--foreground", "--card-foreground", "--popover-foreground", "--term-ink"], set.text);
+  // --muted / --secondary too: the base skin's hover fills, skeletons and
+  // secondary buttons read them (shadcn tokens), so a tenant surface reaches them.
+  add(["--surface", "--surface-2", "--card", "--popover", "--muted", "--secondary", "--composer-bg", "--term-fill"], set.surface);
+  add(["--ink", "--ink-soft", "--foreground", "--card-foreground", "--popover-foreground", "--secondary-foreground", "--term-ink"], set.text);
   add(["--ink-mute", "--muted-foreground", "--term-mute"], set.muted);
   add(["--hair", "--hair-2", "--border", "--input", "--term-hair"], set.border);
   add(["--accent", "--tenant-accent", "--primary"], set.accent);

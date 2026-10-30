@@ -4,8 +4,8 @@ import {
   ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
-} from "../../stock/attachment.aui";
-import { MarkdownText } from "../../stock/markdown-text";
+} from "./attachment.aui";
+import { MarkdownText } from "./markdown-text";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { useSuggestionGroup } from "../../suggestion-cycle";
 import { SuggestionScrollRow } from "../../suggestion-scroll-row";
@@ -17,11 +17,11 @@ import { useSkinRuntime } from "../../stock/skin-runtime";
 // skins render reasoning and tool calls as assistant-ui ships them.
 import { ToolFallback } from "./aui-default/tool-fallback.aui";
 
-import { TooltipIconButton } from "../../stock/tooltip-icon-button";
+import { TooltipIconButton } from "./tooltip-icon-button";
 import { Reasoning } from "./aui-default/reasoning.aui";
 import { ChainOfThoughtActivity } from "./elements/chain-of-thought-activity";
-import { Button } from "../../stock/ui/button";
-import { Skeleton } from "../../stock/ui/skeleton";
+import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   SkinCredit,
@@ -194,7 +194,7 @@ const LanguageChip: FC = () => {
               type="button"
               role="option"
               aria-selected={o.code === current}
-              className="hover:bg-accent flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs"
+              className="hover:bg-muted flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs"
               onClick={() => {
                 prefs.setLanguage(o.code);
                 setOpen(false);
@@ -327,7 +327,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-muted absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -952,7 +952,7 @@ const AssistantActionBar: FC = () => {
         <ActionBarMorePrimitive.Trigger asChild>
           <TooltipIconButton
             tooltip="More"
-            className="data-[state=open]:bg-accent"
+            className="data-[state=open]:bg-muted"
           >
             <MoreHorizontalIcon />
           </TooltipIconButton>
@@ -964,7 +964,7 @@ const AssistantActionBar: FC = () => {
           className="aui-action-bar-more-content bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-xl border p-1.5"
         >
           <ActionBarPrimitive.ExportMarkdown asChild>
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none">
+            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none">
               <DownloadIcon className="size-4" />
               Export as Markdown
             </ActionBarMorePrimitive.Item>

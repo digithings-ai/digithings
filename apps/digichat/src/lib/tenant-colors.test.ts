@@ -79,3 +79,13 @@ describe("tenant colors", () => {
     expect(TENANT_HEADING_FONT_CSS).toContain("font-family:var(--font-heading)");
   });
 });
+
+describe("tenant surface reaches the shadcn hover and secondary fills", () => {
+  it("maps surface to --muted and --secondary, text to --secondary-foreground", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#3d3d3d", text: "#fafafa" }));
+    expect(vars["--muted"]).toBe("#3d3d3d");
+    expect(vars["--secondary"]).toBe("#3d3d3d");
+    expect(vars["--popover"]).toBe("#3d3d3d");
+    expect(vars["--secondary-foreground"]).toBe("#fafafa");
+  });
+});

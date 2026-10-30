@@ -25,8 +25,8 @@ import {
   CollapsibleTrigger,
 } from "./collapsible";
 import { cn } from "@/lib/utils";
-import { Button } from "../../../stock/ui/button";
-import { Textarea } from "../../../stock/ui/textarea";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
 import { useTraceT } from "../../../trace-i18n";
 
 const ANIMATION_DURATION = 200;
