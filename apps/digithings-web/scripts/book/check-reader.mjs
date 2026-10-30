@@ -20,9 +20,9 @@
  *
  * Loopback only, no paid service: Playwright's Chromium, as `print-pdf.mjs`.
  */
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { digithingsCsp } from "../../lib/security-headers.mjs";
@@ -45,24 +45,38 @@ const TYPES = {
   ".txt": "text/plain",
 };
 
+/** Every file under `dir`, keyed by the URL path that serves it. */
+function filesUnder(dir) {
+  const files = new Map();
+  const walk = (folder, prefix) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const path = join(folder, entry.name);
+      if (entry.isDirectory()) walk(path, `${prefix}${entry.name}/`);
+      else files.set(`${prefix}${entry.name}`, path);
+    }
+  };
+  walk(dir, "/");
+  return files;
+}
+
+/**
+ * A read-only server over `out/` with the production CSP. It answers only from
+ * a list of the files the export wrote, so a request path never reaches the
+ * file system: no traversal to guard.
+ */
 function serve(dir) {
   const csp = digithingsCsp();
-  const root = resolve(dir);
+  const files = filesUnder(resolve(dir));
   const server = createServer((req, res) => {
-    let decoded;
+    let path;
     try {
-      decoded = decodeURIComponent((req.url ?? "/").split("?")[0]);
+      path = decodeURIComponent((req.url ?? "/").split("?")[0]);
     } catch {
       res.writeHead(400).end("bad request");
       return;
     }
-    let file = resolve(root, decoded.replace(/^\/+/, ""));
-    if (relative(root, file).split(sep).includes("..")) {
-      res.writeHead(403).end("forbidden");
-      return;
-    }
-    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, "index.html");
-    if (!existsSync(file)) {
+    const file = files.get(path) ?? files.get(`${path.replace(/\/+$/, "")}/index.html`);
+    if (!file) {
       res.writeHead(404).end("not found");
       return;
     }
