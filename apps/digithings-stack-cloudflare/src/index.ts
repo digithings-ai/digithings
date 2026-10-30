@@ -62,6 +62,7 @@ import { mcpEdgeTarget } from "./mcp-edge-target";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 import { composeCorpusMap } from "./tenant-config";
+import { readTenantFilesEnv } from "./tenant-files";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
 // the file is dependency-free constants, so it cannot fail independently of
@@ -230,6 +231,12 @@ export class DigiStackContainer extends Container {
     // ignores that header and always uses defaultPort (digigraph :8000) — which
     // made key.digithings.ai / JWKS / bff_session hit digigraph (smoke NO-GO).
     const targetPort = targetPortFromRequest(request);
+    // Cold start only: tenant site graphs and page corpora ride into the new
+    // container's env from KV (./tenant-files; no key = byte-identical env).
+    // A running container already has them, so a warm request reads nothing.
+    if (!this.ctx.container?.running) {
+      Object.assign(this.envVars, await readTenantFilesEnv(env.TENANT_CONFIG));
+    }
     try {
       await this.startAndWaitForPorts({
         // digigraph binds first for every request, so it is unconditional.
@@ -375,6 +382,11 @@ export function containerBootingResponse(
 
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
+  /**
+   * Tenant config KV (wrangler `kv_namespaces`). Read only at a container cold
+   * start, for the `DIGI_TENANT_FILES` bundle (./tenant-files).
+   */
+  TENANT_CONFIG?: KVNamespace;
   /**
    * Service binding to this same Worker, used only for the digikey JWKS:
    * `key.digithings.ai` is this Worker's own route, so a plain fetch cannot
