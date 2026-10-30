@@ -82,12 +82,22 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         "Search this tenant's own public web presence with the first-party digisearch "
         "web_search tool. Results are restricted server-side to: "
         + ", ".join(pin_list)
-        + ". Other domains and other search engines are refused; include_domains "
-        "can only narrow this list. Cite the page URL of every fact you use."
+        + ". A listed host includes all of its subdomains (e.g. academy.<host>); a "
+        "listed path covers only pages under that path. Other domains and other "
+        "search engines are refused. Each call is one search: to search a listed "
+        "site other than the first, or one subdomain of it, pass that host in "
+        "include_domains (it can only narrow this list). To read a full page, "
+        "follow one of its links or check a subdomain, call web_search with url "
+        "set to that page's URL instead of a query: it returns the page text and "
+        "the links on it that stay inside these sites. "
+        "Cite the page URL of every fact you use."
     ]
     graph = load_web_search_site_graph(site_id) if isinstance(site_id, str) else None
     if graph:
-        parts.append(graph)
+        parts.append(
+            "Site map (a starting guide, not a limit: pages and subdomains not "
+            "listed here are allowed when they sit inside the sites above):\n\n" + graph
+        )
     fn["description"] = "\n\n".join(parts)
     props = fn["parameters"]["properties"]
     props.pop("provider", None)
@@ -95,6 +105,16 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         **props["include_domains"],
         "description": "Optional narrowing within: " + ", ".join(pin_list) + ".",
     }
+    # Open-page mode exists only here: the shared (unpinned) definition never
+    # offers ``url``, so an unpinned session's schema is unchanged.
+    props["url"] = {
+        "type": "string",
+        "description": (
+            "Absolute URL of one page inside the sites above to open and read in "
+            "full (instead of searching). Pages outside them are refused."
+        ),
+    }
+    fn["parameters"]["required"] = []
     return tool
 
 
@@ -146,12 +166,29 @@ def _domain_within(domain: str, pin: str) -> bool:
 
 
 def _split_pin(pin: str) -> tuple[str, str]:
-    """``host/path`` -> ``(host, "/path")``; a bare host has an empty path."""
-    host, sep, path = pin.strip().lower().rstrip("/").partition("/")
+    """``host/path`` -> ``(host, "/path")``; a bare host has an empty path.
+
+    An exact-page query (``host/path?k=v``) is dropped here; see :func:`_pin_query`.
+    """
+    host, sep, path = pin.strip().lower().split("?", 1)[0].rstrip("*").rstrip("/").partition("/")
     host = host.rstrip(".")
     if host.startswith("www."):
         host = host[4:]
     return host, ("/" + path if sep and path else "")
+
+
+def _pin_query(pin: str) -> list[tuple[str, str]]:
+    """The ``k=v`` pairs of an exact-page pin (``host/path?k=v``), else empty."""
+    _, sep, query = pin.strip().lower().partition("?")
+    if not sep:
+        return []
+    from urllib.parse import parse_qsl
+
+    return parse_qsl(query, keep_blank_values=False)
+
+
+#: digisearch's WebSearchRequest takes at most this many include_domains.
+ENGINE_MAX_INCLUDE_DOMAINS = 5
 
 
 def _pin_hosts(pinned: Any) -> list[str]:
@@ -166,11 +203,13 @@ def _pin_hosts(pinned: Any) -> list[str]:
 def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
     """Clamp a model's ``include_domains`` to the hosts of the tenant's pins.
 
-    No request: every pinned host. A request: only the requested domains that
-    sit inside a pinned host (equal or a subdomain). Anything else is dropped,
-    so the result is never wider than the pin; when nothing the model asked for
-    survives, the pin itself is used. Path prefixes are not expressible as
-    engine domains, so :func:`url_within_pins` enforces them on the results.
+    The pin is an allowlist the model aims ONE search at, never a fan-out. No
+    request: every pinned host when they fit one engine call, otherwise the
+    first (primary) pin's host alone. A request: only the requested domains
+    that sit inside a pinned host (equal or a subdomain). Anything else is
+    dropped, so the result is never wider than the pin; when nothing the model
+    asked for survives, the default is used. Path prefixes are not expressible
+    as engine domains, so :func:`url_within_pins` enforces them on the results.
     """
     hosts = _pin_hosts(pinned)
     if not hosts:
@@ -182,8 +221,36 @@ def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
             d = d[4:]
         if d and any(_domain_within(d, h) for h in hosts) and d not in wanted:
             wanted.append(d)
-    # digisearch accepts at most five include_domains.
-    return (wanted or hosts)[:5]
+    if wanted:
+        return wanted[:ENGINE_MAX_INCLUDE_DOMAINS]
+    if len(hosts) <= ENGINE_MAX_INCLUDE_DOMAINS:
+        return hosts
+    return hosts[:1]
+
+
+def _normalize_path(path: str) -> str | None:
+    """Lower-cased URL path, dot segments resolved, no trailing ``/``.
+
+    Same rule as digisearch ``web_search.fence.normalize_path`` (parity-tested):
+    ``/company/acme/../other`` matches as ``/other``, so ``..`` can never walk
+    out of a path pin. ``None`` (no match) when a segment decodes to something
+    holding ``/`` or ``\\``.
+    """
+    from urllib.parse import unquote
+
+    out: list[str] = []
+    for seg in (path or "/").split("/"):
+        dec = unquote(seg)
+        if "/" in dec or "\\" in dec:
+            return None
+        if dec in ("", "."):
+            continue
+        if dec == "..":
+            if out:
+                out.pop()
+            continue
+        out.append(seg)
+    return ("/" + "/".join(out)).lower().rstrip("/")
 
 
 def url_within_pins(url: Any, pins: Any) -> bool:
@@ -199,13 +266,33 @@ def url_within_pins(url: Any, pins: Any) -> bool:
         return False
     if parts.scheme not in ("http", "https"):
         return False
-    host = (parts.hostname or "").lower().rstrip(".")
+    try:
+        host = (parts.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
     if not host:
         return False
-    path = (parts.path or "/").lower().rstrip("/")
+    path = _normalize_path(parts.path)
+    if path is None:
+        return False
     for pin in _as_str_list(pins):
         pin_host, pin_path = _split_pin(pin)
         if not pin_host or not _domain_within(host, pin_host):
+            continue
+        pin_query = _pin_query(pin)
+        if pin_query:
+            # Exact page: same path and every pinned k=v present in the URL.
+            from urllib.parse import parse_qsl
+
+            have = set(parse_qsl((parts.query or "").lower(), keep_blank_values=False))
+            if path == pin_path and all(kv in have for kv in pin_query):
+                return True
+            continue
+        if pin.strip().endswith("*"):
+            # Segment prefix: ``/posts/acme_*`` takes ``/posts/acme_x`` (and
+            # anything under it) but never ``/posts/acme`` or ``/posts/acmex``.
+            if pin_path and path.startswith(pin_path) and len(path) > len(pin_path):
+                return True
             continue
         if not pin_path or path == pin_path or path.startswith(pin_path + "/"):
             return True
@@ -222,6 +309,7 @@ def call_digisearch_web_search(
     context: ToolContext | None = None,
     timeout: float = 120.0,
     page_corpus: str | None = None,
+    fence: list[str] | None = None,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
@@ -242,6 +330,7 @@ def call_digisearch_web_search(
         context=context,
         timeout=timeout,
         page_corpus=page_corpus,
+        fence=fence,
     )
 
 
@@ -255,6 +344,7 @@ def _call_digisearch_web_search(
     context: ToolContext | None = None,
     timeout: float = 120.0,
     page_corpus: str | None = None,
+    fence: list[str] | None = None,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -292,6 +382,10 @@ def _call_digisearch_web_search(
         # Pinned tenant with a pre-crawled corpus: digisearch still fetches the
         # live page first and uses the corpus only for a challenge or a failure.
         arguments["page_corpus"] = page_corpus
+    if fence:
+        # Pinned tenant: digisearch refuses any enrichment fetch hop (a redirect)
+        # that leaves these sites, so off-fence page text never comes back.
+        arguments["fence"] = list(fence)
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
@@ -369,6 +463,12 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
                 "tool": WEB_SEARCH_TOOL_NAME,
                 "message": "web_search is not available for this tenant.",
             }
+    page_url = str(args.get("url") or "").strip()
+    if pinned is not None and page_url:
+        # Open-page mode (pinned definition only): read one page in the fence.
+        # An unpinned call never takes this branch, so ``url`` stays ignored
+        # there exactly as before.
+        return _open_pinned_page(page_url, _as_str_list(pinned), context)
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
@@ -396,6 +496,8 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         # still cannot hand a pinned tenant an off-pin row: it is dropped before
         # the summary is built, so neither its URL nor its snippet survives.
         search_kwargs["url_filter"] = lambda u: url_within_pins(u, pinned)
+        # ...and digisearch fences every enrichment fetch hop with the same pins.
+        search_kwargs["fence"] = _as_str_list(pinned)
         # Tenant map webSearchPageCorpus (digisearch page_corpus): a live page
         # behind a bot challenge falls back to the pre-crawled copy. Unpinned
         # tenants never send one.
@@ -445,6 +547,92 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
     return {
         "content": summary or "Web search returned no results.",
         "results": results,
+        "rag_sources": rag_sources_from_results(results),
+        "name": WEB_SEARCH_TOOL_NAME,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Open-page mode: web_search(url=...) for a pinned tenant
+# --------------------------------------------------------------------------- #
+
+#: Page text handed to the model per opened page (characters); digisearch caps at 40k.
+OPEN_PAGE_MAX_CHARS = 12000
+
+
+def _open_page_refused(message: str) -> dict[str, Any]:
+    return {"error": "tool_not_allowed", "tool": WEB_SEARCH_TOOL_NAME, "message": message}
+
+
+def _open_pinned_page(url: str, pins: list[str], context: ToolContext) -> str | dict[str, Any]:
+    """Open one page inside the pin: checked here, then on every hop in digisearch."""
+    if "://" not in url:
+        url = "https://" + url
+    if not url_within_pins(url, pins):
+        return _open_page_refused(
+            "That page is outside the allowed sites: " + ", ".join(pins) + "."
+        )
+    from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
+
+    arguments: dict[str, Any] = {"url": url, "fence": pins, "max_chars": OPEN_PAGE_MAX_CHARS}
+    corpus = context.state.get("web_search_page_corpus")
+    if isinstance(corpus, str) and corpus.strip():
+        arguments["page_corpus"] = corpus.strip()
+    inv = invoke_digisearch_tool(
+        _digisearch_service_base(),
+        WEB_SEARCH_TOOL_NAME,
+        arguments,
+        default_index_name=getattr(context, "index_name", None) or "default",
+        bearer_token=_digi_bearer_from_context(context),
+        request_id=getattr(context, "request_id", None),
+        timeout=60.0,
+    )
+    if not isinstance(inv, dict) or inv.get("ok") is not True:
+        err = str((inv or {}).get("error") or "unknown error") if isinstance(inv, dict) else ""
+        if err.startswith("fence_refused"):
+            return _open_page_refused("The page redirected outside the allowed sites.")
+        return {
+            "error": "fetch_failed",
+            "tool": WEB_SEARCH_TOOL_NAME,
+            "message": f"Could not open {url}: {err or 'no response'}",
+        }
+    raw_data = inv.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    final_url = str(data.get("final_url") or url)
+    if not url_within_pins(final_url, pins):
+        # digisearch fences every hop; this is the second lock on the same door.
+        return _open_page_refused("The page redirected outside the allowed sites.")
+    links = [
+        u for u in (data.get("links") or []) if isinstance(u, str) and url_within_pins(u, pins)
+    ]
+    title = str(data.get("title") or "").strip() or final_url
+    text = str(data.get("content") or "")
+    lines = [f"# [{title}]({final_url})", ""]
+    if data.get("source") == "page_corpus":
+        lines += ["(Saved copy: the live page could not be read directly.)", ""]
+    lines.append(text or "(No readable text on this page.)")
+    if data.get("truncated"):
+        lines += ["", "(Page text truncated.)"]
+    if links:
+        lines += ["", "Links on this page within the allowed sites:"]
+        lines += [f"- {u}" for u in links]
+    results = [
+        {
+            "doc_id": final_url,
+            "content": text[:2000],
+            "rank": 0,
+            "metadata": {
+                "title": title,
+                "source_url": final_url,
+                "evidence_tier": EXTERNAL_EVIDENCE_TIER,
+                "source_kind": "external",
+            },
+        }
+    ]
+    return {
+        "content": "\n".join(lines),
+        "results": results,
+        "links": links,
         "rag_sources": rag_sources_from_results(results),
         "name": WEB_SEARCH_TOOL_NAME,
     }

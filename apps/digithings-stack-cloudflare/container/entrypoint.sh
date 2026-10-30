@@ -18,6 +18,13 @@ if ! mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor; th
   exit 1
 fi
 
+# Tenant site graphs and page corpora from KV (src/tenant-files.ts). Never
+# fatal: without them a pinned tenant keeps its pin and only loses the site
+# map text and the challenge-page fallback.
+if [ -n "${DIGI_TENANT_FILES_PARTS:-}" ]; then
+  python3 /unpack_tenant_files.py /data/tenant-files || true
+fi
+
 # Stable digikey issuer defaults for CF custom domains (overridable via envVars).
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
 export DIGIKEY_JWKS_URL="${DIGIKEY_JWKS_URL:-http://127.0.0.1:8005/.well-known/jwks.json}"
