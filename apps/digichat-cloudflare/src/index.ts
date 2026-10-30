@@ -151,6 +151,7 @@ export class DigiChatContainer extends Container {
     // digigraph refuses hosted web search (the turn then runs without it).
     DIGICHAT_LICENSE_JWT: workerVars.DIGICHAT_LICENSE_JWT ?? "",
     DIGIKEY_PUBLIC_KEY_PEM: pemEnvValue(workerVars.DIGIKEY_PUBLIC_KEY_PEM),
+    DIGIKEY_ISSUER: workerVars.DIGIKEY_ISSUER ?? "https://key.digithings.ai",
     // The chat's API-key MCP identity (digikey). The container mints edge
     // tokens from the BFF session first, because that token names the turn's
     // tenant; this key is only the fallback for a deployment without
@@ -370,6 +371,8 @@ export interface Env {
   DIGICHAT_LICENSE_JWT?: string;
   /** digikey public key PEM that verifies the license; literal `\n` is expanded. */
   DIGIKEY_PUBLIC_KEY_PEM?: string;
+  /** Expected license `iss`; must match the stack's digikey issuer. */
+  DIGIKEY_ISSUER?: string;
   /** Dedicated digikey API key for MCP `authScheme: jwt` rows (server-only). */
   DIGICHAT_MCP_IDENTITY_KEY?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
