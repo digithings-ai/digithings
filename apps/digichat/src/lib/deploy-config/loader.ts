@@ -249,8 +249,14 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
     ...(cfg.limits ? { limits: cfg.limits } : {}),
-    ...(catalog.length
-      ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
+    ...(catalog.length || cfg.tools?.exclusive === true
+      ? {
+          tools: {
+            allowUserToggle: cfg.tools?.allowUserToggle ?? true,
+            catalog,
+            ...(cfg.tools?.exclusive === true ? { exclusive: true } : {}),
+          },
+        }
       : {}),
     mcp: {
       servers: cfg.mcp?.servers ?? [],

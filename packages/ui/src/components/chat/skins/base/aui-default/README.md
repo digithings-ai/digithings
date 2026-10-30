@@ -15,3 +15,6 @@ calls exactly as assistant-ui ships them (no digichat trace styling).
 Only import paths are rewritten. The `digichat` skin keeps `../../stock/*`.
 A tool call that waits on a human approval still uses the stock fallback,
 which owns the approval controls.
+
+Local change: the ToolFallback argument and result blocks cap at `max-h-72`
+and scroll inside the card, so a long payload does not stretch the thread.

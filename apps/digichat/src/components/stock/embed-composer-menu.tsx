@@ -374,9 +374,17 @@ function initialView(kind: ComposerMenuKind): MenuView {
   return "main";
 }
 
+/**
+ * The composer the panes anchor to: the digichat skin's composer, else the
+ * thread composer every other skin marks for the shared palette
+ * (`SkinPaletteBridge`, `data-skin-palette-composer`).
+ */
 function composerHost(): HTMLElement | null {
   if (typeof document === "undefined") return null;
-  return document.querySelector<HTMLElement>('[data-thread-skin="digichat"] .aui-composer-root');
+  return (
+    document.querySelector<HTMLElement>('[data-thread-skin="digichat"] .aui-composer-root') ??
+    document.querySelector<HTMLElement>("[data-skin-palette-composer]")
+  );
 }
 
 /**

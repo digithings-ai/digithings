@@ -274,7 +274,9 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
   const rows: ProductSlashCommand[] = [];
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
-    if (def.id === "search-engine" && !vis.webSearch) continue;
+    // A locked tool surface keeps the tenant's engine (the chat API ignores a
+    // visitor pick there too), so the picker is not offered.
+    if (def.id === "search-engine" && (!vis.webSearch || api.toolControl === "locked")) continue;
     if (def.id === "byok" && vis.byok === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
     if (def.id === "artifacts" && vis.artifacts !== true) continue;

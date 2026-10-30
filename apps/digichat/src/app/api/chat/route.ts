@@ -78,7 +78,7 @@ import {
   resolveAnonymousDeploymentChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { embedTenantRefusesByok, isPlanTierSatisfied } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
 import {
@@ -140,6 +140,17 @@ export async function POST(req: Request) {
   const { tenantSlug, ownerUserSub } = tenantCtx;
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const embedConfig = embedConfigOf(tenantCtx);
+  // An operator-paid tenant without the BYOK surface takes no visitor key:
+  // refuse it here rather than only hiding the menu.
+  if (byokKey && embedTenantRefusesByok(embedConfig)) {
+    return new Response(
+      JSON.stringify({
+        error: "byok_disabled",
+        message: "This chat does not accept your own API key.",
+      }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
 
   // Resolve the deployment before the request limiter. The limiter is
   // per deployment (`guardrails.rateLimit`), and an own key skips it.
@@ -873,7 +884,10 @@ export async function POST(req: Request) {
     v === "parallel" ||
     v === "firecrawl" ||
     v === "tinyfish";
-  const browserEngine = isEngineName(engineRaw) ? engineRaw : undefined;
+  // A tenant that locks session controls keeps its own engine: a visitor
+  // cannot move its searches onto another (possibly paid) engine.
+  const engineLocked = dep?.gate?.lockSessionControls === true;
+  const browserEngine = !engineLocked && isEngineName(engineRaw) ? engineRaw : undefined;
   const tenantEngine =
     tenantEngineRaw !== "auto" && isEngineName(tenantEngineRaw) ? tenantEngineRaw : undefined;
   const effectiveEngine = browserEngine === "auto" ? undefined : (browserEngine ?? tenantEngine);
@@ -890,6 +904,7 @@ export async function POST(req: Request) {
     const {
       filterForceToolHeader,
       filterDisabledToolsHeader,
+      exclusiveCatalogDisabledIds,
       omitForcedCatalogIds,
       mcpServersHeaderValue,
       operatorMcpServersForUpstream,
@@ -931,10 +946,13 @@ export async function POST(req: Request) {
         ? filterForceToolHeader(dep, forceToolRaw)
         : undefined;
     if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
-    const disabled = omitForcedCatalogIds(
-      filterDisabledToolsHeader(dep, disabledToolsRaw),
-      allowed,
-    );
+    const disabled = [
+      ...new Set([
+        ...omitForcedCatalogIds(filterDisabledToolsHeader(dep, disabledToolsRaw), allowed),
+        // An exclusive catalog is the whole tool surface (fail closed upstream).
+        ...exclusiveCatalogDisabledIds(dep),
+      ]),
+    ];
     // Forward catalog ids as-is (#3807): digigraph `expand_disabled_tool_tokens`
     // expands digisearch/digivault aliases upstream. Do not expand to tool
     // names here — that would break the upstream contract.
