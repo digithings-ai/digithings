@@ -1,420 +1,89 @@
-# Branch Protection Policy
+# Branch protection (`digithings-ai/digithings`)
 
-## Why branch protection matters
+> **PENDING ROLLOUT.** The "Target state" below is not fully live (the `main` admin-enforcement step is live as of the 2026-10-29 14:45 CET read; the `develop` steps are not). It is the target decided for the dev-flow upgrade (2026-10-29). Applying it is a repository-settings change that Chris makes or approves. Until then, "Live settings" is what GitHub enforces.
 
-PRs have landed on `develop` and `main` while CI was red or while no baseline tests ran.
-Branch protection makes the most important status checks required gates — a PR cannot merge
-until they pass. `develop` and `main` require different checks for different reasons (see
-below); together they eliminate silent failures and keep both branches always releasable.
+## Target state (PENDING ROLLOUT)
 
-## Required status checks
+### `develop`
 
-Required checks are branch-specific — `develop` and `main` are gated by entirely different
-mechanisms (see below) and are managed by different tooling. Verify live state with the
-commands in [Verify the configuration](#verify-the-configuration) rather than trusting this
-doc blindly; it has drifted from reality before (that's the story this section tells).
+- Required status checks: `local-ci` and `merge-queue`. `merge-queue` is a commit status that `scripts/merge_queue.py` posts on a PR head in `run` mode (`success` right before it merges that head, `failure` on a refused head, `pending` when not reached). It is added by [#6558](https://github.com/digithings-ai/digithings/pull/6558), which is open and unmerged as of the read below.
+- Pushes to `develop` are restricted to the promotion identity: agents reach `develop` only through a promotion PR. The promotion identity (a GitHub App or bot account) does not exist yet; creating it is Chris's step.
+- Everything else (up-to-date strictness, review count) stays as it is today.
 
-### On `develop`
+### `main`
 
-**Current live state (applied 2026-08-19, #2469):**
+- Required status check: `Every commit reaching main was reviewed` (from `.github/workflows/ci-review-coverage.yml`, `scripts/check_review_coverage.py`).
+- Enforced for admins (`enforce_admins: true`): an admin can no longer merge past a failing required check. **Live**: Platform reports applying it at 14:41 CET on 2026-10-29; the 14:45 read below confirms it (it was off at 14:38).
 
-| Check name | Workflow | What it validates |
+### Rollout order
+
+1. Merge #6558 and watch one queue `run` tick post `merge-queue` on open PR heads.
+2. Add `merge-queue` to develop's required contexts (the command recorded in #6558):
+
+   ```
+   gh api -X PATCH repos/digithings-ai/digithings/branches/develop/protection/required_status_checks \
+     --input - <<<'{"strict":false,"contexts":["local-ci","merge-queue"]}'
+   ```
+
+3. Create the promotion identity, then restrict pushes on `develop` to it.
+4. ~~Turn on `enforce_admins` for `main`.~~ Done (Platform, reported 14:41 CET, 2026-10-29; confirmed at the 14:45 read).
+5. Re-read the settings and replace "Live settings" below with the new read.
+
+Note that a commit status can be posted by anyone with a write token, so `merge-queue` stops accidental bypass, not deliberate bypass; the push restriction is the stronger control.
+
+## Live settings as of 2026-10-29 14:45 CET (UTC+1)
+
+Read-only, through the GitHub branches and repository API (`GET /repos/digithings-ai/digithings/branches/{branch}` and `GET /repos/digithings-ai/digithings`). Nothing was changed.
+
+| Setting | `develop` | `main` |
 |---|---|---|
-| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
-| `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
-| `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
-| `gitleaks-scan` | `security-gitleaks.yml` | Secrets scan over the PR diff (full history on `develop`/`main` push). **Not required** — the inventory declares it `advisory`. Added to the writer's payload in #3922 and never applied live; DIG-2223 removed it from the writer. |
+| Protected | yes | yes |
+| Head at read | `67310448` | `986051dc` |
+| Required status checks | `local-ci` (commit status, no app bound) | `Every commit reaching main was reviewed` (bound to the GitHub Actions app, id 15368) |
+| Required checks apply to admins (`enforcement_level`) | yes (`everyone`) | yes (`everyone`); was `non_admins` at the 14:38 read |
 
-> **Why `gitleaks-scan` is still not required (blocker resolved 2026-10-10, #5318).** It was
-> blocked on a workflow-level `paths-ignore: ["**.md", "docs/**"]` in `security-gitleaks.yml`.
-> A workflow skipped by path filtering reports **no check run at all** — not a skipped job —
-> so requiring the name would hang every docs-only PR on "Waiting for status to be reported".
-> #5318 deleted that filter, so the workflow now reports on every PR and the stall hazard is
-> gone.
->
-> What is *not* gone is the promotion decision itself. The check stays `advisory` until
-> DIG-1983's branch-protection write is sequenced, which is a human-only repo-settings change.
-> Until then the snapshot lists three contexts and the writer applies three.
+Repository: public; default branch `develop`; merge commits, squash and rebase merges all allowed; auto-merge off; head branches deleted on merge; "update branch" suggestion off.
 
-`strict: true` — the PR branch must be up-to-date with `develop` before merging.
-`scripts/set-branch-protection.sh` applies exactly this payload and refuses `--branch main`
-(its contexts are develop-specific — see [On `main`](#on-main)). It reads the context list
-from `.github/required-contexts.txt` rather than carrying one of its own — see
-[Ownership](#ownership-of-develops-required-contexts).
+**Not readable in this read** (the branch summary does not expose them, and there was no read path for the full protection or rulesets endpoints): `strict` (up-to-date requirement), required approving reviews, push restrictions, rulesets (including the `module-branch-protection` ruleset AGENTS.md describes), and GitHub's native merge queue. Secondary reports, not verified here: PR #6558 (27 Oct) records develop as `strict: false`, `enforce_admins: true`, no rulesets; the dev-flow plan (29 Oct, before the 14:41 change) records develop strict off with 0 approvals and main with admins not enforced and 0 approvals. Verify with:
 
-Verified before applying: a throwaway PR touching no component path (the worst case for
-`ci.yml`'s per-job path gating) confirmed all three checks post a real conclusion rather
-than sitting `pending` forever — see #2469 and the closed [PR #2471](https://github.com/digithings-ai/digithings/pull/2471).
+```
+gh api repos/digithings-ai/digithings/branches/develop/protection
+gh api repos/digithings-ai/digithings/branches/main/protection
+gh api repos/digithings-ai/digithings/rulesets
+```
 
-**History — this was a known, paused migration, not unexplained drift.** Until 2026-08-19,
-`develop` had *zero* required status checks (the `required_status_checks` key was absent
-from the API entirely) — two of the three checks this doc used to describe here
-(`baseline / tests`, `Require Fixes`) no longer existed as check names by the time anyone
-looked: `Require Fixes` was deleted outright in `c0cdd8d1b` (#2341, "drop unenforced
-PR-linkage gate"), and `baseline / tests` was folded into `ruff-and-scripts` as a step, not
-a separate job. On 2026-08-13, `fd6de617f` ("ci: make CI/type-check/docs checks safe to
-require on develop") found and recorded the zero-required-checks state, then did the prep
-work needed to safely require checks without a false "waiting forever" merge block: dropped
-the `pull_request` path filters on `ci-docs.yml` and `ci-type-check.yml` (a path-filtered
-check never posts on a PR outside its paths, and GitHub then blocks merge forever waiting on
-a status that will never arrive once the name is required), and added the
-`required-checks` aggregator job to `ci.yml` — every job there is individually path-gated
-via a `changes` job, so no single existing job name was stable across every PR shape. That
-commit stopped short of the branch-protection API call itself on purpose: *"This commit only
-changes what CI reports; it does not touch branch protection."* #2469 made that follow-up
-call, six days later, after the throwaway-PR verification above.
+## Gap: live vs target
 
-### On `main`
-
-`main`'s only required status check is **`Every commit reaching main was reviewed`**, from
-[`ci-review-coverage.yml`](../.github/workflows/ci-review-coverage.yml) — a different
-mechanism from `develop`'s, not a subset or superset of it. `scripts/set-branch-protection.sh`
-does not touch `main` at all (it refuses `--branch main`); `main`'s protection was set up as
-a one-off `gh api` call, not tracked by any script.
-
-This check does not require a live approving review on the promotion PR
-(`required_approving_review_count: 0`, `require_code_owner_reviews: false` — verified via
-API). Instead, `scripts/check_review_coverage.py` walks every commit in the PR's range
-(merge and bot commits exempt) and requires each one to already carry review evidence from
-its own task PR. The walker batches GitHub GraphQL (PR hatch state + associated SHAs)
-instead of sequential `gh pr view`; hatch rules are unchanged, satisfied by any one of:
-
-| hatch | claim | self-grantable? |
-|-------|-------|-----------------|
-| `Cursor Bugbot` concluded success | a machine reviewed it | no |
-| an **APPROVED** review | someone else read it | no |
-| a completed agent-tool review (CodeRabbit, Claude, …) | a PR-review bot finished a pass | no |
-| label `reviewed:agent` + a findings comment | an in-session review ran | yes, but costs a real review |
-| label `reviewed:owner` | "I read this myself" | yes |
-| label `risk:low` | "this didn't warrant a review" | yes |
-
-Full rationale — why reviewing the promotion diff itself is the wrong moment, and why this
-is deliberately *not* a required `Cursor Bugbot` check on `main` — is in
-[`AGENTS.md` § Review coverage](../AGENTS.md#review-coverage-the-gate-before-production).
-
-**Why not a live reviewer-request instead?** [#1612](https://github.com/digithings-ai/digithings/issues/1612)
-proposed auto-requesting a non-author reviewer on every promotion PR to work around
-`CODEOWNERS` listing only the sole maintainer — the same failure mode that forced an admin
-bypass on #1610. That approach was superseded by the per-commit check above: the Copilot
-review-request job was retired (2026-08-05, account unsubscribed) and Bugbot proved
-unreliable as a *required* check (it reports `neutral` on a usage-limit skip, which would
-have blocked all ten promotions on 2026-08-05 had it been required). #1612 was closed as
-not planned; see its closing comment for the full comparison.
-
-## The policy-gate drift guard
-
-`ci.yml`'s own "Verify needs list covers every job in this file" step only sees
-`ci.yml`, so it cannot fail on a policy check that lives in another workflow file — it
-would stay green no matter which one that was. `scripts/check_required_policy_checks.py`
-is the corrected inventory ([DIG-1982](https://github.com/digithings-ai/digithings/issues/1982)).
-It reconciles:
-
-| set | against | catches |
+| Setting | Live | Target |
 |---|---|---|
-| `.github/policy-checks.yml` | the jobs the workflows actually define | a renamed or dropped check; a policy surface nobody declared |
-| `.github/policy-checks.yml` | develop's required contexts | a check the gate does not hold, and a gate the inventory does not own |
-| every context the gate holds **or** the inventory declares | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
+| `develop` required checks | `local-ci` | `local-ci`, `merge-queue` |
+| `develop` push restriction | not readable in this read | promotion identity only |
+| `main` admins | enforced (confirmed 14:45 CET) | enforced (gap closed) |
 
-That third row covers both sets on purpose, and the second half of it is
-[DIG-2237](https://github.com/digithings-ai/digithings/issues/2237), because the original
-guard only asked about the live gate. A workflow whose checks are all `advisory` reports
-nothing that anyone is waiting for, so a workflow-level `paths-ignore` added to one was a
-**false green**: no failing check, and a PR shape the check would never cover. The moment
-DIG-1952 child B promotes such an entry, every PR it skips hangs. The guard now reports that
-as a finding before the promotion, not after.
+## Known drift in the tooling
 
-"Whether it can report" is decided from the `pull_request:` trigger alone, and all four
-filters matter, not two of them:
+- `.github/required-contexts.txt`, which `scripts/set-branch-protection.sh` applies and `scripts/check_required_policy_checks.py` reads, still lists the Actions-era contexts `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey` on `develop` (checked at `67310448`, 2026-10-29 15:19 CET). Live develop requires `local-ci` only. Running `scripts/set-branch-protection.sh` as-is would not produce the live or the target state; do not run it until the snapshot is updated in the same change as the protection.
+- Previous versions of this doc described those three contexts with `strict: true` as live; that is no longer true.
+- **Resolved in [#6667](https://github.com/digithings-ai/digithings/pull/6667), pending merge (in progress, owned by Platform):** #6667 changes `.github/required-contexts.txt` to list only `local-ci`, matching live develop protection, and declares `local-ci` under a new `external_contexts:` key in `.github/policy-checks.yml` (no workflow produces it). The three Actions-era contexts become advisory there.
+- **`merge-queue` is deliberately left out of `.github/required-contexts.txt` for now.** That is a staging choice: `set-branch-protection.sh` applies the file exactly, and requiring a context that only the queue posts would lock `develop` before the queue posts it. Chris's target is unchanged: `develop` requires the promotion / `merge-queue` check (see Target state), still PENDING ROLLOUT. When it rolls out, the file gains `merge-queue` in the same change as the protection.
+- **In progress, owned by Platform, in [#6667](https://github.com/digithings-ai/digithings/pull/6667):** moving `scripts/merge_queue.py` and `scripts/check_review_coverage.py` from per-seat reviewer independence and the `reviewed:*` labels to platform-level attribution with session-level independence (see [ops/ATTRIBUTION.md](ops/ATTRIBUTION.md)).
 
-| trigger filter | why it can stop the check arriving |
-|---|---|
-| `paths:` / `paths-ignore:` | a skipped **workflow** reports nothing — only a skipped *job* reports Success |
-| `branches:` | the workflow never starts for a PR into another branch |
-| `branches-ignore:` | the same filter spelled as an exclusion; matching globs |
-| `types:` | for `pull_request`, `GITHUB_SHA` is the **last merge commit on the PR merge branch**, and a required context has to report against that commit for the PR to ever leave "Waiting for status to be reported": `opened` covers the first report, `synchronize` every later push, `reopened` a re-open, so all three or the context is not safe to require. A workflow on `types: [opened]` reports for the opening push and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
+## Ownership of develop's required contexts
 
-An **absent** `types:` key is GitHub's default (`opened`, `synchronize`, `reopened`), which
-includes `synchronize` and is therefore reachable. A `types:` key that is present but
-unreadable is treated as empty, so the rule fails closed rather than passing on a value
-nobody could read.
+The context set is `.github/required-contexts.txt`; the only writer is `scripts/enable_branch_protection.py` (develop entrypoint `scripts/set-branch-protection.sh`, which refuses `--branch main`); the check is `scripts/check_required_policy_checks.py`. `main`'s protection is a one-off `gh api` call, not tracked by a script.
 
-`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The reconciliations do
-not overlap; dropping the old one would leave a real hole.
+## Keeping the snapshot true
 
-### Completeness: `tracked_workflows` is an allowlist, not the scope
+CI cannot read branch protection (`GITHUB_TOKEN` cannot get `administration: read`), so update the snapshot in the same change as any protection edit and run `python3 scripts/check_required_policy_checks.py --live --repo digithings-ai/digithings --branch develop`. `.github/workflows/policy-gate-live.yml` carries that read on `workflow_dispatch` only, and skips until its `POLICY_CHECK_READER_TOKEN` is provisioned.
 
-`.github/policy-checks.yml` tracks 8 of the 66 workflow files — the ones with policy
-surfaces. That is the right size, but an allowlist nobody checks for completeness is not an
-inventory: a brand-new workflow carrying a real gate would be out of scope by construction,
-and `policy.untracked-producer` would never be raised.
+## Path-filtered required checks
 
-So the guard also scans every `*.yml` under `.github/workflows/` for a named job matching a
-live or declared context, and fails when the producer is untracked — including when the
-producer is untracked *and* cannot report, which previously drew `policy.undeclared-gate`
-and then stopped, giving the wrong diagnosis on exactly the case `gitleaks-scan` exists to
-exercise. Adding a workflow is therefore not free: either name it in `tracked_workflows`, or
-do not give any of its jobs a `name:`. Migrating all 66 is not the answer and is not
-required.
+A workflow skipped by `paths` / `paths-ignore` / `branches` filters reports no check at all, so requiring its name hangs every PR it skips on "Waiting for status to be reported". Prove a new required check reports on a docs-only PR before requiring it.
 
-An untracked file that will not parse is reported (`policy.unreadable-workflow`), not
-raised — otherwise any of the 58 untracked workflows could take the guard down with an
-unreadable error instead of a diagnosis. A **tracked** file that will not parse still
-raises, because a tracked file is a declared surface.
+## Emergency bypass
 
-**Check the gate, at any time:**
+As of the 2026-10-29 14:45 CET read there is no admin bypass on `main`: its required check applies to admins too. Never disable protection to get past it; fix the check instead, and if Chris does lift protection for a genuine emergency, open a follow-up issue linked to the bypassed PR.
 
-```bash
-python3 scripts/check_required_policy_checks.py                    # committed snapshot (what CI runs)
-python3 scripts/check_required_policy_checks.py --live \
-    --repo digithings-ai/digithings --branch develop               # the live gate
-```
+## Other repos
 
-CI reads `.github/required-contexts.txt`, not the API: reading branch protection needs
-`administration: read`, which **cannot be granted to `GITHUB_TOKEN`** at all, so no
-workflow can read it. The snapshot is only trustworthy if it is updated in the same
-change as the protection itself — run `--live` after any manual branch-protection edit
-and commit the difference, or the guard is checking a fiction.
-
-### Keeping the snapshot true
-
-Doing that by hand leaves one gap: nothing catches a branch-protection edit that nobody ran
-`--live` after. The PR path cannot close it, because `GITHUB_TOKEN` cannot read branch
-protection at all, so putting the read on the PR path would mean putting a human-only
-credential in front of every merge.
-
-**A dispatch-only workflow carries the read, and it is not on the merge path.**
-[`policy-gate-live.yml`](../.github/workflows/policy-gate-live.yml) runs
-[`scripts/policy_gate_live.py`](../scripts/policy_gate_live.py), which hands
-`POLICY_CHECK_READER_TOKEN` to the guard through `GH_TOKEN` and turns the guard's answer into
-a scheduling decision:
-
-- **`workflow_dispatch` only.** No `pull_request`, no `push`, no `on.schedule`. A GHA schedule
-  is forbidden repository-wide ([`tests/scripts/test_no_gha_schedules.py`](../tests/scripts/test_no_gha_schedules.py)),
-  and the 2026-10-14 cost lock disabled the lanes that used to carry one. A dispatch spends
-  minutes only when someone asks for one.
-- **`environment: cron`.** The PAT is environment-scoped, so a job that did not declare the
-  environment would resolve the name to empty and fail as "no key" rather than "permission
-  denied".
-- **A loud skip is never a green.** With no token the run prints `SKIPPED`, says the gate was
-  not read, and exits 0 — so the merge path and a dispatch stay green while nobody can
-  provision the credential. A token that is present but cannot read, or a guard that crashes,
-  exits 2. The guard's final `policy-gate-verdict:` line is what separates a real drift from
-  an uncaught exception, which also exits 1.
-- **A citable verdict.** Each outcome line carries a UTC timestamp and the Actions run id and
-  URL (the hostname on a plain host), which is the record a green run leaves behind.
-
-**It has not yet run against the real API, and this section says so.** The credential is still
-not provisioned: `cron` holds no `POLICY_CHECK_READER_TOKEN`, and creating the fine-grained PAT
-is Chris's personal-account step
-([`docs/ops/policy-check-credential.md`](../docs/ops/policy-check-credential.md) § Provisioning).
-The lane therefore skips today. Until the PAT lands, the manual `--live` read remains the only
-way to compare the snapshot with the live gate, and a recorded green run is still outstanding.
-
-An earlier draft carried the read as a `policy-gate-live` **job inside `ci-pr-hygiene.yml`**,
-meant to run on that workflow's clock. It was removed, and the reasons shaped the replacement:
-
-- **It could never run.** `ci-pr-hygiene.yml` is `disabled_manually` on GitHub since the
-  2026-10-14 cost lock, and its `digithings-cron` row is `enabled: false`
-  (`apps/digithings-cron/src/jobs.ts`). A job on a deliberately silent lane reports nothing,
-  so the replacement is its own workflow with an on-demand trigger.
-- **Its credential design was rejected.** It read `POLICY_CHECK_APP_PRIVATE_KEY` /
-  `POLICY_CHECK_APP_ID` / `POLICY_CHECK_INSTALLATION_ID` and called
-  `scripts/mint_policy_check_token.py` — the GitHub App design **rejected on 2026-10-07**,
-  whose manifest, minting script and tests were deleted by that same change. The credential the
-  registry names is the fine-grained PAT `POLICY_CHECK_READER_TOKEN`, and the replacement uses
-  only that name.
-- **It would have been a red run, not a check.** The secret it read was never provisioned, and
-  creating it needs a personal-account action that is Chris-only on this one-member org. A
-  canary that starts red because it cannot read its own secret is how a check becomes a silent
-  stop, so the replacement skips loudly instead.
-
-**What the guard does check, mechanically.** `scripts/check_required_policy_checks.py` always
-compares the committed snapshot against `scripts/set-branch-protection.sh` — the writer that
-applies it — and fails when the two disagree, so the snapshot and the writer cannot drift
-apart. What it does *not* do is compare the snapshot with the live gate: under `--live` the
-guard reconciles the **live** context set against the **inventory** in
-`.github/policy-checks.yml` (in both directions — a required context that is missing from
-the gate, and a live context that the inventory never declares), and separately checks the
-snapshot against the writer. So a hand edit of branch protection shows up as a drift between
-the live set and the inventory, while a hand edit of the snapshot alone shows up as a drift
-between the snapshot and the writer. Only the combination of both checks is a proof that the
-three agree.
-
-**What remains once the PAT is provisioned:** dispatch
-[`policy-gate-live.yml`](../.github/workflows/policy-gate-live.yml) once, record the run URL and
-timestamp in the tracker, and add `POLICY_CHECK_READER_TOKEN` to
-[`SECRETS_INVENTORY.md`](ops/SECRETS_INVENTORY.md) per step 5 of the credential document. The
-`accepted_missing` entry in [`secret-names.json`](../.github/secret-names.json) exists only
-until then and has a review date; do not leave it in place after the secret lands.
-
-### Declaring a new policy check
-
-Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
-
-- `required` — must be in develop's contexts *and* must report on every develop PR.
-  The guard fails both if it is absent and if it could be skipped.
-- `advisory` — runs and reports but deliberately does not gate. **Requires a `reason`.**
-- `other-branch` — gates another branch (`main`), not develop.
-
-### Every non-`required` entry needs an owner
-
-A `reason` records what was true when it was written. On its own it is indistinguishable
-from what is true now, forever — which is what makes `advisory` an escape hatch nobody owns
-([DIG-2237](https://github.com/digithings-ai/digithings/issues/2237)). So:
-
-| field | required on | meaning |
-|---|---|---|
-| `owner:` | every non-`required` entry | who answers for it. Missing → `GuardError` |
-| `review_by:` | *or* one of the two below, on `advisory` | a date to revisit the decision |
-| `issue:` | | the issue tracking the gap (`DIG-NNNN`) |
-| `gated_by:` | | a context that is `required` in this inventory **and** present in the live gate |
-
-`gated_by:` is validated, not trusted: naming a context the inventory does not declare is a
-`GuardError`, and naming one that is declared but not actually in the live gate is a
-`policy.bad-gated-by` finding. Otherwise "it is gated by the aggregator" would be a citation
-rather than a fact. `advisory` with none of the three raises.
-
-There is a separate, narrower field for a gap that is **accepted on purpose**: `known_gap:`.
-It suppresses the reachability finding for that entry while the entry is ungated, and stops
-applying the moment the entry reaches the live gate — at that point the check really does
-have to report, so the accepted gap has expired. **`Workflow secret references (PR reporter)`
-is the only entry with one today**: it lives in its own path-filtered workflow, so it does
-not report on every PR shape while it stays advisory, and the day it is promoted the gap
-closes. (`gitleaks-scan` used to be the carrier; its own `paths-ignore` was removed upstream
-in #5318, so that gap is gone.)
-
-A job counts as a policy surface when it has an explicit `name:`. A job without one
-reports under its job id and is folded into an aggregator instead. Naming a job makes it
-a policy surface; leaving it unnamed keeps it internal.
-
-**`gitleaks-scan` is the worked example of why `required` is not free.** Its entry is
-`advisory`, and for six days it was also the fourth context hardcoded into the writer — a
-gate you could apply with one command, declared nowhere in the inventory, recorded in no
-snapshot. Two things had to be true before promoting it, and only the first now holds:
-
-* **The check reports on every PR shape.** It did not, until #5318 removed the
-  workflow-level `paths-ignore` — a skipped *workflow* reports nothing, while a skipped *job*
-  reports Success, which is why the filter could not simply be moved to a job-level `if:`
-  (GitHub expressions cannot test "changed files match this path glob"). `policy.stall` in
-  `scripts/check_required_policy_checks.py` now enforces this in CI instead of only in prose.
-* **Someone promotes it on purpose.** That is DIG-1983's branch-protection write, which is
-  human-only. Until it happens the snapshot lists three contexts and the writer applies three.
-
-## Ownership of `develop`'s required contexts
-
-Two files decide what `develop` requires, and exactly one of each kind, so there is nothing
-left to compare by hand (DIG-2223):
-
-| Role | File | Owns |
-|---|---|---|
-| The context **set** | `.github/required-contexts.txt` | Which check names `develop` requires. Comment lines are prose, not gates. |
-| The **write** | `scripts/enable_branch_protection.py` | The only script that PUTs protection. Owns the preflight, the plan-blocked diagnosis, and the union that stops a narrower apply from dropping a live gate. |
-| The **develop entrypoint** | `scripts/set-branch-protection.sh` | Nothing but the branch name. Reads the set from the snapshot, then delegates. Holds no list of its own. |
-| The **check** | `scripts/check_required_policy_checks.py` | Executes the writer (`--print-contexts`) and fails on any difference from the snapshot, then reconciles the snapshot against the inventory and the workflows. |
-
-`scripts/check_required_policy_checks.py` executes the writer rather than scanning its
-source, because a source scan goes blind the moment the payload is built any other way — a
-generated list, a heredoc, a variable — and a scan that finds no literals then reads exactly
-like "the writer is in sync".
-
-**Adding a gate is therefore:** edit the snapshot, declare it in `.github/policy-checks.yml`,
-prove its workflow reports on a docs-only PR, then run the writer. Editing the writer is not
-a step, because it holds no list to edit.
-
-## How to apply protection
-
-Re-apply `develop`'s checks (idempotent — safe to re-run any time the snapshot matches what's
-actually live). The snapshot is the **input**, not a record of what was applied: edit
-`.github/required-contexts.txt` first, then run the writer, which applies exactly that list.
-
-```bash
-bash scripts/set-branch-protection.sh
-```
-
-By default the writer *unions* the live contexts, so a stale snapshot cannot quietly weaken
-the branch. To make the snapshot authoritative — which is what you want immediately after
-editing it — pass `--replace-checks`, and then prove the result against the live gate:
-
-```bash
-bash scripts/set-branch-protection.sh --replace-checks
-python3 scripts/check_required_policy_checks.py --live \
-    --repo digithings-ai/digithings --branch develop
-```
-
-`--branch main` is refused on purpose — see [On `main`](#on-main) for how `main`'s
-protection is actually managed.
-
-Preview what would be applied without calling the API:
-
-```bash
-bash scripts/set-branch-protection.sh --dry-run
-```
-
-**Before adding a new check name to `develop`'s required set:** confirm with a throwaway PR
-that it actually posts a status on a PR shape that doesn't exercise it — a path-filtered
-workflow that never fires on some PRs will hang those PRs' merge button forever once
-required. See #2469's verification (a closed throwaway PR, #2471) for the pattern.
-
-The script requires the `gh` CLI to be installed and authenticated (`gh auth login`).
-
-## Verify the configuration
-
-```bash
-gh api repos/digithings-ai/digithings/branches/develop/protection | python3 -m json.tool
-gh api repos/digithings-ai/digithings/branches/main/protection    | python3 -m json.tool
-```
-
-Look at `required_status_checks.contexts`: on `develop` it should list the checks in
-[On `develop`](#on-develop) with `strict: true`; on `main` it should list only
-`Every commit reaching main was reviewed` per [On `main`](#on-main).
-
-`scripts/enable_branch_protection.py status` reports the same state in a form meant for
-reading, and is what [the policy-gate guard](#the-policy-gate-drift-guard) uses:
-
-```bash
-python3 scripts/enable_branch_protection.py status \
-    --repo digithings-ai/digithings --branch develop
-```
-
-## Emergency bypass procedure
-
-`enforce_admins` is intentionally set to `false`. Repository admins can merge a PR even
-when checks fail by clicking "Merge without waiting for requirements" on GitHub.
-
-Use this sparingly and only for genuine emergencies (e.g., a broken check infrastructure
-blocking a hotfix). After any admin bypass, open a follow-up issue and link it to the
-bypassed PR.
-
-Do **not** disable branch protection entirely — adjust it or fix the failing check instead.
-
-## Updating required checks
-
-If a check is renamed or replaced, re-run the script after updating the `contexts` array in
-`scripts/set-branch-protection.sh`. The `gh api PUT` call is idempotent — it replaces the
-full protection config each time.
-
-## Scope: this applies to `digithings`, not to `twelve-x`
-
-Everything above is about `digithings-ai/digithings`, and only that repo has the protection
-described here. `digithings-ai` is on the GitHub Free plan, and **protected branches on a
-private repository require GitHub Pro**. `twelve-x` and `digithings-ops` are private, so
-branch protection, rulesets and the native merge queue are all refused on them with:
-
-```
-Upgrade to GitHub Pro or make this repository public to enable this feature.
-```
-
-This is a plan limit, not a misconfiguration — the identical API call succeeds on the
-public `digithings` and is refused on private `twelve-x` in the same org, with the same
-token and the same admin permission.
-
-`scripts/enable_branch_protection.py status` reports the gate for any repo:
-
-```bash
-python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
-```
-
-Until the plan changes, the merge path for `twelve-x` is
-[the merge queue](MERGE_QUEUE.md), which governs merges but — say this plainly — **cannot
-stop a direct push to the branch.** Only branch protection can do that. The full repo
-survey is in [MERGE_QUEUE.md § Repo survey](MERGE_QUEUE.md#repo-survey).
+Everything above is about `digithings-ai/digithings`. The org's private repos listed in [MERGE_QUEUE.md § Repo survey](MERGE_QUEUE.md#repo-survey) are on the GitHub Free plan, where branch protection and rulesets are refused ("Upgrade to GitHub Pro or make this repository public"). There the merge path is [the merge queue](MERGE_QUEUE.md), which cannot stop a direct push.
