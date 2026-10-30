@@ -83,3 +83,34 @@ describe("omitForcedCatalogIds", () => {
 });
 
 void DEFAULT_CLIENT_CONFIG;
+
+describe("exclusiveCatalogDisabledIds", () => {
+  it("disables every built-in family an exclusive catalog does not name", async () => {
+    const { exclusiveCatalogDisabledIds } = await import("./force-tool");
+    const only = {
+      tools: { allowUserToggle: false, exclusive: true, catalog: [{ id: "web_search", default: true }] },
+    } as unknown as DigichatDeployment;
+    const out = exclusiveCatalogDisabledIds(only);
+    expect(out).toContain("digisearch");
+    expect(out).toContain("digisearch_semantic");
+    expect(out).toContain("digivault");
+    expect(out).toContain("digivault_backlinks");
+    expect(out).not.toContain("web_search");
+  });
+
+  it("keeps a family the exclusive catalog names", async () => {
+    const { exclusiveCatalogDisabledIds } = await import("./force-tool");
+    const withSearch = {
+      tools: { allowUserToggle: false, exclusive: true, catalog: [{ id: "digisearch" }] },
+    } as unknown as DigichatDeployment;
+    const out = exclusiveCatalogDisabledIds(withSearch);
+    expect(out).not.toContain("digisearch");
+    expect(out).toContain("digivault");
+  });
+
+  it("changes nothing for a non-exclusive deployment", async () => {
+    const { exclusiveCatalogDisabledIds } = await import("./force-tool");
+    expect(exclusiveCatalogDisabledIds(dep)).toEqual([]);
+    expect(exclusiveCatalogDisabledIds(null)).toEqual([]);
+  });
+});

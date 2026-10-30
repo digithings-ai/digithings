@@ -137,6 +137,40 @@ export function filterDisabledToolsHeader(
   return out;
 }
 
+/**
+ * Built-in graph tool families, by the catalog id that names them. Tokens are
+ * digigraph disable tokens: aliases it expands or exact tool names (unknown
+ * names are ignored upstream, so listing a tool a stack lacks is harmless).
+ */
+const BUILTIN_TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = {
+  digisearch: ["digisearch", "digisearch_semantic", "digisearch_fetch_all"],
+  digivault: [
+    "digivault",
+    "digivault_search_notes",
+    "digivault_get_note",
+    "digivault_search_tag",
+    "digivault_backlinks",
+  ],
+};
+
+/**
+ * Disable tokens for an exclusive catalog (`tools.exclusive`): every built-in
+ * family the catalog does not name. Empty for a non-exclusive deployment.
+ */
+export function exclusiveCatalogDisabledIds(
+  dep: DigichatDeployment | null | undefined,
+): string[] {
+  const tools = dep?.tools;
+  if (!tools || tools.exclusive !== true) return [];
+  const named = new Set((tools.catalog ?? []).map((e) => e.id.trim().toLowerCase()));
+  const out: string[] = [];
+  for (const [family, tokens] of Object.entries(BUILTIN_TOOL_FAMILIES)) {
+    if (named.has(family)) continue;
+    out.push(...tokens);
+  }
+  return out;
+}
+
 /** Force-with-query wins: do not disable the catalog id being forced this send. */
 export function omitForcedCatalogIds(
   disabled: readonly string[],

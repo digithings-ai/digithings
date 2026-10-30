@@ -701,6 +701,12 @@ export const ToolsSchema = z
   .object({
     allowUserToggle: z.boolean().default(true),
     catalog: z.array(ToolCatalogEntrySchema).default([]),
+    /**
+     * The catalog is the whole tool surface: built-in graph tool families
+     * (digisearch, digivault) the catalog does not name are disabled on every
+     * turn, server-side. Absent keeps today's behaviour.
+     */
+    exclusive: z.boolean().optional(),
   })
   .strict();
 

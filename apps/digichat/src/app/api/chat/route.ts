@@ -884,7 +884,10 @@ export async function POST(req: Request) {
     v === "parallel" ||
     v === "firecrawl" ||
     v === "tinyfish";
-  const browserEngine = isEngineName(engineRaw) ? engineRaw : undefined;
+  // A tenant that locks session controls keeps its own engine: a visitor
+  // cannot move its searches onto another (possibly paid) engine.
+  const engineLocked = dep?.gate?.lockSessionControls === true;
+  const browserEngine = !engineLocked && isEngineName(engineRaw) ? engineRaw : undefined;
   const tenantEngine =
     tenantEngineRaw !== "auto" && isEngineName(tenantEngineRaw) ? tenantEngineRaw : undefined;
   const effectiveEngine = browserEngine === "auto" ? undefined : (browserEngine ?? tenantEngine);
@@ -901,6 +904,7 @@ export async function POST(req: Request) {
     const {
       filterForceToolHeader,
       filterDisabledToolsHeader,
+      exclusiveCatalogDisabledIds,
       omitForcedCatalogIds,
       mcpServersHeaderValue,
       operatorMcpServersForUpstream,
@@ -942,10 +946,13 @@ export async function POST(req: Request) {
         ? filterForceToolHeader(dep, forceToolRaw)
         : undefined;
     if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
-    const disabled = omitForcedCatalogIds(
-      filterDisabledToolsHeader(dep, disabledToolsRaw),
-      allowed,
-    );
+    const disabled = [
+      ...new Set([
+        ...omitForcedCatalogIds(filterDisabledToolsHeader(dep, disabledToolsRaw), allowed),
+        // An exclusive catalog is the whole tool surface (fail closed upstream).
+        ...exclusiveCatalogDisabledIds(dep),
+      ]),
+    ];
     // Forward catalog ids as-is (#3807): digigraph `expand_disabled_tool_tokens`
     // expands digisearch/digivault aliases upstream. Do not expand to tool
     // names here — that would break the upstream contract.

@@ -329,6 +329,8 @@ export type EmbedTenantConfig = {
   pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
+    /** Only the catalog's tools reach the model (see ToolsSchema.exclusive). */
+    exclusive?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -1147,6 +1149,7 @@ function parseTenantTools(
   return {
     tools: {
       ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      ...(r.exclusive === true ? { exclusive: true } : {}),
       catalog,
     },
   };
@@ -1414,16 +1417,17 @@ export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolea
 }
 
 /**
- * True when this embed tenant refuses a visitor's own API key. An
- * `operator` tenant pays for inference with the operator's keys, and one that
- * does not show the BYOK surface (`showByok` not true) has no sanctioned way
- * for a visitor to bring a key, so the chat API rejects one instead of
- * routing the turn through it.
+ * True when this embed tenant refuses a visitor's own API key, so the chat
+ * API rejects one instead of routing the turn through it. A row that sets
+ * `showByok: false` has switched BYOK off. An `operator` tenant pays with the
+ * operator's keys and, unless it shows the BYOK surface, has no sanctioned way
+ * for a visitor to bring a key either.
  */
 export function embedTenantRefusesByok(
   cfg: Pick<EmbedTenantConfig, "llmAccess" | "showByok"> | null | undefined,
 ): boolean {
   if (!cfg) return false;
+  if (cfg.showByok === false) return true;
   return cfg.llmAccess === "operator" && cfg.showByok !== true;
 }
 
