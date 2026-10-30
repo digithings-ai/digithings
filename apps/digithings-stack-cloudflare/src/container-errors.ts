@@ -268,6 +268,31 @@ const FAILED_PATTERNS = [
 ] as const;
 
 /**
+ * Capacity refusal vocabulary (DIG-5945): the platform could not hand this
+ * Durable Object a running container instance because the pool is full. It is
+ * NOT a failed container (a fresh instance cannot be started by retrying), so
+ * it is never retried and never answered as `container_failed`. It is surfaced
+ * as a retryable `container_booting` 503 instead, and logged at error level so
+ * the capacity condition is visible in observability and can alert on.
+ */
+const CAPACITY_PATTERNS = [
+  "maximum number of running container instances",
+  "no container instance that can be provided",
+] as const;
+
+/**
+ * True when the message is a capacity refusal rather than a failed container.
+ *
+ * Kept separate from `isContainerFailedError` on purpose: a capacity refusal
+ * must not be retried (an immediate retry cannot conjure a slot, DIG-4422),
+ * and it is the condition the run-watch alert keys off of (DIG-5945).
+ */
+export function isContainerCapacityError(err: unknown): boolean {
+  const message = safeErrorMessage(err).toLowerCase();
+  return CAPACITY_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+/**
  * True when the message confirms the container itself is gone or exited
  * (recycled / failed), as opposed to still booting.
  *

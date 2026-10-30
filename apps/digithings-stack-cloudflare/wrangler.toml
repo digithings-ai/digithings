@@ -117,6 +117,13 @@ image_build_context = "../.."
 # deploy). Billing is per running instance: idle slots cost nothing, and an
 # old-rev instance stops after sleepAfter (5m) once traffic moves to the new id.
 max_instances = 10
+# Graceful drain on version rollout (DIG-5945): during a deploy rollout the
+# platform skips instances that have been connected to their Durable Object
+# for less than this window, so a freshly-started instance is not SIGTERM'd
+# mid-boot and in-flight requests can finish (up to the 15m drain). 300s
+# matches the digichat container's cold-boot budget and the digigraph boot
+# window.
+rollout_active_grace_period = 300
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 # standard-1 = 4 GiB (was standard-2, 6 GiB). Memory is billed per GiB-s.
 # Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.
