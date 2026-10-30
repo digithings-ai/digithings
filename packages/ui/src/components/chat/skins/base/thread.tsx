@@ -9,6 +9,7 @@ import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { useSuggestionGroup } from "../../suggestion-cycle";
+import { SuggestionScrollRow } from "../../suggestion-scroll-row";
 import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { BackendNotice } from "../../stock/chat-notice";
@@ -498,7 +499,7 @@ const ThreadSuggestions: FC = () => {
         className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
         {...handlers}
       >
-        <div className="w-full scrollbar-none overflow-x-auto">
+        <SuggestionScrollRow className="w-full">
           <div className="mx-auto flex w-max items-center gap-2">
             {suggestions.map((prompt) => (
               <Button
@@ -511,7 +512,7 @@ const ThreadSuggestions: FC = () => {
               </Button>
             ))}
           </div>
-        </div>
+        </SuggestionScrollRow>
       </div>
     );
   }
@@ -522,7 +523,7 @@ const ThreadSuggestions: FC = () => {
       className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
       {...handlers}
     >
-      <div className="w-full scrollbar-none overflow-x-auto">
+      <SuggestionScrollRow className="w-full">
         <div className="mx-auto flex w-max items-center gap-2">
           {SUGGESTION_GROUPS.map((group) => (
             <Button
@@ -543,11 +544,11 @@ const ThreadSuggestions: FC = () => {
             </Button>
           ))}
         </div>
-      </div>
+      </SuggestionScrollRow>
       {expandedGroup && (
-        <div
+        <SuggestionScrollRow
           key={expandedGroup.label}
-          className="fade-in slide-in-from-top-1 animate-in w-full scrollbar-none overflow-x-auto duration-200"
+          className="fade-in slide-in-from-top-1 animate-in w-full duration-200"
         >
           <div className="mx-auto flex w-max items-center gap-2">
             {expandedGroup.options.map((option) => (
@@ -561,7 +562,7 @@ const ThreadSuggestions: FC = () => {
               </Button>
             ))}
           </div>
-        </div>
+        </SuggestionScrollRow>
       )}
     </div>
   );

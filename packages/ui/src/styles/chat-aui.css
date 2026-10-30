@@ -1057,3 +1057,53 @@ html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
 .digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
   color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }
+
+/* ── Example-question rows: thin overlay-style scrollbar ─────────────────
+   Shared by every skin through <SuggestionScrollRow>. The bar is 4px and
+   invisible at rest; it shows while the row is hovered, focused or being
+   scrolled. The row sets data-hover / data-focus / data-scrolling itself
+   because Chrome does not repaint the thumb on :hover alone. Blink/WebKit use
+   the ::-webkit-scrollbar rules; Gecko gets the standard pair, guarded so
+   Chrome keeps honouring the 4px webkit size. */
+.aui-suggestion-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-track,
+.aui-suggestion-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: transparent;
+}
+
+.aui-suggestion-scroll:hover::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-hover]::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-focus]::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-scrolling]::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 45%, transparent);
+}
+
+@supports (-moz-appearance: none) {
+  .aui-suggestion-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .aui-suggestion-scroll:hover,
+  .aui-suggestion-scroll:focus-within,
+  .aui-suggestion-scroll[data-scrolling] {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 45%, transparent)
+      transparent;
+  }
+}

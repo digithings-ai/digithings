@@ -2,6 +2,7 @@
 
 import { AuiIf, useAuiState, ThreadPrimitive } from "@assistant-ui/react";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { SuggestionScrollRow } from "../suggestion-scroll-row";
 
 const FollowupSuggestionsRow: FC = () => {
   const suggestions = useAuiState((s) => s.thread.suggestions);
@@ -41,11 +42,11 @@ const FollowupSuggestionsRow: FC = () => {
   }, ${fades.right ? "black calc(100% - 2rem), transparent" : "black"})`;
 
   return (
-    <div
+    <SuggestionScrollRow
       ref={scrollRef}
       onScroll={updateFades}
       // overflow-x clips both axes; py-1/-my-1 gives focus rings vertical room without changing outer height.
-      className="aui-thread-followup-suggestions -my-1 w-full overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="aui-thread-followup-suggestions -my-1 w-full py-1"
       style={{ maskImage, WebkitMaskImage: maskImage }}
     >
       <div className="mx-auto flex min-h-8 w-max items-center gap-2 px-0.5">
@@ -65,7 +66,7 @@ const FollowupSuggestionsRow: FC = () => {
           </ThreadPrimitive.Suggestion>
         ))}
       </div>
-    </div>
+    </SuggestionScrollRow>
   );
 };
 
