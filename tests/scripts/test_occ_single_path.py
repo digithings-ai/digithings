@@ -1,7 +1,7 @@
 """OCC is one path, one gate, one secret (2026-10-27 consolidation).
 
 The regression this pins is not a unit-level behaviour, it is a *wiring* one:
-`occGate(request, key)` used to fall back to `fetch(request)` — a fetch of the
+`legacyInviteGate(request, key)` used to fall back to `fetch(request)` — a fetch of the
 URL the Worker was already serving — and every unit test injected a stub
 upstream, so the suite stayed green while the production path was never the one
 under test. The same shape had two gates and two copies of the same secret
@@ -10,7 +10,7 @@ test noticing.
 
 So this file asserts the wiring, not the gate logic:
 
-* the Worker passes a real container upstream to `occGate` (the third argument),
+* the Worker passes a real container upstream to `legacyInviteGate` (the third argument),
 * the gate rewrites `/chat/occ` onto the app's own embed route,
 * the invite moves out of the URL into `x-embed-token`,
 * the Pages shell and its Pages twin gate no longer exist.
@@ -31,34 +31,34 @@ def _read(path: Path) -> str:
 
 
 def test_the_worker_hands_the_gate_a_container_upstream() -> None:
-    """`occGate` must not be called with only the request and the key.
+    """`legacyInviteGate` must not be called with only the request and the key.
 
     That is exactly the old call, and its default upstream was `fetch` — a
     subrequest to the Worker's own URL. The third argument is what makes the
     valid-invite path reach the container.
     """
     src = _read(WORKER / "index.ts")
-    call = re.search(r"occGate\(([^;]*?)\);", src, re.DOTALL)
-    assert call, "index.ts no longer calls occGate"
+    call = re.search(r"legacyInviteGate\(([^;]*?)\);", src, re.DOTALL)
+    assert call, "index.ts no longer calls legacyInviteGate"
     args = [a.strip() for a in call.group(1).split(",")]
     assert len(args) >= 3, (
-        "occGate is called with fewer than three arguments — the container "
+        "legacyInviteGate is called with fewer than three arguments — the container "
         f"upstream is missing: {call.group(0)[:160]}"
     )
     assert "container" in call.group(1), (
-        "the third argument to occGate must be the container fetch, not the "
+        "the third argument to legacyInviteGate must be the container fetch, not the "
         f"default self-fetch: {call.group(0)[:160]}"
     )
 
 
 def test_the_gate_rewrites_onto_the_app_embed_route() -> None:
-    src = _read(WORKER / "occ-gate.ts")
+    src = _read(WORKER / "legacy-invite-gate.ts")
 
-    assert "occContainerRequest" in src, "the gate no longer builds a container request"
-    assert re.search(r"pathname\s*=\s*OCC_CONTAINER_PATH", src), (
+    assert "legacyInviteContainerRequest" in src, "the gate no longer builds a container request"
+    assert re.search(r"pathname\s*=\s*LEGACY_INVITE_CONTAINER_PATH", src), (
         "the gate must rewrite the path to the app's embed route"
     )
-    assert re.search(r'searchParams\.set\("host",\s*OCC_EMBED_HOST\)', src), (
+    assert re.search(r'searchParams\.set\("host",\s*LEGACY_INVITE_EMBED_HOST\)', src), (
         "the gate must set the OCC tenant host on the container request"
     )
     assert re.search(r'searchParams\.delete\("token"\)', src), (
@@ -85,9 +85,9 @@ def test_the_gate_has_no_self_fetch_default() -> None:
     covers. Here we only refuse the exact old shape — a valid branch that calls
     the upstream with the original request object.
     """
-    src = _read(WORKER / "occ-gate.ts")
+    src = _read(WORKER / "legacy-invite-gate.ts")
     # The second argument is the (trimmed) invite key, whatever its local name.
-    assert re.search(r"containerUpstream\(occContainerRequest\(request, \w+\)\)", src), (
+    assert re.search(r"containerUpstream\(legacyInviteContainerRequest\(request, \w+\)\)", src), (
         "the valid branch must send a rewritten container request, never the original request"
     )
     assert "containerUpstream(request)" not in src, (
@@ -104,7 +104,7 @@ def test_the_invite_link_does_not_leave_the_key_in_the_address_bar() -> None:
     re-requests with the cookie and the key is out of the location bar and
     history without needing JavaScript.
     """
-    src = _read(WORKER / "occ-gate.ts")
+    src = _read(WORKER / "legacy-invite-gate.ts")
     assert re.search(r"status:\s*302", src), (
         "the invite arm must redirect; returning 200 leaves ?token= in the address bar"
     )

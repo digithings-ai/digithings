@@ -2,36 +2,36 @@ import { CONTAINER_BASE_PATH } from "./base-path";
 import { constantTimeEqual } from "./constant-time";
 
 /**
- * DIG-1210 / DIG-3585: /chat/occ is invite-only. It is the app's own embed
+ * DIG-1210 / DIG-3585: the legacy invite page ({@link LEGACY_INVITE_PAGE_PATH}) is invite-only. It is the app's own embed
  * route, gated at the edge; nothing is served without a valid invite — no
  * title, branding or loader. Anything else gets the site's ordinary 404 page
  * with a real 404 status.
  *
  * A valid `?token=` also sets the tab-session cookie from DIG-1437
  * (b9dd6c4b8). The cookie holds an issued-at time and an HMAC over it keyed
- * with the invite key (see {@link occInviteCookieValue}), never the key itself
+ * with the invite key (see {@link legacyInviteCookieValue}), never the key itself
  * (HttpOnly, Secure, SameSite=Strict, Path=/chat, no Max-Age attribute: the
  * browser drops it with the session, and the edge refuses it once it is older
  * than `OCC_INVITE_MAX_AGE_DAYS`, default 30). A reload without `?token=`
  * presents the cookie instead of the query; reopening the link renews it.
  *
- * Path=/chat, not /chat/occ: the page is only half of the chat. Its API calls
+ * Path=/chat, not the page's own path: the page is only half of the chat. Its API calls
  * (`/chat/api/embed/tenant-config`, every `/chat/api/chat` turn) need the
  * invite too, and after the 302 strips `?token=` the browser has no other copy
  * of it. The cookie reaches the edge on those calls and the edge turns it into
- * the app's own transport ({@link bindOccApiCall}); it is removed from every
+ * the app's own transport ({@link bindLegacyInviteApiCall}); it is removed from every
  * request the container sees ({@link withoutInviteCookie}).
  *
  * There is deliberately ONE gate and ONE secret: the Worker validates, sets the
  * cookie, and proxies to the container it already serves `/chat` from. The
  * container is never asked for an uninvited request, and the Pages project is
- * not in the OCC path at all (2026-10-27 consolidation).
+ * not in the legacy invite page's path at all (2026-10-27 consolidation).
  */
-/** The OCC page's public path, without the trailing slash. */
-export const OCC_PAGE_PATH = "/chat/occ";
+/** The legacy invite page's public path, without the trailing slash. */
+export const LEGACY_INVITE_PAGE_PATH = "/chat/occ";
 
-export function isOccShellPath(pathname: string): boolean {
-  return pathname === OCC_PAGE_PATH || pathname.startsWith(`${OCC_PAGE_PATH}/`);
+export function isLegacyInviteShellPath(pathname: string): boolean {
+  return pathname === LEGACY_INVITE_PAGE_PATH || pathname.startsWith(`${LEGACY_INVITE_PAGE_PATH}/`);
 }
 
 /** Constant-time string compare (length leak only); false when either side is empty. */
@@ -41,61 +41,61 @@ export function inviteTokenValid(given: string | null, expected: string | undefi
 }
 
 /** Session cookie set once a valid invite link is opened (DIG-1437). */
-export const OCC_INVITE_COOKIE = "occ_invite";
+export const LEGACY_INVITE_COOKIE = "occ_invite";
 
 /** The cookie's scope: the whole app, so its API calls carry the invite too. */
-export const OCC_INVITE_COOKIE_PATH = CONTAINER_BASE_PATH;
+export const LEGACY_INVITE_COOKIE_PATH = CONTAINER_BASE_PATH;
 
-/** The scope the first edge gate used; retired, see {@link occLegacyCookieClear}. */
-export const OCC_LEGACY_COOKIE_PATH = `${CONTAINER_BASE_PATH}/occ`;
+/** The scope the first edge gate used; retired, see {@link legacyInviteRetiredCookieClear}. */
+export const LEGACY_INVITE_RETIRED_COOKIE_PATH = `${CONTAINER_BASE_PATH}/occ`;
 
 /**
  * Domain-separation label for the cookie MAC. Bumping it retires every cookie;
  * v1 (a MAC over the label alone, no issued-at) was retired this way.
  */
-const OCC_COOKIE_LABEL = "digichat/occ_invite/v2";
+const LEGACY_INVITE_COOKIE_LABEL = "digichat/occ_invite/v2";
 
 /** The version prefix of a cookie value: `v2.<issued-at>.<mac>`. */
-const OCC_COOKIE_VERSION = "v2";
+const LEGACY_INVITE_COOKIE_VERSION = "v2";
 
 /** Default cookie lifetime when `OCC_INVITE_MAX_AGE_DAYS` is unset or invalid. */
-export const OCC_INVITE_DEFAULT_MAX_AGE_DAYS = 30;
+export const LEGACY_INVITE_DEFAULT_MAX_AGE_DAYS = 30;
 
 /** Upper bound on a configured lifetime: a typo must not mean "forever". */
-export const OCC_INVITE_MAX_MAX_AGE_DAYS = 365;
+export const LEGACY_INVITE_MAX_MAX_AGE_DAYS = 365;
 
 /** Clock skew tolerated for an issued-at in the future (edge clocks differ). */
-const OCC_COOKIE_FUTURE_SKEW_S = 300;
+const LEGACY_INVITE_COOKIE_FUTURE_SKEW_S = 300;
 
 /**
- * How old an `occ_invite` cookie may be. `nowMs` is a test seam; the gate uses
+ * How old an invite cookie (`LEGACY_INVITE_COOKIE`) may be. `nowMs` is a test seam; the gate uses
  * the clock.
  */
-export interface OccCookiePolicy {
+export interface LegacyInviteCookiePolicy {
   maxAgeSeconds: number;
   nowMs?: number;
 }
 
 /**
  * The cookie lifetime in seconds from the non-secret `OCC_INVITE_MAX_AGE_DAYS`
- * var: a whole number of days from 1 to {@link OCC_INVITE_MAX_MAX_AGE_DAYS}.
+ * var: a whole number of days from 1 to {@link LEGACY_INVITE_MAX_MAX_AGE_DAYS}.
  * Unset, malformed, zero or negative falls back to the 30-day default; a larger
  * value is capped. Never unlimited.
  */
-export function occInviteMaxAgeSeconds(raw: string | undefined | null): number {
+export function legacyInviteMaxAgeSeconds(raw: string | undefined | null): number {
   const text = (raw ?? "").trim();
   const days = /^\d{1,4}$/.test(text) ? Number(text) : NaN;
   const valid = Number.isInteger(days) && days >= 1;
-  const capped = valid ? Math.min(days, OCC_INVITE_MAX_MAX_AGE_DAYS) : OCC_INVITE_DEFAULT_MAX_AGE_DAYS;
+  const capped = valid ? Math.min(days, LEGACY_INVITE_MAX_MAX_AGE_DAYS) : LEGACY_INVITE_DEFAULT_MAX_AGE_DAYS;
   return capped * 24 * 60 * 60;
 }
 
 /** The default policy: 30 days, the clock. */
-export const DEFAULT_OCC_COOKIE_POLICY: OccCookiePolicy = {
-  maxAgeSeconds: OCC_INVITE_DEFAULT_MAX_AGE_DAYS * 24 * 60 * 60,
+export const DEFAULT_LEGACY_INVITE_COOKIE_POLICY: LegacyInviteCookiePolicy = {
+  maxAgeSeconds: LEGACY_INVITE_DEFAULT_MAX_AGE_DAYS * 24 * 60 * 60,
 };
 
-function nowSeconds(policy: OccCookiePolicy): number {
+function nowSeconds(policy: LegacyInviteCookiePolicy): number {
   return Math.floor((policy.nowMs ?? Date.now()) / 1000);
 }
 
@@ -114,24 +114,24 @@ async function cookieMac(expected: string, issuedAtS: number): Promise<string> {
     false,
     ["sign"],
   );
-  const msg = enc.encode(`${OCC_COOKIE_LABEL}|${issuedAtS}`);
+  const msg = enc.encode(`${LEGACY_INVITE_COOKIE_LABEL}|${issuedAtS}`);
   return base64Url(await crypto.subtle.sign("HMAC", key, msg));
 }
 
 /**
- * The `occ_invite` cookie value: `v2.<issued-at>.<mac>`, where the MAC is
+ * The invite cookie (`LEGACY_INVITE_COOKIE`) value: `v2.<issued-at>.<mac>`, where the MAC is
  * HMAC-SHA256 keyed with the invite key over the label and the issued-at
  * (unix seconds). The cookie proves the browser opened a valid invite link at
  * that time, without carrying the key: a leaked cookie is not the key, does
  * not work as `?token=`, stops working after the max age, and dies when the
  * key is rotated. Changing the issued-at breaks the MAC.
  */
-export async function occInviteCookieValue(
+export async function legacyInviteCookieValue(
   expected: string,
   issuedAtS: number = Math.floor(Date.now() / 1000),
 ): Promise<string> {
   const iat = Math.floor(issuedAtS);
-  return `${OCC_COOKIE_VERSION}.${iat}.${await cookieMac(expected, iat)}`;
+  return `${LEGACY_INVITE_COOKIE_VERSION}.${iat}.${await cookieMac(expected, iat)}`;
 }
 
 /**
@@ -139,34 +139,34 @@ export async function occInviteCookieValue(
  * a MAC that matches under this key (constant-time compare), an issued-at no
  * older than the policy's max age, and not in the future beyond a small skew.
  */
-export async function occInviteCookieIssuedAt(
+export async function legacyInviteCookieIssuedAt(
   value: string,
   expected: string,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<number | null> {
   const parts = value.split(".");
-  if (parts.length !== 3 || parts[0] !== OCC_COOKIE_VERSION) return null;
+  if (parts.length !== 3 || parts[0] !== LEGACY_INVITE_COOKIE_VERSION) return null;
   const [, iatText, mac] = parts as [string, string, string];
   if (!/^\d{1,12}$/.test(iatText) || !mac) return null;
   const iat = Number(iatText);
   const macOk = constantTimeEqual(mac, await cookieMac(expected, iat));
   const now = nowSeconds(policy);
-  const fresh = iat <= now + OCC_COOKIE_FUTURE_SKEW_S && now - iat <= policy.maxAgeSeconds;
+  const fresh = iat <= now + LEGACY_INVITE_COOKIE_FUTURE_SKEW_S && now - iat <= policy.maxAgeSeconds;
   return macOk && fresh ? iat : null;
 }
 
-/** The `Set-Cookie` value; `cookieValue` comes from {@link occInviteCookieValue}. */
-export function occInviteCookieHeader(cookieValue: string): string {
-  return `${OCC_INVITE_COOKIE}=${encodeURIComponent(cookieValue)}; Path=${OCC_INVITE_COOKIE_PATH}; Secure; HttpOnly; SameSite=Strict`;
+/** The `Set-Cookie` value; `cookieValue` comes from {@link legacyInviteCookieValue}. */
+export function legacyInviteCookieHeader(cookieValue: string): string {
+  return `${LEGACY_INVITE_COOKIE}=${encodeURIComponent(cookieValue)}; Path=${LEGACY_INVITE_COOKIE_PATH}; Secure; HttpOnly; SameSite=Strict`;
 }
 
 /**
- * Expires a cookie an earlier gate scoped to /chat/occ. A browser that still
+ * Expires a cookie an earlier gate scoped to the legacy invite page. A browser that still
  * holds one would paint the page and then send every API call without the
  * invite, because that cookie never reaches /chat/api/*.
  */
-export function occLegacyCookieClear(): string {
-  return `${OCC_INVITE_COOKIE}=; Path=${OCC_LEGACY_COOKIE_PATH}; Max-Age=0; Secure; HttpOnly; SameSite=Strict`;
+export function legacyInviteRetiredCookieClear(): string {
+  return `${LEGACY_INVITE_COOKIE}=; Path=${LEGACY_INVITE_RETIRED_COOKIE_PATH}; Max-Age=0; Secure; HttpOnly; SameSite=Strict`;
 }
 
 /** Every value of `name` in a Cookie header (a browser may send one per path). */
@@ -191,37 +191,37 @@ export function readCookie(header: string | null, name: string): string | null {
 }
 
 /**
- * The newest valid `occ_invite` value in the Cookie header (see
- * {@link occInviteCookieIssuedAt}), or null. Every value is checked, so the
+ * The newest valid `LEGACY_INVITE_COOKIE` value in the Cookie header (see
+ * {@link legacyInviteCookieIssuedAt}), or null. Every value is checked, so the
  * time taken does not depend on which one is valid. Expired, tampered,
  * old-format and raw-key cookies are all null.
  */
 export async function validInviteCookie(
   header: string | null,
   expected: string | undefined,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<string | null> {
   const key = expected?.trim();
   if (!key) return null;
   let best: { value: string; iat: number } | null = null;
-  for (const value of readCookies(header, OCC_INVITE_COOKIE)) {
-    const iat = await occInviteCookieIssuedAt(value, key, policy);
+  for (const value of readCookies(header, LEGACY_INVITE_COOKIE)) {
+    const iat = await legacyInviteCookieIssuedAt(value, key, policy);
     if (iat !== null && (best === null || iat > best.iat)) best = { value, iat };
   }
   return best?.value ?? null;
 }
 
-/** True when the Cookie header carries a valid `occ_invite` (see {@link validInviteCookie}). */
+/** True when the Cookie header carries a valid `LEGACY_INVITE_COOKIE` (see {@link validInviteCookie}). */
 export async function inviteCookieValid(
   header: string | null,
   expected: string | undefined,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<boolean> {
   return (await validInviteCookie(header, expected, policy)) !== null;
 }
 
 /**
- * The Cookie header without `occ_invite`. The cookie is derived from the invite
+ * The Cookie header without `LEGACY_INVITE_COOKIE`. The cookie is derived from the invite
  * key; the edge is the only place that needs it, so it never reaches the container
  * (its logs, its request objects, the app's own cookie parsing).
  */
@@ -233,7 +233,7 @@ export function withoutInviteCookie(headers: Headers): void {
     .filter((part) => {
       const i = part.indexOf("=");
       const name = (i < 0 ? part : part.slice(0, i)).trim();
-      return name !== OCC_INVITE_COOKIE;
+      return name !== LEGACY_INVITE_COOKIE;
     })
     .map((part) => part.trim())
     .filter(Boolean);
@@ -255,7 +255,7 @@ export type InviteProof = { kind: "token" } | { kind: "cookie"; value: string };
 export async function inviteAccepted(
   request: Request,
   expected: string | undefined,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<InviteProof | null> {
   const key = expected?.trim();
   if (!key) return null;
@@ -265,11 +265,11 @@ export async function inviteAccepted(
   return value === null ? null : { kind: "cookie", value };
 }
 
-/** The tenant host the OCC embed resolves for this shell. */
-export const OCC_EMBED_HOST = "occ.digithings.ai";
+/** The tenant host the legacy invite embed resolves for this shell. */
+export const LEGACY_INVITE_EMBED_HOST = "occ.digithings.ai";
 
 /** The app route that renders the embed shell under the container base path. */
-export const OCC_CONTAINER_PATH = `${CONTAINER_BASE_PATH}/embed`;
+export const LEGACY_INVITE_CONTAINER_PATH = `${CONTAINER_BASE_PATH}/embed`;
 
 /**
  * The header the app already uses for the per-tenant embed secret
@@ -289,44 +289,44 @@ export const EMBED_HOST_HEADER = "x-embed-host";
 export const DIGI_TENANT_HEADER = "x-digi-tenant";
 
 /**
- * The referrer policy on the OCC page. `same-origin` keeps the full Referer on
- * the page's own API calls — which is how the edge tells an OCC call from a
+ * The referrer policy on the legacy invite page. `same-origin` keeps the full Referer on
+ * the page's own API calls — which is how the edge tells a legacy invite call from a
  * house one — and sends none at all to another origin.
  */
-export const OCC_REFERRER_POLICY = "same-origin";
+export const LEGACY_INVITE_REFERRER_POLICY = "same-origin";
 
 /**
  * The request the Container serves for a valid invite.
  *
- * `/chat/occ` is the app's own embed route, not a Pages shell: the path is
+ * The legacy invite page is the app's own embed route, not a Pages shell: the path is
  * rewritten to the base-path embed surface, the tenant host is set, the
  * invite is moved from the query to `x-embed-token`, and the query token is
  * dropped. The response is the chat itself — there is no iframe and no second
  * origin in the chain.
  */
-export function occContainerRequest(request: Request, invite: string): Request {
+export function legacyInviteContainerRequest(request: Request, invite: string): Request {
   const target = new URL(request.url);
-  target.pathname = OCC_CONTAINER_PATH;
-  target.searchParams.set("host", OCC_EMBED_HOST);
+  target.pathname = LEGACY_INVITE_CONTAINER_PATH;
+  target.searchParams.set("host", LEGACY_INVITE_EMBED_HOST);
   target.searchParams.delete("token");
   const containerRequest = new Request(target.toString(), request);
   // Overwrite rather than append: a client-supplied header must never be
   // able to stand in for the edge's own verdict.
   containerRequest.headers.set(EMBED_TOKEN_HEADER, invite);
-  containerRequest.headers.set(EMBED_HOST_HEADER, OCC_EMBED_HOST);
+  containerRequest.headers.set(EMBED_HOST_HEADER, LEGACY_INVITE_EMBED_HOST);
   containerRequest.headers.delete(DIGI_TENANT_HEADER);
   withoutInviteCookie(containerRequest.headers);
   return containerRequest;
 }
 
-/** The app's API under its base path: what the OCC page calls after it paints. */
+/** The app's API under its base path: what the legacy invite page calls after it paints. */
 export function isChatApiPath(pathname: string): boolean {
   return pathname.startsWith(`${CONTAINER_BASE_PATH}/api/`);
 }
 
 /**
- * True when the call says it comes from the OCC page itself: a same-origin
- * Referer whose path is /chat/occ, plus, when the browser sends them,
+ * True when the call says it comes from the legacy invite page itself: a same-origin
+ * Referer whose path is {@link LEGACY_INVITE_PAGE_PATH}, plus, when the browser sends them,
  * `Sec-Fetch-Site: same-origin` and an `Origin` equal to ours.
  *
  * What this does and does not prove:
@@ -334,21 +334,21 @@ export function isChatApiPath(pathname: string): boolean {
  *   origin, its Sec-Fetch-Site is `cross-site`, and the cookie is
  *   SameSite=Strict, so it never carries the invite anyway.
  * - Script on OUR origin can pass. Referer is a forbidden header name, but
- *   `fetch(url, { referrer: "/chat/occ" })` may set any same-origin referrer.
- *   So this check only tells an OCC call apart from a house call made by the
+ *   `fetch(url, { referrer: LEGACY_INVITE_PAGE_PATH })` may set any same-origin referrer.
+ *   So this check only tells a legacy invite call apart from a house call made by the
  *   app's own code. It is not a security boundary against same-origin script.
  *   The boundary is the HttpOnly invite cookie, which only a browser that
  *   opened a valid invite link holds.
  * - A non-browser caller can send any header. Without the cookie it gets
  *   nothing from this.
  */
-export function refererIsOccPage(request: Request): boolean {
+export function refererIsLegacyInvitePage(request: Request): boolean {
   const raw = request.headers.get("referer");
   if (!raw) return false;
   try {
     const self = new URL(request.url).origin;
     const ref = new URL(raw);
-    if (ref.origin !== self || !isOccShellPath(ref.pathname)) return false;
+    if (ref.origin !== self || !isLegacyInviteShellPath(ref.pathname)) return false;
     const site = request.headers.get("sec-fetch-site");
     if (site !== null && site.trim().toLowerCase() !== "same-origin") return false;
     const origin = request.headers.get("origin");
@@ -360,53 +360,53 @@ export function refererIsOccPage(request: Request): boolean {
 }
 
 /**
- * Binds an OCC page's API call (`/chat/api/*`) to the invite, in place, on the
+ * Binds a legacy invite page's API call (`/chat/api/*`) to the invite, in place, on the
  * request the container is about to receive.
  *
  * - `X-Digi-Tenant` is always dropped: only the app sets it, server-side.
- * - From the OCC page, the client's own `x-embed-token` / `X-Embed-Host` are
- *   always dropped. The edge alone decides whether this call is OCC: when the
- *   `occ_invite` cookie is valid it sets the invite as `x-embed-token` and the
- *   host as `occ.digithings.ai`; otherwise the call goes on with neither, and
+ * - From the legacy invite page, the client's own `x-embed-token` / `X-Embed-Host` are
+ *   always dropped. The edge alone decides whether this call is a legacy invite call: when the
+ *   invite cookie (`LEGACY_INVITE_COOKIE`) is valid it sets the invite as `x-embed-token` and the
+ *   host as `LEGACY_INVITE_EMBED_HOST`; otherwise the call goes on with neither, and
  *   the app answers it as an unverified caller (house defaults or refused).
  * - From anywhere else (the house chat, a customer's embed) the tenant headers
  *   are the caller's own and pass through: a cookie never makes a house call
- *   OCC, and other tenants keep their token transport.
- * - The `occ_invite` cookie itself never reaches the container.
+ *   a legacy invite call, and other tenants keep their token transport.
+ * - The invite cookie (`LEGACY_INVITE_COOKIE`) itself never reaches the container.
  *
  * `request` must be the edge's own copy (its headers are mutable); the
  * Referer and Cookie are read from it before anything is removed.
  */
-export async function bindOccApiCall(
+export async function bindLegacyInviteApiCall(
   request: Request,
   expected: string | undefined,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<void> {
   const key = expected?.trim();
-  const fromOccPage = refererIsOccPage(request);
+  const fromLegacyInvitePage = refererIsLegacyInvitePage(request);
   const invited =
-    fromOccPage &&
+    fromLegacyInvitePage &&
     Boolean(key) &&
     (await inviteCookieValid(request.headers.get("cookie"), key, policy));
   const headers = request.headers;
   headers.delete(DIGI_TENANT_HEADER);
-  if (fromOccPage) {
+  if (fromLegacyInvitePage) {
     headers.delete(EMBED_TOKEN_HEADER);
     headers.delete(EMBED_HOST_HEADER);
     if (invited && key) {
       headers.set(EMBED_TOKEN_HEADER, key);
-      headers.set(EMBED_HOST_HEADER, OCC_EMBED_HOST);
+      headers.set(EMBED_HOST_HEADER, LEGACY_INVITE_EMBED_HOST);
     }
   }
   withoutInviteCookie(headers);
 }
 
-export async function occGate(
+export async function legacyInviteGate(
   request: Request,
   expected: string | undefined,
   containerUpstream: (req: Request) => Promise<Response> = fetch,
   siteUpstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,
-  policy: OccCookiePolicy = DEFAULT_OCC_COOKIE_POLICY,
+  policy: LegacyInviteCookiePolicy = DEFAULT_LEGACY_INVITE_COOKIE_POLICY,
 ): Promise<Response> {
   const url = new URL(request.url);
   const key = expected?.trim();
@@ -421,33 +421,33 @@ export async function occGate(
     // container request entirely and works with scripting disabled.
     // A token hit always issues a FRESH cookie (new issued-at): reopening the
     // link is how a visitor renews an expired session.
-    // The bare `/chat/occ?token=` link lands on `/chat/occ/`, the same clean
-    // address as `/chat/occ/?token=`: one canonical URL, no key in it, and no
+    // The bare `<page>?token=` link lands on `<page>/`, the same clean
+    // address as `<page>/?token=`: one canonical URL, no key in it, and no
     // second hop for a trailing-slash redirect after the cookie is set.
     const clean = new URL(request.url);
     clean.searchParams.delete("token");
-    if (clean.pathname === OCC_PAGE_PATH) clean.pathname = `${OCC_PAGE_PATH}/`;
+    if (clean.pathname === LEGACY_INVITE_PAGE_PATH) clean.pathname = `${LEGACY_INVITE_PAGE_PATH}/`;
     const headers = new Headers({
       location: clean.toString(),
       "cache-control": "no-store",
-      "referrer-policy": OCC_REFERRER_POLICY,
+      "referrer-policy": LEGACY_INVITE_REFERRER_POLICY,
     });
     const issuedAt = nowSeconds(policy);
-    headers.append("set-cookie", occInviteCookieHeader(await occInviteCookieValue(key, issuedAt)));
-    headers.append("set-cookie", occLegacyCookieClear());
+    headers.append("set-cookie", legacyInviteCookieHeader(await legacyInviteCookieValue(key, issuedAt)));
+    headers.append("set-cookie", legacyInviteRetiredCookieClear());
     return new Response(null, { status: 302, headers });
   }
   if (accepted?.kind === "cookie" && key) {
-    const res = await containerUpstream(occContainerRequest(request, key));
+    const res = await containerUpstream(legacyInviteContainerRequest(request, key));
     const headers = new Headers(res.headers);
     headers.set("cache-control", "no-store");
-    headers.set("referrer-policy", OCC_REFERRER_POLICY);
-    // A browser that still holds a /chat/occ-scoped cookie from an earlier gate
+    headers.set("referrer-policy", LEGACY_INVITE_REFERRER_POLICY);
+    // A browser that still holds a legacy-page-scoped cookie from an earlier gate
     // gets it moved to /chat here, so its API calls carry the invite too. The
     // SAME value is re-set (same issued-at): a cookie hit never extends the
     // session, only a fresh `?token=` hit does.
-    headers.append("set-cookie", occInviteCookieHeader(accepted.value));
-    headers.append("set-cookie", occLegacyCookieClear());
+    headers.append("set-cookie", legacyInviteCookieHeader(accepted.value));
+    headers.append("set-cookie", legacyInviteRetiredCookieClear());
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   }
   // The 404 is the site's own page, never the container's: it goes to the
@@ -524,10 +524,10 @@ export function isInviteOnlyEmbedRequest(url: URL, referer: string | null = null
 
 /**
  * The /embed form of an invite-only tenant without its key answers the site
- * 404, exactly like /chat/occ and like any nonexistent path — never the
+ * 404, exactly like the legacy invite page and like any nonexistent path — never the
  * container's own error page. Null means "invited, proxy as usual".
  */
-export async function occEmbedGate(
+export async function legacyInviteEmbedGate(
   request: Request,
   expected: string | undefined,
   upstream: (req: Request | string, init?: RequestInit) => Promise<Response> = fetch,

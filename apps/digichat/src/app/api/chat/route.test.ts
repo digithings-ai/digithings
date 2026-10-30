@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import {
-  bindOccApiCall,
-  occInviteCookieValue,
-} from "../../../../../digichat-cloudflare/src/occ-gate";
+  bindLegacyInviteApiCall,
+  legacyInviteCookieValue,
+} from "../../../../../digichat-cloudflare/src/legacy-invite-gate";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 
 vi.mock("@/lib/request-auth", () => ({
@@ -3433,7 +3433,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     // These drive the real embed tenant resolution with a request shaped the
     // way the digichat Worker hands it to the container: the browser on
     // /chat/occ holds the invite only as the occ_invite cookie (no ?token=,
-    // no ?host= in its URL), and the Worker's bindOccApiCall decides — from
+    // no ?host= in its URL), and the Worker's bindLegacyInviteApiCall decides — from
     // the cookie AND the Referer — whether the call is the OCC tenant's.
     const OCC_HOST = "occ.digithings.ai";
     /** A test fixture, not a credential. */
@@ -3493,7 +3493,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
 
     /** The same turn after the Worker's edge binding. */
     async function throughEdge(req: Request): Promise<Request> {
-      await bindOccApiCall(req, INVITE);
+      await bindLegacyInviteApiCall(req, INVITE);
       return req;
     }
 
@@ -3524,7 +3524,7 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
       vi.mocked(streamText).mockClear();
       installOcc();
-      COOKIE = await occInviteCookieValue(INVITE);
+      COOKIE = await legacyInviteCookieValue(INVITE);
     });
 
     afterEach(() => {

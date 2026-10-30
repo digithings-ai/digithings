@@ -94,7 +94,7 @@ hosts:
     gate:
       # The invite link is the only gate, and the edge enforces it: without the
       # credential the surface 404s before the app renders (embed-invite-only.ts
-      # and the Worker's occ-gate.ts). In the app `invite` accounts turns like
+      # and the Worker's legacy-invite-gate.ts). In the app `invite` accounts turns like
       # `ungated` — no free-turn quota, no trial form — because the gate has
       # already run by the time a request reaches the chat route.
       mode: invite

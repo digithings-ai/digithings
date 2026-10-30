@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTAINER_UNAVAILABLE_BODY, RETRY_AFTER_SECONDS } from "./container-retry";
 import worker, { BOOT_CONFIG_TTL_MS, DigiChatContainer, type Env } from "./index";
 import { env as stubEnv } from "../test/cloudflare-workers-stub";
-import { occInviteCookieValue } from "./occ-gate";
+import { legacyInviteCookieValue } from "./legacy-invite-gate";
 
 /**
  * The Container base class is not constructible outside the Workers runtime
@@ -152,7 +152,7 @@ describe("the digichat Worker", () => {
  * `workerVars`, so writing a binding into it is the test's Worker binding.
  */
 describe("KV config document forwarded to the container", () => {
-  const OCC_TENANTS = JSON.stringify({
+  const LEGACY_INVITE_TENANTS = JSON.stringify({
     "occ.digithings.ai": { slug: "occ", token: "invite-123", gateMode: "invited" },
   });
   const CONFIG_DOC = "version: 1\ndeployment:\n  slug: digithings-ai-config\n";
@@ -170,7 +170,7 @@ describe("KV config document forwarded to the container", () => {
 
   it("forwards DIGICHAT_CONFIG_YAML from KV alongside the tenant registry", async () => {
     stubEnv.DIGICHAT_TENANTS_KV = tenantsKv({
-      "embed-tenants": OCC_TENANTS,
+      "embed-tenants": LEGACY_INVITE_TENANTS,
       "config-yaml": CONFIG_DOC,
     });
     const container = newContainer();
@@ -179,14 +179,14 @@ describe("KV config document forwarded to the container", () => {
     await container.fetch(chatRequest());
 
     expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe(CONFIG_DOC);
-    // OCC must not regress: its KV tenant entry still reaches the container.
+    // The legacy invite tenant must not regress: its KV tenant entry still reaches the container.
     expect(JSON.parse(container.envVars.DIGICHAT_EMBED_TENANTS)).toEqual({
       "occ.digithings.ai": { slug: "occ", token: "invite-123", gateMode: "invited" },
     });
   });
 
   it("forwards an empty document when the key is absent, leaving file/defaults in charge", async () => {
-    stubEnv.DIGICHAT_TENANTS_KV = tenantsKv({ "embed-tenants": OCC_TENANTS });
+    stubEnv.DIGICHAT_TENANTS_KV = tenantsKv({ "embed-tenants": LEGACY_INVITE_TENANTS });
     const container = newContainer();
     hooks.containerFetch.mockResolvedValue(new Response("ok"));
 
@@ -244,7 +244,7 @@ describe("boot config re-read window", () => {
     });
   }
 
-  /** The token the container was last handed for the OCC host. */
+  /** The token the container was last handed for the legacy invite host. */
   function servedToken(container: DigiChatContainer): string | undefined {
     const raw = container.envVars.DIGICHAT_EMBED_TENANTS;
     if (!raw) return undefined;
@@ -427,13 +427,13 @@ describe("boot config re-read window", () => {
   });
 });
 
-describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
+describe("the legacy invite page's API calls through the Worker (DIG-3585)", () => {
   const KEY = "fixture-invite-key";
   /** The cookie the edge sets for KEY: a derived value, never the key. */
   let COOKIE = "";
 
   beforeEach(async () => {
-    COOKIE = await occInviteCookieValue(KEY);
+    COOKIE = await legacyInviteCookieValue(KEY);
   });
 
   function envWithInvite(): Env {
@@ -449,7 +449,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     return hooks.containerFetch.mock.calls[0]![0];
   }
 
-  it("binds a cookie-only call from /chat/occ to the OCC tenant", async () => {
+  it("binds a cookie-only call from the legacy invite page to the legacy invite tenant", async () => {
     const seen = await containerSees({
       method: "POST",
       body: "{}",
@@ -484,7 +484,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     expect(seen.headers.get("cookie")).toBeNull();
   });
 
-  it("drops forged tenant headers from the OCC page without the cookie", async () => {
+  it("drops forged tenant headers from the legacy invite page without the cookie", async () => {
     const seen = await containerSees({
       method: "POST",
       body: "{}",
@@ -500,7 +500,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
 
   it("honours OCC_INVITE_MAX_AGE_DAYS: an older cookie is not bound", async () => {
     const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-    const old = await occInviteCookieValue(KEY, twoDaysAgo);
+    const old = await legacyInviteCookieValue(KEY, twoDaysAgo);
     const headers = { referer: "https://digithings.ai/chat/occ", cookie: `occ_invite=${old}` };
     hooks.getContainer.mockReturnValue({ fetch: hooks.containerFetch });
     hooks.containerFetch.mockResolvedValue(new Response("{}", { status: 200 }));
@@ -527,7 +527,7 @@ describe("the OCC page's API calls through the Worker (DIG-3585)", () => {
     // must not log that URL, and the container must not receive it: the edge
     // swaps it for the cookie and redirects to the clean address. (The
     // platform's own invocation log is covered by redact_query_string in
-    // wrangler.toml, pinned in occ-route.contract.test.ts.)
+    // wrangler.toml, pinned in legacy-invite-route.contract.test.ts.)
     const quiet: string[] = [];
     for (const level of ["warn", "info", "debug"] as const) {
       vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {

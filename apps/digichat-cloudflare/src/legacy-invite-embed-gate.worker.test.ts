@@ -1,5 +1,5 @@
 /**
- * Worker-level check for the /embed invite gate: the key-bearing OCC embed
+ * Worker-level check for the /embed invite gate: the key-bearing legacy invite embed
  * (the path 2.6.6 broke) still reaches the container untouched, and only the
  * keyless form gets the site 404. Container and Pages are mocked.
  */
@@ -46,7 +46,7 @@ async function worker() {
 const env = { OCC_INVITE_KEY: KEY } as never;
 
 describe("the /embed invite gate in the Worker", () => {
-  it("passes the key-bearing OCC embed to the container: 200 text/html, relative rewrite", async () => {
+  it("passes the key-bearing legacy invite embed to the container: 200 text/html, relative rewrite", async () => {
     const w = await worker();
     for (let i = 0; i < 3; i++) {
       const res = await w.fetch(
@@ -71,7 +71,7 @@ describe("the /embed invite gate in the Worker", () => {
     expect(pages).not.toHaveBeenCalled();
   });
 
-  it("gates the base-path spelling of the OCC embed too (DIG-5121)", async () => {
+  it("gates the base-path spelling of the legacy invite embed too (DIG-5121)", async () => {
     const w = await worker();
     // The keyless form gets the site 404 and never reaches the container.
     for (const path of [
@@ -109,7 +109,7 @@ describe("the /embed invite gate in the Worker", () => {
     expect(containerFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("answers the keyless or wrong-key OCC embed with the site 404, never the container", async () => {
+  it("answers the keyless or wrong-key legacy invite embed with the site 404, never the container", async () => {
     const w = await worker();
     for (const q of ["", "&token=wrong", "&token="]) {
       const res = await w.fetch(

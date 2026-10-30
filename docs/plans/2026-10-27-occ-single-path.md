@@ -10,15 +10,15 @@ There is one chat application and one chat container, but two front doors:
 | Path | Today |
 |---|---|
 | `/chat` | Worker → Container (the app, `basePath: /chat`) |
-| `/chat/occ` | Worker `occGate` → `fetch(request)` → **Pages shell** → iframe `/embed?host=occ.digithings.ai` → Container |
+| `/chat/occ` | Worker `legacyInviteGate` → `fetch(request)` → **Pages shell** → iframe `/embed?host=occ.digithings.ai` → Container |
 
 That split has cost us three things:
 
-1. **Two copies of the gate** — `apps/digichat-cloudflare/src/occ-gate.ts` in the Worker and `apps/digithings-web/functions/chat/occ/[[path]].ts` in Pages.
+1. **Two copies of the gate** — `apps/digichat-cloudflare/src/legacy-invite-gate.ts` in the Worker and `apps/digithings-web/functions/chat/occ/[[path]].ts` in Pages.
 2. **Two copies of the same secret** — `OCC_INVITE_KEY` exists on both the Worker and the Pages project, with no check that the values match. The Worker gate runs first, so a link generated from the Pages copy 404s at the Worker and looks exactly like a bad token.
 3. **Two deploy surfaces that drift** — the Pages project builds on push; the container deploys by manual dispatch. On 2026-10-27 the promotion merged but did not deploy, and OCC was reported broken while the Pages twin was healthy.
 
-There is also a wiring defect behind the second door: `occGate(request, key)` is called with no upstream, so the valid-invite branch falls back to `fetch(request)` — a fetch of the same URL the Worker is already serving. The unit tests inject a stub upstream (`vi.fn`), so they pass while the production path has never been exercised. `scripts/smoke_occ_invite_gate.sh` tests only the **uninvited** 404.
+There is also a wiring defect behind the second door: `legacyInviteGate(request, key)` is called with no upstream, so the valid-invite branch falls back to `fetch(request)` — a fetch of the same URL the Worker is already serving. The unit tests inject a stub upstream (`vi.fn`), so they pass while the production path has never been exercised. `scripts/smoke_occ_invite_gate.sh` tests only the **uninvited** 404.
 
 ## The design
 
@@ -28,7 +28,7 @@ There is also a wiring defect behind the second door: `occGate(request, key)` is
 
 ```
 valid token or cookie
-  └─ Worker occGate
+  └─ Worker legacyInviteGate
        ├─ validates against OCC_INVITE_KEY (edge only)
        ├─ answers 302 to the tokenless URL, with occ_invite cookie
        │    (HttpOnly, Secure, SameSite=Strict, Path=/chat) — the key never
@@ -63,7 +63,7 @@ The app already has the exact seam this needs:
    `Path=/chat` (and expires the `Path=/chat/occ` one) so a browser holding the earlier cookie
    migrates without a new invite link.
 8. The page's `/chat/api/*` calls are OCC **only** when the `/chat` cookie is valid **and** the
-   Referer is `/chat/occ` (`bindOccApiCall`; the gate serves the page with
+   Referer is `/chat/occ` (`bindLegacyInviteApiCall`; the gate serves the page with
    `Referrer-Policy: same-origin`). From that page the client's own tenant headers are dropped; a
    client `X-Digi-Tenant` is dropped on every `/chat/api/*` call; a house page with the cookie stays
    the house. The cookie never reaches the container.
@@ -76,7 +76,7 @@ The app already has the exact seam this needs:
 ## The change (one PR)
 
 **Worker**
-- `src/occ-gate.ts`: `occGate(request, key, containerUpstream, siteUpstream = fetch)`.
+- `src/legacy-invite-gate.ts`: `legacyInviteGate(request, key, containerUpstream, siteUpstream = fetch)`.
   - valid: build `/chat/embed?host=occ.digithings.ai`, set `x-embed-token`, delete `token`, call `containerUpstream`.
   - invalid: `siteNotFound(origin, siteUpstream)` — the 404 still comes from Pages, never the container.
 - `src/index.ts`: compute the container before the OCC branch and pass `(req) => container.fetch(req)`.
@@ -92,8 +92,8 @@ The app already has the exact seam this needs:
 - Keep the Pages project: it still serves the marketing site.
 
 **Tests**
-1. Unit (`occ-gate.test.ts`): the container request path is `/chat/embed`, `host` is set, `token` is absent, `x-embed-token` is the key, the cookie is set only for the token arm, and the 404 uses the site upstream (not the container).
-2. Source contract (Python, with the other `tests/scripts` checks): `index.ts` passes a container upstream to `occGate`; the Pages shell and Pages function do not exist. That is the test that would have caught today's wiring bug.
+1. Unit (`legacy-invite-gate.test.ts`): the container request path is `/chat/embed`, `host` is set, `token` is absent, `x-embed-token` is the key, the cookie is set only for the token arm, and the 404 uses the site upstream (not the container).
+2. Source contract (Python, with the other `tests/scripts` checks): `index.ts` passes a container upstream to `legacyInviteGate`; the Pages shell and Pages function do not exist. That is the test that would have caught today's wiring bug.
 3. Smoke (`scripts/smoke_occ_invite_gate.sh`): keep the uninvited 404 check, add an invited check that runs only when `OCC_INVITE_KEY` is set, asserting 200 and shell markup, and that the response is not an iframe.
 
 **Docs**

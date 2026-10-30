@@ -1,7 +1,7 @@
 /**
  * Paths digichat owns on digithings.ai (Pages owns the marketing site; the
- * invite-gated /chat/occ is answered by the gate in index.ts before these run).
- * digithings + OCC (and future tenants) share one Container — tenant selection
+ * legacy invite-gated page is answered by the gate in index.ts before these run).
+ * digithings, the legacy invite tenant (and future tenants) share one Container — tenant selection
  * is via /embed?host=… / X-Embed-Host, not separate Container instances.
  *
  * DIG-5121: the app itself is the canonical digichat surface and is served
@@ -9,13 +9,13 @@
  * path baked in, so the Worker maps every public path onto the path the
  * Container actually serves — see `containerPathFor`.
  */
-import { isOccShellPath } from "./occ-gate";
+import { isLegacyInviteShellPath } from "./legacy-invite-gate";
 import { CONTAINER_BASE_PATH } from "./base-path";
 
 /**
  * The base path the digichat app is built and served under inside the Container.
  *
- * The constant lives in ./base-path.ts, because the gate (occ-gate.ts) needs it
+ * The constant lives in ./base-path.ts, because the gate (legacy-invite-gate.ts) needs it
  * and this module already imports the gate: a third module keeps that
  * dependency one-way.
  */
@@ -96,18 +96,18 @@ export function isContainerInternalPath(pathname: string): boolean {
 }
 
 /**
- * True for the canonical /chat surface: the app itself, minus /chat/occ, which
+ * True for the canonical /chat surface: the app itself, minus the legacy invite page, which
  * only the invite gate may answer (it never falls through to this proxy).
  */
 export function isChatSurfacePath(pathname: string): boolean {
-  if (isOccShellPath(pathname)) return false;
+  if (isLegacyInviteShellPath(pathname)) return false;
   return pathname === CONTAINER_BASE_PATH || pathname.startsWith(`${CONTAINER_BASE_PATH}/`);
 }
 
 /**
  * True for the public paths this Worker forwards to the digichat Container.
  *
- * The canonical /chat surface is proxied (DIG-5121) except for /chat/occ,
+ * The canonical /chat surface is proxied (DIG-5121) except for the legacy invite page,
  * which the invite gate answers itself.
  */
 export function shouldProxyToDigiChat(pathname: string): boolean {

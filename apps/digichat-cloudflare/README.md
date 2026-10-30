@@ -11,7 +11,7 @@ Requires **Workers Paid** (Containers are not on Free).
 | Public path | Owner | Tenant |
 |---|---|---|
 | `digithings.ai/chat` | Worker → Container — **the digichat app**, built with basePath `/chat` (DIG-5121) | — |
-| `digithings.ai/chat/occ` | Worker `occGate` → Container, served by the app's `/chat/embed` route (invite-gated at the edge) | occ |
+| `digithings.ai/chat/occ` | Worker `legacyInviteGate` → Container, served by the app's `/chat/embed` route (invite-gated at the edge) | occ |
 | `digithings.ai/chat/occ?token=<key>` | same; the gate answers 302 to the tokenless page URL `/chat/occ/` (trailing slash, other query kept) with the session cookie, then the cookie request carries the key as `x-embed-token` (DIG-1210, DIG-1437) | occ |
 | `digithings.ai/embed*` | Worker → Container (ADR 0018 compatibility route) | selected by `host` |
 | `digithings.ai/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health` | Worker → Container (ADR 0018 compatibility routes) | — |
@@ -50,12 +50,12 @@ OCC tenant (`x-embed-token` + `X-Embed-Host: occ.digithings.ai`) only when the
 cookie is valid **and** the Referer is `/chat/occ` (with `Sec-Fetch-Site:
 same-origin` and a matching `Origin` when the browser sends them). It drops the client's own tenant headers from that page,
 drops a client `X-Digi-Tenant` on every `/chat/api/*` call, and never lets the
-cookie reach the Container (`bindOccApiCall` in `src/occ-gate.ts`).
+cookie reach the Container (`bindLegacyInviteApiCall` in `src/legacy-invite-gate.ts`).
 
 ```text
 Browser
   → digithings.ai/chat           (Worker → one digichat Container, basePath /chat)
-  → digithings.ai/chat/occ       (Worker occGate → same Container, /chat/embed)
+  → digithings.ai/chat/occ       (Worker legacyInviteGate → same Container, /chat/embed)
        → DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
        → DIGIKEY_URL=https://key.digithings.ai
 ```

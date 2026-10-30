@@ -90,7 +90,7 @@ A cold start longer than that is what a stuck loading banner actually is.
 
 ```
 browser → digithings-digichat Worker (/chat*)
-  → isOccShellPath → occGate
+  → isLegacyInviteShellPath → legacyInviteGate
   → valid ?token= or occ_invite cookie?  (OCC_INVITE_KEY, constant-time)
       no  → fetch /__not-found__ → the site's own 404
       yes → set cookie, rewrite to /chat/embed?host=the gated tenant host,
@@ -99,7 +99,7 @@ browser → digithings-digichat Worker (/chat*)
   → the app's embed route renders the chat directly (no Pages shell, no iframe)
 ```
 
-One gate, one behaviour: `apps/digichat-cloudflare/src/occ-gate.ts` is the only
+One gate, one behaviour: `apps/digichat-cloudflare/src/legacy-invite-gate.ts` is the only
 place the invite is checked. The token is `OCC_INVITE_KEY`; the Pages shell and
 its twin gate were removed in the 2026-10-27 consolidation.
 
@@ -144,9 +144,9 @@ dialled. Auth modes are in `src/mcp-edge-auth.ts:507-539`, the host rewrite in
 | MCP servers | digisearch, digivault | helpdesk (static key), digisearch, digivault |
 | tool visibility | house catalog | OCC catalog + skills pack `occ` |
 
-The separation is made in exactly two places: the Worker's `occGate` rewrites
+The separation is made in exactly two places: the Worker's `legacyInviteGate` rewrites
 `/chat/occ` onto the app's `/chat/embed` route with `host=occ.digithings.ai`
-(`apps/digichat-cloudflare/src/occ-gate.ts`), and the `occ.digithings.ai` row exists
+(`apps/digichat-cloudflare/src/legacy-invite-gate.ts`), and the `occ.digithings.ai` row exists
 only in KV (`embed-tenants`) and in the `config-yaml` document. There is no second
 Worker, no second container, no second KV, and no second shell.
 

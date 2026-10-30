@@ -8,7 +8,7 @@
  * of idleness despite `sleepAfter = "1m"`. `stop()` / `destroy()` exist only as
  * in-Durable Object methods, so the only recovery was deleting the whole
  * Cloudflare Container application. This is the Worker-side, secret-gated path
- * that calls `destroy()`, mirroring the pure-module shape of `occ-gate.ts` (it
+ * that calls `destroy()`, mirroring the pure-module shape of `legacy-invite-gate.ts` (it
  * has no Cloudflare-runtime imports, so it is unit-testable outside the Workers
  * runtime).
  *
@@ -18,7 +18,7 @@
  * discloses only that the path is Worker-owned. The key is Worker-only and is
  * never forwarded to the Container.
  */
-import { inviteTokenValid } from "./occ-gate";
+import { inviteTokenValid } from "./legacy-invite-gate";
 
 /** The Worker holds the key; the Container never receives it (see index.ts `Env`). */
 export const DIGICHAT_ADMIN_KEY_HEADER = "x-digi-admin-key";
@@ -45,7 +45,7 @@ export async function digichatContainerReset(
       headers: { Allow: "POST" },
     });
   }
-  // Constant-time compare with the same null-guard idiom as the OCC gate: an
+  // Constant-time compare with the same null-guard idiom as the legacy invite gate: an
   // unset expected key or a missing header is a refusal, not an error.
   const expected = expectedKey?.trim();
   const provided = request.headers.get(DIGICHAT_ADMIN_KEY_HEADER)?.trim() ?? null;
