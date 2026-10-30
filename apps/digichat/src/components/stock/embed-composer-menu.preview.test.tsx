@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -316,13 +316,20 @@ describe("EmbedComposerMenu live preview", () => {
 describe("prefs preview overlay", () => {
   it("overlays the preview on prefs while committedPrefs keeps the chosen value", () => {
     let seen: EmbedChatPrefsApi | null = null;
-    function Probe() {
-      seen = useEmbedChatPrefs();
+    // The probe reports the context after each commit instead of writing to
+    // a test variable during render.
+    function Probe({ onApi }: { onApi: (value: EmbedChatPrefsApi) => void }) {
+      const value = useEmbedChatPrefs();
+      useEffect(() => onApi(value));
       return null;
     }
     render(
       <EmbedChatPrefsProvider value={api()}>
-        <Probe />
+        <Probe
+          onApi={(value) => {
+            seen = value;
+          }}
+        />
       </EmbedChatPrefsProvider>,
     );
     act(() => seen!.previewPrefs!({ view: "quiet", scrollbars: "always" }));

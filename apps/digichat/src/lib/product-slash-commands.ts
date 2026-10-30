@@ -272,11 +272,26 @@ function modelChoiceValue(model: string | undefined): string {
   return value;
 }
 
+/**
+ * The tenant's chat languages (the composer chip's list), or null when the
+ * tenant sets none and every supported language is offered.
+ */
+export function tenantLanguageCodes(
+  api: Pick<EmbedChatPrefsApi, "languageOptions">,
+): string[] | null {
+  const codes = api.languageOptions?.map((option) => option.code) ?? [];
+  return codes.length ? codes : null;
+}
+
 /** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
+  allowed: readonly string[] | null = null,
 ): ProductSlashCommand[] {
-  return FEATURED_LANGUAGE_CODES.map((code) => {
+  const codes = allowed
+    ? FEATURED_LANGUAGE_CODES.filter((code) => allowed.includes(code))
+    : FEATURED_LANGUAGE_CODES;
+  return codes.map((code) => {
     const label = languageLabel(code);
     return {
       id: label.toLowerCase(),
@@ -349,7 +364,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
     }
   }
 
-  rows.push(...featuredLanguageCommands(api.setLanguage));
+  rows.push(...featuredLanguageCommands(api.setLanguage, tenantLanguageCodes(api)));
   rememberSlashValues(rows);
   return rows;
 }
@@ -432,7 +447,10 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         return;
       }
       const code = tryResolveLanguageInput(arg);
-      if (code) api.setLanguage(code);
+      // A tenant with a language list only offers those languages; any other
+      // pick opens the (filtered) page instead.
+      const allowed = tenantLanguageCodes(api);
+      if (code && (!allowed || allowed.includes(code))) api.setLanguage(code);
       else api.openLanguage();
       return;
     }
@@ -518,11 +536,22 @@ export function executeSlashFromComposer(
   if (def) executeSlashDef(def, arg, api);
 }
 
-export function languageSelectOptions(): {
+export function languageSelectOptions(allowed: readonly string[] | null = null): {
   value: string;
   label: string;
   native: string;
 }[] {
+  // A tenant language list (the chip's) is the whole page, in its order.
+  if (allowed) {
+    return allowed.map((code) => {
+      const row = LANGUAGES.find((l) => l.code === code);
+      return {
+        value: code,
+        label: row?.label ?? languageLabel(code),
+        native: row?.native ?? languageLabel(code),
+      };
+    });
+  }
   const featured = new Set<string>(FEATURED_LANGUAGE_CODES);
   const head = FEATURED_LANGUAGE_CODES.map((code) => {
     const row = LANGUAGES.find((l) => l.code === code);

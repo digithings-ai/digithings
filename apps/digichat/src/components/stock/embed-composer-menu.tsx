@@ -61,6 +61,7 @@ import {
   previewThemePick,
   isPrivateMode,
   languageSelectOptions,
+  tenantLanguageCodes,
   subscribePrivateMode,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
@@ -161,6 +162,13 @@ export type MenuRow = {
    * when the highlight leaves it, the page changes or the menu closes.
    */
   preview?: MenuRowPreview;
+  /**
+   * Choosing this row commits a setting: any live preview ends first, then
+   * the row applies its value and the menu stays open on the same page with
+   * the new value checked. Escape, a click outside or the close actions still
+   * close it.
+   */
+  commits?: boolean;
 };
 
 export type MenuRowPreview =
@@ -520,7 +528,11 @@ export function EmbedComposerMenu({
     return () => window.removeEventListener("resize", measureMenuRoom);
   }, [measureMenuRoom]);
   const available = sessionPickerModels(models ?? [], providerActive?.provider ?? null);
-  const languages = useMemo(() => languageSelectOptions(), []);
+  const tenantLanguages = api.languageOptions;
+  const languages = useMemo(
+    () => languageSelectOptions(tenantLanguageCodes({ languageOptions: tenantLanguages })),
+    [tenantLanguages],
+  );
   const toolOnInput = useMemo(
     () => ({
       digisearch: committedChatPrefs(api).digisearch,
@@ -542,9 +554,10 @@ export function EmbedComposerMenu({
       }),
     [api],
   );
+  const committedMcpCustom = committedChatPrefs(api).mcpCustom;
   const mcpConfigs = useMemo(
-    () => connectedMcpConfigs(api.mcpServers, committedChatPrefs(api).mcpCustom),
-    [api.mcpServers, committedChatPrefs(api).mcpCustom],
+    () => connectedMcpConfigs(api.mcpServers, committedMcpCustom),
+    [api.mcpServers, committedMcpCustom],
   );
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
@@ -691,19 +704,6 @@ export function EmbedComposerMenu({
   useEffect(() => endPreview, [endPreview]);
 
   /**
-   * Choosing a setting applies it and keeps the menu open on the same page,
-   * with the new value checked. Escape, a click outside or the close actions
-   * still close it.
-   */
-  const commitExclusive = useCallback(
-    (apply: () => void) => {
-      endPreview();
-      apply();
-    },
-    [endPreview],
-  );
-
-  /**
    * The root is the same command list the `/` palette filters — one source of
    * truth, so going back never lands on a second, shorter "main". Rows that
    * name a page open it in place; actions run and close the menu.
@@ -758,10 +758,9 @@ export function EmbedComposerMenu({
         value: committedChatPrefs(api).scroll === "free" ? "free" : "follow",
         detail: "Follow the latest message, or leave the scroll where it is.",
         checked: committedChatPrefs(api).scroll === "follow",
+        commits: true,
         activate: () => {
-          commitExclusive(() =>
-            api.setScroll(committedChatPrefs(api).scroll === "free" ? "follow" : "free"),
-          );
+          api.setScroll(committedChatPrefs(api).scroll === "free" ? "follow" : "free");
         },
       },
     ];
@@ -781,12 +780,13 @@ export function EmbedComposerMenu({
           insert: optionDraft("/language", o.label),
           token: o.label,
           ...(native ? { aliases: [native] } : {}),
+          commits: true,
           activate: () => {
-            commitExclusive(() => api.setLanguage(o.value));
+            api.setLanguage(o.value);
           },
         };
       }),
-    [languages, api, commitExclusive],
+    [languages, api],
   );
 
   const modelRows = useMemo((): MenuRow[] => {
@@ -809,12 +809,11 @@ export function EmbedComposerMenu({
           insert: optionDraft("/models", preset.label),
           token: preset.label,
           aliases: [preset.id],
+          commits: true,
           activate: () => {
             const next = preset.id === "auto" ? "" : token;
-            commitExclusive(() => {
-              api.setModel(next);
-              onPickSessionModel?.(next);
-            });
+            api.setModel(next);
+            onPickSessionModel?.(next);
           },
         };
       });
@@ -844,11 +843,10 @@ export function EmbedComposerMenu({
         insert: optionDraft("/models", node.id),
         token: node.id,
         aliases: node.name !== node.id ? [node.name] : [],
+        commits: true,
         activate: () => {
-          commitExclusive(() => {
-            api.setModel(node.id);
-            onPickSessionModel?.(node.id);
-          });
+          api.setModel(node.id);
+          onPickSessionModel?.(node.id);
         },
       }));
       if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
@@ -870,8 +868,9 @@ export function EmbedComposerMenu({
             exclusive: true,
             insert: optionDraft("/models", "auto"),
             token: "auto",
+            commits: true,
             activate: () => {
-              commitExclusive(() => api.setModel(""));
+              api.setModel("");
             },
           },
         ]
@@ -905,16 +904,15 @@ export function EmbedComposerMenu({
           exclusive: true,
           insert: optionDraft("/models", id),
           token: id,
+          commits: true,
           activate: () => {
-            commitExclusive(() => {
-              api.setModel(id);
-              onPickSessionModel?.(id);
-            });
+            api.setModel(id);
+            onPickSessionModel?.(id);
           },
         };
       }),
     ];
-  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
+  }, [available, api, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -926,11 +924,12 @@ export function EmbedComposerMenu({
         exclusive: true,
         insert: optionDraft("/effort", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setEffort(id));
+          api.setEffort(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const engineRows = useMemo(
@@ -943,11 +942,12 @@ export function EmbedComposerMenu({
         exclusive: true,
         insert: optionDraft("/search-engine", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setSearchEngine(id));
+          api.setSearchEngine(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const viewRows = useMemo(
@@ -961,11 +961,12 @@ export function EmbedComposerMenu({
         insert: optionDraft("/view", id),
         token: id,
         preview: { kind: "prefs", patch: { view: id } },
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setView(id));
+          api.setView(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const densityRows = useMemo(
@@ -979,11 +980,12 @@ export function EmbedComposerMenu({
         insert: optionDraft("/density", id),
         token: id,
         preview: { kind: "prefs", patch: { density: id } },
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setDensity(id));
+          api.setDensity(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const themeRows = useMemo((): MenuRow[] => {
@@ -1000,21 +1002,20 @@ export function EmbedComposerMenu({
       insert: slashName(`theme ${step.palette} ${step.mode}`),
       token: `${step.palette} ${step.mode}`,
       preview: { kind: "theme", preference: step.mode, palette: step.palette },
+      commits: true,
       activate: () => {
-        commitExclusive(() => {
-          if (api.setTheme && current.id === step.id) {
-            // On a host that owns the theme (an embed), the checked row drops
-            // the visitor's pick, so the chat follows the parent / tenant again.
-            applyThemePick(api, "auto", step.palette);
-          } else {
-            // Document theme (the app): any row, the checked one included,
-            // pins that mode and palette, as before 2.6.6.
-            applyThemePick(api, step.mode, step.palette);
-          }
-        });
+        if (api.setTheme && current.id === step.id) {
+          // On a host that owns the theme (an embed), the checked row drops
+          // the visitor's pick, so the chat follows the parent / tenant again.
+          applyThemePick(api, "auto", step.palette);
+        } else {
+          // Document theme (the app): any row, the checked one included,
+          // pins that mode and palette, as before 2.6.6.
+          applyThemePick(api, step.mode, step.palette);
+        }
       },
     }));
-  }, [api, commitExclusive, themeBase]);
+  }, [api, themeBase]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -1026,11 +1027,12 @@ export function EmbedComposerMenu({
         exclusive: true,
         insert: optionDraft("/thinking", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setThinking(id));
+          api.setThinking(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const toggleTool = useCallback(
@@ -1492,9 +1494,10 @@ export function EmbedComposerMenu({
     (row: MenuRow | undefined) => {
       if (!row) return;
       if (row.insert) api.setComposerDraft?.(row.insert);
+      if (row.commits) endPreview();
       row.activate();
     },
-    [api],
+    [api, endPreview],
   );
 
   useEffect(() => {

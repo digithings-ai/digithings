@@ -206,7 +206,7 @@ export function ProductStockShell({
   // digithings.ai shell shows on /chat/<slug>). `?boot=` / the `bootLabVariant`
   // prop still wins, then the deployment's `chrome.loading`; `classic` opts
   // back into the pre-banner welcome loader.
-  const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
+  const [bootVariant] = useState<BootLabVariant | null>(() =>
     resolveBootLabVariant(bootLabVariant ?? cfg.chrome.loading ?? null),
   );
 

@@ -850,6 +850,30 @@ describe("EmbedComposerMenu current value", () => {
     expect(api.setEffort).not.toHaveBeenCalledWith("low");
   });
 
+  it("offers only the tenant's chip languages on /language when the tenant sets a list", async () => {
+    const user = userEvent.setup();
+    const api = prefs({
+      prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" },
+      languageOptions: [
+        { code: "en", short: "EN", label: "English" },
+        { code: "fr", short: "FR", label: "Français" },
+      ],
+    });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="language" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const rows = await screen.findAllByRole("menuitemradio");
+    expect(rows.map((row) => row.textContent?.trim().slice(0, 2))).toEqual(["en", "fr"]);
+    expect(screen.queryByRole("menuitemradio", { name: /nl\s+Dutch/i })).toBeNull();
+    await user.click(screen.getByRole("menuitemradio", { name: /fr\s+French/i }));
+    expect(api.setLanguage).toHaveBeenCalledWith("fr");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("opens /language on the language that is set", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "nl", model: "alpha" } });

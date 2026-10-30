@@ -235,8 +235,9 @@ export type EmbedChatPrefsApi = {
   removeMcpConfig: (id: string) => void;
   setLanguage: (code: string) => void;
   /**
-   * The tenant's chat languages, for the composer language chip. Absent (or
-   * fewer than two) means no chip; `/language` is unchanged either way.
+   * The tenant's chat languages, for the composer language chip and the
+   * `/language` page. Absent (or fewer than two) means no chip and every
+   * supported language on `/language`; set, `/language` offers only these.
    */
   languageOptions?: { code: string; short: string; label: string }[];
   /** Footer credit in the session language: `${lead} digithings ${tail}`. */
