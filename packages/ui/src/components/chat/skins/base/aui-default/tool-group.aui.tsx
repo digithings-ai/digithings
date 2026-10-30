@@ -40,6 +40,8 @@ export type ToolGroupRootProps = Omit<
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     defaultOpen?: boolean;
+    /** Open while this group is still streaming, auto-close on completion. */
+    streamingOpen?: boolean;
   };
 
 function ToolGroupRoot({
@@ -48,21 +50,26 @@ function ToolGroupRoot({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   defaultOpen = false,
+  streamingOpen = false,
   children,
   ...props
 }: ToolGroupRootProps) {
   const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const [initialOpen] = useState(defaultOpen);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
 
   const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
+  // The first manual toggle wins; until then the group follows the stream.
+  const isOpen = isControlled
+    ? controlledOpen
+    : (userOpen ?? (streamingOpen || initialOpen));
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       lockScroll();
       if (!isControlled) {
-        setUncontrolledOpen(open);
+        setUserOpen(open);
       }
       controlledOnOpenChange?.(open);
     },
@@ -114,6 +121,9 @@ function ToolGroupTrigger({
         "group-data-[variant=muted]/tool-group-root:w-full group-data-[variant=muted]/tool-group-root:px-4",
         className,
       )}
+      // Folded while the tools run, the trigger is the one control that
+      // knows about them, so it carries the busy state.
+      aria-busy={active || undefined}
       {...props}
     >
       {active && (
