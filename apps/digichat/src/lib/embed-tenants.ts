@@ -1413,6 +1413,20 @@ export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolea
   );
 }
 
+/**
+ * True when this embed tenant refuses a visitor's own API key. An
+ * `operator` tenant pays for inference with the operator's keys, and one that
+ * does not show the BYOK surface (`showByok` not true) has no sanctioned way
+ * for a visitor to bring a key, so the chat API rejects one instead of
+ * routing the turn through it.
+ */
+export function embedTenantRefusesByok(
+  cfg: Pick<EmbedTenantConfig, "llmAccess" | "showByok"> | null | undefined,
+): boolean {
+  if (!cfg) return false;
+  return cfg.llmAccess === "operator" && cfg.showByok !== true;
+}
+
 /** Plan-tier ordering for the runtime tier gate (lower index = lower tier). */
 const PLAN_TIER_ORDER = ["free", "brief", "desk", "studio", "enterprise"] as const;
 

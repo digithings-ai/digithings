@@ -265,3 +265,19 @@ describe("slash palette in every registered skin", () => {
     await unmount();
   });
 });
+
+describe("base skin model picker under a chat host", () => {
+  it("shows the session model and opens the host's models menu, not the demo list", async () => {
+    const view = await mount("base");
+    try {
+      const chip = document.querySelector<HTMLButtonElement>(
+        "[data-deploy-model-picker] button[aria-label='Open models']",
+      );
+      expect(chip).not.toBeNull();
+      expect(document.body.textContent ?? "").not.toContain("GPT-5.6 Luna");
+      expect(document.body.textContent ?? "").not.toContain("GPT-5.6 Terra");
+    } finally {
+      await view.unmount();
+    }
+  });
+});

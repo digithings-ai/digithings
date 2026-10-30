@@ -46,6 +46,7 @@ import {
 } from "./elements/quote.aui";
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
 import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
+import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarMorePrimitive,
@@ -68,6 +69,7 @@ import {
   ArrowUpIcon,
   ChartColumnIcon,
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CloudSunIcon,
@@ -102,7 +104,39 @@ import { DEFAULT_MODEL_ID } from "./model";
 
 const models = docsModelOptions();
 
+/** Display label for a model id: the part after the vendor prefix. */
+export function modelChipLabel(model: string): string {
+  const id = model.trim();
+  if (!id) return "auto";
+  return id.slice(id.lastIndexOf("/") + 1);
+}
+
+/**
+ * Inside a host with chat prefs the chip is the real picker: it shows the
+ * session model and opens the host's models menu (the same list `/models`
+ * shows). The demo selector only renders without a host (the catalog).
+ */
 const ModelPicker: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  if (prefs) {
+    if (!prefs.showModels) return null;
+    return (
+      <div data-deploy-model-picker>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="aui-model-chip text-muted-foreground hover:text-foreground h-7 max-w-48 gap-1 rounded-full px-2.5 text-xs"
+          onClick={prefs.openModels}
+          aria-label="Open models"
+          title={prefs.prefs.model.trim() || "auto"}
+        >
+          <span className="truncate">{modelChipLabel(prefs.prefs.model)}</span>
+          <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+        </Button>
+      </div>
+    );
+  }
   return (
     <div data-deploy-model-picker>
     <ModelSelector

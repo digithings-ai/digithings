@@ -187,7 +187,7 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args px-4", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value whitespace-pre-wrap">{argsText}</pre>
+      <pre className="aui-tool-fallback-args-value whitespace-pre-wrap max-h-72 overflow-auto break-words overscroll-contain">{argsText}</pre>
     </div>
   );
 }
@@ -208,7 +208,7 @@ function ToolFallbackResult({
       {...props}
     >
       <p className="aui-tool-fallback-result-header font-semibold">Result:</p>
-      <pre className="aui-tool-fallback-result-content whitespace-pre-wrap">
+      <pre className="aui-tool-fallback-result-content whitespace-pre-wrap max-h-72 overflow-auto break-words overscroll-contain">
         {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
       </pre>
     </div>

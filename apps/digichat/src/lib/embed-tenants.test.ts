@@ -1350,3 +1350,19 @@ describe("lockSessionControls (DIG-1210)", () => {
     expect(() => parseEmbedTenants(JSON.stringify(entry("yes")))).toThrow(/lockSessionControls/);
   });
 });
+
+describe("embedTenantRefusesByok", () => {
+  it("refuses a visitor key on an operator tenant without the BYOK surface", async () => {
+    const { embedTenantRefusesByok } = await import("./embed-tenants");
+    expect(embedTenantRefusesByok({ llmAccess: "operator" })).toBe(true);
+    expect(embedTenantRefusesByok({ llmAccess: "operator", showByok: false })).toBe(true);
+  });
+
+  it("keeps BYOK where the tenant offers it or is not operator-paid", async () => {
+    const { embedTenantRefusesByok } = await import("./embed-tenants");
+    expect(embedTenantRefusesByok({ llmAccess: "operator", showByok: true })).toBe(false);
+    expect(embedTenantRefusesByok({ llmAccess: "free_then_byok", showByok: true })).toBe(false);
+    expect(embedTenantRefusesByok({ llmAccess: "free_then_byok" })).toBe(false);
+    expect(embedTenantRefusesByok(null)).toBe(false);
+  });
+});

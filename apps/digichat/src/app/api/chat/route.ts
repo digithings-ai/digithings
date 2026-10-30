@@ -78,7 +78,7 @@ import {
   resolveAnonymousDeploymentChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { embedTenantRefusesByok, isPlanTierSatisfied } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
 import {
@@ -140,6 +140,17 @@ export async function POST(req: Request) {
   const { tenantSlug, ownerUserSub } = tenantCtx;
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const embedConfig = embedConfigOf(tenantCtx);
+  // An operator-paid tenant without the BYOK surface takes no visitor key:
+  // refuse it here rather than only hiding the menu.
+  if (byokKey && embedTenantRefusesByok(embedConfig)) {
+    return new Response(
+      JSON.stringify({
+        error: "byok_disabled",
+        message: "This chat does not accept your own API key.",
+      }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
 
   // Resolve the deployment before the request limiter. The limiter is
   // per deployment (`guardrails.rateLimit`), and an own key skips it.
