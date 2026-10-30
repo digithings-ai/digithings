@@ -79,3 +79,24 @@ describe("tenant colors", () => {
     expect(TENANT_HEADING_FONT_CSS).toContain("font-family:var(--font-heading)");
   });
 });
+
+describe("tenant surface reaches the shadcn hover and secondary fills", () => {
+  it("derives --muted and --secondary off the surface toward the text, distinct from --popover", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#3d3d3d", text: "#fafafa" }));
+    expect(vars["--popover"]).toBe("#3d3d3d");
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #3d3d3d 92%, #fafafa)");
+    expect(vars["--secondary"]).toBe(vars["--muted"]);
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
+    expect(vars["--secondary-foreground"]).toBe("#fafafa");
+  });
+
+  it("mixes toward the theme foreground when the tenant sets no text colour", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#f6f6f6" }));
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #f6f6f6 92%, var(--foreground))");
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
+  });
+
+  it("sets no --muted without a surface", () => {
+    expect(Object.fromEntries(tenantColorVars({ text: "#111111" }))["--muted"]).toBeUndefined();
+  });
+});

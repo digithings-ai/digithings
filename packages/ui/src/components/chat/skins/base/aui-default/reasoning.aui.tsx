@@ -7,7 +7,7 @@ import {
   type ReasoningMessagePartComponent,
   type ReasoningGroupComponent,
 } from "@assistant-ui/react";
-import { MarkdownText } from "../../../stock/markdown-text";
+import { MarkdownText } from "../markdown-text";
 import {
   ANIMATION_DURATION,
   ReasoningRoot as ReasoningRootBase,

@@ -244,8 +244,8 @@ export const modelSelectorTriggerVariants = cva(
     variants: {
       variant: {
         outline:
-          "border-input hover:bg-accent hover:text-accent-foreground border bg-transparent",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+          "border-input hover:bg-muted hover:text-foreground border bg-transparent",
+        ghost: "hover:bg-muted hover:text-foreground",
         muted: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
       },
       size: {
@@ -681,8 +681,8 @@ function ModelSelectorEffort({
             key={option.id}
             value={option.id}
             className={cn(
-              "focus-visible:ring-ring/50 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-md px-2 py-1 text-xs transition-colors outline-none focus-visible:ring-1",
-              "data-checked:bg-accent data-checked:text-accent-foreground data-checked:font-medium",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-md px-2 py-1 text-xs transition-colors outline-none",
+              "data-checked:bg-muted data-checked:text-foreground data-checked:font-medium",
             )}
           >
             {option.name}

@@ -75,3 +75,25 @@ export function tenantFontStyle(fonts: TenantFonts | null | undefined): CSSPrope
  */
 export const TENANT_HEADING_FONT_CSS =
   "[data-tenant-heading-font] :is(.aui-thread-welcome-message-inner,.aui-md-h1,.aui-md-h2,.aui-md-h3,.aui-md-h4){font-family:var(--font-heading)}";
+
+/**
+ * Overlays (tooltips, popovers, menus, dialogs) portal to <body>, outside the
+ * wrapper that carries the inline font variables, so they fell back to the
+ * page face (Inter). This rule gives the portaled overlay slots the tenant's
+ * body face. It skips a page running the digichat skin, which pins its own
+ * mono face. Fonts only: no colours, no shapes. "" when the tenant sets no
+ * body face.
+ */
+export const TENANT_OVERLAY_SLOTS = [
+  "[data-slot=tooltip-content]",
+  "[data-slot=popover-content]",
+  "[data-slot=dropdown-menu-content]",
+  "[data-slot=dialog-content]",
+  "[data-slot=hover-card-content]",
+  "[data-slot=select-content]",
+] as const;
+
+export function tenantOverlayFontCss(fonts: TenantFonts | null | undefined): string {
+  if (!fonts?.body) return "";
+  return `html:not(:has([data-thread-skin="digichat"])) :is(${TENANT_OVERLAY_SLOTS.join(",")}){font-family:${stack(fonts.body)}}`;
+}
