@@ -269,7 +269,7 @@ describe("boot config re-read window", () => {
 
     await container.fetch(chatRequest());
     // One window = one read of each key.
-    expect(kv.reads).toEqual(["embed-tenants", "config-yaml"]);
+    expect(kv.reads).toEqual(["embed-tenants", "config-yaml", "gated-claims"]);
     expect(servedToken(container)).toBe("first");
     expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe(DOC_A);
 
@@ -281,7 +281,14 @@ describe("boot config re-read window", () => {
     await container.fetch(chatRequest());
 
     // The count rose, and the value the container now gets is the edited one.
-    expect(kv.reads).toEqual(["embed-tenants", "config-yaml", "embed-tenants", "config-yaml"]);
+    expect(kv.reads).toEqual([
+      "embed-tenants",
+      "config-yaml",
+      "gated-claims",
+      "embed-tenants",
+      "config-yaml",
+      "gated-claims",
+    ]);
     expect(servedToken(container)).toBe("second");
     expect(container.envVars.DIGICHAT_CONFIG_YAML).toBe(DOC_B);
   });
@@ -300,7 +307,7 @@ describe("boot config re-read window", () => {
     now += BOOT_CONFIG_TTL_MS - 1;
     await container.fetch(chatRequest());
 
-    expect(kv.reads).toHaveLength(2);
+    expect(kv.reads).toHaveLength(3);
     expect(servedToken(container)).toBe("first");
   });
 
@@ -313,7 +320,7 @@ describe("boot config re-read window", () => {
 
     // Single-flight: both requests are served, KV is read once per key, so a
     // burst on a cold window cannot stampede the namespace.
-    expect(kv.reads).toEqual(["embed-tenants", "config-yaml"]);
+    expect(kv.reads).toEqual(["embed-tenants", "config-yaml", "gated-claims"]);
     expect(hooks.containerFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -346,7 +353,7 @@ describe("boot config re-read window", () => {
     now += BOOT_CONFIG_TTL_MS;
     await container.fetch(chatRequest());
 
-    expect(kv.reads).toHaveLength(4);
+    expect(kv.reads).toHaveLength(6);
     expect(servedToken(container)).toBe("first");
   });
 
@@ -358,15 +365,65 @@ describe("boot config re-read window", () => {
     vi.spyOn(Date, "now").mockImplementation(() => now);
 
     await container.fetch(chatRequest());
-    expect(kv.reads).toHaveLength(2);
+    expect(kv.reads).toHaveLength(3);
 
     container.onStop();
     kv.values["embed-tenants"] = tenants("after-stop");
     // Same instant: only onStop() can make this re-read.
     await container.fetch(chatRequest());
 
-    expect(kv.reads).toHaveLength(4);
+    expect(kv.reads).toHaveLength(6);
     expect(servedToken(container)).toBe("after-stop");
+  });
+
+  const CLAIM_A = { slug: "example", chatSlug: "example", host: "example.digithings.test" };
+  const CLAIM_B = { slug: "example-b", chatSlug: "example-b", host: "b.example.com" };
+
+  it("forwards the durable gated claims from KV to the container", async () => {
+    const kv = countingKv({
+      "embed-tenants": tenants("first"),
+      "config-yaml": DOC_A,
+      "gated-claims": JSON.stringify([CLAIM_A, { slug: "bad slug" }]),
+    });
+    stubEnv.DIGICHAT_TENANTS_KV = kv;
+    const container = newContainer();
+    vi.spyOn(Date, "now").mockImplementation(() => 5_000_000);
+
+    await container.fetch(chatRequest());
+
+    expect(JSON.parse(container.envVars.DIGICHAT_GATED_CLAIMS ?? "")).toEqual([CLAIM_A]);
+  });
+
+  it("only adds claims: a later empty or failed read keeps the ones already forwarded", async () => {
+    const kv = countingKv({
+      "embed-tenants": tenants("first"),
+      "config-yaml": DOC_A,
+      "gated-claims": JSON.stringify([CLAIM_A]),
+    });
+    stubEnv.DIGICHAT_TENANTS_KV = kv;
+    const container = newContainer();
+    let now = 6_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    await container.fetch(chatRequest());
+
+    // The key is emptied: the claim stays.
+    kv.values["gated-claims"] = "";
+    now += BOOT_CONFIG_TTL_MS;
+    await container.fetch(chatRequest());
+    expect(JSON.parse(container.envVars.DIGICHAT_GATED_CLAIMS ?? "")).toEqual([CLAIM_A]);
+
+    // A new claim is added; KV then fails: both stay.
+    kv.values["gated-claims"] = JSON.stringify([CLAIM_B]);
+    now += BOOT_CONFIG_TTL_MS;
+    await container.fetch(chatRequest());
+    kv.get = async (key: string) => {
+      kv.reads.push(key);
+      throw new Error("kv down");
+    };
+    now += BOOT_CONFIG_TTL_MS;
+    const res = await container.fetch(chatRequest());
+    expect(res.status).toBe(200);
+    expect(JSON.parse(container.envVars.DIGICHAT_GATED_CLAIMS ?? "")).toEqual([CLAIM_A, CLAIM_B]);
   });
 });
 
