@@ -165,6 +165,73 @@ describe("composeCorpusMapWithKv: slugs are judged as the consumers read them", 
   });
 });
 
+describe("composeCorpusMapWithKv: only slugs digigraph accepts ship", () => {
+  const EVIL = { digisearchIndex: "stolen", vaultPathPrefix: "clients/other/", webSearchDomains: ["x.example"] };
+  const house = JSON.parse(HOUSE).digithings;
+  // Python str.strip() removes these but JS trim() does not, so without the
+  // slug rule they reach a consumer as the house tenant.
+  const SNEAKY = [
+    "\u001cdigithings",
+    "digithings\u001f",
+    "\u0085digithings-ai",
+    "\u001ddigithings-ai\u001e",
+    "DIGITHIN\u212aS-ai",
+  ];
+
+  it("drops control-character and non-ASCII house look-alikes from KV, with a warning", () => {
+    for (const slug of SNEAKY) {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const out = JSON.parse(
+        composeCorpusMapWithKv(HOUSE, LEGACY, JSON.stringify({ [slug]: EVIL, "tenant-b": PINNED })),
+      );
+      expect(Object.keys(out)).toEqual(["digithings", "digithings-ai", "tenant-a", "tenant-b"]);
+      expect(out.digithings).toEqual(house);
+      expect(out["digithings-ai"]).toEqual(house);
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    }
+  });
+
+  it("drops the same look-alikes from the private secret, with a warning", () => {
+    for (const slug of SNEAKY) {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const priv = JSON.stringify({ [slug]: EVIL, "tenant-a": { digisearchIndex: "a" } });
+      for (const kv of [null, JSON.stringify({ "tenant-b": PINNED })]) {
+        const out = JSON.parse(composeCorpusMapWithKv(HOUSE, priv, kv));
+        expect(out.digithings).toEqual(house);
+        expect(out["digithings-ai"]).toEqual(house);
+        expect(out["tenant-a"]).toEqual({ digisearchIndex: "a" });
+        expect(Object.keys(out).every((k) => /^[a-z0-9][a-z0-9-]*$/.test(k))).toBe(true);
+      }
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    }
+  });
+
+  it("drops slugs that fail digigraph's rule even when they are not house look-alikes", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw = JSON.stringify({ "-lead": EVIL, "a_b": EVIL, "a.b": EVIL, "a b": EVIL, "tenant-b": PINNED });
+    const out = JSON.parse(composeCorpusMapWithKv(HOUSE, LEGACY, raw));
+    expect(Object.keys(out)).toEqual(["digithings", "digithings-ai", "tenant-a", "tenant-b"]);
+    expect(warn).toHaveBeenCalledTimes(4);
+  });
+
+  it("logs a hash tag and a reason, never the rejected slug itself", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw = JSON.stringify({
+      "Secret-Client": EVIL,
+      " secret-client": EVIL,
+      "\u001csecret-client-two": EVIL,
+      DIGITHINGS: EVIL,
+    });
+    composeCorpusMapWithKv(HOUSE, LEGACY, raw);
+    const logged = warn.mock.calls.map((c) => c.map(String).join(" ")).join("\n");
+    expect(logged.toLowerCase()).not.toContain("secret-client");
+    expect(logged.toLowerCase()).not.toContain("digithings\"");
+    expect(logged).toMatch(/#[0-9a-f]{8}/);
+  });
+});
+
 describe("readTenantCorpusMapKv", () => {
   it("reads the one key, and treats a missing binding or KV error as no value", async () => {
     const seen: string[] = [];

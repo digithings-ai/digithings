@@ -279,17 +279,44 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
 
 /**
  * The form every consumer keys a tenant by: digigraph's corpus routing and
- * digivault's tenant scope both trim and lower-case the slug (last wins), so
- * the Worker must judge collisions on this form, not on the raw JSON key.
+ * digivault's tenant scope both `strip()` and `lower()` the slug (last wins),
+ * so the Worker must judge collisions on this form, not on the raw JSON key.
  */
 export function normalizeTenantSlug(slug: string): string {
   return slug.trim().toLowerCase();
 }
 
+/** digigraph's own slug rule (`_SLUG` in digigraph/corpus_routing.py). */
+const TENANT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * JS `trim()` and Python `str.strip()` disagree outside ASCII whitespace
+ * (Python also strips U+001C-U+001F and U+0085; `lower()` folds some non-ASCII
+ * letters to ASCII). Accepting only all-ASCII raw keys whose normalised form
+ * passes digigraph's rule makes the two normalisations agree on every key that
+ * ships.
+ */
+const ASCII_ONLY_RE = /^[\x00-\x7f]*$/;
+
+/**
+ * Short, stable tag for a rejected slug (FNV-1a 32-bit), so a warning can say
+ * which key was dropped without writing a tenant name into the Worker logs.
+ */
+function slugTag(raw: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i += 1) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `#${h.toString(16).padStart(8, "0")}`;
+}
+
 /**
  * Client (non-house) entries keyed by their normalised slug, safe to merge
- * under the house map. Dropped with one warning each:
- * - a slug that is blank once trimmed;
+ * under the house map. Dropped with one warning each (a hash tag and a reason,
+ * never the raw slug):
+ * - a slug whose raw key is not all ASCII, or whose normalised form fails
+ *   digigraph's `^[a-z0-9][a-z0-9-]*$` (blank, control characters, ...);
  * - a slug that normalises to a house slug (`digithings`, `digithings-ai`),
  *   because a consumer would otherwise read it as the house tenant;
  * - every slug in a group that normalises to the same value (`Acme` and
@@ -301,21 +328,23 @@ export function sanitizeClientCorpusMap(
   map: TenantCorpusMap | undefined,
   label: string,
 ): TenantCorpusMap {
+  const drop = (raws: string[], reason: string) =>
+    console.warn(`[tenant-config] ${label}: dropping slug ${raws.map(slugTag).join(",")}: ${reason}`);
   const groups = new Map<string, string[]>();
   for (const raw of Object.keys(map ?? {})) {
     const norm = normalizeTenantSlug(raw);
+    if (!ASCII_ONLY_RE.test(raw) || !TENANT_SLUG_RE.test(norm)) {
+      drop([raw], "not a valid tenant slug");
+      continue;
+    }
     groups.set(norm, [...(groups.get(norm) ?? []), raw]);
   }
   const out: TenantCorpusMap = {};
   for (const [norm, raws] of groups) {
-    if (norm === "") {
-      console.warn(`[tenant-config] ${label}: dropping a blank tenant slug`);
-    } else if (norm === HOUSE_TENANT_SLUG || norm === LIVE_HOUSE_TENANT_SLUG) {
-      console.warn(`[tenant-config] ${label}: dropping ${JSON.stringify(raws)}, which names the house tenant`);
+    if (norm === HOUSE_TENANT_SLUG || norm === LIVE_HOUSE_TENANT_SLUG) {
+      drop(raws, "names the house tenant");
     } else if (raws.length > 1) {
-      console.warn(
-        `[tenant-config] ${label}: dropping ${JSON.stringify(raws)}, which collide as ${JSON.stringify(norm)}`,
-      );
+      drop(raws, "slugs collide once trimmed and lower-cased");
     } else {
       out[norm] = (map as TenantCorpusMap)[raws[0]];
     }
