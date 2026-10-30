@@ -211,14 +211,6 @@ export function buildModelPathTree(ids: readonly string[]): ModelPathNode[] {
   return sort(root);
 }
 
-/** Folder paths that hold an id (`a/b/c` -> `a`, `a/b`). */
-export function modelFolderAncestors(id: string): string[] {
-  const parts = id.split("/").filter((part) => part.length > 0);
-  const out: string[] = [];
-  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
-  return out;
-}
-
 /** The /tools tree branch glyph for a row under a service. */
 export function treeBranchGlyph(branch: MenuRow["branch"]): string {
   if (branch === "last") return "└─";
@@ -582,8 +574,6 @@ export function EmbedComposerMenu({
   const rowPointer = useRef("");
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
   const [appliedOpen, setAppliedOpen] = useState("");
-  /** Provider headers the visitor opened or closed; null means the default. */
-  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean | undefined> | null>(null);
 
   useEffect(() => {
     mcpDraftRef.current = mcpDraft;
@@ -630,7 +620,6 @@ export function EmbedComposerMenu({
     setMcpError(null);
     setMcpSuggestIndex(-1);
     setMcpIdDropdownOpen(false);
-    setExpandedProviders(null);
   }
 
   const commitExclusive = useCallback(
@@ -731,38 +720,6 @@ export function EmbedComposerMenu({
     // provider's own models. The catalog picker is the house list.
     if (picker && !providerActive) {
       const selected = api.prefs.model;
-      const autoPreset = picker.presets.find((preset) => preset.id === "auto");
-      const selectedPreset = picker.presets.find((preset) => `preset:${preset.id}` === selected);
-      // The row to open by default: the selected model, or the Auto default.
-      const currentModel =
-        selectedPreset?.model ??
-        (selected && selected !== "auto" && !selected.startsWith("preset:")
-          ? selected
-          : undefined) ??
-        autoPreset?.model ??
-        (defaultModel?.includes("/") ? defaultModel : "");
-      // Default: the folders holding the current model are open.
-      const defaultOpen: Record<string, boolean> = {};
-      for (const path of currentModel ? modelFolderAncestors(currentModel) : []) {
-        defaultOpen[path] = true;
-      }
-      const opened = expandedProviders ?? defaultOpen;
-      const toggleProvider = (path: string) => {
-        setExpandedProviders((prev) => {
-          const base = prev ?? defaultOpen;
-          const currentlyOpen = filtering
-            ? base[path] !== false
-            : base[path] === true;
-          // During filtering the default is open, so closing stores `false`
-          // and re-opening clears back to the (open) default.
-          const next = currentlyOpen
-            ? false
-            : filtering
-              ? undefined
-              : true;
-          return { ...base, [path]: next };
-        });
-      };
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
         const token = `preset:${preset.id}`;
         const checked =
@@ -787,28 +744,31 @@ export function EmbedComposerMenu({
           },
         };
       });
-      // Provider groups as a /tools-style tree: a /provider row whose children
-      // are the raw model ids. Activating the header collapses or expands it.
-      const filtering = Boolean(api.paletteQuery?.trim());
-      const leafRow = (
-        node: Extract<ModelPathNode, { kind: "leaf" }>,
-        branch: MenuRow["branch"],
-        treePrefix: string,
-      ): MenuRow => ({
+      // One flat list of models under the modes: each row reads only the
+      // model name (the id after its provider path), sorted by provider then
+      // name. The pick, the API id and the accessible name stay the full id,
+      // and the filter matches the name or the full id (`gpt` finds
+      // `openai/gpt-6-luna`, `openai` finds every OpenAI model).
+      const leaves = (nodes: ModelPathNode[]): Extract<ModelPathNode, { kind: "leaf" }>[] =>
+        nodes.flatMap((node) => (node.kind === "leaf" ? [node] : leaves(node.children)));
+      const flat = picker.showFullList
+        ? leaves(
+            buildModelPathTree(picker.groups.flatMap((group) => group.models.map((m) => m.id))),
+          )
+        : [];
+      // Two providers can ship the same model name; only then the row keeps
+      // the full id so the two stay tellable apart.
+      const nameCount = new Map<string, number>();
+      for (const leaf of flat) nameCount.set(leaf.name, (nameCount.get(leaf.name) ?? 0) + 1);
+      const groupRows: MenuRow[] = flat.map((node) => ({
         id: node.id,
-        // The row reads the last path segment. The selected value, the API
-        // id and the toolbar name stay the full id. The accessible name keeps
-        // the full raw id so assistive tech keeps the provider association.
         ariaLabel: node.id,
-        label: node.name,
+        label: (nameCount.get(node.name) ?? 0) > 1 ? node.id : node.name,
         value: "",
         checked: selected === node.id,
         exclusive: true,
-        branch,
-        treePrefix,
         insert: optionDraft("/models", node.id),
         token: node.id,
-        // `gpt` finds `openai/gpt-6-luna`: the filter matches prefixes.
         aliases: node.name !== node.id ? [node.name] : [],
         activate: () => {
           commitExclusive(() => {
@@ -816,43 +776,7 @@ export function EmbedComposerMenu({
             onPickSessionModel?.(node.id);
           });
         },
-      });
-      const treeRows = (nodes: ModelPathNode[], depth: number, rails: string): MenuRow[] =>
-        nodes.flatMap((node, index): MenuRow[] => {
-          const last = index === nodes.length - 1;
-          // Top level has no glyph (like a /tools service or a bare id).
-          const branch: MenuRow["branch"] = depth === 0 ? undefined : last ? "last" : "mid";
-          const prefix = depth === 0 ? "" : rails;
-          if (node.kind === "leaf") return [leafRow(node, filtering ? undefined : branch, prefix)];
-          // A typed filter searches every folder at every depth.
-          // Filtering force-opens every folder by default, but a manual toggle
-          // still wins, so the header is not a visible no-op while filtering.
-          const open = filtering
-            ? opened[node.path] !== false
-            : opened[node.path] === true;
-          const header: MenuRow = {
-            id: `folder:${node.path}`,
-            label: `/${node.name}`,
-            value: "",
-            expanded: open,
-            branch,
-            treePrefix: prefix,
-            token: node.path,
-            activate: () => {
-              toggleProvider(node.path);
-            },
-          };
-          if (!open) return [header];
-          const childRails = depth === 0 ? "" : `${rails}${last ? "   " : "│  "}`;
-          return [header, ...treeRows(node.children, depth + 1, childRails)];
-        });
-      const groupRows: MenuRow[] = picker.showFullList
-        ? treeRows(
-            buildModelPathTree(picker.groups.flatMap((group) => group.models.map((m) => m.id))),
-            0,
-            "",
-          )
-        : [];
+      }));
       if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
     }
     // Auto is only a real option when the deployment default is Auto (no
@@ -893,32 +817,30 @@ export function EmbedComposerMenu({
     }
     return [
       ...autoRows,
-      ...available.map((id) => ({
-        id,
-        label: id,
-        value: "",
-        checked: (providerActive?.model || api.prefs.model) === id,
-        exclusive: true,
-        insert: optionDraft("/models", id),
-        token: id,
-        activate: () => {
-          commitExclusive(() => {
-            api.setModel(id);
-            onPickSessionModel?.(id);
-          });
-        },
-      })),
+      ...available.map((id, _i, all) => {
+        const name = id.slice(id.lastIndexOf("/") + 1);
+        const clash =
+          all.filter((other) => other.slice(other.lastIndexOf("/") + 1) === name).length > 1;
+        return {
+          id,
+          ariaLabel: id,
+          label: clash ? id : name,
+          aliases: name !== id ? [name] : [],
+          value: "",
+          checked: (providerActive?.model || api.prefs.model) === id,
+          exclusive: true,
+          insert: optionDraft("/models", id),
+          token: id,
+          activate: () => {
+            commitExclusive(() => {
+              api.setModel(id);
+              onPickSessionModel?.(id);
+            });
+          },
+        };
+      }),
     ];
-  }, [
-    available,
-    api,
-    commitExclusive,
-    defaultModel,
-    expandedProviders,
-    onPickSessionModel,
-    picker,
-    providerActive,
-  ]);
+  }, [available, api, commitExclusive, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -2120,6 +2042,7 @@ export function EmbedComposerMenu({
                     aria-describedby={selected ? detailId : undefined}
                     aria-label={row.ariaLabel}
                     data-cursor={selected ? "true" : undefined}
+                    data-slot="composer-menu-row"
                     className={MENU_ROW_CLASS}
                     ref={(node) => {
                       if (selected) node?.scrollIntoView({ block: "nearest" });

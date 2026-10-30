@@ -39,8 +39,11 @@
   text-align: start;
 }
 
+/* One row style for the slash palette and every composer menu page (theme,
+   view, density, language, models...): same inset, radius, padding. */
 [data-skin-palette-composer] .skin-palette.skin-palette [data-slot="composer-trigger-popover-item"],
-[data-skin-palette-composer] .skin-palette.skin-palette [role="option"] {
+[data-skin-palette-composer] .skin-palette.skin-palette [role="option"],
+[data-skin-palette-composer] .dc-composer-menu.dc-composer-menu [data-slot="composer-menu-row"] {
   margin-inline: 0.25rem;
   width: calc(100% - 0.5rem);
   border-radius: 0.5rem;
@@ -52,7 +55,8 @@
 /* A neutral wash mixed from the popover's own colours. --accent is not used:
    brand accent themes repoint it to a saturated colour. */
 [data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted],
-[data-skin-palette-composer] .dc-composer-menu [data-cursor="true"] {
+[data-skin-palette-composer] .dc-composer-menu [data-cursor="true"],
+[data-skin-palette-composer] .dc-composer-menu.dc-composer-menu [data-slot="composer-menu-row"][data-cursor="true"] {
   background: color-mix(in oklab, var(--ink) 9%, var(--bg));
   color: var(--ink);
   outline: none;
