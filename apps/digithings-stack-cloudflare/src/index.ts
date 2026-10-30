@@ -62,7 +62,7 @@ import { mcpEdgeTarget } from "./mcp-edge-target";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 import { composeCorpusMap } from "./tenant-config";
-import { readTenantFilesEnv } from "./tenant-files";
+import { applyTenantFilesEnv, readTenantFilesEnv } from "./tenant-files";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
 // the file is dependency-free constants, so it cannot fail independently of
@@ -235,7 +235,8 @@ export class DigiStackContainer extends Container {
     // container's env from KV (./tenant-files; no key = byte-identical env).
     // A running container already has them, so a warm request reads nothing.
     if (!this.ctx.container?.running) {
-      Object.assign(this.envVars, await readTenantFilesEnv(env.TENANT_CONFIG));
+      // Replace, not merge: a shrunk or removed bundle must not leave stale chunks.
+      applyTenantFilesEnv(this.envVars, await readTenantFilesEnv(env.TENANT_CONFIG));
     }
     try {
       await this.startAndWaitForPorts({

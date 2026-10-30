@@ -66,7 +66,6 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_WEBSETS_EXPORT,
     TOOL_DIGISEARCH_WEBSETS_GET,
     TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS,
-    TOOL_WEB_FETCH,
     TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
@@ -1404,9 +1403,15 @@ def api_orchestrator_invoke(
             data=ResearchTurnOutput.model_validate(body),
         )
 
-    if tool == TOOL_WEB_FETCH:
-        # One page inside a pinned tenant's site fence (web_search/fenced_fetch.py):
-        # the fence is required and enforced on every redirect hop.
+    if (
+        tool == TOOL_WEB_SEARCH
+        and args.get("url")
+        and isinstance(args.get("fence"), list)
+        and args["fence"]
+    ):
+        # Open-page mode of web_search, pinned tenants only: read one page inside
+        # the tenant's site fence (web_search/fenced_fetch.py), enforced on every
+        # redirect hop. Without a fence ``url`` is ignored, exactly as before.
         from digisearch.web_search.fenced_fetch import invoke_web_fetch
 
         env = invoke_web_fetch(args)

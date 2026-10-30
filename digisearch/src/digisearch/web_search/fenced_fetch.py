@@ -1,6 +1,7 @@
 """Open one page for a pinned tenant: fetch it inside the tenant's site fence.
 
-``web_fetch`` is the "open this URL" half of a pinned tenant's web tools. It
+This is the open-page mode of ``web_search`` (``url`` + ``fence`` arguments),
+which only a pinned tenant's tool definition offers. It
 reads one full page on an allowed site, so the model can follow links and
 discover subdomains instead of seeing only search snippets. Never indexes.
 
@@ -8,6 +9,12 @@ The fence (``fence.py``) is enforced on the requested URL and on **every
 redirect hop** (digifetch ``url_guard``), after the SSRF guard. A hop outside
 the fence stops the fetch: off-fence content never comes back. Links found on
 the page are returned only when they are themselves inside the fence.
+
+The fetch is bounded: a byte cap on the streamed body
+(``MAX_PAGE_BYTES``), a text-only content-type allowlist
+(``ALLOWED_CONTENT_TYPES``) and one overall deadline across every hop and
+chunk (``FETCH_DEADLINE_S``). These apply to this path only; digifetch's
+defaults are unchanged.
 
 A live page behind a bot challenge (or a failed fetch) falls back to the
 tenant's pre-crawled page corpus when one is named, exactly like web_search
@@ -18,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -35,7 +43,14 @@ from digisearch.web_search.page_corpus import corpus_page_text, is_challenge_pag
 
 logger = logging.getLogger(__name__)
 
-TOOL_WEB_FETCH = "web_fetch"
+#: Largest page body read (bytes); the stream stops past this.
+MAX_PAGE_BYTES = 3 * 1024 * 1024
+#: Whole fetch (all redirect hops and body chunks), seconds.
+FETCH_DEADLINE_S = 20.0
+#: Media types read as a page. A missing Content-Type is treated as HTML.
+ALLOWED_CONTENT_TYPES = frozenset(
+    {"text/html", "application/xhtml+xml", "text/plain", "text/markdown"}
+)
 #: Default and ceiling for the page text handed back (characters).
 DEFAULT_MAX_CHARS = 12000
 MAX_CHARS_CEILING = 40000
@@ -55,7 +70,7 @@ class WebFetchRequest(BaseModel):
 
 
 class WebFetchData(BaseModel):
-    """One fetched page (the ``data`` of a ``web_fetch`` orchestrator call)."""
+    """One opened page (the ``data`` of an open-page ``web_search`` call)."""
 
     url: str
     final_url: str
@@ -181,11 +196,15 @@ def fetch_page(req: WebFetchRequest, *, fetcher: Any | None = None) -> dict[str,
     config = WebSearchConfig.from_env()
     owns = fetcher is None
     active = fetcher or HttpFetcher(
-        timeout=config.fetch_timeout, allowed_hosts=config.fetch_allowed_hosts
+        timeout=min(config.fetch_timeout, FETCH_DEADLINE_S),
+        max_bytes=MAX_PAGE_BYTES,
+        allowed_hosts=config.fetch_allowed_hosts,
     )
+    deadline = time.monotonic() + FETCH_DEADLINE_S
     try:
         try:
-            fetched = active.fetch(req.url, url_guard=fence_guard(pins))
+            fetched = active.download(req.url, url_guard=fence_guard(pins), deadline=deadline)
+            html = _page_text(fetched.content, fetched.content_type)
         except FenceRefusedError:
             # A redirect left the fence (e.g. to a login host): nothing from
             # the far side is returned, not even through the corpus.
@@ -195,14 +214,13 @@ def fetch_page(req: WebFetchRequest, *, fetcher: Any | None = None) -> dict[str,
             if fallback is not None:
                 return fallback
             raise
-        html = fetched.text or ""
         if is_challenge_page(fetched.status_code, fetched.url, html):
             fallback = _from_corpus(req, pins, "live page is a bot challenge")
             if fallback is not None:
                 return fallback
             raise RuntimeError("the live page is a bot challenge and no saved copy exists")
         md = extract_markdown(html, url=fetched.url) or ""
-        # Builder/SPA pages (e.g. a LearnWorlds academy) defeat the article
+        # Site-builder / SPA pages defeat the article
         # extractor: keep the page's visible text when it holds far more.
         visible = _visible_text(html)
         if len(visible) > 3 * max(len(md), 300):
@@ -211,7 +229,7 @@ def fetch_page(req: WebFetchRequest, *, fetcher: Any | None = None) -> dict[str,
         try:
             parser.feed(html)
         except Exception:  # malformed HTML: keep the text, lose the links
-            logger.info("web_fetch: link parse failed for %s", fetched.url)
+            logger.info("open page: link parse failed for %s", fetched.url)
         if not md.strip():
             fallback = _from_corpus(req, pins, "no readable text on the live page")
             if fallback is not None:
@@ -230,8 +248,36 @@ def fetch_page(req: WebFetchRequest, *, fetcher: Any | None = None) -> dict[str,
             active.close()
 
 
+class UnsupportedContentError(ValueError):
+    """The page is not text (a PDF, image, archive, ...) or is over the byte cap."""
+
+
+def _page_text(content: bytes, content_type: str | None) -> str:
+    """Decode a text page body; refuse non-text media types and oversize bodies.
+
+    The cap is re-checked here so an injected fetcher (whatever its own
+    ``max_bytes``) is held to the same limit.
+    """
+    raw_type = (content_type or "").strip()
+    media, _, params = raw_type.partition(";")
+    media = media.strip().lower()
+    if media and media not in ALLOWED_CONTENT_TYPES:
+        raise UnsupportedContentError(f"not a text page (content type {media})")
+    if len(content) > MAX_PAGE_BYTES:
+        raise UnsupportedContentError(f"page is larger than {MAX_PAGE_BYTES} bytes")
+    charset = "utf-8"
+    for param in params.split(";"):
+        key, _, value = param.partition("=")
+        if key.strip().lower() == "charset" and value.strip():
+            charset = value.strip().strip('"').strip("'")
+    try:
+        return content.decode(charset, errors="replace")
+    except LookupError:  # unknown charset label
+        return content.decode("utf-8", errors="replace")
+
+
 def invoke_web_fetch(arguments: dict[str, Any], *, fetcher: Any | None = None) -> dict[str, Any]:
-    """Orchestrator envelope for ``web_fetch``: ``{"ok", "data"|"error"}``. Never raises."""
+    """Orchestrator envelope for open-page ``web_search``: ``{"ok", "data"|"error"}``. Never raises."""
     try:
         req = WebFetchRequest(
             **{k: v for k, v in arguments.items() if k in WebFetchRequest.model_fields}
@@ -239,7 +285,7 @@ def invoke_web_fetch(arguments: dict[str, Any], *, fetcher: Any | None = None) -
     except ValidationError as exc:
         from digisearch.web_search.models import summarize_validation_error
 
-        return {"ok": False, "error": f"invalid web_fetch input: {summarize_validation_error(exc)}"}
+        return {"ok": False, "error": f"invalid open-page input: {summarize_validation_error(exc)}"}
     try:
         return {"ok": True, "data": fetch_page(req, fetcher=fetcher)}
     except FenceRefusedError as exc:
@@ -248,4 +294,4 @@ def invoke_web_fetch(arguments: dict[str, Any], *, fetcher: Any | None = None) -
         from digisearch.web_search.service import _scrub_provider_detail
 
         detail = _scrub_provider_detail(str(exc) or type(exc).__name__)
-        return {"ok": False, "error": f"web_fetch failed: {detail[:300]}"}
+        return {"ok": False, "error": f"open page failed: {detail[:300]}"}

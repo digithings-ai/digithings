@@ -86,3 +86,31 @@ export async function readTenantFilesEnv(
     return {};
   }
 }
+
+/** Env keys this module owns: the chunks, the part count and the two reader dirs. */
+export function isTenantFilesEnvKey(key: string): boolean {
+  return (
+    /^DIGI_TENANT_FILES_(\d+|PARTS)$/.test(key) ||
+    key === "DIGIGRAPH_WEB_SEARCH_SITES_DIR" ||
+    key === "DIGISEARCH_PAGE_CORPUS_DIR"
+  );
+}
+
+/**
+ * Replace (not merge) the tenant-files env on a container's env vars.
+ *
+ * The Durable Object keeps `envVars` across cold starts, so a plain merge
+ * would keep stale chunks after the KV bundle shrinks or is removed (an old
+ * `DIGI_TENANT_FILES_2` beside a new 2-part bundle, or the dirs of a deleted
+ * bundle). Every key this module owns is dropped first, then the fresh env is
+ * applied; nothing else on `target` is touched.
+ */
+export function applyTenantFilesEnv(
+  target: Record<string, string>,
+  fresh: Record<string, string>,
+): Record<string, string> {
+  for (const key of Object.keys(target)) {
+    if (isTenantFilesEnvKey(key)) delete target[key];
+  }
+  return Object.assign(target, fresh);
+}

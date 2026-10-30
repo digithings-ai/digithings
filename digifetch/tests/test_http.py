@@ -444,3 +444,47 @@ def test_url_guard_runs_on_every_hop_and_stops_before_the_refused_request(monkey
         _fetcher(handler).fetch("https://a.example/", url_guard=guard)
     assert guarded == ["https://a.example/", "https://b.example/next", "https://c.example/far"]
     assert requested == ["https://a.example/", "https://b.example/next"]
+
+
+def _public_dns(monkeypatch) -> None:
+    import ipaddress
+
+    monkeypatch.setitem(
+        HttpFetcher.fetch.__globals__["validate_fetch_url"].__globals__,
+        "_resolve",
+        lambda host, port: [ipaddress.ip_address("8.8.8.8")],
+    )
+
+
+def test_download_url_guard_runs_on_every_hop(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "a.example":
+            return httpx.Response(302, headers={"location": "https://c.example/far"})
+        return httpx.Response(200, content=b"far side")
+
+    class Refused(Exception):
+        pass
+
+    def guard(url: str) -> None:
+        if "c.example" in url:
+            raise Refused(url)
+
+    with pytest.raises(Refused):
+        _fetcher(handler).download("https://a.example/", url_guard=guard)
+    assert requested == ["https://a.example/"]
+
+
+def test_download_deadline_stops_the_download(monkeypatch) -> None:
+    import time as _time
+
+    _public_dns(monkeypatch)
+    f = _fetcher(lambda r: httpx.Response(200, content=b"x" * 10))
+    with pytest.raises(TimeoutError):
+        f.download("https://a.example/", deadline=_time.monotonic() - 1)
+    # A future deadline (and the default None) download normally.
+    assert f.download("https://a.example/", deadline=_time.monotonic() + 60).content == b"x" * 10
+    assert f.download("https://a.example/").content == b"x" * 10

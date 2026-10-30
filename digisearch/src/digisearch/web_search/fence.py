@@ -12,12 +12,15 @@ fetch hop can never be wider than the one digigraph applies to results.
   subdomain; ``host/path/seg*`` admits ``/path/seg<more>`` only.
 - ``host/path?k=v`` admits that one page carrying ``k=v``.
 - A leading ``www.`` is ignored on both sides.
+- The URL path is normalised before matching: ``.`` and ``..`` segments
+  (plain or percent-encoded) are resolved, so ``/company/acme/../other`` is
+  matched as ``/other``; a segment hiding an encoded ``/`` or ``\\`` is refused.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 
 class FenceRefusedError(RuntimeError):
@@ -39,6 +42,27 @@ def _split_pin(pin: str) -> tuple[str, str]:
 def _pin_query(pin: str) -> list[tuple[str, str]]:
     _, sep, query = pin.strip().lower().partition("?")
     return parse_qsl(query, keep_blank_values=False) if sep else []
+
+
+def normalize_path(path: str) -> str | None:
+    """Lower-cased URL path with dot segments resolved and no trailing ``/``.
+
+    ``None`` when a segment decodes to something holding ``/`` or ``\\``: a
+    server may decode it into a different path than the one matched here.
+    """
+    out: list[str] = []
+    for seg in (path or "/").split("/"):
+        dec = unquote(seg)
+        if "/" in dec or "\\" in dec:
+            return None
+        if dec in ("", "."):
+            continue
+        if dec == "..":
+            if out:
+                out.pop()
+            continue
+        out.append(seg)
+    return ("/" + "/".join(out)).lower().rstrip("/")
 
 
 def clean_pins(pins: Iterable[object] | None) -> list[str]:
@@ -66,7 +90,9 @@ def url_in_fence(url: object, pins: Iterable[str]) -> bool:
         return False
     if not host:
         return False
-    path = (parts.path or "/").lower().rstrip("/")
+    path = normalize_path(parts.path)
+    if path is None:
+        return False
     for pin in pins:
         pin_host, pin_path = _split_pin(pin)
         if not pin_host or not _domain_within(host, pin_host):

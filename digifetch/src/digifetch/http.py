@@ -20,6 +20,7 @@ can send.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Iterable, Mapping
 from typing import (
     Any,  # score:allow untyped any — Playwright cookie dicts are untyped (browser optional)
@@ -185,6 +186,12 @@ def cookies_from_playwright(cookies: Iterable[Mapping[str, Any]]) -> dict[str, s
         if isinstance(name, str) and isinstance(value, str):
             out[name] = value
     return out
+
+
+def _check_deadline(deadline: float | None, url: str) -> None:
+    """Raise :class:`TimeoutError` once a caller's monotonic ``deadline`` has passed."""
+    if deadline is not None and time.monotonic() > deadline:
+        raise TimeoutError(f"download from {url} passed its deadline")
 
 
 class HttpFetcher:
@@ -399,6 +406,8 @@ class HttpFetcher:
         method: str = "GET",
         headers: Mapping[str, str] | None = None,
         cookies: Mapping[str, str] | None = None,
+        url_guard: Callable[[str], None] | None = None,
+        deadline: float | None = None,
     ) -> DownloadResult:
         """Download binary content (e.g. a PDF) with a size cap.
 
@@ -411,8 +420,15 @@ class HttpFetcher:
         Cookies, headers and the 307/308 method-preservation rule all behave
         exactly as in :meth:`fetch`.
 
+        ``url_guard`` (optional) runs on the original URL and every redirect hop
+        exactly as in :meth:`fetch`. ``deadline`` (optional, a
+        :func:`time.monotonic` instant) bounds the whole download: it is
+        checked before every hop and after every body chunk. Both default to
+        ``None``, which leaves the download unchanged.
+
         Raises:
             DownloadTooLargeError: if the body exceeds ``max_bytes``.
+            TimeoutError: if ``deadline`` passes before the body is complete.
             httpx.HTTPStatusError: on a 4xx/5xx response.
             SsrfBlockedError: if a URL or redirect hop is refused by the guard.
         """
@@ -421,6 +437,9 @@ class HttpFetcher:
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
+            if url_guard is not None:
+                url_guard(current_url)
+            _check_deadline(deadline, url)
             same_origin = _url_origin(current_url) == origin
             hop_cookies = self._hop_cookies(cookies, same_origin=same_origin)
             with self._client.stream(
@@ -446,6 +465,7 @@ class HttpFetcher:
                             f"download from {url} exceeded {self._max_bytes} bytes"
                         )
                     chunks.append(chunk)
+                    _check_deadline(deadline, url)
                 return DownloadResult(
                     status_code=response.status_code,
                     url=str(response.url),

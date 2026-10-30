@@ -504,7 +504,7 @@ def test_orchestrator_failing_web_search_surfaced_fail_hard(
 
 
 @pytest.mark.unit
-def test_orchestrator_invoke_web_fetch_returns_a_fenced_page(
+def test_orchestrator_invoke_web_search_url_mode_returns_a_fenced_page(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import digisearch.web_search.fenced_fetch as ff
@@ -528,7 +528,7 @@ def test_orchestrator_invoke_web_fetch_returns_a_fenced_page(
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
-            "tool": "web_fetch",
+            "tool": "web_search",
             "arguments": {"url": "https://academy.example/", "fence": ["example"]},
         },
     )
@@ -541,15 +541,36 @@ def test_orchestrator_invoke_web_fetch_returns_a_fenced_page(
 
 
 @pytest.mark.unit
-def test_orchestrator_invoke_web_fetch_refuses_without_a_fence(client: TestClient) -> None:
+@pytest.mark.parametrize("fence", [None, []])
+def test_orchestrator_invoke_web_search_url_without_a_fence_is_not_a_page_fetch(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, fence: list[str] | None
+) -> None:
+    import digisearch.web_search.fenced_fetch as ff
+
+    def _boom(arguments: dict) -> dict:
+        raise AssertionError("an unfenced url must never reach the page fetch")
+
+    monkeypatch.setattr(ff, "invoke_web_fetch", _boom)
+    arguments: dict = {"url": "https://example.com/"}
+    if fence is not None:
+        arguments["fence"] = fence
+    r = client.post("/v1/orchestrator_invoke", json={"tool": "web_search", "arguments": arguments})
+    assert r.status_code == 200
+    # Same as before url mode existed: no query, no search.
+    assert r.json()["ok"] is False
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_has_no_separate_web_fetch_tool(client: TestClient) -> None:
     r = client.post(
         "/v1/orchestrator_invoke",
-        json={"tool": "web_fetch", "arguments": {"url": "https://example.com/"}},
+        json={
+            "tool": "web_fetch",
+            "arguments": {"url": "https://example.com/", "fence": ["example.com"]},
+        },
     )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is False
-    assert "invalid web_fetch input" in body["error"]
+    # An unknown tool name is rejected before any dispatch.
+    assert r.status_code == 400
 
 
 @pytest.mark.unit
@@ -571,7 +592,11 @@ def test_orchestrator_invoke_web_search_forwards_the_fence(
         "/v1/orchestrator_invoke",
         json={
             "tool": "web_search",
-            "arguments": {"query": "q", "fence": ["example-client.test"], "include_domains": ["example-client.test"]},
+            "arguments": {
+                "query": "q",
+                "fence": ["example-client.test"],
+                "include_domains": ["example-client.test"],
+            },
         },
     )
     assert r.status_code == 200

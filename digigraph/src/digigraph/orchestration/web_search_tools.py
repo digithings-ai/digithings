@@ -87,7 +87,9 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         "search engines are refused. Each call is one search: to search a listed "
         "site other than the first, or one subdomain of it, pass that host in "
         "include_domains (it can only narrow this list). To read a full page, "
-        "follow its links or check a subdomain, use web_fetch with the page URL. "
+        "follow one of its links or check a subdomain, call web_search with url "
+        "set to that page's URL instead of a query: it returns the page text and "
+        "the links on it that stay inside these sites. "
         "Cite the page URL of every fact you use."
     ]
     graph = load_web_search_site_graph(site_id) if isinstance(site_id, str) else None
@@ -103,6 +105,16 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         **props["include_domains"],
         "description": "Optional narrowing within: " + ", ".join(pin_list) + ".",
     }
+    # Open-page mode exists only here: the shared (unpinned) definition never
+    # offers ``url``, so an unpinned session's schema is unchanged.
+    props["url"] = {
+        "type": "string",
+        "description": (
+            "Absolute URL of one page inside the sites above to open and read in "
+            "full (instead of searching). Pages outside them are refused."
+        ),
+    }
+    fn["parameters"]["required"] = []
     return tool
 
 
@@ -216,6 +228,31 @@ def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
     return hosts[:1]
 
 
+def _normalize_path(path: str) -> str | None:
+    """Lower-cased URL path, dot segments resolved, no trailing ``/``.
+
+    Same rule as digisearch ``web_search.fence.normalize_path`` (parity-tested):
+    ``/company/acme/../other`` matches as ``/other``, so ``..`` can never walk
+    out of a path pin. ``None`` (no match) when a segment decodes to something
+    holding ``/`` or ``\\``.
+    """
+    from urllib.parse import unquote
+
+    out: list[str] = []
+    for seg in (path or "/").split("/"):
+        dec = unquote(seg)
+        if "/" in dec or "\\" in dec:
+            return None
+        if dec in ("", "."):
+            continue
+        if dec == "..":
+            if out:
+                out.pop()
+            continue
+        out.append(seg)
+    return ("/" + "/".join(out)).lower().rstrip("/")
+
+
 def url_within_pins(url: Any, pins: Any) -> bool:
     """True when ``url`` falls inside one pin: host equal or a subdomain, and,
     for a ``host/path`` pin, a path equal to or under that path."""
@@ -229,10 +266,15 @@ def url_within_pins(url: Any, pins: Any) -> bool:
         return False
     if parts.scheme not in ("http", "https"):
         return False
-    host = (parts.hostname or "").lower().rstrip(".")
+    try:
+        host = (parts.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
     if not host:
         return False
-    path = (parts.path or "/").lower().rstrip("/")
+    path = _normalize_path(parts.path)
+    if path is None:
+        return False
     for pin in _as_str_list(pins):
         pin_host, pin_path = _split_pin(pin)
         if not pin_host or not _domain_within(host, pin_host):
@@ -421,6 +463,12 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
                 "tool": WEB_SEARCH_TOOL_NAME,
                 "message": "web_search is not available for this tenant.",
             }
+    page_url = str(args.get("url") or "").strip()
+    if pinned is not None and page_url:
+        # Open-page mode (pinned definition only): read one page in the fence.
+        # An unpinned call never takes this branch, so ``url`` stays ignored
+        # there exactly as before.
+        return _open_pinned_page(page_url, _as_str_list(pinned), context)
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
@@ -505,92 +553,34 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
 
 
 # --------------------------------------------------------------------------- #
-# web_fetch: open one page inside a pinned tenant's sites
+# Open-page mode: web_search(url=...) for a pinned tenant
 # --------------------------------------------------------------------------- #
 
-WEB_FETCH_TOOL_NAME = "web_fetch"
-#: Page text handed to the model per call (characters); digisearch caps at 40k.
-WEB_FETCH_MAX_CHARS = 12000
-
-WEB_FETCH_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": WEB_FETCH_TOOL_NAME,
-        "description": (
-            "Open one web page and read its full text, plus the links on it that "
-            "stay inside this tenant's allowed sites. Use it to read a page found "
-            "by web_search, follow a link, or check a subdomain. Pages outside the "
-            "allowed sites (and redirects that leave them) are refused."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Absolute http(s) URL of the page to open.",
-                },
-            },
-            "required": ["url"],
-        },
-    },
-}
+#: Page text handed to the model per opened page (characters); digisearch caps at 40k.
+OPEN_PAGE_MAX_CHARS = 12000
 
 
-def _pinned_list(context: ToolContext) -> list[str] | None:
-    """The tenant's pins, ``None`` when web search is unpinned."""
-    pinned = context.state.get("web_search_domains")
-    if pinned is None:
-        return None
-    return _as_str_list(pinned)
+def _open_page_refused(message: str) -> dict[str, Any]:
+    return {"error": "tool_not_allowed", "tool": WEB_SEARCH_TOOL_NAME, "message": message}
 
 
-def web_fetch_tool_for_tenant(pins: Any) -> dict[str, Any] | None:
-    """``web_fetch`` for a pinned tenant (its description names the sites), else ``None``.
-
-    Unpinned sessions never get it: an open-web page fetch is not offered.
-    """
-    pin_list = _as_str_list(pins)
-    if pins is None or not pin_list:
-        return None
-    import copy
-
-    tool = copy.deepcopy(WEB_FETCH_TOOL)
-    tool["function"]["description"] += (
-        " Allowed sites (a host includes its subdomains; a path covers pages "
-        "under it): " + ", ".join(pin_list) + "."
-    )
-    return tool
-
-
-def _web_fetch_refused(message: str) -> dict[str, Any]:
-    return {"error": "tool_not_allowed", "tool": WEB_FETCH_TOOL_NAME, "message": message}
-
-
-def _handle_web_fetch(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
-    """Open one page for a pinned tenant, fenced here and on every hop in digisearch."""
-    if not _web_search_available(context):
-        return web_search_disabled_payload(WEB_FETCH_TOOL_NAME)
-    pins = _pinned_list(context)
-    if not pins:
-        return _web_fetch_refused("web_fetch is only available to a tenant with pinned sites.")
-    url = str(args.get("url") or "").strip()
-    if not url:
-        return "No URL provided."
+def _open_pinned_page(url: str, pins: list[str], context: ToolContext) -> str | dict[str, Any]:
+    """Open one page inside the pin: checked here, then on every hop in digisearch."""
     if "://" not in url:
         url = "https://" + url
     if not url_within_pins(url, pins):
-        return _web_fetch_refused(
+        return _open_page_refused(
             "That page is outside the allowed sites: " + ", ".join(pins) + "."
         )
     from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
 
-    arguments: dict[str, Any] = {"url": url, "fence": pins, "max_chars": WEB_FETCH_MAX_CHARS}
+    arguments: dict[str, Any] = {"url": url, "fence": pins, "max_chars": OPEN_PAGE_MAX_CHARS}
     corpus = context.state.get("web_search_page_corpus")
     if isinstance(corpus, str) and corpus.strip():
         arguments["page_corpus"] = corpus.strip()
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
-        WEB_FETCH_TOOL_NAME,
+        WEB_SEARCH_TOOL_NAME,
         arguments,
         default_index_name=getattr(context, "index_name", None) or "default",
         bearer_token=_digi_bearer_from_context(context),
@@ -600,17 +590,18 @@ def _handle_web_fetch(args: dict[str, Any], context: ToolContext) -> str | dict[
     if not isinstance(inv, dict) or inv.get("ok") is not True:
         err = str((inv or {}).get("error") or "unknown error") if isinstance(inv, dict) else ""
         if err.startswith("fence_refused"):
-            return _web_fetch_refused("The page redirected outside the allowed sites.")
+            return _open_page_refused("The page redirected outside the allowed sites.")
         return {
             "error": "fetch_failed",
-            "tool": WEB_FETCH_TOOL_NAME,
+            "tool": WEB_SEARCH_TOOL_NAME,
             "message": f"Could not open {url}: {err or 'no response'}",
         }
-    data = inv.get("data") if isinstance(inv.get("data"), dict) else {}
+    raw_data = inv.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
     final_url = str(data.get("final_url") or url)
     if not url_within_pins(final_url, pins):
         # digisearch fences every hop; this is the second lock on the same door.
-        return _web_fetch_refused("The page redirected outside the allowed sites.")
+        return _open_page_refused("The page redirected outside the allowed sites.")
     links = [
         u for u in (data.get("links") or []) if isinstance(u, str) and url_within_pins(u, pins)
     ]
@@ -625,7 +616,6 @@ def _handle_web_fetch(args: dict[str, Any], context: ToolContext) -> str | dict[
     if links:
         lines += ["", "Links on this page within the allowed sites:"]
         lines += [f"- {u}" for u in links]
-    content = "\n".join(lines)
     results = [
         {
             "doc_id": final_url,
@@ -640,9 +630,9 @@ def _handle_web_fetch(args: dict[str, Any], context: ToolContext) -> str | dict[
         }
     ]
     return {
-        "content": content,
+        "content": "\n".join(lines),
         "results": results,
         "links": links,
         "rag_sources": rag_sources_from_results(results),
-        "name": WEB_FETCH_TOOL_NAME,
+        "name": WEB_SEARCH_TOOL_NAME,
     }

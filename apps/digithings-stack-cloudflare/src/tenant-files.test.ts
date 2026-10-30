@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyTenantFilesEnv,
   readTenantFilesEnv,
   TENANT_FILES_CHUNK,
   TENANT_FILES_KEY,
@@ -37,5 +38,29 @@ describe("tenant files env", () => {
     const boom = { get: async () => { throw new Error("kv down"); } };
     expect(await readTenantFilesEnv(boom)).toEqual({});
     expect(await readTenantFilesEnv(undefined)).toEqual({});
+  });
+
+  it("replaces stale tenant-files env and leaves every other var alone", () => {
+    const target: Record<string, string> = {
+      DIGI_TENANT_FILES_0: "old0",
+      DIGI_TENANT_FILES_1: "old1",
+      DIGI_TENANT_FILES_2: "old2",
+      DIGI_TENANT_FILES_PARTS: "3",
+      DIGIGRAPH_WEB_SEARCH_SITES_DIR: "/data/tenant-files/sites",
+      DIGISEARCH_PAGE_CORPUS_DIR: "/data/tenant-files/pages",
+      DIGI_TENANT_FILES_NOTE: "not owned",
+      OTHER: "kept",
+    };
+    const fresh = tenantFilesEnv(doc("QUJD"));
+    applyTenantFilesEnv(target, fresh);
+    expect(target.DIGI_TENANT_FILES_0).toBe("QUJD");
+    expect(target.DIGI_TENANT_FILES_PARTS).toBe("1");
+    expect("DIGI_TENANT_FILES_1" in target).toBe(false);
+    expect("DIGI_TENANT_FILES_2" in target).toBe(false);
+    expect(target.OTHER).toBe("kept");
+    expect(target.DIGI_TENANT_FILES_NOTE).toBe("not owned");
+    // A removed bundle clears every owned key.
+    applyTenantFilesEnv(target, {});
+    expect(target).toEqual({ DIGI_TENANT_FILES_NOTE: "not owned", OTHER: "kept" });
   });
 });
