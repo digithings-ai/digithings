@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { useAuiState } from "@assistant-ui/react";
+import type { ReactNode } from "react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,17 +9,7 @@ import {
 import { DisclosureChevron } from "../disclosure-chevron";
 import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
-import { workStatusText } from "./work-status";
-import { useTraceT } from "../trace-i18n";
-import { turnCutShort, useTurnOutcome } from "../turn-outcome";
-
-/**
- * How long the chain waits before it folds away once the turn is over.
- *
- * The tools answer faster than the eye can follow: without this the block
- * shuts between two tool calls and opens again, which reads as a glitch.
- */
-const SETTLE_MS = 600;
+import { useWorkChain } from "../trace-grouping/use-work-chain";
 
 /** The upstream disclosure duration. */
 const ANIMATION_DURATION = 200;
@@ -80,63 +69,21 @@ export function WorkChain({
   followedByText?: boolean;
   className?: string;
 }) {
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  const [settled, setSettled] = useState(false);
-
-  // The work of this block is over when text follows it: the agent wrote
-  // something, so it stopped reasoning and stopped calling tools for that
-  // run. Until then the block is still working — a second run of tool calls
-  // and reasoning without text in between is the same block, not a new one.
-  // The marker and the title follow the work; the disclosure follows it too.
-  //
-  // A turn that was stopped or failed before any text is over too: nothing
-  // more will arrive, so the marker stops and the title says how it ended.
-  const outcome = useTurnOutcome();
-  const cutShort = !followedByText && turnCutShort(outcome);
-  const working = !followedByText && !cutShort;
-
-  useEffect(() => {
-    if (working) {
-      setSettled(false);
-      return;
-    }
-    const id = setTimeout(() => setSettled(true), SETTLE_MS);
-    return () => clearTimeout(id);
-  }, [working]);
-
-  const open = userOpen ?? (
-    openAtRest ? true : foldOnAnswer ? working : !settled && working
-  );
-
-  // Folded, the header is a live status line — the same sentence the retired
-  // summary level showed. Expanded, the plain title is enough: the reasoning
-  // and the tool calls are underneath it.
-  const parts = useAuiState((s) => s.message.parts);
-  const tr = useTraceT();
-  const status = !open && indices ? workStatusText(parts, indices, tr) : undefined;
-  const endedTitle = outcome === "failed" ? tr.t("failed") : tr.t("stopped");
-  const title = cutShort
-    ? endedTitle
-    : status
-      ? status.label
-      : working
-        ? tr.t("working")
-        : tr.t("worked");
-  const markerRunning = !cutShort && (status ? status.running : working);
-  const marker = cutShort
-    ? outcome === "failed"
-      ? "error"
-      : "stop"
-    : markerRunning
-      ? "loading"
-      : "idle";
+  // The fold, the header title and the marker are the shared trace rules
+  // (`trace-grouping`), which the base skins render too.
+  const { open, onOpenChange, title, marker, outcome } = useWorkChain({
+    indices,
+    openAtRest,
+    foldOnAnswer,
+    followedByText,
+  });
 
   return (
     <Collapsible
       data-slot="aui_work-chain"
-      data-outcome={cutShort ? outcome : working ? "running" : "done"}
+      data-outcome={outcome}
       open={open}
-      onOpenChange={setUserOpen}
+      onOpenChange={onOpenChange}
       className={cn("aui-work-chain", className)}
       style={{ "--animation-duration": `${ANIMATION_DURATION}ms` } as React.CSSProperties}
     >

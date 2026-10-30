@@ -28,6 +28,14 @@ import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { useTraceT } from "../../../trace-i18n";
+import { toolRowTitle } from "../../../stock/tool-display";
+import { useTurnOutcome } from "../../../turn-outcome";
+import {
+  effectiveToolStatus,
+  resolveToolStatus,
+  toolRowStatus,
+} from "../../../trace-grouping/tool-row";
+import { useToolRowOpenWhileRunning } from "../../../trace-grouping/use-deploy-work-disclosure";
 
 const ANIMATION_DURATION = 200;
 
@@ -137,14 +145,13 @@ function ToolFallbackTrigger({
   toolName: string;
   status?: ToolCallMessagePartStatus;
 }) {
-  const tr = useTraceT();
-  const statusType = status?.type ?? "complete";
-  const isRunning = statusType === "running";
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
-
+  // The same words as the digichat skin's row (running, waiting, failed,
+  // cancelled, used), from the shared trace rules.
+  const { label, statusType, isRunning, isCancelled } = toolRowStatus(
+    status,
+    useTraceT(),
+  );
   const Icon = statusIconMap[statusType];
-  const label = isCancelled ? tr.t("cancelledTool") : tr.t("usedTool");
 
   return (
     <CollapsibleTrigger
@@ -171,7 +178,7 @@ function ToolFallbackTrigger({
           isRunning && "shimmer motion-reduce:animate-none",
         )}
       >
-        {label}: <b>{toolName}</b>
+        {label}: <b>{toolRowTitle(toolName)}</b>
       </span>
       <ToolFallbackDuration />
       <ChevronDownIcon
@@ -664,13 +671,23 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
   argsText,
   result,
-  status,
+  status: partStatus,
+  isError,
   addResult,
   resume,
   interrupt,
   approval,
   respondToApproval,
 }) => {
+  // Shared trace rules: a failed call reads failed even when its part says
+  // complete, and a call left pending by a stopped turn reads cancelled.
+  const outcome = useTurnOutcome();
+  const resolved = resolveToolStatus(partStatus, isError, result);
+  const status = effectiveToolStatus(
+    resolved,
+    outcome,
+    offersInterruptAction(resolved, approval, interrupt),
+  );
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const isRequiresAction = status?.type === "requires-action";
@@ -686,9 +703,19 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     setPrevRequiresAction(isRequiresAction);
     if (isRequiresAction) setOpen(true);
   }
+  // Local: while the call runs the card shows its arguments, and it folds
+  // again once the call completes. The first manual toggle wins.
+  const openWhileRunning = useToolRowOpenWhileRunning();
+  const [touched, setTouched] = useState(false);
+  const streamingOpen =
+    !touched && openWhileRunning && status?.type === "running";
+  const onOpenChange = useCallback((next: boolean) => {
+    setTouched(true);
+    setOpen(next);
+  }, []);
 
   return (
-    <ToolFallbackRoot open={open} onOpenChange={setOpen}>
+    <ToolFallbackRoot open={open || streamingOpen} onOpenChange={onOpenChange}>
       <ToolFallbackTrigger toolName={toolName} status={status} />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />

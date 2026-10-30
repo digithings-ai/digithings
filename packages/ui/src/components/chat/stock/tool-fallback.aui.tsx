@@ -29,6 +29,11 @@ import { readGloomberbAttribution } from "@digithings/ui";
 import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
 import { JsonView } from "./json-view";
 import { EN_TRACE_T, useTraceT, type TraceT } from "../trace-i18n";
+import {
+  effectiveToolStatus,
+  resolveToolStatus,
+  toolRowStatus,
+} from "../trace-grouping/tool-row";
 
 const ANIMATION_DURATION = 200;
 
@@ -45,24 +50,8 @@ export const formatToolDuration = (ms: number) => {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s${whole}`;
 };
 
-/**
- * assistant-ui's `toMessagePartStatus` returns `{ type: "complete" }` for any
- * tool-call part with a defined `result` — even when `isError` is set, because
- * an `output-error` part carries `result = { error }`. Derive the error state
- * from `isError` so a failed or orphaned row does not render as success.
- */
-export function resolveToolStatus(
-  status: ToolCallMessagePartStatus | undefined,
-  isError: boolean | undefined,
-  result: unknown,
-): ToolCallMessagePartStatus | undefined {
-  if (!isError || status?.type === "incomplete") return status;
-  const error =
-    result && typeof result === "object" && "error" in result
-      ? (result as { error?: unknown }).error
-      : undefined;
-  return { type: "incomplete", reason: "error", error };
-}
+// Shared with the base skins' tool rows (`trace-grouping/tool-row.ts`).
+export { resolveToolStatus };
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -165,21 +154,7 @@ export function toolTriggerLabel(
   isRunning: boolean;
   isCancelled: boolean;
 } {
-  const statusType = status?.type ?? "complete";
-  const isRunning = statusType === "running";
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
-  const isErrorStatus =
-    status?.type === "incomplete" && status.reason === "error";
-  const label = isCancelled
-    ? tr.t("cancelledTool")
-    : isErrorStatus
-      ? tr.t("failedTool")
-      : statusType === "running"
-        ? tr.t("runningTool")
-        : statusType === "requires-action"
-          ? tr.t("waitingOnTool")
-          : tr.t("usedTool");
+  const { label, statusType, isRunning, isCancelled } = toolRowStatus(status, tr);
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
@@ -792,12 +767,11 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   // A call still waiting on a result when the turn was stopped will never
   // get one: show it cancelled, not "Waiting on tool". A call that waits on
   // the visitor (approval, interrupt) keeps its controls.
-  const effectiveStatus: ToolCallMessagePartStatus | undefined =
-    outcome === "stopped" &&
-    resolved?.type === "requires-action" &&
-    !offersInterruptAction(resolved, approval, interrupt)
-      ? { type: "incomplete", reason: "cancelled" }
-      : resolved;
+  const effectiveStatus = effectiveToolStatus(
+    resolved,
+    outcome,
+    offersInterruptAction(resolved, approval, interrupt),
+  );
   const isCancelled =
     effectiveStatus?.type === "incomplete" &&
     effectiveStatus.reason === "cancelled";

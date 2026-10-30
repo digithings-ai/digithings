@@ -1,5 +1,5 @@
 /**
- * The one class `run-activity.tsx` takes from assistant-ui's
+ * The one class the base work chain (`../elements/work-chain.tsx`) takes from assistant-ui's
  * `elements/surfaces.tsx` (copied unchanged). The rest of that file is
  * other elements' styling and is not vendored here.
  */
