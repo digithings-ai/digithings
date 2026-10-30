@@ -19,7 +19,28 @@ import { ToolFallback } from "./aui-default/tool-fallback.aui";
 
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Reasoning } from "./aui-default/reasoning.aui";
-import { ChainOfThoughtActivity } from "./elements/chain-of-thought-activity";
+import { WorkChain } from "./elements/work-chain";
+import {
+  ReasoningContent,
+  ReasoningRoot,
+  ReasoningText,
+  ReasoningTrigger,
+} from "./aui-default/reasoning.aui";
+import {
+  ToolGroupContent,
+  ToolGroupRoot,
+  ToolGroupTrigger,
+} from "./aui-default/tool-group.aui";
+import {
+  chainFollowedByText,
+  chainGroupBy,
+  chainHoldsWork,
+  chainToolCount,
+  messageHasContent,
+  reasoningGroupDisclosure,
+  toolGroupDisclosure,
+  useDeployWorkDisclosure,
+} from "../../trace-grouping";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -46,7 +67,6 @@ import {
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
-  groupPartByType,
   MessagePrimitive,
   ThreadPrimitive,
   unstable_useMentionAdapter,
@@ -844,6 +864,12 @@ const DataNotice: FC<{ part: { readonly type: string; readonly name?: string; re
 
 const AssistantMessage: FC = () => {
   const disclosure = useViewDisclosure();
+  const { reasoningMode, toolCallsMode, disclosure: work } = useDeployWorkDisclosure();
+  // The whole turn, not just the group: the tools answer faster than the
+  // chain can fold, and a group that closes between two of them flickers.
+  const turnRunning = useAuiState((s) => s.thread.isRunning);
+  const messageParts = useAuiState((s) => s.message.parts);
+  const hasContent = messageHasContent(messageParts);
   // reserves space for action bar and compensates with `-mb` for consistent msg spacing
   // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
   // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
@@ -860,53 +886,92 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
-        <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
-        >
+        {/* The digichat skin's trace grouping and fold rules
+            (`trace-grouping`); only the look is the base skin's. */}
+        <MessagePrimitive.GroupedParts groupBy={chainGroupBy}>
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
-                // assistant-ui's Run activity element: one summary line for
-                // the consecutive reasoning and tool calls, expanding to them.
+                // A chain of only status or source parts is not work: no
+                // header, the loading row covers that phase. The parts still
+                // render bare so a backend notice does not vanish.
+                if (!chainHoldsWork(messageParts, part.indices)) return <>{children}</>;
+                // One header for the whole chain: the reasoning and the tool
+                // calls collapse together.
                 return (
-                  <ChainOfThoughtActivity
+                  <div data-slot="aui_chain-of-thought">
+                    <WorkChain
+                      key={disclosure.key}
+                      indices={part.indices}
+                      openAtRest={work.openAtRest}
+                      foldOnAnswer={work.foldOnAnswer}
+                      followedByText={chainFollowedByText(messageParts, part.indices)}
+                    >
+                      {children}
+                    </WorkChain>
+                  </div>
+                );
+              case "group-tool": {
+                if (toolCallsMode === "off") return null;
+                // The group can hold the source and status parts between two
+                // tool runs; the count is the tool calls only.
+                const toolCount = chainToolCount(messageParts, part.indices);
+                if (toolCount === 0) return <div data-slot="aui_chain-tools">{children}</div>;
+                const running = part.status.type === "running";
+                const group = toolGroupDisclosure(work, toolCallsMode, running || turnRunning);
+                return (
+                  <ToolGroupRoot
                     key={disclosure.key}
-                    group={part}
-                    defaultOpen={disclosure.toolGroupOpen}
+                    variant="ghost"
+                    defaultOpen={group.defaultOpen}
+                    streamingOpen={group.streamingOpen}
+                    {...(group.locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
-                    {children}
-                  </ChainOfThoughtActivity>
+                    <ToolGroupTrigger count={toolCount} active={running} disabled={group.locked} />
+                    <ToolGroupContent>{children}</ToolGroupContent>
+                  </ToolGroupRoot>
                 );
-              case "group-tool":
+              }
+              case "group-reasoning": {
+                if (reasoningMode === "off") return null;
+                const running = part.status.type === "running";
+                const box = reasoningGroupDisclosure(work, reasoningMode, running || turnRunning);
                 return (
-                  <div data-slot="aui_chain-tools" className="flex flex-col gap-2">
-                    {children}
-                  </div>
-                );
-              case "group-reasoning":
-                return (
-                  <div
-                    data-slot="aui_chain-reasoning"
-                    className="aui-reasoning-text text-muted-foreground space-y-4 leading-relaxed text-pretty"
+                  <ReasoningRoot
+                    key={disclosure.key}
+                    variant="ghost"
+                    className="mb-0"
+                    streaming={box.streamingOpen}
+                    defaultOpen={box.defaultOpen}
+                    {...(box.locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
-                    {children}
-                  </div>
+                    {/* The reasoning is a sub-step with its own disclosure
+                        inside the chain, streaming while it runs. */}
+                    <ReasoningTrigger active={running} disabled={box.locked} />
+                    <ReasoningContent aria-busy={running}>
+                      <ReasoningText>{children}</ReasoningText>
+                    </ReasoningContent>
+                  </ReasoningRoot>
                 );
+              }
               case "text":
                 return <MarkdownText />;
               case "reasoning":
+                if (reasoningMode === "off") return null;
                 return <Reasoning {...part} />;
               case "tool-call":
+                if (toolCallsMode === "off") return null;
                 // assistant-ui's ToolFallback owns the approval controls too.
                 return part.toolUI ?? <ToolFallback key={disclosure.key} {...part} />;
               case "indicator":
-                return <AssistantWorkingIndicator />;
+                // One loading affordance per turn: once anything real has
+                // arrived the work chain takes over.
+                return hasContent ? null : <AssistantWorkingIndicator />;
               case "data":
                 return part.dataRendererUI ?? <DataNotice part={part} />;
+              case "source":
+                // Citations are inline links in the answer.
+                return null;
               default:
                 return null;
             }

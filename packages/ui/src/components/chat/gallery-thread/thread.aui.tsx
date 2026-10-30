@@ -32,6 +32,16 @@ import {
   type ScrollMode,
 } from "./scroll-mode";
 import { WorkChain } from "./work-chain";
+import {
+  chainFollowedByText,
+  chainGroupBy,
+  chainHoldsWork,
+  chainToolCount,
+  messageHasContent,
+  messageHasWork,
+  reasoningGroupDisclosure,
+  toolGroupDisclosure,
+} from "../trace-grouping";
 import { WorkChainSummary } from "./work-chain-summary";
 import { PrivateToolCallStep, PrivateWorkStep } from "./private-work-step";
 import {
@@ -68,7 +78,6 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
@@ -238,44 +247,6 @@ export type ThreadMentionTrigger = {
   directive: NonNullable<SlashPopoverProps["directive"]>;
   iconMap?: SlashPopoverProps["iconMap"];
 };
-
-/**
- * The chain grouping.
- *
- * A source or a status part between two work runs must not split the chain:
- * only text ends a work run, so two runs with nothing but a source between
- * them are one chain, not two. The library's helper covers the part types it
- * knows; the status parts (`data-*`) are matched here, and the memo
- * fingerprint is kept so the tree is not rebuilt on every render.
- */
-const chainGroupBy = (() => {
-  const base = groupPartByType({
-    reasoning: ["group-chainOfThought", "group-reasoning"],
-    "tool-call": ["group-chainOfThought", "group-tool"],
-    "standalone-tool-call": [],
-    source: ["group-chainOfThought", "group-tool"],
-  });
-  const fn = (part: { type: string; name?: string }, context?: unknown) => {
-    const dataName =
-      part.type === "data"
-        ? part.name
-        : part.type.startsWith("data-")
-          ? part.type.slice("data-".length)
-          : undefined;
-    // A data-notice (a rate-limit wait, and any other status notice) stays
-    // outside the chain. The chain folds once the answer arrives, which would
-    // hide the notice inside the collapsed work block.
-    if (dataName === "notice") return base(part as never, context as never);
-    if (part.type === "data" || part.type.startsWith("data-")) {
-      return ["group-chainOfThought", "group-tool"] as const;
-    }
-    return base(part as never, context as never);
-  };
-  (fn as unknown as Record<symbol, string>)[
-    Symbol.for("@assistant-ui/groupBy.memoKey")
-  ] = "digichat:chain-v3";
-  return fn;
-})();
 
 const DEFAULT_THREAD_ACTIONS: Required<ThreadActions> = {
   undo: true,
@@ -1238,22 +1209,13 @@ const AssistantMessage: FC = () => {
   // Only text ends a work run: a chain with a text part after it has
   // answered, so its work is over. A chain without one is still the agent's
   // current work, even if the model streams another run of tool calls.
-  const hasWork = messageParts.some(
-    (part) => part.type === "reasoning" || part.type === "tool-call",
-  );
+  const hasWork = messageHasWork(messageParts);
   // Anything real that arrived from the agent — reasoning, a tool call, the
   // answer itself. A status part (the connection state) is not content: it is
   // the pre-response phase, which is exactly when the loading row belongs.
-  const hasContent = messageParts.some((part) => part.type !== "data");
-  const followedByText = (indices: readonly number[]) => {
-    const last = indices.length > 0 ? indices[indices.length - 1] : -1;
-    return messageParts.some((part, index) => {
-      if (index <= last) return false;
-      if (part.type !== "text") return false;
-      const text = (part as { text?: unknown }).text;
-      return typeof text === "string" && text.trim() !== "";
-    });
-  };
+  const hasContent = messageHasContent(messageParts);
+  const followedByText = (indices: readonly number[]) =>
+    chainFollowedByText(messageParts, indices);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -1282,10 +1244,7 @@ const AssistantMessage: FC = () => {
                 // animation we do not want. No reasoning and no tool call in
                 // the group means no work block: the loading row covers that
                 // phase on its own.
-                const holdsWork = part.indices.some((index) => {
-                  const kind = messageParts[index]?.type;
-                  return kind === "reasoning" || kind === "tool-call";
-                });
+                const holdsWork = chainHoldsWork(messageParts, part.indices);
                 // The parts still render bare: a backend notice (DIG-4459)
                 // rides a data part and must not vanish with the header.
                 if (!holdsWork) return <>{children}</>;
@@ -1333,26 +1292,24 @@ const AssistantMessage: FC = () => {
                 if (ToolGroup) {
                   return <ToolGroup group={part}>{children}</ToolGroup>;
                 }
-                const locked = toolCallsMode === "locked_open";
                 const running = part.status.type === "running";
                 // The group can hold the source and status parts that sit
                 // between two tool runs; the count is the tool calls only.
-                const toolCount = part.indices.filter(
-                  (index) => messageParts[index]?.type === "tool-call",
-                ).length;
+                const toolCount = chainToolCount(messageParts, part.indices);
                 if (toolCount === 0) {
                   return <div data-slot="aui_chain-of-thought">{children}</div>;
                 }
+                const group = toolGroupDisclosure(
+                  disclosure,
+                  toolCallsMode,
+                  running || turnRunning,
+                );
+                const locked = group.locked;
                 return (
                   <ToolGroupRoot
                     variant="ghost"
-                    defaultOpen={
-                      disclosure.openAtRest || toolCallsMode === "expanded" || locked
-                    }
-                    streamingOpen={
-                      (disclosure.openWhileRunning || toolCallsMode === "balanced") &&
-                      (running || turnRunning)
-                    }
+                    defaultOpen={group.defaultOpen}
+                    streamingOpen={group.streamingOpen}
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     <ToolGroupTrigger
@@ -1383,17 +1340,17 @@ const AssistantMessage: FC = () => {
                   );
                 }
                 const running = part.status.type === "running";
-                const locked = reasoningMode === "locked_open";
+                const box = reasoningGroupDisclosure(
+                  disclosure,
+                  reasoningMode,
+                  running || turnRunning,
+                );
+                const locked = box.locked;
                 return (
                   <ReasoningRoot
                     variant="ghost"
-                    streaming={
-                      (running || turnRunning) &&
-                      (disclosure.openWhileRunning || reasoningMode === "balanced")
-                    }
-                    defaultOpen={
-                      disclosure.openAtRest || reasoningMode === "expanded" || locked
-                    }
+                    streaming={box.streamingOpen}
+                    defaultOpen={box.defaultOpen}
                     {...(locked ? { open: true, onOpenChange: () => {} } : {})}
                   >
                     {/* Upstream's structure: the reasoning is a sub-step with

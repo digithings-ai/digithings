@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TRACE_LOCALES, createTraceT, resolveTraceLocale } from "./core";
 import { workStatusText } from "../gallery-thread/work-status";
-import { chainStatusLabel } from "../skins/base/elements/chain-of-thought-activity";
+import { toolRowStatus } from "../trace-grouping/tool-row";
 import { en } from "./locales/en";
 
 describe("trace i18n tables", () => {
@@ -45,16 +45,19 @@ describe("trace i18n tables", () => {
     ] as never;
     expect(workStatusText(parts, [0, 1], createTraceT("en")).label).toBe("Used 1 tool");
     expect(workStatusText(parts, [0, 1], createTraceT("fr")).label).toBe("1 outil utilisé");
-    const runs = [{ kind: "tool", indices: [1], toolNames: ["web_search"] }] as never;
-    expect(chainStatusLabel("error", runs, createTraceT("fr"))).toBe("Échec · 1 outil utilisé");
-    expect(chainStatusLabel("requires-action", runs, createTraceT("en"))).toBe("Needs your input");
+    const running = { type: "running" } as never;
+    expect(toolRowStatus(running, createTraceT("fr")).label).toBe("Outil en cours");
+    expect(toolRowStatus({ type: "requires-action", reason: "tool-calls" }, createTraceT("en")).label).toBe(
+      "Waiting on tool",
+    );
   });
 });
 
 /** Files that render the chat trace. Their user-facing words must come from the tables. */
 const TRACE_FILES = [
-  "skins/base/elements/chain-of-thought-activity.tsx",
-  "skins/base/aui-default/run-activity.tsx",
+  "skins/base/elements/work-chain.tsx",
+  "trace-grouping/tool-row.ts",
+  "trace-grouping/use-work-chain.ts",
   "skins/base/aui-default/reasoning.tsx",
   "skins/base/aui-default/tool-fallback.aui.tsx",
   "skins/base/aui-default/tool-group.aui.tsx",
