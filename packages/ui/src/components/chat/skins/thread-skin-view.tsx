@@ -48,6 +48,13 @@ const ProductPageAssistant = lazy(() =>
 const DigichatSkin = lazy(() =>
   import("./digichat").then((m) => ({ default: m.DigichatSkin })),
 );
+// The product `/` palette for every skin that is not digichat (digichat wires
+// the same palette into its own composer). Its own chunk, like the skins.
+const SkinPaletteBridge = lazy(() =>
+  import("../stock/skin-palette-bridge").then((m) => ({
+    default: m.SkinPaletteBridge,
+  })),
+);
 
 const CLONE_THREADS: Record<CloneSkin, LazyExoticComponent<FC>> = {
   chatgpt: ChatGPT,
@@ -64,7 +71,9 @@ export type ThreadSkinViewProps = {
   /**
    * First-party skin wiring (product copy, slash commands, pending headers).
    * Provided by the host app — e.g. digichat's `DIGICHAT_SKIN_OPTIONS`.
-   * Only the `digichat` branch reads it; all other skins ignore it (WS4).
+   * The `digichat` branch reads all of it. Every other skin gets the same
+   * slash palette (`slash`, `privateMode`) through `SkinPaletteBridge`; the
+   * rest (copy, layout) stays digichat-only (WS4).
    */
   digichat?: DigichatSkinOptions;
 };
@@ -93,6 +102,21 @@ function ThreadSkinSwitch({
   composerLayout,
   digichat,
 }: ThreadSkinViewProps) {
+  if (skin === "digichat") {
+    return <DigichatSkin composerLayout={composerLayout} {...digichat} />;
+  }
+  if (!digichat?.slash) return <SkinThread skin={skin} />;
+  return (
+    <SkinPaletteBridge
+      slash={digichat.slash}
+      privateMode={digichat.privateMode}
+    >
+      <SkinThread skin={skin} />
+    </SkinPaletteBridge>
+  );
+}
+
+function SkinThread({ skin }: { skin: Exclude<ThreadSkin, "digichat"> }) {
   if (isCloneSkin(skin)) {
     const Clone = CLONE_THREADS[skin];
     return <Clone />;
@@ -116,10 +140,6 @@ function ThreadSkinSwitch({
 
   if (skin === "webpage-assistant") {
     return <WebpageAssistant />;
-  }
-
-  if (skin === "digichat") {
-    return <DigichatSkin composerLayout={composerLayout} {...digichat} />;
   }
 
   return <ProductPageAssistant />;

@@ -22,7 +22,7 @@ import type { FC } from "react";
 import { cn } from "@/lib/utils";
 import { useAttribution } from "./skin-chrome";
 
-export const SKIN_CREDIT_TEXT = "powered by digichat — a digithings product.";
+export const SKIN_CREDIT_TEXT = "powered by digichat, a digithings product.";
 
 export const SkinCredit: FC<{
   className?: string;
@@ -45,7 +45,7 @@ export const SkinCredit: FC<{
         className,
       )}
     >
-      powered by digichat — a{" "}
+      powered by digichat, a{" "}
       <a
         href="https://digithings.ai"
         target="_blank"

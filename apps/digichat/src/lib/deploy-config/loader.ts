@@ -175,6 +175,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       placeholder: cfg.placeholder,
       accent: cfg.accent,
       ...(cfg.fonts ? { fonts: cfg.fonts } : {}),
+      ...(cfg.colors ? { colors: cfg.colors } : {}),
       attribution: cfg.attribution,
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       toolbar: cfg.toolbar !== false,
@@ -248,8 +249,14 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
     ...(cfg.limits ? { limits: cfg.limits } : {}),
-    ...(catalog.length
-      ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
+    ...(catalog.length || cfg.tools?.exclusive === true
+      ? {
+          tools: {
+            allowUserToggle: cfg.tools?.allowUserToggle ?? true,
+            catalog,
+            ...(cfg.tools?.exclusive === true ? { exclusive: true } : {}),
+          },
+        }
       : {}),
     mcp: {
       servers: cfg.mcp?.servers ?? [],
@@ -290,6 +297,7 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     skin: dep.chrome.skin,
     accent: dep.chrome.accent,
     ...(dep.chrome.fonts ? { fonts: dep.chrome.fonts } : {}),
+    ...(dep.chrome.colors ? { colors: dep.chrome.colors } : {}),
     attribution: dep.chrome.attribution !== false,
     title: dep.chrome.title,
     welcome: welcomeTitle(dep.chrome.welcome),

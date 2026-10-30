@@ -70,6 +70,7 @@ export {
   catalogAllowsDisableId,
   allowedForceTools,
   omitForcedCatalogIds,
+  exclusiveCatalogDisabledIds,
   FORCE_TOOL_BY_CATALOG_ID,
   DISABLEABLE_CATALOG_IDS,
 } from "./force-tool";

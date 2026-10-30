@@ -45,6 +45,8 @@ import {
   SelectionToolbar,
 } from "./elements/quote.aui";
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
+import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
+import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarMorePrimitive,
@@ -67,6 +69,7 @@ import {
   ArrowUpIcon,
   ChartColumnIcon,
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CloudSunIcon,
@@ -101,7 +104,39 @@ import { DEFAULT_MODEL_ID } from "./model";
 
 const models = docsModelOptions();
 
+/** Display label for a model id: the part after the vendor prefix. */
+export function modelChipLabel(model: string): string {
+  const id = model.trim();
+  if (!id) return "auto";
+  return id.slice(id.lastIndexOf("/") + 1);
+}
+
+/**
+ * Inside a host with chat prefs the chip is the real picker: it shows the
+ * session model and opens the host's models menu (the same list `/models`
+ * shows). The demo selector only renders without a host (the catalog).
+ */
 const ModelPicker: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  if (prefs) {
+    if (!prefs.showModels) return null;
+    return (
+      <div data-deploy-model-picker>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="aui-model-chip text-muted-foreground hover:text-foreground h-7 max-w-48 gap-1 rounded-full px-2.5 text-xs"
+          onClick={prefs.openModels}
+          aria-label="Open models"
+          title={prefs.prefs.model.trim() || "auto"}
+        >
+          <span className="truncate">{modelChipLabel(prefs.prefs.model)}</span>
+          <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+        </Button>
+      </div>
+    );
+  }
   return (
     <div data-deploy-model-picker>
     <ModelSelector
@@ -523,13 +558,17 @@ const Composer: FC = () => {
     iconMap: slashIconMap,
     fallbackIcon: SlashIcon,
   });
+  // Host-wired product palette (SkinPaletteBridge): it owns the trigger root
+  // and the `/` and `@` menus, so the demo commands step aside. A nested root
+  // here would shadow it.
+  const productPalette = useSkinPaletteOptional();
   const { placeholder } = useComposerCopy(
     "How can I help you today?",
     "Send a message... (@ to mention, / for commands)",
   );
 
   return (
-    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+    <DemoTriggerRoot enabled={!productPalette}>
       <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
@@ -547,17 +586,35 @@ const Composer: FC = () => {
           </div>
         </ComposerPrimitive.AttachmentDropzone>
 
-        <ComposerTriggerPopover char="@" {...mention} />
+        {productPalette ? null : (
+          <ComposerTriggerPopover char="@" {...mention} />
+        )}
 
-        <ComposerTriggerPopover
-          char="/"
-          {...slash}
-          emptyItemsLabel="No matching commands"
-        />
+        {productPalette ? null : (
+          <ComposerTriggerPopover
+            char="/"
+            {...slash}
+            emptyItemsLabel="No matching commands"
+          />
+        )}
       </ComposerPrimitive.Root>
-    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+    </DemoTriggerRoot>
   );
 };
+
+/** The demo palette's own trigger root; skipped under the product palette. */
+const DemoTriggerRoot: FC<{ enabled: boolean; children: ReactNode }> = ({
+  enabled,
+  children,
+}) =>
+  enabled ? (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      {children}
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
+  ) : (
+    <>{children}</>
+  );
+
 
 const ComposerAction: FC = () => {
   return (

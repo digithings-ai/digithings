@@ -14,6 +14,7 @@
 
 import type { ActivityDetail } from "@/lib/chat-activity";
 import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
+import { parseTenantColors, type TenantColors } from "@/lib/tenant-colors";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
@@ -170,6 +171,8 @@ export type EmbedTenantConfig = {
   accent?: { color: string; foreground: string };
   /** Heading and body faces, as font variables only (src/lib/tenant-fonts.ts). */
   fonts?: TenantFonts;
+  /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
+  colors?: TenantColors;
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
   title?: string;
@@ -329,6 +332,8 @@ export type EmbedTenantConfig = {
   pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
+    /** Only the catalog's tools reach the model (see ToolsSchema.exclusive). */
+    exclusive?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -678,6 +683,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   }
 
   const fonts = parseTenantFonts(v.fonts, ctx);
+  const colors = parseTenantColors(v.colors, ctx);
 
   if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
     throw new Error(`${ctx}: aliases must be an array of strings`);
@@ -1040,6 +1046,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       }),
     accent,
     ...(fonts ? { fonts } : {}),
+    ...(colors ? { colors } : {}),
     attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,
@@ -1147,6 +1154,7 @@ function parseTenantTools(
   return {
     tools: {
       ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      ...(r.exclusive === true ? { exclusive: true } : {}),
       catalog,
     },
   };
@@ -1411,6 +1419,21 @@ export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolea
     cfg.requiredPlanTier !== undefined &&
     DESK_PLUS_PLAN_TIERS.has(cfg.requiredPlanTier)
   );
+}
+
+/**
+ * True when this embed tenant refuses a visitor's own API key, so the chat
+ * API rejects one instead of routing the turn through it. A row that sets
+ * `showByok: false` has switched BYOK off. An `operator` tenant pays with the
+ * operator's keys and, unless it shows the BYOK surface, has no sanctioned way
+ * for a visitor to bring a key either.
+ */
+export function embedTenantRefusesByok(
+  cfg: Pick<EmbedTenantConfig, "llmAccess" | "showByok"> | null | undefined,
+): boolean {
+  if (!cfg) return false;
+  if (cfg.showByok === false) return true;
+  return cfg.llmAccess === "operator" && cfg.showByok !== true;
 }
 
 /** Plan-tier ordering for the runtime tier gate (lower index = lower tier). */

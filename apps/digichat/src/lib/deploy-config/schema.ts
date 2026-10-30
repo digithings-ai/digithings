@@ -6,6 +6,7 @@
  */
 
 import { TenantFontsSchema } from "@/lib/tenant-fonts";
+import { TenantColorsSchema } from "@/lib/tenant-colors";
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
@@ -277,6 +278,8 @@ export const ChromeSchema = z
     accent: AccentSchema.optional(),
     /** Heading and body faces, font variables only (src/lib/tenant-fonts.ts). */
     fonts: TenantFontsSchema.optional(),
+    /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
+    colors: TenantColorsSchema.optional(),
     attribution: z.boolean().optional(),
     /** Curated reply-language default (see languages.ts). */
     defaultLanguage: z
@@ -701,6 +704,12 @@ export const ToolsSchema = z
   .object({
     allowUserToggle: z.boolean().default(true),
     catalog: z.array(ToolCatalogEntrySchema).default([]),
+    /**
+     * The catalog is the whole tool surface: built-in graph tool families
+     * (digisearch, digivault) the catalog does not name are disabled on every
+     * turn, server-side. Absent keeps today's behaviour.
+     */
+    exclusive: z.boolean().optional(),
   })
   .strict();
 
