@@ -10,7 +10,7 @@ import {
   parseInvitePages,
   withoutInvitePageCookies,
 } from "./invite-pages";
-import { EMBED_HOST_HEADER, EMBED_TOKEN_HEADER, OCC_INVITE_DEFAULT_MAX_AGE_DAYS } from "./occ-gate";
+import { EMBED_HOST_HEADER, EMBED_TOKEN_HEADER, LEGACY_INVITE_DEFAULT_MAX_AGE_DAYS } from "./legacy-invite-gate";
 
 const KEY = "example-invite-key-fixture";
 const ENV = { EXAMPLE_INVITE_KEY: KEY, EXAMPLE_B_INVITE_KEY: "example-b-key-fixture" };
@@ -21,7 +21,7 @@ const RAW = JSON.stringify({
 const PAGES = parseInvitePages(RAW);
 const PAGE = PAGES[0]!;
 const NOW_MS = Date.UTC(2026, 9, 29, 12, 0, 0);
-const POLICY = { maxAgeSeconds: OCC_INVITE_DEFAULT_MAX_AGE_DAYS * 86400, nowMs: NOW_MS };
+const POLICY = { maxAgeSeconds: LEGACY_INVITE_DEFAULT_MAX_AGE_DAYS * 86400, nowMs: NOW_MS };
 const NOW_S = NOW_MS / 1000;
 
 const notFound = vi.fn(async () => new Response("site 404", { status: 404, headers: { "x-site": "1" } }));

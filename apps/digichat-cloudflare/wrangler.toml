@@ -23,7 +23,7 @@ enabled = true
 # door still hands the URL on, and the app does not log request URLs. The
 # platform's invocation log, however, records the request URL itself, so
 # query strings are dropped from this Worker's logs and traces (the repo's
-# wrangler 4.133 pin validates the key). Pinned in occ-route.contract.test.ts.
+# wrangler 4.133 pin validates the key). Pinned in legacy-invite-route.contract.test.ts.
 redact_query_string = true
 
 # ROUTE OWNERSHIP (this file owns the digichat surface; the 2026-10-18
@@ -42,7 +42,7 @@ redact_query_string = true
 # say OCC is client work that must not ride the shared digithings platform.
 # Chris reversed that on 2026-10-27: OCC is one tenant of the shared stack and
 # of this Worker's one container, like the house chat. What keeps it apart is
-# not a separate deployment but the gate — the invite link (src/occ-gate.ts)
+# not a separate deployment but the gate — the invite link (src/legacy-invite-gate.ts)
 # is the only way in to /chat/occ, its API calls are bound to the OCC tenant
 # at this edge only from that page with a valid invite cookie, and the OCC
 # indexes answer only the OCC tenant. The route ownership above is unchanged.
@@ -69,7 +69,7 @@ redact_query_string = true
 # /embed* stays for good — the marketing site's own shell points it at
 # digithings.ai/embed?host=digithings.ai and customer embeds use it, so that
 # route is not a temporary bridge (its host=occ door stays invite-gated: see
-# occEmbedGate). The /api/* routes below are the legacy spelling of what the
+# legacyInviteEmbedGate). The /api/* routes below are the legacy spelling of what the
 # app now serves under /chat/api/*; they are reviewed once the cutover is
 # verified live. /chat/occ* is no Pages shell any more: this Worker's invite
 # gate serves the app itself there (DIG-3585).
@@ -133,7 +133,7 @@ pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"
 
 # DIG-3585: the invite-gated OCC page. This Worker answers /chat/occ itself
-# (src/occ-gate.ts): a valid ?token= is traded for the occ_invite cookie, and a
+# (src/legacy-invite-gate.ts): a valid ?token= is traded for the occ_invite cookie, and a
 # valid cookie gets the app's own embed route from the Container. Pages is not
 # in this path; anything else gets the site's 404.
 [[routes]]
@@ -149,7 +149,7 @@ zone_name = "digithings.ai"
 #
 # /chat/occ needs no route of its own for safety: every request is matched by
 # the /chat* pattern below, and the Worker answers /chat/occ itself
-# (src/occ-gate.ts) before anything is proxied. That in-Worker gate is the
+# (src/legacy-invite-gate.ts) before anything is proxied. That in-Worker gate is the
 # guarantee, whichever order the routes are matched in.
 [[routes]]
 pattern = "digithings.ai/chat*"

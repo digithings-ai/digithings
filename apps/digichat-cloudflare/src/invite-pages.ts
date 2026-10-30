@@ -4,26 +4,26 @@ import {
   DIGI_TENANT_HEADER,
   EMBED_HOST_HEADER,
   EMBED_TOKEN_HEADER,
-  OCC_INVITE_COOKIE,
-  OCC_PAGE_PATH,
-  OCC_REFERRER_POLICY,
-  type OccCookiePolicy,
+  LEGACY_INVITE_COOKIE,
+  LEGACY_INVITE_PAGE_PATH,
+  LEGACY_INVITE_REFERRER_POLICY,
+  type LegacyInviteCookiePolicy,
   embedHostOf,
   isEmbedSurfacePath,
   readCookies,
   siteNotFound,
-} from "./occ-gate";
+} from "./legacy-invite-gate";
 
 /**
- * Invite-only tenant pages beyond OCC, configured rather than hard-coded.
+ * Invite-only tenant pages beyond the legacy invite page, configured rather than hard-coded.
  *
- * OCC's gate (`occ-gate.ts`) is the model and stays exactly as it is. Every
+ * The legacy hard-coded invite gate (`legacy-invite-gate.ts`) is the model and stays exactly as it is. Every
  * other invite-only tenant is one entry of the NON-SECRET Worker var
  * `DIGICHAT_INVITE_PAGES`:
  *
  *   {"<slug>": {"host": "<tenant host>", "keyEnv": "<SECRET_NAME>"}}
  *
- * - `/chat/<slug>` is gated here exactly like `/chat/occ`: a valid `?token=`
+ * - `/chat/<slug>` is gated here exactly like the legacy invite page: a valid `?token=`
  *   is traded for a `<slug>_invite` cookie (HttpOnly, Secure,
  *   SameSite=Lax, Path=/chat, `v2.<issued-at>.<mac>`), the browser is
  *   302'd to `/chat/<slug>/`, and a valid cookie is proxied to the app's
@@ -33,7 +33,7 @@ import {
  *   read from the Worker env at request time and never forwarded except as
  *   the tenant's `x-embed-token`. A missing secret fails closed (404).
  * - The page's `/chat/api/*` calls are bound to the tenant only with a valid
- *   cookie and a same-origin Referer on that page (same rule as OCC).
+ *   cookie and a same-origin Referer on that page (same rule as the legacy invite gate).
  * - `/embed?host=<host>` without the key answers the site 404.
  *
  * The var is the record of which paths are gated, and it lives outside the
@@ -64,7 +64,7 @@ const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
  * page can never take one of them.
  */
 export const RESERVED_CHAT_SEGMENTS: ReadonlySet<string> = new Set([
-  OCC_PAGE_PATH.slice(`${CONTAINER_BASE_PATH}/`.length),
+  LEGACY_INVITE_PAGE_PATH.slice(`${CONTAINER_BASE_PATH}/`.length),
   "embed",
   "api",
   "healthz",
@@ -168,7 +168,7 @@ async function cookieMac(page: InvitePage, key: string, iat: number): Promise<st
   return base64Url(await crypto.subtle.sign("HMAC", k, enc.encode(`digichat/${page.cookie}/v2|${iat}`)));
 }
 
-function nowSeconds(policy: OccCookiePolicy): number {
+function nowSeconds(policy: LegacyInviteCookiePolicy): number {
   return Math.floor((policy.nowMs ?? Date.now()) / 1000);
 }
 
@@ -181,7 +181,7 @@ async function cookieIssuedAt(
   page: InvitePage,
   value: string,
   key: string,
-  policy: OccCookiePolicy,
+  policy: LegacyInviteCookiePolicy,
 ): Promise<number | null> {
   const parts = value.split(".");
   if (parts.length !== 3 || parts[0] !== COOKIE_VERSION) return null;
@@ -198,7 +198,7 @@ export async function validInvitePageCookie(
   page: InvitePage,
   header: string | null,
   key: string | undefined,
-  policy: OccCookiePolicy,
+  policy: LegacyInviteCookiePolicy,
 ): Promise<string | null> {
   if (!key) return null;
   let best: { value: string; iat: number } | null = null;
@@ -221,11 +221,11 @@ export function invitePageCookieHeader(page: InvitePage, value: string): string 
   return `${page.cookie}=${encodeURIComponent(value)}; Path=${CONTAINER_BASE_PATH}; Secure; HttpOnly; SameSite=Lax`;
 }
 
-/** Drops every invite cookie (OCC's and each configured page's) from the headers. */
+/** Drops every invite cookie (the legacy invite page's and each configured page's) from the headers. */
 export function withoutInvitePageCookies(headers: Headers, pages: readonly InvitePage[]): void {
   const raw = headers.get("cookie");
   if (raw === null) return;
-  const names = new Set([OCC_INVITE_COOKIE, ...pages.map((p) => p.cookie)]);
+  const names = new Set([LEGACY_INVITE_COOKIE, ...pages.map((p) => p.cookie)]);
   const kept = raw
     .split(";")
     .filter((part) => {
@@ -251,7 +251,7 @@ function containerRequestFor(page: InvitePage, request: Request, key: string, pa
   return req;
 }
 
-/** `/chat/<slug>` for a configured page: same contract as `occGate`. */
+/** `/chat/<slug>` for a configured page: same contract as `legacyInviteGate`. */
 export async function invitePageGate(
   page: InvitePage,
   pages: readonly InvitePage[],
@@ -259,7 +259,7 @@ export async function invitePageGate(
   key: string | undefined,
   containerUpstream: (req: Request) => Promise<Response>,
   siteUpstream: (req: Request | string, init?: RequestInit) => Promise<Response>,
-  policy: OccCookiePolicy,
+  policy: LegacyInviteCookiePolicy,
 ): Promise<Response> {
   const url = new URL(request.url);
   if (key) {
@@ -271,7 +271,7 @@ export async function invitePageGate(
       const headers = new Headers({
         location: clean.toString(),
         "cache-control": "no-store",
-        "referrer-policy": OCC_REFERRER_POLICY,
+        "referrer-policy": LEGACY_INVITE_REFERRER_POLICY,
       });
       headers.append(
         "set-cookie",
@@ -284,7 +284,7 @@ export async function invitePageGate(
       const res = await containerUpstream(containerRequestFor(page, request, key, pages));
       const headers = new Headers(res.headers);
       headers.set("cache-control", "no-store");
-      headers.set("referrer-policy", OCC_REFERRER_POLICY);
+      headers.set("referrer-policy", LEGACY_INVITE_REFERRER_POLICY);
       headers.append("set-cookie", invitePageCookieHeader(page, value));
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
     }
@@ -313,7 +313,7 @@ function refererPage(request: Request, pages: readonly InvitePage[]): InvitePage
 
 /**
  * Binds a configured page's `/chat/api/*` call to its tenant, in place (same
- * rule as `bindOccApiCall`). From the page, the client's own tenant headers
+ * rule as `bindLegacyInviteApiCall`). From the page, the client's own tenant headers
  * are always dropped and set only with a valid cookie. Calls from anywhere
  * else are untouched here.
  */
@@ -321,7 +321,7 @@ export async function bindInvitePageApiCall(
   request: Request,
   pages: readonly InvitePage[],
   env: Record<string, unknown>,
-  policy: OccCookiePolicy,
+  policy: LegacyInviteCookiePolicy,
 ): Promise<void> {
   const page = refererPage(request, pages);
   if (!page) return;

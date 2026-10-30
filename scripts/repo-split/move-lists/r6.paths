@@ -24,4 +24,4 @@ tests/dg/test_tenant_corpus_parity.py
 tests/dg/test_occ_ticket_payload_retired.py
 tests/scripts/test_datatap_answer_check_clock.py
 tests/scripts/test_datatap_answer_integrity_check.py
-docs/ops/OCC_INVITE_KEY.md
+docs/ops/LEGACY_INVITE_KEY.md

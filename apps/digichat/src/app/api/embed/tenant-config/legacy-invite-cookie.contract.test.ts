@@ -4,7 +4,7 @@
  *
  * After the invite link's 302 the browser on /chat/occ holds the invite only
  * as the `occ_invite` cookie; its URL carries no ?token= and no ?host=. The
- * digichat Worker's `bindOccApiCall` is what turns a /chat/api/* call from
+ * digichat Worker's `bindLegacyInviteApiCall` is what turns a /chat/api/* call from
  * that page into an OCC call — and only when the cookie is valid AND the
  * Referer is the OCC page. These tests run the real Worker binding and the
  * real app route back to back, the way production chains them.
@@ -12,9 +12,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import {
-  bindOccApiCall,
-  occInviteCookieValue,
-} from "../../../../../../digichat-cloudflare/src/occ-gate";
+  bindLegacyInviteApiCall,
+  legacyInviteCookieValue,
+} from "../../../../../../digichat-cloudflare/src/legacy-invite-gate";
 import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 import { resetDigichatConfigForTests } from "@/lib/deploy-config/loader";
 
@@ -65,7 +65,7 @@ function browserRead(referer: string, headers: Record<string, string> = {}): Req
 }
 
 async function tenantSeen(req: Request): Promise<{ slug?: string; mcp?: { servers?: unknown[] } }> {
-  await bindOccApiCall(req, INVITE);
+  await bindLegacyInviteApiCall(req, INVITE);
   const res = await GET(req);
   expect(res.status).toBe(200);
   return (await res.json()) as { slug?: string; mcp?: { servers?: unknown[] } };
@@ -80,7 +80,7 @@ function expectNotOcc(body: { slug?: string; mcp?: { servers?: unknown[] } }): v
 let COOKIE = "";
 
 beforeEach(async () => {
-  COOKIE = await occInviteCookieValue(INVITE);
+  COOKIE = await legacyInviteCookieValue(INVITE);
   vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
   vi.stubEnv("DIGICHAT_CONFIG_PATH", "");
   resetEmbedTenantRegistryForTests();

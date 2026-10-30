@@ -5,9 +5,9 @@
  *
  * Website paths (different chats, same Container):
  *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
- *   digithings.ai/chat/occ  → invite gate (this Worker) → the app's /chat/embed,
- *                             OCC tenant; its /chat/api/* calls are bound to the
- *                             invite here too (see bindOccApiCall)
+ *   the legacy invite page  → invite gate (this Worker) → the app's /chat/embed,
+ *                             legacy invite tenant; its /chat/api/* calls are bound to the
+ *                             invite here too (see bindLegacyInviteApiCall)
  */
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
@@ -29,15 +29,15 @@ import {
   unionGatedClaims,
 } from "./tenants-kv";
 import {
-  bindOccApiCall,
+  bindLegacyInviteApiCall,
   isChatApiPath,
-  isOccShellPath,
-  occEmbedGate,
-  occGate,
-  occInviteMaxAgeSeconds,
-  type OccCookiePolicy,
+  isLegacyInviteShellPath,
+  legacyInviteEmbedGate,
+  legacyInviteGate,
+  legacyInviteMaxAgeSeconds,
+  type LegacyInviteCookiePolicy,
   withoutInviteCookie,
-} from "./occ-gate";
+} from "./legacy-invite-gate";
 import {
   INVITE_PAGES_VAR,
   bindInvitePageApiCall,
@@ -131,7 +131,7 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
-    // Non-secret: which tenant hosts are invite-only beyond OCC (slug, host and
+    // Non-secret: which tenant hosts are invite-only beyond the legacy invite page (slug, host and
     // the NAME of each key). The app uses it so an invite-only host never falls
     // back to a generic chat; the key values are not in it.
     DIGICHAT_INVITE_PAGES: workerVars.DIGICHAT_INVITE_PAGES ?? "",
@@ -162,7 +162,7 @@ export class DigiChatContainer extends Container {
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
-    // Read-only Zammad helpdesk MCP (in-container zammad-mcp, OCC tickets).
+    // Read-only Zammad helpdesk MCP (in-container zammad-mcp, the legacy tenant's tickets).
     ZAMMAD_API_TOKEN: workerVars.ZAMMAD_API_TOKEN ?? "",
     ZAMMAD_BASE_URL: workerVars.ZAMMAD_BASE_URL ?? "",
     // Edge key for the digithings-stack `/_stack/mcp/<id>` routes that front
@@ -309,25 +309,25 @@ export class DigiChatContainer extends Container {
   }
 }
 
-/** The `occ_invite` cookie lifetime from the non-secret var (default 30 days). */
-function occCookiePolicy(env: Env): OccCookiePolicy {
-  return { maxAgeSeconds: occInviteMaxAgeSeconds(env.OCC_INVITE_MAX_AGE_DAYS) };
+/** The invite cookie (`LEGACY_INVITE_COOKIE`) lifetime from the non-secret var (default 30 days). */
+function legacyInviteCookiePolicy(env: Env): LegacyInviteCookiePolicy {
+  return { maxAgeSeconds: legacyInviteMaxAgeSeconds(env.OCC_INVITE_MAX_AGE_DAYS) };
 }
 
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
   /**
-   * DIG-1210 invite key gating /chat/occ and binding the OCC page's
+   * DIG-1210 invite key gating the legacy invite page and binding the legacy invite page's
    * /chat/api/* calls to the invite. Worker-only; never forwarded.
    */
   OCC_INVITE_KEY?: string;
   /**
-   * Non-secret: how many days an `occ_invite` cookie is honoured after the
+   * Non-secret: how many days an invite cookie (`LEGACY_INVITE_COOKIE`) is honoured after the
    * invite link set it (whole days, 1-365; default 30). Worker-only.
    */
   OCC_INVITE_MAX_AGE_DAYS?: string;
   /**
-   * Non-secret JSON: invite-only tenant pages beyond OCC,
+   * Non-secret JSON: invite-only tenant pages beyond the legacy invite page,
    * `{"<slug>": {"host": "<host>", "keyEnv": "<SECRET_NAME>"}}`. Each
    * `keyEnv` names a Worker secret; see src/invite-pages.ts.
    */
@@ -400,11 +400,11 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
-    // Computed before the invite gate because /chat/occ is served by the same
+    // Computed before the invite gate because the legacy invite page is served by the same
     // container as /chat: the gate validates, then proxies there. The id is
     // derived from the deploy's rev, never hand-pinned.
     const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
-    if (isOccShellPath(url.pathname)) {
+    if (isLegacyInviteShellPath(url.pathname)) {
       // One gate, one secret, one path: the invite is checked here and the
       // request goes to the container's own embed route. Nothing is fetched
       // from this Worker's own URL, and Pages is not in the chain.
@@ -413,7 +413,7 @@ export default {
       // draining slot or a dropped connection on this path answers the same
       // retryable 503 / inline HTML `/chat` answers, instead of a raw 5xx.
       const container = getContainer(workerEnv.DIGICHAT, containerId);
-      return occGate(
+      return legacyInviteGate(
         request,
         workerEnv.OCC_INVITE_KEY,
         async (req) =>
@@ -422,10 +422,10 @@ export default {
             await fetchContainerWithRetry(req, (r) => container.fetch(r)),
           ),
         fetch,
-        occCookiePolicy(workerEnv),
+        legacyInviteCookiePolicy(workerEnv),
       );
     }
-    // Configured invite-only pages (/chat/<slug>), gated like /chat/occ.
+    // Configured invite-only pages (/chat/<slug>), gated like the legacy invite page.
     const invitePages = parseInvitePages(workerEnv[INVITE_PAGES_VAR]);
     const secrets = workerEnv as unknown as Record<string, unknown>;
     const invitePage = invitePageFor(invitePages, url.pathname);
@@ -442,12 +442,12 @@ export default {
             await fetchContainerWithRetry(req, (r) => container.fetch(r)),
           ),
         fetch,
-        occCookiePolicy(workerEnv),
+        legacyInviteCookiePolicy(workerEnv),
       );
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
-    const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
+    const embedGate = await legacyInviteEmbedGate(request, workerEnv.OCC_INVITE_KEY);
     if (embedGate) return embedGate;
     const pageEmbedGate = await invitePageEmbedGate(request, invitePages, secrets);
     if (pageEmbedGate) return pageEmbedGate;
@@ -480,7 +480,7 @@ export default {
           " and fell back to the legacy id.",
       });
     }
-    // OCC helpdesk MCP: /api/mcp/zammad* is served by the in-container
+    // Legacy tenant helpdesk MCP: /api/mcp/zammad* is served by the in-container
     // zammad-mcp through the trusted proxy, not by Next. Gate it here with the
     // edge key this Worker holds; the container never sees the key. Fail closed.
     //
@@ -517,7 +517,7 @@ export default {
         );
       }
     }
-    // One shared instance — digithings, OCC, and future tenants via embed registry.
+    // One shared instance — digithings, the legacy invite tenant, and future tenants via embed registry.
     // The id is derived from the deploying commit, never hand-pinned: a warm
     // instance keeps its boot env, so a forgotten bump silently serves the old
     // image. See paths.ts. Same `containerId` the reset lever above destroys.
@@ -533,20 +533,20 @@ export default {
     // routes are moved under it and the canonical /chat paths are passed
     // through unchanged.
     const containerRequest = withContainerPath(request, url.pathname);
-    // DIG-3585: the OCC page's API calls. After the invite link's 302 the
-    // browser holds the invite only as the occ_invite cookie, so the edge is
-    // what makes a /chat/api/* call from /chat/occ an OCC call — and the only
+    // DIG-3585: the legacy invite page's API calls. After the invite link's 302 the
+    // browser holds the invite only as the invite cookie (LEGACY_INVITE_COOKIE), so the edge is
+    // what makes a /chat/api/* call from the legacy invite page a legacy invite call — and the only
     // thing that can: the client's own tenant headers are dropped on those
     // calls, and a house page's calls are never upgraded by the cookie.
     // Judged on the path the container sees, so a legacy /api/* alias is bound
     // the same way as its /chat/api/* target.
     if (isChatApiPath(new URL(containerRequest.url).pathname)) {
-      await bindOccApiCall(
+      await bindLegacyInviteApiCall(
         containerRequest,
         workerEnv.OCC_INVITE_KEY,
-        occCookiePolicy(workerEnv),
+        legacyInviteCookiePolicy(workerEnv),
       );
-      await bindInvitePageApiCall(containerRequest, invitePages, secrets, occCookiePolicy(workerEnv));
+      await bindInvitePageApiCall(containerRequest, invitePages, secrets, legacyInviteCookiePolicy(workerEnv));
     }
     // The invite cookies stop at the edge on every path, like the edge key.
     withoutInviteCookie(containerRequest.headers);

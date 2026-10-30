@@ -118,11 +118,11 @@ shows `https://digithings.ai/chat/occ/` with no `token=`, and send one message.
 - **[Chris] Rotate the invite key (optional).** Worker invocation logs written
   before `redact_query_string` took effect may hold a first-hop `?token=` URL until
   Workers Logs retention (7 days) ages them out. Rotating closes that window now and
-  retires every issued cookie. Follow `docs/ops/OCC_INVITE_KEY.md`; it is a
+  retires every issued cookie. Follow `docs/ops/LEGACY_INVITE_KEY.md`; it is a
   Cloudflare secret change.
 - **[Chris] Remove the Pages copy of `OCC_INVITE_KEY`.** The Pages shell is gone;
   the Worker is the only gate, so the key should exist only as a Worker secret
-  (definition of done in `docs/plans/2026-10-27-occ-single-path.md`).
+  (definition of done in `docs/plans/2026-10-27-legacy-invite-single-path.md`).
 - `OCC_INVITE_MAX_AGE_DAYS = 30` is a plain `[vars]` value in
   `apps/digichat-cloudflare/wrangler.toml`; change it by PR if a different session
   lifetime is wanted.

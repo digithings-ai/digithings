@@ -244,7 +244,7 @@ describe("occ.digithings.ai — config/occ.yaml equals today's live tenant", () 
 
   /**
    * Today's OCC gate is enforced at the EDGE (embed-invite-only.ts, mirrored by
-   * the Worker's occ-gate.ts), not in the tenant row — the KV row still says
+   * the Worker's legacy-invite-gate.ts), not in the tenant row — the KV row still says
    * `ungated`. The document has to say what is actually enforced, so the
    * expected mode is derived from the invite-host map, not from the row.
    */

@@ -5,7 +5,7 @@
 # written to a file, and never placed in a command line: the headers are handed to curl through
 # `curl --config -` on stdin, so the value does not appear in `ps` output or shell history.
 #
-# What it proves, and what it cannot: see docs/ops/OCC_INVITE_KEY.md. Short version — it reads
+# What it proves, and what it cannot: see docs/ops/LEGACY_INVITE_KEY.md. Short version — it reads
 # the `slug` in the body of GET /api/embed/tenant-config, because that route always answers HTTP
 # 200 and encodes the authorization decision in the body. A script that only checks status codes
 # reports a false PASS here.

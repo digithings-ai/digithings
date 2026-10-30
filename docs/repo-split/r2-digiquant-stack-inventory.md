@@ -232,7 +232,7 @@ anchored tip:
 | `scripts/check_occ_rollout_auth_guard.py` | R6 | |
 | `scripts/index_occ_tickets.py` | R6 | |
 | `scripts/test_occ_rollout_scope_guard.sh` | R6 | |
-| `docs/ops/OCC_INVITE_KEY.md` | R6 | |
+| `docs/ops/LEGACY_INVITE_KEY.md` | R6 | |
 | `apps/digithings-stack-cloudflare/container/seed_chroma.sh` | R5 | |
 
 **Two corrections to the send-back's paths.**

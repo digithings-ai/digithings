@@ -11,7 +11,7 @@ are not:
 |---|---|---|
 | store | KV `config-yaml` | KV `embed-tenants` |
 | schema | `DigichatDeployment` | `EmbedTenantConfig`, converted then merged *over* the document |
-| gate | `gate.mode` (config) | host hardcoded in `occ-gate.ts:105` and its Pages twin |
+| gate | `gate.mode` (config) | host hardcoded in `legacy-invite-gate.ts:105` and its Pages twin |
 
 Two schemas means two ways to drop a field, and a field dropped on one path is
 invisible on the other. That is the shape of the MCP identity bug fixed in
@@ -52,7 +52,7 @@ request host. `embed-tenants` becomes a compatibility shim and then retires.
 
 ### 3. Gate from config
 - Derive the invite requirement from the resolved deployment
-  (`gate.mode: invite`) instead of `INVITE_ONLY_EMBED_HOSTS` in `occ-gate.ts`
+  (`gate.mode: invite`) instead of `INVITE_ONLY_EMBED_HOSTS` in `legacy-invite-gate.ts`
   and the Pages twin.
 - A host without the gate must still get the site's own 404, byte-identical.
 

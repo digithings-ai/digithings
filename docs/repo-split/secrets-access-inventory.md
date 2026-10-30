@@ -183,7 +183,7 @@ secret store (`~/.config/digithings/secrets/`), and on 2026-10-21 the sanctioned
 copy was restored to the Keychain and proved against production (DIG-4810:
 `EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS). **No rotation
 was performed** — the value that is live is the value that was installed on
-2026-10-11. Runbook `docs/ops/OCC_INVITE_KEY.md`; inventory row `OCC_INVITE_KEY`
+2026-10-11. Runbook `docs/ops/LEGACY_INVITE_KEY.md`; inventory row `OCC_INVITE_KEY`
 and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
 
 ## Local-only Keychain (`digithings-local/*`, never moves)

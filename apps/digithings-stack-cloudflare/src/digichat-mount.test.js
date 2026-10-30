@@ -272,8 +272,8 @@ describe("digichat separation pins (Chris, 2026-10-19)", () => {
   });
 
   it("does NOT gate the OCC shell here — the invite gate stays on the digichat worker", () => {
-    expect(source).not.toContain("occGate(");
-    expect(source).not.toContain("isOccShellPath(");
+    expect(source).not.toContain("legacyInviteGate(");
+    expect(source).not.toContain("isLegacyInviteShellPath(");
   });
 
   it("keeps the /_dtchat asset prefix (no clash with Pages /_next)", () => {

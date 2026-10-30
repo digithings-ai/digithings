@@ -38,7 +38,7 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   1. the `token` field of the `occ.digithings.ai` entry inside the digichat Worker secret
      `DIGICHAT_EMBED_TENANTS` — the registry copy the Container reads;
   2. the digichat Worker secret `OCC_INVITE_KEY`, which the edge gates compare: `/chat/occ`
-     (`occGate`) and `/embed?host=occ.digithings.ai` (`occEmbedGate`). A request without the key
+     (`legacyInviteGate`) and `/embed?host=occ.digithings.ai` (`legacyInviteEmbedGate`). A request without the key
      gets the site 404 at the Worker. The gate keys on the embed **surface**, not on one path
      spelling, so it covers every route that renders the embed shell: `/embed`, `/chat/embed`
      (the base-path spelling the app is served under since DIG-5121) and `/chat/?mode=embed`.
@@ -57,7 +57,7 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   the Keychain custody copy and the local host secret store, or the next
   [restore](#custody) reinstalls a dead key as the sanctioned copy.
 - The 404 the gate answers is the **site's own** 404, passed through untouched (`siteNotFound` in
-  `apps/digichat-cloudflare/src/occ-gate.ts`): a gated address must answer exactly like a path that
+  `apps/digichat-cloudflare/src/legacy-invite-gate.ts`): a gated address must answer exactly like a path that
   does not exist — same status, same headers, same body. Do not "fix" it by adding
   `cache-control: no-store` or any other marker: that would make the gated address
   distinguishable from a plain 404.
@@ -68,7 +68,7 @@ issued per user, has no expiry of its own, and cannot be attributed to a person.
   reaches the Container URL, the HTML or the flight payload, and the cookie itself is stripped
   before any request reaches the Container.
 - **The page's API calls** (`/chat/api/*`) carry no key of their own: the browser sends the
-  `/chat`-scoped cookie and the Worker (`bindOccApiCall` in `occ-gate.ts`) sets `X-Embed-Token`
+  `/chat`-scoped cookie and the Worker (`bindLegacyInviteApiCall` in `legacy-invite-gate.ts`) sets `X-Embed-Token`
   and `X-Embed-Host: occ.digithings.ai` only when that cookie is valid **and** the Referer is the
   `/chat/occ` page (the gate serves it with `Referrer-Policy: same-origin` so the path is sent),
   and, when the browser sends them, `Sec-Fetch-Site` is `same-origin` and `Origin` is ours.
@@ -396,7 +396,7 @@ of this table is `apps/digichat/src/lib/embed-occ-invite-key.test.ts`.
 
 One check the script cannot do: that a **staff user** gets a working chat session at
 `https://digithings.ai/chat/occ?token=<key>` — a real message round-trip. That is a browser step
-and it is the only proof that the whole chain (Worker `occGate` → `/chat/embed` +
+and it is the only proof that the whole chain (Worker `legacyInviteGate` → `/chat/embed` +
 `X-Embed-Token` → Container → model) works end to end. `scripts/smoke_occ_invite_gate.sh` covers
 the HTTP half when `OCC_INVITE_KEY` is set; the message round-trip stays manual. When it is run,
 do it by hand, once, and record the outcome in
@@ -470,7 +470,7 @@ and live customer PII anyway.
   (`[observability] enabled = true` in `apps/digichat-cloudflare/wrangler.toml`), so the Worker
   also sets `redact_query_string = true` there: query strings are dropped from its logs and
   traces, for `/chat/occ?token=` and the legacy `/embed?...&token=` door alike (pinned by
-  `occ-route.contract.test.ts`). This takes effect on the next Worker deploy; invocation logs
+  `legacy-invite-route.contract.test.ts`). This takes effect on the next Worker deploy; invocation logs
   written before it may still hold a first-hop URL until Workers Logs retention (7 days) ages
   them out. The legacy `/embed` door still passes its URL to the container, whose app does not
   log request URLs. One limit remains: the `Referrer-Policy: no-referrer`

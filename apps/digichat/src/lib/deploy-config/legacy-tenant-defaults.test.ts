@@ -5,9 +5,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  OCC_EMBED_HOST as WORKER_GATED_HOST,
-  OCC_PAGE_PATH as WORKER_GATED_PATH,
-} from "../../../../digichat-cloudflare/src/occ-gate";
+  LEGACY_INVITE_EMBED_HOST as WORKER_GATED_HOST,
+  LEGACY_INVITE_PAGE_PATH as WORKER_GATED_PATH,
+} from "../../../../digichat-cloudflare/src/legacy-invite-gate";
 import {
   LEGACY_GATED_TENANTS,
   LEGACY_GATED_TENANT_HOST,
