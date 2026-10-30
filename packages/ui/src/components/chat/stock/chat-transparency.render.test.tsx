@@ -143,10 +143,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe.each([
-  ["gallery skin", Gallery],
-  ["base skin", BaseThread as FC],
-])("chat transparency (%s)", (_name, Skin) => {
+describe.each([["gallery skin", Gallery]])("chat transparency (%s)", (_name, Skin) => {
   it("shows the full pretty-printed arguments and the error under them", async () => {
     const { host, unmount } = await mount(Skin, FAILED_TOOL);
     await openTool(host);
@@ -291,5 +288,57 @@ describe("notice helpers", () => {
     act(() => root.render(<pre>{nodes}</pre>));
     expect(host.textContent).toBe(text);
     act(() => root.unmount());
+  });
+});
+
+/**
+ * The base skin renders assistant-ui's own parts (0.15.18 ToolFallback and
+ * MessageError), so it shows what stock shows: the raw arguments, the error
+ * result under them, and the stock red error box. Long blocks still scroll.
+ */
+describe("chat transparency (base skin, stock assistant-ui parts)", () => {
+  const Skin = BaseThread as FC;
+
+  it("shows the arguments and the error result under them, both scrollable", async () => {
+    const { host, unmount } = await mount(Skin, FAILED_TOOL);
+    await openTool(host);
+    const args = host.querySelector<HTMLElement>('[data-slot="tool-fallback-args"]');
+    const result = host.querySelector<HTMLElement>('[data-slot="tool-fallback-result"]');
+    expect(args).toBeTruthy();
+    expect(result).toBeTruthy();
+    expect(args!.textContent).toContain("mailbox_29");
+    expect(args!.compareDocumentPosition(result!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(result!.textContent).toContain("'pageSize' must be a string");
+    expect(result!.textContent).toContain("McpServer.handle (server.ts:203)");
+    for (const pre of [args!.querySelector("pre")!, result!.querySelector("pre")!]) {
+      expect(pre.className).toMatch(/\bmax-h-72\b/);
+      expect(pre.className).toMatch(/\boverflow-auto\b/);
+    }
+    unmount();
+  });
+
+  it("renders a failed turn in assistant-ui's MessageError box", async () => {
+    const { host, unmount } = await mount(Skin, ERRORED_TURN);
+    const root = host.querySelector<HTMLElement>(".aui-message-error-root");
+    expect(root).toBeTruthy();
+    expect(root!.className).toContain("border-destructive");
+    expect(root!.textContent).toContain("Response exceeded the token limit (250000 tokens per minute).");
+    unmount();
+  });
+
+  it("keeps a backend status line visible beside a folded tool group", async () => {
+    const { host, unmount } = await mount(Skin, TOOL_CAP_TURN);
+    const notice = host.querySelector<HTMLElement>('[data-slot="chat-notice"][data-tone="status"]');
+    expect(notice?.textContent).toContain("Pausing for the token limit, resuming shortly");
+    expect(notice?.getAttribute("role")).toBe("status");
+    expect(host.textContent).toContain("The orders table is the one that holds them.");
+    unmount();
+  });
+
+  it("renders a backend status notice as a muted line", async () => {
+    const { host, unmount } = await mount(Skin, STATUS_TURN);
+    const notice = host.querySelector<HTMLElement>('[data-slot="chat-notice"][data-tone="status"]');
+    expect(notice?.textContent).toContain("Waiting for model capacity — retrying in 8s");
+    unmount();
   });
 });

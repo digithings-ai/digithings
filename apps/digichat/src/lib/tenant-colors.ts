@@ -14,6 +14,10 @@
  * canvas is right from the first parsed byte. The selectors double `:root`
  * so they beat palettes.css (`:root[data-palette][data-theme]`) and the
  * shadcn `.dark` wrapper without `!important`.
+ *
+ * The tenant's colours are its default look only. A palette the visitor picks
+ * with `/theme` paints `data-palette` on the root, and the root selector here
+ * requires its absence, so every palette re-themes a tenant chat in full.
  */
 import { z } from "zod";
 import { HEX_COLOR } from "@/lib/hex-color";
@@ -86,7 +90,7 @@ export function tenantColorVars(set: TenantColorSet): [string, string][] {
 function modeCss(mode: "light" | "dark", set: TenantColorSet): string {
   const vars = tenantColorVars(set);
   if (!vars.length) return "";
-  const root = `:root:root[data-theme="${mode}"]`;
+  const root = `:root:root[data-theme="${mode}"]:not([data-palette])`;
   const scopes = [
     root,
     `${root} .dc-embed-shell`,

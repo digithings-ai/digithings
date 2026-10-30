@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { MarkdownText } from "../stock/markdown-text";
 import { ToolFallback } from "../stock/tool-fallback.aui";
+import { useViewDisclosure } from "../stock/deploy-ui-context";
 import { SkinCredit, useComposerCopy } from "../stock";
 
 
@@ -281,6 +282,7 @@ const assistantActionClassName =
   "flex size-8 items-center justify-center rounded-lg text-[#5d5d5d] transition-colors hover:bg-black/[0.07] hover:text-[#5d5d5d] dark:text-[#cdcdcd] dark:hover:bg-white/15 dark:hover:text-[#cdcdcd]";
 
 const AssistantMessage: FC = () => {
+  const disclosure = useViewDisclosure();
   return (
     <MessagePrimitive.Root className="relative mx-auto flex w-full max-w-3xl flex-col">
       <div className="text-[#0d0d0d] dark:text-[#ececec]">
@@ -288,7 +290,14 @@ const AssistantMessage: FC = () => {
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
             if (part.type === "tool-call")
-              return part.toolUI ?? <ToolFallback {...part} />;
+              return (
+                part.toolUI ?? (
+                  <ToolFallback
+                    key={disclosure.key}
+                    {...part}
+                  />
+                )
+              );
             return null;
           }}
         </MessagePrimitive.Parts>

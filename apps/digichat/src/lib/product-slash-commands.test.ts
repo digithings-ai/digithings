@@ -12,6 +12,7 @@ import {
   extraSlashDefs,
   isPrivateMode,
   isPrivateModeAvailable,
+  languageSelectOptions,
   prefixSlashAdapter,
   privateModeHeaderEntries,
   seedPrivateMode,
@@ -19,6 +20,7 @@ import {
   setPrivateModeAvailable,
   slashItemPrefixMatch,
   slashSubmitAction,
+  tenantLanguageCodes,
 } from "./product-slash-commands";
 
 function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
@@ -276,6 +278,46 @@ describe("executeSlashDef", () => {
     expect(a.setLanguage).toHaveBeenCalledWith("it");
     executeSlashDef(def, "espanol", a);
     expect(a.setLanguage).toHaveBeenCalledWith("es");
+  });
+
+  it("keeps /language to the tenant's languages when a list is set, unchanged when unset", () => {
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    const fenced = api({
+      languageOptions: [
+        { code: "en", short: "EN", label: "English" },
+        { code: "fr", short: "FR", label: "Français" },
+      ],
+    });
+    executeSlashDef(def, "fr", fenced);
+    expect(fenced.setLanguage).toHaveBeenCalledWith("fr");
+    executeSlashDef(def, "dutch", fenced);
+    expect(fenced.setLanguage).not.toHaveBeenCalledWith("nl");
+    expect(fenced.openLanguage).toHaveBeenCalledOnce();
+    expect(languageSelectOptions(tenantLanguageCodes(fenced)).map((o) => o.value)).toEqual([
+      "en",
+      "fr",
+    ]);
+    const ids = buildProductSlashCommands(fenced).map((c) => c.id);
+    expect(ids).toContain("language");
+    expect(ids).not.toContain("dutch");
+
+    const open = api();
+    expect(tenantLanguageCodes(open)).toBeNull();
+    expect(languageSelectOptions(tenantLanguageCodes(open))).toEqual(languageSelectOptions());
+    executeSlashDef(def, "dutch", open);
+    expect(open.setLanguage).toHaveBeenCalledWith("nl");
+    expect(buildProductSlashCommands(open).map((c) => c.id)).toContain("dutch");
+  });
+
+  it("keeps a single-language tenant on its language for typed /language", () => {
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    const one = api({ allowedLanguages: ["fr"] });
+    expect(tenantLanguageCodes(one)).toEqual(["fr"]);
+    expect(languageSelectOptions(tenantLanguageCodes(one)).map((o) => o.value)).toEqual(["fr"]);
+    executeSlashDef(def, "en", one);
+    expect(one.setLanguage).not.toHaveBeenCalled();
+    expect(one.openLanguage).toHaveBeenCalledOnce();
+    expect(buildProductSlashCommands(one).map((c) => c.id)).not.toContain("dutch");
   });
 
   it("opens /provider and seeds a provider from the remainder", () => {

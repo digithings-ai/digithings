@@ -214,6 +214,11 @@ def run_web_search(
     policy = RetryPolicy(attempts=2, base_delay=1.0, factor=2.0, max_delay=5.0)
     limiter = _limiter_for(config.min_interval_s)
     enriched: list[WebSearchResult] = []
+    guard = None
+    if req.fence:
+        from digisearch.web_search.fence import fence_guard
+
+        guard = fence_guard(req.fence)
     with HttpFetcher(
         timeout=config.fetch_timeout, allowed_hosts=config.fetch_allowed_hosts
     ) as fetcher:
@@ -221,7 +226,13 @@ def run_web_search(
             try:
                 limiter.acquire()
                 fetched = with_retry(
-                    lambda: fetcher.fetch(hit.url), policy, description="web_search fetch"
+                    lambda: (
+                        fetcher.fetch(hit.url, url_guard=guard)
+                        if guard is not None
+                        else fetcher.fetch(hit.url)
+                    ),
+                    policy,
+                    description="web_search fetch",
                 )
                 if req.page_corpus and is_challenge_page(
                     fetched.status_code, fetched.url, fetched.text or ""

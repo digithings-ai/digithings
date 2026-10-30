@@ -184,7 +184,11 @@ def test_oss_seam_pins_recency_and_clamp(monkeypatch):
         "purpose",
         "effort",
         "offset",
+        "fence",
+        "page_corpus",
     }
+    # A monitor never sets a pinned tenant's site fence or page corpus.
+    assert req.fence is None and req.page_corpus is None
     assert data.results == [
         WebSearchResult(url="https://a.com/1", title="A", snippet="alpha").model_dump()
     ]

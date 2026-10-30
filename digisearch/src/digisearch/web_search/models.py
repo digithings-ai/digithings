@@ -89,6 +89,10 @@ class WebSearchRequest(BaseModel):
     page_corpus: str | None = Field(
         default=None, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$"
     )
+    # A pinned tenant's allowed sites (web_search/fence.py). When set, result
+    # enrichment refuses any fetch hop outside them: a hit whose page redirects
+    # off the fence keeps its search snippet, never the far page's text.
+    fence: list[str] | None = Field(default=None, max_length=50)
 
 
 class WebSearchConfigError(ValueError):
