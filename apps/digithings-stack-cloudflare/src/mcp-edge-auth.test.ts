@@ -13,6 +13,7 @@ import {
   MCP_EDGE_JWKS_KV_KEY,
   MCP_EDGE_JWKS_TTL_MS,
   MCP_EDGE_MAX_INSPECT_BYTES,
+  MCP_EDGE_WILDCARD_TENANTS,
   _resetMcpEdgeJwksCacheForTests,
   authorizeMcpEdge,
   mcpScopeForServer,
@@ -741,5 +742,105 @@ describe("write tools need their own scope", () => {
       env: ENV,
     });
     expect(decision.ok).toBe(true);
+  });
+});
+
+describe("tenant binding at the edge (#6648)", () => {
+  function vaultCall(tool: string, token: string): Request {
+    return new Request("https://stack.test/_stack/mcp/digivault/mcp", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: tool, arguments: { path_prefix: "clients/tenant-b" } },
+      }),
+    });
+  }
+
+  async function decide(claims: Record<string, unknown>, tool = "search_notes") {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claims);
+    return authorizeMcpEdge({
+      request: vaultCall(tool, token),
+      serverId: "digivault",
+      expectedKey: "",
+      env: ENV,
+    });
+  }
+
+  it("only the house tenants may hold a bare wildcard", () => {
+    expect([...MCP_EDGE_WILDCARD_TENANTS].sort()).toEqual(["digithings", "digithings-ai"]);
+  });
+
+  it("refuses a token with no tenant_slug claim with 401", async () => {
+    const claims = claimsFor("mcp:digivault");
+    delete (claims as Record<string, unknown>).tenant_slug;
+    expect(await decide(claims)).toEqual({ ok: false, status: 401, reason: "missing_tenant" });
+  });
+
+  it("refuses a blank tenant_slug with 401", async () => {
+    expect(await decide(claimsFor("mcp:digivault", { tenant_slug: "  " }))).toEqual({
+      ok: false,
+      status: 401,
+      reason: "missing_tenant",
+    });
+  });
+
+  it("refuses a non-house bare * with 403, read or write", async () => {
+    for (const tool of ["search_notes", "create_note"]) {
+      expect(await decide(claimsFor("*", { tenant_slug: "tenant-a" }), tool)).toEqual({
+        ok: false,
+        status: 403,
+        reason: "wildcard_scope",
+      });
+    }
+  });
+
+  it("refuses a non-house * even alongside the real scopes", async () => {
+    expect(
+      await decide(claimsFor("mcp:digivault mcp:digivault:write *", { tenant_slug: "tenant-a" })),
+    ).toEqual({ ok: false, status: 403, reason: "wildcard_scope" });
+  });
+
+  it("keeps the house * working on both servers", async () => {
+    for (const tenant of ["digithings", "digithings-ai"]) {
+      const decision = await decide(claimsFor("*", { tenant_slug: tenant }), "create_note");
+      expect(decision.ok).toBe(true);
+    }
+  });
+
+  it("lets a non-house tenant use its own explicit digivault scopes", async () => {
+    const read = await decide(claimsFor("mcp:digivault", { tenant_slug: "tenant-a" }));
+    expect(read).toEqual({ ok: true, via: "jwt", scope: "mcp:digivault" });
+    const write = await decide(
+      claimsFor("mcp:digivault mcp:digivault:write", { tenant_slug: "tenant-a" }),
+      "create_note",
+    );
+    expect(write.ok).toBe(true);
+  });
+
+  it("returns the tenant from verifyDigikeyJwt", async () => {
+    stubJwks([primary]);
+    const token = await signJwt(primary, claimsFor("mcp:digivault", { tenant_slug: "tenant-a" }));
+    const result = await verifyDigikeyJwt(token, ENV);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.tenant).toBe("tenant-a");
+  });
+
+  // Regression for the review repro: a wildcard api_key minted for some other
+  // tenant used to pass the edge and reach create_note on any path_prefix.
+  it("regression: a non-house * api_key can no longer reach create_note", async () => {
+    const decision = await decide(
+      claimsFor("*", {
+        tenant_slug: "some-other-tenant",
+        principal_kind: "api_key",
+        sub: "api_key:some-other-tenant",
+      }),
+      "create_note",
+    );
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.status).toBe(403);
   });
 });

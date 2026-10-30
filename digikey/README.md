@@ -17,3 +17,10 @@ SQLite (tests / quick dev): `DIGIKEY_DATABASE_URL=sqlite:///./digikey.db`
 ```bash
 python -m digikey.cli issue-key --tenant default --label dev --scopes '*' --kind dev_global
 ```
+
+`issue-key` without `--scopes` grants `digigraph:chat,digisearch:query` only
+(`DEFAULT_ISSUE_KEY_SCOPES` in `cli.py`). It used to grant `*`, and a `*` key
+exchanged at `/v1/oauth/token` opened every MCP edge server (#6648). Name the
+scopes a key needs, e.g. `--scopes mcp:digivault` for read-only vault MCP access;
+`*` must be passed explicitly, and the MCP edge refuses a bare `*` from any
+tenant other than the house. A `dev_global` key with no `--scopes` still gets `*`.

@@ -33,6 +33,7 @@ from typing import Any  # score:allow untyped any — tool argument maps are arb
 from digibase import art9
 from pydantic import BaseModel, ConfigDict, Field
 
+from digivault.mcp_tenant import McpTenantRefused, resolve_mcp_path_prefix
 from digivault.models import Note
 from digivault.vault import Vault, VaultError
 
@@ -296,6 +297,35 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         assert result.data is not None
         return _json.dumps(result.data)
 
+    def _authorization() -> str | None:
+        """The ``Authorization`` header of the HTTP request carrying this call.
+
+        ``None`` outside an HTTP transport (stdio, an in-process call) — the
+        operator compat path, see :mod:`digivault.mcp_tenant`.
+        """
+        get_context = getattr(mcp, "get_context", None)
+        if get_context is None:
+            return None
+        try:
+            request = get_context().request_context.request
+        except Exception:
+            return None
+        headers = getattr(request, "headers", None)
+        if headers is None:
+            return None
+        return headers.get("authorization")
+
+    def _bound_prefix(requested: str | None) -> str | None:
+        """Bind ``requested`` to the caller's verified tenant (#6648).
+
+        Raises :class:`McpTenantRefused`; every tool turns that into its
+        ``[digivault error: …]`` string before touching the vault.
+        """
+        return resolve_mcp_path_prefix(_authorization(), requested)
+
+    def _refused(exc: McpTenantRefused) -> str:
+        return f"[digivault error: {exc}]"
+
     def _mcp_search_tag_result(result: ToolDispatchResult) -> str:
         """Preserve pre-#3041 MCP contract: JSON array of {name, title, rel_path}.
 
@@ -329,7 +359,11 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             _open_supabase_store,
         )
 
-        prefix = (path_prefix or "").strip()
+        try:
+            bound = _bound_prefix(path_prefix)
+        except McpTenantRefused as exc:
+            return _refused(exc)
+        prefix = (bound or "").strip()
         if not prefix:
             return "[digivault error: path_prefix is required]"
         if not (query or "").strip():
@@ -352,11 +386,18 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
     # inject the operator ``setup.path_prefix`` value as a tool kwarg (FastMCP
     # silently drops kwargs the signature does not declare). The client merges
     # setup over caller args, so an operator-configured prefix always wins over
-    # a model-supplied one; an absent/blank value keeps whole-vault behaviour.
+    # a model-supplied one. A call carrying a digikey bearer is then bound to
+    # the bearer's tenant (``_bound_prefix``, #6648): a blank prefix becomes the
+    # tenant's own and any other tenant's is refused. Without a bearer (static
+    # edge key, in-network) an absent/blank value keeps whole-vault behaviour.
 
     @mcp.tool(name=MCP_TOOL_SEARCH_TAG)
     def digivault_search_tag(tag: str, path_prefix: str | None = None) -> str:
         """Find vault notes carrying a given tag (without '#'). Use to locate docs by topic."""
+        try:
+            path_prefix = _bound_prefix(path_prefix)
+        except McpTenantRefused as exc:
+            return _refused(exc)
         try:
             vault = open_vault()
         except VaultError as e:
@@ -371,6 +412,10 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
     def digivault_backlinks(name: str, path_prefix: str | None = None) -> str:
         """List notes that link to a given note (its backlinks)."""
         try:
+            path_prefix = _bound_prefix(path_prefix)
+        except McpTenantRefused as exc:
+            return _refused(exc)
+        try:
             vault = open_vault()
         except VaultError as e:
             return f"[digivault error: {e}]"
@@ -383,6 +428,10 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
     @mcp.tool(name=MCP_TOOL_LINT)
     def digivault_lint(path_prefix: str | None = None) -> str:
         """Validate the vault: unresolved wikilinks, missing frontmatter, orphans, tags."""
+        try:
+            path_prefix = _bound_prefix(path_prefix)
+        except McpTenantRefused as exc:
+            return _refused(exc)
         try:
             vault = open_vault()
         except VaultError as e:
@@ -400,6 +449,10 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
 
         if os.environ.get("DIGIVAULT_MCP_WRITE") != "1":
             return "[digivault error: write tools are disabled on this MCP surface]"
+        try:
+            path_prefix = _bound_prefix(path_prefix)
+        except McpTenantRefused as exc:
+            return _refused(exc)
         try:
             vault = open_vault()
         except VaultError as e:
