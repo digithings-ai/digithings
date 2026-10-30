@@ -146,8 +146,20 @@ def _normalize_web_search_pin(value: Any) -> str | None:
     if not _DOMAIN.match(host):
         return None
     path = ("/" + path).rstrip("/") if sep else ""
+    # A trailing ``*`` pins a partial last segment, e.g. ``/posts/acme_*`` for
+    # every ``/posts/acme_<slug>`` page. The prefix itself must be non-empty
+    # and a bare ``/*`` (the whole host) is refused: pin the host instead.
+    prefix = path.endswith("*")
+    if prefix:
+        path = path[:-1]
+        if not path or path.endswith("/") or qsep:
+            return None
+    if "*" in path:
+        return None  # ``*`` only means "segment prefix", and only at the end
     if path and not _PIN_PATH.match(path):
         return None
+    if prefix:
+        return host + path + "*"
     if qsep:
         # A query narrows one exact page: it needs a path and a k=v form.
         if not path or not _PIN_QUERY.match(query):

@@ -152,7 +152,7 @@ def _split_pin(pin: str) -> tuple[str, str]:
 
     An exact-page query (``host/path?k=v``) is dropped here; see :func:`_pin_query`.
     """
-    host, sep, path = pin.strip().lower().split("?", 1)[0].rstrip("/").partition("/")
+    host, sep, path = pin.strip().lower().split("?", 1)[0].rstrip("*").rstrip("/").partition("/")
     host = host.rstrip(".")
     if host.startswith("www."):
         host = host[4:]
@@ -238,6 +238,12 @@ def url_within_pins(url: Any, pins: Any) -> bool:
 
             have = set(parse_qsl((parts.query or "").lower(), keep_blank_values=False))
             if path == pin_path and all(kv in have for kv in pin_query):
+                return True
+            continue
+        if pin.strip().endswith("*"):
+            # Segment prefix: ``/posts/acme_*`` takes ``/posts/acme_x`` (and
+            # anything under it) but never ``/posts/acme`` or ``/posts/acmex``.
+            if pin_path and path.startswith(pin_path) and len(path) > len(pin_path):
                 return True
             continue
         if not pin_path or path == pin_path or path.startswith(pin_path + "/"):

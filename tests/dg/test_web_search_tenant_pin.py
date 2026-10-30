@@ -517,3 +517,29 @@ def test_exact_page_pin_with_a_query() -> None:
     assert not url_within_pins("https://store.example/apps/details?id=co.other.app", pins)
     assert not url_within_pins("https://store.example/apps/details/more?id=co.acme.app", pins)
     assert pinned_include_domains(pins, None) == ["store.example"]
+
+
+def test_segment_prefix_pin_normalizes_and_rejects_wildcards_elsewhere() -> None:
+    assert (
+        _normalize_web_search_pin("www.social.example/posts/acme_*")
+        == "social.example/posts/acme_*"
+    )
+    for bad in (
+        "social.example/*",
+        "social.example/posts/*",
+        "social.example/a*/b",
+        "social.example/p*?x=1",
+        "*.social.example",
+    ):
+        assert _normalize_web_search_pin(bad) is None, bad
+
+
+def test_segment_prefix_pin_matches_only_longer_paths_in_that_segment() -> None:
+    pins = ["social.example/posts/acme_*"]
+    assert url_within_pins("https://www.social.example/posts/acme_launch-day-123", pins)
+    assert url_within_pins("https://social.example/posts/acme_x/activity", pins)
+    assert not url_within_pins("https://social.example/posts/acme_", pins)
+    assert not url_within_pins("https://social.example/posts/acmex_launch", pins)
+    assert not url_within_pins("https://social.example/posts/other_acme_launch", pins)
+    assert not url_within_pins("https://social.example/company/acme", pins)
+    assert pinned_include_domains(pins, None) == ["social.example"]
