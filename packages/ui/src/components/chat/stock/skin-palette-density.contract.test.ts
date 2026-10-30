@@ -8,7 +8,8 @@ const css = readFileSync(join(__dirname, "../../../styles/chat-skin-palette.css"
 describe("/density in skins that are not digichat", () => {
   it("the palette scope carries the density pref", () => {
     expect(bridge).toMatch(/data-skin-density=\{density\}/);
-    expect(bridge).toMatch(/useEmbedChatPrefsOptional\(\)\?\.prefs\.density/);
+    expect(bridge).toMatch(/chatPrefs\?\.density/);
+    expect(bridge).toMatch(/useEmbedChatPrefsOptional\(\)\?\.prefs/);
   });
 
   it("compact and airy respace the messages; default adds no rule", () => {
