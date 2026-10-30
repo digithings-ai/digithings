@@ -571,8 +571,8 @@ def test_orchestrator_invoke_web_search_forwards_the_fence(
         "/v1/orchestrator_invoke",
         json={
             "tool": "web_search",
-            "arguments": {"query": "q", "fence": ["nomadis.co"], "include_domains": ["nomadis.co"]},
+            "arguments": {"query": "q", "fence": ["example-client.test"], "include_domains": ["example-client.test"]},
         },
     )
     assert r.status_code == 200
-    assert seen.get("fence") == ["nomadis.co"]
+    assert seen.get("fence") == ["example-client.test"]

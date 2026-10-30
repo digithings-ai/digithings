@@ -3,12 +3,14 @@
 The digisearch hub is faked; the fence on every redirect hop is covered in
 ``digisearch/tests/test_web_fetch_fence.py``. Here: the digigraph-side gate,
 the second check on the final URL and links, the tool surface, and that
-unpinned tenants (OCC, house) are untouched.
+unpinned tenants (other tenants, house) are untouched.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
+from urllib.parse import SplitResult, urlsplit
 
 import pytest
 from digigraph.orchestration import web_search_tools
@@ -25,13 +27,20 @@ from digigraph.tool_policy import apply_web_search_opt_in, strip_web_search_tool
 pytestmark = pytest.mark.unit
 
 PINS = [
-    "nomadis.co",
-    "linkedin.com/company/nomadis",
-    "linkedin.com/posts/nomadis_*",
-    "x.com/nomadisinc",
-    "play.google.com/store/apps/details?id=co.nomadis.mynomadis",
+    "example-client.test",
+    "linkedin.com/company/exampleclient",
+    "linkedin.com/posts/exampleclient_*",
+    "x.com/exampleclientinc",
+    "play.google.com/store/apps/details?id=test.exampleclient.myapp",
 ]
 
+
+_URL_RE = re.compile(r"https?://[^\s<>()\[\]\"']+")
+
+
+def _urls_in(text: str) -> list[SplitResult]:
+    """Every absolute http(s) URL in ``text``, parsed."""
+    return [urlsplit(m.group(0)) for m in _URL_RE.finditer(text)]
 
 def _context(**state: Any) -> ToolContext:
     return ToolContext(
@@ -84,37 +93,40 @@ def test_fetch_reads_a_subdomain_page_and_lists_in_fence_links(
     hub = _patch_hub(
         monkeypatch,
         _page(
-            "https://academy.nomadis.co/courses",
+            "https://academy.example-client.test/courses",
             links=[
-                "https://fr.academy.nomadis.co/",
+                "https://fr.academy.example-client.test/",
                 "https://www.linkedin.com/in/someone",  # dropped: outside the path pin
-                "https://evilnomadis.co/",  # dropped: look-alike
+                "https://evilexample-client.test/",  # dropped: look-alike
             ],
         ),
     )
-    ctx = _context(web_search_domains=PINS, web_search_page_corpus="nomadis")
-    out = _handle_web_fetch({"url": "academy.nomadis.co/courses"}, ctx)
+    ctx = _context(web_search_domains=PINS, web_search_page_corpus="exampleclient")
+    out = _handle_web_fetch({"url": "academy.example-client.test/courses"}, ctx)
     assert isinstance(out, dict) and "error" not in out
     tool, args = hub.calls[0]
     assert tool == WEB_FETCH_TOOL_NAME
-    assert args["url"] == "https://academy.nomadis.co/courses"
+    assert args["url"] == "https://academy.example-client.test/courses"
     assert args["fence"] == PINS
-    assert args["page_corpus"] == "nomadis"
-    assert out["links"] == ["https://fr.academy.nomadis.co/"]
+    assert args["page_corpus"] == "exampleclient"
+    assert out["links"] == ["https://fr.academy.example-client.test/"]
     assert len(out["content"]) > 4000  # the full page, not a snippet
-    assert "https://fr.academy.nomadis.co/" in out["content"]
-    assert "linkedin.com/in/someone" not in out["content"]
+    # Compare parsed hosts and paths, never substrings of the page text: a
+    # substring test would also pass for a look-alike host.
+    content_urls = {(u.hostname, u.path) for u in _urls_in(out["content"])}
+    assert ("fr.academy.example-client.test", "/") in content_urls
+    assert ("www.linkedin.com", "/in/someone") not in content_urls
     assert out["rag_sources"]
 
 
 @pytest.mark.parametrize(
     "url",
     [
-        "https://nomadis.co.evil.com/",
-        "https://evilnomadis.co/",
-        "https://en.wikipedia.org/wiki/Nomadis",
+        "https://example-client.test.evil.com/",
+        "https://evilexample-client.test/",
+        "https://en.wikipedia.org/wiki/ExampleClient",
         "https://www.linkedin.com/feed/",
-        "https://twitter.com/nomadisinc",
+        "https://twitter.com/exampleclientinc",
     ],
 )
 def test_fetch_outside_the_fence_is_refused_without_calling_digisearch(
@@ -127,9 +139,9 @@ def test_fetch_outside_the_fence_is_refused_without_calling_digisearch(
 
 
 def test_final_url_outside_the_fence_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_hub(monkeypatch, _page("https://nomadis.freshworks.com/login"))
+    _patch_hub(monkeypatch, _page("https://exampleclient.helpdesk-vendor.test/login"))
     out = _handle_web_fetch(
-        {"url": "https://support.nomadis.co/"}, _context(web_search_domains=PINS)
+        {"url": "https://support.example-client.test/"}, _context(web_search_domains=PINS)
     )
     assert isinstance(out, dict) and out["error"] == "tool_not_allowed"
     assert "redirected" in out["message"]
@@ -138,20 +150,20 @@ def test_final_url_outside_the_fence_is_refused(monkeypatch: pytest.MonkeyPatch)
 def test_digisearch_fence_refusal_maps_to_not_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_hub(monkeypatch, {"ok": False, "error": "fence_refused: outside the allowed sites"})
     out = _handle_web_fetch(
-        {"url": "https://support.nomadis.co/"}, _context(web_search_domains=PINS)
+        {"url": "https://support.example-client.test/"}, _context(web_search_domains=PINS)
     )
     assert isinstance(out, dict) and out["error"] == "tool_not_allowed"
 
 
 def test_fetch_failure_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_hub(monkeypatch, {"ok": False, "error": "web_fetch failed: bot challenge"})
-    out = _handle_web_fetch({"url": "https://www.nomadis.co/"}, _context(web_search_domains=PINS))
+    out = _handle_web_fetch({"url": "https://www.example-client.test/"}, _context(web_search_domains=PINS))
     assert isinstance(out, dict) and out["error"] == "fetch_failed"
 
 
 def test_saved_copy_is_labelled(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_hub(monkeypatch, _page("https://www.nomadis.co/", source="page_corpus"))
-    out = _handle_web_fetch({"url": "https://www.nomadis.co/"}, _context(web_search_domains=PINS))
+    _patch_hub(monkeypatch, _page("https://www.example-client.test/", source="page_corpus"))
+    out = _handle_web_fetch({"url": "https://www.example-client.test/"}, _context(web_search_domains=PINS))
     assert isinstance(out, dict) and "Saved copy" in out["content"]
 
 
@@ -166,10 +178,10 @@ def test_unpinned_or_empty_pin_has_no_web_fetch(
 
 
 def test_web_fetch_needs_the_web_search_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
-    hub = _patch_hub(monkeypatch, _page("https://www.nomadis.co/"))
+    hub = _patch_hub(monkeypatch, _page("https://www.example-client.test/"))
     ctx = _context(web_search_domains=PINS)
     ctx.state["enable_web_search"] = False
-    out = _handle_web_fetch({"url": "https://www.nomadis.co/"}, ctx)
+    out = _handle_web_fetch({"url": "https://www.example-client.test/"}, ctx)
     assert isinstance(out, dict) and out["error"] == "tool_not_allowed"
     assert hub.calls == []
 
@@ -179,7 +191,8 @@ def test_tool_definitions() -> None:
     assert web_fetch_tool_for_tenant([]) is None
     tool = web_fetch_tool_for_tenant(PINS)
     assert tool is not None and tool["function"]["name"] == WEB_FETCH_TOOL_NAME
-    assert "nomadis.co" in tool["function"]["description"]
+    described = set(re.findall(r"[a-z0-9][a-z0-9.-]*\.[a-z]+", tool["function"]["description"]))
+    assert "example-client.test" in described
     search = web_search_tool_for_tenant(PINS, None)
     assert search is not None
     desc = search["function"]["description"]
@@ -210,18 +223,18 @@ def test_web_fetch_rides_with_web_search_through_the_allowlist() -> None:
 def test_matcher_parity_with_digisearch_fence() -> None:
     fence = pytest.importorskip("digisearch.web_search.fence")
     urls = [
-        "https://nomadis.co/",
-        "https://academy.nomadis.co/",
-        "https://fr.academy.nomadis.co/",
-        "https://nomadis.co.evil.com/",
-        "https://evilnomadis.co/",
-        "https://www.linkedin.com/posts/nomadis_x-1",
-        "https://www.linkedin.com/posts/other_nomadis",
-        "https://www.linkedin.com/company/nomadis/jobs",
-        "https://www.linkedin.com/company/nomadisx",
-        "https://x.com/nomadisinc",
+        "https://example-client.test/",
+        "https://academy.example-client.test/",
+        "https://fr.academy.example-client.test/",
+        "https://example-client.test.evil.com/",
+        "https://evilexample-client.test/",
+        "https://www.linkedin.com/posts/exampleclient_x-1",
+        "https://www.linkedin.com/posts/other_exampleclient",
+        "https://www.linkedin.com/company/exampleclient/jobs",
+        "https://www.linkedin.com/company/exampleclientx",
+        "https://x.com/exampleclientinc",
         "https://x.com/other",
-        "https://play.google.com/store/apps/details?id=co.nomadis.mynomadis",
+        "https://play.google.com/store/apps/details?id=test.exampleclient.myapp",
         "https://play.google.com/store/apps/details?id=other",
         "https://en.wikipedia.org/",
     ]
