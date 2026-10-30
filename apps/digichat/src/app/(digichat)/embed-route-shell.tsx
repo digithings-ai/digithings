@@ -30,6 +30,7 @@ import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 import { isPrivateUrlParam, privateFirstPaintTenant } from "@/lib/private-chrome";
+import { tenantColorsCss } from "@/lib/tenant-colors";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts. A top-level page with no ?theme= (a /chat/<slug> tenant document)
@@ -91,6 +92,8 @@ export default async function EmbedRouteShell({
         : "#f1f0eb" // canon-allow: same literal pair as the product-chrome.css term-bg fallback
       : "var(--background)";
 
+  const tenantCfgColorsCss = tenantColorsCss(seededCfg.colors);
+
   return (
     <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
       {/* The embed paints no colour of its own until the canvas below streams
@@ -130,6 +133,12 @@ export default async function EmbedRouteShell({
           }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}${SITE_EMBED_CANVAS_CSS}`,
         }}
       />
+      {/* Tenant colours (src/lib/tenant-colors.ts): the tenant's own light and
+          dark hexes, validated #rrggbb only, painted from the first byte. Later
+          in the document than the canvas rule above, and :root:root beats it. */}
+      {tenantCfgColorsCss ? (
+        <style data-tenant-colors="" dangerouslySetInnerHTML={{ __html: tenantCfgColorsCss }} />
+      ) : null}
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
       <script dangerouslySetInnerHTML={{ __html: embedPalettePinScript() }} />
       <script

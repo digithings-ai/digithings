@@ -50,6 +50,18 @@ describe("parseEmbedTenants", () => {
     expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette is not supported on embeds/);
   });
 
+  it("accepts tenant colors and refuses a bad hex (tenant-colors.ts)", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    base[host].colors = { light: { background: "#ffffff", link: "#0a58a8" }, dark: { background: "#1b1b1b" } };
+    expect(parseEmbedTenants(JSON.stringify(base)).get(host)?.colors).toEqual({
+      light: { background: "#ffffff", link: "#0a58a8" },
+      dark: { background: "#1b1b1b" },
+    });
+    base[host].colors = { light: { background: "white" } };
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/colors\.light\.background/);
+  });
+
   it("refuses bad values for the chrome seed keys", () => {
     const cases: Array<[string, unknown, RegExp]> = [
       ["density", "dense", /density must be/],
