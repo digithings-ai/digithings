@@ -53,14 +53,48 @@ SESSION_DENSITIES: tuple[str, ...] = ("compact", "default", "airy")
 SESSION_THEME_MODES: tuple[str, ...] = ("light", "dark", "auto")
 # Mirrors packages/ui/src/theme/palette-registry.ts PALETTE_IDS plus "default".
 SESSION_PALETTES: tuple[str, ...] = (
-    "default", "aura", "ayu", "catppuccin", "catppuccin-frappe", "catppuccin-macchiato",
-    "cobalt2", "cursor", "dracula", "everforest", "flexoki", "github", "gruvbox",
-    "kanagawa", "material", "matrix", "mercury", "monokai", "nightowl", "nord",
-    "one-dark", "osaka-jade", "orng", "lucent-orng", "palenight", "rosepine",
-    "solarized", "synthwave84", "tokyonight", "vesper", "vercel", "zenburn", "carbonfox",
+    "default",
+    "aura",
+    "ayu",
+    "catppuccin",
+    "catppuccin-frappe",
+    "catppuccin-macchiato",
+    "cobalt2",
+    "cursor",
+    "dracula",
+    "everforest",
+    "flexoki",
+    "github",
+    "gruvbox",
+    "kanagawa",
+    "material",
+    "matrix",
+    "mercury",
+    "monokai",
+    "nightowl",
+    "nord",
+    "one-dark",
+    "osaka-jade",
+    "orng",
+    "lucent-orng",
+    "palenight",
+    "rosepine",
+    "solarized",
+    "synthwave84",
+    "tokyonight",
+    "vesper",
+    "vercel",
+    "zenburn",
+    "carbonfox",
 )
 SESSION_SEARCH_ENGINES: tuple[str, ...] = (
-    "auto", "internal", "exa", "tavily", "parallel", "firecrawl", "tinyfish",
+    "auto",
+    "internal",
+    "exa",
+    "tavily",
+    "parallel",
+    "firecrawl",
+    "tinyfish",
 )
 SESSION_THINKING_MODES: tuple[str, ...] = ("auto", "collapsed", "open")
 
@@ -90,7 +124,12 @@ SESSION_SET_LANGUAGE_TOOL = _fn(
 SESSION_SET_MODEL_TOOL = _fn(
     SESSION_SET_MODEL,
     "Set the chat model id for this session (must be on the deployment allowlist).",
-    {"model": {"type": "string", "description": "Model id, e.g. deepseek/deepseek-v4.1-flash-1017."}},
+    {
+        "model": {
+            "type": "string",
+            "description": "Model id, e.g. deepseek/deepseek-v4.1-flash-1017.",
+        }
+    },
     ["model"],
 )
 SESSION_SET_EFFORT_TOOL = _fn(
@@ -227,14 +266,20 @@ def session_tool_handler(name: str) -> SessionToolHandler:
             if mode and mode not in SESSION_THEME_MODES:
                 return {"ok": False, "error": "mode must be light, dark, or auto"}
             if palette and palette not in SESSION_PALETTES:
-                return {"ok": False, "error": f"unknown palette; use one of {', '.join(SESSION_PALETTES)}"}
+                return {
+                    "ok": False,
+                    "error": f"unknown palette; use one of {', '.join(SESSION_PALETTES)}",
+                }
             if not mode and not palette:
                 return {"ok": False, "error": "pass mode (light|dark|auto) and/or palette"}
             return _handle_session_tool({"mode": mode or None, "palette": palette or None}, context)
         if name == SESSION_SET_SEARCH_ENGINE:
             engine = str(raw.get("engine") or raw.get("search_engine") or "").strip().lower()
             if engine not in SESSION_SEARCH_ENGINES:
-                return {"ok": False, "error": f"engine must be one of {', '.join(SESSION_SEARCH_ENGINES)}"}
+                return {
+                    "ok": False,
+                    "error": f"engine must be one of {', '.join(SESSION_SEARCH_ENGINES)}",
+                }
             return _handle_session_tool({"engine": engine}, context)
         if name == SESSION_UPSERT_MCP:
             # Never echo a credential into the trace / tool result.

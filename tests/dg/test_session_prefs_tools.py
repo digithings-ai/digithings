@@ -11,11 +11,11 @@ from digigraph.orchestration.session_prefs_tools import (
     SESSION_SET_THEME,
     SESSION_SET_THINKING,
     SESSION_SET_THINKING_TOOL,
-    SESSION_UPSERT_MCP,
     SESSION_SET_VIEW,
     SESSION_SET_VIEW_TOOL,
     SESSION_TOGGLE_TOOL,
     SESSION_TOOL_NAMES,
+    SESSION_UPSERT_MCP,
 )
 
 
