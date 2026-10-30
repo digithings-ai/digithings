@@ -604,6 +604,33 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
+  it("filters the model list by any part of the name or id, start-of-name first", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/big-flash", label: "Big Flash" }] },
+        { provider: "beta", models: [{ id: "beta/flash-mini", label: "Flash Mini" }, { id: "beta/think-luna", label: "Luna" }] },
+      ],
+    };
+    const shown = async (paletteQuery: string) => {
+      const { unmount } = render(
+        <EmbedChatPrefsProvider
+          value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, paletteQuery })}
+        >
+          <EmbedComposerMenu kind="models" picker={picker} models={["alpha/big-flash"]} onClose={vi.fn()} />
+        </EmbedChatPrefsProvider>,
+      );
+      const radios = await screen.findAllByRole("menuitemradio");
+      const out = radios.map((row) => row.textContent?.trim());
+      unmount();
+      return out;
+    };
+    expect(await shown("FLASH")).toEqual(["flash-mini", "big-flash"]);
+    expect(await shown("luna")).toEqual(["think-luna"]);
+    expect(await shown("ALPHA")).toEqual(["big-flash"]);
+  });
+
   it("still filters by the provider part of the full id", async () => {
     const picker = {
       showFullList: true,

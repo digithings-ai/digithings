@@ -1335,6 +1335,9 @@ export function EmbedComposerMenu({
   const selection = submenuRows(
     rows.map((row) => ({ ...row, token: row.token ?? row.label })),
     paletteFilter,
+    // Model lists match anywhere in the name or full id (`flash`, `luna`,
+    // `openai`), start-of-name matches first.
+    { contains: view === "models" || view === "provider-model" },
   );
   const shown = selection.rows;
   const title =
