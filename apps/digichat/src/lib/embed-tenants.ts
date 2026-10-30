@@ -13,6 +13,7 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import { parseTenantLocales, type TenantLocales } from "@/lib/tenant-locales";
 import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
 import { parseTenantColors, type TenantColors } from "@/lib/tenant-colors";
 import {
@@ -196,6 +197,8 @@ export type EmbedTenantConfig = {
   access?: TenantAccess;
   /** Default input placeholder (URL ?placeholder= wins). */
   placeholder?: string;
+  /** Chat languages and their translated copy (the composer language chip). */
+  locales?: TenantLocales;
   /**
    * Contact email shown when the free-turn gate locks (turn_limited tenants).
    * When set, the paywall becomes a "contact us" message with a mailto link
@@ -836,6 +839,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: pageContext must be "off", "silent", or "visible"`);
     }
   }
+  const locales = parseTenantLocales(v.locales, ctx);
   let welcomeBody: string[] | undefined;
   if (v.welcomeBody !== undefined) {
     if (typeof v.welcomeBody === "string") {
@@ -1057,6 +1061,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     ...(typeof v.productChat === "boolean" ? { productChat: v.productChat } : {}),
     ...(access ? { access } : {}),
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
+    ...(locales ? { locales } : {}),
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,

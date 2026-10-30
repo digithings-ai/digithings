@@ -6,17 +6,16 @@ import {
   UserMessageAttachments,
 } from "../../stock/attachment.aui";
 import { MarkdownText } from "../../stock/markdown-text";
-import { DotMatrix } from "./ui/dot-matrix";
 import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { useSuggestionGroup } from "../../suggestion-cycle";
+import { SuggestionScrollRow } from "../../suggestion-scroll-row";
 import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
-import { BackendNotice } from "../../stock/chat-notice";
-import { ToolFallback as ApprovalToolFallback } from "../../stock/tool-fallback.aui";
+import { backendNoticeOf } from "../../stock/chat-notice";
+import { useSkinRuntime } from "../../stock/skin-runtime";
 // assistant-ui's own trace parts (see ./aui-default/README.md): the base
 // skins render reasoning and tool calls as assistant-ui ships them.
 import { ToolFallback } from "./aui-default/tool-fallback.aui";
-import { MessageError } from "../../stock/message-error.aui";
 
 import {
   ToolGroupContent,
@@ -47,6 +46,7 @@ import {
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
 import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
 import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
+import { useViewDisclosure } from "../../stock/deploy-ui-context";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarMorePrimitive,
@@ -55,6 +55,7 @@ import {
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
+  ErrorPrimitive,
   groupPartByType,
   MessagePrimitive,
   ThreadPrimitive,
@@ -81,14 +82,11 @@ import {
   HelpCircleIcon,
   LanguagesIcon,
   LightbulbIcon,
-  MenuIcon,
   MicIcon,
   MoreHorizontalIcon,
-  PanelLeftIcon,
   PencilIcon,
   PencilLineIcon,
   RefreshCwIcon,
-  ShareIcon,
   SlashIcon,
   SquareIcon,
   WrenchIcon,
@@ -97,7 +95,7 @@ import {
   LexicalComposerInput,
   type DirectiveChipProps,
 } from "@assistant-ui/react-lexical";
-import { useState, type FC, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 import { ModelSelector } from "./elements/model-selector.aui";
 import { docsModelOptions } from "./docs-model-options";
 import { DEFAULT_MODEL_ID } from "./model";
@@ -146,6 +144,78 @@ const ModelPicker: FC = () => {
       size="sm"
       className="h-7 rounded-full"
     />
+    </div>
+  );
+};
+
+/**
+ * The tenant's chat languages, as a chip beside the model chip. It drives the
+ * same session language as `/language`, so the two always agree. Renders only
+ * when the host lists two or more languages.
+ */
+const LanguageChip: FC = () => {
+  const prefs = useEmbedChatPrefsOptional();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const options = prefs?.languageOptions;
+  if (!prefs || !options || options.length < 2) return null;
+  const current = prefs.prefs.language;
+  const active = options.find((o) => o.code === current);
+  return (
+    <div ref={rootRef} data-deploy-language-picker className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="aui-language-chip text-muted-foreground hover:text-foreground h-7 gap-1 rounded-full px-2.5 text-xs"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Chat language"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={active?.label ?? current}
+      >
+        <span>{active?.short ?? current.toUpperCase()}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 opacity-60" />
+      </Button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Chat language"
+          className="aui-language-menu bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 min-w-36 rounded-xl border p-1 shadow-md"
+        >
+          {options.map((o) => (
+            <button
+              key={o.code}
+              type="button"
+              role="option"
+              aria-selected={o.code === current}
+              className="hover:bg-accent flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs"
+              onClick={() => {
+                prefs.setLanguage(o.code);
+                setOpen(false);
+              }}
+            >
+              <span>{o.label}</span>
+              <span className="text-muted-foreground">{o.short}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -425,7 +495,7 @@ const ThreadSuggestions: FC = () => {
         className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
         {...handlers}
       >
-        <div className="w-full scrollbar-none overflow-x-auto">
+        <SuggestionScrollRow className="w-full">
           <div className="mx-auto flex w-max items-center gap-2">
             {suggestions.map((prompt) => (
               <Button
@@ -438,7 +508,7 @@ const ThreadSuggestions: FC = () => {
               </Button>
             ))}
           </div>
-        </div>
+        </SuggestionScrollRow>
       </div>
     );
   }
@@ -449,7 +519,7 @@ const ThreadSuggestions: FC = () => {
       className="aui-thread-welcome-suggestions flex w-full flex-col gap-2 px-4"
       {...handlers}
     >
-      <div className="w-full scrollbar-none overflow-x-auto">
+      <SuggestionScrollRow className="w-full">
         <div className="mx-auto flex w-max items-center gap-2">
           {SUGGESTION_GROUPS.map((group) => (
             <Button
@@ -470,11 +540,11 @@ const ThreadSuggestions: FC = () => {
             </Button>
           ))}
         </div>
-      </div>
+      </SuggestionScrollRow>
       {expandedGroup && (
-        <div
+        <SuggestionScrollRow
           key={expandedGroup.label}
-          className="fade-in slide-in-from-top-1 animate-in w-full scrollbar-none overflow-x-auto duration-200"
+          className="fade-in slide-in-from-top-1 animate-in w-full duration-200"
         >
           <div className="mx-auto flex w-max items-center gap-2">
             {expandedGroup.options.map((option) => (
@@ -488,7 +558,7 @@ const ThreadSuggestions: FC = () => {
               </Button>
             ))}
           </div>
-        </div>
+        </SuggestionScrollRow>
       )}
     </div>
   );
@@ -622,6 +692,7 @@ const ComposerAction: FC = () => {
       <div className="flex items-center gap-1">
         <ComposerAddAttachment />
         <ModelPicker />
+        <LanguageChip />
       </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -689,72 +760,100 @@ const ComposerAction: FC = () => {
   );
 };
 
+/**
+ * assistant-ui's own working indicator (base thread.aui.tsx, `indicator`
+ * part), verbatim. The only addition: a status line the server sent (a boot
+ * retry, a rate-limit wait, waking services) shows beside it as plain text.
+ */
 const AssistantWorkingIndicator: FC = () => {
-  // Text, not `content`: data parts (the warming-up notice itself) also count
-  // toward `content`, which made this false the moment the notice arrived and
-  // hid its own message (#5979 review).
-  const isEmpty = useAuiState(
-    (s) => !s.message.parts.some((part) => part.type === "text" && (part.text ?? "").length > 0),
-  );
-  // Text only when the server sent a status message (DIG-4459): the BFF's
-  // boot retry (#4753) and the throttled deployment (#5979) ride the
-  // connection part with their own message. A bare `connecting` is the plain
-  // wait for a response: the animation alone, no client-side default copy.
   const statusText = useAuiState((s) => connectionStatusText(s.message.parts));
-  // Latest connection state wins. A turn that hits the model's rate limit after
-  // text has already streamed (DC-18) waits mid-message; without this the
-  // countdown only showed on an empty message.
-  const waitingMidMessage = useAuiState((s) => {
-    let state: string | undefined;
-    for (const part of s.message.parts) {
-      if (part.type !== "data" || part.name !== "connection") continue;
-      const next = (part.data as { state?: string } | undefined)?.state;
-      if (typeof next === "string") state = next;
-    }
-    return state === "warming_up";
-  });
   const wakePhase = useDigichatWarmupPhase();
-  if (!isEmpty && waitingMidMessage && statusText) {
-    return (
+  const line = statusText ?? (wakePhase === "waking" ? "Waking up services…" : null);
+  return (
+    <>
       <span
         data-slot="aui_assistant-message-indicator"
-        className="text-muted-foreground inline-flex items-center gap-2 align-middle"
-        role="status"
+        className="animate-pulse font-sans"
+        aria-label="Assistant is working"
       >
-        <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">{statusText}</span>
+        {"●"}
       </span>
-    );
-  }
-  if (isEmpty) {
+      {line ? (
+        <span
+          data-slot="aui_assistant-message-status"
+          role="status"
+          className="text-muted-foreground ms-2 text-sm"
+        >
+          {line}
+        </span>
+      ) : null}
+    </>
+  );
+};
+
+/**
+ * assistant-ui's own MessageError (base thread.aui.tsx), verbatim markup. The
+ * message text goes through the host's error formatter when it has one, so a
+ * raw API payload never reaches the visitor.
+ */
+const MessageError: FC = () => {
+  const runtime = useSkinRuntime();
+  const raw = useAuiState((s) => {
+    const status = s.message.status as { type?: string; reason?: string; error?: unknown } | undefined;
+    if (status?.type !== "incomplete" || status.reason !== "error") return undefined;
+    const error = status.error;
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object" && "message" in error) {
+      const message = (error as { message: unknown }).message;
+      if (typeof message === "string") return message;
+    }
+    return error != null ? String(error) : undefined;
+  });
+  const err = raw ? new Error(raw) : undefined;
+  const friendly =
+    runtime.errorParsers?.formatError?.(err) ?? runtime.errorParsers?.parseError?.(err)?.message ?? undefined;
+  return (
+    <MessagePrimitive.Error>
+      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
+        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2">
+          {friendly ?? undefined}
+        </ErrorPrimitive.Message>
+      </ErrorPrimitive.Root>
+    </MessagePrimitive.Error>
+  );
+};
+
+/**
+ * A backend notice (data-notice, or a data-status with a message). Stock
+ * assistant-ui renders only `dataRendererUI` for data parts, so these use the
+ * MessageError box above for errors and plain muted text for status lines.
+ */
+const DataNotice: FC<{ part: { readonly type: string; readonly name?: string; readonly data?: unknown } }> = ({
+  part,
+}) => {
+  const notice = backendNoticeOf(part);
+  if (!notice) return null;
+  if (notice.tone === "status") {
     return (
-      <span
-        data-slot="aui_assistant-message-indicator"
-        className="text-muted-foreground inline-flex items-center gap-2 align-middle"
-      >
-        <DotMatrix state="connecting" aria-hidden />
-        {wakePhase === "waking" ? (
-          <span className="text-sm">Waking up services…</span>
-        ) : statusText ? (
-          <span className="text-sm">{statusText}</span>
-        ) : (
-          <span className="sr-only">Assistant is working</span>
-        )}
-      </span>
+      <p data-slot="chat-notice" data-tone="status" role="status" className="text-muted-foreground my-1 text-sm">
+        {notice.message}
+      </p>
     );
   }
   return (
-    <span
-      data-slot="aui_assistant-message-indicator"
-      className="animate-pulse font-sans"
-      aria-label="Assistant is working"
+    <div
+      data-slot="chat-notice"
+      data-tone="error"
+      role="alert"
+      className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 my-1 rounded-md border p-3 text-sm dark:text-red-200"
     >
-      {"●"}
-    </span>
+      {notice.message}
+    </div>
   );
 };
 
 const AssistantMessage: FC = () => {
+  const disclosure = useViewDisclosure();
   // reserves space for action bar and compensates with `-mb` for consistent msg spacing
   // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
   // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
@@ -784,7 +883,11 @@ const AssistantMessage: FC = () => {
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
                 return (
-                  <ToolGroupRoot variant="ghost">
+                  <ToolGroupRoot
+                    key={disclosure.key}
+                    variant="ghost"
+                    defaultOpen={disclosure.toolGroupOpen}
+                  >
                     <ToolGroupTrigger
                       count={part.indices.length}
                       active={part.status.type === "running"}
@@ -795,7 +898,10 @@ const AssistantMessage: FC = () => {
               case "group-reasoning": {
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot defaultOpen={running}>
+                  <ReasoningRoot
+                    key={disclosure.key}
+                    defaultOpen={disclosure.reasoningOpen(running)}
+                  >
                     <ReasoningTrigger active={running} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -808,23 +914,12 @@ const AssistantMessage: FC = () => {
               case "reasoning":
                 return <Reasoning {...part} />;
               case "tool-call":
-                // A human approval gate keeps the stock fallback, which owns
-                // the Allow/Deny controls; every other call is assistant-ui's.
-                return (
-                  part.toolUI ??
-                  (part.status?.type === "requires-action" &&
-                  (part.approval != null || part.interrupt != null) ? (
-                    <ApprovalToolFallback {...part} />
-                  ) : (
-                    <ToolFallback {...part} />
-                  ))
-                );
+                // assistant-ui's ToolFallback owns the approval controls too.
+                return part.toolUI ?? <ToolFallback key={disclosure.key} {...part} />;
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "data":
-                // DIG-4459: a backend notice (data-notice, or a data-status
-                // with a message) shows as a boxed status/error line.
-                return part.dataRendererUI ?? <BackendNotice part={part} />;
+                return part.dataRendererUI ?? <DataNotice part={part} />;
               default:
                 return null;
             }

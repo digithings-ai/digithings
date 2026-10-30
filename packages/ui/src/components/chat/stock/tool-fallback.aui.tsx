@@ -1,5 +1,6 @@
 "use client";
 
+import { useViewDisclosure } from "./deploy-ui-context";
 import { memo, useCallback, useRef, useState } from "react";
 import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
@@ -803,7 +804,9 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     isRequiresAction &&
     offersInterruptAction(effectiveStatus, approval, interrupt);
 
-  const [open, setOpen] = useState(isRequiresAction);
+  // /view verbose opens the cards; a call that waits on the visitor always does.
+  const { toolCardOpen } = useViewDisclosure();
+  const [open, setOpen] = useState(isRequiresAction || toolCardOpen);
   const [prevRequiresAction, setPrevRequiresAction] =
     useState(isRequiresAction);
   if (isRequiresAction !== prevRequiresAction) {

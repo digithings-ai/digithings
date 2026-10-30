@@ -68,6 +68,15 @@ export function applySessionTool(
   if (name === "session_set_language") {
     const code = tryResolveLanguageInput(str(args, "code", "language"));
     if (!code) return { ok: false, message: "Unknown language." };
+    // setLanguage ignores a language the tenant does not offer; say so to the
+    // model instead of reporting a switch that did not happen.
+    const allowed = api.allowedLanguages;
+    if (allowed?.length && !allowed.includes(code)) {
+      return {
+        ok: false,
+        message: `This chat only answers in ${allowed.join(", ")}; the language was not changed.`,
+      };
+    }
     api.setLanguage(code);
     return { ok: true, message: `Language set to ${code}.` };
   }

@@ -13,18 +13,24 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { DotMatrix } from "@digithings/ui/chat/dot-matrix";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
-import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
+import {
+  committedChatPrefs,
+  slashRowPreview,
+  useEmbedChatPrefs,
+  type EmbedChatPrefsPreview,
+} from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
   wellKnownMcpGrouped,
@@ -52,8 +58,10 @@ import {
   applyThemePick,
   buildProductSlashCommands,
   currentThemeState,
+  previewThemePick,
   isPrivateMode,
   languageSelectOptions,
+  tenantLanguageCodes,
   subscribePrivateMode,
 } from "@/lib/product-slash-commands";
 import { languageDisplayName } from "@/lib/languages";
@@ -148,7 +156,24 @@ export type MenuRow = {
    * spaces each), drawn before the branch glyph of a nested row.
    */
   treePrefix?: string;
+  /**
+   * A purely visual setting this row would set. The page paints it while
+   * the row is highlighted (hover or arrows) and puts the chosen look back
+   * when the highlight leaves it, the page changes or the menu closes.
+   */
+  preview?: MenuRowPreview;
+  /**
+   * Choosing this row commits a setting: any live preview ends first, then
+   * the row applies its value and the menu stays open on the same page with
+   * the new value checked. Escape, a click outside or the close actions still
+   * close it.
+   */
+  commits?: boolean;
 };
+
+export type MenuRowPreview =
+  | { kind: "prefs"; patch: EmbedChatPrefsPreview }
+  | { kind: "theme"; preference: "light" | "dark"; palette: string };
 
 /**
  * A tool's name as `/tools` shows it: a trailing note in parentheses, such as
@@ -208,14 +233,6 @@ export function buildModelPathTree(ids: readonly string[]): ModelPathNode[] {
     return nodes;
   };
   return sort(root);
-}
-
-/** Folder paths that hold an id (`a/b/c` -> `a`, `a/b`). */
-export function modelFolderAncestors(id: string): string[] {
-  const parts = id.split("/").filter((part) => part.length > 0);
-  const out: string[] = [];
-  for (let i = 1; i < parts.length; i++) out.push(parts.slice(0, i).join("/"));
-  return out;
 }
 
 /** The /tools tree branch glyph for a row under a service. */
@@ -489,13 +506,42 @@ export function EmbedComposerMenu({
 }) {
   const api = useEmbedChatPrefs();
   const menuBodyRef = useRef<HTMLDivElement | null>(null);
+  // The menu opens upward from the composer. A centred (empty-thread)
+  // composer leaves less room above it than the list's cap, and the top rows
+  // then sat off-screen; cap the list to the room that is really there.
+  const menuRootRef = useRef<HTMLDivElement | null>(null);
+  const [menuRoom, setMenuRoom] = useState<number | null>(null);
+  const measureMenuRoom = useCallback(() => {
+    const anchor = menuRootRef.current?.parentElement;
+    if (!anchor) return;
+    const hint = 32; // footer hint row under the list
+    const room = Math.floor(anchor.getBoundingClientRect().top - 12 - hint);
+    setMenuRoom(Math.max(128, room));
+  }, []);
+  // No deps: the menu mounts and unmounts with the trigger, so measure after
+  // every commit (a same-value set bails out) and again on resize.
+  useLayoutEffect(() => {
+    measureMenuRoom();
+  });
+  useEffect(() => {
+    window.addEventListener("resize", measureMenuRoom);
+    return () => window.removeEventListener("resize", measureMenuRoom);
+  }, [measureMenuRoom]);
   const available = sessionPickerModels(models ?? [], providerActive?.provider ?? null);
-  const languages = useMemo(() => languageSelectOptions(), []);
+  const tenantLanguages = api.languageOptions;
+  const allowedLanguages = api.allowedLanguages;
+  const languages = useMemo(
+    () =>
+      languageSelectOptions(
+        tenantLanguageCodes({ languageOptions: tenantLanguages, allowedLanguages }),
+      ),
+    [tenantLanguages, allowedLanguages],
+  );
   const toolOnInput = useMemo(
     () => ({
-      digisearch: api.prefs.digisearch,
-      vault: api.prefs.vault,
-      webSearch: api.prefs.webSearch,
+      digisearch: committedChatPrefs(api).digisearch,
+      vault: committedChatPrefs(api).vault,
+      webSearch: committedChatPrefs(api).webSearch,
       extraToolOn: api.extraToolOn,
     }),
     [api],
@@ -508,13 +554,14 @@ export function EmbedComposerMenu({
         tenantAllowsWeb: api.tenantAllowsWeb,
         catalogTools: api.catalogTools,
         mcpServers: api.mcpServers,
-        mcpCustom: api.prefs.mcpCustom,
+        mcpCustom: committedChatPrefs(api).mcpCustom,
       }),
     [api],
   );
+  const committedMcpCustom = committedChatPrefs(api).mcpCustom;
   const mcpConfigs = useMemo(
-    () => connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom),
-    [api.mcpServers, api.prefs.mcpCustom],
+    () => connectedMcpConfigs(api.mcpServers, committedMcpCustom),
+    [api.mcpServers, committedMcpCustom],
   );
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
@@ -560,8 +607,6 @@ export function EmbedComposerMenu({
   const rowPointer = useRef("");
   const openKey = `${kind}\0${providerSeed ?? ""}\0${mcpSeed ?? ""}`;
   const [appliedOpen, setAppliedOpen] = useState("");
-  /** Provider headers the visitor opened or closed; null means the default. */
-  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean | undefined> | null>(null);
 
   useEffect(() => {
     mcpDraftRef.current = mcpDraft;
@@ -588,7 +633,7 @@ export function EmbedComposerMenu({
       setView("mcp-edit");
     } else if (typeof mcpOpened === "string") {
       const hit =
-        connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === mcpOpened) ??
+        connectedMcpConfigs(api.mcpServers, committedChatPrefs(api).mcpCustom).find((s) => s.id === mcpOpened) ??
         applyWellKnownMcp({ ...emptyMcpConfig(), label: mcpOpened }, mcpOpened);
       setMcpDraft(hit);
       setView("mcp-edit");
@@ -608,17 +653,59 @@ export function EmbedComposerMenu({
     setMcpError(null);
     setMcpSuggestIndex(-1);
     setMcpIdDropdownOpen(false);
-    setExpandedProviders(null);
   }
 
-  const commitExclusive = useCallback(
-    (apply: () => void) => {
-      apply();
-      if (api.composerDraftBound) queueMicrotask(() => api.setComposerDraft?.(""));
-      else onClose();
+  // Live preview: a highlighted visual row (theme, view, density, scrollbar)
+  // paints the page before it is chosen. Nothing is stored. Moving to a
+  // non-visual row, leaving the page or closing the menu paints the chosen
+  // look again; choosing the row commits it.
+  const apiRef = useRef(api);
+  useEffect(() => {
+    apiRef.current = api;
+  }, [api]);
+  const prefsPreviewOn = useRef(false);
+  const themeBaseRef = useRef<ReturnType<typeof currentThemeState> | null>(null);
+  /** The chosen theme while a preview paints another; the checked row reads it. */
+  const [themeBase, setThemeBase] = useState<ReturnType<typeof currentThemeState> | null>(null);
+  const endPrefsPreview = useCallback(() => {
+    if (!prefsPreviewOn.current) return;
+    prefsPreviewOn.current = false;
+    apiRef.current.previewPrefs?.(null);
+  }, []);
+  const endThemePreview = useCallback(() => {
+    const base = themeBaseRef.current;
+    if (!base) return;
+    themeBaseRef.current = null;
+    setThemeBase(null);
+    previewThemePick(apiRef.current, null, base);
+  }, []);
+  const endPreview = useCallback(() => {
+    endPrefsPreview();
+    endThemePreview();
+  }, [endPrefsPreview, endThemePreview]);
+  const startPreview = useCallback(
+    (target: MenuRowPreview) => {
+      const current = apiRef.current;
+      if (target.kind === "prefs") {
+        endThemePreview();
+        if (!current.previewPrefs) return;
+        prefsPreviewOn.current = true;
+        current.previewPrefs(target.patch);
+        return;
+      }
+      endPrefsPreview();
+      // A host that owns the theme but cannot preview it keeps its theme.
+      if (current.setTheme && !current.previewTheme) return;
+      if (!themeBaseRef.current) {
+        const base = currentThemeState(current);
+        themeBaseRef.current = base;
+        setThemeBase(base);
+      }
+      previewThemePick(current, target, themeBaseRef.current);
     },
-    [api, onClose],
+    [endPrefsPreview, endThemePreview],
   );
+  useEffect(() => endPreview, [endPreview]);
 
   /**
    * The root is the same command list the `/` palette filters — one source of
@@ -646,10 +733,12 @@ export function EmbedComposerMenu({
         .map((command) => {
           const node = NODE_BY_ID[command.id];
           const draft = node ? paneDraftForId(command.id) : null;
+          const look = slashRowPreview(command.id, committedChatPrefs(api));
           return {
             id: command.id,
             label: command.label ?? `/${command.id}`,
             value: command.value ?? "",
+            ...(look ? { preview: { kind: "prefs" as const, patch: look } } : {}),
             ...(command.description ? { detail: command.description } : {}),
             ...(draft ? { insert: draft } : {}),
             activate: node
@@ -669,14 +758,13 @@ export function EmbedComposerMenu({
       // names the one you are in.
       {
         id: "scroll",
-        label: slashName(api.prefs.scroll === "free" ? "scroll follow" : "scroll free"),
-        value: api.prefs.scroll === "free" ? "free" : "follow",
+        label: slashName(committedChatPrefs(api).scroll === "free" ? "scroll follow" : "scroll free"),
+        value: committedChatPrefs(api).scroll === "free" ? "free" : "follow",
         detail: "Follow the latest message, or leave the scroll where it is.",
-        checked: api.prefs.scroll === "follow",
+        checked: committedChatPrefs(api).scroll === "follow",
+        commits: true,
         activate: () => {
-          commitExclusive(() =>
-            api.setScroll(api.prefs.scroll === "free" ? "follow" : "free"),
-          );
+          api.setScroll(committedChatPrefs(api).scroll === "free" ? "follow" : "free");
         },
       },
     ];
@@ -685,7 +773,7 @@ export function EmbedComposerMenu({
   const languageRows = useMemo(
     (): MenuRow[] =>
       languages.map((o) => {
-        const selected = api.prefs.language === o.value;
+        const selected = committedChatPrefs(api).language === o.value;
         const native = o.native !== o.label ? o.native : "";
         return {
           id: o.value,
@@ -696,51 +784,20 @@ export function EmbedComposerMenu({
           insert: optionDraft("/language", o.label),
           token: o.label,
           ...(native ? { aliases: [native] } : {}),
+          commits: true,
           activate: () => {
-            commitExclusive(() => api.setLanguage(o.value));
+            api.setLanguage(o.value);
           },
         };
       }),
-    [languages, api, commitExclusive],
+    [languages, api],
   );
 
   const modelRows = useMemo((): MenuRow[] => {
     // A connected BYOK provider replaces the house catalog with that
     // provider's own models. The catalog picker is the house list.
     if (picker && !providerActive) {
-      const selected = api.prefs.model;
-      const autoPreset = picker.presets.find((preset) => preset.id === "auto");
-      const selectedPreset = picker.presets.find((preset) => `preset:${preset.id}` === selected);
-      // The row to open by default: the selected model, or the Auto default.
-      const currentModel =
-        selectedPreset?.model ??
-        (selected && selected !== "auto" && !selected.startsWith("preset:")
-          ? selected
-          : undefined) ??
-        autoPreset?.model ??
-        (defaultModel?.includes("/") ? defaultModel : "");
-      // Default: the folders holding the current model are open.
-      const defaultOpen: Record<string, boolean> = {};
-      for (const path of currentModel ? modelFolderAncestors(currentModel) : []) {
-        defaultOpen[path] = true;
-      }
-      const opened = expandedProviders ?? defaultOpen;
-      const toggleProvider = (path: string) => {
-        setExpandedProviders((prev) => {
-          const base = prev ?? defaultOpen;
-          const currentlyOpen = filtering
-            ? base[path] !== false
-            : base[path] === true;
-          // During filtering the default is open, so closing stores `false`
-          // and re-opening clears back to the (open) default.
-          const next = currentlyOpen
-            ? false
-            : filtering
-              ? undefined
-              : true;
-          return { ...base, [path]: next };
-        });
-      };
+      const selected = committedChatPrefs(api).model;
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
         const token = `preset:${preset.id}`;
         const checked =
@@ -756,81 +813,46 @@ export function EmbedComposerMenu({
           insert: optionDraft("/models", preset.label),
           token: preset.label,
           aliases: [preset.id],
+          commits: true,
           activate: () => {
             const next = preset.id === "auto" ? "" : token;
-            commitExclusive(() => {
-              api.setModel(next);
-              onPickSessionModel?.(next);
-            });
+            api.setModel(next);
+            onPickSessionModel?.(next);
           },
         };
       });
-      // Provider groups as a /tools-style tree: a /provider row whose children
-      // are the raw model ids. Activating the header collapses or expands it.
-      const filtering = Boolean(api.paletteQuery?.trim());
-      const leafRow = (
-        node: Extract<ModelPathNode, { kind: "leaf" }>,
-        branch: MenuRow["branch"],
-        treePrefix: string,
-      ): MenuRow => ({
+      // One flat list of models under the modes: each row reads only the
+      // model name (the id after its provider path), sorted by provider then
+      // name. The pick, the API id and the accessible name stay the full id,
+      // and the filter matches the name or the full id (`gpt` finds
+      // `openai/gpt-6-luna`, `openai` finds every OpenAI model).
+      const leaves = (nodes: ModelPathNode[]): Extract<ModelPathNode, { kind: "leaf" }>[] =>
+        nodes.flatMap((node) => (node.kind === "leaf" ? [node] : leaves(node.children)));
+      const flat = picker.showFullList
+        ? leaves(
+            buildModelPathTree(picker.groups.flatMap((group) => group.models.map((m) => m.id))),
+          )
+        : [];
+      // Two providers can ship the same model name; only then the row keeps
+      // the full id so the two stay tellable apart.
+      const nameCount = new Map<string, number>();
+      for (const leaf of flat) nameCount.set(leaf.name, (nameCount.get(leaf.name) ?? 0) + 1);
+      const groupRows: MenuRow[] = flat.map((node) => ({
         id: node.id,
-        // The row reads the last path segment. The selected value, the API
-        // id and the toolbar name stay the full id. The accessible name keeps
-        // the full raw id so assistive tech keeps the provider association.
         ariaLabel: node.id,
-        label: node.name,
+        label: (nameCount.get(node.name) ?? 0) > 1 ? node.id : node.name,
         value: "",
         checked: selected === node.id,
         exclusive: true,
-        branch,
-        treePrefix,
         insert: optionDraft("/models", node.id),
         token: node.id,
-        // `gpt` finds `openai/gpt-6-luna`: the filter matches prefixes.
         aliases: node.name !== node.id ? [node.name] : [],
+        commits: true,
         activate: () => {
-          commitExclusive(() => {
-            api.setModel(node.id);
-            onPickSessionModel?.(node.id);
-          });
+          api.setModel(node.id);
+          onPickSessionModel?.(node.id);
         },
-      });
-      const treeRows = (nodes: ModelPathNode[], depth: number, rails: string): MenuRow[] =>
-        nodes.flatMap((node, index): MenuRow[] => {
-          const last = index === nodes.length - 1;
-          // Top level has no glyph (like a /tools service or a bare id).
-          const branch: MenuRow["branch"] = depth === 0 ? undefined : last ? "last" : "mid";
-          const prefix = depth === 0 ? "" : rails;
-          if (node.kind === "leaf") return [leafRow(node, filtering ? undefined : branch, prefix)];
-          // A typed filter searches every folder at every depth.
-          // Filtering force-opens every folder by default, but a manual toggle
-          // still wins, so the header is not a visible no-op while filtering.
-          const open = filtering
-            ? opened[node.path] !== false
-            : opened[node.path] === true;
-          const header: MenuRow = {
-            id: `folder:${node.path}`,
-            label: `/${node.name}`,
-            value: "",
-            expanded: open,
-            branch,
-            treePrefix: prefix,
-            token: node.path,
-            activate: () => {
-              toggleProvider(node.path);
-            },
-          };
-          if (!open) return [header];
-          const childRails = depth === 0 ? "" : `${rails}${last ? "   " : "│  "}`;
-          return [header, ...treeRows(node.children, depth + 1, childRails)];
-        });
-      const groupRows: MenuRow[] = picker.showFullList
-        ? treeRows(
-            buildModelPathTree(picker.groups.flatMap((group) => group.models.map((m) => m.id))),
-            0,
-            "",
-          )
-        : [];
+      }));
       if (presetRows.length || groupRows.length) return [...presetRows, ...groupRows];
     }
     // Auto is only a real option when the deployment default is Auto (no
@@ -846,12 +868,13 @@ export function EmbedComposerMenu({
             id: "auto",
             label: "auto",
             value: "deployment default",
-            checked: !api.prefs.model || api.prefs.model === "auto",
+            checked: !committedChatPrefs(api).model || committedChatPrefs(api).model === "auto",
             exclusive: true,
             insert: optionDraft("/models", "auto"),
             token: "auto",
+            commits: true,
             activate: () => {
-              commitExclusive(() => api.setModel(""));
+              api.setModel("");
             },
           },
         ]
@@ -871,32 +894,29 @@ export function EmbedComposerMenu({
     }
     return [
       ...autoRows,
-      ...available.map((id) => ({
-        id,
-        label: id,
-        value: "",
-        checked: (providerActive?.model || api.prefs.model) === id,
-        exclusive: true,
-        insert: optionDraft("/models", id),
-        token: id,
-        activate: () => {
-          commitExclusive(() => {
+      ...available.map((id, _i, all) => {
+        const name = id.slice(id.lastIndexOf("/") + 1);
+        const clash =
+          all.filter((other) => other.slice(other.lastIndexOf("/") + 1) === name).length > 1;
+        return {
+          id,
+          ariaLabel: id,
+          label: clash ? id : name,
+          aliases: name !== id ? [name] : [],
+          value: "",
+          checked: (providerActive?.model || committedChatPrefs(api).model) === id,
+          exclusive: true,
+          insert: optionDraft("/models", id),
+          token: id,
+          commits: true,
+          activate: () => {
             api.setModel(id);
             onPickSessionModel?.(id);
-          });
-        },
-      })),
+          },
+        };
+      }),
     ];
-  }, [
-    available,
-    api,
-    commitExclusive,
-    defaultModel,
-    expandedProviders,
-    onPickSessionModel,
-    picker,
-    providerActive,
-  ]);
+  }, [available, api, defaultModel, onPickSessionModel, picker, providerActive]);
 
   const effortRows = useMemo(
     (): MenuRow[] =>
@@ -904,15 +924,16 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`effort ${id}`),
         value: "",
-        checked: api.prefs.effort === id,
+        checked: committedChatPrefs(api).effort === id,
         exclusive: true,
         insert: optionDraft("/effort", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setEffort(id));
+          api.setEffort(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const engineRows = useMemo(
@@ -921,15 +942,16 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`search-engine ${id}`),
         value: SEARCH_ENGINE_LABELS[id] ?? "",
-        checked: (api.prefs.searchEngine || "auto") === id,
+        checked: (committedChatPrefs(api).searchEngine || "auto") === id,
         exclusive: true,
         insert: optionDraft("/search-engine", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setSearchEngine(id));
+          api.setSearchEngine(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const viewRows = useMemo(
@@ -938,15 +960,17 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`view ${id}`),
         value: VIEW_LABELS[id],
-        checked: api.prefs.view === id,
+        checked: committedChatPrefs(api).view === id,
         exclusive: true,
         insert: optionDraft("/view", id),
         token: id,
+        preview: { kind: "prefs", patch: { view: id } },
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setView(id));
+          api.setView(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const densityRows = useMemo(
@@ -955,19 +979,23 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`density ${id}`),
         value: TRACE_DENSITY_LABELS[id],
-        checked: api.prefs.density === id,
+        checked: committedChatPrefs(api).density === id,
         exclusive: true,
         insert: optionDraft("/density", id),
         token: id,
+        preview: { kind: "prefs", patch: { density: id } },
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setDensity(id));
+          api.setDensity(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const themeRows = useMemo((): MenuRow[] => {
-    const state = currentThemeState(api);
+    // While a row is previewed the page paints that row; the checked row is
+    // still the chosen theme.
+    const state = themeBase ?? currentThemeState(api);
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -977,21 +1005,21 @@ export function EmbedComposerMenu({
       exclusive: true,
       insert: slashName(`theme ${step.palette} ${step.mode}`),
       token: `${step.palette} ${step.mode}`,
+      preview: { kind: "theme", preference: step.mode, palette: step.palette },
+      commits: true,
       activate: () => {
-        commitExclusive(() => {
-          if (api.setTheme && current.id === step.id) {
-            // On a host that owns the theme (an embed), the checked row drops
-            // the visitor's pick, so the chat follows the parent / tenant again.
-            applyThemePick(api, "auto", step.palette);
-          } else {
-            // Document theme (the app): any row, the checked one included,
-            // pins that mode and palette, as before 2.6.6.
-            applyThemePick(api, step.mode, step.palette);
-          }
-        });
+        if (api.setTheme && current.id === step.id) {
+          // On a host that owns the theme (an embed), the checked row drops
+          // the visitor's pick, so the chat follows the parent / tenant again.
+          applyThemePick(api, "auto", step.palette);
+        } else {
+          // Document theme (the app): any row, the checked one included,
+          // pins that mode and palette, as before 2.6.6.
+          applyThemePick(api, step.mode, step.palette);
+        }
       },
     }));
-  }, [api, commitExclusive]);
+  }, [api, themeBase]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -999,22 +1027,23 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`thinking ${id}`),
         value: THINKING_LABELS[id] ?? "",
-        checked: api.prefs.thinking === id,
+        checked: committedChatPrefs(api).thinking === id,
         exclusive: true,
         insert: optionDraft("/thinking", id),
         token: id,
+        commits: true,
         activate: () => {
-          commitExclusive(() => api.setThinking(id));
+          api.setThinking(id);
         },
       })),
-    [api, commitExclusive],
+    [api],
   );
 
   const toggleTool = useCallback(
     (id: string) => {
-      if (id === "digisearch") api.setDigisearch(!api.prefs.digisearch);
-      else if (id === "digivault") api.setVault(!api.prefs.vault);
-      else if (id === "websearch") api.setWebSearch(!api.prefs.webSearch);
+      if (id === "digisearch") api.setDigisearch(!committedChatPrefs(api).digisearch);
+      else if (id === "digivault") api.setVault(!committedChatPrefs(api).vault);
+      else if (id === "websearch") api.setWebSearch(!committedChatPrefs(api).webSearch);
       else api.setExtraTool(id, !api.extraToolOn(id));
     },
     [api],
@@ -1391,6 +1420,9 @@ export function EmbedComposerMenu({
   const selection = submenuRows(
     rows.map((row) => ({ ...row, token: row.token ?? row.label })),
     paletteFilter,
+    // Model lists match anywhere in the name or full id (`flash`, `luna`,
+    // `openai`), start-of-name matches first.
+    { contains: view === "models" || view === "provider-model" },
   );
   const shown = selection.rows;
   const title =
@@ -1422,6 +1454,13 @@ export function EmbedComposerMenu({
 
   const safeCursor = shown.length ? Math.min(cursor, shown.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
+
+  const previewTarget = shown[safeCursor]?.preview;
+  const previewKey = previewTarget ? JSON.stringify(previewTarget) : "";
+  useEffect(() => {
+    if (!previewKey) endPreview();
+    else startPreview(JSON.parse(previewKey) as MenuRowPreview);
+  }, [endPreview, previewKey, startPreview]);
 
   /**
    * The cursor belongs to the page, not to the moment the menu opened: a
@@ -1459,9 +1498,10 @@ export function EmbedComposerMenu({
     (row: MenuRow | undefined) => {
       if (!row) return;
       if (row.insert) api.setComposerDraft?.(row.insert);
+      if (row.commits) endPreview();
       row.activate();
     },
-    [api],
+    [api, endPreview],
   );
 
   useEffect(() => {
@@ -1711,7 +1751,9 @@ export function EmbedComposerMenu({
 
   const body = (
     <div
+      ref={menuRootRef}
       className="dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border"
+      style={menuRoom === null ? undefined : ({ "--dc-menu-room": `${menuRoom}px` } as CSSProperties)}
       data-thread-skin="digichat"
       data-embed-settings
       data-embed-composer-menu
@@ -1721,7 +1763,7 @@ export function EmbedComposerMenu({
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
-          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto pt-0.5 pb-1.5"
+          className="dc-composer-menu-body flex max-h-[min(50vh,22rem,var(--dc-menu-room,22rem))] flex-col overflow-y-auto pt-0.5 pb-1.5"
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
@@ -2096,6 +2138,7 @@ export function EmbedComposerMenu({
                     aria-describedby={selected ? detailId : undefined}
                     aria-label={row.ariaLabel}
                     data-cursor={selected ? "true" : undefined}
+                    data-slot="composer-menu-row"
                     className={MENU_ROW_CLASS}
                     ref={(node) => {
                       if (selected) node?.scrollIntoView({ block: "nearest" });
@@ -2119,14 +2162,9 @@ export function EmbedComposerMenu({
                     }}
                     onKeyDown={(e) => onRowKey(e, index)}
                   >
-                    {/* The user-message chevron marks the cursor on every page,
-                        including a checked radio row; the value mark (diamond)
-                        stays on the right, so the two never collide. */}
-                    {selected ? (
-                      <span className="aui-menu-cursor" aria-hidden>
-                        <DotMatrix state="user" className="size-3.5" />
-                      </span>
-                    ) : null}
+                    {/* The cursor row is marked by the lighter background on
+                        every page (data-cursor, styled per skin), the same as
+                        the slash palette; the value mark stays on the right. */}
                     {row.branch ? (
                       <span
                         data-slot="tools-tree-branch"

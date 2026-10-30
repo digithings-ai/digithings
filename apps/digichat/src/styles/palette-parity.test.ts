@@ -582,3 +582,38 @@ describe("chatgpt skin paints the palette canvas in dark", () => {
     expect(embedWrapperBackground("lucent-orng", "claude")).toBe("oklch(0.141 0.005 285.823)");
   });
 });
+
+/**
+ * The embed wrapper carries `.dark`, whose shadcn --accent is a grey hover
+ * tint. With a named palette painted, the wrapper keeps the palette accent so
+ * the send button and links take the theme colour in every dark palette.
+ */
+function embedWrapperAccent(id: string | null, skin = "base"): string {
+  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.setAttribute("data-site-theme", "1");
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  document.body.innerHTML = `<div class="dc-embed-shell bg-background"><div class="dark bg-background"><div data-stock-product data-thread-skin="${skin}" data-chrome-mode="embed"></div></div></div>`;
+  const shell = document.querySelector(".dc-embed-shell")!;
+  const wrapper = shell.firstElementChild!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, shell, wrapper]);
+  return (maps[maps.length - 1]["--accent"] ?? "").toLowerCase();
+}
+
+function declaredAccent(id: string): string | null {
+  const palettes = readFileSync(path.join(ROOT, "packages/design/palettes.css"), "utf8");
+  const block = palettes.match(new RegExp(`:root\\[data-palette="${id}"\\]\\[data-theme="dark"\\][^{]*\\{([^}]*)\\}`));
+  return block?.[1].match(/--accent:\s*([^;]+)/)?.[1].trim().toLowerCase() ?? null;
+}
+
+describe("dark embed wrapper keeps the palette accent", () => {
+  it.each(PALETTE_IDS.map((id) => [id] as const))("%s dark: wrapper --accent is the palette accent", (id) => {
+    const declared = declaredAccent(id);
+    expect(declared, `${id} dark has no --accent`).toBeTruthy();
+    expect(embedWrapperAccent(id)).toBe(declared);
+  });
+
+  it("no palette: the wrapper keeps the shadcn dark accent", () => {
+    expect(embedWrapperAccent(null)).toBe("oklch(0.274 0.006 286.033)");
+  });
+});

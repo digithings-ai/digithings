@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PaletteRowPreview } from "../../../stock/palette-row-preview";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -247,6 +248,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
           removeOnExecute={action.removeOnExecute}
         />
       ) : null}
+      <PaletteRowPreview />
       <Categories
         iconMap={iconMap}
         fallbackIcon={fallbackIcon}

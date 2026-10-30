@@ -1057,3 +1057,67 @@ html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
 .digichat-launcher .aui-chat-notice[data-tone="error"] .aui-chat-notice-title {
   color: color-mix(in srgb, var(--notice-danger) 80%, var(--ink));
 }
+
+/* ── Example-question rows: thin overlay-style scrollbar ─────────────────
+   Shared by every skin through <SuggestionScrollRow>. The bar is 4px and
+   invisible at rest; it shows while the row is hovered, focused or being
+   scrolled. The row sets data-hover / data-focus / data-scrolling itself
+   because Chrome does not repaint the thumb on :hover alone. Blink/WebKit use
+   the ::-webkit-scrollbar rules; Gecko gets the standard pair, guarded so
+   Chrome keeps honouring the 4px webkit size. */
+.aui-suggestion-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-track,
+.aui-suggestion-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.aui-suggestion-scroll::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: transparent;
+}
+
+.aui-suggestion-scroll:hover::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-hover]::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-focus]::-webkit-scrollbar-thumb,
+.aui-suggestion-scroll[data-scrolling]::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 45%, transparent);
+}
+
+@supports (-moz-appearance: none) {
+  .aui-suggestion-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .aui-suggestion-scroll:hover,
+  .aui-suggestion-scroll:focus-within,
+  .aui-suggestion-scroll[data-scrolling] {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground, #8a8a8a) 45%, transparent)
+      transparent;
+  }
+}
+
+/* Send arrow on the filled accent button. Light mode: white whenever white
+   clears 3:1 against the accent (WCAG 1.4.11, icons), i.e. OKLab L below
+   ~0.669; a lighter accent keeps a dark arrow. Dark mode keeps the theme's
+   --on-accent. Tracks whatever --accent the palette or tenant sets. */
+.aui-composer-send {
+  --on-accent-icon: var(--on-accent);
+}
+:root[data-theme="light"] .aui-composer-send {
+  --on-accent-icon: oklch(from var(--accent) clamp(0, (0.669 - l) * 1000, 1) 0 0);
+}
+.aui-composer-send.text-on-accent {
+  color: var(--on-accent-icon);
+}
