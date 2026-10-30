@@ -20,15 +20,16 @@ import {
 import { cn } from "@/lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { useTraceT } from "../trace-i18n";
+import { stockRadius, useStockShape } from "./stock-shape";
 
 const ANIMATION_DURATION = 200;
 
 const toolGroupVariants = cva("aui-tool-group-root group/tool-group w-full", {
   variants: {
     variant: {
-      outline: "rounded-none border py-3",
+      outline: "border py-3",
       ghost: "",
-      muted: "border-hair-2 bg-surface-2/30 rounded-none border py-3",
+      muted: "border-hair-2 bg-surface-2/30 border py-3",
     },
   },
   defaultVariants: { variant: "outline" },
@@ -56,6 +57,7 @@ function ToolGroupRoot({
   children,
   ...props
 }: ToolGroupRootProps) {
+  const stock = useStockShape();
   const collapsibleRef = useRef<HTMLDivElement>(null);
   const [initialOpen] = useState(defaultOpen);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
@@ -86,6 +88,8 @@ function ToolGroupRoot({
       onOpenChange={handleOpenChange}
       className={cn(
         toolGroupVariants({ variant }),
+        // assistant-ui's outline/muted tool group is rounded-lg.
+        (variant ?? "outline") !== "ghost" && stockRadius(stock, "rounded-lg"),
         "group/tool-group-root",
         className,
       )}

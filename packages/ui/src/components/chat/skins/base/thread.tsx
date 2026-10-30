@@ -13,35 +13,14 @@ import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { backendNoticeOf } from "../../stock/chat-notice";
 import { useSkinRuntime } from "../../stock/skin-runtime";
-// assistant-ui's own trace parts (see ./aui-default/README.md): the base
-// skins render reasoning and tool calls as assistant-ui ships them.
-import { ToolFallback } from "./aui-default/tool-fallback.aui";
+// assistant-ui's own trace parts (see ./aui-default/README.md), shared with
+// the stock thread: the base skins render reasoning and tool calls as
+// assistant-ui ships them.
+import { AssistantTrace } from "./elements/assistant-trace.aui";
 
 import { MessageExportMenu } from "../../stock/message-export-menu";
 import { TooltipIconButton } from "./tooltip-icon-button";
-import { Reasoning } from "./aui-default/reasoning.aui";
-import { WorkChain } from "./elements/work-chain";
-import {
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "./aui-default/reasoning.aui";
-import {
-  ToolGroupContent,
-  ToolGroupRoot,
-  ToolGroupTrigger,
-} from "./aui-default/tool-group.aui";
-import {
-  chainFollowedByText,
-  chainGroupBy,
-  chainHoldsWork,
-  chainToolCount,
-  messageHasContent,
-  reasoningGroupDisclosure,
-  toolGroupDisclosure,
-  useDeployWorkDisclosure,
-} from "../../trace-grouping";
+import { messageHasContent } from "../../trace-grouping";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -58,7 +37,6 @@ import {
 import { ComposerTriggerPopover } from "./elements/composer-trigger-popover.aui";
 import { useSkinPaletteOptional } from "../../stock/skin-palette-context";
 import { useEmbedChatPrefsOptional } from "../../stock/embed-chat-prefs";
-import { useViewDisclosure } from "../../stock/deploy-ui-context";
 import { DirectiveText } from "./elements/directive-text.aui";
 import {
   ActionBarPrimitive,
@@ -863,11 +841,6 @@ const DataNotice: FC<{ part: { readonly type: string; readonly name?: string; re
 };
 
 const AssistantMessage: FC = () => {
-  const disclosure = useViewDisclosure();
-  const { reasoningMode, toolCallsMode, disclosure: work } = useDeployWorkDisclosure();
-  // The whole turn, not just the group: the tools answer faster than the
-  // chain can fold, and a group that closes between two of them flickers.
-  const turnRunning = useAuiState((s) => s.thread.isRunning);
   const messageParts = useAuiState((s) => s.message.parts);
   const hasContent = messageHasContent(messageParts);
   // reserves space for action bar and compensates with `-mb` for consistent msg spacing
@@ -888,81 +861,11 @@ const AssistantMessage: FC = () => {
       >
         {/* The digichat skin's trace grouping and fold rules
             (`trace-grouping`); only the look is the base skin's. */}
-        <MessagePrimitive.GroupedParts groupBy={chainGroupBy}>
-          {({ part, children }) => {
+        <AssistantTrace
+          renderPart={({ part }) => {
             switch (part.type) {
-              case "group-chainOfThought":
-                // A chain of only status or source parts is not work: no
-                // header, the loading row covers that phase. The parts still
-                // render bare so a backend notice does not vanish.
-                if (!chainHoldsWork(messageParts, part.indices)) return <>{children}</>;
-                // One header for the whole chain: the reasoning and the tool
-                // calls collapse together.
-                return (
-                  <div data-slot="aui_chain-of-thought">
-                    <WorkChain
-                      key={disclosure.key}
-                      indices={part.indices}
-                      openAtRest={work.openAtRest}
-                      foldOnAnswer={work.foldOnAnswer}
-                      followedByText={chainFollowedByText(messageParts, part.indices)}
-                    >
-                      {children}
-                    </WorkChain>
-                  </div>
-                );
-              case "group-tool": {
-                if (toolCallsMode === "off") return null;
-                // The group can hold the source and status parts between two
-                // tool runs; the count is the tool calls only.
-                const toolCount = chainToolCount(messageParts, part.indices);
-                if (toolCount === 0) return <div data-slot="aui_chain-tools">{children}</div>;
-                const running = part.status.type === "running";
-                const group = toolGroupDisclosure(work, toolCallsMode, running || turnRunning);
-                return (
-                  <ToolGroupRoot
-                    key={disclosure.key}
-                    variant="ghost"
-                    defaultOpen={group.defaultOpen}
-                    streamingOpen={group.streamingOpen}
-                    {...(group.locked ? { open: true, onOpenChange: () => {} } : {})}
-                  >
-                    <ToolGroupTrigger count={toolCount} active={running} disabled={group.locked} />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
-                );
-              }
-              case "group-reasoning": {
-                if (reasoningMode === "off") return null;
-                const running = part.status.type === "running";
-                const box = reasoningGroupDisclosure(work, reasoningMode, running || turnRunning);
-                return (
-                  <ReasoningRoot
-                    key={disclosure.key}
-                    variant="ghost"
-                    className="mb-0"
-                    streaming={box.streamingOpen}
-                    defaultOpen={box.defaultOpen}
-                    {...(box.locked ? { open: true, onOpenChange: () => {} } : {})}
-                  >
-                    {/* The reasoning is a sub-step with its own disclosure
-                        inside the chain, streaming while it runs. */}
-                    <ReasoningTrigger active={running} disabled={box.locked} />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
-                );
-              }
               case "text":
                 return <MarkdownText />;
-              case "reasoning":
-                if (reasoningMode === "off") return null;
-                return <Reasoning {...part} />;
-              case "tool-call":
-                if (toolCallsMode === "off") return null;
-                // assistant-ui's ToolFallback owns the approval controls too.
-                return part.toolUI ?? <ToolFallback key={disclosure.key} {...part} />;
               case "indicator":
                 // One loading affordance per turn: once anything real has
                 // arrived the work chain takes over.
@@ -976,7 +879,7 @@ const AssistantMessage: FC = () => {
                 return null;
             }
           }}
-        </MessagePrimitive.GroupedParts>
+        />
         <MessageError />
       </div>
 

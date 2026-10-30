@@ -28,6 +28,26 @@
   --color-warn: var(--warn);
 }
 
+/* The stock thread's raised fill (user bubble, skeletons, dialog, inline
+   code, hovers): `bg-surface-2` and `bg-surface-2/<n>`. This sheet declares
+   no `--color-surface-2` theme colour, so Tailwind's own `bg-*` does not emit
+   it; this utility does, and only inside the stock thread (its root carries
+   `data-stock-thread`) and the stock portals rendered from it (the dialog
+   carries `data-stock-portal` inside StockShapeProvider). Anywhere else the
+   class matches no declaration at all, exactly as before the stock thread
+   used it: other skins and host chrome reuse stock parts that ask for it
+   (markdown table heads, tool cards, the docs page's outline Button) and
+   keep their own background. `:where()` adds no specificity, and
+   `--surface-2` resolves on the element, so thread-scoped tokens win.
+   `--value("2")` limits the utility to `bg-surface-2`. */
+@utility bg-surface-* {
+  &:where([data-stock-thread], [data-stock-thread] *, [data-stock-portal], [data-stock-portal] *) {
+    --stock-surface-step: --value("2");
+    background-color: var(--surface-2);
+    background-color: color-mix(in oklab, var(--surface-2) --modifier(integer)%, transparent);
+  }
+}
+
 /* `--font-geist-mono` is the retired name for the host surface's one mono face
    (DIG-2375). It is declared HERE, beside the rules that read it, because every
    surface that mounts this sheet sets only the generic `--font-mono-face` from

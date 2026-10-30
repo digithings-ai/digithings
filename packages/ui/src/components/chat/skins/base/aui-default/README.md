@@ -27,6 +27,9 @@ Import paths are rewritten. Local changes:
 - `tool-group.aui.tsx`: `streamingOpen` (open while the group streams, folded
   on completion), as in the digichat skin's tool group.
 
+The trace itself (`../elements/assistant-trace.aui.tsx`) is shared: the base
+Thread and the stock Thread (`../../../stock/thread.aui.tsx`) both render it.
+
 The base thread (`../thread.tsx`) also uses assistant-ui's own working
 indicator (the pulsing dot) and MessageError markup from the upstream
 `elements/thread.aui.tsx`. The `digichat` skin keeps `../../stock/*`.

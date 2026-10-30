@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BaseThread } from "./thread";
+import { Thread as StockThread } from "../../stock/thread.aui";
 import { DigichatThread } from "../../DigichatThread";
 import { TraceLocaleProvider } from "../../trace-i18n";
 import { DEFAULT_DEPLOY_UI, DeployUiProvider } from "../../stock/deploy-ui-context";
@@ -115,7 +116,7 @@ const SendOnMount: FC = () => {
   return null;
 };
 
-type Skin = "base" | "digichat";
+type Skin = "base" | "digichat" | "stock";
 
 let cleanup: (() => void) | undefined;
 function teardown(): void {
@@ -146,6 +147,8 @@ async function mount(
           <AssistantRuntimeProvider runtime={runtime}>
             {skin === "base" ? (
               <BaseThread />
+            ) : skin === "stock" ? (
+              <StockThread autoFocus={false} />
             ) : (
               <DigichatThread
                 placeholder="Ask"
@@ -266,5 +269,49 @@ describe("base skin trace parity with the digichat skin", () => {
     const row = host.querySelector('[data-slot="tool-fallback-trigger"]')!;
     expect(expanded(row)).toBe(true);
     expect(host.textContent).toContain('"query"');
+  });
+});
+
+/**
+ * The stock thread (expo, docs and product-page skins) draws the base skin's
+ * trace (`elements/assistant-trace.aui.tsx`): same chain, reasoning boxes,
+ * tool groups, tool cards and open/closed states.
+ */
+describe("stock thread trace parity with the base skin", () => {
+  async function pair(opts: Parameters<typeof mount>[1]) {
+    const base = trace(await mount("base", opts));
+    teardown();
+    const stock = trace(await mount("stock", opts));
+    teardown();
+    return { base, stock };
+  }
+
+  it("groups a finished turn under one folded work chain", async () => {
+    const { base, stock } = await pair({ initialMessages: DONE_TURN });
+    expect(stock.chains).toEqual(base.chains);
+    expect(stock.reasoning).toEqual(base.reasoning);
+    expect(stock.toolGroups).toEqual(base.toolGroups);
+    expect(stock.toolRows).toEqual(base.toolRows);
+    expect(stock.chains).toHaveLength(1);
+    expect(stock.chains[0]!.open).toBe(false);
+  });
+
+  it("opens every card in the verbose view", async () => {
+    const { base, stock } = await pair({ initialMessages: DONE_TURN, view: "verbose" });
+    expect(stock.chains).toEqual(base.chains);
+    expect(stock.toolRows.map((r) => r.label)).toEqual([
+      "Used tool: web_search",
+      "Used tool: web_fetch",
+      "Used tool: web_fetch",
+    ]);
+  });
+
+  it("streams with the chain, reasoning box, tool group and running card open", async () => {
+    const { base, stock } = await pair({ adapter: streaming, send: true });
+    expect(stock.chains).toEqual(base.chains);
+    expect(stock.reasoning).toEqual(base.reasoning);
+    expect(stock.toolGroups).toEqual(base.toolGroups);
+    expect(stock.toolRows).toEqual(base.toolRows);
+    expect(stock.chains[0]!.open).toBe(true);
   });
 });

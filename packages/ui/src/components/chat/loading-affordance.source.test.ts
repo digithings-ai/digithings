@@ -40,7 +40,9 @@ describe("one loading affordance per turn", () => {
     // only thing in the group is the connection state.
     expect(thread).toMatch(/const holdsWork = chainHoldsWork\(messageParts, part\.indices\)/);
     expect(thread).toMatch(/if \(!holdsWork\) return <>\{children\}<\/>;/);
-    expect(read("skins/base/thread.tsx")).toMatch(
+    // The base skin's trace (shared with the stock thread) lives in
+    // `skins/base/elements/assistant-trace.aui.tsx`.
+    expect(read("skins/base/elements/assistant-trace.aui.tsx")).toMatch(
       /if \(!chainHoldsWork\(messageParts, part\.indices\)\) return <>\{children\}<\/>;/,
     );
   });

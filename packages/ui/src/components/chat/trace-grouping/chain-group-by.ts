@@ -2,7 +2,7 @@ import { groupPartByType } from "@assistant-ui/react";
 
 /**
  * The chain grouping every first-party trace uses (the digichat skin's
- * gallery thread and the base skins).
+ * gallery thread, the base skins and the stock thread).
  *
  * Reasoning and tool calls nest under one `group-chainOfThought`, and inside
  * it adjacent reasoning parts coalesce into `group-reasoning` and adjacent
