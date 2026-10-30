@@ -62,6 +62,7 @@ import { mcpEdgeTarget } from "./mcp-edge-target";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 import { composeCorpusMap } from "./tenant-config";
+import { composeCorpusMapWithKv, readTenantCorpusMapKv } from "./tenant-corpus-kv";
 import { applyTenantFilesEnv, readTenantFilesEnv } from "./tenant-files";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -181,7 +182,8 @@ export class DigiStackContainer extends Container {
     // config held in the DIGI_TENANT_CORPUS_MAP_PRIVATE Worker secret, so it never
     // sits in the public repo. This joins them; ./tenant-config owns the merge rule
     // (house wins on a slug collision, digithings-only floor when neither half is
-    // usable).
+    // usable). At cold start fetch() recomposes this with any client entries
+    // from KV (./tenant-corpus-kv); with no KV key the value is exactly this one.
     DIGI_TENANT_CORPUS_MAP: composeCorpusMap(
       env.DIGI_TENANT_CORPUS_MAP,
       env.DIGI_TENANT_CORPUS_MAP_PRIVATE,
@@ -237,6 +239,14 @@ export class DigiStackContainer extends Container {
     if (!this.ctx.container?.running) {
       // Replace, not merge: a shrunk or removed bundle must not leave stale chunks.
       applyTenantFilesEnv(this.envVars, await readTenantFilesEnv(env.TENANT_CONFIG));
+      // Client corpus map entries ride in the same way (./tenant-corpus-kv).
+      // Recomposed from env on every cold start, so a removed or broken KV
+      // value falls back to the env-only map rather than keeping a stale one.
+      this.envVars.DIGI_TENANT_CORPUS_MAP = composeCorpusMapWithKv(
+        env.DIGI_TENANT_CORPUS_MAP,
+        env.DIGI_TENANT_CORPUS_MAP_PRIVATE,
+        await readTenantCorpusMapKv(env.TENANT_CONFIG),
+      );
     }
     try {
       await this.startAndWaitForPorts({
