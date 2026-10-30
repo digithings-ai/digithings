@@ -64,11 +64,14 @@ const REASONING_ONLY: ThreadMessageLike[] = [
 ];
 
 let cleanup: (() => void) | undefined;
-afterEach(() => {
+
+/** Unmount the current root; a function so tsc does not narrow `cleanup` at call sites. */
+function teardown(): void {
   cleanup?.();
   cleanup = undefined;
   document.body.innerHTML = "";
-});
+}
+afterEach(teardown);
 
 async function mount(initialMessages: ThreadMessageLike[], locale = "en") {
   const Harness: FC = () => {
@@ -185,16 +188,12 @@ describe("trace strings follow the session language", () => {
       const rows = [...host.querySelectorAll('[data-slot="tool-fallback-trigger"]')].map((el) => el.textContent ?? "");
       expect(rows.length).toBe(2);
       for (const row of rows) expect(row).toContain(toolRow);
-      cleanup?.();
-      cleanup = undefined;
-      document.body.innerHTML = "";
+      teardown();
       const only = await mount(REASONING_ONLY, locale);
       expect(
         only.querySelector('[data-slot="run-activity"] [data-slot="collapsible-trigger"]')?.textContent?.trim(),
       ).toBe(thought);
-      cleanup?.();
-      cleanup = undefined;
-      document.body.innerHTML = "";
+      teardown();
     }
   });
 });

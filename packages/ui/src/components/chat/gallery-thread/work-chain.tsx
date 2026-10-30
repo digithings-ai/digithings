@@ -47,7 +47,6 @@ export function WorkChain({
   indices,
   openAtRest = false,
   foldOnAnswer = false,
-  running = false,
   followedByText = false,
   className,
 }: {

@@ -1603,6 +1603,7 @@ function EmbedChat({
       stockClient.backendType,
       stockClient.gate.lockSessionControls,
       stockClient.tools.allowUserToggle,
+      stockClient.models.available,
       paletteQuery,
       setComposerDraft,
       bindComposerDraft,
