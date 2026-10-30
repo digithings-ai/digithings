@@ -84,6 +84,11 @@ class WebSearchRequest(BaseModel):
     # Deep-paging start offset. Only meaningful for providers that can page
     # (exa); offset > 0 against a provider that cannot is a 400, not a no-op.
     offset: int = Field(default=0, ge=0)
+    # Pre-crawled page text to use when a live page fetch is a bot challenge or
+    # fails (web_search/page_corpus.py). Unset: enrichment is unchanged.
+    page_corpus: str | None = Field(
+        default=None, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$"
+    )
 
 
 class WebSearchConfigError(ValueError):

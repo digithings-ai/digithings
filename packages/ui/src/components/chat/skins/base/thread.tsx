@@ -12,14 +12,17 @@ import { useSuggestionGroup } from "../../suggestion-cycle";
 import { connectionStatusText } from "../../connection-status";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { BackendNotice } from "../../stock/chat-notice";
-import { ToolFallback } from "../../stock/tool-fallback.aui";
+import { ToolFallback as ApprovalToolFallback } from "../../stock/tool-fallback.aui";
+// assistant-ui's own trace parts (see ./aui-default/README.md): the base
+// skins render reasoning and tool calls as assistant-ui ships them.
+import { ToolFallback } from "./aui-default/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
 
 import {
   ToolGroupContent,
   ToolGroupRoot,
   ToolGroupTrigger,
-} from "../../stock/tool-group.aui";
+} from "./aui-default/tool-group.aui";
 import { TooltipIconButton } from "../../stock/tooltip-icon-button";
 import {
   Reasoning,
@@ -27,7 +30,7 @@ import {
   ReasoningRoot,
   ReasoningText,
   ReasoningTrigger,
-} from "../../stock/reasoning.aui";
+} from "./aui-default/reasoning.aui";
 import { Button } from "../../stock/ui/button";
 import { Skeleton } from "../../stock/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -748,7 +751,17 @@ const AssistantMessage: FC = () => {
               case "reasoning":
                 return <Reasoning {...part} />;
               case "tool-call":
-                return part.toolUI ?? <ToolFallback {...part} />;
+                // A human approval gate keeps the stock fallback, which owns
+                // the Allow/Deny controls; every other call is assistant-ui's.
+                return (
+                  part.toolUI ??
+                  (part.status?.type === "requires-action" &&
+                  (part.approval != null || part.interrupt != null) ? (
+                    <ApprovalToolFallback {...part} />
+                  ) : (
+                    <ToolFallback {...part} />
+                  ))
+                );
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "data":

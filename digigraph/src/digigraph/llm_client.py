@@ -321,6 +321,9 @@ def digifetch_web_search(
     usage_kind: str = "web_search",
     provider: str | None = None,
     context: Any | None = None,
+    recency_days: int | None = None,
+    url_filter: Callable[[str], bool] | None = None,
+    page_corpus: str | None = None,
 ) -> tuple[str, list[str]]:
     """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
@@ -329,7 +332,11 @@ def digifetch_web_search(
     retires in a later task). ``provider`` names the search engine and is
     forwarded only when set and not ``auto`` (see ``call_digisearch_web_search``,
     #4722). The bearer threads via ``context`` (Task 2 seam:
-    ``ToolContext.state["digi_bearer"]``).
+    ``ToolContext.state["digi_bearer"]``). ``recency_days`` is forwarded only
+    when set (digisearch keeps its own default otherwise). ``url_filter`` drops
+    rows before the summary is built, so a dropped row leaves no trace in it.
+    ``page_corpus`` (forwarded only when set) names the pre-crawled page text
+    digisearch may use when a live page fetch is a bot challenge or fails.
     """
     del model, usage_kind
     from digigraph.orchestration.web_search_tools import call_digisearch_web_search
@@ -341,8 +348,12 @@ def digifetch_web_search(
         max_results=max_results,
         provider=provider,
         context=context,
+        **({"recency_days": recency_days} if recency_days is not None else {}),
+        **({"page_corpus": page_corpus} if page_corpus else {}),
     )
     rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []
+    if url_filter is not None:
+        rows = [r for r in rows if url_filter(str(r.get("doc_id", "")))]
     if not rows:
         raise RuntimeError(f"web_search tool returned no rows for query={query!r}")
     summary = "\n".join(f"- {r.get('content', '')} ({r.get('doc_id', '')})" for r in rows)

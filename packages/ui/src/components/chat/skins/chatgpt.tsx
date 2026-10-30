@@ -46,7 +46,7 @@ export const ChatGPT: FC = () => {
     "Ask anything",
   );
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-black dark:text-[#ececec]">
+    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-[color:var(--chat-skin-canvas,#000)] dark:text-[#ececec]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <EmptyState />
         </AuiIf>
@@ -61,7 +61,7 @@ export const ChatGPT: FC = () => {
               }}
             </ThreadPrimitive.Messages>
 
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-1 dark:bg-black">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-1 dark:bg-[color:var(--chat-skin-canvas,#000)]">
               <ThreadScrollToBottom />
               <Composer placeholder={placeholder} />
               <SkinCredit />

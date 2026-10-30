@@ -101,6 +101,17 @@ export function isCloneSkin(value: ThreadSkin): value is CloneSkin {
   return (CLONE_SKINS as readonly string[]).includes(value);
 }
 
+/**
+ * Skins that carry the digithings website's dotted vertical guide lines
+ * (`LayoutLines`). The lines are part of the house look, so only the house
+ * skin draws them; every other skin hides them by default.
+ */
+export const SITE_RAILS_SKINS = ["digichat"] as const;
+
+export function skinShowsSiteRails(value: string | null | undefined): boolean {
+  return (SITE_RAILS_SKINS as readonly string[]).includes(value ?? "");
+}
+
 export function skinOwnsPageChrome(value: ThreadSkin): boolean {
   return (LAYOUT_SKINS as readonly string[]).includes(value);
 }

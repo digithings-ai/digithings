@@ -27,6 +27,8 @@ function inviteOnlyHosts(): ReadonlyMap<string, string> {
   for (const claim of gatedTenantClaims()) {
     if (claim.host) out.set(claim.host, claim.slug);
   }
+  // Hosts from DIGICHAT_INVITE_PAGES (the env, not the registry) also deny.
+  for (const [h, sl] of configuredInviteOnlyHosts()) if (!out.has(h)) out.set(h, sl);
   let registry: ReturnType<typeof getEmbedTenantRegistry>;
   try {
     registry = getEmbedTenantRegistry();
@@ -36,6 +38,33 @@ function inviteOnlyHosts(): ReadonlyMap<string, string> {
   }
   for (const [host, cfg] of registry) {
     if (isGatedEmbedTenant(cfg) && !out.has(host)) out.set(host, cfg.slug);
+  }
+  return out;
+}
+
+/**
+ * Invite-only hosts beyond OCC, from the non-secret `DIGICHAT_INVITE_PAGES`
+ * JSON the Worker forwards (`{"<slug>": {"host": "<host>", "keyEnv": "..."}}`,
+ * see apps/digichat-cloudflare/src/invite-pages.ts). Only slug and host are
+ * read here; the edge owns the keys. A malformed value adds nothing, and the
+ * OCC entry above can never be removed by it.
+ */
+export function configuredInviteOnlyHosts(
+  raw: string | undefined = process.env.DIGICHAT_INVITE_PAGES,
+): Map<string, string> {
+  const out = new Map(INVITE_ONLY_EMBED_HOSTS);
+  const text = (raw ?? "").trim();
+  if (!text) return out;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return out;
+    for (const [slug, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) continue;
+      const host = normalizeEmbedHost((value as { host?: unknown } | null)?.host as string | undefined);
+      if (host && !out.has(host)) out.set(host, slug);
+    }
+  } catch {
+    /* not JSON: nothing beyond OCC */
   }
   return out;
 }

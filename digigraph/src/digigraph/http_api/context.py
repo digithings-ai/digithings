@@ -175,6 +175,10 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     updates["lock_session_controls"] = bool(corpus.lock_session_controls)
     # Same rule: dedicated per-index search tools come only from the tenant map.
     updates["digisearch_tools"] = corpus.digisearch_tools
+    # Same rule: a tenant's web_search pin comes only from the tenant map.
+    updates["web_search_domains"] = corpus.web_search_domains
+    updates["web_search_site"] = corpus.web_search_site
+    updates["web_search_page_corpus"] = corpus.web_search_page_corpus
     # Same rule again: a tenant's skill documents are tenant content (DIG-2637).
     # Both keys are written unconditionally, so a client body value cannot select
     # a pack and a prior turn's set cannot survive: unmapped / unauthenticated

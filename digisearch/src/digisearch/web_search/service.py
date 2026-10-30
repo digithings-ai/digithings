@@ -21,6 +21,7 @@ from digisearch.web_search.models import (
     WebSearchResponse,
     WebSearchResult,
 )
+from digisearch.web_search.page_corpus import corpus_page_text, is_challenge_page
 from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
 
 logger = logging.getLogger(__name__)
@@ -199,6 +200,12 @@ def search_web(req: WebSearchRequest, config: WebSearchConfig | None = None) -> 
     return _search_only(req, config)
 
 
+def _from_corpus(hit: WebSearchResult, corpus_id: str) -> WebSearchResult:
+    """``hit`` with its corpus page text, or unchanged when the corpus lacks it."""
+    text = corpus_page_text(corpus_id, hit.url)
+    return hit.model_copy(update={"snippet": text[:2000]}) if text else hit
+
+
 def run_web_search(
     req: WebSearchRequest, config: WebSearchConfig | None = None
 ) -> WebSearchResponse:
@@ -216,6 +223,12 @@ def run_web_search(
                 fetched = with_retry(
                     lambda: fetcher.fetch(hit.url), policy, description="web_search fetch"
                 )
+                if req.page_corpus and is_challenge_page(
+                    fetched.status_code, fetched.url, fetched.text or ""
+                ):
+                    # Live page is a bot challenge: the corpus copy, if any.
+                    enriched.append(_from_corpus(hit, req.page_corpus))
+                    continue
                 md = extract_markdown(fetched.text or "", url=hit.url)
                 enriched.append(
                     hit.model_copy(update={"snippet": md[:2000] if md else hit.snippet})
@@ -232,6 +245,6 @@ def run_web_search(
                     _scrub_provider_detail(hit.url),
                     _scrub_provider_detail(str(exc) or type(exc).__name__),
                 )
-                enriched.append(hit)
+                enriched.append(_from_corpus(hit, req.page_corpus) if req.page_corpus else hit)
     rest = resp.results[config.fetch_max_pages :]
     return WebSearchResponse(query=resp.query, results=enriched + rest, provider=resp.provider)
