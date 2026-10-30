@@ -233,6 +233,7 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
 COPY apps/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
 COPY apps/digithings-stack-cloudflare/container/unpack_tenant_files.py /unpack_tenant_files.py
+COPY apps/digithings-stack-cloudflare/container/license_public_key.py /license_public_key.py
 COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
 COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
 COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh

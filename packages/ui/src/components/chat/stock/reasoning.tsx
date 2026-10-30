@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { OverlayScrollbar } from "../overlay-scrollbar";
+import { useTraceT } from "../trace-i18n";
 
 export const ANIMATION_DURATION = 200;
 
@@ -173,6 +174,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+  const reasoningLabel = useTraceT().t("reasoning");
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -195,7 +197,7 @@ function ReasoningTrigger({
           "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",
         )}
       >
-        Reasoning{durationText}
+        {reasoningLabel}{durationText}
       </span>
       <DisclosureChevron />
     </CollapsibleTrigger>

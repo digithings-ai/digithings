@@ -11,6 +11,7 @@ import { DisclosureChevron } from "../disclosure-chevron";
 import { WorkStatusLead } from "../work-status-lead";
 import { cn } from "./cn";
 import { workStatusText } from "./work-status";
+import { useTraceT } from "../trace-i18n";
 import { turnCutShort, useTurnOutcome } from "../turn-outcome";
 
 /**
@@ -46,7 +47,6 @@ export function WorkChain({
   indices,
   openAtRest = false,
   foldOnAnswer = false,
-  running = false,
   followedByText = false,
   className,
 }: {
@@ -112,15 +112,16 @@ export function WorkChain({
   // summary level showed. Expanded, the plain title is enough: the reasoning
   // and the tool calls are underneath it.
   const parts = useAuiState((s) => s.message.parts);
-  const status = !open && indices ? workStatusText(parts, indices) : undefined;
-  const endedTitle = outcome === "failed" ? "Failed" : "Stopped";
+  const tr = useTraceT();
+  const status = !open && indices ? workStatusText(parts, indices, tr) : undefined;
+  const endedTitle = outcome === "failed" ? tr.t("failed") : tr.t("stopped");
   const title = cutShort
     ? endedTitle
     : status
       ? status.label
       : working
-        ? "Working"
-        : "Worked";
+        ? tr.t("working")
+        : tr.t("worked");
   const markerRunning = !cutShort && (status ? status.running : working);
   const marker = cutShort
     ? outcome === "failed"

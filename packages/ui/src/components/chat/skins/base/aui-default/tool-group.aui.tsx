@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "./collapsible";
 import { cn } from "@/lib/utils";
+import { useTraceT } from "../../../trace-i18n";
 
 const ANIMATION_DURATION = 200;
 
@@ -101,7 +102,7 @@ function ToolGroupTrigger({
   count: number;
   active?: boolean;
 }) {
-  const label = `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const label = useTraceT().plural("toolCalls", count);
 
   return (
     <CollapsibleTrigger

@@ -28,6 +28,7 @@ import { Textarea } from "./ui/textarea";
 import { readGloomberbAttribution } from "@digithings/ui";
 import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
 import { JsonView } from "./json-view";
+import { EN_TRACE_T, useTraceT, type TraceT } from "../trace-i18n";
 
 const ANIMATION_DURATION = 200;
 
@@ -155,7 +156,10 @@ function ToolFallbackDuration({
  * one word per state. Shared with the private-session row
  * (`gallery-thread/private-work-step.tsx`), which must read exactly the same.
  */
-export function toolTriggerLabel(status: ToolCallMessagePartStatus | undefined): {
+export function toolTriggerLabel(
+  status: ToolCallMessagePartStatus | undefined,
+  tr: TraceT = EN_TRACE_T,
+): {
   label: string;
   matrixState: DotMatrixState;
   isRunning: boolean;
@@ -168,14 +172,14 @@ export function toolTriggerLabel(status: ToolCallMessagePartStatus | undefined):
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
   const label = isCancelled
-    ? "Cancelled tool"
+    ? tr.t("cancelledTool")
     : isErrorStatus
-      ? "Failed tool"
+      ? tr.t("failedTool")
       : statusType === "running"
-        ? "Running tool"
+        ? tr.t("runningTool")
         : statusType === "requires-action"
-          ? "Waiting on tool"
-          : "Used tool";
+          ? tr.t("waitingOnTool")
+          : tr.t("usedTool");
   const matrixState: DotMatrixState = isCancelled
     ? "idle"
     : statusMatrix[statusType];
@@ -193,7 +197,7 @@ function ToolFallbackTrigger({
   title?: string;
   status?: ToolCallMessagePartStatus;
 }) {
-  const { label, matrixState, isRunning, isCancelled } = toolTriggerLabel(status);
+  const { label, matrixState, isRunning, isCancelled } = toolTriggerLabel(status, useTraceT());
 
   return (
     <CollapsibleTrigger
@@ -382,6 +386,7 @@ function ToolFallbackError({
 }: React.ComponentProps<"div"> & {
   status?: ToolCallMessagePartStatus;
 }) {
+  const tr = useTraceT();
   if (status?.type !== "incomplete") return null;
 
   const errorText = toolErrorText(status.error);
@@ -405,7 +410,7 @@ function ToolFallbackError({
         title={
           <>
             <span className="aui-tool-fallback-error-header">
-              {isCancelled ? "Cancelled: " : "Error: "}
+              {isCancelled ? tr.t("cancelledPrefix") : tr.t("errorPrefix")}{" "}
             </span>
             <span className="aui-tool-fallback-error-reason">{firstLine}</span>
           </>

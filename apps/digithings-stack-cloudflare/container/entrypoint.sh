@@ -228,6 +228,21 @@ if [ "$pem_ok" -ne 1 ]; then
   fi
 fi
 
+# digigraph checks digichat's license (X-Digi-License) against DIGIKEY_PUBLIC_KEY_PEM
+# before it allows a hosted capability such as web search (spec §7). Licenses are
+# signed with this stack's digikey key, so derive the public half from it unless an
+# operator pinned one. Without it every license fails to verify and web search is
+# refused with 403, which digichat then drops silently. Public material only.
+if [ "$pem_ok" -eq 1 ] && [ -z "${DIGIKEY_PUBLIC_KEY_PEM:-}" ]; then
+  DIGIKEY_PUBLIC_KEY_PEM=$(python3 /license_public_key.py 2>/dev/null || true)
+  if [ -n "$DIGIKEY_PUBLIC_KEY_PEM" ]; then
+    export DIGIKEY_PUBLIC_KEY_PEM
+  else
+    unset DIGIKEY_PUBLIC_KEY_PEM
+    echo "digithings-stack: WARN could not derive DIGIKEY_PUBLIC_KEY_PEM; licensed hosted features stay off"
+  fi
+fi
+
 # Copy vault seed notes. Files named seed-*.md are always refreshed from the
 # image (dogfood corpus). Other filenames are copied only if missing so
 # operator / docs_onboard notes are never overwritten.

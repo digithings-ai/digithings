@@ -195,6 +195,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
+#   DIGICHAT_LICENSE_JWT     # optional: owner-minted license (digikey license-mint); without it
+#                            # the chat is unlicensed and hosted web search is refused upstream
+#   DIGIKEY_PUBLIC_KEY_PEM   # optional: digikey public key that verifies that license (not secret)
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
@@ -255,6 +258,9 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
 # / digiquant / digitrace from /api/health (defaults would be unreachable).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
+# Issuer the chat expects on its license JWT. Must match the stack's
+# DIGIKEY_ISSUER; without it the container falls back to the local dev issuer.
+DIGIKEY_ISSUER = "https://key.digithings.ai"
 # /chat/occ invite cookie lifetime in whole days (1-365). Non-secret: the cookie
 # carries its issued-at inside the MAC, and the edge refuses it once it is older
 # than this. Reopening the invite link issues a fresh one. Worker-only.

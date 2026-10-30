@@ -315,6 +315,12 @@ export type EmbedChatPrefsApi = {
    * app leaves this unset.
    */
   themeLocked?: boolean;
+  /**
+   * Model ids this chat offers (the picker's list). The model's
+   * session_set_model is checked against it, so a pick the server would
+   * refuse is reported back instead of breaking the next turn.
+   */
+  availableModels?: readonly string[];
   /** Open the mode + palette picker. No-op when the host does not provide it. */
   openTheme?: () => void;
   /**

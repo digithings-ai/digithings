@@ -11,6 +11,7 @@ import {
 } from "../stock/tool-fallback.aui";
 import { useTurnOutcome } from "../turn-outcome";
 import { cn } from "./cn";
+import { EN_TRACE_T, useTraceT, type TraceT } from "../trace-i18n";
 
 /**
  * One work step in a private session, drawn exactly like the normal row —
@@ -50,20 +51,23 @@ function toolStatus(
 }
 
 /** The normal rows' words: "Reasoning" for a reasoning row, the upstream tool wording for a tool row. */
-export function privateWorkStepLabel({
+export function privateWorkStepLabel(
+  {
   kind,
   statusType,
   reason,
   isError,
-}: Pick<PrivateWorkStepProps, "kind" | "statusType" | "reason" | "isError">): {
+}: Pick<PrivateWorkStepProps, "kind" | "statusType" | "reason" | "isError">,
+  tr: TraceT = EN_TRACE_T,
+): {
   label: string;
   state: string;
 } {
   const running = statusType === "running";
   if (kind === "reasoning") {
-    return { label: "Reasoning", state: running ? "thinking" : "thought" };
+    return { label: tr.t("reasoning"), state: running ? "thinking" : "thought" };
   }
-  const { label, matrixState } = toolTriggerLabel(toolStatus(statusType, reason, isError));
+  const { label, matrixState } = toolTriggerLabel(toolStatus(statusType, reason, isError), tr);
   return { label, state: matrixState };
 }
 
@@ -77,6 +81,7 @@ export const PrivateWorkStep: FC<PrivateWorkStepProps> = ({
   isError,
   trailing,
 }) => {
+  const tr = useTraceT();
   const running = statusType === "running";
   if (kind === "reasoning") {
     return (
@@ -107,7 +112,7 @@ export const PrivateWorkStep: FC<PrivateWorkStepProps> = ({
               running && "shimmer motion-reduce:animate-none",
             )}
           >
-            Reasoning
+            {tr.t("reasoning")}
           </span>
         </div>
       </div>
@@ -115,6 +120,7 @@ export const PrivateWorkStep: FC<PrivateWorkStepProps> = ({
   }
   const { label, matrixState, isRunning, isCancelled } = toolTriggerLabel(
     toolStatus(statusType, reason, isError),
+    tr,
   );
   return (
     <div

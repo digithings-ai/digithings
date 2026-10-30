@@ -42,7 +42,13 @@ logger = logging.getLogger(__name__)
 # Session controls a client tenant must never drive (DIG-1210): the model,
 # MCP servers and tool toggles stay operator-configured.
 LOCKED_SESSION_TOOLS = frozenset(
-    {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
+    {
+        "session_set_model",
+        "session_upsert_mcp",
+        "session_remove_mcp",
+        "session_toggle_tool",
+        "session_set_search_engine",
+    }
 )
 
 
