@@ -28,6 +28,7 @@ import { Textarea } from "./ui/textarea";
 import { readGloomberbAttribution } from "@digithings/ui";
 import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
 import { JsonView } from "./json-view";
+import { stockRadius, useStockShape } from "./stock-shape";
 import { EN_TRACE_T, useTraceT, type TraceT } from "../trace-i18n";
 import {
   effectiveToolStatus,
@@ -362,6 +363,7 @@ function ToolFallbackError({
   status?: ToolCallMessagePartStatus;
 }) {
   const tr = useTraceT();
+  const stock = useStockShape();
   if (status?.type !== "incomplete") return null;
 
   const errorText = toolErrorText(status.error);
@@ -376,7 +378,7 @@ function ToolFallbackError({
 
   return (
     <div
-      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className))}
+      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className), stock)}
       data-slot="tool-fallback-error"
       {...props}
     >
@@ -456,6 +458,7 @@ function ToolFallbackApproval({
     interrupt?: ToolCallMessagePart["interrupt"];
     approval?: ToolCallMessagePart["approval"];
   }) {
+  const stock = useStockShape();
   const [submitted, setSubmitted] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
@@ -617,7 +620,7 @@ function ToolFallbackApproval({
           <ul className="aui-tool-fallback-approval-confirm-grants flex flex-col gap-1">
             {confirming.grants.map((grant) => (
               <li key={grant}>
-                <code className="aui-tool-fallback-approval-confirm-grant bg-surface-2 rounded-none px-1.5 py-0.5 text-xs">
+                <code className={cn("aui-tool-fallback-approval-confirm-grant bg-surface-2 px-1.5 py-0.5 text-xs", stockRadius(stock, "rounded"))}>
                   {grant}
                 </code>
               </li>

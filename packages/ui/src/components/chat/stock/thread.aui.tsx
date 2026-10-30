@@ -28,6 +28,7 @@ import { MessageExportMenu } from "./message-export-menu";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
+import { StockShapeProvider } from "./stock-shape";
 import { cn } from "@/lib/utils";
 import { useStockComposerGateSubmit } from "./stock-send-gate";
 import { MessageError } from "./message-error.aui";
@@ -127,13 +128,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton className="ml-auto h-9 w-2/5 rounded-none motion-reduce:animate-none" />
+    <Skeleton className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton className="ml-auto h-9 w-1/3 rounded-none motion-reduce:animate-none" />
+    <Skeleton className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -149,7 +150,9 @@ export const Thread: FC<ThreadProps> = ({
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      <StockShapeProvider>
+        <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      </StockShapeProvider>
     </ThreadComponentsContext.Provider>
   );
 };
@@ -167,7 +170,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
       style={{
         ["--thread-max-width" as string]: "44rem",
         ["--composer-bg" as string]: "var(--card, var(--surface))",
-        ["--composer-radius" as string]: "0",
+        ["--composer-radius" as string]: "1rem",
         ["--composer-padding" as string]: "8px",
       }}
     >
@@ -241,7 +244,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom border-hair bg-surface hover:bg-surface-2 absolute -top-12 z-10 self-center rounded-none p-4 disabled:invisible"
+        className="aui-thread-scroll-to-bottom border-hair bg-surface hover:bg-surface-2 absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -296,7 +299,7 @@ const ThreadSuggestionItem: FC = () => {
       <SuggestionPrimitive.Trigger send asChild>
         <Button
           variant="ghost"
-          className="aui-thread-welcome-suggestion text-ink hover:bg-surface-2 border-hair h-auto gap-1.5 rounded-none border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+          className="aui-thread-welcome-suggestion text-ink hover:bg-surface-2 border-hair h-auto gap-1.5 rounded-md border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
         >
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
           <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
@@ -350,7 +353,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="aui-composer-dictate text-ink-mute hover:text-ink size-7 rounded-none"
+                className="aui-composer-dictate text-ink-mute hover:text-ink size-7 rounded-full"
                 aria-label="Start voice input"
               >
                 <MicIcon className="aui-composer-dictate-icon size-4" />
@@ -365,7 +368,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="aui-composer-stop-dictation text-danger size-7 rounded-none"
+                className="aui-composer-stop-dictation text-danger size-7 rounded-full"
                 aria-label="Stop voice input"
               >
                 <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
@@ -381,7 +384,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-send size-7 rounded-none"
+              className="aui-composer-send size-7 rounded-full"
               aria-label="Send message"
             >
               <ArrowUpIcon className="aui-composer-send-icon size-4" />
@@ -394,7 +397,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-cancel size-7 rounded-none"
+              className="aui-composer-cancel size-7 rounded-full"
               aria-label="Stop generating"
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
@@ -564,8 +567,8 @@ const AssistantActionBar: FC = () => {
           </TooltipIconButton>
         }
         icon={<DownloadIcon className="size-4" />}
-        contentClassName="aui-action-bar-more-content border-hair bg-surface-2 text-ink data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-none border p-1.5"
-        itemClassName="aui-action-bar-more-item hover:bg-surface-2 hover:text-ink focus:bg-surface-2 focus:text-ink data-[state=open]:text-ink flex cursor-pointer items-center gap-2 rounded-none px-2.5 py-1.5 text-sm outline-none select-none"
+        contentClassName="aui-action-bar-more-content border-hair bg-surface-2 text-ink data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-xl border p-1.5"
+        itemClassName="aui-action-bar-more-item hover:bg-surface-2 hover:text-ink focus:bg-surface-2 focus:text-ink data-[state=open]:text-ink flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
       />
     </ActionBarPrimitive.Root>
   );
@@ -606,7 +609,7 @@ const UserMessage: FC = () => {
           alignEnd ? "col-start-2" : "col-start-1",
         )}
       >
-        <div className="aui-user-message-content peer bg-surface-2 text-ink rounded-none px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-surface-2 text-ink rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />
@@ -656,13 +659,13 @@ const EditComposer: FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 rounded-none px-3.5"
+              className="h-8 px-3.5"
             >
               Cancel
             </Button>
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send asChild>
-            <Button size="sm" className="h-8 rounded-none px-3.5">
+            <Button size="sm" className="h-8 px-3.5">
               Update
             </Button>
           </ComposerPrimitive.Send>

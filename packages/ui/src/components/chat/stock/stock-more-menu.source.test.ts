@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // The stock skin's "…" menu is portaled to <body> and its `bg-surface-2`
 // class has no Tailwind colour behind it in DigiChat (chat-aui.css declares
 // no --color-surface-2), so chat-stock-menu.css gives it its background,
-// border, shadow and radius. These pin the pieces that rule depends on.
+// border and shadow. These pin the pieces that rule depends on.
 const thread = readFileSync(join(__dirname, "thread.aui.tsx"), "utf8");
 const css = readFileSync(join(__dirname, "../../../styles/chat-stock-menu.css"), "utf8");
 const MENU = ".aui-action-bar-more-content.bg-surface-2";
@@ -27,15 +27,22 @@ describe("stock skin More menu", () => {
     for (const cls of menus) expect(cls.split(/\s+/)).toContain("bg-surface-2");
   });
 
-  it("draws a solid, rounded panel from the theme tokens", () => {
+  it("draws a solid panel from the theme tokens", () => {
     const body = rule(MENU);
     expect(body).toMatch(/background-color:\s*var\(--surface-2,\s*var\(--popover/);
-    expect(body).toMatch(/border-radius:\s*calc\(var\(--radius/);
     expect(body).toMatch(/box-shadow:/);
     expect(body).not.toMatch(/transparent/);
   });
 
-  it("stays unlayered so it outranks the rounded-none utility", () => {
+  it("uses assistant-ui's menu radii: rounded-xl panel, rounded-lg rows", () => {
+    const menu = thread.match(/"aui-action-bar-more-content[^"]*"/)?.[0] ?? "";
+    const item = thread.match(/"aui-action-bar-more-item[^"]*"/)?.[0] ?? "";
+    expect(menu.split(/\s+/)).toContain("rounded-xl");
+    expect(item.split(/\s+/)).toContain("rounded-lg");
+    expect(`${menu} ${item}`).not.toContain("rounded-none");
+  });
+
+  it("stays unlayered so it outranks the skin's own surface utilities", () => {
     expect(css).not.toMatch(/@layer/);
   });
 

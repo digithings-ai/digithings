@@ -13,10 +13,20 @@ describe("stock Thread defaults", () => {
     expect(thread).toContain("It reads the configured docs, then answers.");
   });
 
-  it("keeps the zero-radius shell", () => {
-    expect(thread).toContain('["--composer-radius" as string]: "0"');
-    expect(thread).not.toContain("rounded-full");
-    expect(thread).not.toContain("rounded-xl");
+  // assistant-ui's default rounded shapes (base registry, r.assistant-ui.com/base,
+  // @assistant-ui/react ^0.15.32): 1rem composer and user bubble, round
+  // composer buttons and scroll-to-bottom, rounded-xl menu and skeletons.
+  it("follows assistant-ui's default radii, not a zero-radius shell", () => {
+    expect(thread).toContain('["--composer-radius" as string]: "1rem"');
+    expect(thread).not.toContain('["--composer-radius" as string]: "0"');
+    expect(thread).not.toContain("rounded-none");
+    expect(thread).toMatch(/aui-user-message-content[^"]*rounded-\(--composer-radius\)/);
+    expect(thread).toMatch(/aui-composer-send size-7 rounded-full/);
+    expect(thread).toMatch(/aui-composer-cancel size-7 rounded-full/);
+    expect(thread).toMatch(/aui-thread-scroll-to-bottom[^"]*rounded-full/);
+    expect(thread).toMatch(/aui-thread-welcome-suggestion [^"]*rounded-md/);
+    expect(thread).toMatch(/w-2\/5 rounded-xl/);
+    expect(thread).toContain("<StockShapeProvider>");
   });
 
   it("keeps the composer placeholder at AA contrast", () => {
