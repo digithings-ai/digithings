@@ -62,6 +62,21 @@ describe("base skin surfaces read the theme, not the digichat skin", () => {
     },
   );
 
+  // WCAG 2.4.7: a highlighted or focused row shows a ring on the theme's
+  // ring token, not only a fill that a tenant theme can flatten.
+  it.each([
+    ["thread.tsx", "aui-action-bar-more-item", "focus-visible:ring-ring"],
+    ["thread.tsx", 'role="option"', "focus-visible:ring-ring"],
+    ["ui/command.tsx", "data-[selected=true]:bg-muted", "data-[selected=true]:ring-ring"],
+    ["elements/composer-trigger-popover.aui.tsx", "data-[highlighted]:bg-muted", "data-[highlighted]:ring-ring"],
+    ["elements/model-selector.tsx", "data-checked:bg-muted", "focus-visible:ring-ring"],
+  ])("%s: the %s row has a visible focus ring", (rel, marker, ring) => {
+    const src = readFileSync(path.join(BASE, rel), "utf8");
+    const at = src.indexOf(marker);
+    expect(at).toBeGreaterThan(-1);
+    expect(src.slice(Math.max(0, at - 700), at + 700)).toContain(ring);
+  });
+
   it("the timing pane and control tooltips use the base tooltip", () => {
     const timing = readFileSync(path.join(BASE, "elements/message-timing.aui.tsx"), "utf8");
     expect(timing).toMatch(/from "\.\.\/ui\/tooltip"/);

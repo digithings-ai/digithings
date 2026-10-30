@@ -81,11 +81,22 @@ describe("tenant colors", () => {
 });
 
 describe("tenant surface reaches the shadcn hover and secondary fills", () => {
-  it("maps surface to --muted and --secondary, text to --secondary-foreground", () => {
+  it("derives --muted and --secondary off the surface toward the text, distinct from --popover", () => {
     const vars = Object.fromEntries(tenantColorVars({ surface: "#3d3d3d", text: "#fafafa" }));
-    expect(vars["--muted"]).toBe("#3d3d3d");
-    expect(vars["--secondary"]).toBe("#3d3d3d");
     expect(vars["--popover"]).toBe("#3d3d3d");
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #3d3d3d 92%, #fafafa)");
+    expect(vars["--secondary"]).toBe(vars["--muted"]);
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
     expect(vars["--secondary-foreground"]).toBe("#fafafa");
+  });
+
+  it("mixes toward the theme foreground when the tenant sets no text colour", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#f6f6f6" }));
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #f6f6f6 92%, var(--foreground))");
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
+  });
+
+  it("sets no --muted without a surface", () => {
+    expect(Object.fromEntries(tenantColorVars({ text: "#111111" }))["--muted"]).toBeUndefined();
   });
 });

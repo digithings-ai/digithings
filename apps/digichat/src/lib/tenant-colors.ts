@@ -67,16 +67,27 @@ export function parseTenantColors(raw: unknown, ctx: string): TenantColors | und
   return parsed.data;
 }
 
-/** Custom properties for one set, in a stable order. Values are validated hex only. */
+/** Share of the text colour mixed into the surface for --muted / --secondary. */
+export const MUTED_FILL_TEXT_SHARE = 8;
+
+/** The highlight fill: the surface moved toward the text colour (or the theme foreground). */
+export function mutedFill(surface: string, text: string | undefined): string {
+  return `color-mix(in oklch, ${surface} ${100 - MUTED_FILL_TEXT_SHARE}%, ${text ?? "var(--foreground)"})`;
+}
+
+/** Custom properties for one set, in a stable order. Values are validated hex (or a color-mix of them). */
 export function tenantColorVars(set: TenantColorSet): [string, string][] {
   const out: [string, string][] = [];
   const add = (names: string[], value: string | undefined) => {
     if (value) for (const n of names) out.push([n, value]);
   };
   add(["--bg", "--embed-canvas", "--background", "--term-bg", "--chat-skin-canvas"], set.background);
-  // --muted / --secondary too: the base skin's hover fills, skeletons and
-  // secondary buttons read them (shadcn tokens), so a tenant surface reaches them.
-  add(["--surface", "--surface-2", "--card", "--popover", "--muted", "--secondary", "--composer-bg", "--term-fill"], set.surface);
+  add(["--surface", "--surface-2", "--card", "--popover", "--composer-bg", "--term-fill"], set.surface);
+  // --muted / --secondary: the base skin's hover, highlighted and selected
+  // fills (and secondary buttons) sit on --popover, so they are derived one
+  // step off the surface toward the text colour, never equal to it (WCAG 2.4.7:
+  // the highlighted menu row stays visible). Built from validated hexes only.
+  add(["--muted", "--secondary"], set.surface ? mutedFill(set.surface, set.text) : undefined);
   add(["--ink", "--ink-soft", "--foreground", "--card-foreground", "--popover-foreground", "--secondary-foreground", "--term-ink"], set.text);
   add(["--ink-mute", "--muted-foreground", "--term-mute"], set.muted);
   add(["--hair", "--hair-2", "--border", "--input", "--term-hair"], set.border);

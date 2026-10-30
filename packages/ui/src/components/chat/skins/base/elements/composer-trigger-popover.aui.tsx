@@ -97,7 +97,7 @@ const Categories: FC<CategoriesProps> = ({
             <ComposerPrimitive.Unstable_TriggerPopoverCategoryItem
               key={cat.id}
               categoryId={cat.id}
-              className="hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition-colors outline-none"
+              className="hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[highlighted]:ring-2 data-[highlighted]:ring-ring data-[highlighted]:ring-inset flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition-colors outline-none"
             >
               <span className="flex items-center gap-2">
                 <Icon className="text-muted-foreground size-4" />
@@ -161,7 +161,7 @@ const Items: FC<ItemsProps> = ({
                   item={item}
                   index={index}
                   aria-describedby={detailId}
-                  className="group hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted flex w-full cursor-pointer flex-col items-stretch gap-0.5 px-3 py-2 text-start transition-colors outline-none"
+                  className="group hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[highlighted]:ring-2 data-[highlighted]:ring-ring data-[highlighted]:ring-inset flex w-full cursor-pointer flex-col items-stretch gap-0.5 px-3 py-2 text-start transition-colors outline-none"
                 >
                   <span className="flex w-full items-center gap-2 text-sm font-medium">
                     <Icon className="text-primary size-3.5" />
