@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "../../../stock/ui/button";
 import { Textarea } from "../../../stock/ui/textarea";
+import { useTraceT } from "../../../trace-i18n";
 
 const ANIMATION_DURATION = 200;
 
@@ -136,13 +137,14 @@ function ToolFallbackTrigger({
   toolName: string;
   status?: ToolCallMessagePartStatus;
 }) {
+  const tr = useTraceT();
   const statusType = status?.type ?? "complete";
   const isRunning = statusType === "running";
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
 
   const Icon = statusIconMap[statusType];
-  const label = isCancelled ? "Cancelled tool" : "Used tool";
+  const label = isCancelled ? tr.t("cancelledTool") : tr.t("usedTool");
 
   return (
     <CollapsibleTrigger
@@ -274,6 +276,7 @@ function ToolFallbackError({
 }: React.ComponentProps<"div"> & {
   status?: ToolCallMessagePartStatus;
 }) {
+  const tr = useTraceT();
   if (status?.type !== "incomplete") return null;
 
   const error = status.error;
@@ -286,7 +289,7 @@ function ToolFallbackError({
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+  const headerText = isCancelled ? tr.t("cancelledPrefix") : tr.t("errorPrefix");
 
   return (
     <div

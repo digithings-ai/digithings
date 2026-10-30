@@ -124,10 +124,10 @@ async function mount(Skin: FC, initialMessages: ThreadMessageLike[]) {
 }
 
 async function openTool(host: HTMLElement) {
-  // Open the work chain / tool group / tool row, outermost first.
+  // Open the work chain / run activity / tool group / tool row, outermost first.
   for (let i = 0; i < 6; i++) {
     const closed = [...host.querySelectorAll<HTMLElement>('[aria-expanded="false"]')].filter((el) =>
-      /work-chain-trigger|tool-group-trigger|tool-fallback-trigger|aui-tool-group|aui-tool-fallback/.test(
+      /work-chain-trigger|tool-group-trigger|tool-fallback-trigger|aui-tool-group|aui-tool-fallback|collapsible-trigger/.test(
         `${el.getAttribute("data-slot") ?? ""} ${el.className}`,
       ),
     );
