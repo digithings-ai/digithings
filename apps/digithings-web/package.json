@@ -19,6 +19,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "book:pdf": "node ./scripts/book/print-pdf.mjs",
+    "book:check-reader": "node ./scripts/book/check-reader.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "write-csp-headers": "node ./lib/write-csp-headers.mjs",
