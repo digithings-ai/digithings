@@ -278,11 +278,59 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
 }
 
 /**
+ * The form every consumer keys a tenant by: digigraph's corpus routing and
+ * digivault's tenant scope both trim and lower-case the slug (last wins), so
+ * the Worker must judge collisions on this form, not on the raw JSON key.
+ */
+export function normalizeTenantSlug(slug: string): string {
+  return slug.trim().toLowerCase();
+}
+
+/**
+ * Client (non-house) entries keyed by their normalised slug, safe to merge
+ * under the house map. Dropped with one warning each:
+ * - a slug that is blank once trimmed;
+ * - a slug that normalises to a house slug (`digithings`, `digithings-ai`),
+ *   because a consumer would otherwise read it as the house tenant;
+ * - every slug in a group that normalises to the same value (`Acme` and
+ *   `acme `): which one a consumer keeps is order-dependent, so none ships.
+ * A map with only canonical (trimmed, lower-case), distinct, non-house slugs
+ * comes back with the same keys, values and order.
+ */
+export function sanitizeClientCorpusMap(
+  map: TenantCorpusMap | undefined,
+  label: string,
+): TenantCorpusMap {
+  const groups = new Map<string, string[]>();
+  for (const raw of Object.keys(map ?? {})) {
+    const norm = normalizeTenantSlug(raw);
+    groups.set(norm, [...(groups.get(norm) ?? []), raw]);
+  }
+  const out: TenantCorpusMap = {};
+  for (const [norm, raws] of groups) {
+    if (norm === "") {
+      console.warn(`[tenant-config] ${label}: dropping a blank tenant slug`);
+    } else if (norm === HOUSE_TENANT_SLUG || norm === LIVE_HOUSE_TENANT_SLUG) {
+      console.warn(`[tenant-config] ${label}: dropping ${JSON.stringify(raws)}, which names the house tenant`);
+    } else if (raws.length > 1) {
+      console.warn(
+        `[tenant-config] ${label}: dropping ${JSON.stringify(raws)}, which collide as ${JSON.stringify(norm)}`,
+      );
+    } else {
+      out[norm] = (map as TenantCorpusMap)[raws[0]];
+    }
+  }
+  return out;
+}
+
+/**
  * Join the split `[vars]` pair into the single corpus map the container reads.
  *
  * The merge rule is one sentence: the primary half wins on every slug collision,
  * so a stale `DIGI_TENANT_CORPUS_MAP_PRIVATE` can never shadow or widen the house
- * entry it does not own. Extra entries therefore only ADD tenants.
+ * entry it does not own. Extra entries therefore only ADD tenants. Extra slugs
+ * are normalised first ({@link sanitizeClientCorpusMap}): a house look-alike or
+ * a case/whitespace collision is dropped with a warning.
  *
  * Never returns an empty string. A half that does not parse is dropped with a
  * warning and the other half still ships; when neither is usable (unset, blank
@@ -301,10 +349,17 @@ export function composeCorpusMap(primary?: string, extra?: string): string {
   if (house === undefined && others === undefined) return DIGITHINGS_ONLY_CORPUS_JSON;
 
   const merged: TenantCorpusMap = { ...house };
-  for (const [slug, entry] of Object.entries(others ?? {})) {
-    if (slug in merged) continue;
+  // Collisions are judged on the consumers' slug form (see
+  // normalizeTenantSlug), so `DIGITHINGS` or ` digithings-ai` cannot ride past
+  // an exact-match check and replace the house entry downstream.
+  const taken = new Set(Object.keys(merged).map(normalizeTenantSlug));
+  for (const [slug, entry] of Object.entries(sanitizeClientCorpusMap(others, CORPUS_MAP_PRIVATE_ENV_VAR))) {
+    if (taken.has(slug)) continue;
     merged[slug] = entry;
   }
+  // Everything dropped and no house half: keep the first-party floor rather
+  // than ship an empty map.
+  if (Object.keys(merged).length === 0) return DIGITHINGS_ONLY_CORPUS_JSON;
   return JSON.stringify(withHouseSlugAlias(merged));
 }
 

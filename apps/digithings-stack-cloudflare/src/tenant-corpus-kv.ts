@@ -17,7 +17,10 @@
  *
  * PRECEDENCE, one rule per pair:
  * - house env entry > everything: a KV entry can never shadow or widen it
- *   (`composeCorpusMap` keeps the primary half on a slug collision);
+ *   (`composeCorpusMap` keeps the primary half on a slug collision). Slugs are
+ *   compared trimmed and lower-cased, as every consumer reads them, so a KV
+ *   slug such as `DIGITHINGS` or ` digithings-ai` is dropped with a warning,
+ *   and so is every KV slug in a group that collides once normalised;
  * - KV entry > `DIGI_TENANT_CORPUS_MAP_PRIVATE` entry for the same slug: the
  *   client repo is the source of its own tenant config.
  *
@@ -27,7 +30,12 @@
  * log one warning; nothing here throws.
  */
 
-import { CORPUS_MAP_PRIVATE_ENV_VAR, composeCorpusMap, parseCorpusMapJson } from "./tenant-config";
+import {
+  CORPUS_MAP_PRIVATE_ENV_VAR,
+  composeCorpusMap,
+  parseCorpusMapJson,
+  sanitizeClientCorpusMap,
+} from "./tenant-config";
 
 /** KV key (in the `TENANT_CONFIG` namespace) holding client corpus map entries. */
 export const TENANT_CORPUS_MAP_KEY = "DIGI_TENANT_CORPUS_MAP";
@@ -62,8 +70,12 @@ export function composeCorpusMapWithKv(
     );
     return base();
   }
-  const fromKv = parseCorpusMapJson(kvRaw);
-  if (fromKv === undefined) {
+  const parsedKv = parseCorpusMapJson(kvRaw);
+  // Slugs are trimmed and lower-cased as the consumers do; house look-alikes
+  // and case/whitespace collisions are dropped with a warning.
+  const fromKv =
+    parsedKv === undefined ? undefined : sanitizeClientCorpusMap(parsedKv, TENANT_CORPUS_MAP_KEY);
+  if (fromKv === undefined || Object.keys(fromKv).length === 0) {
     console.warn(
       `[tenant-corpus-kv] ${TENANT_CORPUS_MAP_KEY} is not a usable slug-keyed JSON object; using the env map only`,
     );
@@ -80,7 +92,13 @@ export function composeCorpusMapWithKv(
       `[tenant-config] ${CORPUS_MAP_PRIVATE_ENV_VAR} is not a usable slug-keyed JSON object; ignoring it`,
     );
   }
-  return composeCorpusMap(primary, JSON.stringify({ ...fromPrivate, ...fromKv }));
+  // Both halves keyed by normalised slug, so a KV entry replaces the private
+  // entry a consumer would treat as the same tenant.
+  const merged = {
+    ...sanitizeClientCorpusMap(fromPrivate, CORPUS_MAP_PRIVATE_ENV_VAR),
+    ...fromKv,
+  };
+  return composeCorpusMap(primary, JSON.stringify(merged));
 }
 
 /** Read the KV value; a missing binding or a KV error is "no value". */
