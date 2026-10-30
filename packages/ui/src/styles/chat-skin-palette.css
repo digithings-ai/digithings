@@ -86,3 +86,30 @@
   background: color-mix(in oklab, var(--ink-mute) 32%, transparent);
   pointer-events: auto;
 }
+
+/*
+ * `/density` for skins that are not digichat. The digichat thread has its own
+ * density tokens; here the scope's [data-skin-density] respaces the messages
+ * the stock assistant-ui markup renders ([data-message-id]). "default" changes
+ * nothing.
+ */
+[data-skin-density="compact"] [data-message-id] {
+  line-height: 1.45;
+}
+[data-skin-density="compact"] [data-message-id] :is(p, ul, ol, pre, blockquote) {
+  margin-block: 0.35em;
+}
+[data-skin-density="compact"] [data-slot="aui_message-group"],
+[data-skin-density="compact"] :has(> [data-message-id] + [data-message-id]) {
+  row-gap: 0.75rem;
+}
+[data-skin-density="airy"] [data-message-id] {
+  line-height: 1.85;
+}
+[data-skin-density="airy"] [data-message-id] :is(p, ul, ol, pre, blockquote) {
+  margin-block: 1em;
+}
+[data-skin-density="airy"] [data-slot="aui_message-group"],
+[data-skin-density="airy"] :has(> [data-message-id] + [data-message-id]) {
+  row-gap: 2.5rem;
+}

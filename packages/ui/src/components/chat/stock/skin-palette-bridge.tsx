@@ -17,6 +17,7 @@ import {
   type SkinSlashPalette,
 } from "./skin-slash-palette";
 import { SkinPaletteContext } from "./skin-palette-context";
+import { useEmbedChatPrefsOptional } from "./embed-chat-prefs";
 
 /** Marks the thread composer form the shared palette is anchored to. */
 export const SKIN_PALETTE_COMPOSER_ATTR = "data-skin-palette-composer";
@@ -102,6 +103,9 @@ function SkinPaletteScope({
   children: ReactNode;
 }) {
   const scopeRef = useRef<HTMLDivElement | null>(null);
+  // `/density` for skins that are not digichat: the scope carries the choice
+  // and chat-skin-palette.css respaces the messages under it.
+  const density = useEmbedChatPrefsOptional()?.prefs.density ?? "default";
   const [anchor, setAnchor] = useState<HTMLFormElement | null>(null);
   const submitRef = useRef(palette.handleSubmit);
   submitRef.current = palette.handleSubmit;
@@ -163,6 +167,7 @@ function SkinPaletteScope({
         <div
           ref={scopeRef}
           data-skin-palette-scope=""
+          data-skin-density={density}
           style={{ display: "contents" }}
         >
           {children}
