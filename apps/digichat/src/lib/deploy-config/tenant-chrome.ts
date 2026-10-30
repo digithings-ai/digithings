@@ -275,7 +275,7 @@ let gatedClaimsView: readonly Readonly<GatedTenantClaim>[] = mergeClaims([], LEG
  * accumulate (process-local): a doc that disappears is indistinguishable from
  * a doc that failed to load, so un-gating a tenant needs a restart. Each claim
  * is stored once per `chatSlug|host`, so loading the same registry again adds
- * nothing. Persistence across restarts is U1's.
+ * nothing. Persistence across restarts comes from the durable claims (U1, below).
  */
 export function rememberGatedTenantDocs(docs: readonly TenantChromeDoc[]): void {
   const next = docs
@@ -289,6 +289,7 @@ export function rememberGatedTenantDocs(docs: readonly TenantChromeDoc[]): void 
 
 /** Test-only reset of the last-good cache. */
 export function resetGatedTenantCacheForTests(): void {
+  foldedDurableClaimsRaw = undefined;
   lastGoodGatedClaims = Object.freeze([]);
   gatedClaimsView = mergeClaims([], LEGACY_GATED_TENANTS);
 }
@@ -298,12 +299,70 @@ export function lastGoodGatedClaimCountForTests(): number {
   return lastGoodGatedClaims.length;
 }
 
+const DURABLE_SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const DURABLE_HOST_RE =
+  /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
 /**
- * The R0-side list of gated claims: the legacy seed plus the last good
+ * Parse the durable gated claims (U1): the JSON array the Worker forwards as
+ * `DIGICHAT_GATED_CLAIMS` from KV `gated-claims`
+ * (apps/digichat-cloudflare/src/tenants-kv.ts). Rows are `{slug, chatSlug,
+ * host}`; an invalid row is skipped on its own, and a value that is not a
+ * JSON array adds nothing. It can only add claims, never remove one.
+ */
+export function parseDurableGatedClaims(raw: string | null | undefined): GatedTenantClaim[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: GatedTenantClaim[] = [];
+  for (const row of parsed) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const slug = typeof r.slug === "string" ? r.slug.trim().toLowerCase() : "";
+    const chatSlug = typeof r.chatSlug === "string" ? r.chatSlug.trim().toLowerCase() : "";
+    const host = typeof r.host === "string" ? r.host.trim().toLowerCase() : "";
+    if (!DURABLE_SLUG_RE.test(slug)) continue;
+    if (chatSlug && !DURABLE_SLUG_RE.test(chatSlug)) continue;
+    if (host && !DURABLE_HOST_RE.test(host)) continue;
+    if (!chatSlug && !host) continue;
+    out.push(host ? { slug, chatSlug, host } : { slug, chatSlug });
+  }
+  return out;
+}
+
+/** The `DIGICHAT_GATED_CLAIMS` value last folded into the claims. */
+let foldedDurableClaimsRaw: string | undefined;
+
+/**
+ * Fold the durable claims from the env into the last-good claims. They only
+ * accumulate, like every other claim: a later blank or broken value removes
+ * nothing already recorded in this process.
+ */
+function foldDurableGatedClaims(): void {
+  const raw = process.env.DIGICHAT_GATED_CLAIMS;
+  if (raw === foldedDurableClaimsRaw) return;
+  foldedDurableClaimsRaw = raw;
+  const claims = parseDurableGatedClaims(raw);
+  if (!claims.length) return;
+  const merged = mergeClaims(lastGoodGatedClaims, claims);
+  if (merged.length === lastGoodGatedClaims.length) return;
+  lastGoodGatedClaims = merged;
+  gatedClaimsView = mergeClaims(mergeClaims([], LEGACY_GATED_TENANTS), lastGoodGatedClaims);
+}
+
+/**
+ * The R0-side list of gated claims: the legacy seed, the durable claims from
+ * KV `gated-claims` (U1, via `DIGICHAT_GATED_CLAIMS`) and the last good
  * registry, deduped by `chatSlug|host`. Independent of the current document,
  * by design. Cached: rebuilt only when a load adds a new claim.
  */
 export function gatedTenantClaims(): readonly Readonly<GatedTenantClaim>[] {
+  foldDurableGatedClaims();
   return gatedClaimsView;
 }
 

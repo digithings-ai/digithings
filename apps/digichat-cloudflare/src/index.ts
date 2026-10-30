@@ -21,7 +21,13 @@ import {
 } from "./paths";
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
-import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
+import {
+  parseGatedClaims,
+  resolveConfigYaml,
+  resolveEmbedTenants,
+  resolveGatedClaims,
+  unionGatedClaims,
+} from "./tenants-kv";
 import {
   bindOccApiCall,
   isChatApiPath,
@@ -128,6 +134,10 @@ export class DigiChatContainer extends Container {
     // the NAME of each key). The app uses it so an invite-only host never falls
     // back to a generic chat; the key values are not in it.
     DIGICHAT_INVITE_PAGES: workerVars.DIGICHAT_INVITE_PAGES ?? "",
+    // Durable gated-tenant claims (U1): normally read from KV `gated-claims`
+    // at boot and merged below; this var is the `[vars]` / `wrangler dev` seam.
+    // Hosts and slugs only, no secret values or names.
+    DIGICHAT_GATED_CLAIMS: workerVars.DIGICHAT_GATED_CLAIMS ?? "",
     // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
     // at boot and overwritten below; this var is the seam for `wrangler dev`
     // and for a deploy that pins the document in `[vars]`.
@@ -203,10 +213,20 @@ export class DigiChatContainer extends Container {
     // A stop overtook this read. Applying it would hand the next request a
     // value resolved against the boot that just ended, and would extend the
     // stale window by another TTL.
+    // Durable claims only accumulate: KV and the `[vars]` seam are unioned, and
+    // a failed read keeps what this container already has, never an empty list.
+    const claims = await resolveGatedClaims(workerVars.DIGICHAT_TENANTS_KV);
+    console.log(`[claims-kv] gated claims source=${claims.source} count=${claims.claims.length}`);
     if (epoch !== this.configEpoch) return;
+    const gatedClaims = unionGatedClaims(
+      parseGatedClaims(this.envVars.DIGICHAT_GATED_CLAIMS),
+      parseGatedClaims(workerVars.DIGICHAT_GATED_CLAIMS),
+      claims.claims,
+    );
     this.envVars = {
       ...this.envVars,
       DIGICHAT_EMBED_TENANTS: tenants,
+      DIGICHAT_GATED_CLAIMS: gatedClaims.length ? JSON.stringify(gatedClaims) : "",
       // KV wins over the `[vars]` seam; `none` leaves that seam in charge.
       ...(source === "kv" ? { DIGICHAT_CONFIG_YAML: yaml } : {}),
     };
@@ -330,6 +350,11 @@ export interface Env {
    * the local-dev / pinned-document seam and loses to KV when both exist.
    */
   DIGICHAT_CONFIG_YAML?: string;
+  /**
+   * Durable gated-tenant claims (U1), JSON array of `{slug, chatSlug, host}`.
+   * Normally KV `gated-claims`; this var is the `[vars]` / `wrangler dev` seam.
+   */
+  DIGICHAT_GATED_CLAIMS?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
