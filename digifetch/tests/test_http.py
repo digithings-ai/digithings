@@ -406,3 +406,41 @@ def test_download_307_preserves_post_method() -> None:
 
     assert result.content == b"bytes"
     assert seen[1] == ("https://one.example/final", "POST")
+
+
+# ── url_guard (per-hop caller fence) ──────────────────────────────────────────
+
+
+def test_url_guard_runs_on_every_hop_and_stops_before_the_refused_request(monkeypatch) -> None:
+    import ipaddress
+
+    # Patch the resolver this HttpFetcher actually calls (another test re-imports
+    # the package, so ``digifetch.ssrf`` may name a different module object).
+    monkeypatch.setitem(
+        HttpFetcher.fetch.__globals__["validate_fetch_url"].__globals__,
+        "_resolve",
+        lambda host, port: [ipaddress.ip_address("8.8.8.8")],
+    )
+    requested: list[str] = []
+    guarded: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "a.example":
+            return httpx.Response(302, headers={"location": "https://b.example/next"})
+        if request.url.host == "b.example":
+            return httpx.Response(302, headers={"location": "https://c.example/far"})
+        return httpx.Response(200, text="far side")
+
+    class Refused(Exception):
+        pass
+
+    def guard(url: str) -> None:
+        guarded.append(url)
+        if "c.example" in url:
+            raise Refused(url)
+
+    with pytest.raises(Refused):
+        _fetcher(handler).fetch("https://a.example/", url_guard=guard)
+    assert guarded == ["https://a.example/", "https://b.example/next", "https://c.example/far"]
+    assert requested == ["https://a.example/", "https://b.example/next"]

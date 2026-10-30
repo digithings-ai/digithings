@@ -71,8 +71,11 @@ from digigraph.orchestration.tool_common import (  # noqa: F401
     _search_payload_for_llm,
 )
 from digigraph.orchestration.web_search_tools import (
+    WEB_FETCH_TOOL,
+    WEB_FETCH_TOOL_NAME,
     WEB_SEARCH_TOOL,
     WEB_SEARCH_TOOL_NAME,
+    _handle_web_fetch,
     _handle_web_search,
     _web_search_available,
 )
@@ -204,6 +207,13 @@ def _register_tools() -> None:
         WEB_SEARCH_TOOL,
         _handle_web_search,
     )
+    # Pinned tenants only (the handler refuses otherwise, and research drops the
+    # definition for an unpinned session): open one page inside the pin.
+    register_tool(
+        WEB_FETCH_TOOL_NAME,
+        WEB_FETCH_TOOL,
+        _handle_web_fetch,
+    )
     for name, schema in SESSION_TOOL_SCHEMAS:
         register_tool(name, schema, session_tool_handler(name))
     for name, schema in SKILL_LIBRARY_TOOL_SCHEMAS:
@@ -269,7 +279,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "web",
-        [WEB_SEARCH_TOOL_NAME],
+        [WEB_SEARCH_TOOL_NAME, WEB_FETCH_TOOL_NAME],
         when=_web_search_available,
     )
     register_skill(

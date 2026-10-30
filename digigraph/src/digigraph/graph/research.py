@@ -487,16 +487,28 @@ def _run_document_rag_path(
     # where it may search and carries the tenant's site graph. The pin itself is
     # enforced in the handler; this only changes what the model reads.
     from digigraph.orchestration.web_search_tools import (
+        WEB_FETCH_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME,
+        web_fetch_tool_for_tenant,
         web_search_tool_for_tenant,
     )
 
     _tenant_web_search = web_search_tool_for_tenant(
         state.get("web_search_domains"), state.get("web_search_site")
     )
+    # web_fetch (open one page inside the pin) exists only for a pinned tenant:
+    # an unpinned session never gets an open-web page fetch.
+    _tenant_web_fetch = web_fetch_tool_for_tenant(state.get("web_search_domains"))
     if _tenant_web_search is not None:
         tools_for_llm = [
             _tenant_web_search if _tool_def_name(t) == WEB_SEARCH_TOOL_NAME else t
+            for t in tools_for_llm
+        ]
+    if _tenant_web_fetch is None:
+        tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) != WEB_FETCH_TOOL_NAME]
+    else:
+        tools_for_llm = [
+            _tenant_web_fetch if _tool_def_name(t) == WEB_FETCH_TOOL_NAME else t
             for t in tools_for_llm
         ]
     # Dedicated per-index search tools (DIG-3269): when the tenant map names them,

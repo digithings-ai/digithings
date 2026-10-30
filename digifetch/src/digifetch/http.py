@@ -20,7 +20,7 @@ can send.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import (
     Any,  # score:allow untyped any — Playwright cookie dicts are untyped (browser optional)
 )
@@ -331,6 +331,7 @@ class HttpFetcher:
         json: Any = None,  # arbitrary JSON-serializable body
         headers: Mapping[str, str] | None = None,
         cookies: Mapping[str, str] | None = None,
+        url_guard: Callable[[str], None] | None = None,
     ) -> FetchResult:
         """Issue an HTTP request and return the decoded text body.
 
@@ -346,12 +347,19 @@ class HttpFetcher:
         an origin boundary). A 307/308 re-sends the original method and body;
         301/302/303 rewrite a body-bearing method to GET and drop the body, per
         RFC 9110 §15.4.
+
+        ``url_guard`` (optional) is called with the original URL and with every
+        redirect hop, after the SSRF guard and before the hop is requested. It
+        raises to refuse the hop: a caller-side fence (e.g. a tenant's allowed
+        sites) so a redirect can never land the fetch somewhere it may not go.
         """
         origin = _url_origin(url)
         current_url = url
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
+            if url_guard is not None:
+                url_guard(current_url)
             same_origin = _url_origin(current_url) == origin
             hop_cookies = self._hop_cookies(cookies, same_origin=same_origin)
             response = self._client.request(

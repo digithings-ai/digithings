@@ -66,6 +66,7 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_WEBSETS_EXPORT,
     TOOL_DIGISEARCH_WEBSETS_GET,
     TOOL_DIGISEARCH_WEBSETS_LIST_ITEMS,
+    TOOL_WEB_FETCH,
     TOOL_WEB_SEARCH,
     OpenAIToolDict,
 )
@@ -77,6 +78,7 @@ from digisearch.tenant_index_scope import (
     parse_index_list,
     validate_index_name,
 )
+from digisearch.web_search.fenced_fetch import WebFetchData
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -952,6 +954,7 @@ class OrchestratorInvokeResponse(BaseModel):
         | WebsetItemsData
         | WebsetEventsData
         | WebsetExportData
+        | WebFetchData
         | None
     ) = None
     error: str | None = None
@@ -1401,6 +1404,18 @@ def api_orchestrator_invoke(
             data=ResearchTurnOutput.model_validate(body),
         )
 
+    if tool == TOOL_WEB_FETCH:
+        # One page inside a pinned tenant's site fence (web_search/fenced_fetch.py):
+        # the fence is required and enforced on every redirect hop.
+        from digisearch.web_search.fenced_fetch import invoke_web_fetch
+
+        env = invoke_web_fetch(args)
+        if env.get("ok") is not True:
+            return OrchestratorInvokeResponse(ok=False, error=str(env.get("error") or "failed"))
+        return OrchestratorInvokeResponse(
+            ok=True, service="digisearch", tool=tool, data=WebFetchData(**env["data"])
+        )
+
     if tool == TOOL_WEB_SEARCH:
         from digisearch.web_providers import (
             UnknownProviderError,
@@ -1443,6 +1458,9 @@ def api_orchestrator_invoke(
         if args.get("page_corpus") is not None:
             # Validated by the model (id pattern); only the in-house engine reads it.
             web_kwargs["page_corpus"] = str(args["page_corpus"])
+        if isinstance(args.get("fence"), list):
+            # A pinned tenant's sites: enrichment refuses off-fence fetch hops.
+            web_kwargs["fence"] = [str(p) for p in args["fence"]]
         if args.get("purpose") is not None:
             web_kwargs["purpose"] = str(args["purpose"])
         if args.get("effort") is not None:

@@ -44,7 +44,8 @@ def test_apply_web_search_opt_in_strips_mcp_proxy_form() -> None:
     stripped = apply_web_search_opt_in(base, enable_web_search=False)
     assert stripped == frozenset({MCP_QUERY})
     kept = apply_web_search_opt_in(base, enable_web_search=True)
-    assert kept == base
+    # web_fetch rides with native web_search (offered only to a pinned tenant).
+    assert kept == base | {"web_fetch"}
 
 
 def test_apply_mcp_extra_tools_gates_proxy_web_search() -> None:

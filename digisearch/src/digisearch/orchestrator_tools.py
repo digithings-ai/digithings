@@ -34,6 +34,9 @@ TOOL_DIGISEARCH = "digisearch"
 TOOL_DIGISEARCH_FETCH_ALL = "digisearch_fetch_all"
 TOOL_DIGISEARCH_RESEARCH_DELEGATE = "digisearch_research_delegate"
 TOOL_WEB_SEARCH = "web_search"
+# Pinned tenants only: open one page inside the tenant's site fence. Not in the
+# public manifest; digigraph offers it only to a tenant with webSearchDomains.
+TOOL_WEB_FETCH = "web_fetch"
 TOOL_DIGISEARCH_MONITORS_TRIGGER = "digisearch_monitors_trigger"
 TOOL_DIGISEARCH_MONITORS_RUNS = "digisearch_monitors_runs"
 # Phase D websets (#4066, R10/R12): the manifest keeps the prefixed names while
@@ -51,6 +54,7 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DIGISEARCH_FETCH_ALL,
         TOOL_DIGISEARCH_RESEARCH_DELEGATE,
         TOOL_WEB_SEARCH,
+        TOOL_WEB_FETCH,
         TOOL_DIGISEARCH_MONITORS_TRIGGER,
         TOOL_DIGISEARCH_MONITORS_RUNS,
         TOOL_DIGISEARCH_WEBSETS_CREATE,

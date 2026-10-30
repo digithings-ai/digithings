@@ -82,14 +82,20 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         "Search this tenant's own public web presence with the first-party digisearch "
         "web_search tool. Results are restricted server-side to: "
         + ", ".join(pin_list)
-        + ". Other domains and other search engines are refused. Each call is one "
-        "search: to search a listed site other than the first, pass that site's host "
-        "in include_domains (it can only narrow this list). Cite the page URL of "
-        "every fact you use."
+        + ". A listed host includes all of its subdomains (e.g. academy.<host>); a "
+        "listed path covers only pages under that path. Other domains and other "
+        "search engines are refused. Each call is one search: to search a listed "
+        "site other than the first, or one subdomain of it, pass that host in "
+        "include_domains (it can only narrow this list). To read a full page, "
+        "follow its links or check a subdomain, use web_fetch with the page URL. "
+        "Cite the page URL of every fact you use."
     ]
     graph = load_web_search_site_graph(site_id) if isinstance(site_id, str) else None
     if graph:
-        parts.append(graph)
+        parts.append(
+            "Site map (a starting guide, not a limit: pages and subdomains not "
+            "listed here are allowed when they sit inside the sites above):\n\n" + graph
+        )
     fn["description"] = "\n\n".join(parts)
     props = fn["parameters"]["properties"]
     props.pop("provider", None)
@@ -261,6 +267,7 @@ def call_digisearch_web_search(
     context: ToolContext | None = None,
     timeout: float = 120.0,
     page_corpus: str | None = None,
+    fence: list[str] | None = None,
 ) -> dict[str, Any]:
     """Public entry point for the digisearch ``web_search`` tool call.
 
@@ -281,6 +288,7 @@ def call_digisearch_web_search(
         context=context,
         timeout=timeout,
         page_corpus=page_corpus,
+        fence=fence,
     )
 
 
@@ -294,6 +302,7 @@ def _call_digisearch_web_search(
     context: ToolContext | None = None,
     timeout: float = 120.0,
     page_corpus: str | None = None,
+    fence: list[str] | None = None,
 ) -> dict[str, Any]:
     """Invoke digisearch ``web_search`` via the vertical-orchestrator hub.
 
@@ -331,6 +340,10 @@ def _call_digisearch_web_search(
         # Pinned tenant with a pre-crawled corpus: digisearch still fetches the
         # live page first and uses the corpus only for a challenge or a failure.
         arguments["page_corpus"] = page_corpus
+    if fence:
+        # Pinned tenant: digisearch refuses any enrichment fetch hop (a redirect)
+        # that leaves these sites, so off-fence page text never comes back.
+        arguments["fence"] = list(fence)
     inv = invoke_digisearch_tool(
         _digisearch_service_base(),
         "web_search",
@@ -435,6 +448,8 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         # still cannot hand a pinned tenant an off-pin row: it is dropped before
         # the summary is built, so neither its URL nor its snippet survives.
         search_kwargs["url_filter"] = lambda u: url_within_pins(u, pinned)
+        # ...and digisearch fences every enrichment fetch hop with the same pins.
+        search_kwargs["fence"] = _as_str_list(pinned)
         # Tenant map webSearchPageCorpus (digisearch page_corpus): a live page
         # behind a bot challenge falls back to the pre-crawled copy. Unpinned
         # tenants never send one.
@@ -486,4 +501,148 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         "results": results,
         "rag_sources": rag_sources_from_results(results),
         "name": WEB_SEARCH_TOOL_NAME,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# web_fetch: open one page inside a pinned tenant's sites
+# --------------------------------------------------------------------------- #
+
+WEB_FETCH_TOOL_NAME = "web_fetch"
+#: Page text handed to the model per call (characters); digisearch caps at 40k.
+WEB_FETCH_MAX_CHARS = 12000
+
+WEB_FETCH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": WEB_FETCH_TOOL_NAME,
+        "description": (
+            "Open one web page and read its full text, plus the links on it that "
+            "stay inside this tenant's allowed sites. Use it to read a page found "
+            "by web_search, follow a link, or check a subdomain. Pages outside the "
+            "allowed sites (and redirects that leave them) are refused."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Absolute http(s) URL of the page to open.",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+}
+
+
+def _pinned_list(context: ToolContext) -> list[str] | None:
+    """The tenant's pins, ``None`` when web search is unpinned."""
+    pinned = context.state.get("web_search_domains")
+    if pinned is None:
+        return None
+    return _as_str_list(pinned)
+
+
+def web_fetch_tool_for_tenant(pins: Any) -> dict[str, Any] | None:
+    """``web_fetch`` for a pinned tenant (its description names the sites), else ``None``.
+
+    Unpinned sessions never get it: an open-web page fetch is not offered.
+    """
+    pin_list = _as_str_list(pins)
+    if pins is None or not pin_list:
+        return None
+    import copy
+
+    tool = copy.deepcopy(WEB_FETCH_TOOL)
+    tool["function"]["description"] += (
+        " Allowed sites (a host includes its subdomains; a path covers pages "
+        "under it): " + ", ".join(pin_list) + "."
+    )
+    return tool
+
+
+def _web_fetch_refused(message: str) -> dict[str, Any]:
+    return {"error": "tool_not_allowed", "tool": WEB_FETCH_TOOL_NAME, "message": message}
+
+
+def _handle_web_fetch(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    """Open one page for a pinned tenant, fenced here and on every hop in digisearch."""
+    if not _web_search_available(context):
+        return web_search_disabled_payload(WEB_FETCH_TOOL_NAME)
+    pins = _pinned_list(context)
+    if not pins:
+        return _web_fetch_refused("web_fetch is only available to a tenant with pinned sites.")
+    url = str(args.get("url") or "").strip()
+    if not url:
+        return "No URL provided."
+    if "://" not in url:
+        url = "https://" + url
+    if not url_within_pins(url, pins):
+        return _web_fetch_refused(
+            "That page is outside the allowed sites: " + ", ".join(pins) + "."
+        )
+    from digigraph.vertical_orchestrator.digisearch_hub import invoke_digisearch_tool
+
+    arguments: dict[str, Any] = {"url": url, "fence": pins, "max_chars": WEB_FETCH_MAX_CHARS}
+    corpus = context.state.get("web_search_page_corpus")
+    if isinstance(corpus, str) and corpus.strip():
+        arguments["page_corpus"] = corpus.strip()
+    inv = invoke_digisearch_tool(
+        _digisearch_service_base(),
+        WEB_FETCH_TOOL_NAME,
+        arguments,
+        default_index_name=getattr(context, "index_name", None) or "default",
+        bearer_token=_digi_bearer_from_context(context),
+        request_id=getattr(context, "request_id", None),
+        timeout=60.0,
+    )
+    if not isinstance(inv, dict) or inv.get("ok") is not True:
+        err = str((inv or {}).get("error") or "unknown error") if isinstance(inv, dict) else ""
+        if err.startswith("fence_refused"):
+            return _web_fetch_refused("The page redirected outside the allowed sites.")
+        return {
+            "error": "fetch_failed",
+            "tool": WEB_FETCH_TOOL_NAME,
+            "message": f"Could not open {url}: {err or 'no response'}",
+        }
+    data = inv.get("data") if isinstance(inv.get("data"), dict) else {}
+    final_url = str(data.get("final_url") or url)
+    if not url_within_pins(final_url, pins):
+        # digisearch fences every hop; this is the second lock on the same door.
+        return _web_fetch_refused("The page redirected outside the allowed sites.")
+    links = [
+        u for u in (data.get("links") or []) if isinstance(u, str) and url_within_pins(u, pins)
+    ]
+    title = str(data.get("title") or "").strip() or final_url
+    text = str(data.get("content") or "")
+    lines = [f"# [{title}]({final_url})", ""]
+    if data.get("source") == "page_corpus":
+        lines += ["(Saved copy: the live page could not be read directly.)", ""]
+    lines.append(text or "(No readable text on this page.)")
+    if data.get("truncated"):
+        lines += ["", "(Page text truncated.)"]
+    if links:
+        lines += ["", "Links on this page within the allowed sites:"]
+        lines += [f"- {u}" for u in links]
+    content = "\n".join(lines)
+    results = [
+        {
+            "doc_id": final_url,
+            "content": text[:2000],
+            "rank": 0,
+            "metadata": {
+                "title": title,
+                "source_url": final_url,
+                "evidence_tier": EXTERNAL_EVIDENCE_TIER,
+                "source_kind": "external",
+            },
+        }
+    ]
+    return {
+        "content": content,
+        "results": results,
+        "links": links,
+        "rag_sources": rag_sources_from_results(results),
+        "name": WEB_FETCH_TOOL_NAME,
     }

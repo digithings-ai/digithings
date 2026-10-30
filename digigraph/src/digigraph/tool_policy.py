@@ -12,6 +12,10 @@ from digigraph.project_config import DigiProjectConfig
 # Opt-in digichat/digigraph web search (#3420). Never in the default corpus allowlist;
 # only unioned when the request explicitly enables it.
 WEB_SEARCH_TOOL_NAME = "web_search"
+# Companion of native web_search: open one page inside a pinned tenant's sites.
+# It rides with web_search through every allowlist and opt-in gate (the handler
+# and research_node further limit it to pinned tenants).
+WEB_FETCH_TOOL_NAME = "web_fetch"
 
 # Remote MCP tools are registered as ``{server_id}_{tool}``
 # (``mcp_client.prefixed_tool_name``), so a digisearch MCP server exposes its
@@ -21,8 +25,10 @@ _WEB_SEARCH_MCP_SUFFIX = f"_{WEB_SEARCH_TOOL_NAME}"
 
 
 def is_web_search_tool(name: str) -> bool:
-    """True for ``web_search`` and its MCP-proxied form ``{server_id}_web_search``."""
-    return name == WEB_SEARCH_TOOL_NAME or name.endswith(_WEB_SEARCH_MCP_SUFFIX)
+    """True for ``web_search``, its MCP-proxied ``{server_id}_web_search`` and ``web_fetch``."""
+    return name in (WEB_SEARCH_TOOL_NAME, WEB_FETCH_TOOL_NAME) or name.endswith(
+        _WEB_SEARCH_MCP_SUFFIX
+    )
 
 
 def is_proxied_web_search_tool(name: str) -> bool:
@@ -111,6 +117,10 @@ def apply_web_search_opt_in(
         return None
     if enable_web_search:
         # Do not union — only activate a tool the operator already allowlisted.
+        # web_fetch is web_search's companion: allowlisting native web_search
+        # allows it too (it is still offered only to a pinned tenant).
+        if WEB_SEARCH_TOOL_NAME in names:
+            return names | {WEB_FETCH_TOOL_NAME}
         return names
     return strip_web_search_tools(names)
 

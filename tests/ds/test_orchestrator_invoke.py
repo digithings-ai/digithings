@@ -501,3 +501,78 @@ def test_orchestrator_failing_web_search_surfaced_fail_hard(
     )
     with pytest.raises(RuntimeError, match="down"):
         execute(ws_mod.WEB_SEARCH_TOOL_NAME, {"query": "x"}, ctx)
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_fetch_returns_a_fenced_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import digisearch.web_search.fenced_fetch as ff
+
+    seen: dict = {}
+
+    def _fake(arguments: dict) -> dict:
+        seen.update(arguments)
+        return {
+            "ok": True,
+            "data": {
+                "url": arguments["url"],
+                "final_url": arguments["url"],
+                "title": "Academy",
+                "content": "page text",
+                "links": ["https://academy.example/b"],
+            },
+        }
+
+    monkeypatch.setattr(ff, "invoke_web_fetch", _fake)
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "web_fetch",
+            "arguments": {"url": "https://academy.example/", "fence": ["example"]},
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["data"]["content"] == "page text"
+    assert body["data"]["links"] == ["https://academy.example/b"]
+    assert seen["fence"] == ["example"]
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_fetch_refuses_without_a_fence(client: TestClient) -> None:
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "web_fetch", "arguments": {"url": "https://example.com/"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "invalid web_fetch input" in body["error"]
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_web_search_forwards_the_fence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import digisearch.web_providers as wp
+    from digisearch.web_search.models import WebSearchResponse
+
+    seen: dict = {}
+
+    class _Provider:
+        def search(self, req):
+            seen["fence"] = req.fence
+            return WebSearchResponse(query=req.query, provider="ddgs", results=[])
+
+    monkeypatch.setattr(wp, "get_provider", lambda name=None: _Provider())
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={
+            "tool": "web_search",
+            "arguments": {"query": "q", "fence": ["nomadis.co"], "include_domains": ["nomadis.co"]},
+        },
+    )
+    assert r.status_code == 200
+    assert seen.get("fence") == ["nomadis.co"]
