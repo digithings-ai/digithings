@@ -36,15 +36,20 @@ import {
   parseCorpusMapJson,
   sanitizeClientCorpusMap,
 } from "./tenant-config";
+import { CONTAINER_ENV_VAR_MAX_BYTES } from "./tenant-files";
 
 /** KV key (in the `TENANT_CONFIG` namespace) holding client corpus map entries. */
 export const TENANT_CORPUS_MAP_KEY = "DIGI_TENANT_CORPUS_MAP";
 
 /**
- * Ceiling on the KV value. The composed map travels as one container env
- * string, which must stay well under Linux's 128 KiB per-string execve limit.
+ * Ceiling on both the KV value and the composed map. The composed map travels
+ * as one container env var, which must stay under CONTAINER_ENV_VAR_MAX_BYTES
+ * (the runtime refuses to start the container otherwise); the margin covers the
+ * variable name and framing.
  */
-export const TENANT_CORPUS_MAP_MAX_BYTES = 96_000;
+export const TENANT_CORPUS_MAP_MAX_BYTES = CONTAINER_ENV_VAR_MAX_BYTES - 1_000;
+
+const utf8Bytes = (s: string) => new TextEncoder().encode(s).length;
 
 /** Minimal KV read surface (lets tests pass a fake). */
 export interface TenantCorpusMapStore {
@@ -64,7 +69,7 @@ export function composeCorpusMapWithKv(
 ): string {
   const base = () => composeCorpusMap(primary, privateRaw);
   if (typeof kvRaw !== "string" || kvRaw.trim() === "") return base();
-  if (new TextEncoder().encode(kvRaw).length > TENANT_CORPUS_MAP_MAX_BYTES) {
+  if (utf8Bytes(kvRaw) > TENANT_CORPUS_MAP_MAX_BYTES) {
     console.warn(
       `[tenant-corpus-kv] ${TENANT_CORPUS_MAP_KEY} is over ${TENANT_CORPUS_MAP_MAX_BYTES} bytes; using the env map only`,
     );
@@ -98,7 +103,16 @@ export function composeCorpusMapWithKv(
     ...sanitizeClientCorpusMap(fromPrivate, CORPUS_MAP_PRIVATE_ENV_VAR),
     ...fromKv,
   };
-  return composeCorpusMap(primary, JSON.stringify(merged));
+  const composed = composeCorpusMap(primary, JSON.stringify(merged));
+  // House entries are added on top of the KV value, so the cap is checked on
+  // the string that actually becomes the env var, not only on the KV input.
+  if (utf8Bytes(composed) > TENANT_CORPUS_MAP_MAX_BYTES) {
+    console.warn(
+      `[tenant-corpus-kv] composed ${TENANT_CORPUS_MAP_KEY} is over ${TENANT_CORPUS_MAP_MAX_BYTES} bytes; using the env map only`,
+    );
+    return base();
+  }
+  return composed;
 }
 
 /** Read the KV value; a missing binding or a KV error is "no value". */

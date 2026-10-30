@@ -7,6 +7,11 @@ import {
   composeCorpusMapWithKv,
   readTenantCorpusMapKv,
 } from "./tenant-corpus-kv";
+import { CONTAINER_ENV_VAR_MAX_BYTES } from "./tenant-files";
+
+/** Bytes of the var as the runtime sees it, name and `=` included. */
+const envVarBytes = (value: string) =>
+  Buffer.byteLength(`DIGI_TENANT_CORPUS_MAP=${value}`, "utf8");
 
 const HOUSE = JSON.stringify({
   digithings: { digisearchIndex: "digithings_docs", vaultPathPrefix: "digithings/" },
@@ -63,6 +68,44 @@ describe("composeCorpusMapWithKv", () => {
     const big = JSON.stringify({ "tenant-b": { researchSystemPrompt: "x".repeat(TENANT_CORPUS_MAP_MAX_BYTES) } });
     expect(composeCorpusMapWithKv(HOUSE, LEGACY, big)).toBe(composeCorpusMap(HOUSE, LEGACY));
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the cap under the container per-variable limit", () => {
+    expect(TENANT_CORPUS_MAP_MAX_BYTES).toBeLessThan(CONTAINER_ENV_VAR_MAX_BYTES);
+    expect(envVarBytes("x".repeat(TENANT_CORPUS_MAP_MAX_BYTES))).toBeLessThan(CONTAINER_ENV_VAR_MAX_BYTES);
+  });
+
+  it("counts UTF-8 bytes, not characters, against the cap", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Under the cap in characters, over it in bytes (3 bytes per character).
+    const prompt = "\u20ac".repeat(Math.ceil(TENANT_CORPUS_MAP_MAX_BYTES / 3));
+    const raw = JSON.stringify({ "tenant-b": { researchSystemPrompt: prompt } });
+    expect(raw.length).toBeLessThan(TENANT_CORPUS_MAP_MAX_BYTES);
+    expect(composeCorpusMapWithKv(HOUSE, LEGACY, raw)).toBe(composeCorpusMap(HOUSE, LEGACY));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the env map when the KV value fits but the composed map does not", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bigHouse = JSON.stringify({
+      digithings: { digisearchIndex: "digithings_docs", researchSystemPrompt: "h".repeat(4_000) },
+    });
+    const fill = TENANT_CORPUS_MAP_MAX_BYTES - 2_000;
+    const raw = JSON.stringify({ "tenant-b": { researchSystemPrompt: "k".repeat(fill) } });
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(TENANT_CORPUS_MAP_MAX_BYTES);
+    const out = composeCorpusMapWithKv(bigHouse, LEGACY, raw);
+    expect(out).toBe(composeCorpusMap(bigHouse, LEGACY));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain("composed");
+  });
+
+  it("never returns a KV-composed map at or over the container per-variable limit", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const n of [0, 1_000, 10_000, TENANT_CORPUS_MAP_MAX_BYTES - 700, TENANT_CORPUS_MAP_MAX_BYTES, 40_000]) {
+      const raw = JSON.stringify({ "tenant-b": { ...PINNED, researchSystemPrompt: "p".repeat(n) } });
+      const out = composeCorpusMapWithKv(HOUSE, LEGACY, raw);
+      expect(envVarBytes(out)).toBeLessThan(CONTAINER_ENV_VAR_MAX_BYTES);
+    }
   });
 
   it("lets a KV entry replace the private entry for the same slug", () => {

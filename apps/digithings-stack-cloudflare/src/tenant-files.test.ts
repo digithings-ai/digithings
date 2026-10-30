@@ -1,8 +1,14 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   applyTenantFilesEnv,
   readTenantFilesEnv,
+  CONTAINER_ENV_VAR_MAX_BYTES,
   TENANT_FILES_CHUNK,
+  TENANT_FILES_MAX_B64,
+  TENANT_FILES_MAX_PARTS,
   TENANT_FILES_KEY,
   tenantFilesEnv,
 } from "./tenant-files";
@@ -28,6 +34,36 @@ describe("tenant files env", () => {
     expect(env.DIGI_TENANT_FILES_0 + env.DIGI_TENANT_FILES_1 + env.DIGI_TENANT_FILES_2).toBe(bundle);
     expect(env.DIGIGRAPH_WEB_SEARCH_SITES_DIR).toBe("/data/tenant-files/sites");
     expect(env.DIGISEARCH_PAGE_CORPUS_DIR).toBe("/data/tenant-files/pages");
+  });
+
+  it("keeps every generated env var under the container per-variable limit", () => {
+    // Bytes as the runtime sees them: name, "=" and value.
+    const bytes = (k: string, v: string) => Buffer.byteLength(`${k}=${v}`, "utf8");
+    expect(TENANT_FILES_CHUNK).toBeLessThan(CONTAINER_ENV_VAR_MAX_BYTES);
+    for (const size of [4, TENANT_FILES_CHUNK, TENANT_FILES_CHUNK + 4, 167_496, TENANT_FILES_MAX_B64]) {
+      const bundle = "A".repeat(size - (size % 4));
+      const env = tenantFilesEnv(doc(bundle));
+      const parts = Number(env.DIGI_TENANT_FILES_PARTS);
+      expect(parts).toBe(Math.ceil(bundle.length / TENANT_FILES_CHUNK));
+      expect(parts).toBeLessThanOrEqual(TENANT_FILES_MAX_PARTS);
+      let joined = "";
+      for (let i = 0; i < parts; i += 1) joined += env[`DIGI_TENANT_FILES_${i}`];
+      expect(joined).toBe(bundle);
+      for (const [k, v] of Object.entries(env)) {
+        expect(bytes(k, v)).toBeLessThan(CONTAINER_ENV_VAR_MAX_BYTES);
+      }
+    }
+  });
+
+  it("refuses a bundle the container unpacker would reject for its part count", () => {
+    const over = "A".repeat(TENANT_FILES_MAX_B64 + 4);
+    expect(tenantFilesEnv(doc(over))).toEqual({});
+  });
+
+  it("matches the part ceiling container/unpack_tenant_files.py enforces", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const unpacker = readFileSync(join(here, "../container/unpack_tenant_files.py"), "utf8");
+    expect(unpacker).toContain(`parts > ${TENANT_FILES_MAX_PARTS}:`);
   });
 
   it("reads the one key and treats a KV failure as no files", async () => {

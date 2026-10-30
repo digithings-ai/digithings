@@ -11,8 +11,9 @@
  *   where the gzipped JSON is `{ "<relative path>": "<utf-8 text>", ... }` and
  *   every path is `sites/<id>.md` or `pages/<id>/<name>.md`.
  *
- * The Worker only splits the base64 into `DIGI_TENANT_FILES_<n>` chunks (one
- * env string stays well under Linux's 128 KiB MAX_ARG_STRLEN) and names the two
+ * The Worker only splits the base64 into `DIGI_TENANT_FILES_<n>` chunks (each
+ * well under the Containers runtime's per-variable limit, see
+ * CONTAINER_ENV_VAR_MAX_BYTES) and names the two
  * directories the readers use. container/entrypoint.sh joins, decodes and
  * writes the files under /data/tenant-files, refusing any other path.
  *
@@ -30,11 +31,28 @@ export const TENANT_FILES_KEY = "DIGI_TENANT_FILES";
 /** Where entrypoint.sh unpacks the bundle (under the container's /data). */
 export const TENANT_FILES_ROOT = "/data/tenant-files";
 
-/** Per-env-var chunk size: far below the 128 KiB per-string execve limit. */
-export const TENANT_FILES_CHUNK = 60_000;
+/**
+ * Hard per-variable limit the Containers runtime enforces when a container
+ * starts: a larger value fails the start with "the size of the env variable
+ * exceeds the limit of 16000 bytes", so every request to the container 503s.
+ * Not in the public limits page; observed on a production start.
+ */
+export const CONTAINER_ENV_VAR_MAX_BYTES = 16_000;
+
+/**
+ * Per-env-var chunk size (base64, so one byte per character). Leaves room for
+ * the variable name and any `NAME=` framing under CONTAINER_ENV_VAR_MAX_BYTES.
+ */
+export const TENANT_FILES_CHUNK = CONTAINER_ENV_VAR_MAX_BYTES - 1_000;
+
+/**
+ * Most chunks container/unpack_tenant_files.py accepts (it ignores a bundle
+ * with more parts, so a larger bundle would start with no files at all).
+ */
+export const TENANT_FILES_MAX_PARTS = 64;
 
 /** Ceiling on the base64 bundle (and so on what one cold start carries). */
-export const TENANT_FILES_MAX_B64 = 1_500_000;
+export const TENANT_FILES_MAX_B64 = TENANT_FILES_CHUNK * TENANT_FILES_MAX_PARTS;
 
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
