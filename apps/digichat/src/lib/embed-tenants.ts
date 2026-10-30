@@ -15,7 +15,6 @@
 import type { ActivityDetail } from "@/lib/chat-activity";
 import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
 import { parseTenantColors, type TenantColors } from "@/lib/tenant-colors";
-import { parseTenantRadius, type TenantRadius } from "@/lib/tenant-radius";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
@@ -174,8 +173,6 @@ export type EmbedTenantConfig = {
   fonts?: TenantFonts;
   /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
   colors?: TenantColors;
-  /** Composer and suggestion-chip corner radii in px (src/lib/tenant-radius.ts). */
-  radius?: TenantRadius;
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
   title?: string;
@@ -685,7 +682,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
 
   const fonts = parseTenantFonts(v.fonts, ctx);
   const colors = parseTenantColors(v.colors, ctx);
-  const radius = parseTenantRadius(v.radius, ctx);
 
   if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
     throw new Error(`${ctx}: aliases must be an array of strings`);
@@ -1049,7 +1045,6 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     accent,
     ...(fonts ? { fonts } : {}),
     ...(colors ? { colors } : {}),
-    ...(radius ? { radius } : {}),
     attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,

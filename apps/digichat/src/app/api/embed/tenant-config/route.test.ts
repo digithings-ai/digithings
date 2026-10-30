@@ -52,7 +52,6 @@ describe("GET /api/embed/tenant-config", () => {
       accent: { color: "#b5562b", foreground: "#fff7f2" },
       fonts: null,
       colors: null,
-      radius: null,
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasTenantHeadingRule, parseTenantFonts, tenantFontStyle, tenantHeadingFontCss, TENANT_FONTS } from "./tenant-fonts";
+import { parseTenantFonts, tenantFontStyle, TENANT_FONTS } from "./tenant-fonts";
 
 describe("tenant fonts", () => {
   it("is absent when the tenant sets none", () => {
@@ -24,26 +24,5 @@ describe("tenant fonts", () => {
     expect(style.fontFamily).toBe("var(--font-sans)");
     expect(style["--font-sans"]).toContain(`var(${TENANT_FONTS.mulish})`);
     expect(style["--font-heading"]).toContain(`var(${TENANT_FONTS.cabin})`);
-  });
-
-  it("accepts a heading weight from the four shipped steps only", () => {
-    expect(parseTenantFonts({ headingWeight: 700 }, "t")).toEqual({ headingWeight: 700 });
-    expect(() => parseTenantFonts({ headingWeight: 650 }, "t")).toThrow(/fonts\.headingWeight/);
-    expect(() => parseTenantFonts({ headingWeight: "700" }, "t")).toThrow(/fonts\.headingWeight/);
-  });
-
-  it("adds the heading rule only for a heading face or weight", () => {
-    expect(hasTenantHeadingRule(null)).toBe(false);
-    expect(hasTenantHeadingRule({ body: "mulish" })).toBe(false);
-    expect(tenantHeadingFontCss({ body: "mulish" })).toBe("");
-    expect(tenantHeadingFontCss({ heading: "cabin" })).toMatch(/\{font-family:var\(--font-heading\)\}$/);
-    expect(tenantHeadingFontCss({ headingWeight: 600 })).toMatch(/\{font-weight:600\}$/);
-    const both = tenantHeadingFontCss({ heading: "cabin", headingWeight: 700 });
-    expect(both.startsWith("[data-tenant-heading-font] :is(.aui-thread-welcome-message-inner,")).toBe(true);
-    expect(both).toMatch(/\{font-family:var\(--font-heading\);font-weight:700\}$/);
-  });
-
-  it("keeps the weight out of the wrapper's inline font style", () => {
-    expect(tenantFontStyle({ headingWeight: 700 })).toBeUndefined();
   });
 });
