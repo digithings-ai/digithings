@@ -392,7 +392,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
   /**
    * House model for the request body. Defaults to ``digigraphModelName()``;
    * the route passes the tenant's curated ``models.default`` so the first
-   * turn runs the same model the picker shows (OCC: v4.1-flash).
+   * turn runs the same model the picker shows.
    */
   model?: string;
   /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
@@ -403,7 +403,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
    * Reported token usage for the premium spend window. Called from the
    * stream `finally`, including when the visitor aborts after an answer.
    * Omitted usage charges a typical turn. Absent when the deployment does
-   * not meter (OCC).
+   * not meter (tenant product chats).
    */
   onUsage?: (usage?: { inputTokens: number; outputTokens: number }) => void;
   /** Shared TPM / tool-cap guard. Inactive when the deployment sets neither. */
@@ -777,7 +777,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
       } finally {
         // An abort used to skip the charge that sat after the SSE loop, so a
         // visitor who disconnected at the end of each answer was not billed.
-        // House passes onUsage; OCC does not, and stays unmetered.
+        // House passes onUsage; a tenant product chat does not, and stays unmetered.
         if (opts.onUsage && (textEmitted || usageMetadata)) {
           opts.onUsage(usageMetadata);
         }

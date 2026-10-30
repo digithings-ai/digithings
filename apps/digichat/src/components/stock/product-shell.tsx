@@ -202,7 +202,7 @@ export function ProductStockShell({
   const [bootVisible, setBootVisible] = useState(false);
   const [serviceNames, setServiceNames] = useState<string[]>(["auth", "assistant"]);
   // The hero-banner cover is the standard boot now (the same animation the
-  // digithings.ai shell shows on /chat/occ). `?boot=` / the `bootLabVariant`
+  // digithings.ai shell shows on /chat/<slug>). `?boot=` / the `bootLabVariant`
   // prop still wins, then the deployment's `chrome.loading`; `classic` opts
   // back into the pre-banner welcome loader.
   const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
@@ -353,7 +353,7 @@ export function ProductStockShell({
 
   // Starter chips: the tenant defines the list, the screen shows four at a
   // time and cycles the rest (see @digithings/ui/chat/suggestions). One
-  // boundary for every surface — the embedding, the standalone app, the OCC
+  // boundary for every surface — the embedding, the standalone app, the tenant
   // panels — because every skin reads the capped group from here: the stock
   // skin through `auiConfig.suggestions`, the gallery and base skins through
   // `skinChrome.suggestions`.

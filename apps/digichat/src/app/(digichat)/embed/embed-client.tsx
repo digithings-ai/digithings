@@ -242,8 +242,8 @@ export function readTrialProofMessage(
  * params itself for everything else.
  *
  * `initialHost` is the `host` the server rendered with. It matters only when
- * the address bar does not carry it: the invite-gated OCC page (DIG-3585) is
- * served at a bare `/chat/occ`, rewritten at the edge to `/embed?host=…`, so
+ * the address bar does not carry it: an invite-gated tenant page (DIG-3585) is
+ * served at a bare `/chat/<slug>`, rewritten at the edge to `/embed?host=…`, so
  * the server saw the host and the client's URL (Next keeps `window.location`
  * as the canonical URL) does not. Without the fallback the client would
  * hydrate as a host-less embed — a mismatch with the server's paint. The URL's
@@ -516,7 +516,7 @@ function EmbedPageInner({
   const fontStyle = tenantFontStyle(tenantCfg.fonts);
 
   // ?wide=1 also means "the embedder wants to show its own page background
-  // through" (digithings.ai /chat, /chat/occ — see ChatEmbedShell). The shell
+  // through" (digithings.ai /chat, /chat/<slug> — see ChatEmbedShell). The shell
   // (embed/layout.tsx) and body both paint an opaque bg-background by design,
   // for the common case of embedding on an arbitrary host page; there's no
   // prop path from this client tree up to that server-rendered ancestor, so
@@ -597,7 +597,7 @@ function EmbedChat({
   const [chatPrefs, setChatPrefs] = useState<EmbedChatPrefs>(() => ({
     ...DEFAULT_EMBED_CHAT_PREFS,
     // Start on the tenant's curated default so the first turn uses the model
-    // the picker shows as selected (v4.1-flash on OCC) instead of falling
+    // the picker shows as selected (the tenant's default) instead of falling
     // through to the digigraph operator default. An empty list leaves the
     // session model unset, even when a default is set, so the turn sends
     // no X-Digi-Model until the user picks one. The live house publishes
@@ -1033,7 +1033,7 @@ function EmbedChat({
   }, [host]);
 
   // Ready handshake targets the *actual* parent browsing context, not virtual
-  // ?host= (e.g. occ.digithings.ai). Parent ChatEmbedShell listens on digithings.ai;
+  // ?host= (e.g. a tenant's embed host). Parent ChatEmbedShell listens on digithings.ai;
   // posting ready to the virtual host is dropped and falsely times out.
   useEffect(() => {
     if (typeof window === "undefined") return;
