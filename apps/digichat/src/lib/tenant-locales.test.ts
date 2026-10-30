@@ -4,6 +4,8 @@ import {
   parseTenantLocales,
   pickBrowserLanguage,
   resolveTenantLanguage,
+  resolveTenantLanguagePick,
+  tenantAllowedLanguages,
   tenantCredit,
   tenantLanguageOptions,
 } from "./tenant-locales";
@@ -50,5 +52,25 @@ describe("tenant locales", () => {
     expect(tenantLanguageOptions(undefined)).toBeUndefined();
     expect(tenantCredit(locales, "fr")?.lead).toMatch(/^propulsé/);
     expect(tenantCredit(locales, "en")).toBeUndefined();
+  });
+});
+
+describe("tenant language list enforcement", () => {
+  it("accepts only the tenant's languages, any language without a list", () => {
+    const both = tenantAllowedLanguages(parseTenantLocales({ languages: ["en", "fr"] }, "t"));
+    expect(both).toEqual(["en", "fr"]);
+    expect(resolveTenantLanguagePick(both, "French")).toBe("fr");
+    expect(resolveTenantLanguagePick(both, "nl")).toBeNull();
+    expect(tenantAllowedLanguages(undefined)).toBeUndefined();
+    expect(resolveTenantLanguagePick(undefined, "nl")).toBe("nl");
+  });
+
+  it("pins a single-language tenant: no chip, but no switching away either", () => {
+    const one = parseTenantLocales({ languages: ["fr"] }, "t");
+    expect(tenantLanguageOptions(one)).toBeUndefined();
+    const allowed = tenantAllowedLanguages(one);
+    expect(allowed).toEqual(["fr"]);
+    expect(resolveTenantLanguagePick(allowed, "fr")).toBe("fr");
+    expect(resolveTenantLanguagePick(allowed, "en")).toBeNull();
   });
 });

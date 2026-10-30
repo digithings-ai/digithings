@@ -529,9 +529,13 @@ export function EmbedComposerMenu({
   }, [measureMenuRoom]);
   const available = sessionPickerModels(models ?? [], providerActive?.provider ?? null);
   const tenantLanguages = api.languageOptions;
+  const allowedLanguages = api.allowedLanguages;
   const languages = useMemo(
-    () => languageSelectOptions(tenantLanguageCodes({ languageOptions: tenantLanguages })),
-    [tenantLanguages],
+    () =>
+      languageSelectOptions(
+        tenantLanguageCodes({ languageOptions: tenantLanguages, allowedLanguages }),
+      ),
+    [tenantLanguages, allowedLanguages],
   );
   const toolOnInput = useMemo(
     () => ({

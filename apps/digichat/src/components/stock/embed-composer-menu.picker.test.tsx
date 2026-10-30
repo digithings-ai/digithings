@@ -874,6 +874,22 @@ describe("EmbedComposerMenu current value", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("shows only the pinned language on /language for a single-language tenant", async () => {
+    const api = prefs({
+      prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "fr", model: "alpha" },
+      allowedLanguages: ["fr"],
+    });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="language" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const rows = await screen.findAllByRole("menuitemradio");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("menuitemradio", { name: /en\s+English/i })).toBeNull();
+  });
+
   it("opens /language on the language that is set", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "nl", model: "alpha" } });

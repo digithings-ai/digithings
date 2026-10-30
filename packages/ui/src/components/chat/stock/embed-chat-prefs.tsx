@@ -240,6 +240,13 @@ export type EmbedChatPrefsApi = {
    * supported language on `/language`; set, `/language` offers only these.
    */
   languageOptions?: { code: string; short: string; label: string }[];
+  /**
+   * The only languages `setLanguage` accepts (a tenant's `locales.languages`,
+   * one or more). `setLanguage` ignores any other code; the menus and the
+   * session tool read this to offer or refuse. Absent means any supported
+   * language.
+   */
+  allowedLanguages?: readonly string[];
   /** Footer credit in the session language: `${lead} digithings ${tail}`. */
   credit?: { lead: string; tail: string };
   setView: (mode: ViewMode) => void;

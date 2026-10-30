@@ -309,6 +309,17 @@ describe("executeSlashDef", () => {
     expect(buildProductSlashCommands(open).map((c) => c.id)).toContain("dutch");
   });
 
+  it("keeps a single-language tenant on its language for typed /language", () => {
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    const one = api({ allowedLanguages: ["fr"] });
+    expect(tenantLanguageCodes(one)).toEqual(["fr"]);
+    expect(languageSelectOptions(tenantLanguageCodes(one)).map((o) => o.value)).toEqual(["fr"]);
+    executeSlashDef(def, "en", one);
+    expect(one.setLanguage).not.toHaveBeenCalled();
+    expect(one.openLanguage).toHaveBeenCalledOnce();
+    expect(buildProductSlashCommands(one).map((c) => c.id)).not.toContain("dutch");
+  });
+
   it("opens /provider and seeds a provider from the remainder", () => {
     const a = api();
     const def = { id: "byok" as const, names: ["/provider", "/byok", "/key"], needsArg: false, hint: "" };

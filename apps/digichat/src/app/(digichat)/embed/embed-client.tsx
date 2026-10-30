@@ -111,11 +111,13 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
-import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
+import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 import {
   languageChoiceKey,
   localizeTenantCopy,
   resolveTenantLanguage,
+  resolveTenantLanguagePick,
+  tenantAllowedLanguages,
   tenantCredit,
   tenantLanguageOptions,
 } from "@/lib/tenant-locales";
@@ -1365,6 +1367,7 @@ function EmbedChat({
     available: stockClient.models.available,
   });
   const languageOptions = useMemo(() => tenantLanguageOptions(tenantLocales), [tenantLocales]);
+  const allowedLanguages = useMemo(() => tenantAllowedLanguages(tenantLocales), [tenantLocales]);
   const credit = tenantCredit(tenantLocales, chatPrefs.language);
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
@@ -1386,7 +1389,10 @@ function EmbedChat({
           mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
         })),
       setLanguage: (code) => {
-        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        // The tenant's language list is enforced here, once, for every caller
+        // (chip, /language, the model's session_set_language).
+        const resolved = resolveTenantLanguagePick(allowedLanguages, code);
+        if (!resolved) return;
         if (tenantLocales) {
           // An explicit pick (chip or /language) is remembered over the browser.
           languageSeedRef.current = resolved;
@@ -1399,6 +1405,7 @@ function EmbedChat({
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
       ...(languageOptions ? { languageOptions } : {}),
+      ...(allowedLanguages ? { allowedLanguages } : {}),
       ...(credit ? { credit } : {}),
       setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
@@ -1607,6 +1614,7 @@ function EmbedChat({
       tenantLocales,
       tenantCfg.slug,
       languageOptions,
+      allowedLanguages,
       credit,
     ],
   );

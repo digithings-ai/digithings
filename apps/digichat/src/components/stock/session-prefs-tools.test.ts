@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import { resolveTenantLanguagePick } from "@/lib/tenant-locales";
 import {
   applySessionTool,
   sessionToolCallsFromMessages,
@@ -197,5 +198,49 @@ describe("sessionToolCallsFromMessages", () => {
       },
     ]);
     expect(calls).toEqual([{ id: "c1", name: "session_set_language", args: { code: "nl" } }]);
+  });
+});
+
+describe("session_set_language and the tenant language list", () => {
+  /** An api whose setLanguage enforces the list the way the embed does. */
+  function tenantApi(allowed: readonly string[] | undefined) {
+    const picked: string[] = [];
+    const a = api({
+      ...(allowed ? { allowedLanguages: allowed } : {}),
+      setLanguage: vi.fn((code: string) => {
+        const next = resolveTenantLanguagePick(allowed, code);
+        if (next) picked.push(next);
+      }),
+    });
+    return { a, picked };
+  }
+
+  it("switches to a language the tenant offers", () => {
+    const { a, picked } = tenantApi(["en", "fr"]);
+    const out = applySessionTool("session_set_language", { code: "French" }, a);
+    expect(out).toEqual({ ok: true, message: "Language set to fr." });
+    expect(picked).toEqual(["fr"]);
+  });
+
+  it("refuses a language the tenant does not offer and changes nothing", () => {
+    const { a, picked } = tenantApi(["en", "fr"]);
+    const out = applySessionTool("session_set_language", { code: "Dutch" }, a);
+    expect(out.ok).toBe(false);
+    expect(out.message).toBe("This chat only answers in en, fr; the language was not changed.");
+    expect(a.setLanguage).not.toHaveBeenCalled();
+    expect(picked).toEqual([]);
+  });
+
+  it("is unchanged when the tenant sets no list", () => {
+    const { a, picked } = tenantApi(undefined);
+    expect(applySessionTool("session_set_language", { code: "Dutch" }, a).ok).toBe(true);
+    expect(picked).toEqual(["nl"]);
+  });
+
+  it("pins a single-language tenant to its language", () => {
+    const { a, picked } = tenantApi(["fr"]);
+    expect(applySessionTool("session_set_language", { code: "en" }, a).ok).toBe(false);
+    expect(applySessionTool("session_set_language", { code: "fr" }, a).ok).toBe(true);
+    expect(picked).toEqual(["fr"]);
   });
 });

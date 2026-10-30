@@ -19,7 +19,7 @@
  * stored choice.
  */
 
-import { LANGUAGES, tryResolveLanguageInput } from "@/lib/languages";
+import { DEFAULT_LANGUAGE_CODE, LANGUAGES, tryResolveLanguageInput } from "@/lib/languages";
 
 export type TenantCredit = { lead: string; tail: string };
 
@@ -161,6 +161,32 @@ export function tenantCredit(
   language: string,
 ): TenantCredit | undefined {
   return locales?.strings?.[language]?.credit;
+}
+
+/**
+ * The only languages a tenant chat may switch to: its `locales.languages`,
+ * one or more. A single-language tenant has no chip but is still pinned to its
+ * language. Undefined (no locales) means every supported language.
+ */
+export function tenantAllowedLanguages(
+  locales: TenantLocales | undefined,
+): readonly string[] | undefined {
+  return locales?.languages.length ? locales.languages : undefined;
+}
+
+/**
+ * The language a pick lands on, or null when the tenant does not offer it.
+ * The one check every language change (chip, `/language`, the model's
+ * `session_set_language`) goes through. An unknown input falls back to the
+ * default language, as before.
+ */
+export function resolveTenantLanguagePick(
+  allowed: readonly string[] | undefined,
+  input: string,
+): string | null {
+  const resolved = tryResolveLanguageInput(input) ?? DEFAULT_LANGUAGE_CODE;
+  if (allowed && !allowed.includes(resolved)) return null;
+  return resolved;
 }
 
 /** Chip rows: short code + autonym, in the tenant's order. */

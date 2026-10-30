@@ -273,13 +273,16 @@ function modelChoiceValue(model: string | undefined): string {
 }
 
 /**
- * The tenant's chat languages (the composer chip's list), or null when the
- * tenant sets none and every supported language is offered.
+ * The tenant's chat languages (what `setLanguage` accepts, else the chip's
+ * list), or null when the tenant sets none and every supported language is
+ * offered. Display only: `setLanguage` enforces the list itself.
  */
 export function tenantLanguageCodes(
-  api: Pick<EmbedChatPrefsApi, "languageOptions">,
+  api: Pick<EmbedChatPrefsApi, "languageOptions" | "allowedLanguages">,
 ): string[] | null {
-  const codes = api.languageOptions?.map((option) => option.code) ?? [];
+  const codes = api.allowedLanguages?.length
+    ? [...api.allowedLanguages]
+    : (api.languageOptions?.map((option) => option.code) ?? []);
   return codes.length ? codes : null;
 }
 
@@ -448,7 +451,8 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       }
       const code = tryResolveLanguageInput(arg);
       // A tenant with a language list only offers those languages; any other
-      // pick opens the (filtered) page instead.
+      // pick opens the (filtered) page instead. setLanguage enforces the list
+      // too; this only keeps the page from silently doing nothing.
       const allowed = tenantLanguageCodes(api);
       if (code && (!allowed || allowed.includes(code))) api.setLanguage(code);
       else api.openLanguage();
