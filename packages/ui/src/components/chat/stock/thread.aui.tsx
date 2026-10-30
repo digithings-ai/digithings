@@ -1,5 +1,6 @@
 "use client";
 
+import "../../../styles/chat-stock-menu.css";
 import {
   ComposerAddAttachment,
   ComposerAttachments,
