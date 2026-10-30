@@ -8,7 +8,7 @@
 #
 # The production write is `scripts/occ_invite_key_rollout.sh` run from a
 # Cloudflare-authenticated terminal (OCC_ROLLOUT_AUTH=login), with the tenant
-# JSON read from the local secrets manager. See docs/ops/OCC_INVITE_KEY.md
+# JSON read from the local secrets manager. See docs/ops/LEGACY_INVITE_KEY.md
 # section "Cloudflare-side rotation". It is a staged-deploy step, after the
 # release merge to main is approved.
 name: "Ops: OCC invite key rollout guards"
@@ -50,5 +50,5 @@ jobs:
             echo "## OCC invite key rollout guards"
             echo
             echo "No Cloudflare API call was made and nothing was written."
-            echo "The production rotation is Cloudflare-side only; see docs/ops/OCC_INVITE_KEY.md."
+            echo "The production rotation is Cloudflare-side only; see docs/ops/LEGACY_INVITE_KEY.md."
           } >> "$GITHUB_STEP_SUMMARY"

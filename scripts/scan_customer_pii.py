@@ -89,7 +89,7 @@ INTERNAL_MARKER_ALLOWLIST = (
     # email"); the numbers are the finding, not the notes.
     "docs/adr/0031-occ-tickets-corpus-retrieval.md",
     # Digits' operating note naming the marker as the exposure.
-    "docs/ops/OCC_INVITE_KEY.md",
+    "docs/ops/LEGACY_INVITE_KEY.md",
     # Source of the convention: the backfill script and the formatter tag.
     "scripts/index_occ_tickets.py",
     "scripts/zammad_mcp/README.md",

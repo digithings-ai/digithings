@@ -1,5 +1,5 @@
 # R5 digithings-stack — shared production platform (DIG-3566 rev 6, DIG-3518).
-# Rev 3: -7 OCC scripts + OCC_INVITE_KEY.md (all R6, overlap item 1); -5 workflows
+# Rev 3: -7 OCC scripts + LEGACY_INVITE_KEY.md (all R6, overlap item 1); -5 workflows
 # (global rule); +infra/self-host 2 files (D-R5-2 inferred) + zammad gold.json.
 # infra/local-proxy/Caddyfile contested (H7), unassigned, excluded.
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.

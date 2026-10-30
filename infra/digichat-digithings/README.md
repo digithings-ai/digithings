@@ -94,7 +94,7 @@ Production `DIGICHAT_EMBED_TENANTS` must include OCC. The `token` in that entry 
 key — a bearer capability, never committed, and **not** the `MCP_EDGE_KEY` literal in the nested
 `mcp.servers` entry (that one is a separate credential; see
 [`docs/ops/SECRETS_ROTATION.md` §1](../../docs/ops/SECRETS_ROTATION.md)). Mint, rotate, revoke and
-verify it with [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md), which is also the
+verify it with [`docs/ops/LEGACY_INVITE_KEY.md`](../../docs/ops/LEGACY_INVITE_KEY.md), which is also the
 rollback for taking OCC off the first-party allowlist:
 
 ```json

@@ -183,7 +183,7 @@ RULES: list[tuple[str, str, str]] = [
     ("infra/docker/Dockerfile.digichat-cloudflare", "R5", "digichat image"),
     # ---- R6: client corpora + rollout tooling ----
     ("docs/projects/online-compliance-center/", "R6", "client corpus"),
-    ("docs/ops/OCC_INVITE_KEY.md", "R6", "rollout tooling doc"),
+    ("docs/ops/LEGACY_INVITE_KEY.md", "R6", "rollout tooling doc"),
     ("scripts/occ_invite_key_rollout.sh", "R6", "rollout tooling"),
     ("scripts/verify_occ_invite_key.sh", "R6", "rollout tooling"),
     ("scripts/occ_invite_key_fixture_server.mjs", "R6", "rollout tooling"),

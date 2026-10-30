@@ -13,7 +13,7 @@ risk ids R1–R21). No value is ever printed here; every literal below is masked
 - Bump the container id whenever a rotated value must reach a running Container — see the next section. `wrangler deploy` alone does **not**.
 - Log every rotation in [`## Rotation log`](#rotation-log). An unlogged rotation is an unverified rotation.
 - The OCC tenant's `token` inside `DIGICHAT_EMBED_TENANTS` has its own runbook, including the
-  verification script and the **Act B2 rollback**: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md). Read it
+  verification script and the **Act B2 rollback**: [LEGACY_INVITE_KEY.md](LEGACY_INVITE_KEY.md). Read it
   before acting on §1 for the `occ` entry.
 
 ## When a rotation fails: report the branch, never the value
@@ -108,7 +108,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 
 **The OCC tenant's `token` is a separate, non-`MCP_EDGE_KEY` credential** — an invite bearer
 capability carried as `?token=` on `digithings.ai/chat/occ`, not the MCP edge key. Do not rotate the
-two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md).
+two together. Procedure, verification script and revocation: [LEGACY_INVITE_KEY.md](LEGACY_INVITE_KEY.md).
 
 ### 2. `DIGIKEY_BFF_TOKEN`
 
@@ -320,7 +320,7 @@ default; before this line it was written down only in the Security & Risk Lead's
 | `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN` | 12 months | admin-token exposure; offboarding | digikey / security owner |
 | `DIGIKEY_DATABASE_URL` | 12 months, with the DB role | DB incident; role audit | data platform |
 | `MCP_EDGE_KEY` + tenant JSON | 12 months | edge 401 incident; tenant offboarding | Cloudflare / platform operator |
-| OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([OCC_INVITE_KEY.md](OCC_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
+| OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([LEGACY_INVITE_KEY.md](LEGACY_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
 | `DIGICHAT_ADMIN_KEY` | 12 months | operator offboarding; any suspected exposure | Cloudflare / platform operator, custody with security |
 | `GH_DISPATCH_TOKEN` | 12 months — **not a chosen cadence**: the provider ceiling for a fine-grained PAT, which expires 2027-09-15 and is not agent-rotatable. Dated exemption below | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
 | `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` | 12 months | token expiry; leaked-scope audit | Cloudflare / platform operator |

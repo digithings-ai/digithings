@@ -111,7 +111,7 @@ deleting one line from `FIRST_PARTY_EMBED_HOSTS` (Act B2).
 **3. The switch is a one-line deletion, and it must not precede the key.**
 A fresh high-entropy token goes into `DIGICHAT_EMBED_TENANTS` via `wrangler secret put` and
 is verified in production before the allowlist entry is removed. Reversed, OCC loses access
-to its own surface. The runbook is `docs/ops/OCC_INVITE_KEY.md`.
+to its own surface. The runbook is `docs/ops/LEGACY_INVITE_KEY.md`.
 
 **4. There is no named approver and no env-var switch. The risk owner is Chris.**
 The earlier design had one switch, `ZAMMAD_MCP_CUSTOMER_DISCLOSURE`, plus
@@ -174,7 +174,7 @@ teaches suppression rather than fixing.
   question); DIG-1230 (containment and free-text-name scoping); DIG-1381 (invite-key
   runbook and deny-path tests).
 - PR [#5172](https://github.com/digithings-ai/digithings/pull/5172) — invite link
-  enablement, and the landing place for `docs/ops/OCC_INVITE_KEY.md` (linked from Decision 3
+  enablement, and the landing place for `docs/ops/LEGACY_INVITE_KEY.md` (linked from Decision 3
   by name rather than by relative link, because that runbook lands with #5172 and this ADR
   must merge on its own).
 - PR [#5166](https://github.com/digithings-ai/digithings/pull/5166) — seed-payload PII gate.

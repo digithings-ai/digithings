@@ -590,7 +590,7 @@ Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is 
 
 - **R1:** `digiquant/scripts/export_sdca_macro.py`, `digiquant/scripts/plot_sdca_tearsheet.py`, SDCA parts of `optimize.py` (`_run_sdca_optimize`, SDCA imports).
 - **R2:** `digiquant/scripts/generate_tearsheets.py` (production job) after its SDCA imports (:66, :161-162) go through the plugin hook (refactor 1.2); generic `optimize.py` shell (private with the digiquant core, per call (a)).
-- **R6:** `scripts/verify_occ_invite_key.sh`, `occ_invite_key_fixture_server.mjs`, `occ_invite_key_rollout.sh` (write-secret/KV half, per refactor 1.9 split), `check_occ_rollout_auth_guard.py`, `index_occ_tickets.py`, `test_occ_rollout_scope_guard.sh`, `docs/ops/OCC_INVITE_KEY.md`.
+- **R6:** `scripts/verify_occ_invite_key.sh`, `occ_invite_key_fixture_server.mjs`, `occ_invite_key_rollout.sh` (write-secret/KV half, per refactor 1.9 split), `check_occ_rollout_auth_guard.py`, `index_occ_tickets.py`, `test_occ_rollout_scope_guard.sh`, `docs/ops/LEGACY_INVITE_KEY.md`.
 - **R5:** `apps/digithings-stack-cloudflare/container/seed_chroma.sh` (generic container infra; tenant seeds come from R2/KV at boot).
 
 **Global rule (all repo-split leaves):** no `.github/workflows` file moves into any private repo. Each workflow maps to a Cloudflare cron, a local-ci job on Chris's Mac, or deletion — recorded in DIG-3605 (crons/jobs off GitHub). Move lists drop every `.github/*` path. No Buildkite, no GitHub Packages/GHCR; signed release tags mandatory for private-repo deploys; no merges to main, no deploys, no repo creation.
