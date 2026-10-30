@@ -20,12 +20,27 @@
   --color-hair: var(--hair);
   --color-hair-2: var(--hair-2);
   --color-surface: var(--surface);
+  /* The stock thread's raised fill (user bubble, skeletons, dialog, inline
+     code, hovers). Without a colour Tailwind never emits `bg-surface-2` and
+     those surfaces paint transparent. Other skins reuse stock parts (markdown
+     table heads, tool cards) that ask for it too and are tuned transparent, so
+     the colour is switched on only on a page that holds a stock thread: until
+     `--stock-surface-2-on` is set (to nothing, below) the value is invalid and
+     the background stays transparent. `--surface-2` still resolves on the
+     element, so thread-scoped tokens win. */
+  --color-surface-2: var(--stock-surface-2-on) var(--surface-2);
   --color-bg: var(--bg);
   --color-on-accent: var(--on-accent);
   --color-up: var(--up);
   --color-down: var(--down);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
+}
+
+/* Page holds a stock thread (its root carries `data-stock-thread`): switch the
+   surface-2 colour on, for the thread and for its portals (dialogs, popovers). */
+html:has([data-stock-thread]) {
+  --stock-surface-2-on: ;
 }
 
 /* `--font-geist-mono` is the retired name for the host surface's one mono face

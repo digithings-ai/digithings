@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The stock skin's "…" menu is portaled to <body> and its `bg-surface-2`
-// class has no Tailwind colour behind it in DigiChat (chat-aui.css declares
-// no --color-surface-2), so chat-stock-menu.css gives it its background,
-// border and shadow. These pin the pieces that rule depends on.
+// The stock skin's "…" menu is portaled to <body>. chat-aui.css's theme
+// bridge declares --color-surface-2, switched on only on a page that holds a
+// stock thread (so `bg-surface-2` paints there and nowhere else), and chat-stock-menu.css gives the menu its background, border,
+// shadow and keyboard focus ring. These pin the pieces those rules depend on.
 const thread = readFileSync(join(__dirname, "thread.aui.tsx"), "utf8");
 const css = readFileSync(join(__dirname, "../../../styles/chat-stock-menu.css"), "utf8");
+const bridge = readFileSync(join(__dirname, "../../../styles/chat-aui.css"), "utf8");
 const MENU = ".aui-action-bar-more-content.bg-surface-2";
 
 function rule(selector: string): string {
@@ -40,6 +41,23 @@ describe("stock skin More menu", () => {
     expect(menu.split(/\s+/)).toContain("rounded-xl");
     expect(item.split(/\s+/)).toContain("rounded-lg");
     expect(`${menu} ${item}`).not.toContain("rounded-none");
+  });
+
+  it("declares the surface-2 colour in the theme bridge", () => {
+    const theme = bridge.slice(bridge.indexOf("@theme inline {"), bridge.indexOf("}", bridge.indexOf("@theme inline {")));
+    expect(theme).toMatch(/--color-surface-2:\s*var\(--stock-surface-2-on\) var\(--surface-2\);/);
+  });
+
+  it("switches surface-2 on only on a page that holds a stock thread", () => {
+    // Other skins reuse stock parts that ask for bg-surface-2 and are tuned
+    // transparent; the colour stays invalid (transparent) until the switch.
+    expect(bridge).toMatch(/html:has\(\[data-stock-thread\]\) \{\s*--stock-surface-2-on: ;\s*\}/);
+    expect(thread).toMatch(/aui-thread-root[^"]*"\s*data-stock-thread=""/);
+  });
+
+  it("rings the keyboard-focused row, not just a tint", () => {
+    const body = rule(`${MENU} .aui-action-bar-more-item:focus-visible`);
+    expect(body).toMatch(/outline:\s*2px solid var\(--ink-soft/);
   });
 
   it("stays unlayered so it outranks the skin's own surface utilities", () => {

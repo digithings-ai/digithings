@@ -11,19 +11,8 @@ import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { Image } from "./image";
 import { useSuggestionGroup } from "../suggestion-cycle";
 import { MarkdownText } from "./markdown-text";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "./reasoning.aui";
-import { ToolFallback } from "./tool-fallback.aui";
-import {
-  ToolGroupContent,
-  ToolGroupRoot,
-  ToolGroupTrigger,
-} from "./tool-group.aui";
+import { AssistantTrace } from "../skins/base/elements/assistant-trace.aui";
+import { messageHasContent } from "../trace-grouping";
 import { MessageExportMenu } from "./message-export-menu";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "./ui/button";
@@ -35,14 +24,13 @@ import { MessageError } from "./message-error.aui";
 import { SkinCredit } from "./skin-credit";
 import { DotMatrix } from "../DotMatrix";
 
-import { useDisclosureUi, useDeployUi } from "./deploy-ui-context";
+import { useDeployUi } from "./deploy-ui-context";
 import {
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
-  groupPartByType,
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
@@ -167,10 +155,11 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-surface @container flex h-full flex-col"
+      data-stock-thread=""
       style={{
         ["--thread-max-width" as string]: "44rem",
         ["--composer-bg" as string]: "var(--card, var(--surface))",
-        ["--composer-radius" as string]: "1rem",
+        ["--composer-radius" as string]: "1.5rem",
         ["--composer-padding" as string]: "8px",
       }}
     >
@@ -411,12 +400,11 @@ const ComposerAction: FC = () => {
 
 const AssistantMessage: FC = () => {
   const {
-    ToolFallback: ToolFallbackComponent = ToolFallback,
+    ToolFallback: ToolFallbackComponent,
     ToolGroup,
     ReasoningGroup,
   } = useContext(ThreadComponentsContext);
-  const reasoningUi = useDisclosureUi("reasoning");
-  const toolCallsUi = useDisclosureUi("toolCalls");
+  const hasContent = useAuiState((s) => messageHasContent(s.message.parts));
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -432,68 +420,17 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-ink px-2 leading-relaxed wrap-break-word"
       >
-        <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
-        >
-          {({ part, children }) => {
+        {/* The base skin's trace (work chain, reasoning box, tool group and
+            assistant-ui's tool cards), shared so the stock thread traces the
+            same way; text, files and the indicator stay the stock look. */}
+        <AssistantTrace
+          ToolFallback={ToolFallbackComponent}
+          ToolGroup={ToolGroup}
+          ReasoningGroup={ReasoningGroup}
+          renderPart={({ part }) => {
             switch (part.type) {
-              case "group-chainOfThought":
-                return <div data-slot="aui_chain-of-thought">{children}</div>;
-              case "group-tool":
-                if (ToolGroup) {
-                  return <ToolGroup group={part}>{children}</ToolGroup>;
-                }
-                return (
-                  <ToolGroupRoot
-                    variant="ghost"
-                    defaultOpen={toolCallsUi.defaultOpen}
-                    {...(toolCallsUi.locked
-                      ? { open: true, onOpenChange: () => {} }
-                      : {})}
-                  >
-                    <ToolGroupTrigger
-                      count={part.indices.length}
-                      active={part.status.type === "running"}
-                      disabled={toolCallsUi.locked}
-                    />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
-                );
-              case "group-reasoning": {
-                if (ReasoningGroup) {
-                  return (
-                    <ReasoningGroup group={part}>{children}</ReasoningGroup>
-                  );
-                }
-                const running = part.status.type === "running";
-                return (
-                  <ReasoningRoot
-                    streaming={running}
-                    defaultOpen={reasoningUi.defaultOpen}
-                    {...(reasoningUi.locked
-                      ? { open: true, onOpenChange: () => {} }
-                      : {})}
-                  >
-                    <ReasoningTrigger
-                      active={running}
-                      disabled={reasoningUi.locked}
-                    />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
-                );
-              }
               case "text":
                 return <MarkdownText />;
-              case "reasoning":
-                return <Reasoning {...part} />;
-              case "tool-call":
-                return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
                 return part.dataRendererUI;
               case "file":
@@ -509,7 +446,9 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return (
+                // One loading affordance per turn: once anything real has
+                // arrived the work chain takes over.
+                return hasContent ? null : (
                   <span
                     data-slot="aui_assistant-message-indicator"
                     role="status"
@@ -523,7 +462,7 @@ const AssistantMessage: FC = () => {
                 return null;
             }
           }}
-        </MessagePrimitive.GroupedParts>
+        />
         <MessageError />
       </div>
 
