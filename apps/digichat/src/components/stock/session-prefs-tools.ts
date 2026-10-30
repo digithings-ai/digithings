@@ -17,7 +17,16 @@ import {
   type SessionMcpConfig,
 } from "@/components/stock/embed-mcp-flow";
 import { tryResolveLanguageInput } from "@/lib/languages";
-import { isThinkingMode, isViewMode } from "@/lib/view-modes";
+import {
+  isLegacyViewMode,
+  isThinkingMode,
+  isViewMode,
+  normalizeViewMode,
+} from "@/lib/view-modes";
+import { applyThemePick, currentThemeState } from "@/lib/product-slash-commands";
+import { applyThemeModeKeepingPalette } from "@/lib/palette-prefs";
+import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
+import { isPaletteId, isThemePreference } from "@digithings/ui/theme";
 
 export const SESSION_TOOL_NAMES = [
   "session_set_language",
@@ -26,6 +35,8 @@ export const SESSION_TOOL_NAMES = [
   "session_set_search_engine",
   "session_set_view",
   "session_set_thinking",
+  "session_set_theme",
+  "session_set_density",
   "session_toggle_tool",
   "session_upsert_mcp",
   "session_remove_mcp",
@@ -81,10 +92,50 @@ export function applySessionTool(
     return { ok: true, message: `Language set to ${code}.` };
   }
   if (name === "session_set_model") {
-    const model = str(args, "model", "id");
-    if (!model) return { ok: false, message: "Missing model." };
+    const raw = str(args, "model", "id");
+    if (!raw) return { ok: false, message: "Missing model." };
+    const model = resolveModelPick(raw, api.availableModels);
+    if (!model) {
+      return {
+        ok: false,
+        message: `Model ${raw} is not offered here. Choose one of: ${(api.availableModels ?? []).join(", ")}.`,
+      };
+    }
     api.setModel(model);
-    return { ok: true, message: `Model set to ${model}.` };
+    return { ok: true, message: `Model set to ${model}. It applies from the next message.` };
+  }
+  if (name === "session_set_theme") {
+    // Same path as `/theme`: a host-owned theme (embed) takes the pick, the
+    // app paints the document theme and stores it like the palette does.
+    if (api.themeLocked) return { ok: false, message: "The theme is fixed for this chat." };
+    const mode = str(args, "mode", "theme", "preference").toLowerCase();
+    const paletteRaw = str(args, "palette").toLowerCase();
+    if (mode && !isThemePreference(mode)) {
+      return { ok: false, message: "Theme mode must be light, dark, or auto." };
+    }
+    if (paletteRaw && paletteRaw !== "default" && !isPaletteId(paletteRaw)) {
+      return { ok: false, message: `Unknown palette ${paletteRaw}.` };
+    }
+    if (!mode && !paletteRaw) return { ok: false, message: "Pass mode or palette." };
+    const state = currentThemeState(api);
+    if (mode && !paletteRaw && !api.setTheme) {
+      applyThemeModeKeepingPalette(mode as "light" | "dark" | "auto");
+    } else {
+      applyThemePick(
+        api,
+        (mode || state.preference) as "light" | "dark" | "auto",
+        paletteRaw || state.palette,
+      );
+    }
+    return { ok: true, message: `Theme set to ${[paletteRaw, mode].filter(Boolean).join(" ")}.` };
+  }
+  if (name === "session_set_density") {
+    const density = str(args, "density", "mode").toLowerCase();
+    if (!isTraceDensity(density)) {
+      return { ok: false, message: "Density must be compact, default, or airy." };
+    }
+    api.setDensity(density);
+    return { ok: true, message: `Density set to ${density}.` };
   }
   if (name === "session_set_effort") {
     const effort = str(args, "effort").toLowerCase();
@@ -101,8 +152,10 @@ export function applySessionTool(
     return { ok: true, message: `Search engine set to ${engine}.` };
   }
   if (name === "session_set_view") {
-    const mode = str(args, "mode", "view").toLowerCase();
-    if (!isViewMode(mode)) {
+    const raw = str(args, "mode", "view").toLowerCase();
+    // Retired ids (hidden / compact / detailed) fold forward, same as `/view`.
+    const mode = isViewMode(raw) ? raw : isLegacyViewMode(raw) ? normalizeViewMode(raw) : null;
+    if (!mode) {
       return { ok: false, message: "View must be quiet, balanced, or verbose." };
     }
     api.setView(mode);
@@ -175,20 +228,61 @@ export function applySessionTool(
   return { ok: false, message: `Unknown session tool ${name}.` };
 }
 
-type ToolCallHit = { id: string; name: string; args: Record<string, unknown> };
+/**
+ * The model id a pick lands on, or null when the host offers a list and the
+ * pick is not on it. Exact id, `preset:` token, case-insensitive id, or a
+ * unique substring ("flash"). No list: the server allowlist decides.
+ */
+export function resolveModelPick(raw: string, available: readonly string[] | undefined): string | null {
+  const pick = raw.trim();
+  if (!pick) return null;
+  if (!available?.length) return pick;
+  if (pick.startsWith("preset:") || available.includes(pick)) return pick;
+  const lower = pick.toLowerCase();
+  const exact = available.find((id) => id.toLowerCase() === lower);
+  if (exact) return exact;
+  const partial = available.filter((id) => id.toLowerCase().includes(lower));
+  return partial.length === 1 ? partial[0] : null;
+}
+
+export type ToolCallHit = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  /** The server result arrived (the call finished). */
+  done: boolean;
+  /** The server refused (ok:false) or the call errored. */
+  refused: boolean;
+  /** Normalized values the server returned, when any. */
+  prefs: Record<string, unknown> | null;
+};
+
+/** Unwrap the BFF tool output (`{...input, result}`) to digigraph's result. */
+function serverResult(raw: unknown): Record<string, unknown> | null {
+  const outer = asRecord(raw);
+  if (!outer) return null;
+  const inner = asRecord(outer.result);
+  if (inner && ("ok" in inner || "session_prefs" in inner || "error" in inner)) return inner;
+  return outer;
+}
 
 function toolNameFromType(type: string): string | null {
   if (type.startsWith("tool-session_")) return type.slice("tool-".length);
   return null;
 }
 
-/** Walk assistant-ui / AI SDK message parts for completed session_* calls. */
+/**
+ * Walk assistant-ui / AI SDK message parts for session_* calls. Ids are
+ * scoped by message: the stream numbers tool calls per turn (`tool-1`, …),
+ * so a bare id repeats on every turn and later calls were skipped.
+ */
 export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[] {
   const out: ToolCallHit[] = [];
-  for (const msg of messages) {
+  for (const [index, msg] of messages.entries()) {
     const rec = asRecord(msg) ?? {};
     const role = rec.role;
     if (role && role !== "assistant") continue;
+    const messageId = String(rec.id ?? index);
     const bags: unknown[] = [];
     if (Array.isArray(rec.parts)) bags.push(...rec.parts);
     if (Array.isArray(rec.content)) bags.push(...rec.content);
@@ -201,12 +295,18 @@ export function sessionToolCallsFromMessages(messages: unknown[]): ToolCallHit[]
         toolNameFromType(type);
       if (!named || !isSessionToolName(named)) continue;
       const state = typeof p.state === "string" ? p.state : "";
-      if (state && state !== "output-available" && state !== "result" && state !== "complete") {
-        if (state === "partial-call" || state === "input-streaming") continue;
-      }
-      const id = String(p.toolCallId ?? p.id ?? `${named}:${out.length}`);
+      if (state === "partial-call" || state === "input-streaming") continue;
+      const id = `${messageId}:${String(p.toolCallId ?? p.id ?? `${named}:${out.length}`)}`;
       const args = asRecord(p.input ?? p.args ?? p.arguments) ?? {};
-      out.push({ id, name: named, args });
+      const output = p.result ?? p.output;
+      const errored =
+        p.isError === true || state === "output-error" || state === "output-denied";
+      const done =
+        errored || output !== undefined || state === "output-available" || state === "result";
+      const res = serverResult(output);
+      const refused = errored || res?.ok === false;
+      const prefs = asRecord(res?.session_prefs) ?? null;
+      out.push({ id, name: named, args, done, refused, prefs });
     }
   }
   return out;
