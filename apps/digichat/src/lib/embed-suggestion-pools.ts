@@ -1,5 +1,14 @@
-/** Default suggestion pools for embed tenants (full list; UI picks a random subset). */
+import { LEGACY_GATED_TENANT_SLUG } from "@/lib/deploy-config/legacy-tenant-defaults";
 
+/**
+ * Suggestion pools (full list; the UI picks a random subset).
+ *
+ * A tenant's pool comes from its document (`chrome.suggestions`, registry
+ * `suggestions`); code keeps only the house pool. The tenant pools below are
+ * the legacy fallback for rows that do not carry `suggestions` yet.
+ */
+
+/** TODO(P-exit): legacy pool, read only when the tenant row has no suggestions. */
 export const DATATAPSTREAM_SUGGESTION_POOL = [
   "What does the /api/config endpoint return?",
   "How do I authenticate API requests?",
@@ -23,7 +32,7 @@ export const DIGITHINGS_SUGGESTION_POOL = [
   "Search the vault for architecture notes",
 ] as const;
 
-/** occ.digithings.ai — help corpus, knowledge vault, Zammad tickets. */
+/** TODO(P-exit): legacy pool of the gated tenant (help corpus, vault, tickets). */
 export const OCC_SUGGESTION_POOL = [
   "How do I file a support ticket?",
   "Search the help articles for onboarding",
@@ -33,16 +42,27 @@ export const OCC_SUGGESTION_POOL = [
   "Check the status of my Zammad tickets",
 ] as const;
 
-const TENANT_SUGGESTION_POOLS: Record<string, readonly string[]> = {
-  datatapstream: DATATAPSTREAM_SUGGESTION_POOL,
+/** The house pool, by house slug. */
+const HOUSE_SUGGESTION_POOLS: Record<string, readonly string[]> = {
   digithings: DIGITHINGS_SUGGESTION_POOL,
   "digithings-ai": DIGITHINGS_SUGGESTION_POOL,
-  occ: OCC_SUGGESTION_POOL,
 };
 
-/** Full suggestion pool for a tenant slug, when the registry entry omits `suggestions`. */
+/**
+ * TODO(P-exit): legacy tenant pools, kept one release behind the fallback so
+ * rows that do not carry `suggestions` yet render the same chips.
+ */
+const LEGACY_TENANT_SUGGESTION_POOLS: Record<string, readonly string[]> = {
+  datatapstream: DATATAPSTREAM_SUGGESTION_POOL,
+  [LEGACY_GATED_TENANT_SLUG]: OCC_SUGGESTION_POOL,
+};
+
+/**
+ * Fallback pool for a slug, read only when the tenant document omits
+ * `suggestions`: the house pool, else the legacy pool (one release).
+ */
 export function getTenantSuggestionPool(slug: string): string[] | undefined {
-  const pool = TENANT_SUGGESTION_POOLS[slug];
+  const pool = HOUSE_SUGGESTION_POOLS[slug] ?? LEGACY_TENANT_SUGGESTION_POOLS[slug];
   return pool ? [...pool] : undefined;
 }
 

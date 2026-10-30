@@ -172,7 +172,7 @@ export async function POST(req: Request) {
   }
 
   const spendGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
-  // Own key: not our inference budget. OCC sets rateLimit false for everyone.
+  // Own key: not our inference budget. The gated tenant sets rateLimit false for everyone.
   const skipOurRequestLimit =
     byokKey.length > 0 || !deploymentRateLimitEnabled(spendGuardrails);
 
@@ -477,8 +477,8 @@ export async function POST(req: Request) {
   // provider models — the CI picker must not reject those ids (#3829).
   // The tenant's curated default wins over the deployment-wide fallback:
   // `models.default` is what the picker shows as selected, so using it here
-  // keeps the first turn on the same model the visitor sees (v4.1-flash for
-  // OCC) instead of the digigraph operator default. Only a slug the tenant
+  // keeps the first turn on the same model the visitor sees (the tenant's
+  // default) instead of the digigraph operator default. Only a slug the tenant
   // actually offers is trusted; anything else falls back.
   // ONE artefact decides the session lock and the model allowlist (DIG-4589).
   // On the embed surface that artefact is the request's tenant: in production
@@ -611,7 +611,7 @@ export async function POST(req: Request) {
   // branch, because every path consumes `messages` — including the digigraph
   // trace stream, which is the default and converts them itself. Patching the
   // converted model messages later would reach only the legacy `streamText`
-  // pair and leave private mode a silent no-op on the path OCC actually uses.
+  // pair and leave private mode a silent no-op on the path tenant chats actually use.
   // The browser holds only stripped tool steps; put this session's kept
   // payloads back so a follow-up turn still has its earlier tool results.
   if (privateMode) messages = rehydratePrivateToolParts(messages, toolScope);

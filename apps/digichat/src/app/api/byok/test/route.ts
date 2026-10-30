@@ -80,7 +80,7 @@ function rateLimitResponse(message: string, retryAfterSec: number): Response {
  *
  * Auth mirrors POST /api/chat: DigiChat session/machine key, OR a verified
  * anonymous embed request (`X-Embed-Host` / embed referer). Embed visitors on
- * digithings.ai / OCC must validate BYOK before session activation.
+ * digithings.ai / tenant chats must validate BYOK before session activation.
  *
  * Rate-limited on BOTH the embed-IP path AND the authenticated/session path —
  * same unconditional-on-both-paths shape as GET /api/byok/models. Each call

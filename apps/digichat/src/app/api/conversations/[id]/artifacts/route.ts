@@ -8,7 +8,7 @@
  * **Which callers the gate admits.** `requireDigiChatAuth` reads exactly two
  * credentials: the `authorization` header (a `digi_live_…` machine key) and the
  * OIDC session cookie. It never reads `x-embed-token`. A tenant configured
- * `auth: anonymous` - the OCC embed in `occ-embed.yaml` is one - is therefore
+ * `auth: anonymous` - the invite-gated tenant example embed is one - is therefore
  * refused 401 here. The embed invite key is honoured on `/api/chat` and
  * `/api/embed/tenant-config`, which resolve the tenant through
  * `resolveVerifiedEmbedTenant`; it is not honoured on this route. An earlier
@@ -27,7 +27,7 @@
  *    that row - behind this same gate. An embed conversation registers a
  *    session link (`registerSession`) but has no row.
  *
- * Together those mean opening the gate alone would move OCC from 401 to 404
+ * Together those mean opening the gate alone would move that tenant from 401 to 404
  * `not_found`, which is the same "the file never existed" answer the blob
  * route's `410` exists to avoid. Widening this surface for an anonymous
  * client-PII tenant is an open decision (DIG-3241), not this file's to make.

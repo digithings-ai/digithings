@@ -22,12 +22,12 @@
  * **Which callers the gate admits.** `requireDigiChatAuth` reads the
  * `authorization` header (a `digi_live_…` machine key) and the OIDC session
  * cookie, and never reads `x-embed-token`. A tenant configured
- * `auth: anonymous` - the OCC embed in `occ-embed.yaml` is one - gets 401
+ * `auth: anonymous` - the invite-gated tenant example embed is one - gets 401
  * here, and that is the intended answer rather than a gap: it holds no
  * credential for this surface. The invite key is honoured on `/api/chat` and
  * `/api/embed/tenant-config`, which resolve the tenant through
  * `resolveVerifiedEmbedTenant`, not here. An earlier version of this comment
- * claimed the OCC invite key was honoured "exactly as it is on the list
+ * claimed the tenant invite key was honoured "exactly as it is on the list
  * endpoint"; that was false (DIG-3241), and the comparison was also
  * self-referential, since the list endpoint runs this same gate and reads
  * these same two credentials. See the sibling route's comment for why
