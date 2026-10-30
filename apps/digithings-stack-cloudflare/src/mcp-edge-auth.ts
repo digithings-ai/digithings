@@ -91,6 +91,29 @@ export function mcpWriteScopeForTool(serverId: string, tool: string): string {
 export const MCP_EDGE_JWKS_TTL_MS = 5 * 60_000;
 
 /**
+ * How long the KV copy of the JWKS is trusted, seconds, when
+ * `MCP_EDGE_JWKS_KV_TTL_SEC` is unset (#6649). Ten minutes: two in-isolate
+ * TTLs, so a busy edge rewrites the entry long before it ages out, and a key
+ * digikey has removed stops being trusted within ten minutes.
+ */
+export const MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT = 600;
+/** Floor for the KV TTL: Workers KV refuses an `expirationTtl` under 60 s. */
+export const MCP_EDGE_JWKS_KV_TTL_SEC_MIN = 60;
+/** Ceiling for the KV TTL: a removed key must not stay trusted past an hour. */
+export const MCP_EDGE_JWKS_KV_TTL_SEC_MAX = 3_600;
+
+/**
+ * The KV TTL in force, seconds: `MCP_EDGE_JWKS_KV_TTL_SEC` clamped to
+ * [{@link MCP_EDGE_JWKS_KV_TTL_SEC_MIN}, {@link MCP_EDGE_JWKS_KV_TTL_SEC_MAX}],
+ * or the default when unset or not a number.
+ */
+export function mcpEdgeJwksKvTtlSec(env: McpEdgeAuthEnv): number {
+  const raw = Number.parseInt(String(env.MCP_EDGE_JWKS_KV_TTL_SEC ?? "").trim(), 10);
+  if (!Number.isFinite(raw) || raw <= 0) return MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT;
+  return Math.min(MCP_EDGE_JWKS_KV_TTL_SEC_MAX, Math.max(MCP_EDGE_JWKS_KV_TTL_SEC_MIN, raw));
+}
+
+/**
  * Tolerated clock difference on `exp` / `nbf` / `iat`, seconds. Same order as
  * the Python verifier's leeway; small enough that an expired token is not
  * usable for long, large enough that a Worker clock a few seconds ahead of
@@ -116,12 +139,19 @@ export type McpEdgeAuthEnv = {
   /**
    * Read-through cache for the public JWKS. Keys survive a cold digikey, whose
    * first response took 43 s against a 5 s fetch cap — long enough that the
-   * verifier gave up before the container answered.
+   * verifier gave up before the container answered. Only for the KV TTL
+   * (`MCP_EDGE_JWKS_KV_TTL_SEC`), and never on the unknown-`kid` refetch (#6649).
    */
   TENANT_CONFIG?: {
     get(key: string): Promise<string | null>;
     put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
   };
+  /**
+   * Seconds the KV copy of the JWKS is trusted (default
+   * {@link MCP_EDGE_JWKS_KV_TTL_SEC_DEFAULT}, clamped to 60..3600). Optional
+   * plain var; nothing has to be provisioned for the default.
+   */
+  MCP_EDGE_JWKS_KV_TTL_SEC?: string | number;
 };
 
 export type McpEdgeAuthResult =
@@ -162,7 +192,12 @@ type Claims = {
   scopes?: unknown;
 };
 
-type JwksState = { keys: Map<string, CryptoKey>; fetchedAtMs: number };
+/**
+ * `notAfterMs`: set when the keys came from KV — the moment that copy's own
+ * TTL runs out. The in-isolate cache never outlives it, so a removed key is
+ * trusted for at most the KV TTL after the live fetch that last saw it.
+ */
+type JwksState = { keys: Map<string, CryptoKey>; fetchedAtMs: number; notAfterMs?: number };
 
 /**
  * Per-isolate JWKS cache and single-flight. Module scope, so every request
@@ -172,11 +207,14 @@ type JwksState = { keys: Map<string, CryptoKey>; fetchedAtMs: number };
  */
 let jwksCache: JwksState | null = null;
 let jwksInflight: Promise<JwksState | null> | null = null;
+/** The in-flight forced (live-only) fetch. Kept apart: it must never join a KV read. */
+let jwksForcedInflight: Promise<JwksState | null> | null = null;
 
 /** Test-only: forget the cached JWKS and any in-flight fetch. */
 export function _resetMcpEdgeJwksCacheForTests(): void {
   jwksCache = null;
   jwksInflight = null;
+  jwksForcedInflight = null;
 }
 
 const RSA_ALG = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" } as const;
@@ -240,28 +278,47 @@ export const MCP_EDGE_JWKS_TIMEOUT_MS = 5_000;
 
 /**
  * KV key holding the last good JWKS. Public keys only — no secret is cached
- * here. Written on every successful fetch and read before any network call, so
- * a cold digikey cannot take MCP down.
+ * here. The value is `{ keys, fetchedAt }` (epoch ms), written on every
+ * successful live fetch with a KV `expirationTtl`.
+ *
+ * A routine load (cold isolate, in-isolate TTL elapsed) reads KV first, so a
+ * cold digikey does not take MCP down while the copy is fresh. A copy older
+ * than {@link mcpEdgeJwksKvTtlSec}, or one without `fetchedAt` (written before
+ * #6649), is a miss: a key digikey has removed stops being trusted once the
+ * TTL runs out.
  *
  * Rotation: digikey publishes a new key under a new `kid`; the unknown-`kid`
- * path forces one refetch, which overwrites this key. If digikey is
- * unreachable at that moment the call fails closed, and the next successful
- * fetch repairs the cache. There is deliberately no TTL: expiring the key on a
- * timer would re-break every MCP call while digikey sleeps.
+ * path forces one refetch, which **skips KV**, fetches live and overwrites the
+ * entry. Before #6649 the forced path read KV too, so a new `kid` was refused
+ * until the entry was deleted by hand. If digikey is unreachable at that moment
+ * the call fails closed, and the next successful fetch repairs the cache.
+ *
+ * Follow-up: this entry lives in the shared `TENANT_CONFIG` namespace; moving
+ * it to a dedicated namespace needs a new KV binding provisioned at deploy.
  */
 export const MCP_EDGE_JWKS_KV_KEY = "digikey-jwks";
 
-type JwksBody = { keys?: unknown };
+type JwksBody = { keys?: unknown; notAfterMs?: number };
+type CachedJwks = { keys?: unknown; fetchedAt?: unknown };
 
-/** Read the cached JWKS body, or null when absent/unusable. */
+/**
+ * Read the cached JWKS body, or null when absent, unusable, undated or older
+ * than the KV TTL. Never consulted on a forced refetch.
+ */
 async function readCachedJwks(env: McpEdgeAuthEnv): Promise<JwksBody | null> {
   const kv = env.TENANT_CONFIG;
   if (!kv) return null;
   try {
     const raw = await kv.get(MCP_EDGE_JWKS_KV_KEY);
     if (typeof raw !== "string" || !raw.trim()) return null;
-    const parsed = JSON.parse(raw) as JwksBody | null;
-    return parsed && Array.isArray(parsed.keys) && parsed.keys.length ? parsed : null;
+    const parsed = JSON.parse(raw) as CachedJwks | null;
+    if (!parsed || !Array.isArray(parsed.keys) || !parsed.keys.length) return null;
+    const fetchedAt = parsed.fetchedAt;
+    if (typeof fetchedAt !== "number" || !Number.isFinite(fetchedAt)) return null;
+    const age = Date.now() - fetchedAt;
+    // A future timestamp is as untrustworthy as an old one.
+    if (age < 0 || age >= mcpEdgeJwksKvTtlSec(env) * 1000) return null;
+    return { keys: parsed.keys, notAfterMs: fetchedAt + mcpEdgeJwksKvTtlSec(env) * 1000 };
   } catch {
     return null;
   }
@@ -272,14 +329,25 @@ async function writeCachedJwks(env: McpEdgeAuthEnv, body: JwksBody): Promise<voi
   const kv = env.TENANT_CONFIG;
   if (!kv) return;
   try {
-    await kv.put(MCP_EDGE_JWKS_KV_KEY, JSON.stringify(body));
+    const ttl = mcpEdgeJwksKvTtlSec(env);
+    await kv.put(MCP_EDGE_JWKS_KV_KEY, JSON.stringify({ keys: body.keys, fetchedAt: Date.now() }), {
+      expirationTtl: ttl,
+    });
   } catch {
     // the caller already has usable keys; caching is an optimisation
   }
 }
 
-async function fetchJwks(url: string, env: McpEdgeAuthEnv): Promise<JwksState | null> {
-  const cached = await readCachedJwks(env);
+/**
+ * Load the JWKS. A routine load prefers a fresh KV copy; a forced load (the
+ * unknown-`kid` path) goes live only and overwrites KV (#6649).
+ */
+async function fetchJwks(
+  url: string,
+  env: McpEdgeAuthEnv,
+  force = false,
+): Promise<JwksState | null> {
+  const cached = force ? null : await readCachedJwks(env);
   const body = cached ?? (await fetchJwksBody(url, env));
   if (!body) return null;
   if (!cached) await writeCachedJwks(env, body);
@@ -293,7 +361,7 @@ async function fetchJwks(url: string, env: McpEdgeAuthEnv): Promise<JwksState | 
   // An empty key set is not a usable JWKS: refuse rather than cache nothing
   // and retry on every request.
   if (!keys.size) return null;
-  return { keys, fetchedAtMs: Date.now() };
+  return { keys, fetchedAtMs: Date.now(), notAfterMs: cached?.notAfterMs };
 }
 
 /**
@@ -320,29 +388,45 @@ async function fetchJwksBody(url: string, env: McpEdgeAuthEnv): Promise<JwksBody
 }
 
 /**
- * The cached key set, or a fetch. `force` skips the TTL — the unknown-`kid`
- * path uses it exactly once per request so a rotation is picked up without
- * waiting out the TTL.
+ * The cached key set, or a fetch. `force` skips the in-isolate TTL **and KV**
+ * — the unknown-`kid` path uses it exactly once per request so a rotation is
+ * picked up live, without waiting out either TTL.
  *
  * Concurrent callers join one in-flight fetch: a burst of requests after a cold
- * start must not produce a burst of JWKS calls.
+ * start must not produce a burst of JWKS calls. Forced callers join only a
+ * forced fetch, never a routine one that may be answering from KV.
  */
 function getJwks(url: string, force: boolean, env: McpEdgeAuthEnv): Promise<JwksState | null> {
-  if (!force && jwksCache && Date.now() - jwksCache.fetchedAtMs < MCP_EDGE_JWKS_TTL_MS) {
+  const now = Date.now();
+  if (
+    !force &&
+    jwksCache &&
+    now - jwksCache.fetchedAtMs < MCP_EDGE_JWKS_TTL_MS &&
+    (jwksCache.notAfterMs === undefined || now < jwksCache.notAfterMs)
+  ) {
     return Promise.resolve(jwksCache);
   }
-  if (jwksInflight) return jwksInflight;
-  const fetchPromise = fetchJwks(url, env)
+  if (force) {
+    if (jwksForcedInflight) return jwksForcedInflight;
+  } else if (jwksInflight) {
+    return jwksInflight;
+  }
+  const clear = () => {
+    if (force) jwksForcedInflight = null;
+    else jwksInflight = null;
+  };
+  const fetchPromise = fetchJwks(url, env, force)
     .then((state) => {
       if (state) jwksCache = state;
-      jwksInflight = null;
+      clear();
       return state;
     })
     .catch(() => {
-      jwksInflight = null;
+      clear();
       return null;
     });
-  jwksInflight = fetchPromise;
+  if (force) jwksForcedInflight = fetchPromise;
+  else jwksInflight = fetchPromise;
   return fetchPromise;
 }
 
