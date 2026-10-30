@@ -25,7 +25,7 @@ import {
  *
  * - `/chat/<slug>` is gated here exactly like `/chat/occ`: a valid `?token=`
  *   is traded for a `<slug>_invite` cookie (HttpOnly, Secure,
- *   SameSite=Strict, Path=/chat, `v2.<issued-at>.<mac>`), the browser is
+ *   SameSite=Lax, Path=/chat, `v2.<issued-at>.<mac>`), the browser is
  *   302'd to `/chat/<slug>/`, and a valid cookie is proxied to the app's
  *   `/chat/embed?host=<host>` with the key in `x-embed-token`. Anything else
  *   gets the site's own 404.
@@ -209,8 +209,16 @@ export async function validInvitePageCookie(
   return best?.value ?? null;
 }
 
+/**
+ * SameSite=Lax, not Strict: invite links are opened by top-level clicks from
+ * PDFs, email and other sites. Those navigations are cross-site, so the
+ * browser drops a Strict cookie on the 302 back to `/chat/<slug>/` and the
+ * invitee gets the site 404. Lax still keeps the cookie off cross-site
+ * subrequests and POSTs, and `/chat/api/*` binding separately requires a
+ * same-origin Referer (and Sec-Fetch-Site / Origin when sent).
+ */
 export function invitePageCookieHeader(page: InvitePage, value: string): string {
-  return `${page.cookie}=${encodeURIComponent(value)}; Path=${CONTAINER_BASE_PATH}; Secure; HttpOnly; SameSite=Strict`;
+  return `${page.cookie}=${encodeURIComponent(value)}; Path=${CONTAINER_BASE_PATH}; Secure; HttpOnly; SameSite=Lax`;
 }
 
 /** Drops every invite cookie (OCC's and each configured page's) from the headers. */
