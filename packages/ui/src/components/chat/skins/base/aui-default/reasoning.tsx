@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "./collapsible";
 import { cn } from "@/lib/utils";
+import { useTraceT } from "../../../trace-i18n";
 
 export const ANIMATION_DURATION = 200;
 
@@ -170,6 +171,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+  const reasoningLabel = useTraceT().t("reasoning");
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -192,7 +194,7 @@ function ReasoningTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        Reasoning{durationText}
+        {reasoningLabel}{durationText}
       </span>
       <ChevronDownIcon
         data-slot="reasoning-trigger-chevron"

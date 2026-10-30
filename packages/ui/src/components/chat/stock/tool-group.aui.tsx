@@ -19,6 +19,7 @@ import {
 } from "./ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
+import { useTraceT } from "../trace-i18n";
 
 const ANIMATION_DURATION = 200;
 
@@ -111,7 +112,8 @@ function ToolGroupTrigger({
   active?: boolean;
   label?: string;
 }) {
-  const text = label ?? `${count} tool ${count === 1 ? "call" : "calls"}`;
+  const tr = useTraceT();
+  const text = label ?? tr.plural("toolCalls", count);
 
   return (
     <CollapsibleTrigger

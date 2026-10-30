@@ -17,19 +17,9 @@ import { useSkinRuntime } from "../../stock/skin-runtime";
 // skins render reasoning and tool calls as assistant-ui ships them.
 import { ToolFallback } from "./aui-default/tool-fallback.aui";
 
-import {
-  ToolGroupContent,
-  ToolGroupRoot,
-  ToolGroupTrigger,
-} from "./aui-default/tool-group.aui";
 import { TooltipIconButton } from "../../stock/tooltip-icon-button";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "./aui-default/reasoning.aui";
+import { Reasoning } from "./aui-default/reasoning.aui";
+import { ChainOfThoughtActivity } from "./elements/chain-of-thought-activity";
 import { Button } from "../../stock/ui/button";
 import { Skeleton } from "../../stock/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -880,35 +870,32 @@ const AssistantMessage: FC = () => {
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
-                return <div data-slot="aui_chain-of-thought">{children}</div>;
-              case "group-tool":
+                // assistant-ui's Run activity element: one summary line for
+                // the consecutive reasoning and tool calls, expanding to them.
                 return (
-                  <ToolGroupRoot
+                  <ChainOfThoughtActivity
                     key={disclosure.key}
-                    variant="ghost"
+                    group={part}
                     defaultOpen={disclosure.toolGroupOpen}
                   >
-                    <ToolGroupTrigger
-                      count={part.indices.length}
-                      active={part.status.type === "running"}
-                    />
-                    <ToolGroupContent>{children}</ToolGroupContent>
-                  </ToolGroupRoot>
+                    {children}
+                  </ChainOfThoughtActivity>
                 );
-              case "group-reasoning": {
-                const running = part.status.type === "running";
+              case "group-tool":
                 return (
-                  <ReasoningRoot
-                    key={disclosure.key}
-                    defaultOpen={disclosure.reasoningOpen(running)}
-                  >
-                    <ReasoningTrigger active={running} />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
+                  <div data-slot="aui_chain-tools" className="flex flex-col gap-2">
+                    {children}
+                  </div>
                 );
-              }
+              case "group-reasoning":
+                return (
+                  <div
+                    data-slot="aui_chain-reasoning"
+                    className="aui-reasoning-text text-muted-foreground space-y-4 leading-relaxed text-pretty"
+                  >
+                    {children}
+                  </div>
+                );
               case "text":
                 return <MarkdownText />;
               case "reasoning":
