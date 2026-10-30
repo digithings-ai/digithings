@@ -195,6 +195,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
+#   DIGICHAT_LICENSE_JWT     # optional: owner-minted license (digikey license-mint); without it
+#                            # the chat is unlicensed and hosted web search is refused upstream
+#   DIGIKEY_PUBLIC_KEY_PEM   # optional: digikey public key that verifies that license (not secret)
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL

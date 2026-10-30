@@ -50,6 +50,7 @@ import {
 } from "./invite-pages";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
+import { pemEnvValue } from "./license-env";
 import {
   CONTAINER_UNAVAILABLE_BODY,
   describeValue,
@@ -145,6 +146,11 @@ export class DigiChatContainer extends Container {
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
+    // License (spec §7.1): the JWT and the digikey public key that verifies it.
+    // Without both, digichat runs unlicensed, sends no X-Digi-License, and
+    // digigraph refuses hosted web search (the turn then runs without it).
+    DIGICHAT_LICENSE_JWT: workerVars.DIGICHAT_LICENSE_JWT ?? "",
+    DIGIKEY_PUBLIC_KEY_PEM: pemEnvValue(workerVars.DIGIKEY_PUBLIC_KEY_PEM),
     // The chat's API-key MCP identity (digikey). The container mints edge
     // tokens from the BFF session first, because that token names the turn's
     // tenant; this key is only the fallback for a deployment without
@@ -360,6 +366,10 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
+  /** digichat license JWT (owner-minted, `digikey license-mint`); forwarded to the container. */
+  DIGICHAT_LICENSE_JWT?: string;
+  /** digikey public key PEM that verifies the license; literal `\n` is expanded. */
+  DIGIKEY_PUBLIC_KEY_PEM?: string;
   /** Dedicated digikey API key for MCP `authScheme: jwt` rows (server-only). */
   DIGICHAT_MCP_IDENTITY_KEY?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
