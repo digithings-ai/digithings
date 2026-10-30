@@ -1,6 +1,7 @@
 import { constantTimeEqual } from "@/lib/constant-time-equal";
 import type { TenantFonts } from "@/lib/tenant-fonts";
 import type { TenantColors } from "@/lib/tenant-colors";
+import type { TenantRadius } from "@/lib/tenant-radius";
 import { mcpSubTools } from "@/lib/deploy-config/client-projection";
 /**
  * The client-safe projection of an embed tenant, and the two ways to obtain it.
@@ -47,6 +48,8 @@ export type EmbedTenantClientConfig = {
   fonts: TenantFonts | null;
   /** Tenant light/dark colour sets (src/lib/tenant-colors.ts); null when unset. */
   colors: TenantColors | null;
+  /** Composer and chip radii (src/lib/tenant-radius.ts); null when unset. */
+  radius: TenantRadius | null;
   attribution: boolean;
   title?: string;
   welcome?: string;
@@ -156,6 +159,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   accent: null,
   fonts: null,
   colors: null,
+  radius: null,
   attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
@@ -190,6 +194,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     accent: cfg.accent ?? null,
     fonts: cfg.fonts ?? null,
     colors: cfg.colors ?? null,
+    radius: cfg.radius ?? null,
     attribution: cfg.attribution,
     title: cfg.title,
     welcome: cfg.welcome,

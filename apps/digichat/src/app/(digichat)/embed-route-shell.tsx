@@ -31,6 +31,7 @@ import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 import { isPrivateUrlParam, privateFirstPaintTenant } from "@/lib/private-chrome";
 import { tenantColorsCss } from "@/lib/tenant-colors";
+import { tenantRadiusCss } from "@/lib/tenant-radius";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts. A top-level page with no ?theme= (a /chat/<slug> tenant document)
@@ -92,7 +93,7 @@ export default async function EmbedRouteShell({
         : "#f1f0eb" // canon-allow: same literal pair as the product-chrome.css term-bg fallback
       : "var(--background)";
 
-  const tenantCfgColorsCss = tenantColorsCss(seededCfg.colors);
+  const tenantCfgColorsCss = tenantColorsCss(seededCfg.colors) + tenantRadiusCss(seededCfg.radius);
 
   return (
     <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
@@ -135,7 +136,8 @@ export default async function EmbedRouteShell({
       />
       {/* Tenant colours (src/lib/tenant-colors.ts): the tenant's own light and
           dark hexes, validated #rrggbb only, painted from the first byte. Later
-          in the document than the canvas rule above, and :root:root beats it. */}
+          in the document than the canvas rule above, and :root:root beats it.
+          Tenant radii (src/lib/tenant-radius.ts) ride in the same sheet. */}
       {tenantCfgColorsCss ? (
         <style data-tenant-colors="" dangerouslySetInnerHTML={{ __html: tenantCfgColorsCss }} />
       ) : null}

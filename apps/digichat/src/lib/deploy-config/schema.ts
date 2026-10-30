@@ -7,6 +7,7 @@
 
 import { TenantFontsSchema } from "@/lib/tenant-fonts";
 import { TenantColorsSchema } from "@/lib/tenant-colors";
+import { TenantRadiusSchema } from "@/lib/tenant-radius";
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
@@ -280,6 +281,8 @@ export const ChromeSchema = z
     fonts: TenantFontsSchema.optional(),
     /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
     colors: TenantColorsSchema.optional(),
+    /** Composer and chip corner radii in px (src/lib/tenant-radius.ts). */
+    radius: TenantRadiusSchema.optional(),
     attribution: z.boolean().optional(),
     /** Curated reply-language default (see languages.ts). */
     defaultLanguage: z

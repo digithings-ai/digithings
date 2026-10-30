@@ -89,6 +89,7 @@ export function clientConfigFromEmbedTenant(
       accent: embed.accent,
       ...(embed.fonts ? { fonts: embed.fonts } : {}),
       ...(embed.colors ? { colors: embed.colors } : {}),
+      ...(embed.radius ? { radius: embed.radius } : {}),
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
       toolbar: embed.toolbar ?? base.chrome.toolbar,

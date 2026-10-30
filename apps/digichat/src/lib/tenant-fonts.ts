@@ -26,7 +26,12 @@ export type TenantFontId = keyof typeof TENANT_FONTS;
 const TENANT_FONT_IDS = Object.keys(TENANT_FONTS) as [TenantFontId, ...TenantFontId[]];
 
 export const TenantFontsSchema = z
-  .object({ heading: z.enum(TENANT_FONT_IDS).optional(), body: z.enum(TENANT_FONT_IDS).optional() })
+  .object({
+    heading: z.enum(TENANT_FONT_IDS).optional(),
+    body: z.enum(TENANT_FONT_IDS).optional(),
+    /** Weight of the welcome title and markdown headings (a tenant's site headings are often bolder than the skin's 500). */
+    headingWeight: z.union([z.literal(400), z.literal(500), z.literal(600), z.literal(700)]).optional(),
+  })
   .strict();
 
 export type TenantFonts = z.infer<typeof TenantFontsSchema>;
@@ -68,10 +73,24 @@ export function tenantFontStyle(fonts: TenantFonts | null | undefined): CSSPrope
 
 /**
  * The one rule tenant fonts add. Stock skins draw the welcome title and
- * markdown headings in the body face (`font-sans`), so a tenant heading face
- * set only as `--font-heading` never reached them. Scoped to the wrapper that
- * carries `data-tenant-heading-font`, which the embed sets only when the
- * tenant names a heading face: no tenant heading, no change.
+ * markdown headings in the body face (`font-sans`) at the skin's weight, so a
+ * tenant heading face set only as `--font-heading` never reached them. Scoped
+ * to the wrapper that carries `data-tenant-heading-font`, which the embed sets
+ * only when the tenant names a heading face or weight: neither, no rule.
  */
-export const TENANT_HEADING_FONT_CSS =
-  "[data-tenant-heading-font] :is(.aui-thread-welcome-message-inner,.aui-md-h1,.aui-md-h2,.aui-md-h3,.aui-md-h4){font-family:var(--font-heading)}";
+const TENANT_HEADING_SELECTOR =
+  "[data-tenant-heading-font] :is(.aui-thread-welcome-message-inner,.aui-md-h1,.aui-md-h2,.aui-md-h3,.aui-md-h4)";
+
+/** Whether the tenant's fonts need the heading rule (and the wrapper attribute). */
+export function hasTenantHeadingRule(fonts: TenantFonts | null | undefined): boolean {
+  return Boolean(fonts?.heading || fonts?.headingWeight);
+}
+
+/** The heading rule for these fonts; "" when the tenant sets no heading face or weight. */
+export function tenantHeadingFontCss(fonts: TenantFonts | null | undefined): string {
+  if (!fonts || !hasTenantHeadingRule(fonts)) return "";
+  const decls: string[] = [];
+  if (fonts.heading) decls.push("font-family:var(--font-heading)");
+  if (fonts.headingWeight) decls.push(`font-weight:${fonts.headingWeight}`);
+  return `${TENANT_HEADING_SELECTOR}{${decls.join(";")}}`;
+}

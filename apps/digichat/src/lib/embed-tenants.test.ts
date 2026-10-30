@@ -62,6 +62,21 @@ describe("parseEmbedTenants", () => {
     expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/colors\.light\.background/);
   });
 
+  it("accepts tenant radii and a heading weight, and refuses bad ones", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    base[host].radius = { composer: 18, chip: 18 };
+    base[host].fonts = { heading: "cabin", headingWeight: 700 };
+    const t = parseEmbedTenants(JSON.stringify(base)).get(host);
+    expect(t?.radius).toEqual({ composer: 18, chip: 18 });
+    expect(t?.fonts).toEqual({ heading: "cabin", headingWeight: 700 });
+    base[host].radius = { composer: "18px" };
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/radius\.composer/);
+    base[host].radius = { composer: 18 };
+    base[host].fonts = { headingWeight: 650 };
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/fonts\.headingWeight/);
+  });
+
   it("refuses bad values for the chrome seed keys", () => {
     const cases: Array<[string, unknown, RegExp]> = [
       ["density", "dense", /density must be/],

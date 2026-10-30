@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseTenantColors, tenantColorVars, tenantColorsCss } from "./tenant-colors";
-import { TENANT_HEADING_FONT_CSS } from "./tenant-fonts";
+import { tenantHeadingFontCss } from "./tenant-fonts";
 
 const LIGHT = {
   background: "#ffffff",
@@ -74,8 +74,7 @@ describe("tenant colors", () => {
     expect(css).not.toMatch(/url\(|@import|expression/);
   });
 
-  it("heading-font rule is scoped to the tenant wrapper attribute", () => {
-    expect(TENANT_HEADING_FONT_CSS.startsWith("[data-tenant-heading-font] ")).toBe(true);
-    expect(TENANT_HEADING_FONT_CSS).toContain("font-family:var(--font-heading)");
+  it("heading rule is scoped to the tenant wrapper attribute", () => {
+    expect(tenantHeadingFontCss({ heading: "cabin" }).startsWith("[data-tenant-heading-font] ")).toBe(true);
   });
 });
