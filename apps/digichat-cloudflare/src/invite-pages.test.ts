@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   bindInvitePageApiCall,
+  invitePageCookieHeader,
   invitePageCookieValue,
   invitePageEmbedGate,
   invitePageFor,
@@ -92,7 +93,7 @@ describe("invitePageGate", () => {
     expect(res.headers.get("location")).toBe("https://digithings.ai/chat/example/");
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toMatch(/^example_invite=v2\.\d+\./);
-    expect(cookie).toContain("Path=/chat; Secure; HttpOnly; SameSite=Strict");
+    expect(cookie).toContain("Path=/chat; Secure; HttpOnly; SameSite=Lax");
     expect(cookie).not.toContain(KEY);
   });
   it("proxies a valid cookie to the app's embed route for the tenant host", async () => {
@@ -120,6 +121,60 @@ describe("invitePageGate", () => {
       );
       expect(res.status).toBe(404);
     }
+  });
+});
+
+describe("invitePageCookieHeader", () => {
+  const attrs = (header: string) =>
+    header
+      .split(";")
+      .slice(1)
+      .map((a) => a.trim().toLowerCase());
+
+  it("is SameSite=Lax so top-level clicks from PDFs, email or other sites keep it across the 302", () => {
+    const a = attrs(invitePageCookieHeader(PAGE, "v2.1.mac"));
+    expect(a).toContain("samesite=lax");
+    expect(a).not.toContain("samesite=strict");
+    expect(a).not.toContain("samesite=none");
+  });
+  it("stays Secure, HttpOnly and scoped to /chat with no Domain or Max-Age", () => {
+    const header = invitePageCookieHeader(PAGE, "v2.1.mac");
+    expect(header.startsWith("example_invite=v2.1.mac;")).toBe(true);
+    const a = attrs(header);
+    expect(a).toContain("secure");
+    expect(a).toContain("httponly");
+    expect(a.filter((x) => x.startsWith("path="))).toEqual(["path=/chat"]);
+    expect(a.some((x) => x.startsWith("domain="))).toBe(false);
+    expect(a.some((x) => x.startsWith("max-age="))).toBe(false);
+  });
+  it("is the same header on the token 302 and on the refresh from a valid cookie", async () => {
+    const issued = await invitePageGate(
+      PAGE,
+      PAGES,
+      new Request(`https://digithings.ai/chat/example?token=${KEY}`),
+      KEY,
+      container,
+      notFound,
+      POLICY,
+    );
+    expect(attrs(issued.headers.get("set-cookie") ?? "")).toEqual([
+      "path=/chat",
+      "secure",
+      "httponly",
+      "samesite=lax",
+    ]);
+    const value = await invitePageCookieValue(PAGE, KEY, NOW_S);
+    const refreshed = await invitePageGate(
+      PAGE,
+      PAGES,
+      new Request("https://digithings.ai/chat/example/", { headers: { cookie: `example_invite=${encodeURIComponent(value)}` } }),
+      KEY,
+      container,
+      notFound,
+      POLICY,
+    );
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.headers.get("set-cookie")).toBe(invitePageCookieHeader(PAGE, value));
   });
 });
 
