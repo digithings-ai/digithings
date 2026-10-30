@@ -244,6 +244,26 @@ export function applyThemePick(api: EmbedChatPrefsApi, preference: ThemePreferen
   else applyDocumentTheme(preference, palette);
 }
 
+/**
+ * Paint a `/theme` row without storing it (palette hover). `null` paints
+ * `base` again. A host that owns the theme previews through its own state;
+ * the document theme repaints with `persist: false`.
+ */
+export function previewThemePick(
+  api: EmbedChatPrefsApi,
+  pick: { preference: ThemePreference; palette: string } | null,
+  base: ThemeState,
+): void {
+  if (api.setTheme) {
+    api.previewTheme?.(
+      pick ? { preference: pick.preference, palette: normalizePalette(pick.palette) } : null,
+    );
+    return;
+  }
+  const next = pick ?? base;
+  applyDocumentTheme(next.preference, next.palette, undefined, { persist: false });
+}
+
 /** Raw model id. Empty and the auto preset both read `auto`. */
 function modelChoiceValue(model: string | undefined): string {
   const value = model?.trim() ?? "";
@@ -269,7 +289,8 @@ export function featuredLanguageCommands(
 
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashCommand[] {
   const vis = visibilityFromPrefs(api);
-  const { prefs } = api;
+  // Values read the chosen prefs, not a live hover preview.
+  const prefs = api.committedPrefs ?? api.prefs;
   const extra = extraSlashDefs(api);
   const rows: ProductSlashCommand[] = [];
 
@@ -419,10 +440,10 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.openSettings();
       return;
     case "toolbar":
-      api.setToolbar(!api.prefs.toolbar);
+      api.setToolbar(!(api.committedPrefs ?? api.prefs).toolbar);
       return;
     case "scrollbar":
-      api.setScrollbars(api.prefs.scrollbars === "always" ? "auto" : "always");
+      api.setScrollbars((api.committedPrefs ?? api.prefs).scrollbars === "always" ? "auto" : "always");
       return;
     case "tools":
       api.openTools();

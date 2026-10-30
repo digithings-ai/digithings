@@ -25,7 +25,12 @@ import {
 import { createPortal } from "react-dom";
 import { Button, Input, Label } from "@digithings/ui/ui";
 import { nextPaletteIndex, optionDraft, paneDraftForId, submenuRows, VIEW_LABELS } from "@digithings/digichat-ui";
-import { useEmbedChatPrefs } from "@digithings/ui/chat/stock";
+import {
+  committedChatPrefs,
+  slashRowPreview,
+  useEmbedChatPrefs,
+  type EmbedChatPrefsPreview,
+} from "@digithings/ui/chat/stock";
 import {
   applyWellKnownMcp,
   wellKnownMcpGrouped,
@@ -53,6 +58,7 @@ import {
   applyThemePick,
   buildProductSlashCommands,
   currentThemeState,
+  previewThemePick,
   isPrivateMode,
   languageSelectOptions,
   subscribePrivateMode,
@@ -149,7 +155,17 @@ export type MenuRow = {
    * spaces each), drawn before the branch glyph of a nested row.
    */
   treePrefix?: string;
+  /**
+   * A purely visual setting this row would set. The page paints it while
+   * the row is highlighted (hover or arrows) and puts the chosen look back
+   * when the highlight leaves it, the page changes or the menu closes.
+   */
+  preview?: MenuRowPreview;
 };
+
+export type MenuRowPreview =
+  | { kind: "prefs"; patch: EmbedChatPrefsPreview }
+  | { kind: "theme"; preference: "light" | "dark"; palette: string };
 
 /**
  * A tool's name as `/tools` shows it: a trailing note in parentheses, such as
@@ -507,9 +523,9 @@ export function EmbedComposerMenu({
   const languages = useMemo(() => languageSelectOptions(), []);
   const toolOnInput = useMemo(
     () => ({
-      digisearch: api.prefs.digisearch,
-      vault: api.prefs.vault,
-      webSearch: api.prefs.webSearch,
+      digisearch: committedChatPrefs(api).digisearch,
+      vault: committedChatPrefs(api).vault,
+      webSearch: committedChatPrefs(api).webSearch,
       extraToolOn: api.extraToolOn,
     }),
     [api],
@@ -522,13 +538,13 @@ export function EmbedComposerMenu({
         tenantAllowsWeb: api.tenantAllowsWeb,
         catalogTools: api.catalogTools,
         mcpServers: api.mcpServers,
-        mcpCustom: api.prefs.mcpCustom,
+        mcpCustom: committedChatPrefs(api).mcpCustom,
       }),
     [api],
   );
   const mcpConfigs = useMemo(
-    () => connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom),
-    [api.mcpServers, api.prefs.mcpCustom],
+    () => connectedMcpConfigs(api.mcpServers, committedChatPrefs(api).mcpCustom),
+    [api.mcpServers, committedChatPrefs(api).mcpCustom],
   );
 
   const [view, setView] = useState<MenuView>(() => initialView(kind));
@@ -600,7 +616,7 @@ export function EmbedComposerMenu({
       setView("mcp-edit");
     } else if (typeof mcpOpened === "string") {
       const hit =
-        connectedMcpConfigs(api.mcpServers, api.prefs.mcpCustom).find((s) => s.id === mcpOpened) ??
+        connectedMcpConfigs(api.mcpServers, committedChatPrefs(api).mcpCustom).find((s) => s.id === mcpOpened) ??
         applyWellKnownMcp({ ...emptyMcpConfig(), label: mcpOpened }, mcpOpened);
       setMcpDraft(hit);
       setView("mcp-edit");
@@ -622,13 +638,69 @@ export function EmbedComposerMenu({
     setMcpIdDropdownOpen(false);
   }
 
+  // Live preview: a highlighted visual row (theme, view, density, scrollbar)
+  // paints the page before it is chosen. Nothing is stored. Moving to a
+  // non-visual row, leaving the page or closing the menu paints the chosen
+  // look again; choosing the row commits it.
+  const apiRef = useRef(api);
+  useEffect(() => {
+    apiRef.current = api;
+  }, [api]);
+  const prefsPreviewOn = useRef(false);
+  const themeBaseRef = useRef<ReturnType<typeof currentThemeState> | null>(null);
+  /** The chosen theme while a preview paints another; the checked row reads it. */
+  const [themeBase, setThemeBase] = useState<ReturnType<typeof currentThemeState> | null>(null);
+  const endPrefsPreview = useCallback(() => {
+    if (!prefsPreviewOn.current) return;
+    prefsPreviewOn.current = false;
+    apiRef.current.previewPrefs?.(null);
+  }, []);
+  const endThemePreview = useCallback(() => {
+    const base = themeBaseRef.current;
+    if (!base) return;
+    themeBaseRef.current = null;
+    setThemeBase(null);
+    previewThemePick(apiRef.current, null, base);
+  }, []);
+  const endPreview = useCallback(() => {
+    endPrefsPreview();
+    endThemePreview();
+  }, [endPrefsPreview, endThemePreview]);
+  const startPreview = useCallback(
+    (target: MenuRowPreview) => {
+      const current = apiRef.current;
+      if (target.kind === "prefs") {
+        endThemePreview();
+        if (!current.previewPrefs) return;
+        prefsPreviewOn.current = true;
+        current.previewPrefs(target.patch);
+        return;
+      }
+      endPrefsPreview();
+      // A host that owns the theme but cannot preview it keeps its theme.
+      if (current.setTheme && !current.previewTheme) return;
+      if (!themeBaseRef.current) {
+        const base = currentThemeState(current);
+        themeBaseRef.current = base;
+        setThemeBase(base);
+      }
+      previewThemePick(current, target, themeBaseRef.current);
+    },
+    [endPrefsPreview, endThemePreview],
+  );
+  useEffect(() => endPreview, [endPreview]);
+
+  /**
+   * Choosing a setting applies it and keeps the menu open on the same page,
+   * with the new value checked. Escape, a click outside or the close actions
+   * still close it.
+   */
   const commitExclusive = useCallback(
     (apply: () => void) => {
+      endPreview();
       apply();
-      if (api.composerDraftBound) queueMicrotask(() => api.setComposerDraft?.(""));
-      else onClose();
     },
-    [api, onClose],
+    [endPreview],
   );
 
   /**
@@ -657,10 +729,12 @@ export function EmbedComposerMenu({
         .map((command) => {
           const node = NODE_BY_ID[command.id];
           const draft = node ? paneDraftForId(command.id) : null;
+          const look = slashRowPreview(command.id, committedChatPrefs(api));
           return {
             id: command.id,
             label: command.label ?? `/${command.id}`,
             value: command.value ?? "",
+            ...(look ? { preview: { kind: "prefs" as const, patch: look } } : {}),
             ...(command.description ? { detail: command.description } : {}),
             ...(draft ? { insert: draft } : {}),
             activate: node
@@ -680,13 +754,13 @@ export function EmbedComposerMenu({
       // names the one you are in.
       {
         id: "scroll",
-        label: slashName(api.prefs.scroll === "free" ? "scroll follow" : "scroll free"),
-        value: api.prefs.scroll === "free" ? "free" : "follow",
+        label: slashName(committedChatPrefs(api).scroll === "free" ? "scroll follow" : "scroll free"),
+        value: committedChatPrefs(api).scroll === "free" ? "free" : "follow",
         detail: "Follow the latest message, or leave the scroll where it is.",
-        checked: api.prefs.scroll === "follow",
+        checked: committedChatPrefs(api).scroll === "follow",
         activate: () => {
           commitExclusive(() =>
-            api.setScroll(api.prefs.scroll === "free" ? "follow" : "free"),
+            api.setScroll(committedChatPrefs(api).scroll === "free" ? "follow" : "free"),
           );
         },
       },
@@ -696,7 +770,7 @@ export function EmbedComposerMenu({
   const languageRows = useMemo(
     (): MenuRow[] =>
       languages.map((o) => {
-        const selected = api.prefs.language === o.value;
+        const selected = committedChatPrefs(api).language === o.value;
         const native = o.native !== o.label ? o.native : "";
         return {
           id: o.value,
@@ -719,7 +793,7 @@ export function EmbedComposerMenu({
     // A connected BYOK provider replaces the house catalog with that
     // provider's own models. The catalog picker is the house list.
     if (picker && !providerActive) {
-      const selected = api.prefs.model;
+      const selected = committedChatPrefs(api).model;
       const presetRows: MenuRow[] = picker.presets.map((preset) => {
         const token = `preset:${preset.id}`;
         const checked =
@@ -792,7 +866,7 @@ export function EmbedComposerMenu({
             id: "auto",
             label: "auto",
             value: "deployment default",
-            checked: !api.prefs.model || api.prefs.model === "auto",
+            checked: !committedChatPrefs(api).model || committedChatPrefs(api).model === "auto",
             exclusive: true,
             insert: optionDraft("/models", "auto"),
             token: "auto",
@@ -827,7 +901,7 @@ export function EmbedComposerMenu({
           label: clash ? id : name,
           aliases: name !== id ? [name] : [],
           value: "",
-          checked: (providerActive?.model || api.prefs.model) === id,
+          checked: (providerActive?.model || committedChatPrefs(api).model) === id,
           exclusive: true,
           insert: optionDraft("/models", id),
           token: id,
@@ -848,7 +922,7 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`effort ${id}`),
         value: "",
-        checked: api.prefs.effort === id,
+        checked: committedChatPrefs(api).effort === id,
         exclusive: true,
         insert: optionDraft("/effort", id),
         token: id,
@@ -865,7 +939,7 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`search-engine ${id}`),
         value: SEARCH_ENGINE_LABELS[id] ?? "",
-        checked: (api.prefs.searchEngine || "auto") === id,
+        checked: (committedChatPrefs(api).searchEngine || "auto") === id,
         exclusive: true,
         insert: optionDraft("/search-engine", id),
         token: id,
@@ -882,10 +956,11 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`view ${id}`),
         value: VIEW_LABELS[id],
-        checked: api.prefs.view === id,
+        checked: committedChatPrefs(api).view === id,
         exclusive: true,
         insert: optionDraft("/view", id),
         token: id,
+        preview: { kind: "prefs", patch: { view: id } },
         activate: () => {
           commitExclusive(() => api.setView(id));
         },
@@ -899,10 +974,11 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`density ${id}`),
         value: TRACE_DENSITY_LABELS[id],
-        checked: api.prefs.density === id,
+        checked: committedChatPrefs(api).density === id,
         exclusive: true,
         insert: optionDraft("/density", id),
         token: id,
+        preview: { kind: "prefs", patch: { density: id } },
         activate: () => {
           commitExclusive(() => api.setDensity(id));
         },
@@ -911,7 +987,9 @@ export function EmbedComposerMenu({
   );
 
   const themeRows = useMemo((): MenuRow[] => {
-    const state = currentThemeState(api);
+    // While a row is previewed the page paints that row; the checked row is
+    // still the chosen theme.
+    const state = themeBase ?? currentThemeState(api);
     const current = matchThemeStep(state.preference, state.palette, state.resolved);
     return themeCycle().map((step) => ({
       id: step.id,
@@ -921,6 +999,7 @@ export function EmbedComposerMenu({
       exclusive: true,
       insert: slashName(`theme ${step.palette} ${step.mode}`),
       token: `${step.palette} ${step.mode}`,
+      preview: { kind: "theme", preference: step.mode, palette: step.palette },
       activate: () => {
         commitExclusive(() => {
           if (api.setTheme && current.id === step.id) {
@@ -935,7 +1014,7 @@ export function EmbedComposerMenu({
         });
       },
     }));
-  }, [api, commitExclusive]);
+  }, [api, commitExclusive, themeBase]);
 
   const thinkingRows = useMemo(
     (): MenuRow[] =>
@@ -943,7 +1022,7 @@ export function EmbedComposerMenu({
         id,
         label: slashName(`thinking ${id}`),
         value: THINKING_LABELS[id] ?? "",
-        checked: api.prefs.thinking === id,
+        checked: committedChatPrefs(api).thinking === id,
         exclusive: true,
         insert: optionDraft("/thinking", id),
         token: id,
@@ -956,9 +1035,9 @@ export function EmbedComposerMenu({
 
   const toggleTool = useCallback(
     (id: string) => {
-      if (id === "digisearch") api.setDigisearch(!api.prefs.digisearch);
-      else if (id === "digivault") api.setVault(!api.prefs.vault);
-      else if (id === "websearch") api.setWebSearch(!api.prefs.webSearch);
+      if (id === "digisearch") api.setDigisearch(!committedChatPrefs(api).digisearch);
+      else if (id === "digivault") api.setVault(!committedChatPrefs(api).vault);
+      else if (id === "websearch") api.setWebSearch(!committedChatPrefs(api).webSearch);
       else api.setExtraTool(id, !api.extraToolOn(id));
     },
     [api],
@@ -1369,6 +1448,13 @@ export function EmbedComposerMenu({
 
   const safeCursor = shown.length ? Math.min(cursor, shown.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
+
+  const previewTarget = shown[safeCursor]?.preview;
+  const previewKey = previewTarget ? JSON.stringify(previewTarget) : "";
+  useEffect(() => {
+    if (!previewKey) endPreview();
+    else startPreview(JSON.parse(previewKey) as MenuRowPreview);
+  }, [endPreview, previewKey, startPreview]);
 
   /**
    * The cursor belongs to the page, not to the moment the menu opened: a

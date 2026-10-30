@@ -10,6 +10,7 @@ import {
   applyEmbedPalette,
   embedThemeColor,
   embedThemePick,
+  embedThemePrefs,
   embedUserThemeKey,
   resolveEmbedPalette,
   resolveEmbedTheme,
@@ -357,3 +358,42 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(meta.get("content")).toBe("#121417");
   });
 });
+
+describe("embed /theme hover preview", () => {
+  it("previews a pick through onThemePreview without touching the stored pick", () => {
+    const onThemePick = vi.fn();
+    const onThemePreview = vi.fn();
+    const session = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (k: string) => session.get(k) ?? null,
+      setItem: (k: string, v: string) => void session.set(k, v),
+      removeItem: (k: string) => void session.delete(k),
+    });
+    const api = embedThemePrefs({
+      theme: { mode: "light", palette: "default" },
+      onThemePick,
+      onThemePreview,
+      openTheme: () => {},
+    });
+    api.previewTheme!({ preference: "dark", palette: "aura" });
+    expect(onThemePreview).toHaveBeenLastCalledWith({ pick: { mode: "dark", palette: "aura" } });
+    // "auto" previews dropping the pick; null ends the preview.
+    api.previewTheme!({ preference: "auto", palette: "default" });
+    expect(onThemePreview).toHaveBeenLastCalledWith({ pick: null });
+    api.previewTheme!(null);
+    expect(onThemePreview).toHaveBeenLastCalledWith(null);
+    expect(onThemePick).not.toHaveBeenCalled();
+    expect(session.size).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("offers no preview when the host gives no preview hook", () => {
+    const api = embedThemePrefs({
+      theme: { mode: "light", palette: "default" },
+      onThemePick: vi.fn(),
+      openTheme: () => {},
+    });
+    expect(api.previewTheme).toBeUndefined();
+  });
+});
+

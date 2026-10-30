@@ -1107,3 +1107,17 @@ html:has([data-thread-skin="digichat"]) [data-slot="tooltip-content"] {
       transparent;
   }
 }
+
+/* Send arrow on the filled accent button. Light mode: white whenever white
+   clears 3:1 against the accent (WCAG 1.4.11, icons), i.e. OKLab L below
+   ~0.669; a lighter accent keeps a dark arrow. Dark mode keeps the theme's
+   --on-accent. Tracks whatever --accent the palette or tenant sets. */
+.aui-composer-send {
+  --on-accent-icon: var(--on-accent);
+}
+:root[data-theme="light"] .aui-composer-send {
+  --on-accent-icon: oklch(from var(--accent) clamp(0, (0.669 - l) * 1000, 1) 0 0);
+}
+.aui-composer-send.text-on-accent {
+  color: var(--on-accent-icon);
+}

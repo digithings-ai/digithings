@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { cn } from "./cn";
 import { OverlayScrollbar } from "../overlay-scrollbar";
+import { PaletteRowPreview } from "../stock/palette-row-preview";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -222,6 +223,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
         />
       ) : null}
       <TriggerPopoverArrowKeys />
+      <PaletteRowPreview />
       <Items emptyLabel={emptyItemsLabel} loadingLabel={loadingLabel} />
     </ComposerPrimitive.Unstable_TriggerPopover>
   );

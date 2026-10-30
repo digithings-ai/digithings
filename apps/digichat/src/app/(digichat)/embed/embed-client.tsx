@@ -333,7 +333,10 @@ function EmbedPageInner({
     () => readEmbedUserThemeRaw(userThemeKey),
     () => null,
   );
-  const userTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  const storedUserTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  // Palette hover previews a /theme row: painted like a pick, never stored.
+  const [themePreview, setThemePreview] = useState<{ pick: EmbedUserTheme | null } | null>(null);
+  const userTheme = themePreview ? themePreview.pick : storedUserTheme;
   const setUserTheme = useCallback(
     (next: EmbedUserTheme | null) => {
       writeEmbedUserTheme(userThemeKey, next);
@@ -559,6 +562,7 @@ function EmbedPageInner({
           bootLab={initialBoot}
           theme={{ mode: effectiveTheme, palette: effectivePalette }}
           onThemePick={setUserTheme}
+          onThemePreview={setThemePreview}
         />
       </div>
     </>
@@ -575,6 +579,7 @@ function EmbedChat({
   bootLab,
   theme,
   onThemePick,
+  onThemePreview,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -586,6 +591,7 @@ function EmbedChat({
   /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
   theme: EmbedUserTheme;
   onThemePick: (next: EmbedUserTheme | null) => void;
+  onThemePreview?: (next: { pick: EmbedUserTheme | null } | null) => void;
 }) {
   const {
     key: byokKey,
@@ -1494,6 +1500,7 @@ function EmbedChat({
       ...embedThemePrefs({
         theme,
         onThemePick,
+        onThemePreview,
         openTheme: () => {
           setComposerMenu("theme");
         },
@@ -1583,6 +1590,7 @@ function EmbedChat({
       theme.mode,
       theme.palette,
       onThemePick,
+      onThemePreview,
       stockClient.features.density,
       stockClient.backendType,
       stockClient.gate.lockSessionControls,

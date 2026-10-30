@@ -96,7 +96,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     document.querySelector("[data-picker-test-host]")?.remove();
   });
 
-  it("applies a model on click and closes; selected row uses the diamond, not on", async () => {
+  it("applies a model on click and stays open; selected row uses the diamond, not on", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -138,10 +138,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
 
     await user.click(other);
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("applies a model on Enter and closes", async () => {
+  it("applies a model on Enter and stays open", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -159,10 +160,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{Enter}");
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("applies a model on ArrowRight and closes", async () => {
+  it("applies a model on ArrowRight and stays open", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -180,10 +182,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{ArrowRight}");
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("closes language pick on click and marks the current code with the diamond", async () => {
+  it("keeps the menu open after a language pick and marks the current code with the diamond", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" } });
     const onClose = vi.fn();
@@ -202,10 +205,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
     await user.click(dutch);
     expect(api.setLanguage).toHaveBeenCalledWith("nl");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("closes search-engine pick on click and marks the current engine as the cursor row", async () => {
+  it("keeps the menu open after a search-engine pick and marks the current engine as the cursor row", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "auto" } });
     const onClose = vi.fn();
@@ -221,7 +225,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const exa = screen.getByRole("menuitemradio", { name: /search-engine exa/i });
     await user.click(exa);
     expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("renders the shared wording for every view level, so no level is left blank", async () => {
@@ -318,7 +323,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
     expect(localStorage.getItem("dt-theme")).toBe("dark");
     expect(localStorage.getItem("dt-palette")).toBe("aura");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -357,7 +363,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
 
     expect(setTheme).toHaveBeenCalledWith("dark", "aura");
     expect(store.size).toBe(0);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -383,7 +390,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     // "auto" is how an embed clears the pick (embedThemePick("auto") is null).
     expect(setTheme).toHaveBeenCalledTimes(1);
     expect(setTheme).toHaveBeenCalledWith("auto", "default");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -418,7 +426,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.click(checked!);
 
     expect(store.get("dt-theme")).toBe(mode);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -815,7 +824,8 @@ describe("EmbedComposerMenu current value", () => {
     await user.keyboard("{Enter}");
     expect(api.setView).toHaveBeenCalledWith("balanced");
     expect(api.setView).not.toHaveBeenCalledWith("quiet");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("opens a sub-page on the value that is set, not on the first row", async () => {
@@ -988,7 +998,7 @@ describe("EmbedComposerMenu current value", () => {
     expect(isCursorRow(openai)).toBe(true);
   });
 
-  it("closes a model pick when the composer writer is not bound", async () => {
+  it("keeps the menu open after a model pick when the composer writer is not bound", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const api = prefs({ setComposerDraft: vi.fn() });
@@ -999,7 +1009,8 @@ describe("EmbedComposerMenu current value", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: "beta" }));
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("leaves the provider page on Escape when the composer writer is not bound", async () => {
