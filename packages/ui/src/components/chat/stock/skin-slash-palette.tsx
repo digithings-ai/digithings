@@ -205,6 +205,7 @@ export function useSkinSlashPalette({
         if (privateMode) return;
         void exportConversation({
           format,
+          privateMode,
           messages: aui.thread().getState().messages,
           strings: exportStrings,
         });

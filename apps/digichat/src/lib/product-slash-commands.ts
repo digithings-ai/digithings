@@ -389,6 +389,9 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
   switch (def.id) {
     case "export": {
       // The whole conversation. The skin bound the runner (`bindThreadExport`).
+      // A private session exports nothing; the submit gate and the skin's
+      // runner refuse too, this is the check closest to the call.
+      if (isPrivateMode()) return;
       const format = exportFormat(arg);
       if (format) api.exportThread?.(format);
       return;

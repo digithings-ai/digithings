@@ -99,6 +99,22 @@ describe("keepAnswerOnly", () => {
     expect(root.querySelector("[data-role='user']")).toBeNull();
     expect(root.textContent).toBe("A");
   });
+
+  it("drops reasoning and tool output from the answer, like the markdown export", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div data-role="assistant" data-message-id="a1">
+        <div data-slot="aui_chain-of-thought"><div data-slot="aui_work-chain">chain-token</div></div>
+        <div data-slot="reasoning-root"><div class="aui-md">reasoning-token</div></div>
+        <div data-slot="tool-group-root"><div data-slot="tool-fallback-root">group-tool-token</div></div>
+        <div data-slot="tool-fallback-root"><pre data-slot="tool-fallback-result">tool-result-token</pre></div>
+        <div data-slot="aui_private-work-step">private-step-token</div>
+        <div data-export-work="">custom-work-token</div>
+        <div class="aui-md"><p>answer-token</p></div>
+      </div>`;
+    keepAnswerOnly(root);
+    expect(root.textContent?.trim()).toBe("answer-token");
+  });
 });
 
 describe("HTML snapshot of a clone skin", () => {

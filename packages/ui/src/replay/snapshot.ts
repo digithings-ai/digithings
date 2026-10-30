@@ -86,9 +86,34 @@ const USER_QUESTION = ".aui-user-message-content";
  */
 const THREAD_ROOT = ".aui-thread-root, [data-export-thread]";
 
-/** Drop the user messages, so the file holds the assistant answer only. */
+/**
+ * The work shown around an answer: reasoning, tool calls and their groups,
+ * the work chain. Every skin draws these with the same slots. A per-message
+ * file holds the answer text only, like the Markdown export.
+ * `data-export-work` marks anything else a skin wants left out.
+ */
+const ANSWER_WORK = [
+  "[data-slot='aui_chain-of-thought']",
+  "[data-slot='aui_chain-tools']",
+  "[data-slot='aui_work-chain']",
+  "[data-slot='aui_work-chain-summary']",
+  "[data-slot='aui_private-work-step']",
+  "[data-slot='reasoning-root']",
+  "[data-slot='tool-group-root']",
+  "[data-slot='tool-fallback-root']",
+  "[data-export-work]",
+].join(", ");
+
+/**
+ * Keep the assistant answer only: drop the user messages, then the reasoning
+ * and tool output inside the answer, so the file holds what the Markdown
+ * export holds.
+ */
 export function keepAnswerOnly(root: ParentNode): void {
   root.querySelectorAll("[data-role='user']").forEach((node) => node.remove());
+  root
+    .querySelectorAll("[data-role='assistant']")
+    .forEach((message) => message.querySelectorAll(ANSWER_WORK).forEach((node) => node.remove()));
 }
 
 const PANEL_STYLE_PROPS = [

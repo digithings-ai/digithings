@@ -522,6 +522,19 @@ describe("private mode availability", () => {
     expect(slashSubmitAction("/export md")).toMatchObject({ kind: "block" });
   });
 
+  it("runs no export while private, even when the gate is skipped", () => {
+    setPrivateModeAvailable(true);
+    setPrivateMode(true);
+    const exportThread = vi.fn();
+    const exportDef = { id: "export" as const, names: ["/export"], needsArg: false, hint: "" };
+    executeSlashDef(exportDef, "md", api({ exportThread }));
+    executeSlashDef(exportDef, "html", api({ exportThread }));
+    expect(exportThread).not.toHaveBeenCalled();
+    setPrivateMode(false);
+    executeSlashDef(exportDef, "md", api({ exportThread }));
+    expect(exportThread.mock.calls).toEqual([["md"]]);
+  });
+
   it("turns on from ?private=1 only when the tenant opted in", () => {
     seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
     expect(isPrivateModeAvailable()).toBe(true);

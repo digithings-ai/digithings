@@ -14,6 +14,7 @@ import {
   type ChatExportFormat,
   type ChatExportStrings,
 } from "../transcript";
+import { useChatPrivateMode } from "./chat-private-mode";
 import { useEmbedChatPrefsOptional } from "./embed-chat-prefs";
 
 /** Export strings in the session language (`/language`), else English. */
@@ -48,8 +49,17 @@ export type MessageExportMenuProps = {
  * the same open state, so the action bar stays visible while the menu is
  * open. The export runs after the menu has closed: the HTML snapshot reads
  * the page, and an open menu hides the thread from it.
+ *
+ * A private session (`ChatPrivateModeProvider`) renders nothing, on every
+ * skin: the export would put the typed text in a file.
  */
-export function MessageExportMenu({
+export function MessageExportMenu(props: MessageExportMenuProps) {
+  const privateMode = useChatPrivateMode();
+  if (privateMode) return null;
+  return <MessageExportMenuOpen {...props} />;
+}
+
+function MessageExportMenuOpen({
   trigger,
   icon,
   formatIcon,

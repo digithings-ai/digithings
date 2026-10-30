@@ -15,11 +15,21 @@ import {
   type ChatExportFormat,
   type ChatExportStrings,
 } from "../components/chat/transcript";
+import { isChatPrivateMode } from "../components/chat/stock/chat-private-mode";
 import { downloadMessageSnapshot, downloadThreadSnapshot, showSnapshotError } from "./browser";
 import { exportFilename } from "./filename";
 import { deploymentText } from "./snapshot";
 
 const EXPORT_FAILED = "Export failed.";
+
+/**
+ * A private session exports nothing: the stored messages still hold the real
+ * typed text, and the file name carries a slug of the question. The menus
+ * already hide the rows; this is the guard behind them.
+ */
+function exportBlocked(input: { privateMode?: boolean | undefined }): boolean {
+  return input.privateMode === true || isChatPrivateMode();
+}
 
 function liveDocument(): Document | null {
   return typeof document === "undefined" ? null : document;
@@ -38,10 +48,16 @@ export type ConversationExportInput = {
   strings?: ChatExportStrings;
   doc?: Document | null;
   now?: string;
+  /** The caller's private flag. The shared one is checked as well. */
+  privateMode?: boolean | undefined;
 };
 
-/** The whole conversation. Resolves after the file is handed to the browser. */
+/**
+ * The whole conversation. Resolves after the file is handed to the browser.
+ * Saves nothing in a private session.
+ */
 export async function exportConversation(input: ConversationExportInput): Promise<void> {
+  if (exportBlocked(input)) return;
   const doc = input.doc === undefined ? liveDocument() : input.doc;
   const now = input.now ?? new Date().toISOString();
   try {
@@ -70,10 +86,16 @@ export type MessageExportInput = {
   trigger: HTMLElement | null;
   doc?: Document | null;
   now?: string;
+  /** The caller's private flag. The shared one is checked as well. */
+  privateMode?: boolean | undefined;
 };
 
-/** One assistant message, without the question before it. */
+/**
+ * One assistant message, without the question before it: the answer text
+ * only, in both formats. Saves nothing in a private session.
+ */
 export async function exportMessage(input: MessageExportInput): Promise<void> {
+  if (exportBlocked(input)) return;
   const doc = input.doc === undefined ? liveDocument() : input.doc;
   const now = input.now ?? new Date().toISOString();
   try {

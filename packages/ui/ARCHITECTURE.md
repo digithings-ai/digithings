@@ -778,6 +778,15 @@ One model for every skin (`components/chat/transcript/chat-export.ts`,
   headings. HTML is a snapshot of the rendered thread.
 - Labels are English and French (`chatExportStrings`); other languages get
   English.
+- The per-message file holds the answer text only in both formats: the HTML
+  snapshot drops the user turn and the reasoning, tool calls and work chain
+  (`keepAnswerOnly`; a skin marks anything else `data-export-work`).
+- A private session exports nothing, on every skin. `ThreadSkinView` wraps
+  each skin in `ChatPrivateModeProvider` (`stock/chat-private-mode.tsx`)
+  with the host's `privateMode`: the message menu renders nothing, and
+  `exportMessage` / `exportConversation` refuse while any private chat is
+  mounted. The stored messages still hold the typed text, and the file name
+  carries a slug of the question.
 
 Clone skins without the `aui-*` classes mark their thread
 `data-export-thread`, their composer, action bar and branch picker
