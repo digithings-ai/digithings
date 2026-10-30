@@ -93,6 +93,7 @@ describe("exclusiveCatalogDisabledIds", () => {
     const out = exclusiveCatalogDisabledIds(only);
     expect(out).toContain("digisearch");
     expect(out).toContain("digisearch_semantic");
+    expect(out).toContain("digisearch_web_search");
     expect(out).toContain("digivault");
     expect(out).toContain("digivault_backlinks");
     expect(out).not.toContain("web_search");

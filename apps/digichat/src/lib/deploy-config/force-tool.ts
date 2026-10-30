@@ -143,7 +143,14 @@ export function filterDisabledToolsHeader(
  * names are ignored upstream, so listing a tool a stack lacks is harmless).
  */
 const BUILTIN_TOOL_FAMILIES: Readonly<Record<string, readonly string[]>> = {
-  digisearch: ["digisearch", "digisearch_semantic", "digisearch_fetch_all"],
+  // `digisearch_web_search` is the MCP-proxied form of web_search; the native
+  // `web_search` tool stays, so an exclusive tenant keeps exactly one search.
+  digisearch: [
+    "digisearch",
+    "digisearch_semantic",
+    "digisearch_fetch_all",
+    "digisearch_web_search",
+  ],
   digivault: [
     "digivault",
     "digivault_search_notes",
