@@ -9,10 +9,10 @@ import {
 } from "@assistant-ui/react";
 import {
   copyMarkdownWithFallback,
-  downloadMarkdown,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
-  type TranscriptTurn,
+  transcriptTurns,
+  type ChatExportFormat,
 } from "../transcript";
 import type {
   ThreadMentionTrigger,
@@ -23,11 +23,9 @@ import {
   useEmbedChatPrefsOptional,
   type EmbedChatPrefsApi,
 } from "./embed-chat-prefs";
-import {
-  downloadThreadSnapshot,
-  showSnapshotError,
-} from "../../../replay/browser";
+import { exportConversation } from "../../../replay/chat-export-run";
 import { applyExportSlash } from "../../../replay/export-format";
+import { useChatExportStrings } from "./message-export-menu";
 
 /**
  * Product slash-command wiring injected by the host (WS4). Structural mirror
@@ -193,40 +191,43 @@ export function useSkinSlashPalette({
     [slashPrefs, slashWiring],
   );
 
+  const exportStrings = useChatExportStrings();
   const copyExport = useMemo(
     () => ({
       copy: () => {
-        const turns = threadTurns(aui.thread().getState().messages);
+        const turns = transcriptTurns(aui.thread().getState().messages);
         const last = [...turns].reverse().find((t) => t.role === "assistant");
         if (!last) return;
         void copyMarkdownWithFallback(serializeAssistantMarkdown(last.content, last.sources));
       },
-      exportThread: () => {
-        const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
-        if (md) downloadMarkdown("digichat.md", md);
-      },
-      exportHtml: () => {
-        void downloadThreadSnapshot().catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : "HTML export failed.";
-          if (typeof document !== "undefined") showSnapshotError(document, message);
-          console.error("html export failed", error);
+      /** The whole conversation, from the chat menu or a typed `/export md|html`. */
+      exportConversation: (format: ChatExportFormat) => {
+        if (privateMode) return;
+        void exportConversation({
+          format,
+          messages: aui.thread().getState().messages,
+          strings: exportStrings,
         });
       },
     }),
-    [aui],
+    [aui, exportStrings, privateMode],
   );
+  // The settings menu and the `/export` pane live outside the runtime; they
+  // reach the thread through the prefs host.
+  useEffect(() => {
+    if (!slashPrefs?.bindThreadExport) return;
+    slashPrefs.bindThreadExport(copyExport.exportConversation);
+  }, [slashPrefs, copyExport]);
 
   const commands = useMemo(() => {
     if (!enableSlash || !slashPrefs || !slashWiring) return [];
     return slashWiring.buildCommands(slashPrefs).map((c) => {
       if (c.id === "copy") return { ...c, execute: copyExport.copy };
-      if (c.id === "export") return { ...c, execute: copyExport.exportThread };
-      if (c.id === "export-html") return { ...c, execute: copyExport.exportHtml };
       if (c.id === "compact") {
         return {
           ...c,
           execute: () => {
-            const md = serializeThreadMarkdown(threadTurns(aui.thread().getState().messages));
+            const md = serializeThreadMarkdown(transcriptTurns(aui.thread().getState().messages));
             slashPrefs.reset();
             slashPrefs.newThread();
             if (!md.trim()) return;
@@ -357,8 +358,8 @@ export function useSkinSlashPalette({
           if (action.command.id === "copy") copyExport.copy();
           else if (action.command.id === "export") {
             applyExportSlash(action.arg, document, {
-              html: () => copyExport.exportHtml(),
-              markdown: () => copyExport.exportThread(),
+              html: () => copyExport.exportConversation("html"),
+              markdown: () => copyExport.exportConversation("md"),
             });
           }
           else if (action.command.id === "compact") {
@@ -388,22 +389,4 @@ export function useSkinSlashPalette({
   );
 }
 
-function threadTurns(messages: readonly unknown[]): TranscriptTurn[] {
-  const out: TranscriptTurn[] = [];
-  for (const raw of messages) {
-    if (!raw || typeof raw !== "object") continue;
-    const m = raw as { role?: string; content?: unknown; parts?: unknown };
-    if (m.role !== "user" && m.role !== "assistant") continue;
-    const parts = Array.isArray(m.content) ? m.content : m.parts;
-    const text = Array.isArray(parts)
-      ? parts
-          .filter((p): p is { type: string; text?: string } => !!p && typeof p === "object")
-          .filter((p) => p.type === "text" && typeof p.text === "string")
-          .map((p) => p.text ?? "")
-          .join("")
-      : "";
-    if (!text.trim()) continue;
-    out.push({ role: m.role, content: text });
-  }
-  return out;
-}
+

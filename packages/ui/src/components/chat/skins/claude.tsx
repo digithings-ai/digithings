@@ -17,8 +17,10 @@ import {
   ChevronDownIcon,
   ClipboardIcon,
   Code as CodeIcon,
+  Download,
   FolderOpen,
   GraduationCap,
+  MoreHorizontal,
   PencilIcon,
   PenLine,
   PlusIcon,
@@ -31,6 +33,7 @@ import {
 import { useState, type FC } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { SkinCredit, useComposerCopy } from "../stock";
 import {
   DropdownMenu,
@@ -46,7 +49,7 @@ const messageActionButtonClassName =
 
 export const Claude: FC = () => {
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-[#F0ECE0] font-serif text-[#1a1a18] dark:bg-[#2b2a27] dark:text-[#eee]">
+    <ThreadPrimitive.Root data-export-thread="" className="flex h-full flex-col items-stretch bg-[#F0ECE0] font-serif text-[#1a1a18] dark:bg-[#2b2a27] dark:text-[#eee]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <EmptyState />
         </AuiIf>
@@ -95,7 +98,7 @@ const Composer: FC = () => {
     "How can I help you today?",
   );
   return (
-    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-[#E5E0D6] bg-white px-3.5 pt-3 pb-2.5 dark:border-[#3d3a35] dark:bg-[#1f1e1b]">
+    <ComposerPrimitive.Root data-export-chrome="" className="flex w-full flex-col gap-2 rounded-2xl border border-[#E5E0D6] bg-white px-3.5 pt-3 pb-2.5 dark:border-[#3d3a35] dark:bg-[#1f1e1b]">
       <ComposerPrimitive.Input
         placeholder={placeholder}
         rows={1}
@@ -265,8 +268,9 @@ const ModeTabs: FC = () => {
 };
 
 const ChatMessage: FC = () => {
+  const role = useAuiState((s) => s.message.role);
   return (
-    <MessagePrimitive.Root className="group/message relative mx-auto flex w-full max-w-3xl flex-col py-2">
+    <MessagePrimitive.Root data-role={role} className="group/message relative mx-auto flex w-full max-w-3xl flex-col py-2">
       <AuiIf condition={(s) => s.message.role === "user"}>
         <div className="flex flex-col items-end gap-1">
           <div className="max-w-[80%] rounded-2xl bg-[#E5E0D6] px-4 py-2.5 wrap-break-word whitespace-pre-wrap text-[#1a1a18] dark:bg-[#393937] dark:text-[#eee]">
@@ -277,7 +281,7 @@ const ChatMessage: FC = () => {
               }}
             </MessagePrimitive.Parts>
           </div>
-          <ActionBarPrimitive.Root className="-mt-px flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+          <ActionBarPrimitive.Root data-export-chrome="" className="-mt-px flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
             <ActionBarPrimitive.Edit className={messageActionButtonClassName}>
               <PencilIcon width={16} height={16} />
             </ActionBarPrimitive.Edit>
@@ -303,7 +307,7 @@ const ChatMessage: FC = () => {
               }}
             </MessagePrimitive.Parts>
           </div>
-          <ActionBarPrimitive.Root className="mt-2 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+          <ActionBarPrimitive.Root data-export-chrome="" className="mt-2 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
             <ActionBarPrimitive.Copy className={messageActionButtonClassName}>
               <AuiIf condition={(s) => s.message.isCopied}>
                 <CheckIcon />
@@ -325,6 +329,17 @@ const ChatMessage: FC = () => {
             <ActionBarPrimitive.Reload className={messageActionButtonClassName}>
               <RefreshCwIcon width={16} height={16} />
             </ActionBarPrimitive.Reload>
+            <MessageExportMenu
+              trigger={
+                <button type="button" aria-label="More" className={messageActionButtonClassName}>
+                  <MoreHorizontal width={16} height={16} />
+                </button>
+              }
+              icon={<Download className="size-4" />}
+              align="start"
+              contentClassName="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out z-50 min-w-40 overflow-hidden rounded-xl border p-1.5 shadow-md"
+              itemClassName="text-muted-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none"
+            />
           </ActionBarPrimitive.Root>
         </div>
       </AuiIf>

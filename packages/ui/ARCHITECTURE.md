@@ -761,10 +761,31 @@ control that keeps its name from its glyph),
 `packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
 (the chain trigger's name).
 
-## Chat HTML export
+## Chat export
 
-`/export` and `/export md` download the thread as markdown. Any other format shows an unsupported-format error. `/export html`
-downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
+One model for every skin (`components/chat/transcript/chat-export.ts`,
+`replay/chat-export-run.ts`): a format, `md` or `html`, and a scope.
+
+- The assistant message "…" menu (`stock/message-export-menu.tsx`) has
+  `Export ▸` with `Markdown (.md)` and `HTML (.html)` in a side panel. Both
+  save that assistant message only; the question names the file but is not
+  in it.
+- The chat-level `/export` (palette pane and the settings list) offers the
+  same two formats and saves the whole conversation, user and assistant turns
+  in order. Bare `/export` opens the pane; `/export md|html` runs one; any
+  other format shows an unsupported-format error.
+- Markdown is built from the runtime messages with `## User` / `## Assistant`
+  headings. HTML is a snapshot of the rendered thread.
+- Labels are English and French (`chatExportStrings`); other languages get
+  English.
+
+Clone skins without the `aui-*` classes mark their thread
+`data-export-thread`, their composer, action bar and branch picker
+`data-export-chrome`, and each message `data-role`.
+
+### HTML snapshot
+
+`/export html` downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
 sidebar or any other thread. Ancestors of that thread are attribute-only
 wrappers, so deployment rules scoped to `[data-stock-product]` still match,
 and a node the live page has computed as `display: none` or `visibility:

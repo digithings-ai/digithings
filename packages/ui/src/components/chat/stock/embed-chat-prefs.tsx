@@ -357,6 +357,14 @@ export type EmbedChatPrefsApi = {
    */
   composerDraftBound?: boolean;
   bindComposerDraft?: (setText: (text: string) => void) => void;
+  /**
+   * Download the whole conversation (`/export`, the settings menu). The
+   * skin binds it from inside the runtime, so a host without a skin bound
+   * leaves `threadExportBound` false.
+   */
+  exportThread?: (format: "md" | "html") => void;
+  threadExportBound?: boolean;
+  bindThreadExport?: (run: (format: "md" | "html") => void) => void;
   /** One palette frame. `keep` leaves a button-opened menu alone. */
   syncPalette?: (next: {
     kind: "closed" | "commands" | "pane";

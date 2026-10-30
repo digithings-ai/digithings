@@ -60,11 +60,9 @@ import {
   CopyActionIcon,
 } from "./action-icons";
 import { TooltipIconButton } from "./tooltip-icon-button";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { Button } from "../../../ui/button";
 import { DotMatrix } from "../DotMatrix";
-import { downloadMessageSnapshot, showSnapshotError } from "../../../replay/browser";
-import { messageAnchor } from "../../../replay/snapshot";
-import { downloadMarkdown } from "../transcript";
 import { connectionStatusText } from "../connection-status";
 import { WorkStatusLead } from "../work-status-lead";
 import { Skeleton } from "../../../ui/skeleton";
@@ -72,7 +70,6 @@ import { cn } from "./cn";
 import { useSuggestionGroup } from "../suggestion-cycle";
 import { SkinCredit } from "../stock/skin-credit";
 import {
-  ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
@@ -1446,10 +1443,6 @@ const AssistantMessage: FC = () => {
 const AssistantActionBar: FC = () => {
   const { undo, feedback } = useContext(ThreadActionsContext);
   const privateMode = useContext(ThreadPrivateModeContext);
-  const messageId = useAuiState((s) => s.message.id);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const exportMessage = useRef<HTMLElement | null>(null);
-  const exportHtmlAfterClose = useRef(false);
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -1503,62 +1496,19 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.FeedbackNegative>
         </>
       ) : null}
-      {/* Private session: the HTML export snapshots the thread anchored at this
-          message, which includes the user's message — the real typed text the
-          mode exists to keep out of a transcript someone else may see. */}
+      {/* Private session: the stored messages still hold the real typed text,
+          which the mode exists to keep out of a file someone else may see. */}
       {privateMode ? null : (
-      <ActionBarMorePrimitive.Root
-        onOpenChange={(open) => {
-          if (open || !exportHtmlAfterClose.current) return;
-          exportHtmlAfterClose.current = false;
-          const doc = document;
-          const message = exportMessage.current;
-          exportMessage.current = null;
-          const id = messageId;
-          requestAnimationFrame(() => {
-            void downloadMessageSnapshot(doc, new Date().toISOString(), id, message).catch(
-              (error: unknown) => {
-                const message = error instanceof Error ? error.message : "HTML export failed.";
-                showSnapshotError(doc, message);
-              },
-            );
-          });
-        }}
-      >
-        <ActionBarMorePrimitive.Trigger asChild ref={triggerRef}>
-          <TooltipIconButton tooltip="More">
-            <DotMatrix state="more" decorative className="size-3.5" />
-          </TooltipIconButton>
-        </ActionBarMorePrimitive.Trigger>
-        <ActionBarMorePrimitive.Content
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          className="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
-        >
-          <ActionBarPrimitive.ExportMarkdown
-            asChild
-            onExport={(content) => {
-              downloadMarkdown("digichat.md", content);
-            }}
-          >
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink">
-              <DotMatrix state="export" decorative className="size-3.5" />
-              Export as Markdown
-            </ActionBarMorePrimitive.Item>
-          </ActionBarPrimitive.ExportMarkdown>
-          <ActionBarMorePrimitive.Item
-            className="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
-            onClick={() => {
-              exportMessage.current = messageAnchor(triggerRef.current, messageId);
-              exportHtmlAfterClose.current = true;
-            }}
-          >
-            <DotMatrix state="export" decorative className="size-3.5" />
-            Export as HTML
-          </ActionBarMorePrimitive.Item>
-        </ActionBarMorePrimitive.Content>
-      </ActionBarMorePrimitive.Root>
+        <MessageExportMenu
+          trigger={
+            <TooltipIconButton tooltip="More">
+              <DotMatrix state="more" decorative className="size-3.5" />
+            </TooltipIconButton>
+          }
+          icon={<DotMatrix state="export" decorative className="size-3.5" />}
+          contentClassName="aui-action-bar-more-content z-[110] min-w-[8rem] overflow-hidden border p-1"
+          itemClassName="aui-action-bar-more-item flex cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 outline-none select-none hover:bg-transparent focus:bg-transparent data-highlighted:bg-transparent data-highlighted:text-ink"
+        />
       )}
       <MessageTiming />
     </ActionBarPrimitive.Root>

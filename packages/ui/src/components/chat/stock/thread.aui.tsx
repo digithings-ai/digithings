@@ -23,6 +23,7 @@ import {
   ToolGroupRoot,
   ToolGroupTrigger,
 } from "./tool-group.aui";
+import { MessageExportMenu } from "./message-export-menu";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
@@ -34,7 +35,6 @@ import { DotMatrix } from "../DotMatrix";
 
 import { useDisclosureUi, useDeployUi } from "./deploy-ui-context";
 import {
-  ActionBarMorePrimitive,
   ActionBarPrimitive,
   AuiIf,
   type AssistantState,
@@ -556,29 +556,16 @@ const AssistantActionBar: FC = () => {
           <RefreshCwIcon />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
-          <TooltipIconButton
-            tooltip="More"
-            className="data-[state=open]:bg-surface-2"
-          >
+      <MessageExportMenu
+        trigger={
+          <TooltipIconButton tooltip="More" className="data-[state=open]:bg-surface-2">
             <MoreHorizontalIcon />
           </TooltipIconButton>
-        </ActionBarMorePrimitive.Trigger>
-        <ActionBarMorePrimitive.Content
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          className="aui-action-bar-more-content border-hair bg-surface-2 text-ink data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-none border p-1.5"
-        >
-          <ActionBarPrimitive.ExportMarkdown asChild>
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item hover:bg-surface-2 hover:text-ink focus:bg-surface-2 focus:text-ink flex cursor-pointer items-center gap-2 rounded-none px-2.5 py-1.5 text-sm outline-none select-none">
-              <DownloadIcon className="size-4" />
-              Export as Markdown
-            </ActionBarMorePrimitive.Item>
-          </ActionBarPrimitive.ExportMarkdown>
-        </ActionBarMorePrimitive.Content>
-      </ActionBarMorePrimitive.Root>
+        }
+        icon={<DownloadIcon className="size-4" />}
+        contentClassName="aui-action-bar-more-content border-hair bg-surface-2 text-ink data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-none border p-1.5"
+        itemClassName="aui-action-bar-more-item hover:bg-surface-2 hover:text-ink focus:bg-surface-2 focus:text-ink data-[state=open]:text-ink flex cursor-pointer items-center gap-2 rounded-none px-2.5 py-1.5 text-sm outline-none select-none"
+      />
     </ActionBarPrimitive.Root>
   );
 };

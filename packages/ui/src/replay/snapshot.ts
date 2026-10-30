@@ -42,6 +42,14 @@ const REMOVE = [
   "[data-slot='aui_user-branch-picker']",
   "[data-slot='aui_assistant-branch-picker']",
   ".aui-thread-scroll-to-bottom",
+  // The drawn scrollbar is positioned for the live viewport; the file scrolls
+  // natively.
+  ".aui-overlay-scroll",
+  // Skins without the aui class names mark their composer and message
+  // controls with this attribute instead.
+  "[data-export-chrome]",
+  // The code block keeps its language label; the copy button needs script.
+  ".aui-code-header-root button",
   "[data-memory-thread-list]",
   ".dc-thread-list",
   "script",
@@ -72,6 +80,17 @@ const CONTENT_LINK = [
 
 const USER_QUESTION = ".aui-user-message-content";
 
+/**
+ * A thread root: the aui class, or `data-export-thread` on skins that do not
+ * use the aui class names.
+ */
+const THREAD_ROOT = ".aui-thread-root, [data-export-thread]";
+
+/** Drop the user messages, so the file holds the assistant answer only. */
+export function keepAnswerOnly(root: ParentNode): void {
+  root.querySelectorAll("[data-role='user']").forEach((node) => node.remove());
+}
+
 const PANEL_STYLE_PROPS = [
   "height",
   "width",
@@ -99,7 +118,7 @@ export function deploymentText(root: ParentNode): string {
  * visible root.
  */
 export function activeThreadRoot(root: ParentNode): HTMLElement | null {
-  const threads = [...root.querySelectorAll<HTMLElement>(".aui-thread-root")].filter(isOpenThread);
+  const threads = [...root.querySelectorAll<HTMLElement>(THREAD_ROOT)].filter(isOpenThread);
   if (threads.length === 0) return null;
   const marked = threads.filter((el) => el.getAttribute("data-active") === "true");
   const pool = marked.length > 0 ? marked : threads;
@@ -146,7 +165,7 @@ function isMessageThread(thread: HTMLElement): boolean {
  * does not widen to the whole thread.
  */
 export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
-  const thread = anchor ? anchor.closest<HTMLElement>(".aui-thread-root") : activeThreadRoot(doc);
+  const thread = anchor ? anchor.closest<HTMLElement>(THREAD_ROOT) : activeThreadRoot(doc);
   if (!thread || (anchor && !isMessageThread(thread))) return null;
   if (anchor && !thread.contains(anchor)) return null;
   const html = doc.createElement("html");

@@ -182,6 +182,8 @@ function paneStaysOpen(command: SlashDef, arg: string): boolean {
     case "mcp":
     case "byok":
       return !raw;
+    case "export":
+      return !raw || !isExportFormat(raw);
     default:
       return true;
   }
@@ -347,7 +349,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
     }
 
     const id = def.id === "lang" ? "language" : def.id;
-    const insertName = def.id === "export" ? "/export md" : def.names[0];
+    const insertName = def.names[0];
     rows.push({
       id,
       label: insertName,
@@ -357,14 +359,6 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
         executeSlashDef(def, "", api);
       },
     });
-    if (def.id === "export") {
-      rows.push({
-        id: "export-html",
-        label: "/export html",
-        description: "Download this chat as HTML.",
-        execute: () => {},
-      });
-    }
   }
 
   rows.push(...featuredLanguageCommands(api.setLanguage, tenantLanguageCodes(api)));
@@ -379,8 +373,26 @@ export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): b
   return false;
 }
 
+/** `md`, `markdown`, `html`: the `/export` argument. */
+function isExportFormat(raw: string): boolean {
+  return exportFormat(raw) !== null;
+}
+
+function exportFormat(raw: string): "md" | "html" | null {
+  const value = raw.trim().toLowerCase().replace(/^\./, "");
+  if (value === "md" || value === "markdown") return "md";
+  if (value === "html" || value === "htm") return "html";
+  return null;
+}
+
 export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsApi): void {
   switch (def.id) {
+    case "export": {
+      // The whole conversation. The skin bound the runner (`bindThreadExport`).
+      const format = exportFormat(arg);
+      if (format) api.exportThread?.(format);
+      return;
+    }
     case "view": {
       const mode = arg.trim().toLowerCase();
       // `hidden` / `compact` / `detailed` are the retired ids; they fold
