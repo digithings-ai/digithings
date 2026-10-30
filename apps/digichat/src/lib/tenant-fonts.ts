@@ -65,3 +65,13 @@ export function tenantFontStyle(fonts: TenantFonts | null | undefined): CSSPrope
   }
   return Object.keys(style).length ? (style as CSSProperties) : undefined;
 }
+
+/**
+ * The one rule tenant fonts add. Stock skins draw the welcome title and
+ * markdown headings in the body face (`font-sans`), so a tenant heading face
+ * set only as `--font-heading` never reached them. Scoped to the wrapper that
+ * carries `data-tenant-heading-font`, which the embed sets only when the
+ * tenant names a heading face: no tenant heading, no change.
+ */
+export const TENANT_HEADING_FONT_CSS =
+  "[data-tenant-heading-font] :is(.aui-thread-welcome-message-inner,.aui-md-h1,.aui-md-h2,.aui-md-h3,.aui-md-h4){font-family:var(--font-heading)}";
