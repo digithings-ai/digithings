@@ -13,10 +13,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -489,6 +491,27 @@ export function EmbedComposerMenu({
 }) {
   const api = useEmbedChatPrefs();
   const menuBodyRef = useRef<HTMLDivElement | null>(null);
+  // The menu opens upward from the composer. A centred (empty-thread)
+  // composer leaves less room above it than the list's cap, and the top rows
+  // then sat off-screen; cap the list to the room that is really there.
+  const menuRootRef = useRef<HTMLDivElement | null>(null);
+  const [menuRoom, setMenuRoom] = useState<number | null>(null);
+  const measureMenuRoom = useCallback(() => {
+    const anchor = menuRootRef.current?.parentElement;
+    if (!anchor) return;
+    const hint = 32; // footer hint row under the list
+    const room = Math.floor(anchor.getBoundingClientRect().top - 12 - hint);
+    setMenuRoom(Math.max(128, room));
+  }, []);
+  // No deps: the menu mounts and unmounts with the trigger, so measure after
+  // every commit (a same-value set bails out) and again on resize.
+  useLayoutEffect(() => {
+    measureMenuRoom();
+  });
+  useEffect(() => {
+    window.addEventListener("resize", measureMenuRoom);
+    return () => window.removeEventListener("resize", measureMenuRoom);
+  }, [measureMenuRoom]);
   const available = sessionPickerModels(models ?? [], providerActive?.provider ?? null);
   const languages = useMemo(() => languageSelectOptions(), []);
   const toolOnInput = useMemo(
@@ -1711,7 +1734,9 @@ export function EmbedComposerMenu({
 
   const body = (
     <div
+      ref={menuRootRef}
       className="dc-composer-menu aui-composer-trigger-popover absolute inset-x-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-none border"
+      style={menuRoom === null ? undefined : ({ "--dc-menu-room": `${menuRoom}px` } as CSSProperties)}
       data-thread-skin="digichat"
       data-embed-settings
       data-embed-composer-menu
@@ -1721,7 +1746,7 @@ export function EmbedComposerMenu({
       <div className="relative min-h-0">
         <div
           ref={menuBodyRef}
-          className="dc-composer-menu-body flex max-h-[min(50vh,22rem)] flex-col overflow-y-auto pt-0.5 pb-1.5"
+          className="dc-composer-menu-body flex max-h-[min(50vh,22rem,var(--dc-menu-room,22rem))] flex-col overflow-y-auto pt-0.5 pb-1.5"
         >
           {view === "provider-key" ? (
             <Label className="flex flex-col items-stretch gap-1 px-3 py-1.5" htmlFor={keyFormId}>
