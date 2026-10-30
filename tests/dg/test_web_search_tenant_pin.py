@@ -474,3 +474,46 @@ def test_proxied_web_search_not_refused_by_pin_when_unpinned(
     except Exception:  # later stages may fail offline; only the pin branch matters
         return
     assert not (isinstance(out, dict) and "pinned" in str(out.get("message", "")))
+
+
+# --- per-tenant host cap and exact-page pins ---------------------------------
+
+
+def test_max_hosts_raises_the_cap_per_tenant() -> None:
+    eleven = [f"h{i}.example" for i in range(11)]
+    raised = load_tenant_corpus_map(
+        '{"acme":{"webSearchDomains":' + str(eleven).replace("'", '"') + ',"webSearchMaxHosts":14}}'
+    )
+    assert raised["acme"].web_search_domains == eleven
+    default = load_tenant_corpus_map(
+        '{"acme":{"webSearchDomains":' + str(eleven).replace("'", '"') + "}}"
+    )
+    assert default["acme"].web_search_domains == []
+
+
+@pytest.mark.parametrize("bad", ['"14"', "0", "true", "999"])
+def test_invalid_max_hosts_keeps_the_default(bad: str) -> None:
+    six = str([f"h{i}.example" for i in range(6)]).replace("'", '"')
+    table = load_tenant_corpus_map(
+        '{"acme":{"webSearchDomains":' + six + ',"webSearchMaxHosts":' + bad + "}}"
+    )
+    assert table["acme"].web_search_domains == []
+
+
+def test_many_pins_default_to_the_primary_host_per_call() -> None:
+    pins = ["example.com"] + [f"h{i}.example" for i in range(8)]
+    assert pinned_include_domains(pins, None) == ["example.com"]
+    assert pinned_include_domains(pins, ["h3.example"]) == ["h3.example"]
+    assert pinned_include_domains(pins, ["elsewhere.org"]) == ["example.com"]
+
+
+def test_exact_page_pin_with_a_query() -> None:
+    pin = _normalize_web_search_pin("store.example/apps/details?id=co.acme.app")
+    assert pin == "store.example/apps/details?id=co.acme.app"
+    assert _normalize_web_search_pin("store.example?id=x") is None
+    assert _normalize_web_search_pin("store.example/apps?id") is None
+    pins = [pin]
+    assert url_within_pins("https://store.example/apps/details?id=co.acme.app&hl=en", pins)
+    assert not url_within_pins("https://store.example/apps/details?id=co.other.app", pins)
+    assert not url_within_pins("https://store.example/apps/details/more?id=co.acme.app", pins)
+    assert pinned_include_domains(pins, None) == ["store.example"]

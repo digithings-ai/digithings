@@ -82,8 +82,10 @@ def web_search_tool_for_tenant(pins: Any, site_id: Any) -> dict[str, Any] | None
         "Search this tenant's own public web presence with the first-party digisearch "
         "web_search tool. Results are restricted server-side to: "
         + ", ".join(pin_list)
-        + ". Other domains and other search engines are refused; include_domains "
-        "can only narrow this list. Cite the page URL of every fact you use."
+        + ". Other domains and other search engines are refused. Each call is one "
+        "search: to search a listed site other than the first, pass that site's host "
+        "in include_domains (it can only narrow this list). Cite the page URL of "
+        "every fact you use."
     ]
     graph = load_web_search_site_graph(site_id) if isinstance(site_id, str) else None
     if graph:
@@ -146,12 +148,29 @@ def _domain_within(domain: str, pin: str) -> bool:
 
 
 def _split_pin(pin: str) -> tuple[str, str]:
-    """``host/path`` -> ``(host, "/path")``; a bare host has an empty path."""
-    host, sep, path = pin.strip().lower().rstrip("/").partition("/")
+    """``host/path`` -> ``(host, "/path")``; a bare host has an empty path.
+
+    An exact-page query (``host/path?k=v``) is dropped here; see :func:`_pin_query`.
+    """
+    host, sep, path = pin.strip().lower().split("?", 1)[0].rstrip("/").partition("/")
     host = host.rstrip(".")
     if host.startswith("www."):
         host = host[4:]
     return host, ("/" + path if sep and path else "")
+
+
+def _pin_query(pin: str) -> list[tuple[str, str]]:
+    """The ``k=v`` pairs of an exact-page pin (``host/path?k=v``), else empty."""
+    _, sep, query = pin.strip().lower().partition("?")
+    if not sep:
+        return []
+    from urllib.parse import parse_qsl
+
+    return parse_qsl(query, keep_blank_values=False)
+
+
+#: digisearch's WebSearchRequest takes at most this many include_domains.
+ENGINE_MAX_INCLUDE_DOMAINS = 5
 
 
 def _pin_hosts(pinned: Any) -> list[str]:
@@ -166,11 +185,13 @@ def _pin_hosts(pinned: Any) -> list[str]:
 def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
     """Clamp a model's ``include_domains`` to the hosts of the tenant's pins.
 
-    No request: every pinned host. A request: only the requested domains that
-    sit inside a pinned host (equal or a subdomain). Anything else is dropped,
-    so the result is never wider than the pin; when nothing the model asked for
-    survives, the pin itself is used. Path prefixes are not expressible as
-    engine domains, so :func:`url_within_pins` enforces them on the results.
+    The pin is an allowlist the model aims ONE search at, never a fan-out. No
+    request: every pinned host when they fit one engine call, otherwise the
+    first (primary) pin's host alone. A request: only the requested domains
+    that sit inside a pinned host (equal or a subdomain). Anything else is
+    dropped, so the result is never wider than the pin; when nothing the model
+    asked for survives, the default is used. Path prefixes are not expressible
+    as engine domains, so :func:`url_within_pins` enforces them on the results.
     """
     hosts = _pin_hosts(pinned)
     if not hosts:
@@ -182,8 +203,11 @@ def pinned_include_domains(pinned: Any, requested: Any) -> list[str]:
             d = d[4:]
         if d and any(_domain_within(d, h) for h in hosts) and d not in wanted:
             wanted.append(d)
-    # digisearch accepts at most five include_domains.
-    return (wanted or hosts)[:5]
+    if wanted:
+        return wanted[:ENGINE_MAX_INCLUDE_DOMAINS]
+    if len(hosts) <= ENGINE_MAX_INCLUDE_DOMAINS:
+        return hosts
+    return hosts[:1]
 
 
 def url_within_pins(url: Any, pins: Any) -> bool:
@@ -206,6 +230,15 @@ def url_within_pins(url: Any, pins: Any) -> bool:
     for pin in _as_str_list(pins):
         pin_host, pin_path = _split_pin(pin)
         if not pin_host or not _domain_within(host, pin_host):
+            continue
+        pin_query = _pin_query(pin)
+        if pin_query:
+            # Exact page: same path and every pinned k=v present in the URL.
+            from urllib.parse import parse_qsl
+
+            have = set(parse_qsl((parts.query or "").lower(), keep_blank_values=False))
+            if path == pin_path and all(kv in have for kv in pin_query):
+                return True
             continue
         if not pin_path or path == pin_path or path.startswith(pin_path + "/"):
             return True
