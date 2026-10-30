@@ -997,19 +997,22 @@ export function EmbedComposerMenu({
   );
   const exportRows = useMemo(
     (): MenuRow[] =>
-      EXPORT_CHOICES.map((choice) => ({
-        id: `export-${choice.value}`,
-        label: choice.value === "html" ? exportStrings.html : exportStrings.markdown,
-        value: "",
-        detail: exportStrings.conversationHint,
-        insert: optionDraft("/export", choice.value),
-        token: choice.value,
-        activate: () => {
-          if (!privateOn) api.exportThread?.(choice.value === "html" ? "html" : "md");
-          if (api.composerDraftBound) api.setComposerDraft?.("");
-          onClose();
-        },
-      })),
+      // Private session: no format rows either, even if `/export ` is typed.
+      privateOn
+        ? []
+        : EXPORT_CHOICES.map((choice) => ({
+            id: `export-${choice.value}`,
+            label: choice.value === "html" ? exportStrings.html : exportStrings.markdown,
+            value: "",
+            detail: exportStrings.conversationHint,
+            insert: optionDraft("/export", choice.value),
+            token: choice.value,
+            activate: () => {
+              if (!privateOn) api.exportThread?.(choice.value === "html" ? "html" : "md");
+              if (api.composerDraftBound) api.setComposerDraft?.("");
+              onClose();
+            },
+          })),
     [api, exportStrings, onClose, privateOn],
   );
 

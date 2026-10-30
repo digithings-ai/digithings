@@ -155,7 +155,12 @@ describe("export runners and the shared private flag", () => {
       doc: document,
       privateMode: true,
     });
-    await exportConversation({ format: "md", messages: [message], doc: document, privateMode: true });
+    await exportConversation({
+      format: "md",
+      messages: [message],
+      doc: document,
+      privateMode: true,
+    });
     expect(saved).toHaveLength(0);
   });
 });
