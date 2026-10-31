@@ -76,6 +76,13 @@ export interface Env {
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
   /** Local dev only: caller used when a request has no identity headers, e.g. "enterprise+12x". */
   DASHBOARD_DEV_CALLER?: string;
+  /**
+   * The workspace this deployment serves, for the digitrace Traces tab
+   * (DIG-2661). The app-layer tenant filter uses it; unset falls back to the
+   * house workspace. See `src/traces.ts` — the edge carries no per-caller
+   * workspace claim today.
+   */
+  DASHBOARD_WORKSPACE_ID?: string;
   /** Optional twelve-x (FX hub) Supabase project; absent = FX reads fail closed (upstream_empty). */
   TWELVEX_SUPABASE_URL?: string;
   TWELVEX_SUPABASE_SERVICE_KEY?: string;

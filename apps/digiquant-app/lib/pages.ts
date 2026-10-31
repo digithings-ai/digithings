@@ -21,4 +21,6 @@ export const PAGE_LAYOUTS: Record<string, Layout> = {
   '/fx/rates': L([['rt-summary', 1, 1, 12, 3], ['rt-curve', 1, 4, 7, 9], ['rt-watchlist', 8, 4, 5, 5], ['rt-theses', 8, 9, 5, 4]]),
   '/fx/settings': L([['se-fx-feed', 1, 1, 6, 6], ['fx-directives', 7, 1, 6, 12], ['se-brokers', 1, 7, 6, 6]]),
   '/pipeline': L([['pl-run-health', 1, 1, 4, 4], ['pl-narrative', 5, 1, 4, 4], ['pl-artifacts', 9, 1, 4, 4], ['pl-canvas', 1, 5, 8, 8], ['pl-node-document', 9, 5, 4, 4], ['pl-call-trace', 9, 9, 4, 4]]),
+  // digitrace Traces tab (DIG-2661): list/search + span tree, and tokens/cost.
+  '/observability/traces': L([['tr-explore', 1, 1, 8, 12], ['tr-cost', 9, 1, 4, 12]]),
 };

@@ -263,3 +263,16 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
 .drawer-x:hover, .drawer-x:focus-visible { color: var(--accent); outline: 0; }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+
+/* ---- digitrace Traces tab (DIG-2661, ADR-0036 §9) ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.trace-search { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--hair); }
+.trace-search input { flex: 1; min-width: 0; background: none; border: 0; border-bottom: 1px solid var(--hair-strong); color: var(--ink); padding: 3px 0; }
+.trace-search input:focus-visible { outline: 0; border-bottom-color: var(--accent); }
+.trace-selected { border-top: 1px solid var(--hair-strong); }
+.trace-selected-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--hair); }
+.trace-tree, .trace-branch { list-style: none; margin: 0; padding: 0; }
+.trace-span { display: flex; align-items: baseline; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--hair); font-size: 12px; min-width: 0; }
+.trace-span > .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-span > .num { font: 11.5px/1.4 var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.trace-detail > .kpis { padding: 8px 12px; }
