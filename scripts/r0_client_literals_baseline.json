@@ -409,10 +409,6 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "digigraph/src/digigraph/skill_library/loader.py": {
-      "count": 1,
-      "ticket": "DIG-4043"
-    },
     "digikey/src/digikey/cli.py": {
       "count": 1,
       "ticket": "DIG-3689"

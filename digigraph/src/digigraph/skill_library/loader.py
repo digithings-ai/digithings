@@ -1,59 +1,53 @@
 """Skill documents for digigraph: one folder per skill, read at call time.
 
-DIG-2637. A *skill document* is a block of instructions the agent fetches with
-the ``get_skill`` tool call, so nothing is baked into the prompt. It is
+A *skill document* is a block of instructions the agent fetches with the
+``get_skill`` tool call, so nothing is baked into the prompt. It is
 deliberately not the tool bundle in ``digigraph.skills.registry``: that is a
 named list of tool names with an optional ``when`` gate and has no body to
-read. Both are called "skill", so they live in different packages rather than
-sharing one directory where the word would mean two incompatible things.
+read. Both are called "skill", so they live in different packages.
 
-Layout — ``skill_library/<pack>/<name>/SKILL.md`` with YAML frontmatter::
+Layout — ``<root>/<pack>/<name>/SKILL.md`` with YAML frontmatter::
 
     ---
-    name: present-results
+    name: answer-briefly
     description: One line, shown to the model by list_skills.
     version: "1"
     ---
 
     the instructions, in markdown
 
-**A skill is tenant content, not house content.** A *pack* is one tenant's set
-of documents, and the pack name is the tenant slug: the four documents under
-``skill_library/occ/`` belong to the ``occ`` tenant and are never served to any
-other tenant. There is deliberately no house/global pack — an unscoped call
-(``pack=None``) returns nothing rather than every document in the tree, so a
-new tenant starts empty and gains only the skills someone puts in its own
-folder. What a tenant may see is decided by ``corpus_routing.tenant_skill_ids``
-(the tenant corpus map's ``skills`` key, defaulting to that tenant's own pack),
-and the resolved ids are carried on ``ToolContext.skill_ids``; the filesystem
-is where the text lives, not the grant.
+``<root>`` is the directory named by ``DIGIGRAPH_SKILLS_DIR`` when that
+variable is set, and the in-package ``skill_library/`` directory otherwise.
+A blank value is unset. Unset keeps the packaged library, so an existing
+deployment is unchanged.
+
+A *pack* is one tenant's documents, and the pack name is the tenant slug.
+There is no house pack: ``pack=None`` returns nothing rather than every
+document in the tree. What a tenant may see is decided by
+``corpus_routing.tenant_skill_ids`` and carried on ``ToolContext.skill_ids``;
+the filesystem is where the text lives, not the grant.
 
 The folder name and the frontmatter ``name`` must agree: one id per skill, no
-aliases. A reader grepping the tree and a caller passing the tool argument then
-always land on the same folder, which is what makes a skill's id citable.
+aliases. A reader and a caller passing the tool argument then land on the
+same folder.
 
-What a document may contain is a product decision, not an oversight. The
-grounding rule (DIG-100, DIG-509 G1', and the canonical text owned by
-``docs/digichat/no-invent-guard.md``) holds that a source-or-refuse rule that
-also enumerates capabilities is the defect it exists to prevent, because an
-inventory read from configuration goes stale and the agent presents it as
-fact. ``tests/dg/test_skill_library.py`` rejects that inventory
-(``azure_ai_search``, ``mcp``, "tool name" / "tool call" / "tool id", and the
-words index, corpus, and tenant). DIG-3355 workflows may still name the
-retrieval paths that brief requires — semantic search over past tickets,
-Zammad metadata tools, and help-docs search — so the agent can pick a path.
-``present-results`` still forbids reciting those paths to the reader.
+The pack and the skill id are each checked against a narrow pattern before
+either is joined onto ``<root>``. The pattern admits no dot, no slash and no
+``..``, which is what keeps a caller-supplied string inside ``<root>/<pack>``.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+# In-package library. Used when DIGIGRAPH_SKILLS_DIR is unset.
 SKILL_LIBRARY_DIR = Path(__file__).resolve().parent
+SKILLS_DIR_ENV = "DIGIGRAPH_SKILLS_DIR"
 SKILL_FILENAME = "SKILL.md"
 
 # Kebab-case id. Deliberately narrow: this pattern is the ONLY thing standing
@@ -61,8 +55,8 @@ SKILL_FILENAME = "SKILL.md"
 # so it admits no dots, no slashes and no leading or trailing separator.
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-# Tenant pack (= tenant slug). Same shape and the same reason: it is joined to
-# SKILL_LIBRARY_DIR, so it can carry no dot, no slash and no leading separator.
+# Tenant pack (= tenant slug). Same shape and the same reason: it is joined onto
+# the skills root, so it can carry no dot, no slash and no leading separator.
 # A pack name that does not match resolves to no directory at all.
 SKILL_PACK_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _FRONTMATTER_RE = re.compile(r"\A---\r?\n(?P<meta>.*?)\r?\n---[ \t]*\r?\n", re.DOTALL)
@@ -152,19 +146,32 @@ def _read_document(folder: Path, pack: str) -> SkillDocument:
     )
 
 
+def skills_dir() -> Path:
+    """Root that packs are read from.
+
+    ``DIGIGRAPH_SKILLS_DIR`` when set to a non-blank value, otherwise the
+    in-package library. A blank value is treated as unset.
+    """
+    raw = os.environ.get(SKILLS_DIR_ENV, "").strip()
+    return Path(raw) if raw else SKILL_LIBRARY_DIR
+
+
 def pack_dir(pack: str | None) -> Path | None:
     """The directory holding one tenant's skills, or ``None`` when *pack* is not
     a usable pack name.
 
+    The root is ``skills_dir()``: an external directory when
+    ``DIGIGRAPH_SKILLS_DIR`` is set, and the in-package library otherwise.
     ``None`` is the fail-closed answer, not an error: an absent tenant has no
-    documents, and an invalid pack name must never widen to the library root.
+    documents, and an invalid pack name must never widen to the library root
+    or escape it.
     """
     if not isinstance(pack, str):
         return None
     name = pack.strip().lower()
     if not SKILL_PACK_RE.match(name):
         return None
-    return SKILL_LIBRARY_DIR / name
+    return skills_dir() / name
 
 
 def skill_folders(pack: str | None = None) -> list[Path]:
@@ -200,7 +207,7 @@ def load_skill_document(name: str, pack: str | None = None) -> SkillDocument:
 
     Both the id and the pack are validated against their own narrow pattern
     *before* either reaches the filesystem: neither carries a dot, a slash or a
-    separator, so the joins below cannot escape ``skill_library/<pack>``.
+    separator, so the joins below cannot escape ``<root>/<pack>``.
     """
     if not isinstance(name, str) or not SKILL_NAME_RE.match(name):
         raise SkillDocumentError(f"{name!r} is not a valid skill id")
