@@ -115,8 +115,8 @@ on the record:
 
 So: the job's name is not in
 `GET /repos/digithings-ai/digithings/branches/develop/protection/required_status_checks`,
-which today returns exactly three contexts — `Required checks passed`,
-`doc-links + agents-init`, `mypy — digibase + digikey` — **and adding it there is
+which the committed snapshot (`.github/required-contexts.txt`) records as
+`Required checks passed` and `doc-links + agents-init` — **and adding it there is
 the specific change that would break this rule.** A failure is the red
 `workflow_dispatch` run itself: the read is never on a clock, so every run has a
 requester who sees it. That is why the workflow does not file a tracker issue —
@@ -250,8 +250,8 @@ it. None of that needs the token to be created by anything but a browser.
    GH_TOKEN="$(cat <pat-file>)" gh api \
      repos/digithings-ai/digithings/branches/develop/protection/required_status_checks
    ```
-   Expect a JSON body, and expect these three contexts in it — `Required checks
-   passed`, `doc-links + agents-init`, `mypy — digibase + digikey`. **Then delete
+   Expect a JSON body, and expect the contexts in `.github/required-contexts.txt`
+   in it (any difference is drift for the `--live` guard). **Then delete
    the staged file.**
 5. **Only then** add the inventory row in
    [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) §(a), with the expiry date from

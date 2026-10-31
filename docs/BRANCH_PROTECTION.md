@@ -22,7 +22,7 @@ doc blindly; it has drifted from reality before (that's the story this section t
 |---|---|---|
 | `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
 | `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
-| `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
+| ~~`mypy — digibase + digikey`~~ | ~~`ci-type-check.yml`~~ | Removed from the committed snapshot (`.github/required-contexts.txt`) when `ci-type-check.yml` was deleted with the GHA exit ledger; local-ci runs the same `mypy` command on every PR. |
 | `gitleaks-scan` | `security-gitleaks.yml` | Secrets scan over the PR diff (full history on `develop`/`main` push). **Not required** — the inventory declares it `advisory`. Added to the writer's payload in #3922 and never applied live; DIG-2223 removed it from the writer. |
 
 > **Why `gitleaks-scan` is still not required (blocker resolved 2026-10-10, #5318).** It was

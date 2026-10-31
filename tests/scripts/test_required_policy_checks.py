@@ -42,11 +42,12 @@ CONTEXTS = REPO_ROOT / ".github" / "required-contexts.txt"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
-#: The live required contexts on develop as of 2026-10-07, read from
-#: GET /repos/digithings-ai/digithings/branches/develop/protection. Two of
-#: these are produced by workflows other than ci.yml, and that is correct —
-#: they are the reason a ci.yml-only guard was the wrong inventory.
-LIVE_CONTEXTS = ["Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"]
+#: The required contexts the committed snapshot names (read from
+#: GET /repos/digithings-ai/digithings/branches/develop/protection on
+#: 2026-10-07; `mypy — digibase + digikey` left with ci-type-check.yml, whose
+#: mypy run is local-ci's). One is produced by a workflow other than ci.yml,
+#: and that is correct — it is why a ci.yml-only guard was the wrong inventory.
+LIVE_CONTEXTS = ["Required checks passed", "doc-links + agents-init"]
 
 
 def _load() -> Any:
@@ -275,17 +276,16 @@ def test_stall_rule_covers_a_workflow_level_paths_filter() -> None:
 # ── the required-and-out-of-file checks the brief warns about ────────────────
 
 
-def test_the_two_out_of_file_required_checks_are_genuinely_required() -> None:
-    """`doc-links + agents-init` and `mypy — digibase + digikey` live in
-    ci-docs.yml and ci-type-check.yml, outside ci.yml's `needs`. Reconciling
-    against ci.yml's job names — what DIG-1952 item 2 asked for literally —
-    would demand they be added to `needs` and break the mechanism that works."""
+def test_the_out_of_file_required_check_is_genuinely_required() -> None:
+    """`doc-links + agents-init` lives in ci-docs.yml, outside ci.yml's `needs`.
+    Reconciling against ci.yml's job names — what DIG-1952 item 2 asked for
+    literally — would demand it be added to `needs` and break the mechanism
+    that works. (`mypy — digibase + digikey` was the second, until
+    ci-type-check.yml was deleted; local-ci runs the same mypy command.)"""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     by_context = {c.context: c for c in inventory}
-    for context, workflow in (
-        ("doc-links + agents-init", "ci-docs.yml"),
-        ("mypy — digibase + digikey", "ci-type-check.yml"),
-    ):
+    assert "mypy — digibase + digikey" not in by_context
+    for context, workflow in (("doc-links + agents-init", "ci-docs.yml"),):
         check = by_context[context]
         assert check.is_required
         assert check.workflow == workflow
@@ -810,7 +810,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
     assert [(c.context, c.workflow, c.job, c.enforcement) for c in inventory] == [
         ("Required checks passed", "ci.yml", "required-checks", "required"),
         ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "required"),
-        ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "required"),
         ("gitleaks-scan", "security-gitleaks.yml", "scan", "advisory"),
         (
             "All agent-task issues in TSV with real phase and valid model",
@@ -858,7 +857,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
         "ci-pr-hygiene.yml",
         "ci-pr-title.yml",
         "ci-review-coverage.yml",
-        "ci-type-check.yml",
         "ci.yml",
         "security-gitleaks.yml",
         "security-workflow-secret-refs.yml",
