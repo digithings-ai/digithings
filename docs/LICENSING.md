@@ -36,7 +36,7 @@ scope here; the audit step below covers it when it changes.
 |---|---|---|---|---|
 | [`beautiful-mermaid`](https://www.npmjs.com/package/beautiful-mermaid/v/1.1.3) | 1.1.3 | MIT | direct dependency of `@digithings/ui` | client bundle |
 | [`elkjs`](https://www.npmjs.com/package/elkjs/v/0.11.1) | 0.11.1 | **EPL-2.0** | transitive via `beautiful-mermaid` | client bundle |
-| [`dompurify`](https://www.npmjs.com/package/dompurify/v/3.4.15) | 3.4.15 | MPL-2.0 OR Apache-2.0 | direct dependency of `@digithings/ui` | client bundle |
+| [`dompurify`](https://www.npmjs.com/package/dompurify/v/3.4.17) | 3.4.17 | MPL-2.0 OR Apache-2.0 | direct dependency of `@digithings/ui` | client bundle |
 
 `@digithings/ui` is [`packages/ui`](../packages/ui/package.json);
 its consumer is the digithings.ai static export
@@ -81,11 +81,37 @@ way, or its version/license changes.
 
 ## Decision: `dompurify` dual license
 
-`dompurify@3.4.15` declares `MPL-2.0 OR Apache-2.0`. digithings relies on the
+`dompurify@3.4.17` declares `MPL-2.0 OR Apache-2.0`. digithings relies on the
 **Apache-2.0** option — a permissive license, so no weak-copyleft obligations
 arise — and consumes it unmodified as a direct dependency of `@digithings/ui`,
 used for SVG sanitization
 ([`sanitize-mermaid-svg.ts`](../packages/ui/src/components/chat/sanitize-mermaid-svg.ts)).
+
+### Security note: five GHSAs closed by the 3.4.17 floor (DIG-5772)
+
+The floor moved from `^3.4.15` to `^3.4.17` on 2026-10-27, and the lock now
+resolves `3.4.17`. OSV lists five advisories against `3.4.15`:
+
+| Advisory | Severity | Needs option | Fixed in |
+|---|---|---|---|
+| `GHSA-cg2g-xh64-v4q7` | CRITICAL | `SAFE_FOR_TEMPLATES` + shadow-root DOM output | 3.4.17 |
+| `GHSA-mrv2-3pqr-j5jr` | HIGH | `IN_PLACE` + node-removing hook | 3.4.17 |
+| `GHSA-6688-9rhm-gjv2` | LOW | `IN_PLACE` | 3.4.16 |
+| `GHSA-c6gr-qvv4-5v3f` | LOW | `PARSER_MEDIA_TYPE: application/xhtml+xml` | 3.4.17 |
+| `GHSA-p98j-92pf-mc4p` | LOW | `IN_PLACE` + node-removing hook | 3.4.16 |
+
+None of the five was reachable at the only call site: `sanitize-mermaid-svg.ts`
+passes `USE_PROFILES: {svg: true, svgFilters: true}` and `ADD_ATTR:
+["dominant-baseline"]` only, so it uses none of the options above
+(`RETURN_DOM`/shadow-root output included). The floor is still raised so the
+audit stops reporting a critical and a high in a package we ship, and so a
+future call site cannot quietly land on an affected release. Re-check if a new
+call site passes `SAFE_FOR_TEMPLATES`, `IN_PLACE`, `PARSER_MEDIA_TYPE` or
+`RETURN_DOM`, or if `mermaid`'s bundled sanitiser is upgraded separately.
+
+`mermaid@11.16.0` declares `dompurify: ^3.3.3` and keeps its own bundled copy in
+its dist build; that path is not changed by this floor and stays a separate
+decision.
 
 ## License audit for new or upgraded dependencies
 

@@ -101,7 +101,7 @@
     "beautiful-mermaid": "^1.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.17",
     "heat-graph": "^0.0.17",
     "katex": "^0.16.47",
     "lightweight-charts": "^5.2.0",
