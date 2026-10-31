@@ -28,10 +28,8 @@ files stay until DIG-3608. DIG-3697 owns `scripts/deploy/runner.sh` and
 | R2 | `.github/workflows/sync-digiquant-runner-digikey-secret.yml` | local-ci | Manual and disarmed. Writes Worker secrets. No API call in this change. |
 | R2 | `.github/workflows/sync-digiquant-runner-mail-secrets.yml` | local-ci | Manual and disarmed. Writes Worker secrets. No API call in this change. |
 | R2 | `.github/workflows/test-digiquant.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |
-| R3 | `.github/workflows/deploy-digiquant-cloudflare.yml` | local-ci | `scripts/build-digiquant.sh`. Pages watching `main` is the publish. |
 | R3 | `.github/workflows/test-dashboard.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |
 | R4 | `.github/workflows/book-pdf.yml` | local-ci | `npm run book:pdf --workspace digithings-web`. |
-| R4 | `.github/workflows/deploy-digithings-cloudflare.yml` | local-ci | `scripts/build-digithings.sh`. Pages watching `main` is the publish. |
 | R4 | `.github/workflows/refresh-repo-activity.yml` | cloudflare-cron | `refresh-repo-activity`. |
 | R4 | `.github/workflows/test-web.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |
 | R6 | `.github/workflows/datatap-answer-check.yml` | manual-dispatch | No clock: retired 2026-10-18 (DIG-4435). The file stays; a human can still start it. |

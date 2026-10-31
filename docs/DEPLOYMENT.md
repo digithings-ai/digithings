@@ -175,11 +175,11 @@ deploys it — `deploy-digichat-cloudflare-container.yml`, on a manual dispatch 
 
 ### digithings.ai — static landing page
 
-- **Source:** `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
+- **Source:** `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` reads that closure from `scripts/build-digithings.sh` (the PR build check workflow was deleted with the GHA exit ledger; a path-gated local-ci lane is a to-do).
 - **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `cloudflare/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `apps/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (today the Pages shell that iframes digichat `/embed`; after the cutover, the app).
-- **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; `scripts/check_deploy_freshness.py` is what fails a missing or >7-day stamp. The daily `freshness-digithings` job lived in `smoke-site.yml`, removed in #4919; the remaining callers are the build-stamp asserts in `deploy-digithings-cloudflare.yml` and `deploy-digiquant-cloudflare.yml`. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
+- **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; `scripts/check_deploy_freshness.py` is what fails a missing or >7-day stamp. The daily `freshness-digithings` job lived in `smoke-site.yml`, removed in #4919; the remaining callers are the build-stamp asserts in `deploy-digiquant-cloudflare.yml` and `scripts/local-deploy/build_sites.sh` (`deploy-digithings-cloudflare.yml` was deleted with the GHA exit ledger). This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
 
 To update the landing page: edit `apps/digithings-web/`, run the build script locally, and let Cloudflare Pages deploy from the connected branch.
 
@@ -330,12 +330,15 @@ Its matrix is every app that pins `wrangler` and ships a `wrangler.toml`, and
 Worker is added without landing in the matrix. The matrix covers
 `digichat-cloudflare` and `digithings-stack-cloudflare`.
 
-### 3. A build check for a site Cloudflare deploys itself (`deploy-digithings-cloudflare.yml`)
+### 3. A build check for a site Cloudflare deploys itself (`deploy-digithings-cloudflare.yml`, deleted)
 
-`bash scripts/build-digithings.sh` plus `dist/` assertions. It never deploys: the real
+`bash scripts/build-digithings.sh` plus `dist/` assertions. It was deleted with the GHA exit
+ledger (disabled since the cost lock); run `scripts/local-deploy/build_sites.sh digithings`
+locally until a path-gated local-ci lane exists. It never deployed: the real
 digithings.ai deploy is **Cloudflare Pages watching `main`**, configured in the Cloudflare
-dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` is the same shape for
-digiquant.io. Nothing in the repo can make a Pages deployment fail before it happens, only
+dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` was the same shape for
+digiquant.io until it was deleted with the GHA exit ledger (site paused; the local lane is
+`scripts/local-deploy/build_sites.sh digiquant`). Nothing in the repo can make a Pages deployment fail before it happens, only
 fail a PR before it merges.
 
 ### The two stacks have a deploy lane again

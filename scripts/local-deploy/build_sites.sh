@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local replacement for the Pages build-check jobs in
 # deploy-digiquant-cloudflare.yml and deploy-digithings-cloudflare.yml
-# (both disabled on GitHub; Actions minutes exhausted).
+# (both deleted with the GHA exit ledger; this script is the replacement).
 #
 # Runs the same build scripts Cloudflare Pages runs, in the same order the
 # lanes run them, then the same dist assertions and the same freshness

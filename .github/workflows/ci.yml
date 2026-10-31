@@ -161,6 +161,8 @@ jobs:
               - 'apps/dashboard-api/**'
               - 'apps/corpus-index/**'
               - 'apps/digitrace-ingest/**'
+              - 'apps/digiquant-app/package.json'
+              - 'packages/contract/package.json'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -237,8 +239,6 @@ jobs:
               - 'package-lock.json'
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/pipeline-digiquant.yml'
-              - '.github/workflows/deploy-digithings-cloudflare.yml'
-              - '.github/workflows/deploy-digiquant-cloudflare.yml'
               - '.github/workflows/**'
             workflows:
               - '.github/workflows/**'

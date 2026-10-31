@@ -214,9 +214,9 @@ Point Stripe Dashboard webhook →
 ## 4. Olympus build / deploy (digiquant.io Cloudflare Pages)
 
 Primary path: Cloudflare Pages git integration on `main`, build command
-`bash scripts/build-digiquant.sh` (see
-[`.github/workflows/deploy-digiquant-cloudflare.yml`](../../../.github/workflows/deploy-digiquant-cloudflare.yml)
-— PR build-check only; dashboard owns production publish).
+`bash scripts/build-digiquant.sh` (the PR build check,
+`deploy-digiquant-cloudflare.yml`, was deleted with the GHA exit ledger; run
+`scripts/local-deploy/build_sites.sh digiquant` locally; dashboard owns production publish).
 
 ### Flag off (pre-cutover — default)
 
