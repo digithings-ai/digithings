@@ -1,15 +1,20 @@
-"""A review verdict applies only to the head SHA it was made against.
+"""A review verdict names one head; a push does not spend a block.
 
 `digithings-ai/digithings#6263` was approved at 01:01 on head `177278b680f4`
 and handed back at 01:05 because a `changes_requested` written against
-`a87fc55760e9` still stood. A verdict is a statement about one commit: a block
-on a commit the PR no longer stands at is a statement about code that is no
-longer here, and it must neither hold the current head nor ask the seat that
-posted it to review work it never saw.
+`a87fc55760e9` still stood. #6399 answered that by letting the branch moving
+spend every block, which also let any push retire a security block nobody had
+answered (T4). The rule now:
 
-These are the five behaviours the rule promises, one test each. They live
-beside `test_merge_queue.py` rather than inside it so the #6263 shape reads as
-one subject.
+* an approve counts only on the head it names;
+* a block stands whatever head it names, until the seat that posted it posts a
+  verdict on the current head (no `Withdraws:` line needed when the block named
+  an older commit — that is the #6263 handback, answered by the seat);
+* another seat's approve never clears it, with or without a `Withdraws:` line;
+* a native CHANGES_REQUESTED stands until it is dismissed or re-reviewed.
+
+They live beside `test_merge_queue.py` rather than inside it so the #6263
+shape reads as one subject.
 """
 
 from __future__ import annotations
@@ -149,11 +154,15 @@ def test_a_verdict_applies_only_to_the_head_it_was_made_against() -> None:
     assert mq.verdict_applies_to_head(unscoped, HEAD_6263)
 
 
-# 2. A `changes_requested` whose head is not the current head must not block.
+# 2. A `changes_requested` whose head is not the current head still blocks (T4).
 
 
-def test_a_stale_seat_block_does_not_hold_the_current_head() -> None:
-    """The #6263 shape: the security desk blocked a head the PR had left."""
+def test_a_stale_seat_block_is_not_cleared_by_another_seats_approve() -> None:
+    """The security desk blocked a head the PR has left; another seat approved.
+
+    Until T4 this asserted `eligible`: the push spent the security block and
+    the code reviewer's approve carried the merge — the #6170 shape again.
+    """
     pr = _pr(
         6263,
         comments=[
@@ -173,11 +182,18 @@ def test_a_stale_seat_block_does_not_hold_the_current_head() -> None:
         ],
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any(
+        SECURITY_SEAT in r and STALE_6263[:12] in r and HEAD_6263[:12] in r
+        for r in verdict.reasons
+    ), verdict.reasons
 
 
-def test_a_stale_unseated_block_does_not_hold_the_current_head() -> None:
-    """The same rule where the seat cannot be read, so the newest verdict decides."""
+def test_a_stale_unseated_block_still_holds_the_current_head() -> None:
+    """The same rule where the seat cannot be read: nothing newer answers it.
+
+    Until T4 this asserted `eligible`.
+    """
     pr = _pr(
         6263,
         comments=[
@@ -193,16 +209,17 @@ def test_a_stale_unseated_block_does_not_hold_the_current_head() -> None:
         ],
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any("A push does not spend a block" in r for r in verdict.reasons), verdict.reasons
 
 
-def test_a_stale_native_block_does_not_hold_the_current_head() -> None:
+def test_a_stale_native_block_still_holds_until_it_is_dismissed() -> None:
     """`reviewDecision` keeps saying CHANGES_REQUESTED after the head moves.
 
-    GitHub's aggregate is not scoped to a commit, and the review that fed it
-    was made against the commit it names. A native block on a head the PR has
-    left is as stale as a posted one — and on this org it is permanent, because
-    the one login that posted it is the only login that could approve.
+    That is GitHub's own rule, and the queue now follows it (T4): a native
+    change request is answered by a new review on the head or by a dismissal,
+    which GitHub audits. Until T4 this asserted `eligible`, so a push retired
+    a native block.
     """
     pr = _pr(6263, comments=[_in_session_review(HEAD_6263)])
     pr["reviewDecision"] = "CHANGES_REQUESTED"
@@ -210,6 +227,27 @@ def test_a_stale_native_block_does_not_hold_the_current_head() -> None:
         {
             "author": {"login": "reviewer"},
             "state": "CHANGES_REQUESTED",
+            "commit": {"oid": STALE_6263},
+        }
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        r.startswith("review has outstanding change requests")
+        and STALE_6263[:12] in r
+        and "dismissal" in r
+        for r in verdict.reasons
+    ), verdict.reasons
+
+
+def test_a_dismissed_native_block_does_not_hold() -> None:
+    """The audited way out of a native block: GitHub no longer reports it."""
+    pr = _pr(6263, comments=[_in_session_review(HEAD_6263)])
+    pr["reviewDecision"] = ""
+    pr["reviews"].append(
+        {
+            "author": {"login": "reviewer"},
+            "state": "DISMISSED",
             "commit": {"oid": STALE_6263},
         }
     )
@@ -350,3 +388,160 @@ def test_an_approve_on_an_old_head_does_not_clear_a_block_on_the_current_head() 
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any(SECURITY_SEAT in r and "changes_requested" in r for r in verdict.reasons)
+
+
+# 6. T4 (from #6399): a push does not spend a security block.
+
+
+def test_a_security_block_on_a_then_a_push_to_b_is_not_eligible_on_label_and_coverage() -> None:
+    """Security blocks A; the author pushes B; label and coverage are on B.
+
+    This is the T4 bypass end to end: no approve on B from anyone, only the
+    `reviewed:agent` label and an in-session marker on B. Not eligible, and the
+    refusal names the seat and the commit it blocked.
+    """
+    pr = _pr(
+        6263,
+        comments=[
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:50:00Z",
+            ),
+            _in_session_review(HEAD_6263),
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(SECURITY_SEAT in r and STALE_6263[:12] in r for r in verdict.reasons), (
+        verdict.reasons
+    )
+
+
+def test_the_same_seat_approving_b_clears_its_block_on_a() -> None:
+    """The #6263 handback, answered by the seat: it re-reviews B and approves.
+
+    No `Withdraws:` line is needed — the block named A, the approve names B, so
+    the seat has posted a verdict on the head the PR stands at.
+    """
+    pr = _pr(
+        6263,
+        comments=[
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:50:00Z",
+            ),
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6263,
+                created="2026-10-23T01:01:00Z",
+            ),
+            _in_session_review(HEAD_6263),
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_reviewer_seats_own_approve_on_b_clears_its_block_on_a() -> None:
+    """The same relief for any seat, not only the security desk."""
+    pr = _pr(
+        6263,
+        comments=[
+            _seat_verdict(
+                seat=REVIEWER_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:50:00Z",
+            ),
+            _seat_verdict(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6263,
+                created="2026-10-23T01:01:00Z",
+            ),
+            _in_session_review(HEAD_6263),
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_another_seats_withdrawal_does_not_clear_a_security_block() -> None:
+    """A `Withdraws:` line speaks only for the seat that writes it."""
+    pr = _pr(
+        6263,
+        comments=[
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:50:00Z",
+            ),
+            _seat_verdict(
+                seat=REVIEWER_SEAT,
+                verdict="approve",
+                head_sha=HEAD_6263,
+                created="2026-10-23T01:01:00Z",
+                withdraws=STALE_6263,
+            ),
+            _in_session_review(HEAD_6263),
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(SECURITY_SEAT in r for r in verdict.reasons), verdict.reasons
+
+
+def test_the_seat_approving_a_again_does_not_clear_its_block_once_the_pr_is_at_b() -> None:
+    """An approve on the commit the PR has left says nothing about B."""
+    pr = _pr(
+        6263,
+        comments=[
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:50:00Z",
+            ),
+            _seat_verdict(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=STALE_6263,
+                created="2026-10-23T00:55:00Z",
+                withdraws=STALE_6263,
+            ),
+            _in_session_review(HEAD_6263),
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+
+
+def test_a_newer_unseated_approve_on_b_answers_an_unseated_block_on_a() -> None:
+    """Clause 2 is still newest-verdict: a later verdict naming B replaces it."""
+    pr = _pr(
+        6263,
+        comments=[
+            {
+                "id": "IC_kwDOprose_6263_block",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "body": f"Review verdict: changes requested ({STALE_6263})\n",
+                "createdAt": "2026-10-23T00:50:00Z",
+            },
+            {
+                "id": "IC_kwDOprose_6263_approve",
+                "author": {"login": "chrizefan"},
+                "authorAssociation": "MEMBER",
+                "body": f"Review verdict: approve ({HEAD_6263})\n",
+                "createdAt": "2026-10-23T01:01:00Z",
+            },
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons

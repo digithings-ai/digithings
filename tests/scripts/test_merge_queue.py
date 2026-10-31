@@ -1409,33 +1409,37 @@ def test_a_missing_commits_key_does_not_change_the_verdict() -> None:
     """The verdict gate reads the verdict, and no longer reads the branch list.
 
     DIG-4878 retired the old question "is the verdict's commit still on this
-    branch?" because the branch answered it, not the verdict. The rule since
-    #6263 asks the verdict's own scope instead: a block naming `b` says nothing
-    about a PR standing at `c`, and that is true whether or not the row carries
-    a `commits` key. The key is still fetched — the reviewer-independence gate
-    reads commit author dates from it — but it does not decide this gate.
+    branch?" because the branch answered it, not the verdict. A block naming
+    `b` still holds a PR standing at `c` (T4: a push does not spend a block),
+    and that is true whether or not the row carries a `commits` key. The key is
+    still fetched — the reviewer-independence gate reads commit author dates
+    from it — but it does not decide this gate.
+
+    Until T4 this asserted `eligible` on the #6263 head-scope rule.
     """
-    pr = _pr(
-        347,
-        head_sha="c" * 40,
-        approved=True,
-        comments=[_review_comment(verdict="changes_requested", head_sha="b" * 40)],
-        omit=("commits",),
-    )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    for omit in ((), ("commits",)):
+        pr = _pr(
+            347,
+            head_sha="c" * 40,
+            approved=True,
+            comments=[_review_comment(verdict="changes_requested", head_sha="b" * 40)],
+            omit=omit,
+        )
+        verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+        assert not verdict.eligible, omit
+        assert any("bbbbbbbbbbbb" in r for r in verdict.reasons), verdict.reasons
 
 
-def test_a_verdict_against_an_older_commit_on_the_branch_does_not_block() -> None:
-    """A reviewer who blocked commit A has said nothing about A+B.
+def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
+    """A reviewer who blocked commit A is not answered by the author pushing B.
 
-    This test asserted the opposite until 2026-10-23. `#6263` was approved at
-    01:01 on `177278b680f4` and handed back at 01:05 because a
-    `changes_requested` against `a87fc55760e9` still stood: a verdict on code
-    the PR has left held the head it stands at, and only the seat that posted it
-    could clear it. The verdict is scoped to the commit it names, so it neither
-    blocks this head nor asks for a re-review of it. A block on the current head
-    still blocks; see the #6263 tests.
+    T4 (from #6399). Between 2026-10-23 and this change the test asserted
+    `eligible`: the #6263 rule scoped a block to the commit it named, so any
+    push retired it and the PR merged on coverage evidence alone. Every seat
+    pushes under one login, so that let the author retire a block it never
+    answered. A block now stands until a later verdict names the head; the
+    #6263 handback is answered by the blocking seat re-reviewing the head (see
+    `test_merge_queue_verdict_head_scope.py`).
     """
     older = "b" * 40
     head = "c" * 40
@@ -1447,16 +1451,17 @@ def test_a_verdict_against_an_older_commit_on_the_branch_does_not_block() -> Non
         comments=[_review_comment(verdict="changes_requested", head_sha=older)],
         commits=[{"oid": older}, {"oid": head}],
     )
-    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("A push does not spend a block" in r for r in verdict.reasons), verdict.reasons
 
 
-def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
-    """A verdict names one commit; this PR stands at another.
+def test_a_verdict_against_a_head_this_pr_does_not_carry_still_blocks() -> None:
+    """A verdict names one commit; this PR stands at another, and it still holds.
 
-    This test asserted the opposite until 2026-10-23, on the DIG-4878 reasoning
-    that a block on code that no longer exists still has to be answered. Under
-    the #6263 rule the block is scoped to the commit it named: it is a statement
-    about code the PR has left, so it does not hold the head the PR stands at.
+    T4 (from #6399) restores the DIG-4878 reasoning: a block on code that no
+    longer exists still has to be answered, by a reviewer and not by a
+    rebase. Between 2026-10-23 and this change the test asserted `eligible`.
     """
     head = "c" * 40
     pr = _pr(
@@ -1468,7 +1473,8 @@ def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> Non
         commits=[{"oid": head}],
     )
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any("ffffffffffff" in r for r in verdict.reasons), verdict.reasons
 
 
 
@@ -1559,15 +1565,14 @@ def _in_session_review_comment(
     }
 
 
-def test_a_block_on_a_head_the_pr_has_left_does_not_hold_it() -> None:
-    """The #6263 defect in one fixture: the branch moved, and the hold is stale.
+def test_a_block_on_a_head_the_pr_has_left_still_holds_it() -> None:
+    """The branch moved under a block, and the label plus coverage do not carry it.
 
-    The verdict names a commit that is no longer on the branch, which is what a
-    rebase or a merge from develop leaves behind. Under the rule until
-    2026-10-23 that kept the PR held indefinitely — the label says a review ran,
-    so the coverage gate was satisfied, and only the same seat could clear a
-    block on code that no longer exists. A verdict is scoped to the commit it
-    names, so this block does not apply to the head the PR stands at.
+    T4 (from #6399). The verdict names a commit that is no longer on the
+    branch, which is what a rebase or a merge from develop leaves behind. The
+    #6263 rule read that block as stale and let the label and the in-session
+    marker carry the merge; this test asserted `eligible` until T4. Nothing in
+    this record answers the block, so the PR waits for a verdict on its head.
     """
     head = "c" * 40
     stale = "f" * 40
@@ -1587,7 +1592,8 @@ def test_a_block_on_a_head_the_pr_has_left_does_not_hold_it() -> None:
     )
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any("ffffffffffff" in r and "changes_requested" in r for r in verdict.reasons)
 
 
 def test_the_label_alone_still_carries_a_pr_with_no_blocking_verdict() -> None:
@@ -1725,16 +1731,16 @@ def test_a_non_answer_is_not_a_verdict() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
-def test_the_6071_timeline_does_not_hold_the_current_head() -> None:
+def test_the_6071_timeline_is_refused() -> None:
     """The shape the DIG-4878 audit found: blocked, rebased, merged on the label.
 
     `digithings-ai/digithings#6071` was blocked at 01:30 Rome against
     `028e67ed`, merged at 02:28 on head `7b3b921d95`, and approved at 02:44 —
     sixteen minutes after the merge. DIG-4878 read that as a merge that should
-    have waited; since #6263 the block on `028e67ed` is scoped to that commit
-    and does not hold `7b3b921d95`, so the same record now queues on its
-    coverage evidence. This test pins the consequence rather than hiding it:
-    the block is not retired by the branch moving — it was never about this head.
+    have waited. #6399 scoped the block to `028e67ed` and this test asserted
+    `eligible` — the record has no approve at all. T4 restores the refusal: a
+    push does not spend a block, so the record waits for a verdict on
+    `7b3b921d95`.
     """
     head = "7b3b921d95" + "0" * 30
     pr = _pr(
@@ -1753,7 +1759,8 @@ def test_the_6071_timeline_does_not_hold_the_current_head() -> None:
     )
     pr["labels"] = [{"name": "reviewed:agent"}]
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any("028e67ed" in r and "7b3b921d95" in r for r in verdict.reasons), verdict.reasons
 
 
 # --- a block belongs to the seat that posted it ---------------------------------
@@ -1894,22 +1901,26 @@ def _the_6170_timeline(*, with_the_security_approve: bool = False) -> dict[str, 
     return pr
 
 
-def test_the_6170_timeline_does_not_hold_the_current_head() -> None:
+def test_the_6170_timeline_is_refused() -> None:
     """The security desk's block named `fb309e6458`; the PR stood at `cd17d6539b`.
 
-    This test asserted a refusal until 2026-10-23, on the DIG-4911 rule that a
-    block belongs to the seat that posted it and no other seat's approve clears
-    it. That rule is what #6263 ran into: the block is still scoped to a commit
-    the PR has left, so no approve on its own head could ever clear it and the
-    seat had to re-review a head it never read. Under the head-scoped rule the
-    block is spent by the branch moving, and the reviewer's approve on the head
-    is what counts. The seat rule itself is unchanged and applies to a block on
-    the current head — see `test_a_block_on_the_current_head_still_holds`.
+    DIG-4911: a block belongs to the seat that posted it and no other seat's
+    approve clears it. #6399 scoped the block to `fb309e6458`, so the push to
+    `cd17d6539b` spent it and this test asserted `eligible` — the exact merge
+    DIG-4911 was written to stop. T4 restores the refusal. The reviewer's own
+    stale blocks are cleared by its approve on the head; the security desk's
+    is not, and the refusal names the seat and the commit it blocked. The way
+    out is the security desk approving `cd17d6539b` — see
+    `test_the_6170_timeline_is_cleared_by_the_security_desks_own_approve`.
     """
     verdict = mq.evaluate(
         _the_6170_timeline(), mq.load_policy(), acting_role="em", base="develop"
     )
-    assert verdict.eligible, verdict.reasons
+    assert not verdict.eligible
+    assert any(
+        SECURITY_SEAT in r and STALE_6170[:12] in r and HEAD_6170[:12] in r
+        for r in verdict.reasons
+    ), verdict.reasons
 
 
 def test_the_6170_timeline_is_cleared_by_the_security_desks_own_approve() -> None:
@@ -2174,14 +2185,15 @@ def test_an_approve_with_no_seat_is_enough_when_no_block_stands(
     assert reasons == []
 
 
-def test_a_block_on_a_head_the_pr_left_needs_no_non_author_approve(
+def test_a_block_on_a_head_the_pr_left_still_needs_a_non_author_approve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The head moving is not a clearance: the stale block is already spent.
+    """The head moving is not a clearance, so the approve that clears is checked.
 
-    A block scoped to a commit the PR has left asks no seat for anything
-    (`verdict_applies_to_head`), so an approve on the new head is not read as
-    clearing it.
+    T4: a block on a commit the PR has left is not spent by the push, so the
+    approve on the new head is what clears it, and it has to pass the same
+    non-author check as a clearance of a block on the head (item 3 of
+    DIG-4990). This one names no seat. Until T4 this asserted no refusal.
     """
     head = "d" * 40
     reasons = _clearance_reasons(
@@ -2202,7 +2214,8 @@ def test_a_block_on_a_head_the_pr_left_needs_no_non_author_approve(
         ],
         head=head,
     )
-    assert reasons == []
+    assert len(reasons) == 1, reasons
+    assert "names no reviewer seat" in reasons[0], reasons
 
 
 def test_the_author_seats_approve_does_not_clear_the_block_end_to_end(
