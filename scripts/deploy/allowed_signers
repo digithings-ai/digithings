@@ -8,4 +8,4 @@
 # in the Mac keychain and never leaves it (approved 2026-10-31). A file
 # with no key lines fails closed: every deploy job refuses the tag.
 # Do not put a private key in this file.
-promotion@noreply.digiforge.local namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINKq/T6JvmayBhm/nZZyYZnz7SZc+Ef+h/+vCoN1vrvl
+promotion@local.invalid namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINKq/T6JvmayBhm/nZZyYZnz7SZc+Ef+h/+vCoN1vrvl
