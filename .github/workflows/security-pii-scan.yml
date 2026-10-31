@@ -1,7 +1,7 @@
 name: "Security: customer PII scan"
 
-# DIG-1498 R5 / DIG-2607. The gitignore rules added for the occ_tickets
-# artifacts govern untracked files only: `git add -f`, a missing root
+# DIG-1498 R5 / DIG-2607. The gitignore rules added for the support-ticket
+# index artifacts govern untracked files only: `git add -f`, a missing root
 # .gitignore and the next artifact under the next name all walk past them.
 # This job scans what is actually committed.
 #
