@@ -1,4 +1,11 @@
-"""`npm-audit` must evaluate on every push to `develop`/`main`, not only on a diff that
+"""The push-evaluation guard (DIG-2305), after the `npm-audit` lane was deleted.
+
+`security-npm-audit.yml` and its `ci.yml` caller were deleted with the GHA exit
+ledger (Dependabot alerts read the same lockfiles), so `ALWAYS_EVALUATED_ON_PUSH`
+is empty. The history below is why the mechanism exists; the tests that pinned
+`npm-audit` itself left with the lane, and this file keeps the generic wiring.
+
+`npm-audit` must evaluate on every push to `develop`/`main`, not only on a diff that
 touched a manifest (DIG-2305).
 
 The path gate in `ci.yml`'s `changes` job answers *which files this commit touched*. The
@@ -71,25 +78,6 @@ def test_ci_still_runs_on_a_push_to_develop_and_main() -> None:
     assert _triggers()["push"]["branches"] == ["main", "develop"]
 
 
-def test_npm_audit_ignores_the_path_filter_on_a_push() -> None:
-    where = "ci.yml: jobs.npm-audit.if"
-    condition = str(_ci()["jobs"]["npm-audit"].get("if", ""))
-    assert "github.event_name == 'push'" in condition, (
-        f"{where} is {condition!r}. `npm-audit` is path-gated, so a push to develop that "
-        "touched no manifest reports the lane as skipped while `Required checks passed` "
-        "reports success — a green gate over a lane that never ran (DIG-2305)"
-    )
-
-
-def test_npm_audit_stays_path_gated_on_a_pull_request() -> None:
-    where = "ci.yml: jobs.npm-audit.if"
-    condition = str(_ci()["jobs"]["npm-audit"].get("if", ""))
-    assert "needs.changes.outputs.npm_audit == 'true'" in condition, (
-        f"{where} is {condition!r}. Dropping the filter outright would make every doc-only "
-        "PR pay for an audit; the widening is meant to apply to pushes only (DIG-2305)"
-    )
-
-
 def test_the_push_guard_is_wired_to_the_push_event() -> None:
     """The guard must be armed by the push event, or it never fires."""
     steps = _ci()["jobs"]["required-checks"]["steps"]
@@ -104,12 +92,10 @@ def test_the_push_guard_is_wired_to_the_push_event() -> None:
     )
 
 
-def test_npm_audit_is_declared_always_evaluated_on_push() -> None:
-    assert "npm-audit" in agg.ALWAYS_EVALUATED_ON_PUSH, (
-        "scripts/ci_required_checks_aggregate.py no longer lists npm-audit in "
-        f"ALWAYS_EVALUATED_ON_PUSH (currently {sorted(agg.ALWAYS_EVALUATED_ON_PUSH)}), so a "
-        "skipped npm-audit on develop reads as success again (DIG-2305)"
-    )
+def test_the_deleted_npm_audit_lane_is_not_declared() -> None:
+    """`npm-audit` left ci.yml with its workflow; an entry naming it would guard nothing."""
+    assert "npm-audit" not in _ci()["jobs"]
+    assert "npm-audit" not in agg.ALWAYS_EVALUATED_ON_PUSH
 
 
 def test_every_declared_job_really_is_unconditional_on_a_push() -> None:

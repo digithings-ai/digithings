@@ -63,7 +63,7 @@ STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation
 | Insider / developer with repo write access | `SECURITY.md`, `.github/workflows/`, live-trading code | T/E — silently weaken controls | `.claude/settings.json` PreToolUse hooks block edits to protected paths off a `task-N-*` branch; pre-push hook blocks live-trading pushes without `Human-Approved-By:` trailer; CI PR-linkage workflow rejects orphan commits. | Hooks run in the developer's local environment — a determined insider bypassing the harness still needs to clear PR review and branch protection. |
 | Insider / developer with repo write access | Client / pilot material | I — accidental commit of confidential data | `projects/` is gitignored and never pushed to public remotes; `gitleaks` CI on every PR and push with pinned SHA; [seed-payload PII gate](#personal-data-in-tracked-payloads) on every PR diff. | `gitleaks` allowlist entries require discipline — an incorrectly scoped entry could mask a real leak. The PII gate only reads addresses, and only in payloads; names have no reliable shape and stay out of scope. |
 | Insider / developer with repo write access | `main` branch | T — unreviewed merge | `main` pushes require `ALLOW_MAIN_PUSH=1`; branch protection + PR scoring gate (Security ≥ 8, Accuracy ≥ 9). | Relies on GitHub branch protection being correctly configured — audited out-of-band. |
-| Compromised dependency (supply-chain) | Any Python component | T/E — malicious transitive package | `pip-audit` workflow on every PR, every `develop`/`main` push, and weekly; fails merge on HIGH/CRITICAL (CVSS ≥ 7); acceptances require a justified `pip-audit-ignore.txt` entry. | MEDIUM/LOW findings are warn-only; `digiquant[nautilus]` is excluded (tracked in #42); `digichat/` Node audit is a sibling follow-up job. |
+| Compromised dependency (supply-chain) | Any Python component | T/E — malicious transitive package | Weekly `pip-audit` in `pipeline-maintenance.yml` (`dependency-audit` job, files a tracker issue) plus GitHub Dependabot alerts on `uv.lock`; acceptances require a justified `pip-audit-ignore.txt` entry. | No per-PR merge gate since the PR/push audit workflows were deleted (they had been disabled since the 2026-10-14 cost lock); Dependabot alerts need an owner. |
 | Compromised dependency (supply-chain) | GitHub Actions runners | T — malicious action version | `gitleaks` and other third-party actions are pinned to commit SHAs in `.github/workflows/`. | Not every action in the repo is SHA-pinned — audited on change to any workflow file. |
 | Co-tenant on shared host (research Phase 5) | Another tenant's index / audit / backtest output | I/E — cross-tenant read or privilege escalation | digikey scoped keys enforce tenant scope at the auth layer; audit events are redacted per tenant. | No storage-layer tenant isolation yet; no per-tenant resource quotas; multi-tenant deployment is explicitly a Phase 5 roadmap item. |
 | Co-tenant on shared host (research Phase 5) | Shared LiteLLM proxy | D — exhaust shared LLM budget | LiteLLM caching enabled; `LITELLM_MASTER_KEY` + virtual keys required beyond loopback dev. | No per-tenant token/cost budget enforcement at the proxy layer. |
@@ -283,19 +283,11 @@ We'll work with you on an embargo period if appropriate and credit you in the re
 
 ## Dependency-audit policy
 
-Every Python component is scanned on every PR, every push to `main`/`develop`, and weekly (Monday 06:00 UTC) by the [`pip-audit` workflow](.github/workflows/security-pip-audit.yml) against the [OSV](https://osv.dev) vulnerability database.
+The per-PR `pip-audit` and `npm audit` workflows (`security-pip-audit.yml`, `security-npm-audit.yml`) were deleted with the GHA exit ledger; both had been disabled on GitHub since the 2026-10-14 cost lock, so no PR had been gated by them since then. Dependency CVEs are now surfaced by:
 
-- **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
-- **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`, `digikey`, `digibot`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
-
-The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
-
-- **Blocks merge:** any advisory npm reports as **HIGH** or **CRITICAL**.
-- **Warn-only:** **MODERATE**, **LOW** and unknown severities.
-- **Per-advisory acceptance:** the classifier matches the ignore list against each advisory individually, not against the package — a *new* advisory on a package that already has accepted ones still blocks.
-- **Fails closed:** an npm audit that could not reach the registry (error body, or no `vulnerabilities` key) fails the lane rather than reporting clean.
-- **Scope note:** accepted npm advisories live in [`npm-audit-ignore.txt`](npm-audit-ignore.txt) and follow the same justification requirement as the Python list below.
+- **Python:** the weekly `dependency-audit` job in [`pipeline-maintenance.yml`](.github/workflows/pipeline-maintenance.yml), which runs `pip-audit` against the [OSV](https://osv.dev) database and files one batched tracker issue, honouring [`pip-audit-ignore.txt`](pip-audit-ignore.txt).
+- **Python and JS:** GitHub Dependabot alerts, which read `uv.lock` and the npm lockfiles. They are not a merge gate and need an owner.
+- **npm triage:** [`scripts/classify_npm_audit.py`](scripts/classify_npm_audit.py) and [`npm-audit-ignore.txt`](npm-audit-ignore.txt) stay in the repo for a by-hand `npm audit --json` triage (per-advisory acceptance, fails closed on a registry error) until it is decided whether Dependabot alone is enough.
 
 ### Accepting a CVE
 

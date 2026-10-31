@@ -401,15 +401,9 @@ export const JOBS: readonly Job[] = [
     "project-enforce-assignment.yml",
   ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  // DIG-4364: both audits are `disabled_manually` on GitHub since the 2026-10-14
-  // cost lock; the Monday 06:33 / 06:37 ticks answered 422. See agent-pr-finalizer
-  // above. The audits still run on PR and `workflow_call` from ci.yml.
-  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml", {
-    enabled: false,
-  }),
-  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml", {
-    enabled: false,
-  }),
+  // security-pip-audit.yml and security-npm-audit.yml (disabled since the
+  // 2026-10-14 cost lock, DIG-4364) were deleted with the GHA exit ledger, and
+  // their disabled rows went with them. Dependabot alerts read the same lockfiles.
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
@@ -441,11 +435,10 @@ export const JOBS: readonly Job[] = [
   // The clock lives here and not on the workflow, for the same reason as the row
   // above: develop carries no on.schedule, and the workflow is workflow_dispatch
   // only.
-  // Weekly, not monthly (DIG-2277): security-pip-audit and security-npm-audit
-  // already read this same lock weekly, so a monthly freshness clock put new
-  // versions at a lower reporting rate than known vulnerabilities. 06:23 is
-  // Monday-only and sits 10 min ahead of the 06:33 audit, so freshness and risk
-  // land in one review window.
+  // Weekly, not monthly (DIG-2277): the weekly audits read this same lock, so a
+  // monthly freshness clock put new versions at a lower reporting rate than known
+  // vulnerabilities. (The two security-*-audit workflows were later deleted with the
+  // GHA exit ledger; pipeline-maintenance's weekly dependency-audit still runs.)
   wd("dependency-freshness", "23 6 * * MON", MONOREPO, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
   // The hourly answer-integrity probe had its clock here (DIG-306). Chris

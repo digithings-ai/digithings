@@ -91,28 +91,33 @@ def test_main_exits_one_on_blocking_failure(
 # `skipped` is tolerated by design — it is what lets this aggregator exist at all,
 # since no path-gated job can be named in develop's branch protection. The defect was
 # that the tolerance also covered a lane which never ran on develop at all: npm-audit
-# reported `skipped` while this gate reported `success`. These four pin the narrow
-# replacement, which is deliberately *not* "no skips anywhere": a doc-only PR must still
-# skip npm-audit cleanly, or every prose fix in the repo would pay for an audit.
+# reported `skipped` while this gate reported `success`. That lane has since been
+# deleted, so ALWAYS_EVALUATED_ON_PUSH is empty; these pin the mechanism with a
+# stand-in lane name passed (or patched) in explicitly.
+
+LANE = "always-on-push-lane"
+ALWAYS = frozenset({LANE})
 
 
-def test_npm_audit_skipped_blocks_on_a_push(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_declared_lane_skipped_blocks_on_a_push(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUSH_EVENT", "true")
-    results = {"npm-audit": {"result": "skipped"}, "changes": {"result": "success"}}
-    blocking, advisory = agg.classify_needs(results, require_evaluated=True)
-    assert list(blocking) == ["npm-audit"]
+    results = {LANE: {"result": "skipped"}, "changes": {"result": "success"}}
+    blocking, advisory = agg.classify_needs(
+        results, require_evaluated=True, always_evaluated=ALWAYS
+    )
+    assert list(blocking) == [LANE]
     assert advisory == {}
 
 
-def test_npm_audit_skipped_is_tolerated_on_a_pull_request() -> None:
-    results = {"npm-audit": {"result": "skipped"}, "changes": {"result": "success"}}
-    blocking, _ = agg.classify_needs(results, require_evaluated=False)
+def test_declared_lane_skipped_is_tolerated_on_a_pull_request() -> None:
+    results = {LANE: {"result": "skipped"}, "changes": {"result": "success"}}
+    blocking, _ = agg.classify_needs(results, require_evaluated=False, always_evaluated=ALWAYS)
     assert blocking == {}
 
 
-def test_npm_audit_success_still_passes_on_a_push() -> None:
-    results = {"npm-audit": {"result": "success"}, "changes": {"result": "success"}}
-    blocking, _ = agg.classify_needs(results, require_evaluated=True)
+def test_declared_lane_success_still_passes_on_a_push() -> None:
+    results = {LANE: {"result": "success"}, "changes": {"result": "success"}}
+    blocking, _ = agg.classify_needs(results, require_evaluated=True, always_evaluated=ALWAYS)
     assert blocking == {}
 
 
@@ -125,22 +130,23 @@ def test_other_path_gated_skips_stay_tolerated_on_a_push() -> None:
     results = {
         "digibase": {"result": "skipped"},
         "actionlint": {"result": "skipped"},
-        "npm-audit": {"result": "success"},
+        LANE: {"result": "success"},
     }
-    blocking, _ = agg.classify_needs(results, require_evaluated=True)
+    blocking, _ = agg.classify_needs(results, require_evaluated=True, always_evaluated=ALWAYS)
     assert blocking == {}
 
 
 def test_main_reads_the_push_flag(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.setattr(agg, "ALWAYS_EVALUATED_ON_PUSH", ALWAYS)
     monkeypatch.setenv(
-        "RESULTS", json.dumps({"npm-audit": {"result": "skipped"}, "changes": {"result": "success"}})
+        "RESULTS", json.dumps({LANE: {"result": "skipped"}, "changes": {"result": "success"}})
     )
 
     monkeypatch.setenv("PUSH_EVENT", "true")
     assert agg.main([]) == 1
-    assert "npm-audit" in capsys.readouterr().out
+    assert LANE in capsys.readouterr().out
 
     # GitHub renders a boolean context as the string "true"; a `false` push must not
     # inherit the tightening, and neither must an unset variable.
