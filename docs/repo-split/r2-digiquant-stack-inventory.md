@@ -156,7 +156,7 @@ Root `scripts/` holds 221 files. R2 operational entry points (the names the plan
     rls_proof/00_supabase_shim.sql
 
 Not R2, other owners: `merge_queue.py` and `merge_queue_policy.json` (repository-wide),
-`merge_litellm_cheaperinference.py` and `zammad_mcp/` (9 files, R5),
+`merge_litellm_cheaperinference.py` and `<helpdesk>_mcp/` (9 files, R5),
 `verify_agent_automerge_pr.py`.
 
 ### 1.8 The core pipeline moves to R2 (send-back item 1)
@@ -501,7 +501,7 @@ that test in R5 must still pass, and it fails loudly if the import path breaks.
 
 `infra/docker/Dockerfile.digithings-stack-cloudflare` (R5): lines 128, 130, 131, 134 are
 `infra/digichat-release/config`, `config/litellm.cheaperinference.yaml`,
-`scripts/merge_litellm_cheaperinference.py`, `scripts/zammad_mcp` — the plan's 128-134 is **exact**.
+`scripts/merge_litellm_cheaperinference.py`, `scripts/<helpdesk>_mcp` — the plan's 128-134 is **exact**.
 Lines 53-117 also copy 9 sibling package sources including `digisearch/seeds`, and line 149
 copies `config/searxng/settings.yml`.
 

@@ -552,7 +552,7 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   non-client registry** (R5 send-back rule 02:06 — the client ACR is not the target; registry per
   decision c7256004 Option A); **D-R5-2: self-host-parity homes in R5, contract published
   from R0** (parity scripts are R5's; R0 inputs become a published artifact; publish precedes the
-  gate); **D-R5-3: zammad_mcp private** (closes D-T2; credential at runtime only);
+  gate); **D-R5-3: helpdesk MCP (`<helpdesk>_mcp`) private** (closes D-T2; credential at runtime only);
   **D-R5-4: delete both dead `pj()` rows** (`jobs.ts` L336/L376 — follow-up H1, not performed in
   the inventory ticket); **D-R5-5: one shared local-ci pipeline with a repo argument**
   (no per-repo copy; R2 globs become a second argument value); **new D-R5-6 (R5 send-back rule 02:06): anything that must run while the Mac is off goes to a
