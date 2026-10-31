@@ -9097,3 +9097,31 @@ def test_human_gate_missing_answer_fails_closed(answer: str) -> None:
     reason = mq._human_gate_refusal(body)
     assert reason is not None and "Is human review required?" in reason
     _assert_human_gate_blocks(9207, body)
+
+
+@pytest.mark.parametrize("quote", ["> ", ">", ">> ", "> > ", ">>> "])
+@pytest.mark.parametrize("bullet", ["-", "+", "1."])
+def test_human_gate_ticked_box_inside_a_blockquote_counts(quote: str, bullet: str) -> None:
+    """(a) Blockquote markers, nested ones included, do not hide a ticked box."""
+    ticked = f"{quote}{bullet} [x] Auth or crypto modified\n"
+    body = _gate_body("- [ ] Live-trading path modified\n" + ticked)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "ticks a Human Gate box" in reason
+    _assert_human_gate_blocks(9208, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** No, human review required\n",
+        "**Is human review required?** No - required\n",
+        "**Is human review required?** **No** (required for the auth change)\n",
+        "**Is human review required? No — REQUIRED**\n",
+    ],
+)
+def test_human_gate_no_that_also_says_required_fails_closed(answer: str) -> None:
+    """(d) A No that also says 'required' is ambiguous and needs owner review."""
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "explicit No" in reason
+    _assert_human_gate_blocks(9209, body)

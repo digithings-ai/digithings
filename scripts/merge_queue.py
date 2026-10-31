@@ -3496,9 +3496,24 @@ def _human_gate_section(body: str) -> str:
 
 
 def _human_review_answer_is_no(answer: str) -> bool:
-    """True only for an explicit No (bold or plain, optional trailing text)."""
+    """True only for an unambiguous No (bold or plain, optional trailing text).
+
+    A No that also says "required" (``No, human review required``,
+    ``No - required``) contradicts itself and fails closed (DIG-6157).
+    """
     cleaned = re.sub(r"[*_`\s]+", " ", answer).strip(" :—-").strip()
-    return bool(re.match(r"(?i)no\b", cleaned)) and not re.search(r"(?i)\byes\b", cleaned)
+    if not re.match(r"(?i)no\b", cleaned):
+        return False
+    return not re.search(r"(?i)\byes\b|\brequir", cleaned)
+
+
+def _strip_blockquote_markers(text: str) -> str:
+    """``text`` with leading blockquote markers removed, nested ones included.
+
+    GitHub renders a task-list box inside ``>`` or ``>>`` as a box, so the
+    tick must count there too (DIG-6157).
+    """
+    return re.sub(r"(?m)^[ \t]*(?:>[ \t]?)+", "", text)
 
 
 def _human_gate_refusal(pr: Any) -> str | None:
@@ -3533,7 +3548,7 @@ def _human_gate_refusal(pr: Any) -> str | None:
             "heading" + _HUMAN_GATE_NEEDS_OWNER
         )
     section = _human_gate_section(body)
-    if section and _HUMAN_GATE_CHECKED_RE.search(section):
+    if section and _HUMAN_GATE_CHECKED_RE.search(_strip_blockquote_markers(section)):
         return "Human Gate: PR body ticks a Human Gate box" + _HUMAN_GATE_NEEDS_OWNER
     answers = [
         m.group("answer") for line in visible if (m := _HUMAN_REVIEW_QUESTION_RE.search(line))
