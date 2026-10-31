@@ -1,35 +1,36 @@
 %%{init: {'theme':'base','themeVariables':{'fontSize':'18px'},'flowchart':{'curve':'basis','nodeSpacing':40,'rankSpacing':80,'wrappingWidth':600}}}%%
 flowchart TB
-  subgraph PUB["PUBLIC on GitHub (primary; Origin inbound mirror)"]
-    R0["<b>R0 digithings</b> (new public repo, scrubbed history)<br/>PyPI: digibase digikey digifetch digigraph digillm<br/>digisearch digivault digitrace digibot digivoice digiskills digiquant<br/>digiquant core + digiquant.plugin API + engine schema<br/>npm @digithings-ai/: design, ui, digichat-ui, hero-banner, surface-config, catalog<br/>apps/digichat engine + GHCR images, MCP tooling, clients/*, docs, openwiki<br/>releases: tags + release-please on main"]
+  subgraph PUB["PUBLIC on GitHub digithings-ai (primary; Forgejo copy for review)"]
+    R0["<b>R0 digithings</b> (new public repo, scrubbed history)<br/>PyPI digithings-#lt;module#gt;: digibase digikey digifetch digigraph digillm<br/>digisearch digivault digitrace digibot digivoice digiskills digiquant<br/>digiquant core + digiquant.plugin API + engine schema<br/>npm @digithings-ai/: design, ui, digichat-ui, hero-banner, surface-config, catalog<br/>apps/digichat engine + GHCR images, MCP tooling, clients/*, docs, openwiki<br/>releases: tags + release-please on main"]
   end
-  subgraph PRIV["PRIVATE on Cursor Origin (local-ci Mac jobs · deploys only from Chris-cut signed tags)"]
-    R1["<b>R1 digiquant-strategies</b><br/>proprietary strategies, optimiser, SDCA MCP/CLI<br/>plugin via entry points · git-tag releases"]
-    R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>@digiquant/contract via git tag"]
+  subgraph PRIV["PRIVATE on local Forgejo digithings-ai (Woodpecker on the Mac · GitHub backup at releases · deploys only from Chris-signed tags)"]
+    R1["<b>R1 digiquant-strategies</b><br/>proprietary strategies, optimiser, SDCA MCP/CLI<br/>plugin via entry points · Forgejo PyPI releases"]
+    R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>@digiquant/contract via Forgejo npm"]
     R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload on Chris-cut web tag"]
     R4["<b>R4 digithings-web</b><br/>digithings.ai, digibook, brand<br/>Pages direct upload on Chris-cut web tag"]
     R5["<b>R5 digithings-stack</b><br/>stack Worker + container, digichat Worker<br/>cron, corpus-index · tag-gated deploys"]
-    R6["<b>R6 digichat-tenants</b><br/>client tenant corpora + seeds, kv-sync<br/>writes KV/R2/secrets, never deploys Workers"]
-    R7["<b>R7 twelve-x</b> (exists)<br/>+ twelve-x desk surface<br/>+ digidata-api"]
+    R6["<b><s>R6 digichat-tenants</s></b> superseded 2026-10-29<br/>one private digithings-ai/#lt;client-slug#gt; repo per client<br/>(Forgejo, from digithings-ai/client-template)<br/>pins R0 releases in its lock · its deploy.sh writes KV/R2"]
+    R7["<b>R7 #lt;client-slug#gt;</b> (exists, on hold)<br/>+ #lt;client-slug#gt; desk surface<br/>+ digidata-api · GitHub + Forgejo copy"]
   end
   MONO["digithings-mono on GitHub (archived, private)<br/>full original history, rollback source<br/>split source for R0 and R1–R7"]
   KV[("Cloudflare KV TENANT_CONFIG + R2 seeds<br/>+ Mac deploy agent secrets<br/>(client configs &amp; deploy secrets, never in a repo)")]
 
   R1 -->|digiquant.plugin API| R0
   R2 -->|pins PyPI| R0
-  R2 -->|git tag pin| R1
+  R2 -->|pins Forgejo PyPI| R1
   R3 -->|npm| R0
   R4 -->|npm| R0
-  R5 -->|pins PyPI + FROM GHCR image| R0
+  R5 -->|pins PyPI + image| R0
   R7 -->|npm + PyPI| R0
   R3 -.->|HTTP via @digiquant/contract| R2
   R4 -.->|/api, /embed routes| R5
   R5 -.->|service binding RUNNER| R2
-  R5 -.->|build trigger via local-ci| R7
-  R5 -.->|build trigger via local-ci| R2
+  R5 -.->|build trigger via Woodpecker| R7
+  R5 -.->|build trigger via Woodpecker| R2
+  R6 -->|pinned releases| R0
   R6 ==>|writes| KV
   KV ==>|read at runtime| R5
-  MONO -.->|filter-repo: scrubbed R0 + one export per Origin repo| R0
+  MONO -.->|filter-repo: scrubbed R0 + one export per Forgejo repo| R0
 
   classDef pub fill:#d4f7dc,stroke:#1e8e3e,stroke-width:3px,color:#0b3d1a;
   classDef priv fill:#fde2e1,stroke:#c5221f,stroke-width:3px,color:#5c0e0c;

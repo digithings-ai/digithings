@@ -1,11 +1,15 @@
 # R2 digiquant-stack: file inventory and move list
 
+> **2026-10-31:** dated record. Since 2026-10-29 (D-C1) the private repos live on local Forgejo in the
+> `digithings-ai` org, not on Cursor Origin; R6 is replaced by per-client repos `digithings-ai/<client-slug>`
+> (D-C2). Where this file says Origin, read it as the 14 Oct plan. See [README.md](README.md#where-things-live-2026-10-31).
+
 Measured against `github/develop` = `d227b6ed526202aaa095b8e645804ef308dde813`
 (2026-10-14T20:25:21+02:00, "feat(digiquant): make the desk settings page persist and apply (#5583)").
 Tree census: `git ls-tree -r` = 6615 paths, 6615 unique.
 
 Plan under review: PR #5695 `docs(root): repo split review and phased migration plan`
-(branch `DIG-3518-repo-split-plan`) plus `~/Code/occ-backups/repo-split-docs/repo-split.md`.
+(branch `DIG-3518-repo-split-plan`) plus `~/Code/<client-slug>-backups/repo-split-docs/repo-split.md`.
 Parent epic: DIG-3518, owner Software Architect (`c3bf0d65`), currently `blocked`.
 
 **Scope of this document.** Inventory only. No repository was created, no history moved, no
@@ -152,7 +156,7 @@ Root `scripts/` holds 221 files. R2 operational entry points (the names the plan
     rls_proof/00_supabase_shim.sql
 
 Not R2, other owners: `merge_queue.py` and `merge_queue_policy.json` (repository-wide),
-`merge_litellm_cheaperinference.py` and `zammad_mcp/` (9 files, R5),
+`merge_litellm_cheaperinference.py` and `<helpdesk>_mcp/` (9 files, R5),
 `verify_agent_automerge_pr.py`.
 
 ### 1.8 The core pipeline moves to R2 (send-back item 1)
@@ -218,7 +222,8 @@ classify each file before moving anything.
 
 The plan carried a whitelist file, `overlaps-known.txt`, for paths belonging to more than one
 repository. **The whitelist is removed.** Every path gets exactly one owner, measured at the
-anchored tip:
+anchored tip (R6 is superseded by the client repos `digithings-ai/<client-slug>`, D-C2; read an R6 owner
+below as the owning client repo):
 
 | path | owner | note |
 |---|---|---|
@@ -226,13 +231,13 @@ anchored tip:
 | `digiquant/scripts/plot_sdca_tearsheet.py` | R1 | SDCA tearsheet plot |
 | `digiquant/src/digiquant/optimize.py` | split | SDCA parts R1, generic shell R2 |
 | `digiquant/scripts/generate_tearsheets.py` | R2 | after the SDCA imports move to the plugin hook |
-| `scripts/verify_occ_invite_key.sh` | R6 | |
-| `scripts/occ_invite_key_fixture_server.mjs` | R6 | |
-| `scripts/occ_invite_key_rollout.sh` | R6 | write-secret and KV half, after refactor 1.9 |
-| `scripts/check_occ_rollout_auth_guard.py` | R6 | |
-| `scripts/index_occ_tickets.py` | R6 | |
-| `scripts/test_occ_rollout_scope_guard.sh` | R6 | |
-| `docs/ops/OCC_INVITE_KEY.md` | R6 | |
+| `scripts/verify_<client-slug>_invite_key.sh` | R6 | |
+| `scripts/<client-slug>_invite_key_fixture_server.mjs` | R6 | |
+| `scripts/<client-slug>_invite_key_rollout.sh` | R6 | write-secret and KV half, after refactor 1.9 |
+| `scripts/check_<client-slug>_rollout_auth_guard.py` | R6 | |
+| `scripts/index_<client-slug>_tickets.py` | R6 | |
+| `scripts/test_<client-slug>_rollout_scope_guard.sh` | R6 | |
+| `docs/ops/<CLIENT_SLUG>_INVITE_KEY.md` | R6 | |
 | `apps/digithings-stack-cloudflare/container/seed_chroma.sh` | R5 | |
 
 **Two corrections to the send-back's paths.**
@@ -262,7 +267,7 @@ declared. Measured outcome:
   which is why block 4 is marked "split" and not "R2" in section 1.
 * **489 does not reproduce from any artefact I can reach.** `r2.paths` is not a path in the
   repository, not one of the six files in PR #5695, and not a token in
-  `~/Code/occ-backups/repo-split-docs/repo-split.md`. The three candidate sums are 423 (the plan's
+  `~/Code/<client-slug>-backups/repo-split-docs/repo-split.md`. The three candidate sums are 423 (the plan's
   R2 rows), 440 (this document's six blocks) and 480 (the six blocks plus the 40 core pipeline
   files). 489 equals none of them.
 
@@ -496,7 +501,7 @@ that test in R5 must still pass, and it fails loudly if the import path breaks.
 
 `infra/docker/Dockerfile.digithings-stack-cloudflare` (R5): lines 128, 130, 131, 134 are
 `infra/digichat-release/config`, `config/litellm.cheaperinference.yaml`,
-`scripts/merge_litellm_cheaperinference.py`, `scripts/zammad_mcp` — the plan's 128-134 is **exact**.
+`scripts/merge_litellm_cheaperinference.py`, `scripts/<helpdesk>_mcp` — the plan's 128-134 is **exact**.
 Lines 53-117 also copy 9 sibling package sources including `digisearch/seeds`, and line 149
 copies `config/searxng/settings.yml`.
 

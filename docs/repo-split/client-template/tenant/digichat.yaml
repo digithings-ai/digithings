@@ -1,0 +1,62 @@
+version: 1
+# ONE DigichatDeployment document (R0 schema, `hosts` shape) for this client.
+# Validate with `make test` (runs R0's `config:check` against this file).
+# Colours and fonts only, on a prebuilt R0 skin: see R0
+# apps/digichat/config/examples/skins/ for the skins.
+hosts:
+  example.digithings.ai:
+    slug: example
+    chrome:
+      # Chat slug: R0 serves this tenant's chat at /chat/<slug> (registry row: chatSlug).
+      # Slug only, never a path; see tenant/SCHEMA-NOTES.md §0 and §2.
+      slug: example
+      mode: app
+      theme: light
+      skin: base
+      # No `title`: the embed draws no top bar.
+      welcome:
+        title: Ask about Example Co
+        body:
+          - Answers from example.com, with sources.
+      placeholder: Ask about Example Co
+      suggestions:
+        - "What does Example Co do?"
+        - "How do I contact support?"
+      accent:
+        color: "#2563EB"
+        foreground: "#FFFFFF"
+      # palette: <an R0 palette id>
+      toolbar: false
+      defaultLanguage: en
+      attribution: true
+    features:
+      attachments: false
+      sources: true
+      privateMode: false
+    models:
+      allowPicker: false
+    guardrails:
+      # Example value: each client sets its own. Keeps the tokens-per-minute limit on (the
+      # safe default). A chrome.productChat row is refused without a positive whole number
+      # here (deployment or user); see tenant/SCHEMA-NOTES.md §0.
+      tokensPerMinute:
+        deployment: 60000
+    backend:
+      type: digigraph
+    tools:
+      allowUserToggle: false
+    mcp:
+      allowUserServers: false
+      allowAddForm: false
+      servers: []
+    gate:
+      # Local default. Staging/prod gates are set per environment in tenant/env/.
+      mode: ungated
+      activityDetail: full
+      llmAccess: free_then_byok
+      showByok: false
+      lockSessionControls: true
+      webSearch: true
+      searchEngine: internal
+    # A variable NAME, never a value.
+    tokenEnv: EXAMPLE_EMBED_TOKEN

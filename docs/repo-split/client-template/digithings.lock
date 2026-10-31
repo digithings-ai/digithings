@@ -1,0 +1,15 @@
+# The ONE pin file: which digithings (R0) this client builds on.
+# Format: key=value lines, comments with '#'. CI refuses a path, a branch or a dirty sha.
+#
+# Interim (before the first package/image release): a git sha that is on R0 develop.
+kind=git-sha
+repo=https://github.com/digithings-ai/digithings.git
+ref=develop
+sha=673104483b98ee4f331c533f80804dadb3fed48e
+#
+# After the first release, switch to versions (one line per artifact):
+# kind=release
+# image.digichat=<registry>/digichat:<ver>@sha256:<digest>
+# image.stack=<registry>/digithings-stack:<ver>@sha256:<digest>
+# pypi.digithings-digigraph=<ver>
+# npm.@digithings-ai/digichat-config=<ver>

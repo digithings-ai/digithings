@@ -6,6 +6,12 @@ and the live state of `digithings-ai` on GitHub and Cloudflare at `develop` 58e1
 Scope: repository layout, GitHub org settings, Cloudflare Worker inventory. I did not read
 production data, run any deploy, or open the Cloudflare dashboard.
 
+> **2026-10-31 note:** this review is the 14 Oct record. Since 2026-10-29 (D-C1) the private repos
+> live on local Forgejo in the `digithings-ai` org, not on Cursor Origin, and R6 is replaced by one
+> `digithings-ai/<client-slug>` repo per client (D-C2). The Origin section below is historical; see
+> [Forgejo as the private home](#forgejo-as-the-private-home-2026-10-29-docs-re-homed-2026-10-31)
+> for how its findings map to Forgejo.
+
 ## Verdict: MODIFY
 
 **Agree with the topology** (R0 public + R1–R7 private, the boundaries and the dependency
@@ -16,18 +22,18 @@ org, and two of them would stop the plan partway through:
 
 | # | Proposal assumes | Reality (evidence) | Impact |
 |---|---|---|---|
-| F1 | Protected release branches and `environment: production` gates in every private repo | Org `digithings-ai` is on **GitHub Free** (`gh api orgs/digithings-ai` → `plan: free`). The existing private `twelve-x` returns *"Upgrade to GitHub Pro or make this repository public"* for both branch protection and rulesets. On Free, private repos also get no environment secrets. On Team, private repos get protection, rulesets, environment secrets and deployment-branch policies, but **not required reviewers or wait timers** (GitHub docs, "Deployments and environments"). | Blocker. Every "protected `release/*` + env gate" in R1–R7 is impossible today. |
+| F1 | Protected release branches and `environment: production` gates in every private repo | Org `digithings-ai` is on **GitHub Free** (`gh api orgs/digithings-ai` → `plan: free`). The existing private `<client-slug>` returns *"Upgrade to GitHub Pro or make this repository public"* for both branch protection and rulesets. On Free, private repos also get no environment secrets. On Team, private repos get protection, rulesets, environment secrets and deployment-branch policies, but **not required reviewers or wait timers** (GitHub docs, "Deployments and environments"). | Blocker. Every "protected `release/*` + env gate" in R1–R7 is impossible today. |
 | F2 | R1 publishes a Python package to "GitHub Packages (private PyPI index)" | GitHub Packages supports npm, RubyGems, Maven/Gradle, NuGet and containers. **No Python registry** (GitHub docs, "Introduction to GitHub Packages"). | Blocker for R2→R1 as written. |
 | F3 | Client files are scrubbed from public history *last*, after all extractions | The repo is **public, MIT**, and its history already contains the paths the proposal moves to R1, R6 and R7. Scrub-last keeps them public for the whole migration (weeks). Dates and the exact path list are on the tracking issue, not here. | Security. Also a licensing fact (L1 below). |
 | F4 | Interim npm via GitHub Packages | GitHub Packages npm needs a classic PAT **even to install public packages**. Cloudflare Pages Git builds would need that token. | Avoid the interim; go straight to npmjs or keep source consumption until the cut. |
-| F5 | "Cloudflare stops auto-deploying from `main`" covers the problem | Only the two **Pages** projects (digiquant.io, digithings.ai) auto-deploy from `main` (Git integration, per the headers of `deploy-digiquant-cloudflare.yml` / `deploy-digithings-cloudflare.yml`). `digithings-stack` and `digithings-digichat` Workers have **no Workers Builds and no deploy workflow** (Workers Builds API: 0 builds) — they are deployed by hand with `wrangler deploy` from a local tree, as is digichat via `scripts/occ_invite_key_rollout.sh`. | The real risk on the platform side is laptop deploys from an arbitrary tree, not `main`. R5 must add a tag-driven deploy path and retire manual deploys. |
+| F5 | "Cloudflare stops auto-deploying from `main`" covers the problem | Only the two **Pages** projects (digiquant.io, digithings.ai) auto-deploy from `main` (Git integration, per the headers of `deploy-digiquant-cloudflare.yml` / `deploy-digithings-cloudflare.yml`). `digithings-stack` and `digithings-digichat` Workers have **no Workers Builds and no deploy workflow** (Workers Builds API: 0 builds) — they are deployed by hand with `wrangler deploy` from a local tree, as is digichat via `scripts/<client-slug>_invite_key_rollout.sh`. | The real risk on the platform side is laptop deploys from an arbitrary tree, not `main`. R5 must add a tag-driven deploy path and retire manual deploys. |
 
 Smaller gaps:
 
 - **G1 Unmapped Cloudflare inventory.** Worker `corpus-index` (created 2026-10-13) has no source directory on `develop` (only references in `digigraph/corpus_routing.py` and tests). `digitrace-langfuse` and `digidata-api` have `wrangler.toml` but are not in the account's Worker list. The migration needs a reconciled inventory: every deployed Worker/Pages project → one repo, one workflow.
 - **G2 The path manifest drifts.** `develop` moved 83a104a10 → 58e18e69b on the same day (6,811 → 6,788 files). The per-repo path lists must be generated by a script from a pinned SHA and checked for "every tracked path is assigned exactly once", not hand-maintained.
 - **G3 Supabase drift.** R0 shipping a "minimal self-host schema" while R2 owns the 140 production migrations means the open engine's tables have two definitions. See recommendation M7.
-- **G4 R6 must not deploy R5.** `occ_invite_key_rollout.sh` runs `wrangler deploy` on the digichat Worker. In R6 it may only write KV, R2 seeds and Worker secrets; the deploy step stays in R5.
+- **G4 R6 must not deploy R5.** `<client-slug>_invite_key_rollout.sh` runs `wrangler deploy` on the digichat Worker. In R6 it may only write KV, R2 seeds and Worker secrets; the deploy step stays in R5.
 - **G5 Dual-home window.** Between "extract with history" and "delete moved paths from public" the same code lives in two repos. Nothing in the proposal stops a PR from landing on the old copy.
 - **G6 Actions minutes.** Public repos run Actions free. The monorepo ran 1,000+ workflow runs from 13 Oct 00:00 to 14 Oct ~14:30, ≥2,186 run-minutes (wall clock; billable job-minutes are higher because jobs run in parallel). Every workflow that moves private is billed at $0.006/min (Linux 2-core) beyond the plan's included minutes. Confidence: UNSURE on the monthly total, LIKELY on the order of magnitude (tens of thousands of minutes/month if all CI went private).
 - **G7 The repo-split docs themselves are sensitive.** A precise map of where client prompts and strategies sit in public history tells a reader what to fetch before the scrub. This PR therefore commits the plan at directory granularity only; the file:line manifest stays on the issue (DIG-3518 documents) and in the private repos.
@@ -63,6 +69,8 @@ D-G5 / D-G6 are answered (above). The detailed local-runner design (isolation, c
 keep-awake, Worker fallback, cost comparison) is DIG-3561's deliverable, not this review's.
 
 ## Cursor Origin as the source-control home (direction of 2026-10-14)
+
+*Historical: superseded on 2026-10-29 by D-C1 (Forgejo). Kept as the record of the 14 Oct check.*
 
 Chris's direction: the seven private repos live on **Cursor Origin** as primary. The public
 `digithings` (R0) stays **GitHub-primary** with an Origin inbound mirror (D-O1, answered (a) below).
@@ -106,13 +114,30 @@ What this means for the plan:
 - **O5 — A new silent auto-deploy path.** The Cloudflare app for Cursor would auto-deploy Workers on
   push. The plan forbids installing it (P0) and keeps deploys on the signed-tag gate.
 - **O6 — Beta risk.** Names are permanent during beta, the API had a breaking change two weeks ago,
-  and controls "may expand during early beta". twelve-x is a client repo (**D-O5**). **Answered:** Chris confirms no client contract applies and he
-  has full control of the codebase; twelve-x moves to Origin in P4.7 with no extra gate.
+  and controls "may expand during early beta". `<client-slug>` is a client repo (**D-O5**). **Answered:** Chris confirms no client contract applies and he
+  has full control of the codebase; `<client-slug>` moves to Origin in P4.7 with no extra gate. *(P4.7 struck 23:18; R7 on hold.)*
 - **O7 — GitHub Packages is gone for private repos.** D-Q7 (`@digiquant/contract` from GitHub
   Packages npm) needs a replacement: a git dependency pinned to a tag on Origin.
 
-Details are in [migration-plan.md § Origin](migration-plan.md#source-control-on-cursor-origin) and
+Details were in the Origin section of the migration plan (now
+[migration-plan.md § Before 2026-10-29: Cursor Origin](migration-plan.md#before-2026-10-29-cursor-origin-historical)) and
 the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-answered).
+
+## Forgejo as the private home (2026-10-29; docs re-homed 2026-10-31)
+
+D-C1 moved the private repos to local Forgejo (digiforge) on Chris's Mac, org `digithings-ai`,
+with a private GitHub backup per repo that the owner pushes at releases only. What that does to
+the Origin findings above:
+
+| Finding | With Forgejo |
+|---|---|
+| O1 public repo / mirror direction | Unchanged in substance: R0 stays GitHub-primary and public (D-O1). The Forgejo copy of R0 is the local review loop; changes reach GitHub only through `sctl publish`. |
+| O2 private repos gain real protection | Holds: Forgejo branch protection works on private repos (no direct push, 1 approval, self-approval refused). Each agent platform has its own Forgejo identity, so no agent is a bypass actor. Live matrix: [docs/ops/forgejo-branch-protection.md](../ops/forgejo-branch-protection.md). |
+| O3 tag deploy gate | Holds: the gate still runs `git verify-tag` against `allowed_signers` (D-G6); it does not depend on a forge feature. |
+| O4 CI vendor | Woodpecker on the Mac, driven by Forgejo webhooks, with statuses on the Forgejo PR. |
+| O5 silent auto-deploy | Holds: no Worker or Pages project is connected to any repo for auto-deploy; Forgejo webhooks drive CI only. |
+| O6 beta risk | Gone for the forge itself (Forgejo is self-hosted); replaced by a single-machine risk: the Mac is the only host, so the GitHub backup (at releases) and a nightly encrypted Forgejo dump are the recovery path. |
+| O7 package registry | Forgejo has PyPI and npm registries (owner `digithings-ai`): dev and private builds go there; stable builds go to PyPI `digithings-<module>` and npm `@digithings-ai/*` (D-C5, D-C6). |
 
 ## Review by dimension
 
@@ -121,7 +146,7 @@ the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-answere
 - R1 separate from R2: agree. Strategy access is narrower and a version pin is the cleanest rollback.
 - R5 vs R6 separate (D-1): agree. Client-confidential data needs per-client access later; tenant changes must not rebuild containers.
 - R4 private (D-W1): agree for now. Note the book's *content* about open modules can be pulled from R0 docs at build time, so R4 stays thin.
-- twelve-x desk pages → R7 (D-X1): agree, but do it last among the web moves. The gate/palette hooks (`client-product-gate.tsx`, `command-palette.tsx`) are a refactor in R3, not a move.
+- `<client-slug>` desk pages → R7 (D-X1): agree, but do it last among the web moves. The gate/palette hooks (`client-product-gate.tsx`, `command-palette.tsx`) are a refactor in R3, not a move.
 - `.claude/ .cursor/ agents/ agents.yml opencode.json projects/` (D-13): these drive the agent fleet today. Do not delete them before Paperclip seat instructions stop reading them. Move to a private `digithings-ops` repo **only if** something still reads them (check with `rg` over `~/paperclip-workspace` and the instance dirs first). This is not a ninth product repo; it is config.
 - `packages/design` is public npm while brand assets are private R4 (D-6): check that `design` contains tokens only and no logo/brand files before publishing.
 
@@ -161,7 +186,7 @@ The rule holds in the proposal: nothing public depends on private; the only priv
 
 ### 7. Developer and agent workflow after the split
 - A cross-repo change (engine fix + stack bump) becomes: PR in R0 → release tag → Renovate/bot bump PR in R2/R5. For local work, a `dt-dev` script clones all repos side by side and uses `uv` path sources / `npm` workspaces overlay to develop against local R0 without publishing.
-- Paperclip: one project per repo (or project-repository bindings), `dt-create-issue --project` mapping, `com.digithings.merge-queue` (today drains only `digithings` and `twelve-x`) extended to all repos, worktree sweep and run-watch pointed at the new repos, DCO app installed on each.
+- Paperclip: one project per repo (or project-repository bindings), `dt-create-issue --project` mapping, `com.digithings.merge-queue` (today drains only `digithings` and `<client-slug>`) extended to all repos, worktree sweep and run-watch pointed at the new repos, DCO app installed on each.
 - Seat instructions and skills that hard-code monorepo paths (`apps/...`, `digiquant/...`) must be updated in the same phase as the move; otherwise agents open PRs against dead paths.
 - CI cost: keep heavy test matrices in public R0 (free minutes). Private repos run only their own tests plus a nightly "latest R0" compatibility job, on the Mac `ci` agents (D-G4/D-G5).
 - Agents never cut release tags; they prepare the release PR and changelog, and Chris cuts the tag (signing it is mandatory, D-G6).

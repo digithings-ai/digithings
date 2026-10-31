@@ -1,0 +1,11 @@
+# Environment overlay for 'staging': host, gate and secret NAMES only (never values).
+environment: staging
+host: example-staging.digithings.ai
+gate:
+  mode: invite
+secrets:
+  # name of the variable or keychain item that holds the value
+  embedToken: EXAMPLE_EMBED_TOKEN
+  inviteKey: EXAMPLE_INVITE_KEY
+kv:
+  key: tenant:example-staging.digithings.ai

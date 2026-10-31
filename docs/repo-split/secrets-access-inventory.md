@@ -4,6 +4,13 @@ Scope: slice P of DIG-3518. Per repo R0–R7: secret **names** needed, where eac
 name lives today, where it moves, and what must leave public R0 + its history.
 **Names only. No values are recorded here or in any artefact this ticket makes.**
 
+> **2026-10-31 re-home:** the private repos live on local Forgejo in the `digithings-ai` org
+> (D-C1, 2026-10-29), not on Cursor Origin, and R6 is replaced by one `digithings-ai/<client-slug>`
+> repo per client (D-C2). The per-repo headings below say where each repo lives now; the 14 Oct
+> sources and limits are kept as the record. The Buildkite `deploy` queue named below was struck on
+> 14 Oct (23:36): read "the deploy job on Chris's Mac". See
+> [Forgejo, Woodpecker and the GitHub backups](#forgejo-woodpecker-and-the-github-backups-names-only).
+
 Sources (read 2026-10-14, names only):
 - `repo-split.md` (develop `83a104a10` tree scan) + plan PR #5695 branch
   `DIG-3518-repo-split-plan` (`docs/repo-split/{README,decisions,migration-plan,review}.md`).
@@ -32,8 +39,8 @@ stays public until cutover), D-12' (fresh public R0), D-R3 (tags, not release
 branches, in R0), D-G4 (private repos on self-hosted runners), D-G5 (deploy +
 CI agents run on Chris's Mac under his normal user; Cloudflare Worker fallback),
 D-G6 (signed release tags optional — deploy control is procedural, not
-cryptographic), D-O1 (R0 GitHub-primary + Origin inbound mirror; R1–R7 Origin
-primary in Chris's personal namespace), D-O2…D-O5 (answered, see PR #5695
+cryptographic — mandatory since 23:18), D-O1 (R0 GitHub-primary + Origin inbound mirror; R1–R7 Origin
+primary in Chris's personal namespace — Origin parts superseded by D-C1 on 2026-10-29), D-O2…D-O5 (answered, see PR #5695
 `decisions.md`), D-T1 (tenant map in KV, fallback = digithings tenant only).
 
 Consequence for secrets: on GitHub Free there is **nowhere on GitHub to store a
@@ -62,7 +69,7 @@ cutover; mono renamed private then archived):
 `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`,
 `DIGIKEY_PRIVATE_KEY_PEM`, `DIGIKEY_LITELLM_PROXY_KEY`,
 `LITELLM_MASTER_KEY`, `LITELLM_PROXY_API_KEY`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
+`<HELPDESK>_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
 `AUTH_SECRET`, `DIGICHAT_*_TOKEN` / `DIGICHAT_*_KEY` / `DIGICHAT_*_SECRET` /
 `DIGICHAT_*_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `AZURE_SEARCH_API_KEY`,
 `BYOK_API_KEY`, `EXA_API_KEY`, `EXA_MONITOR_WEBHOOK_SECRET`, `XAI_API_KEY`,
@@ -76,13 +83,14 @@ Worker `[vars]` (non-secret config such as `SUPABASE_URL` public anon URL,
 `DIGICHAT_EMBED_HOSTS`, `DIGISEARCH_URL`) are not secrets and stay as vars;
 anything above that appears as a var today moves to a Worker secret instead.
 
-## R1 — `digiquant-strategies` (private, Origin)
+## R1 — `digiquant-strategies` (private, Forgejo; was Origin until 2026-10-29)
 
-Needs **no stored secret**. Build/publish uses the short-lived Origin token
-minted by the CI agent at job time (D-Q7: git tag pins, no registry). No
+Needs **no stored secret** in the repo. Since 2026-10-29 R1 publishes to the Forgejo PyPI
+registry (D-C6); CI uses its Forgejo identity's token from the Mac keychain at job time (14 Oct:
+a short-lived Origin token and git tag pins, D-Q7′ — superseded). No
 service-role, broker, or provider keys. No Keychain move. No wrangler binding.
 
-## R2 — `digiquant-stack` (private, Origin)
+## R2 — `digiquant-stack` (private, Forgejo; was Origin until 2026-10-29)
 
 Deploy-time set, held **only on the Mac deploy agent** (Buildkite `deploy`
 queue), pushed to Workers via `wrangler secret put` and to Supabase via
@@ -98,92 +106,100 @@ queue), pushed to Workers via `wrangler secret put` and to Supabase via
 `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY`, `DIGIKEY_URL`,
 `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`,
 `DIGIKEY_PRIVATE_KEY_PEM`, `DIGIKEY_LITELLM_PROXY_KEY`,
-`DIGICHAT_EMBED_TENANTS` (own Worker copy; R6 is the source of truth),
+`DIGICHAT_EMBED_TENANTS` (own Worker copy; source of truth: the client repos since 2026-10-29, was R6),
 `AUTH_SECRET`, `CRON_KICK_SECRET`, `RUNNER_AUTH_TOKEN`, `D1_API_TOKEN`.
 Today: GitHub `production`/`cron` environment secrets + `secrets.*` in the
 pipeline/digiquant workflows. Moves to: Mac deploy-agent env + Worker secrets;
-no GitHub environment exists for Origin repos.
+no GitHub environment exists for Forgejo repos or their GitHub backups. Reading R1 from the
+Forgejo registry uses a read-only Forgejo token passed as a BuildKit secret.
 
-## R3 — `digiquant-web` (private, Origin)
+## R3 — `digiquant-web` (private, Forgejo; was Origin until 2026-10-29)
 
 Public-anon only. `NEXT_PUBLIC_SUPABASE_URL` + anon key (public), Pages deploy
 by direct upload from the Mac agent on a Chris-cut release tag (D-Pages — no
 stored Pages token in the repo). No service-role key, `CORE_SUPABASE_SERVICE_KEY`, no broker keys. Today: Pages Git integration on
 `digiquant-io` (auto-deploy from `main` — disconnected at cutover).
 
-## R4 — `digithings-web` (private, Origin)
+## R4 — `digithings-web` (private, Forgejo; was Origin until 2026-10-29)
 
 Pages deploy token only, held on the Mac and used for direct upload (D-Pages).
 No API keys, no service-role, no `byok` secrets in repo (`byok-providers.json`
 via `@digithings/catalog`). Today: Pages Git integration on `digithings-ai`.
 
-## R5 — `digithings-stack` (private, Origin)
+## R5 — `digithings-stack` (private, Forgejo; was Origin until 2026-10-29)
 
 Platform deploy set, held **only on the Mac deploy agent**, Worker runtime
 secrets via `wrangler secret put` from that Mac. Never in the repo.
 `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_EMAIL_API_TOKEN`, `GH_DISPATCH_TOKEN` (re-scoped to Buildkite
-pipelines for R2+R7 at the move; GitHub Actions dispatch retires),
+`CLOUDFLARE_EMAIL_API_TOKEN`, `GH_DISPATCH_TOKEN` (re-scoped at the move to the local CI
+trigger API for R2+R7 — Buildkite struck; GitHub Actions dispatch retires),
 `DIGITHINGS_PROJECT_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`
 (token-canary), provider-review keys, `DIGIKEY_ADMIN_TOKEN`,
 `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`, `DIGIKEY_PRIVATE_KEY_PEM`,
 `DIGIKEY_URL`, `DIGIGRAPH_INTERNAL_URL`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN` (stack-edge path; live Zammad uses `ZAMMAD_API_TOKEN` via
+`<HELPDESK>_API_TOKEN` (stack-edge path; the live helpdesk uses `<HELPDESK>_API_TOKEN` via
 `tokenEnv`, never committed), `AUTH_SECRET`, `DATABASE_URL`,
 `DIGICHAT_MONITOR_TOKENS`, `DIGICHAT_PLAN_PROOF_SECRET`,
-`DIGICHAT_EMBED_TENANTS` (runtime read; source of truth moves to KV via R6,
+`DIGICHAT_EMBED_TENANTS` (runtime read; source of truth moves to KV via the client repos' deploys, was R6,
 fallback = digithings tenant only per D-T1), `GROQ_API_KEY` (where still
 wired). Service bindings (`RUNNER`, `DASHBOARD_API`) carry no secret.
 Today: hand-run `wrangler deploy` from local trees + `secrets.*` in
 deploy/cron workflows. Moves to: tag-driven deploy from the Mac agent
-(P2 gate hook); the Cloudflare-app-for-Cursor auto-deploy path is forbidden
-(O5) and is never installed.
+(P2 gate hook); no auto-deploy-on-push integration is connected to any repo
+(O5, D-X2).
 
-## R6 — `digichat-tenants` (private, Origin)
+## R6 — `digichat-tenants` (superseded 2026-10-29; was planned private on Origin)
+
+> Superseded 2026-10-29 (D-C2, D-C4): one private `digithings-ai/<client-slug>` repo per
+> client on Forgejo, from `digithings-ai/client-template`. Read R6 below as those repos;
+> `kv-sync` becomes each repo's `deploy/deploy.sh`. Each client repo holds secret **names** only
+> (per-environment overlays); the values stay in the Mac keychain and reach Cloudflare as Worker
+> secrets, and the deploy uses a token scoped to that client's KV namespace, R2 prefix and
+> `client-<client-slug>-*` Workers (D-C9).
 
 Tenant-data repo: schema + sources only, **no live keys in the repo**.
 `CLOUDFLARE_API_TOKEN` (KV + R2 write scoped, held on the Mac, used by the
 `kv-sync` script), `DIGICHAT_EMBED_TENANTS` content (pushed to KV namespace
 `TENANT_CONFIG`, never committed with live values), R2 seed objects (pushed,
-not stored as secrets), `OCC_INVITE_KEY` (see below), `ZAMMAD_API_TOKEN`
-(server-side only). `config/examples/occ-embed.yaml` keeps `tokenEnv` **names**
+not stored as secrets), `<CLIENT_SLUG>_INVITE_KEY` (see below), `<HELPDESK>_API_TOKEN`
+(server-side only). `config/examples/<client-slug>-embed.yaml` keeps `tokenEnv` **names**
 only. `DIGI_TENANT_CORPUS_MAP` fallback is removed from the stack Worker at
-the move (D-T1); `seed/occ_help` + `seed/vault/clients/*` sources live here
+the move (D-T1); `seed/<client-slug>_help` + `seed/vault/clients/*` sources live here
 and are fetched from R2 at boot.
 
-## R7 — `twelve-x` (private, Origin, exists)
+## R7 — `<client-slug>` (private, exists; GitHub + Forgejo copy, was an Origin mirror until 2026-10-29)
 
-Moves in P4.7 with full history (D-O5: no client gate; GitHub repo archived
+*P4.7 struck 23:18 (14 Oct); the desk-surface move is on hold.* 14 Oct text: moves in P4.7 with full history (D-O5: no client gate; GitHub repo archived
 read-only 90 days, then deleted). Needs: anon Supabase URL + anon key,
-`D1_API_TOKEN` (twelvex D1 API), Pages/desk deploy via Mac agent. No
+`D1_API_TOKEN` (`<client-slug>` D1 API), Pages/desk deploy via Mac agent. No
 service-role, no strategies keys, no tenant keys. Client desk pages
-(`apps/dashboard` twelve-x paths + `apps/digidata-api`) land here; the desk
+(`apps/dashboard` `<client-slug>` paths + `apps/digidata-api`) land here; the desk
 gate/palette become pluggable (D-X1).
 
-## OCC invite key + tenant tokens + edge keys (Keychain, names only)
+## Client invite key + tenant tokens + edge keys (Keychain, names only)
 
 Live human-held names (Keychain service names, values never touched):
-`digithings.occ-invite-key`,
+`digithings.<client-slug>-invite-key`,
 `digithings.mcp-edge-key`,
-`digithings.zammad-edge-key`, `digithings.tenant-token-digiquant-io`,
+`digithings.<helpdesk>-edge-key`, `digithings.tenant-token-digiquant-io`,
 `digithings.tenant-token-digithings-ai`.
 These stay in Keychain + Cloudflare Worker secrets + KV. They are **never
-committed** to any repo (R0/R5/R6 hold procedure and `tokenEnv` names only,
+committed** to any repo (R0/R5/client repos hold procedure and `tokenEnv` names only,
 per DIG-1612/#5308). Rotation is a human/Keymaster action, not part of the
 file move.
 
-`digithings.occ-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
+`digithings.<client-slug>-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
 and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524), on the
-reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the OCC
+reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the first client
 tenant resolving at no credential (DIG-1381) — and that the token was being echoed into served
 HTML (DIG-3523). The production copies were not revoked: the Worker secret, the Pages secret and
-the OCC tenant `token` still held the value, and all of those surfaces are write-only, so the
+the first client tenant `token` still held the value, and all of those surfaces are write-only, so the
 live value could not be read back from them. The value survived in the local host
 secret store (`~/.config/digithings/secrets/`), and on 2026-10-21 the sanctioned
 copy was restored to the Keychain and proved against production (DIG-4810:
-`EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS). **No rotation
+`EXPECT_B2=1 bash scripts/verify_<client-slug>_invite_key.sh` → 7/7 PASS). **No rotation
 was performed** — the value that is live is the value that was installed on
-2026-10-11. Runbook `docs/ops/OCC_INVITE_KEY.md`; inventory row `OCC_INVITE_KEY`
+2026-10-11. Runbook `docs/ops/<CLIENT_SLUG>_INVITE_KEY.md`; inventory row `<CLIENT_SLUG>_INVITE_KEY`
 and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
 
 ## Local-only Keychain (`digithings-local/*`, never moves)
@@ -198,20 +214,35 @@ and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
 `digithings-local/E2E_BEARER_TOKEN`,
 `digithings-local/MCP_EDGE_KEY`, plus `digithings/DIGIKEY_ADMIN_TOKEN` and
 the `digithings` metadata entry. Local dev only (see
-`~/.config/digithings/local-stack-secrets.yaml`). Never pushed to Origin,
+`~/.config/digithings/local-stack-secrets.yaml`). Never pushed to Forgejo,
 GitHub, Cloudflare, or any repo.
+
+## Forgejo, Woodpecker and the GitHub backups (names only)
+
+Added 2026-10-31.
+- **Forgejo identities:** one Forgejo user and token per agent platform (D-C1). Tokens live in the
+  Mac keychain; their item names are not listed in this public file. They never enter a repo, an
+  issue, a PR body or a CI log.
+- **Forgejo org secrets** (`FORGE_TOKEN`, `NPM_TOKEN`, `WOODPECKER_AGENT_SECRET`) and repo
+  variables are listed by name in [docs/plans/forgejo-full-setup.md](../plans/forgejo-full-setup.md).
+  Woodpecker secrets for a private repo are set by Chris or DevOps, never pasted into issues.
+- **GitHub backups:** pushed by the owner with the owner's own GitHub login at releases only. No
+  agent holds a credential that can push a backup, and no Actions secrets exist on the backups.
+- **Registries:** dev and private builds publish to the Forgejo registry with a Forgejo token; stable
+  publishes use PyPI trusted publishing (no stored secret) and the npm token the owner provides.
 
 ## Access inventory (who holds what after the move)
 
-- Chris: everything (namespace owner, Keychain holder, release-tag cutter,
-  Buildkite org creator, Pages/Cloudflare account owner).
-- DevOps Lead + digiquant seats: R2 deploy via the Mac `deploy` queue (no
+- Chris: everything (Forgejo admin and `digithings-ai` org owner, Keychain holder, release-tag
+  cutter, the only one who pushes GitHub backups, Pages/Cloudflare account owner).
+- DevOps Lead + digiquant seats: R2 deploy via the Mac deploy job (no
   direct secret copies; short-lived job env only).
-- UI seats: R3/R4 build on `ci` queue (no credentials); Claude UI review as today.
-- Client-delivery seat: R6 folder-scoped (CODEOWNERS per client later).
-- Agents: act as Chris (D-O4) — Origin rulesets and the optional tag gate are
-  advisory/procedural, not hard controls. Seat instructions forbid cutting
-  release tags; the audit log records every tag.
+- UI seats: R3/R4 build on the Mac CI (no credentials); Claude UI review as today.
+- Client-delivery seat: per client repo (was R6 folder-scoped).
+- Agents: since 2026-10-29 each platform pushes with its own Forgejo identity (D-C1; was "act as
+  Chris", D-O4). Forgejo branch protection has no agent bypass, and the signed-tag gate is
+  mandatory (D-G6). Seat instructions forbid cutting release tags and pushing GitHub backups; the
+  audit log records every tag.
 - Public contributors: R0 only, via DCO + GitHub-hosted CI; self-hosted
   runners never touch public repos (fork-PR execution risk).
 
