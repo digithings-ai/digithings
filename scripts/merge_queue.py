@@ -3416,19 +3416,55 @@ _HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*[-*]\s*\[[xX]\]")
 # A sentence that merely mentions the gate is not the section: matching it
 # would start the section in prose, end it at the next heading, and miss a
 # ticked box in the real section further down (fail open).
-_HUMAN_GATE_HEADING_RE = re.compile(r"(?im)^#{1,6}\s+[^\n]*human gate[^\n]*$")
+_HUMAN_GATE_HEADING_RE = re.compile(r"(?i)^ {0,3}(#{1,6})[ \t]+.*human gate")
+_ATX_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]|$)")
+
+
+def _human_gate_section_lines(body: str) -> list[str] | None:
+    """Original lines of the Human Gate section, or None when there is no gate heading.
+
+    Fenced code is ignored when looking for the gate heading and for the end
+    of the section, so a heading or `#` line inside a code block can neither
+    open a decoy section nor cut the real one short. The section runs until
+    the next heading of the same or a higher level (fewer or equal `#`), so a
+    subheading inside it stays part of it. The returned lines are the raw body
+    lines, fenced code included, so a ticked box can only add to the verdict.
+    """
+    if not body:
+        return None
+    raw = body.splitlines()
+    # `_strip_fenced_blocks` blanks fenced lines but keeps the line count, so
+    # indices into `visible` map straight back onto `raw`. An unclosed fence
+    # runs to the end of the body, which can only hide a heading: the caller
+    # then fails closed (DIG-6137).
+    visible = _strip_fenced_blocks(body).splitlines()
+    start = level = None
+    for i, line in enumerate(visible):
+        m = _HUMAN_GATE_HEADING_RE.match(line)
+        if m:
+            start, level = i + 1, len(m.group(1))
+            break
+    if start is None:
+        return None
+    end = len(raw)
+    for j in range(start, len(visible)):
+        h = _ATX_HEADING_RE.match(visible[j])
+        if h and len(h.group(1)) <= level:
+            end = j
+            break
+    return raw[start:end]
 
 
 def _human_gate_section(body: str) -> str:
-    """Text under the ATX heading that names the Human Gate section, up to the next heading."""
-    if not body:
+    """Text under the ATX heading that names the Human Gate section.
+
+    The section ends at the next heading of the same or higher level; fenced
+    code never opens or ends it (DIG-6137).
+    """
+    lines = _human_gate_section_lines(body)
+    if not lines:
         return ""
-    m = _HUMAN_GATE_HEADING_RE.search(body)
-    if not m:
-        return ""
-    rest = body[m.end():]
-    n = re.search(r"(?im)^#{1,6}\s+", rest)
-    return rest[: n.start()] if n else rest
+    return "\n".join(lines) + "\n"
 
 
 def _body_requires_human_review(pr: Any) -> bool:
@@ -3441,9 +3477,9 @@ def _body_requires_human_review(pr: Any) -> bool:
         body = pr
     else:
         body = str((pr or {}).get("body") or "")
-    if re.search(r"(?i)human gate", body) and not _HUMAN_GATE_HEADING_RE.search(body):
-        # The body names the gate but has no gate heading, so the boxes cannot
-        # be read: fail closed and ask for owner review.
+    if re.search(r"(?i)human gate", body) and _human_gate_section_lines(body) is None:
+        # The body names the gate but has no gate heading outside code, so the
+        # boxes cannot be read: fail closed and ask for owner review.
         return True
     section = _human_gate_section(body)
     if section and _HUMAN_GATE_CHECKED_RE.search(section):

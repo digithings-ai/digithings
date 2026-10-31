@@ -8913,3 +8913,75 @@ def test_human_gate_prose_mention_without_heading_fails_closed() -> None:
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("Human Gate" in r for r in verdict.reasons)
+
+
+# --- DIG-6137: Human Gate parser must not fail open on code or subheadings ----
+
+
+def _assert_human_gate_blocks(number: int, body: str) -> None:
+    assert mq._body_requires_human_review(body)
+    pr = _pr(number, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_heading_inside_code_fence_is_not_the_section() -> None:
+    """(a) A fenced gate heading before the real section must not shadow it."""
+    for fence in ("```", "~~~"):
+        body = (
+            "## Summary\n\nTemplate example:\n\n"
+            f"{fence}markdown\n## Human Gate\n\n- [ ] Live-trading path modified\n{fence}\n\n"
+            "## Testing\n\nran it\n\n"
+            "## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n"
+        )
+        assert "- [x] Auth" in mq._human_gate_section(body)
+        _assert_human_gate_blocks(9101, body)
+
+
+def test_human_gate_hash_line_inside_code_fence_does_not_end_the_section() -> None:
+    """(b) A `#` line inside a fenced block within the section must not end it."""
+    for fence in ("```", "~~~"):
+        body = (
+            "## Summary\n\nx\n\n"
+            "## Human Gate\n\n"
+            f"{fence}bash\n# touched paths\nls services/\n{fence}\n\n"
+            "- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n\n"
+            "## Notes\n\nnone\n"
+        )
+        section = mq._human_gate_section(body)
+        assert "- [x] Auth" in section
+        assert "none" not in section
+        _assert_human_gate_blocks(9102, body)
+
+
+def test_human_gate_subheading_stays_inside_the_section() -> None:
+    """(c) A deeper subheading inside the section must not end it."""
+    body = (
+        "## Summary\n\nx\n\n"
+        "## Human Gate\n\n"
+        "### Trading\n\n- [ ] Live-trading path modified\n\n"
+        "### Security\n\n- [x] Auth or crypto modified\n\n"
+        "## Notes\n\nnone\n"
+    )
+    section = mq._human_gate_section(body)
+    assert "- [x] Auth" in section
+    assert "none" not in section
+    _assert_human_gate_blocks(9103, body)
+
+
+def test_human_gate_section_ends_at_a_higher_level_heading() -> None:
+    """The section still ends at a heading of higher level than the gate heading."""
+    body = (
+        "### Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "## Appendix\n\n- [x] unrelated checklist item\n"
+    )
+    assert "unrelated" not in mq._human_gate_section(body)
+    assert not mq._body_requires_human_review(body)
+
+
+def test_human_gate_unclosed_fence_hiding_the_heading_fails_closed() -> None:
+    """An unclosed fence that swallows the gate heading leaves no readable section."""
+    body = "## Summary\n\n```\nexample\n\n## Human Gate\n\n- [x] Auth or crypto modified\n"
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9104, body)
