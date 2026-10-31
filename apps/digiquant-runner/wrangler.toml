@@ -18,8 +18,8 @@
 #                                the probe closed. Not LLM or digikey keys.
 #
 # Not on this Worker: broker credentials, Alpaca keys, FRED_API_KEY, GH_ISSUE_TOKEN.
-# Phase 3 Task 7 puts these via .github/workflows/sync-digiquant-runner-digikey-secret.yml
-# (workflow_dispatch; logs name + length only): DIGIQUANT_DIGIKEY_API_KEY.
+# Put by hand with `wrangler secret put` (the GHA sync workflows were deleted with
+# the GHA exit ledger; see docs/ops/digiquant-runner.md): DIGIQUANT_DIGIKEY_API_KEY.
 # wrangler.toml has no env blocks — one script (develop/prod not split).
 # Tracing is in-house digitrace (generic DIGI_OTEL_HEADERS OTLP path);
 # allocation-shadow command allowlist stays empty. Do not commit values.

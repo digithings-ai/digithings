@@ -25,8 +25,6 @@ files stay until DIG-3608. DIG-3697 owns `scripts/deploy/runner.sh` and
 | R2 | `.github/workflows/pipeline-digiquant-onchain.yml` | cloudflare-cron | `onchain`. |
 | R2 | `.github/workflows/pipeline-digiquant-tearsheets.yml` | cloudflare-cron | `tearsheets`. |
 | R2 | `.github/workflows/pipeline-digiquant-allocation-shadow.yml` | deletion | Producer workflow is absent. Isolation script stays. DIG-3608 removes the file. |
-| R2 | `.github/workflows/sync-digiquant-runner-digikey-secret.yml` | local-ci | Manual and disarmed. Writes Worker secrets. No API call in this change. |
-| R2 | `.github/workflows/sync-digiquant-runner-mail-secrets.yml` | local-ci | Manual and disarmed. Writes Worker secrets. No API call in this change. |
 | R2 | `.github/workflows/test-digiquant.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |
 | R3 | `.github/workflows/deploy-digiquant-cloudflare.yml` | local-ci | `scripts/build-digiquant.sh`. Pages watching `main` is the publish. |
 | R3 | `.github/workflows/test-dashboard.yml` | local-ci | `ci.yml` workflow_call. Runner: DIG-3561. |

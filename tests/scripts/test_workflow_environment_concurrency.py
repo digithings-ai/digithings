@@ -123,8 +123,6 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     "pipeline-provider-review.yml": {"review"},
     "pipeline-research-metrics.yml": {"refresh"},
     "project-enforce-assignment.yml": {"orphan-check"},
-    "sync-digiquant-runner-digikey-secret.yml": {"sync-runner-house"},
-    "sync-digiquant-runner-mail-secrets.yml": {"sync-runner-mail"},
     "token-canary.yml": {"canary"},
     # DIG-5536: the live branch-protection read. The PAT is `cron`-environment
     # scoped, so losing this line resolves it to empty and the run reports a

@@ -119,20 +119,6 @@ ROWS: tuple[Row, ...] = (
     ),
     Row(
         "R2",
-        ".github/workflows/sync-digiquant-runner-digikey-secret.yml",
-        "local-ci",
-        armed=False,
-        note="Manual. Writes Worker secrets. This change adds no API call.",
-    ),
-    Row(
-        "R2",
-        ".github/workflows/sync-digiquant-runner-mail-secrets.yml",
-        "local-ci",
-        armed=False,
-        note="Manual. Writes Worker secrets. This change adds no API call.",
-    ),
-    Row(
-        "R2",
         ".github/workflows/test-digiquant.yml",
         "local-ci",
         ci_uses=True,
