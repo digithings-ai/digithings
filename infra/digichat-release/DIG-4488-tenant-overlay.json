@@ -1,0 +1,18 @@
+{
+  "DIGICHAT_EMBED_TENANTS_note": "OVERLAY, not the registry. The digichat registry is composed at apply time from the host secret store: python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --overlay infra/digichat-release/DIG-4488-tenant-overlay.json. This file carries no token and no mcp rows. Never write this file to the worker secret. This overlay carries one example tenant and sets no corpus routing. The picker switch turns the model picker on; the model list, caps and presets are the house product defaults, so this file does not restate them. A raw model id list is still refused. Tool and MCP locks are unchanged. The example tenant sets no token limits and no premium meter; the invite link is the gate. The tool-call cap and answer guard stay. privateMode is on: a display-side private session for demos (the model uses stand-in names in its replies; nothing stored, no tool result and no prompt is rewritten, and the invite link remains the gate). welcome and privateMode are recorded here as placeholders. Real tenant values are supplied from the private client repo at compose time.",
+  "DIGICHAT_EMBED_TENANTS": {
+    "tenant.example.invalid": {
+      "slug": "example-tenant",
+      "welcome": "Ask about this workspace.",
+      "gateMode": "ungated",
+      "webSearch": false,
+      "privateMode": true,
+      "models": {
+        "occPicker": true
+      },
+      "backend": {
+        "type": "digigraph"
+      }
+    }
+  }
+}

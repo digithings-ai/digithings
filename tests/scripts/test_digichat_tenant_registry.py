@@ -13,7 +13,8 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "digichat_tenant_registry.py"
 STAGED = REPO / "infra" / "digichat-release" / "DIG-3556-staged-prod-tenant-config.json"
-OCC_ONLY = REPO / "infra" / "digichat-release" / "DIG-4488-occ-tenant-overlay.json"
+TENANT_OVERLAY = REPO / "infra" / "digichat-release" / "DIG-4488-tenant-overlay.json"
+EXAMPLE_HOST = "tenant.example.invalid"
 
 
 def _load_module():
@@ -67,9 +68,41 @@ def _staged_overlay():
         return json.load(handle)
 
 
-def _occ_only_overlay():
-    with OCC_ONLY.open("r", encoding="utf-8") as handle:
+def _tenant_overlay():
+    with TENANT_OVERLAY.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _live_with_example_tenant():
+    """LIVE plus the placeholder host the public overlay names."""
+    base = json.loads(json.dumps(LIVE))
+    base[EXAMPLE_HOST] = {
+        "slug": "example-tenant",
+        "gateMode": "ungated",
+        "webSearch": False,
+        "token": "tok-example",
+        "backend": {"type": "digigraph"},
+    }
+    return base
+
+
+def _kv_with_example_tenant():
+    """KV_LIVE plus the placeholder host the public overlay names."""
+    base = json.loads(json.dumps(KV_LIVE))
+    base[EXAMPLE_HOST] = {
+        "slug": "example-tenant",
+        "gateMode": "ungated",
+        "attribution": False,
+        "webSearch": False,
+        "tokenEnv": "EXAMPLE_INVITE_KEY",
+        "backend": {"type": "digigraph"},
+        "models": {
+            "default": "house/model",
+            "available": ["house/model", "other/model"],
+            "allowPicker": True,
+        },
+    }
+    return base
 
 
 def test_compose_keeps_every_live_tenant_and_token():
@@ -150,11 +183,14 @@ def test_the_repo_overlay_adds_only_the_house_tool_rows_over_the_live_copy():
     assert composed["digiquant.io"] == live["digiquant.io"]
 
 
-def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
-    """The OCC-only overlay is the scoped apply: the OCC tenant, and nothing else."""
-    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
-    assert sorted(overlay) == ["occ.digithings.ai"]
-    entry = overlay["occ.digithings.ai"]
+def test_the_tenant_overlay_carries_one_tenant_and_no_credential():
+    """The tenant overlay is the scoped apply: one example tenant, and nothing else."""
+    overlay = registry.load_registry(_tenant_overlay(), str(TENANT_OVERLAY))
+    assert sorted(overlay) == [EXAMPLE_HOST]
+    entry = overlay[EXAMPLE_HOST]
+    assert entry["slug"] == "example-tenant"
+    assert entry["welcome"] == "Ask about this workspace."
+    assert entry["privateMode"] is True
     assert "token" not in entry
     assert "tokenEnv" not in entry
     assert "mcp" not in entry
@@ -164,46 +200,66 @@ def test_the_occ_only_overlay_carries_one_tenant_and_no_credential():
     assert "vaultPathPrefix" not in backend
 
 
-def test_the_occ_only_overlay_carries_the_overlay_note():
+def test_the_tenant_overlay_carries_the_overlay_note():
     """An operator who opens only this file reads that it is an overlay.
 
     The note is a sibling of the tenant payload, so the composer never reads
     it: Guard 3 refuses an unknown key inside a tenant entry.
     """
-    document = _occ_only_overlay()
+    document = _tenant_overlay()
     note = document.get("DIGICHAT_EMBED_TENANTS_note")
     assert isinstance(note, str)
     assert "OVERLAY, not the registry" in note
     assert "Never write this file to the worker secret" in note
+    assert "private client repo at compose time" in note
 
-    overlay = registry.load_registry(document, str(OCC_ONLY))
-    assert sorted(overlay) == ["occ.digithings.ai"]
-    assert "DIGICHAT_EMBED_TENANTS_note" not in overlay["occ.digithings.ai"]
+    overlay = registry.load_registry(document, str(TENANT_OVERLAY))
+    assert sorted(overlay) == [EXAMPLE_HOST]
+    assert "DIGICHAT_EMBED_TENANTS_note" not in overlay[EXAMPLE_HOST]
 
-    composed, report = registry.compose_registry(LIVE, overlay)
-    assert sorted(composed) == sorted(LIVE)
+    live = _live_with_example_tenant()
+    composed, report = registry.compose_registry(live, overlay)
+    assert sorted(composed) == sorted(live)
     # The overlay sets the picker switch only; the model policy is the product
     # default the app resolves, not a copy in this file.
-    assert composed["occ.digithings.ai"]["models"] == {"occPicker": True}
-    assert any(path.startswith("occ.digithings.ai.models") for path in report["changed_paths"])
+    assert composed[EXAMPLE_HOST]["models"] == overlay[EXAMPLE_HOST]["models"]
+    assert any(path.startswith(EXAMPLE_HOST + ".models") for path in report["changed_paths"])
 
 
-def test_the_occ_only_overlay_leaves_the_digithings_tenant_alone():
-    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
-    composed, report = registry.compose_registry(LIVE, overlay)
-    assert sorted(composed) == sorted(LIVE)
-    assert composed["digithings.ai"] == LIVE["digithings.ai"]
-    assert composed["digiquant.io"] == LIVE["digiquant.io"]
+def test_the_tenant_overlay_leaves_the_digithings_tenant_alone():
+    overlay = registry.load_registry(_tenant_overlay(), str(TENANT_OVERLAY))
+    live = _live_with_example_tenant()
+    composed, report = registry.compose_registry(live, overlay)
+    assert sorted(composed) == sorted(live)
+    assert composed["digithings.ai"] == live["digithings.ai"]
+    assert composed["digiquant.io"] == live["digiquant.io"]
     assert not [p for p in report["changed_paths"] if p.startswith("digithings.ai")]
 
 
-def test_the_occ_only_overlay_sets_only_the_picker_on_the_kv_copy():
-    overlay = registry.load_registry(_occ_only_overlay(), str(OCC_ONLY))
-    composed, report = registry.compose_kv_registry(KV_LIVE, overlay)
-    models = composed["occ.digithings.ai"]["models"]
-    assert models == {"occPicker": True}
-    assert "occ.digithings.ai.models.available" in report["changed_paths"]
-    assert composed["occ.digithings.ai"]["tokenEnv"] == "OCC_INVITE_KEY"
+def test_the_tenant_overlay_sets_only_the_picker_on_the_kv_copy():
+    overlay = registry.load_registry(_tenant_overlay(), str(TENANT_OVERLAY))
+    kv = _kv_with_example_tenant()
+    composed, report = registry.compose_kv_registry(kv, overlay)
+    models = composed[EXAMPLE_HOST]["models"]
+    assert models == overlay[EXAMPLE_HOST]["models"]
+    assert EXAMPLE_HOST + ".models.available" in report["changed_paths"]
+    assert composed[EXAMPLE_HOST]["tokenEnv"] == "EXAMPLE_INVITE_KEY"
+
+
+def test_the_tenant_overlay_records_the_welcome_and_private_mode():
+    """The overlay records placeholder welcome text and private mode, and composes."""
+    overlay = registry.load_registry(_tenant_overlay(), str(TENANT_OVERLAY))
+    entry = overlay[EXAMPLE_HOST]
+    assert entry["welcome"] == "Ask about this workspace."
+    assert entry["privateMode"] is True
+    live = _live_with_example_tenant()
+    composed, _ = registry.compose_registry(live, overlay)
+    assert composed[EXAMPLE_HOST]["privateMode"] is True
+    assert composed[EXAMPLE_HOST]["welcome"] == "Ask about this workspace."
+    kv = _kv_with_example_tenant()
+    composed_kv, _ = registry.compose_kv_registry(kv, overlay)
+    assert composed_kv[EXAMPLE_HOST]["welcome"] == "Ask about this workspace."
+    assert composed_kv[EXAMPLE_HOST]["privateMode"] is True
 
 
 def test_overlay_with_a_token_is_refused():

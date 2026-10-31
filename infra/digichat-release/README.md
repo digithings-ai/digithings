@@ -50,7 +50,7 @@ The overlay sets `image: ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` an
 
 Tear down: `make digichat-release-down VERSION=1.0.0`.
 
-Existing clients (including DataTap) may keep `DIGICHAT_VERSION=0.9.3` —
+Existing clients may keep `DIGICHAT_VERSION=0.9.3` —
 `ghcr.io/digithings-ai/digichat:v0.9.3` stays on GHCR.
 
 ## The deployment config — one file per install
@@ -169,7 +169,7 @@ Profile A digigraph is **research_rag only**. The stack image ships
   whichever `digiproject*.yaml` is actually mounted, not a separate default)
 - `DIGIQUANT_URL=` (empty)
 
-digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). OCC and
+digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). Client tenant and
 website chat must never surface `DIGIQUANT_DATA_DIR` errors.
 
 **Local JSON env:** Docker's env-file parser strips unescaped `"` inside
@@ -181,7 +181,7 @@ when that file exists.
 
 ## Profile B — Foundry (client Azure only)
 
-digithings has **no Azure**. This snippet is for client environments (DataTap-like ACA /
+digithings has **no Azure**. This snippet is for client environments (Azure Container Apps /
 Compose). Services: digichat (GHCR) + digichat-db only — no digigraph / digikey / LiteLLM.
 
 ```text
@@ -235,10 +235,18 @@ python3 scripts/digichat_tenant_registry.py apply \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
 ```
 
+### Live KV change log
+
+- **28 Oct 2026** — one tenant's `welcome` and `privateMode` were updated on
+  the live `embed-tenants` KV key. `DIG-4488-tenant-overlay.json` records the
+  shape (`welcome`, `privateMode: true`) with placeholder copy. Real tenant
+  values are supplied from the private client repo at compose time. A backup
+  of the previous value is kept off-repo in the host secret store.
+
 The compose refuses, and names the reason: an overlay that drops a tenant, an
 overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
 live registry does not have, an overlay key the runtime does not read, and a
-composed registry that routes a tenant to the retired OCC ticket corpus. The
+composed registry that routes a tenant to a retired client ticket corpus. The
 composed registry can also not be written inside the repository. The KV copy
 additionally refuses a base that carries a credential value: it carries
 references only.
@@ -264,7 +272,7 @@ writes nothing at all: no file, no KV key, no secret, no recycle. If the
 secret write fails after the KV write, the apply puts the previous KV copy
 back, so the two copies never disagree about a tenant.
 
-The OCC tenant sets `models.occPicker` and must not carry a raw
+The example client tenant sets `models.occPicker` and must not carry a raw
 `models.available` id list. DIG-4750 refused an open id list; the curated
 catalog is the picker. The model list, caps and presets are the product
 defaults the app resolves (the catalog plus `PRODUCT_PICKER_PRESETS`), so an
@@ -281,11 +289,11 @@ for the staged overlay, and
 [`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md) for the
 rotation runbook.
 
-### The OCC-only overlay
+### The example-tenant overlay
 
-`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone and only turns
+`DIG-4488-tenant-overlay.json` carries one example tenant and only turns
 its model picker on (`models.occPicker`). It sets no model policy and no raw
-model id list, so OCC inherits the same product defaults as the house chat.
+model id list, so the tenant inherits the same product defaults as the house chat.
 The overlay does not touch the `digithings.ai` tenant.
 
 The overlay pins `slug`, `gateMode`, `webSearch`, the `backend` type, and the
@@ -300,24 +308,26 @@ the short house prompt. Applying it to KV is still a human step.
 
 | Scope | Overlay | Change to the `digithings.ai` tenant |
 |---|---|---|
-| OCC only | `DIG-4488-occ-tenant-overlay.json` | none |
+| Example tenant | `<client repo>/tenant/overlay.json` | none |
 | Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing, web search, and the catalog policy |
 
-Both scopes write the same KV key and the same OCC catalog policy. The
+Both scopes write the same KV key and the same client catalog policy. The
 `digithings.ai` tenant differs.
 
 ```sh
-# scope A: the OCC tenant only
+# scope A: the example client tenant only
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
-  --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json
+  --overlay <client repo>/tenant/overlay.json
 
-# scope B: the OCC tenant and the staged digithings.ai corpus switch.
+# scope B: the example client tenant and the staged digithings.ai corpus switch.
 # Run it only after the DIG-3556 prompt merge and the corpus backfill.
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
   --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json
 ```
+
+The in-repo `infra/digichat-release/DIG-4488-tenant-overlay.json` is a placeholder fixture for tests, not the production overlay; production applies pass the overlay from the private client repo.
 
 A human runs the apply. The script asks for a typed confirmation before it
 writes the KV key, the Worker secret, or recycles the container.
@@ -335,7 +345,7 @@ writes the KV key, the Worker secret, or recycles the container.
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
 | Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
-| Plan the OCC-only tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json` |
+| Plan the example-tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay <client repo>/tenant/overlay.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |
