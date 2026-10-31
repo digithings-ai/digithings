@@ -9,7 +9,7 @@
 
 ## What this is
 
-The DataTap Azure access register ([DIG-1674 document](https://paperclip.local/DIG/issues/DIG-1674), document id `7089f97b-9f0f-4b57-be10-26e787ecf583`) lists the subscriptions an agent may touch. Its machine-readable copy is [`config/datatap_azure_access_register.json`](../../config/datatap_azure_access_register.json). Today it lists **zero** subscriptions, which is the correct state: only DataTap, in writing, can classify a subscription, and it has not done so.
+The Azure access register lists the subscriptions an agent may touch. Its machine-readable copy is [`config/azure_access_register.example.json`](../../config/azure_access_register.example.json). Today that example lists **zero** subscriptions, which is the enforced state. A private register is selected with `AZ_GUARD_REGISTER`. Only the tenant owner, in writing, can classify a subscription, and that has not been done for this example.
 
 Until now that register was enforced by agent memory. The register itself says why that is not enough: *"A remembered rule is not a control."* Memory failed once, on a SEV1.
 
@@ -56,7 +56,7 @@ To see it by hand:
 $ az account show --subscription fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0
 az guard: REFUSED (subscription-not-authorised)
   target subscription : fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0
-  register            : …/config/datatap_azure_access_register.json (0 authorised subscription(s))
+  register            : …/config/azure_access_register.example.json (0 authorised subscription(s))
   command             : az account show --subscription fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0
 
 Nothing was executed. This refusal is enforced, not advisory:
@@ -117,7 +117,7 @@ Exit code is always **78** (`sysexits.h EX_CONFIG`) for every refusal, so it can
 Every refusal appends one JSON line to `~/.digithings/az-guard-refusals.log`:
 
 ```json
-{"command":["group","list","--subscription","fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0"],"cwd":"/Users/…","event":"az-guard refusal","reason":"register-empty","register":"…/config/datatap_azure_access_register.json","register_authorized_count":0,"subscription":"fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0","subscription_source":"command-line","ts":"2026-10-07T02:14:31Z","user":"chrisstefan"}
+{"command":["group","list","--subscription","00000000-0000-0000-0000-000000000000"],"cwd":"/Users/…","event":"az-guard refusal","reason":"register-empty","register":"…/config/azure_access_register.example.json","register_authorized_count":0,"subscription":"00000000-0000-0000-0000-000000000000","subscription_source":"command-line","ts":"2026-10-07T02:14:31Z","user":"chrisstefan"}
 ```
 
 The log carries the timestamp, the resolved subscription and where it came from, the reason, and the command **shape**. Values of password/secret/token/sas/key/cert-looking options are replaced with `<redacted>` in both the log and the stderr block, so a refused command that carried a secret does not turn the refusal log into a credential store. If the log is unwritable the refusal still stands, with a warning on stderr — a broken log never turns a refusal into a pass.
@@ -147,7 +147,7 @@ Read these before you treat the guard as more than it is.
 
 Only DataTap, in writing, can classify a subscription (DIG-1687). So:
 
-1. Security edits `config/datatap_azure_access_register.json` — `authorized_subscriptions` gains a full subscription UUID, and `last_changed` / `changed_by` are updated.
+1. Security edits the private register (`AZ_GUARD_REGISTER`), not the in-repo example — `authorized_subscriptions` gains a full subscription UUID, and `last_changed` / `changed_by` are updated.
 2. Security updates the DIG-1674 document in the same PR and records who confirmed it.
 3. Security opens the PR. The guard's test suite runs in CI on it.
 

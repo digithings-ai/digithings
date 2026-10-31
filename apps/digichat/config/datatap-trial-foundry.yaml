@@ -70,7 +70,7 @@ deployment:
   backend:
     type: foundry
     # Per-trial values — replaced by the pipeline (see
-    # config/examples/datatap-trial-deploy.md).
+    # config/examples/trial-deploy.md).
     projectEndpoint: https://REPLACE-FOUNDRY-ACCOUNT.services.ai.azure.com/api/projects/REPLACE-PROJECT
     agentName: REPLACE-AGENT-NAME
   # The house per-visitor minute is cleared. The shared allowance is

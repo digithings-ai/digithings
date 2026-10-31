@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Install (or remove) the az guard so it sits on PATH ahead of the real `az`.
 #
-#   scripts/az-guard/install.sh                    # install into ~/.local/bin
-#   scripts/az-guard/install.sh --bindir DIR      # install somewhere else
-#   scripts/az-guard/install.sh --check            # verify an existing install, write nothing
-#   scripts/az-guard/install.sh --uninstall        # rollback: remove the symlink
+#   scripts/az-guard/install.sh                         # install into ~/.local/bin
+#   scripts/az-guard/install.sh --bindir DIR            # install somewhere else
+#   scripts/az-guard/install.sh --register PATH         # private register for this run
+#   scripts/az-guard/install.sh --check                 # verify an existing install, write nothing
+#   scripts/az-guard/install.sh --uninstall             # rollback: remove the symlink
+#
+# Default register: config/azure_access_register.example.json next to this repo.
+# It authorises nothing. AZ_GUARD_REGISTER or --register selects a private register
+# supplied outside the repo. The guard reads AZ_GUARD_REGISTER when az runs, so export
+# it in the shell that invokes az. This script exports it for the --check probe and
+# prints the path it resolved.
 #
 # It installs a symlink, not a copy, so `git pull` updates the guard with no second step.
-# The guard reads its register relative to its own resolved path, so the symlink does not
-# change where the register is found.
-#
 # Rollback is one command: `scripts/az-guard/install.sh --uninstall`. It removes only the
 # symlink this script created and never touches a real `az`.
 
@@ -18,6 +22,8 @@ set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 shim="$here/az"
 bindir="${HOME}/.local/bin"
+repo_root=$(cd -- "$here/../.." && pwd)
+register="${AZ_GUARD_REGISTER:-$repo_root/config/azure_access_register.example.json}"
 mode="install"
 
 while [ $# -gt 0 ]; do
@@ -25,7 +31,8 @@ while [ $# -gt 0 ]; do
     --bindir) bindir="${2:?--bindir needs a directory}"; shift 2 ;;
     --check) mode="check"; shift ;;
     --uninstall) mode="uninstall"; shift ;;
-    -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --register) register="${2:?--register needs a path}"; shift 2 ;;
+    -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "install.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,7 +48,7 @@ describe() {
   printf 'az guard\n'
   printf '  shim    : %s\n' "$shim"
   printf '  link    : %s\n' "$link"
-  printf '  register: %s\n' "$(cd -- "$here/../.." && pwd)/config/datatap_azure_access_register.json"
+  printf '  register: %s\n' "$register"
   printf '  log     : %s\n' "${AZ_GUARD_LOG:-$HOME/.digithings/az-guard-refusals.log}"
   printf '  guard   : %s\n' "$(command -v az || echo 'not on PATH')"
 }
@@ -73,9 +80,11 @@ case "$mode" in
     status=0
     # A refusal probe, not a call: the guard refuses before exec, so this makes no
     # network call and touches no tenant. Exit 78 is the documented refusal code.
-    probe=$(az account show --subscription fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0 2>&1) && probe_rc=0 || probe_rc=$?
+    # Nil UUID: not a real subscription, and not on the example register. A private
+    # register must not authorise this placeholder or the probe stops proving refusal.
+    probe=$(AZ_GUARD_REGISTER="$register" az account show --subscription 00000000-0000-0000-0000-000000000000 2>&1) && probe_rc=0 || probe_rc=$?
     if [ "$probe_rc" -eq 78 ] && printf '%s' "$probe" | grep -q 'az guard: REFUSED'; then
-      echo "  PASS    : the production subscription id is refused (exit 78, nothing executed)"
+      echo "  PASS    : an unauthorised example subscription id is refused (exit 78, nothing executed)"
     else
       echo "  FAIL    : the probe exited $probe_rc instead of the documented refusal." >&2
       printf '%s\n' "$probe" >&2

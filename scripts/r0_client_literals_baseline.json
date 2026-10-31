@@ -14,7 +14,7 @@
       "ticket": "DIG-3689"
     },
     "AGENTS.md": {
-      "count": 3,
+      "count": 2,
       "ticket": "DIG-3689"
     },
     "infra/docker/Dockerfile.digichat-cloudflare": {
@@ -90,7 +90,7 @@
       "ticket": "DIG-4043"
     },
     "apps/digichat/ARCHITECTURE.md": {
-      "count": 15,
+      "count": 14,
       "ticket": "DIG-3689"
     },
     "apps/digichat/CHANGELOG.md": {
@@ -554,11 +554,11 @@
       "ticket": "DIG-3689"
     },
     "docs/ops/credential-ownership.md": {
-      "count": 36,
+      "count": 35,
       "ticket": "DIG-3689"
     },
     "docs/ops/datatap-azure-az-guard.md": {
-      "count": 12,
+      "count": 8,
       "ticket": "DIG-3689"
     },
     "docs/ops/digichat-aca-secret-fingerprints.json": {
@@ -650,11 +650,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/az-guard/az": {
-      "count": 5,
-      "ticket": "DIG-3689"
-    },
-    "scripts/az-guard/install.sh": {
-      "count": 1,
+      "count": 3,
       "ticket": "DIG-3689"
     },
     "scripts/check_digichat_image_binding.py": {
@@ -666,7 +662,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/check_r0_no_client_literals.py": {
-      "count": 14,
+      "count": 12,
       "ticket": "DIG-3689"
     },
     "scripts/datatap_answer_integrity_check.py": {
@@ -894,11 +890,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_az_guard.py": {
-      "count": 7,
-      "ticket": "DIG-3689"
-    },
-    "tests/scripts/test_check_digichat_image_binding.py": {
-      "count": 1,
+      "count": 6,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_check_gloomberb_ci_guard.py": {

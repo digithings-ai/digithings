@@ -1,0 +1,24 @@
+{
+  "_readme": [
+    "Example Azure access register. The guard reads exactly one key:",
+    "authorized_subscriptions. Every other key is ignored on purpose. An agent",
+    "that adds \"allow_all\": true, \"denied\": [] or a comment has changed nothing,",
+    "because there is no key in this file that opens access.",
+    "",
+    "Each entry must be a full subscription UUID. A subscription name is not",
+    "authorisation and the guard refuses one.",
+    "",
+    "EMPTY IS THE SHIPPED STATE AND IT IS ENFORCED: an empty list refuses every",
+    "az command, including reads. A real allowlist belongs in a private register.",
+    "Point AZ_GUARD_REGISTER at that file. Do not put live tenant, subscription,",
+    "or resource ids in this example.",
+    "",
+    "Placeholder subscription id: 00000000-0000-0000-0000-000000000000.",
+    "Placeholder tenant id: 00000000-0000-0000-0000-000000000001.",
+    "Placeholder subscription name: Example Subscription."
+  ],
+  "authorized_subscriptions": [],
+  "last_changed": "2026-10-07",
+  "changed_by": "Security",
+  "source_document": "example-azure-access-register"
+}

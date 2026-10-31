@@ -67,7 +67,7 @@ def _facts(
     tag_commit: str | None = V232_COMMIT,
     image_revision: str | None = V232_COMMIT,
     image_digest: str = V232_DIGEST,
-    image_ref: str = "datatapchatregistry.azurecr.io/digichat:v2.3.2",
+    image_ref: str = "example.azurecr.io/digichat:v2.3.2",
     tag_ref: str = "digichat-v2.3.2",
 ) -> dict[str, Any]:
     return {

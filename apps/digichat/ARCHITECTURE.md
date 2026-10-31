@@ -1548,7 +1548,7 @@ stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style 
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is
 `config/datatap-trial-test.yaml`, deployed per
-`config/examples/datatap-trial-deploy.md` — that doc, not this section, is the
+`config/examples/trial-deploy.md` — that doc, not this section, is the
 tenant-rollout reference.
 
 In-iframe “ask digichat” chrome is omitted on the first-party skin; outer launcher title /

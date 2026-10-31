@@ -35,7 +35,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIM = REPO_ROOT / "scripts" / "az-guard" / "az"
 INSTALLER = REPO_ROOT / "scripts" / "az-guard" / "install.sh"
-COMMITTED_REGISTER = REPO_ROOT / "config" / "datatap_azure_access_register.json"
+COMMITTED_REGISTER = REPO_ROOT / "config" / "azure_access_register.example.json"
 
 #: The guard's documented refusal code: sysexits EX_CONFIG, not an Azure error code.
 EXIT_REFUSED = 78
