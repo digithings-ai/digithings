@@ -149,10 +149,14 @@ duplicate delivery.
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(44 expressions after the DIG-4364 lock hold). House-run is
+(40 expressions after the DIG-4364 lock hold and the 2026-10-31 runner pause). House-run is
 weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
 `house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
-`checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
+`checkpoint-archive` (`30 13 * * *`) and `market-data-refresh-morning` /
+`-evening` (`0 13`, `30 21`) are disabled since 2026-10-31: digiquant-runner
+fails them on a stale `CORE_POSTGRES_URI` (~350 failures/day, `digikey_app`
+lockout risk). Rows stay with `enabled: false`, wrangler lines are commented
+out; re-enabling needs the S7 fix.
 GHA `schedule:` stays off — this Worker is the SSOT. Leftover sweep after
 #4970: develop YAML has zero `on.schedule` keys; `digisearch_parity` is
 not a workflow in this repo. Path A traps

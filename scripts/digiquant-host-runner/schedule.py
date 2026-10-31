@@ -61,9 +61,12 @@ class Row(NamedTuple):
 
 
 ROWS: tuple[Row, ...] = (
-    Row("market-data-refresh-morning", "market-data-refresh", "0 13 * * *"),
-    Row("market-data-refresh-evening", "market-data-refresh", "30 21 * * *"),
-    Row("checkpoint-archive", "checkpoint-archive", "30 13 * * *"),
+    # Disabled 2026-10-31 with their digithings-cron rows: the runner fails these
+    # on a stale CORE_POSTGRES_URI (~350 failures/day, digikey_app lockout risk).
+    # Re-enabling needs the S7 fix; restore these lines with the jobs.ts rows.
+    # Row("market-data-refresh-morning", "market-data-refresh", "0 13 * * *"),
+    # Row("market-data-refresh-evening", "market-data-refresh", "30 21 * * *"),
+    # Row("checkpoint-archive", "checkpoint-archive", "30 13 * * *"),
     Row("prices-at-open-13", "prices-at-open", "40 13 * * MON-FRI"),
     Row("prices-at-open-14", "prices-at-open", "40 14 * * MON-FRI"),
     Row("prices-fx-refresh", "prices-fx-candles", "19 */2 * * MON-FRI"),

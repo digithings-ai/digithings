@@ -7,9 +7,6 @@ const RESUMED_PIPELINE_IDS = [
   "prices-fx-refresh",
   "prices-fx-refresh-sun",
   "prices-eod-macro",
-  "market-data-refresh-morning",
-  "market-data-refresh-evening",
-  "checkpoint-archive",
   "house-run-09",
   "research-metrics",
   "tearsheets",
@@ -21,6 +18,15 @@ const RESUMED_PIPELINE_IDS = [
 ] as const;
 
 const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
+
+// Disabled 2026-10-31, rows kept: digiquant-runner fails these on a stale
+// CORE_POSTGRES_URI (~350 failures/day, digikey_app lockout risk). Re-enabling
+// needs the S7 fix; move them back to RESUMED_PIPELINE_IDS when it lands.
+const DISABLED_RUNNER_DB_IDS = [
+  "checkpoint-archive",
+  "market-data-refresh-evening",
+  "market-data-refresh-morning",
+] as const;
 
 // Manual-only rows: no Cloudflare clock by design, kick-addressed by cron.
 // DIG-1335: twelve-x-backfill is on-demand (one missed date per kick).
@@ -150,8 +156,13 @@ describe("jobsForCron", () => {
       expect(job?.kind).toBe("container");
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
-      expect(job?.enabled).toBe(true);
     }
+    expect(fx?.enabled).toBe(true);
+    // Disabled until S7 (stale CORE_POSTGRES_URI on the runner); rows kept.
+    expect(morning?.enabled).toBe(false);
+    expect(evening?.enabled).toBe(false);
+    expect(uniqueEnabledCrons()).not.toContain("0 13 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("30 21 * * *");
   });
 
   it("market_context jobs pass bucket inputs", () => {
@@ -255,10 +266,14 @@ describe("jobsForCron", () => {
       workflow: "pipeline-checkpoint-archive.yml",
       ref: "develop",
       codeRef: "main",
-      enabled: true,
+      // Disabled until S7 (stale CORE_POSTGRES_URI on the runner); row kept.
+      enabled: false,
     });
-    expect(jobsForCron("30 13 * * *").map((job) => job.id)).toEqual(["checkpoint-archive"]);
-    expect(uniqueEnabledCrons()).toContain("30 13 * * *");
+    expect(jobsForCron("30 13 * * *").map((job) => job.id)).toEqual([]);
+    expect(jobsForCron("30 13 * * *", { includeDisabled: true }).map((job) => job.id)).toEqual([
+      "checkpoint-archive",
+    ]);
+    expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
   });
 
   it("resumes twelve-x clocks and Path A traps; weekly Mon house-run only", () => {
@@ -266,7 +281,14 @@ describe("jobsForCron", () => {
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...MANUAL_ONLY_IDS, ...GITHUB_LOCK_DISABLED_IDS].sort());
+    ).toEqual(
+      [
+        ...DISABLED_HOUSE_RETRY_IDS,
+        ...DISABLED_RUNNER_DB_IDS,
+        ...MANUAL_ONLY_IDS,
+        ...GITHUB_LOCK_DISABLED_IDS,
+      ].sort(),
+    );
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)

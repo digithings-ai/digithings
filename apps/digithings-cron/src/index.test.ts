@@ -181,14 +181,13 @@ describe("scheduled", () => {
     expect(created).toEqual(["Unrecognised cron trigger — */10 * * * *"]);
   });
 
-  it("dispatches checkpoint-archive to digiquant-runner", async () => {
+  // Disabled 2026-10-31 until S7: the runner fails these on a stale
+  // CORE_POSTGRES_URI. Until the next deploy drops the triggers, a tick on one
+  // of these crons is a quiet tick: no runner start, no GitHub call, no issue.
+  it("does not dispatch the disabled market-data and checkpoint-archive clocks", async () => {
     const githubFetch = vi.fn();
     vi.stubGlobal("fetch", githubFetch);
-    const runnerFetch = vi.fn(
-      async () =>
-        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
-    );
-    const pending: Promise<unknown>[] = [];
+    const runnerFetch = vi.fn();
     const env: Env = {
       DRY_RUN: "0",
       GH_DISPATCH_TOKEN: "github-token",
@@ -197,15 +196,19 @@ describe("scheduled", () => {
       RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
     };
 
-    await worker.scheduled(
-      { cron: "30 13 * * *", scheduledTime: Date.UTC(2026, 9, 5, 13, 30) } as ScheduledController,
-      env,
-      executionContext(pending),
-    );
-    await Promise.all(pending);
+    for (const cron of ["0 13 * * *", "30 13 * * *", "30 21 * * *"]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        { cron, scheduledTime: Date.UTC(2026, 9, 5, 13, 30) } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+      expect(pending).toHaveLength(0);
+    }
 
     expect(githubFetch).not.toHaveBeenCalled();
-    expect(runnerFetch).toHaveBeenCalledOnce();
+    expect(runnerFetch).not.toHaveBeenCalled();
   });
 });
 

@@ -16,8 +16,8 @@ execution probe is `--dry-run` only.
 
 | Cron job | Command | Notes |
 | --- | --- | --- |
-| `market-data-refresh-morning` (`0 13 * * *`) | `market-data-refresh` | |
-| `market-data-refresh-evening` (`30 21 * * *`) | `market-data-refresh` | Same concurrency group |
+| `market-data-refresh-morning` (`0 13 * * *`) | `market-data-refresh` | Disabled 2026-10-31 (stale `CORE_POSTGRES_URI`); re-enable after S7 |
+| `market-data-refresh-evening` (`30 21 * * *`) | `market-data-refresh` | Same concurrency group; disabled 2026-10-31, re-enable after S7 |
 | `prices-fx-refresh` / `prices-fx-refresh-sun` | `prices-fx-candles` | No `fetch-macro` |
 | `prices-at-open-13` / `prices-at-open-14` | `prices-at-open` | ET open gate still applies |
 | `prices-eod-macro` | `prices-eod-macro` | `fetch-macro` only when `run_writers=true` |

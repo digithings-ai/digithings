@@ -39,7 +39,9 @@ export function accountIdFromWranglerToml(text: string): string {
 /**
  * Cron expressions in `[triggers].crons`, in file order.
  *
- * Trailing `# job-id` comments are ignored. Reading stops at the closing bracket
+ * Trailing `# job-id` comments are ignored, and so is a whole-line comment such
+ * as a commented-out (disabled) trigger: TOML never reads it, so neither do we.
+ * Reading stops at the closing bracket
  * of the crons list, so a later table can never contribute expressions.
  */
 export function cronsFromWranglerToml(text: string): string[] {
@@ -58,6 +60,7 @@ export function cronsFromWranglerToml(text: string): string[] {
     }
     // Reading stops at the closing bracket, so a later table cannot contribute.
     if (trimmed.startsWith("]")) break;
+    if (trimmed.startsWith("#")) continue;
     const match = /"([^"]*)"/.exec(trimmed);
     if (match) out.push(match[1]);
   }

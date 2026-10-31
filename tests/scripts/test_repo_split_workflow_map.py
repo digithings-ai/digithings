@@ -77,9 +77,18 @@ def _enabled_clocks() -> dict[str, set[str]]:
         REPO_ROOT / "tests" / "scripts" / "test_migrated_workflows_still_clocked.py",
     )
     rows, _names, _targets = pin._job_rows()
+    # Clocks paused on purpose, row kept and pinned as disabled (2026-10-31:
+    # digiquant-runner stale CORE_POSTGRES_URI, re-enable after S7). They keep
+    # their cloudflare-cron disposition; the pin module guards that they stay
+    # documented and are moved back once re-enabled.
+    paused = {
+        (workflow, job_id)
+        for workflow, job_ids in pin.DISABLED_MIGRATED_CLOCKS.items()
+        for job_id in job_ids
+    }
     found: dict[str, set[str]] = {}
     for row in rows:
-        if not row["enabled"]:
+        if not row["enabled"] and (row["workflow"], row["id"]) not in paused:
             continue
         found.setdefault(str(row["workflow"]), set()).add(str(row["id"]))
     return found
