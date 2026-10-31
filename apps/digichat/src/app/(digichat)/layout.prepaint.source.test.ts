@@ -60,7 +60,7 @@ describe("themeInitScript (what the head script paints)", () => {
     expect(run(false).getAttribute("data-theme")).toBe("dark");
   });
 
-  // QUARANTINE: fails on develop 673104483 since 2bbbe3758 (#6630); Node >= 25's built-in localStorage global shadows happy-dom's, so localStorage.setItem/clear are missing (passes on Node 22/24); ticket: DIG-6066
+  // QUARANTINE: fails on develop 673104483 since 2bbbe3758 (#6630); Node >= 25's built-in localStorage global shadows happy-dom's, so localStorage.setItem/clear are missing (passes on Node 22/24); ticket: DIG-6118 (split from DIG-6066)
   it.skip("applies a palette the site saved", () => {
     localStorage.setItem("dt-palette", "nord");
     const e = run(false);
