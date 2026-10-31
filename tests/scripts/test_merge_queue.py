@@ -8886,3 +8886,30 @@ def test_human_gate_unticked_template_passes_merge_queue() -> None:
     pr = _pr(9004, approved=True, body=_HUMAN_GATE_UNTICKED)
     verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert verdict.eligible, verdict.reasons
+
+
+def test_human_gate_prose_mention_does_not_hide_the_ticked_section() -> None:
+    """A sentence naming the gate is not the section; the real heading still blocks."""
+    body = (
+        "## Summary\n\nThe Human Gate section below is unchanged.\n\n"
+        "## Testing\n\nran it\n\n"
+        "## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n"
+    )
+    assert mq._human_gate_section(body).lstrip().startswith("- [ ] Live-trading")
+    pr = _pr(9005, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_prose_mention_without_heading_fails_closed() -> None:
+    """A body that only mentions the gate in prose has no gate section and is blocked."""
+    body = (
+        "## Summary\n\nNothing here touches the Human Gate list.\n\n"
+        "- [x] Auth or crypto modified\n"
+    )
+    assert mq._human_gate_section(body) == ""
+    pr = _pr(9006, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)

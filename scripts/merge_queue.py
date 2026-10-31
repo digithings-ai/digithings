@@ -3412,18 +3412,20 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     return _review_coverage(pr, repo)[0]
 
 _HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*[-*]\s*\[[xX]\]")
+# The section starts only at an ATX heading (`#` to `######`, then whitespace).
+# A sentence that merely mentions the gate is not the section: matching it
+# would start the section in prose, end it at the next heading, and miss a
+# ticked box in the real section further down (fail open).
+_HUMAN_GATE_HEADING_RE = re.compile(r"(?im)^#{1,6}\s+[^\n]*human gate[^\n]*$")
 
 
 def _human_gate_section(body: str) -> str:
-    """Text under a heading that names the Human Gate section, up to the next heading."""
+    """Text under the ATX heading that names the Human Gate section, up to the next heading."""
     if not body:
         return ""
-    m = re.search(r"(?im)^#{0,6}\s*[^\n]*human gate[^\n]*$", body)
+    m = _HUMAN_GATE_HEADING_RE.search(body)
     if not m:
-        # Fall back to a line that names the section even without a markdown heading.
-        m = re.search(r"(?im)^.*human gate.*$", body)
-        if not m:
-            return ""
+        return ""
     rest = body[m.end():]
     n = re.search(r"(?im)^#{1,6}\s+", rest)
     return rest[: n.start()] if n else rest
@@ -3439,6 +3441,10 @@ def _body_requires_human_review(pr: Any) -> bool:
         body = pr
     else:
         body = str((pr or {}).get("body") or "")
+    if re.search(r"(?i)human gate", body) and not _HUMAN_GATE_HEADING_RE.search(body):
+        # The body names the gate but has no gate heading, so the boxes cannot
+        # be read: fail closed and ask for owner review.
+        return True
     section = _human_gate_section(body)
     if section and _HUMAN_GATE_CHECKED_RE.search(section):
         return True
