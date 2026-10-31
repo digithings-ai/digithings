@@ -73,7 +73,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `publish-digillm-image.yml` | Publish: digillm image | pull_request, push, dispatch | Build, smoke-test and publish the digillm LiteLLM proxy image (DIG-1780) | Working | `paths:` filter |
 | `secret-staleness-check.yml` | Ops: environment gate drift | dispatch (CF clock, monthly) | Compare `.github/environments.json` with live environment protection rules | Working | none |
 | `security-npm-audit.yml` | Security: npm audit | workflow_call, dispatch | `npm audit` over the JS workspaces; sibling of `security-pip-audit.yml` | Disabled on GitHub 2026-10-14 (cost lock; CF clock held off, DIG-4364) | none |
-| `security-pii-scan.yml` | Security: customer PII scan | pull_request, push | Block committed customer PII (DIG-1498, DIG-2607) | Working | none |
 | `self-host-parity.yml` | self-host-parity | pull_request, push, dispatch | Self-host vs hosted parity checks (DIG-2767) | Working | `paths:` filter |
 | `sync-digiquant-runner-digikey-secret.yml` | Ops: sync digiquant-runner house secrets | dispatch | Put digikey and tracing secrets onto digiquant-runner (#4761); never prints values | Working | none |
 | `sync-digiquant-runner-mail-secrets.yml` | Ops: sync digiquant-runner mail secrets | dispatch | Put mail/notify secrets onto digiquant-runner (#4761); never prints values | Working | none |
