@@ -129,20 +129,29 @@ export default function BookLive({
       if (pages && stage.current && pages.parentElement !== stage.current) {
         stage.current.appendChild(pages);
       }
+      // The engine stamps its own count on <html> when the last page is laid
+      // out. That is the moment the stage may be scaled: from here on nothing
+      // measures the page boxes again. Read it off <html>, not off the source:
+      // pagedjs replaces the node it paginates, so a marker written there lives
+      // on a detached copy.
+      const paginated = Boolean(document.documentElement.dataset.bookPaginated);
+      if (paginated) setPaged(true);
+
       // The boxes arrive in a stream. Waiting for the count to settle is what
       // keeps a reader from watching one page become nineteen; the map's count
       // is a hint, not a fact, because a narrow window paginates one page short.
-      if (pages && stage.current?.contains(pages)) {
+      //
+      // Ready also waits for the marker above. The column scale is applied with
+      // it, and data-ready is what reveals the pages and what the export guard
+      // measures from. Publishing ready first lets that scale land afterwards:
+      // the stage shrinks from A4 (794px) to the column, inside the same window
+      // as the PDF click, and the guard reports the shrink as the export moving
+      // the page. The pages stay hidden until ready, so the shrink happens
+      // before anything is shown.
+      if (pages && stage.current?.contains(pages) && paginated) {
         if (settle.current) clearTimeout(settle.current);
         settle.current = setTimeout(() => setReady(true), 320);
       }
-
-      // The engine stamps its own count on the document when the last page is
-      // laid out. That is the moment the stage may be scaled: from here on
-      // nothing measures the page boxes again. Read it off <html>, not off the
-      // source: pagedjs replaces the node it paginates, so a marker written
-      // there lives on a detached copy.
-      if (document.documentElement.dataset.bookPaginated) setPaged(true);
 
       // pagedjs clones the source wrapper with the content, so a page box can
       // arrive holding a copy of the portal host — and with it the inline style
@@ -184,7 +193,14 @@ export default function BookLive({
     };
     take();
     const observer = new MutationObserver(take);
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // childList: the page boxes arriving. attributes: the pagination marker is
+    // written onto <html> with no new node, and ready cannot wait for it otherwise.
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-book-paginated"],
+    });
     return () => observer.disconnect();
   }, []);
 
