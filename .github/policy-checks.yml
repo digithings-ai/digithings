@@ -21,8 +21,8 @@
 # WHAT COUNTS AS A CHECK IN A TRACKED WORKFLOW
 #
 # A job with an explicit `name:`. A job without one reports its check under the
-# job id — those are internal lane jobs (ci.yml's path-gated component jobs,
-# ci-pr-hygiene.yml's `path-filter` helper) and are folded into an aggregator
+# job id — those are internal lane jobs (ci.yml's path-gated component jobs)
+# and are folded into an aggregator
 # rather than being gates in their own right. Naming a job makes it a policy
 # surface; leaving it unnamed keeps it internal. That is the whole rule.
 #
@@ -79,7 +79,6 @@
 # every named job in it a policy surface the inventory must account for.
 tracked_workflows:
   - ci.yml
-  - ci-pr-hygiene.yml
   - ci-pr-title.yml
   - ci-review-coverage.yml
   - ci-docs.yml
@@ -140,19 +139,6 @@ checks:
       so the check reports on every PR), so requiring it would no longer stall
       docs-only PRs — but it is still required nowhere, so it stays advisory
       until DIG-1952 child B sequences the branch-protection write.
-
-  - context: All agent-task issues in TSV with real phase and valid model
-    workflow: ci-pr-hygiene.yml
-    job: coverage
-    enforcement: advisory
-    owner: DevOps
-    issue: DIG-1952
-    review_by: 2027-04-13
-    reason: >-
-      Agent-task TSV coverage. Deliberately ungated: the issue-linkage check
-      that used to live in this file was removed in docs/adr/0024 precisely
-      because it was never a required check, so its failures never blocked a
-      merge while still costing a CI run per PR and producing rework.
 
   - context: Validate PR title
     workflow: ci-pr-title.yml

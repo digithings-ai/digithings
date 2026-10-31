@@ -26,7 +26,7 @@ are gone from the tables below.
 | Stale issues (>90d no activity) | `pipeline-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
 | Stale PRs (>14d no activity) | `pipeline-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
 | Label coverage drift | `pipeline-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `priority:*` or `component:*` |
-| Project-field coverage | the `coverage` job in `ci-pr-hygiene.yml` | daily 06:00 UTC + on PR (CF clock held off since 2026-10-14, DIG-4364) | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
+| Project-field coverage | none: the `coverage` job went with `ci-pr-hygiene.yml` (deleted, GHA exit ledger; disabled since 2026-10-14, DIG-4364) | by hand | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
 | Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:13 UTC (digithings-cron) | Regenerates `docs/agent-backlog/generated-snapshot.md` |
 
 ## Documentation hygiene

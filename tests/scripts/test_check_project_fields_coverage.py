@@ -1,4 +1,4 @@
-"""Unit tests for scripts/check_project_fields_coverage.py (ci-pr-hygiene coverage job).
+"""Unit tests for scripts/check_project_fields_coverage.py (was the ci-pr-hygiene coverage job).
 
 Every open ``agent-task`` issue must have a real phase + sonnet/opus model in
 ``scripts/project_fields.tsv``. A missing row, placeholder ``phase-N``, or bad
