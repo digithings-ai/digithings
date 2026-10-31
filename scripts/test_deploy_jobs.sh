@@ -23,7 +23,7 @@ ok() { echo "ok   $*"; }
 
 # --- source invariants -------------------------------------------------------
 
-ids="stack digichat cron runner dashboard-api corpus-index"
+ids="stack digichat cron runner corpus-index"
 for id in $ids; do
   [ -x "scripts/deploy/${id}.sh" ] || fail "missing executable scripts/deploy/${id}.sh"
   grep -q -- "--job ${id} " "scripts/deploy/${id}.sh" || fail "${id}.sh does not pass --job ${id}"
@@ -36,7 +36,7 @@ for id in $ids; do
     *) fail "workers.tsv missing $id" ;;
   esac
 done
-ok "seven job entrypoints match workers.tsv"
+ok "five job entrypoints match workers.tsv"
 
 # Non-comment code must not put a secret or run a live wrangler deploy.
 python3 - << 'PY' || fail "live deploy or secret put found in code"

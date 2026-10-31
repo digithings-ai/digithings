@@ -11,7 +11,6 @@ install a launchd job.
 | `digichat` | `digichat-vX.Y.Z` | `apps/digichat-cloudflare` | `digithings-digichat` |
 | `cron` | `cron-vX.Y.Z` | `apps/digithings-cron` | `digithings-cron` |
 | `runner` | `runner-vX.Y.Z` | `apps/digiquant-runner` | `digiquant-runner` |
-| `dashboard-api` | `dashboard-api-vX.Y.Z` | `apps/dashboard-api` | `dashboard-api` |
 | `corpus-index` | `corpus-index-vX.Y.Z` | none (job disarmed; source is `apps/corpus-index`) | `corpus-index` |
 
 `corpus-index` source has been on `develop` since #5853 (`apps/corpus-index`),
