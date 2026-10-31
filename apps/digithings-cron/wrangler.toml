@@ -5,7 +5,7 @@
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
 # DigiQuant clocks resumed 2026-10-01; house-run is weekly Monday only.
 # twelve-x FX Hub clocks live. Path A traps restored (dispatch-only YAML);
-# agent-pr-finalizer held off by the 2026-10-14 GitHub lock (DIG-4364).
+# agent-pr-finalizer deleted with its workflow (GHA exit ledger).
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"

@@ -97,7 +97,6 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     # environment holds 0 secrets and every name still resolves at repo or org scope — so
     # this is a precondition for DIG-248 rather than a live break today.
     "agent-backlog-snapshot.yml": {"snapshot"},
-    "agent-pr-finalizer.yml": {"finalize"},
     "execution-cron-check.yml": {"probe"},
     "pipeline-checkpoint-archive.yml": {"archive"},
     "pipeline-continuous-improvement.yml": {"digest"},
