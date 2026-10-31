@@ -34,8 +34,8 @@ can legitimately go several quiet days without a frontend-touching commit. A
 window under ~72h would cry wolf over a long weekend; 7 days is well inside the
 time it took for the current freeze to be noticed.
 
-Usage (build-stamp asserts in ``deploy-digithings-cloudflare.yml`` and
-``scripts/local-deploy/build_sites.sh``; the daily live probe left with
+Usage (build-stamp asserts in ``scripts/local-deploy/build_sites.sh``, which
+replaced the two deleted Pages build-check workflows; the daily live probe left with
 ``smoke-site.yml`` in #4919)::
 
     curl -sL -o body.json -w '%{http_code}' https://digiquant.io/build-info.json

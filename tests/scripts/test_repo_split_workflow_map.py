@@ -42,7 +42,6 @@ APPROVED: tuple[tuple[str, str], ...] = (
     ("R2", ".github/workflows/test-digiquant.yml"),
     ("R3", ".github/workflows/test-dashboard.yml"),
     ("R4", ".github/workflows/book-pdf.yml"),
-    ("R4", ".github/workflows/deploy-digithings-cloudflare.yml"),
     ("R4", ".github/workflows/refresh-repo-activity.yml"),
     ("R4", ".github/workflows/test-web.yml"),
     ("R6", ".github/workflows/datatap-answer-check.yml"),

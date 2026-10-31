@@ -1,5 +1,10 @@
 """Each deploy build check must watch every workspace its build actually compiles.
 
+(GHA exit ledger: both Pages build-check workflows were deleted, so the per-workflow
+filter test below went with them. What remains pins the build-input closure itself and
+that no workspace manifest is orphaned by every path filter. A path-gated local-ci lane
+for the digithings.ai build is a to-do, Q5.)
+
 Both static sites deploy through Cloudflare Pages running one build script, and each
 site's `Deploy: … build check` workflow re-runs that script on PRs matching its
 ``paths:`` filter. Those filters are maintained by hand against a moving import graph and
@@ -41,14 +46,13 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: (deploy build check workflow, the build script it re-runs), one per static site.
-DEPLOY_CHECKS = [
-    pytest.param(
-        REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
-        REPO_ROOT / "scripts" / "build-digithings.sh",
-        id="digithings.ai",
-    ),
-]
+#: The two Pages build-check workflows (`deploy-digi{things,quant}-cloudflare.yml`) were
+#: deleted with the GHA exit ledger, so there is no `paths:` filter left to hold to the
+#: closure; the build scripts stay and are read directly.
+BUILD_SCRIPTS = {
+    "digithings.ai": REPO_ROOT / "scripts" / "build-digithings.sh",
+    "digiquant.io": REPO_ROOT / "scripts" / "build-digiquant.sh",
+}
 
 #: A line that builds a workspace. `run build:analyze` is deliberately not one.
 _BUILD_LINE = re.compile(r"\bnpm\b.*\brun\s+build(?:\s|$)")
@@ -145,31 +149,6 @@ def _push_paths(workflow: Path) -> list[str]:
     return list(parsed[True].get("push", {}).get("paths", []))
 
 
-def _trigger_paths(workflow: Path) -> list[str]:
-    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so the
-    # trigger block is not reachable under the string "on".
-    parsed: dict[Any, Any] = yaml.safe_load(workflow.read_text(encoding="utf-8"))
-    return parsed[True]["pull_request"]["paths"]
-
-
-def _closure_for(site: str) -> set[str]:
-    """The build-input closure of one site, selected by id rather than list position."""
-    workflow, build_script = next(p.values for p in DEPLOY_CHECKS if p.id == site)
-    assert isinstance(build_script, Path) and isinstance(workflow, Path)
-    return _build_input_dirs(build_script)
-
-
-@pytest.mark.parametrize(("workflow", "build_script"), DEPLOY_CHECKS)
-def test_deploy_check_watches_every_workspace_it_builds(workflow: Path, build_script: Path) -> None:
-    paths = _trigger_paths(workflow)
-    missing = sorted(d for d in _build_input_dirs(build_script) if f"{d}/**" not in paths)
-    assert not missing, (
-        f"{workflow.name} does not watch {missing}, which {build_script.name} compiles. "
-        f"An edit there would run neither this check nor any production `next build`. "
-        f"Add each as '<dir>/**' to the `paths:` filter."
-    )
-
-
 def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
     """No workspace manifest may be orphaned — the hole the eighth one sat in.
 
@@ -194,7 +173,6 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
         (REPO_ROOT / "scripts" / "ci_paths.yaml").read_text(encoding="utf-8")
     )
     watched = {glob for globs in filters.values() if isinstance(globs, list) for glob in globs}
-    watched.update(glob for p in DEPLOY_CHECKS for glob in _trigger_paths(p.values[0]))
     # The cron Worker deploys from a push-gated workflow (no pull_request trigger),
     # so its paths live under on.push.paths — a third cover the union must count,
     # or every new push-deployed workspace reopens the orphan hole.
@@ -218,10 +196,8 @@ def test_digichat_ui_is_a_digithings_build_input_but_not_a_digiquant_one() -> No
     Only digithings.ai gained an entry. A reader who finds one workflow changed and the
     other untouched should be able to see that this was computed, not overlooked.
     """
-    digithings = _closure_for("digithings.ai")
-    # The digiquant.io build check workflow was deleted with the GHA exit ledger (site
-    # paused); its build script stays, so read the closure straight from it.
-    digiquant = _build_input_dirs(REPO_ROOT / "scripts" / "build-digiquant.sh")
+    digithings = _build_input_dirs(BUILD_SCRIPTS["digithings.ai"])
+    digiquant = _build_input_dirs(BUILD_SCRIPTS["digiquant.io"])
     assert "packages/digichat-ui" in digithings
     assert "packages/digichat-ui" not in digiquant
     # The walk follows dependencies, not dependents: `digichat` consumes digichat-ui but is

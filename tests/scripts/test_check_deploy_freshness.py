@@ -1,4 +1,4 @@
-"""Unit tests for scripts/check_deploy_freshness.py and its workflow wiring (#1759).
+"""Unit tests for scripts/check_deploy_freshness.py and its wiring (#1759).
 
 digiquant.io and digithings.ai are both Cloudflare Pages static exports, and a
 Pages project that stops producing deployments keeps serving the last good build
@@ -6,9 +6,10 @@ with a 200 and no ``last-modified`` header (verified against the live site
 2026-08-01). Every probe in ``smoke-site.yml`` therefore passed throughout a
 multi-week deploy freeze. The checker turns the build stamp written by
 ``scripts/write-build-info.sh`` into a pass/fail verdict; these tests pin every
-branch of that verdict offline, plus each workflow call site — one freshness job
-and one build check per site — since a probe that is never invoked detects
-nothing, and a probe that names the wrong site misdirects the operator.
+branch of that verdict offline, plus the local build call site
+(``scripts/local-deploy/build_sites.sh``; both Pages build-check workflows were
+deleted with the GHA exit ledger), since a probe that is never invoked detects
+nothing.
 """
 
 from __future__ import annotations
@@ -17,18 +18,16 @@ import importlib.util
 import json
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
 import pytest
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_deploy_freshness.py"
-# The digiquant.io build check was deleted with the GHA exit ledger (site paused).
-_BUILD_CHECK_WORKFLOWS = [
-    REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
-]
+_BUILD_SITES = REPO_ROOT / "scripts" / "local-deploy" / "build_sites.sh"
+# The two Pages build-check workflows, deleted with the GHA exit ledger.
+_DELETED = ("deploy-digiquant-cloudflare.yml", "deploy-digithings-cloudflare.yml")
 
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
@@ -61,16 +60,6 @@ def _stamp(built_at: datetime) -> str:
             "built_at": f"{built_at:%Y-%m-%dT%H:%M:%SZ}",
         }
     )
-
-
-def _workflow(path: Path) -> dict[str, Any]:
-    parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert isinstance(parsed, dict)
-    return parsed
-
-
-def _run_blocks(job: dict[str, Any]) -> list[str]:
-    return [step["run"] for step in job.get("steps", []) if isinstance(step.get("run"), str)]
 
 
 
@@ -196,81 +185,13 @@ class TestCli:
         assert cdf.main(["--url", URL, "--status", "000"]) == 0
 
 
+def test_the_local_site_build_validates_the_stamp_it_just_wrote() -> None:
+    """Both Pages build-check workflows were deleted with the GHA exit ledger.
 
-@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
-def test_build_check_validates_the_stamp_it_just_wrote(workflow_path: Path) -> None:
-    runs = "\n".join(
-        run for job in _workflow(workflow_path)["jobs"].values() for run in _run_blocks(job)
-    )
-    assert "dist/build-info.json" in runs
-    assert "scripts/check_deploy_freshness.py" in runs
-
-
-def _trigger_paths(workflow_path: Path) -> list[str]:
-    # PyYAML resolves a bare top-level `on:` key to the boolean True (YAML 1.1), so
-    # the trigger block is not reachable under the string "on".
-    return _workflow(workflow_path)[True]["pull_request"]["paths"]
-
-
-@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
-@pytest.mark.parametrize(
-    "callee", ["scripts/write-build-info.sh", "scripts/check_deploy_freshness.py"]
-)
-def test_build_check_watches_the_files_it_runs(workflow_path: Path, callee: str) -> None:
-    """A check that does not fire on its own inputs proves nothing about them.
-
-    Both deploy checks listed only ``scripts/build-*.sh``, never its callees. So an
-    edit to ``write-build-info.sh`` — which the real Cloudflare build runs under
-    ``set -euo pipefail``, and whose absent output hard-fails that build — matched no
-    glob and ran neither check; likewise ``check_deploy_freshness.py``, the evaluator
-    both the "Assert deploy build stamp" step and the daily probe call.
+    ``scripts/local-deploy/build_sites.sh`` is the remaining call site: it must assert the
+    stamp exists and run the evaluator over it, for each site.
     """
-    assert callee in _trigger_paths(workflow_path)
-
-
-@pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)
-@pytest.mark.parametrize(
-    "manifest",
-    [
-        "pyproject.toml",
-        "requirements.txt",
-        "setup.py",
-        "package.json",
-        "package-lock.json",
-        # Not root-anchored, and the exception proves the rule below: it is an *install*
-        # input, not a build input. The root `npm install` resolves all eight workspace
-        # manifests before either site compiles, and of the eight this was the only one in
-        # no path filter anywhere in the repo — so a bad range there failed both
-        # production builds with no CI job running. Nothing derives it, because nothing
-        # about it moves: it is not reached through any import edge.
-        "apps/digiweb/package.json",
-    ],
-)
-def test_build_check_watches_the_root_manifests(workflow_path: Path, manifest: str) -> None:
-    """The manifests every deploy build resolves, pinned like the callees above.
-
-    Two routes into the same failure. Cloudflare's build image auto-detects languages
-    from the repo root and runs ``pip install .`` *before* the configured build command,
-    so a Python manifest can freeze a site without a frontend file being touched — #1714
-    edited only the root pyproject.toml and uv.lock, and both sites silently built
-    nothing for three days with every PR green. The npm manifests break it more
-    directly: each build script runs its own root ``npm install`` (#1956), which
-    reconciles the lock against the workspace manifests rather than installing from it,
-    so a bad resolution fails the build with nothing else touched. Each workflow's own
-    comment records both; nothing enforced either.
-
-    Install inputs only — the manifests a build *resolves*. Which workspace *directories*
-    a site must watch is a different question, and a moving one: it follows the import
-    graph, so it is answered by deriving the closure from the manifests in
-    test_deploy_build_inputs.py rather than by a list here. A hardcoded list of those
-    would go stale the next time a frontend dependency edge changes, silently, which is
-    the failure mode this whole module exists to refuse.
-    """
-    paths = _trigger_paths(workflow_path)
-    # Accept a covering directory glob as well as the literal path. A later PR widening
-    # `apps/digiweb/package.json` to `apps/digiweb/**`
-    # strictly improves coverage; a literal-membership assertion would go red on it and
-    # the obvious fix would be to keep both — which is exactly the dead entry the comment
-    # at the top of that filter warns #1966 had to remove.
-    covering = f"{PurePosixPath(manifest).parent}/**"
-    assert manifest in paths or covering in paths
+    body = _BUILD_SITES.read_text(encoding="utf-8")
+    assert body.count("test -f dist/build-info.json") == 2
+    assert body.count("python3 scripts/check_deploy_freshness.py") == 2
+    assert not any((REPO_ROOT / ".github" / "workflows" / name).exists() for name in _DELETED)

@@ -154,13 +154,6 @@ ROWS: tuple[Row, ...] = (
     ),
     Row(
         "R4",
-        ".github/workflows/deploy-digithings-cloudflare.yml",
-        "local-ci",
-        anchor="scripts/build-digithings.sh",
-        note="Pull-request build check. Pages watching main is the publish.",
-    ),
-    Row(
-        "R4",
         ".github/workflows/refresh-repo-activity.yml",
         "cloudflare-cron",
         clock_ids=("refresh-repo-activity",),

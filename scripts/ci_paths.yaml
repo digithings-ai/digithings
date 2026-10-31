@@ -271,6 +271,12 @@ web:
   # whole contract — the receiver, the protobuf decoder, the queue retry policy
   # and the index rows — would run nowhere without it.
   - apps/digitrace-ingest/**
+  # Install inputs only (the root `npm ci` here resolves them). The two Pages
+  # build-check workflows that used to watch these manifests were deleted with the
+  # GHA exit ledger, and without this entry both are orphans in
+  # test_deploy_build_inputs.py's union guard.
+  - apps/digiquant-app/package.json
+  - packages/contract/package.json
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -414,13 +420,6 @@ ruff_and_scripts:
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
   # symptom is a cost figure that is quietly a floor.
   - .github/workflows/pipeline-digiquant.yml
-  # tests/scripts/test_check_deploy_freshness.py pins the deploy check's own `paths:` filter —
-  # that each lists the build script's callees, not just the build script. Same shape as the
-  # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
-  # matches the `workflows` (actionlint) filter and nothing else, so the guard against that
-  # deletion would never run on the deletion. actionlint does not read trigger filters for
-  # coverage, and the failure is silent by construction — the check simply stops firing.
-  - .github/workflows/deploy-digithings-cloudflare.yml
   # tests/scripts/test_workflow_environment_concurrency.py is different in kind from the
   # entries above: it asserts an invariant over EVERY workflow (an `environment`-gated job may
   # not sit in a queueing concurrency group — #2541), so naming files one at a time cannot

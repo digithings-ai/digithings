@@ -50,13 +50,12 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 STACK_WORKFLOW = WORKFLOWS_DIR / "deploy-digithings-stack-cloudflare.yml"
 
 # Paths whose deployment is owned by Cloudflare's git integration, not by a
-# workflow here. `gh pages deploy` in these files builds a PR preview;
-# production digithings.ai / digiquant.io are built by Cloudflare from main.
-PAGES_GIT_INTEGRATION_WORKFLOWS = frozenset(
-    {
-        "deploy-digithings-cloudflare.yml",
-    }
-)
+# workflow here. Production digithings.ai / digiquant.io are built by Cloudflare
+# from main. The two Pages PR build checks that sat here
+# (deploy-digi{things,quant}-cloudflare.yml) were deleted with the GHA exit
+# ledger, so the exemption is empty; a future Pages build check goes back in.
+PAGES_GIT_INTEGRATION_WORKFLOWS: frozenset[str] = frozenset()
+DELETED_PAGES_BUILD_CHECKS = ("deploy-digithings-cloudflare.yml", "deploy-digiquant-cloudflare.yml")
 
 # What "this workflow can change production" looks like in practice: a
 # shell deploy command in a `run:` step, the wrangler-action composite, or
@@ -436,6 +435,8 @@ def test_the_pinned_pages_workflows_are_still_build_checks_only() -> None:
     exemption is wrong and this test fails rather than hiding the
     regression.
     """
+    for name in DELETED_PAGES_BUILD_CHECKS:
+        assert not (WORKFLOWS_DIR / name).exists(), f"{name} is back; re-add it to the exemption"
     for name in PAGES_GIT_INTEGRATION_WORKFLOWS:
         path = WORKFLOWS_DIR / name
         assert path.exists(), f"allowlisted workflow {name} no longer exists"
