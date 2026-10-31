@@ -42,12 +42,15 @@ JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 
 # Every builder that names a workflow in jobs.ts. A builder missing here is
 # invisible to the parse, which would leave its row unpinned while the pins below
-# still pass, so test_worker_clock_rows_are_parsed_completely fails instead.
-# At develop d227b6ed5 the file used cj, pj, tw and wd. rd and wj are kept
-# because the house parity mirror in test_prices_cron_dst.py names them, and an
-# unused entry costs nothing: the guard fails on a builder present here and
-# absent from this tuple, never on the reverse.
-BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw")
+# still pass, so test_worker_clock_rows_are_parsed_completely fails instead and
+# names that builder. At develop d227b6ed5 the file used cj, pj, tw and wd. rd
+# and wj are kept because the house parity mirror in test_prices_cron_dst.py
+# names them, and an unused entry costs nothing: the guard fails on a builder
+# present in jobs.ts and absent from this tuple, never on the reverse.
+# tx puts a route token before the workflow file, so the .yml is the fourth
+# quoted string, not the third.
+BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw", "tx")
+_WORKFLOW_AT = {"tx": 3}
 
 # workflow file -> job id(s) in jobs.ts that must carry its clock, enabled.
 MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
@@ -109,13 +112,18 @@ def _job_rows() -> tuple[list[dict[str, object]], set[str], int]:
         targets += 1
         names.add(name)
         strings = re.findall(r'"([^"]*)"', args)
-        if name not in BUILDERS or len(strings) < 3 or not strings[2].endswith(".yml"):
+        if name not in BUILDERS:
             continue
+        workflow_at = _WORKFLOW_AT.get(name, 2)
+        if len(strings) <= workflow_at or not strings[workflow_at].endswith(".yml"):
+            raise AssertionError(
+                f"clock builder {name!r} has no .yml at quoted string {workflow_at}"
+            )
         rows.append(
             {
                 "id": strings[0],
                 "cron": strings[1],
-                "workflow": strings[2],
+                "workflow": strings[workflow_at],
                 "enabled": "enabled: false" not in args,
             }
         )
