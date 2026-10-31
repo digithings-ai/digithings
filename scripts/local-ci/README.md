@@ -30,7 +30,7 @@ whose merges it gates, at the same version as the code it gates.
 | `import_preflight.py` | refuses a tick when a module the runner imports is missing from the install (DIG-5585) |
 | `check_required_context_producers.py` | asserts every required context has exactly one producer (DIG-4507) |
 | `review_applied.py` | decides `review-applied`: a review pass of the head left findings and every thread is resolved or answered; silent until the head is reviewed |
-| `pr_template.py` | checks a PR body against the required sections and the Human Gate question |
+| `pr_template.py` | checks a PR body against the required sections and the Human Gate question; only the Human Gate blocks |
   (`pr_template.py` is byte-identical; the runner and the review check carry the small
 
 Tests are `tests/scripts/test_local_ci.py`, `test_review_applied.py`,
@@ -343,6 +343,14 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   the gitleaks sentinel, so one edit buys one re-check and not one per tick. A
   failure that names any code gate keeps its row terminal: its remedy is a
   commit.
+- **template paperwork warns, the Human Gate blocks**: a missing linked
+  issue, Component, Change Type, Summary or Testing Evidence is logged as
+  `pr-template WARN:` and counted on the green receipt
+  (`template: 3 warning(s)`). Only the Human Gate fails `pr-template`: an
+  unanswered question (the template's untouched `Yes / No` counts as
+  unanswered) or a checked Human Gate box answered `No` (#6603, #6601). The
+  paperwork findings were 150 of 342 local-ci reds, and none made a merge
+  safer.
 
 ## The bun suites
 

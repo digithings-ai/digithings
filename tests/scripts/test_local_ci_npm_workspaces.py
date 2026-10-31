@@ -269,8 +269,8 @@ def test_run_checks_wires_the_npm_gate():
     assert "npm_gate(pr, WT)" in src
     assert "run_npm_suites(WT, step, out, fails, npm_suites, installed=npm_installed)" in src
     assert 'summary["npm"]' in src
-    assert ('success_desc(mins, summary.get("bun"), summary.get("pytest"), '
-            'summary.get("npm"))') in src
+    assert 'success_desc(mins, summary.get("bun"), summary.get("pytest"),' in src
+    assert 'summary.get("npm"),' in src
 
 
 def test_live_tree_mapping_has_no_error():

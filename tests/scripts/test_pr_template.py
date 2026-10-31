@@ -147,5 +147,53 @@ class TemplateTest(unittest.TestCase):
             self.assertIn(want, failures)
 
 
+class SeverityTest(unittest.TestCase):
+    """Only the Human Gate blocks; every other finding is a warning (plan P1-2)."""
+
+    GATE_YES_WITH_BOX = FULL.replace(
+        "## Human Gate\n",
+        "## Human Gate\n\n- [x] Auth or crypto modified (digikey signing)\n")
+
+    def test_paperwork_findings_are_warnings(self):
+        _ok, failures = _mod.check_template(FULL.replace("Fixes #3842", "Fixes #"))
+        blocking, warnings = _mod.split_findings(failures)
+        self.assertEqual(blocking, [])
+        self.assertEqual(warnings, ["linked-issue: 'Fixes #' names no issue number"])
+
+    def test_the_bare_template_blocks_only_on_the_human_gate(self):
+        tpl = os.path.join(_SCRIPTS, "..", "..", ".github", "PULL_REQUEST_TEMPLATE.md")
+        with open(tpl) as f:
+            _ok, failures = _mod.check_template(f.read())
+        blocking, warnings = _mod.split_findings(failures)
+        self.assertEqual([b.split(":")[0] for b in blocking], ["human-gate"])
+        self.assertIn("linked-issue: 'Fixes #' names no issue number", warnings)
+
+    def test_unanswered_human_gate_blocks(self):
+        b = FULL.replace("**Is human review required?** No", "**Is human review required?**")
+        _ok, failures = _mod.check_template(b)
+        blocking, _warnings = _mod.split_findings(failures)
+        self.assertEqual(len(blocking), 1)
+
+    def test_untouched_yes_slash_no_is_unanswered(self):
+        b = FULL.replace("required?** No", "required?** Yes / No")
+        _ok, failures = _mod.check_template(b)
+        self.assertIn("human-gate: 'Is human review required?' unanswered (Yes/No)",
+                      _mod.split_findings(failures)[0])
+
+    def test_checked_box_answered_no_blocks(self):
+        """#6603 / #6601: a checked Human Gate box must not ride through on 'No'."""
+        _ok, failures = _mod.check_template(self.GATE_YES_WITH_BOX)
+        self.assertEqual(_mod.split_findings(failures)[0],
+                         ["human-gate: a Human Gate box is checked but the answer is No"])
+
+    def test_checked_box_answered_yes_passes(self):
+        b = self.GATE_YES_WITH_BOX.replace("required?** No", "required?** Yes")
+        ok, failures = _mod.check_template(b)
+        self.assertTrue(ok, failures)
+
+    def test_full_body_has_no_findings(self):
+        self.assertEqual(_mod.split_findings(_mod.check_template(FULL)[1]), ([], []))
+
+
 if __name__ == "__main__":
     unittest.main()
