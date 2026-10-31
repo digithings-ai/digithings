@@ -98,9 +98,15 @@
   }
 }
 
+/* The stock assistant-ui thread radius as a theme token, so the base skin's
+   `rounded-thread` (user bubble) is a real utility. Plain @theme (not inline):
+   the utility reads var(--radius-thread), so skin scopes that zero it still win. */
+@theme {
+  --radius-thread: 1.5rem;
+}
+
 :root {
   --radius: 0.625rem;
-  --radius-thread: 1.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
@@ -166,6 +172,36 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+/* A /theme palette paints <html> ([data-palette][data-theme]). Embed and
+   config wrappers carry `.dark`, whose shadcn --accent (a grey hover tint)
+   would replace the palette accent in every dark palette: the send button and
+   links lost the theme colour. Keep the painted palette's accent and
+   destructive. Canvas tokens stay with the per-skin rules in chat-*.css. */
+:root[data-palette] .dark {
+  --accent: inherit;
+  --destructive: inherit;
+}
+
+/* Markdown links paint `text-accent`. Inside .dark that token is the shadcn
+   hover tint (0.274, about #27272a), so on a framed or catalog base skin a
+   link sat at 1.3:1 on the 0.141 canvas. Give the link its own --accent: the
+   dark foreground (about 19:1). Site chats (data-site-theme, app mode) already
+   resolve --accent to the ink or the palette accent, so they are left alone. */
+:root.dark:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) .aui-md-a,
+:root:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) .dark .aui-md-a {
+  --accent: var(--foreground);
+}
+
+/* In light, the same base-skin link inherits the digichat pink (#e2708a),
+   3.04:1 on white. Give it a darker pink of the same hue (#b64a65, 5.05:1 on
+   white, 4.6:1 on zinc-100) so it meets AA. Scoped to the base thread root
+   (.aui-thread-root) on framed and catalog surfaces in light only: the other
+   catalog skins, site chats, app mode and the digichat skin (its own link
+   colour) are untouched; a page with any .dark wrapper keeps the dark rule. */
+:root:not(.dark):not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])):not(:has(.dark)) .aui-thread-root .aui-md-a {
+  --accent: #b64a65;
 }
 
 @layer base {

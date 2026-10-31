@@ -13,6 +13,7 @@
  */
 
 import { startWarmup, getWarmupServiceNames } from "@/lib/warmup-gate";
+import { usePaintsNamedPalette } from "@/lib/use-painted-palette";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
@@ -202,10 +203,10 @@ export function ProductStockShell({
   const [bootVisible, setBootVisible] = useState(false);
   const [serviceNames, setServiceNames] = useState<string[]>(["auth", "assistant"]);
   // The hero-banner cover is the standard boot now (the same animation the
-  // digithings.ai shell shows on /chat/occ). `?boot=` / the `bootLabVariant`
+  // digithings.ai shell shows on /chat/<slug>). `?boot=` / the `bootLabVariant`
   // prop still wins, then the deployment's `chrome.loading`; `classic` opts
   // back into the pre-banner welcome loader.
-  const [bootVariant, setBootVariant] = useState<BootLabVariant | null>(() =>
+  const [bootVariant] = useState<BootLabVariant | null>(() =>
     resolveBootLabVariant(bootLabVariant ?? cfg.chrome.loading ?? null),
   );
 
@@ -353,7 +354,7 @@ export function ProductStockShell({
 
   // Starter chips: the tenant defines the list, the screen shows four at a
   // time and cycles the rest (see @digithings/ui/chat/suggestions). One
-  // boundary for every surface — the embedding, the standalone app, the OCC
+  // boundary for every surface — the embedding, the standalone app, the tenant
   // panels — because every skin reads the capped group from here: the stock
   // skin through `auiConfig.suggestions`, the gallery and base skins through
   // `skinChrome.suggestions`.
@@ -369,6 +370,10 @@ export function ProductStockShell({
   });
   const chips = suggestionCycle.visible;
 
+  // The brand accent is the default look: a painted palette brings its own.
+  const paintsPalette = usePaintsNamedPalette();
+  const brandAccent = paintsPalette ? null : cfg.chrome.accent;
+
   const skinChrome = useMemo<SkinChromeValue>(
     () => ({
       skin: cfg.chrome.skin,
@@ -379,7 +384,7 @@ export function ProductStockShell({
       welcomeBody: cfg.chrome.welcomeBody ?? [],
       placeholder: placeholder?.trim() || cfg.chrome.placeholder,
       suggestions: chips,
-      accent: cfg.chrome.accent,
+      accent: brandAccent,
       modelPicker: features.modelPicker || cfg.models.allowPicker,
       pageContext: features.pageContext,
       attribution: cfg.chrome.attribution,
@@ -392,7 +397,7 @@ export function ProductStockShell({
       cfg.chrome.welcome,
       cfg.chrome.welcomeBody,
       cfg.chrome.placeholder,
-      cfg.chrome.accent,
+      brandAccent,
       cfg.chrome.attribution,
       features.modelPicker,
       features.pageContext,
@@ -443,10 +448,10 @@ export function ProductStockShell({
   );
 
   const ownsPage = skinOwnsPageChrome(cfg.chrome.skin);
-  const accentStyle = cfg.chrome.accent
+  const accentStyle = brandAccent
     ? ({
-        ["--accent" as string]: cfg.chrome.accent.color,
-        ["--accent-foreground" as string]: cfg.chrome.accent.foreground,
+        ["--accent" as string]: brandAccent.color,
+        ["--accent-foreground" as string]: brandAccent.foreground,
       } as const)
     : undefined;
 

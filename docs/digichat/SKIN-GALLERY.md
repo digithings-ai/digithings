@@ -144,11 +144,26 @@ const { prefsApi, panes } = useStockChatPrefs({
 
 `useStockChatPrefs` / `StockChatPrefsHost` live in
 `apps/digichat/src/components/stock/stock-chat-prefs-host.tsx` and build a full
-`EmbedChatPrefsApi` with no sign-in. This is what turns on the `digichat` skin's
-composer chrome: the `/` command palette (19 commands — `/new`, `/clear`,
+`EmbedChatPrefsApi` with no sign-in. This is what turns on the composer
+chrome: the `/` command palette (19 commands — `/new`, `/clear`,
 `/compact`, `/undo`, `/redo`, `/copy`, `/export`, `/help`, `/settings`, `/view`,
 `/thinking`, `/effort`, `/models`, `/language` and language shortcuts), the
 settings/tools/model panes, and the `@`-mention menu.
+
+**The palette is skin-agnostic.** The palette logic lives in
+`packages/ui/src/components/chat/stock/skin-slash-palette.tsx`
+(`useSkinSlashPalette`). The `digichat` skin wires it into its own composer;
+every other registered skin gets it from `SkinPaletteBridge`
+(`stock/skin-palette-bridge.tsx`), which `ThreadSkinView` mounts whenever the
+host passes `digichat.slash`. The bridge marks the skin's thread composer form
+`data-skin-palette-composer`, portals the `/` and `@` popovers into it, and
+catches slash submits before the skin sends. Colours come from the shared
+shadcn tokens (`--popover`, `--popover-foreground`, `--border`, `--muted-foreground`) in
+`styles/chat-skin-palette.css`, so light and dark follow each skin with no
+per-skin rules. The `base` skin is the one special case: its demo `/` and `@`
+menus and their own trigger root step aside when the product palette is
+present (a nested root would shadow the shared one). Tests:
+`apps/digichat/src/components/stock/skin-palette.all-skins.test.tsx`.
 
 **Tool catalog.** `DEFAULT_CLIENT_CONFIG`
 (`apps/digichat/src/lib/deploy-config/client-projection.ts`) deliberately ships
@@ -254,7 +269,7 @@ render subtly wrong with no error. These five have each caused a real bug:
    `--font-geist-mono` to that face so the skin CSS keeps resolving it.
 4. **The prefs host.** No `EmbedChatPrefsProvider` above the skin means
    `useEmbedChatPrefsOptional()` returns `null`, `enableSlash` is false, and the
-   `/` palette plus `@`-mentions are silently absent.
+   `/` palette plus `@`-mentions are silently absent in every skin.
 5. **The theme attribute.** See "Selector chrome" — `data-theme` / `.light` on
    `<html>` is what makes the first-party light palette match.
 

@@ -26,15 +26,33 @@ export const BOOK_READER_CSS = `
   align-items: start;
 }
 
+/* The sidebar is a column: the title, the contents (which scroll on their own
+   when the window is short), and the export cells pinned under them. The
+   export used to sit at the end of one scrolling box, below the fold of the
+   sidebar on a laptop: pressing PDF or HTML focused a button the box then
+   scrolled into view, and the whole contents list jumped 115px under the
+   pointer. Now only the list scrolls, the cells are always fully in view, and
+   the outer box clips rather than scrolls, so focus has nothing to move. */
 .book-nav {
   position: sticky;
   top: calc(var(--dq-nav-h) + 1.5rem);
   align-self: start;
+  display: flex;
+  flex-direction: column;
   max-height: calc(100dvh - var(--dq-nav-h) - 3rem);
-  overflow: auto;
+  overflow: hidden;
+  overflow: clip;
   font-family: var(--font-mono);
   font-size: 0.78rem;
 }
+.book-nav > ol {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.book-nav > .book-export { flex: none; }
 .book-nav__title {
   margin: 0 0 0.75rem;
   font-size: 0.72rem;
@@ -340,5 +358,17 @@ html:has(.book-live) { scrollbar-gutter: stable; }
     break-inside: avoid;
   }
   .book-live .pagedjs_page:last-child { break-after: auto; }
+  /* The engine clones the document's wrappers into every page box, so a page
+     carries an empty <html> and <body> above its content. The pagination step
+     drops them; this makes a stray one harmless. The book's own sheet gives body
+     a height of 100%, which on paper resolves against the page's content box: an
+     empty clone then measures a full page tall and claims a whole column of the
+     page flow, which is how the cover ended up in a column parked beyond the
+     sheet and sheet one printed as a bare field. */
+  .pagedjs_page html, .pagedjs_page body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
 }
 `;

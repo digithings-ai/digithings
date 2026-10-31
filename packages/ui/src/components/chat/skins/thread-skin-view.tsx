@@ -4,6 +4,7 @@ import { lazy, Suspense, type FC, type LazyExoticComponent } from "react";
 import type { ComposerLayout } from "@digithings/ui/chat/thread";
 import { isCloneSkin, type CloneSkin, type ThreadSkin } from "./thread-skins";
 import type { DigichatSkinOptions } from "./digichat";
+import { ChatPrivateModeProvider } from "../stock/chat-private-mode";
 
 // Per-skin on-demand chunks (WS4 Step 5): each skin ships only when its id is
 // selected. The `.then` interop maps the named export to the default that
@@ -48,6 +49,13 @@ const ProductPageAssistant = lazy(() =>
 const DigichatSkin = lazy(() =>
   import("./digichat").then((m) => ({ default: m.DigichatSkin })),
 );
+// The product `/` palette for every skin that is not digichat (digichat wires
+// the same palette into its own composer). Its own chunk, like the skins.
+const SkinPaletteBridge = lazy(() =>
+  import("../stock/skin-palette-bridge").then((m) => ({
+    default: m.SkinPaletteBridge,
+  })),
+);
 
 const CLONE_THREADS: Record<CloneSkin, LazyExoticComponent<FC>> = {
   chatgpt: ChatGPT,
@@ -64,7 +72,9 @@ export type ThreadSkinViewProps = {
   /**
    * First-party skin wiring (product copy, slash commands, pending headers).
    * Provided by the host app — e.g. digichat's `DIGICHAT_SKIN_OPTIONS`.
-   * Only the `digichat` branch reads it; all other skins ignore it (WS4).
+   * The `digichat` branch reads all of it. Every other skin gets the same
+   * slash palette (`slash`, `privateMode`) through `SkinPaletteBridge`; the
+   * rest (copy, layout) stays digichat-only (WS4).
    */
   digichat?: DigichatSkinOptions;
 };
@@ -81,10 +91,14 @@ export function ThreadSkinView(props: ThreadSkinViewProps) {
   // Suspense boundary for the per-skin chunks above. Fallback is null so no
   // loading chrome flashes when a newly selected skin's chunk arrives late;
   // once loaded the render is identical to the static version (WS4 Step 5).
+  // Every skin reads the session's private flag from here (the message
+  // export menus hide, the export runners refuse), not only digichat.
   return (
-    <Suspense fallback={null}>
-      <ThreadSkinSwitch {...props} />
-    </Suspense>
+    <ChatPrivateModeProvider privateMode={props.digichat?.privateMode}>
+      <Suspense fallback={null}>
+        <ThreadSkinSwitch {...props} />
+      </Suspense>
+    </ChatPrivateModeProvider>
   );
 }
 
@@ -93,6 +107,21 @@ function ThreadSkinSwitch({
   composerLayout,
   digichat,
 }: ThreadSkinViewProps) {
+  if (skin === "digichat") {
+    return <DigichatSkin composerLayout={composerLayout} {...digichat} />;
+  }
+  if (!digichat?.slash) return <SkinThread skin={skin} />;
+  return (
+    <SkinPaletteBridge
+      slash={digichat.slash}
+      privateMode={digichat.privateMode}
+    >
+      <SkinThread skin={skin} />
+    </SkinPaletteBridge>
+  );
+}
+
+function SkinThread({ skin }: { skin: Exclude<ThreadSkin, "digichat"> }) {
   if (isCloneSkin(skin)) {
     const Clone = CLONE_THREADS[skin];
     return <Clone />;
@@ -116,10 +145,6 @@ function ThreadSkinSwitch({
 
   if (skin === "webpage-assistant") {
     return <WebpageAssistant />;
-  }
-
-  if (skin === "digichat") {
-    return <DigichatSkin composerLayout={composerLayout} {...digichat} />;
   }
 
   return <ProductPageAssistant />;

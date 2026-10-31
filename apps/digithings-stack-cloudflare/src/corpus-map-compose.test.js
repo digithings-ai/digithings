@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DIGITHINGS_ONLY_CORPUS_JSON, composeCorpusMap } from "./tenant-config";
 
@@ -209,5 +209,81 @@ describe("composeCorpusMap: the house var and the private-tenant secret rejoin",
       digithings: { digisearchIndex: "digithings_docs" },
       "digithings-ai": { digisearchIndex: "digithings_docs" },
     });
+  });
+});
+
+/**
+ * The pre-hardening merge, verbatim in behaviour: exact-match house-wins, raw
+ * keys. For canonical client slugs the hardened composeCorpusMap must produce
+ * the SAME bytes, so today's deployed config does not change.
+ */
+function legacyCompose(primaryRaw, extraRaw) {
+  const parse = (raw) => {
+    try {
+      const v = JSON.parse(raw);
+      if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+      const out = {};
+      for (const [k, e] of Object.entries(v)) {
+        if (typeof e === "object" && e !== null && !Array.isArray(e)) out[k] = e;
+      }
+      return Object.keys(out).length ? out : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const merged = { ...parse(primaryRaw) };
+  for (const [k, e] of Object.entries(parse(extraRaw) ?? {})) if (!(k in merged)) merged[k] = e;
+  const house = merged.digithings;
+  const out = {};
+  for (const [k, e] of Object.entries(merged)) {
+    if (k === "digithings" || k === "digithings-ai") {
+      if (!("digithings" in out)) {
+        out.digithings = house;
+        out["digithings-ai"] = house;
+      }
+      continue;
+    }
+    out[k] = e;
+  }
+  return JSON.stringify(out);
+}
+
+describe("composeCorpusMap: slug normalisation keeps today's config byte-identical", () => {
+  it("matches the pre-hardening output for the real house var, alone and with canonical client slugs", () => {
+    const silent = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(composeCorpusMap(primary(), undefined)).toBe(legacyCompose(primary(), "{}"));
+      expect(composeCorpusMap(primary(), privateHalf())).toBe(legacyCompose(primary(), privateHalf()));
+      const clients = JSON.stringify({
+        "tenant-a": { digisearchIndex: "a", webSearchDomains: ["a.example"] },
+        "tenant-b": { digisearchIndex: "b", researchSystemPrompt: "p" },
+      });
+      expect(composeCorpusMap(primary(), clients)).toBe(legacyCompose(primary(), clients));
+      expect(silent).not.toHaveBeenCalled();
+    } finally {
+      silent.mockRestore();
+    }
+  });
+
+  it("drops private-secret slugs that normalise to the house tenant, keeping the real house entry", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const evil = { digisearchIndex: "stolen", vaultPathPrefix: "clients/other", webSearchDomains: ["x.example"] };
+      const extra = JSON.stringify({
+        DIGITHINGS: evil,
+        " digithings": evil,
+        "Digithings-AI": evil,
+        "\tdigithings-ai": evil,
+        "tenant-a": { digisearchIndex: "a" },
+      });
+      const out = JSON.parse(composeCorpusMap(primary(), extra));
+      const house = JSON.parse(primary()).digithings;
+      expect(Object.keys(out)).toEqual(["digithings", "digithings-ai", "tenant-a"]);
+      expect(out.digithings).toEqual(house);
+      expect(out["digithings-ai"]).toEqual(house);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

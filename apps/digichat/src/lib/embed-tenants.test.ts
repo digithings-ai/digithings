@@ -50,6 +50,18 @@ describe("parseEmbedTenants", () => {
     expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/palette is not supported on embeds/);
   });
 
+  it("accepts tenant colors and refuses a bad hex (tenant-colors.ts)", () => {
+    const base = JSON.parse(VALID) as Record<string, Record<string, unknown>>;
+    const [host] = Object.keys(base);
+    base[host].colors = { light: { background: "#ffffff", link: "#0a58a8" }, dark: { background: "#1b1b1b" } };
+    expect(parseEmbedTenants(JSON.stringify(base)).get(host)?.colors).toEqual({
+      light: { background: "#ffffff", link: "#0a58a8" },
+      dark: { background: "#1b1b1b" },
+    });
+    base[host].colors = { light: { background: "white" } };
+    expect(() => parseEmbedTenants(JSON.stringify(base))).toThrow(/colors\.light\.background/);
+  });
+
   it("refuses bad values for the chrome seed keys", () => {
     const cases: Array<[string, unknown, RegExp]> = [
       ["density", "dense", /density must be/],
@@ -173,6 +185,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp: {
@@ -212,6 +225,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp: { servers: [{ id: "zammad", url: "http://zammad-mcp:8770/mcp", allowedTools }] },
@@ -250,6 +264,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp: {
@@ -272,6 +287,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp,
@@ -295,6 +311,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp,
@@ -326,6 +343,7 @@ describe("parseEmbedTenants", () => {
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           mcp,
@@ -346,18 +364,21 @@ describe("parseEmbedTenants", () => {
           slug: "digithings",
           aliases: ["www.digithings.ai"],
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
         },
         "occ.digithings.ai": {
           slug: "occ",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "occ-t",
         },
         "client.example": {
           slug: "acme",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "c",
         },
@@ -375,6 +396,7 @@ describe("parseEmbedTenants", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           skin: "base",
@@ -390,6 +412,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "shh",
           skin: "perplexity",
@@ -406,6 +429,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             token: "shh",
             skin: "ink",
@@ -421,6 +445,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "turn_limited",
           token: "shh",
         },
@@ -567,6 +592,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           guardrails: { tokensPerMinute: { user: 80000 }, maxToolCallsPerTurn: 4 },
           gateMode: "ungated",
           token: "shh",
@@ -583,6 +609,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             guardrails: { answerAt: 0.9, pauseAt: 0.9 },
             gateMode: "ungated",
             token: "shh",
@@ -633,6 +660,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "turn_limited",
             accent: { color: "red", foreground: "#ffffff" },
             token: "tok",
@@ -649,6 +677,7 @@ describe("parseEmbedTenants", () => {
           "a.example.com": {
             slug: "a",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "turn_limited",
             token: "a-secret",
           },
@@ -656,6 +685,7 @@ describe("parseEmbedTenants", () => {
             slug: "b",
             aliases: ["a.example.com"],
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "turn_limited",
             token: "b-secret",
           },
@@ -681,6 +711,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "turn_limited",
             token: "   ",
           },
@@ -695,6 +726,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "trial_form",
           token: "t",
         },
@@ -709,6 +741,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "turn_limited",
           token: "t",
           ...keys,
@@ -729,6 +762,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "turn_limited",
           token: "t",
           view: "hidden",
@@ -752,6 +786,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             theme: "midnight",
             token: "t",
@@ -768,6 +803,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "turn_limited",
             token: "t",
             lockedContact: 123,
@@ -784,6 +820,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "turn_limited",
           token: "t",
           lockedContact: "info@example.com",
@@ -800,6 +837,7 @@ describe("parseEmbedTenants", () => {
         "tenant.example": {
           slug: "tenant",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "tok",
           ...extra,
@@ -833,6 +871,7 @@ describe("parseEmbedTenants", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           showByok: true,
           layout: "page",
@@ -854,6 +893,7 @@ describe("parseEmbedTenants", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           showByok: true,
           llmAccess: "free_then_byok",
@@ -893,6 +933,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "ex",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             llmAccess: "paid_only",
             token: "t",
@@ -909,6 +950,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "ex",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             layout: "fullscreen",
             token: "t",
@@ -924,6 +966,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "ex",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
         },
@@ -940,6 +983,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           showLanguageSelector: false,
@@ -956,6 +1000,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             token: "t",
             showLanguageSelector: "yes",
@@ -971,6 +1016,7 @@ describe("parseEmbedTenants", () => {
         "digithings.ai": {
           slug: "digithings",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           showContextMeter: true,
@@ -983,6 +1029,7 @@ describe("parseEmbedTenants", () => {
         "www.digithings.ai": {
           slug: "digithings-ai",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           showContextMeter: false,
@@ -996,6 +1043,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             token: "t",
             showContextMeter: true,
@@ -1011,6 +1059,7 @@ describe("parseEmbedTenants", () => {
           "digithings.ai": {
             slug: "digithings",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             token: "t",
             showContextMeter: "yes",
@@ -1023,6 +1072,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
         },
@@ -1037,6 +1087,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
         },
@@ -1051,6 +1102,7 @@ describe("parseEmbedTenants", () => {
         "example.com": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
           pageContext: "silent",
@@ -1063,6 +1115,7 @@ describe("parseEmbedTenants", () => {
         "example.org": {
           slug: "example",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "t",
         },
@@ -1078,6 +1131,7 @@ describe("parseEmbedTenants", () => {
           "example.com": {
             slug: "example",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "ungated",
             token: "t",
             pageContext: "hidden",
@@ -1093,6 +1147,7 @@ describe("parseEmbedTenants", () => {
         "dev.datatap.stream": {
           slug: "datatap",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "trial_form",
           token: "t",
           gate: { consumeUrl: "https://api.test/consume" },
@@ -1109,6 +1164,7 @@ describe("parseEmbedTenants", () => {
           "dev.datatap.stream": {
             slug: "datatap",
             backend: { type: "digigraph" },
+          token: "test-token-not-secret",
             gateMode: "trial_form",
             token: "t",
             gate: { consumeUrl: "http://api.test/consume" },
@@ -1124,6 +1180,7 @@ describe("parseEmbedTenants", () => {
         "dev.datatap.stream": {
           slug: "datatap",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "trial_form",
           token: "t",
         },
@@ -1228,6 +1285,7 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
         [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
           slug: "digiquant-dashboard",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           token: "dash-secret",
         },
@@ -1242,6 +1300,7 @@ describe("digiquant dashboard tenant contract (#3662)", () => {
         [DIGIQUANT_DASHBOARD_EMBED_HOST]: {
           slug: "digiquant-dashboard",
           backend: { type: "digigraph" },
+          token: "test-token-not-secret",
           gateMode: "ungated",
           llmAccess: "operator",
           showByok: true,
@@ -1348,5 +1407,53 @@ describe("lockSessionControls (DIG-1210)", () => {
 
   it("rejects a non-boolean value", () => {
     expect(() => parseEmbedTenants(JSON.stringify(entry("yes")))).toThrow(/lockSessionControls/);
+  });
+});
+
+describe("embedTenantRefusesByok", () => {
+  it("refuses a visitor key on an operator tenant without the BYOK surface", async () => {
+    const { embedTenantRefusesByok } = await import("./embed-tenants");
+    expect(embedTenantRefusesByok({ llmAccess: "operator" })).toBe(true);
+    expect(embedTenantRefusesByok({ llmAccess: "operator", showByok: false })).toBe(true);
+  });
+
+  it("refuses a visitor key on any tenant that switched BYOK off", async () => {
+    const { embedTenantRefusesByok } = await import("./embed-tenants");
+    expect(embedTenantRefusesByok({ llmAccess: "free_then_byok", showByok: false })).toBe(true);
+  });
+
+  it("keeps BYOK where the tenant offers it or is not operator-paid", async () => {
+    const { embedTenantRefusesByok } = await import("./embed-tenants");
+    expect(embedTenantRefusesByok({ llmAccess: "operator", showByok: true })).toBe(false);
+    expect(embedTenantRefusesByok({ llmAccess: "free_then_byok", showByok: true })).toBe(false);
+    expect(embedTenantRefusesByok({ llmAccess: "free_then_byok" })).toBe(false);
+    expect(embedTenantRefusesByok(null)).toBe(false);
+  });
+});
+
+describe("tools.exclusive", () => {
+  it("parses an exclusive catalog and carries it onto the deployment", async () => {
+    const { parseEmbedTenants } = await import("./embed-tenants");
+    const { embedTenantToDeployment } = await import("./deploy-config/loader");
+    const reg = parseEmbedTenants(
+      JSON.stringify({
+        "chat.example.com": {
+          slug: "example",
+          gateMode: "ungated",
+          llmAccess: "operator",
+          backend: { type: "digigraph" },
+          token: "test-token-not-secret",
+          webSearch: true,
+          tools: { allowUserToggle: false, exclusive: true, catalog: [] },
+          mcp: { servers: [], allowUserServers: false, allowAddForm: false },
+        },
+      }),
+    );
+    const cfg = reg.get("chat.example.com")!;
+    expect(cfg.tools?.exclusive).toBe(true);
+    const dep = embedTenantToDeployment(cfg);
+    expect(dep.tools?.exclusive).toBe(true);
+    expect(dep.tools?.catalog.map((t) => t.id)).toEqual(["web_search"]);
+    expect(dep.mcp?.allowUserServers).toBe(false);
   });
 });

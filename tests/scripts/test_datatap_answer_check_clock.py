@@ -19,14 +19,12 @@ but the clock is gone (DIG-4435).
 These pins therefore assert that the clock cannot dispatch anything:
 
 * no ``[triggers] crons`` entry in ``wrangler.toml`` carries its cron, so the
-  next deploy leaves the Worker without the trigger;
-* the ``wd()`` row in ``jobs.ts`` that names the job is **disabled**, so the
-  tick stays quiet (and the row leaves ``uniqueEnabledCrons()``, which is the
-  set the deploy contract compares to ``wrangler.toml``);
-* the retired cron is carried by no enabled row — the deployed Worker still
-  holds the ``17 * * * *`` trigger until the next deploy, and a deployed cron
-  that no job row claims at all is an ``unrecognised_cron`` violation, which
-  would red local-ci and deadlock the merge that has to remove the clock.
+  deploy left the Worker without the trigger;
+* no ``wd()`` row in ``jobs.ts`` names the job at all — the disabled tombstone
+  that held the claim until the deploy was deleted once the live Worker stopped
+  carrying the trigger;
+* the retired cron is claimed by no row, because a deployed cron with no
+  claimant is an ``unrecognised_cron`` violation and no such cron is deployed.
 
 The workflow keeps its ``workflow_dispatch``-only shape.
 
@@ -326,42 +324,36 @@ def _retired_row() -> str:
     return match.group(0) if match else ""
 
 
-def test_the_clock_row_is_disabled_in_the_cron_worker() -> None:
-    """Retired 2026-10-18 (Chris). The row may stay, but it may not dispatch.
+def test_the_clock_row_is_gone_from_the_cron_worker() -> None:
+    """Retired 2026-10-18 (Chris); deleted once the deploy dropped its trigger.
 
-    The row is a tombstone, not a deletion. The deployed Worker still carries
-    the `17 * * * *` trigger until the next digithings-cron deploy, and the
-    deployed-trigger contract fails a deployed cron that no job row claims —
-    deleting the row would red local-ci and deadlock the merge. A disabled row
-    still claims its cron, and the tick stays quiet.
+    The row stayed as a disabled tombstone only while the deployed Worker still
+    carried the `17 * * * *` trigger, because the deployed-trigger contract
+    fails a deployed cron that no job row claims and the merge that removes the
+    trigger could not land with the row gone. The digithings-cron deploy of
+    2026-10-27T01:26:47Z dropped the trigger and no :17 dispatch has fired
+    since, so the tombstone has no claim left to hold.
     """
-    row = _retired_row()
-    assert row, f'jobs.ts carries no wd("{JOB_ID}", …) row at all: the retired check lost its tombstone'
-    assert "enabled: false" in row, (
-        f'jobs.ts still enables wd("{JOB_ID}", …): the retired check would keep dispatching'
+    assert not _retired_row(), (
+        f'jobs.ts still carries a wd("{JOB_ID}", …) row: the retired check has a claimant again'
     )
-    assert f'"{CRON}"' in row, "the tombstone row no longer carries the retired cron"
 
 
 def test_no_clock_row_targets_this_workflow() -> None:
-    """No enabled Worker row may dispatch this workflow file any more."""
+    """No Worker row may name this workflow file any more."""
     text = _jobs_code()
-    assert text.count("datatap-answer-check.yml") == 1, (
-        "more than one jobs.ts row names that workflow file: an enabled row "
-        "would still dispatch the retired check"
+    assert "datatap-answer-check.yml" not in text, (
+        "a jobs.ts row names that workflow file: it would dispatch the retired check"
     )
-    assert "enabled: false" in _retired_row(), "the only row naming the workflow is enabled"
 
 
-def test_the_retired_cron_is_carried_by_no_enabled_row() -> None:
-    """The retired cron may only be claimed by the disabled tombstone row."""
-    text = _jobs_code()
-    claims = text.count('"' + CRON + '"')
-    assert claims == 1, (
+def test_the_retired_cron_is_claimed_by_no_row() -> None:
+    """The retired cron belongs to no Worker row and no trigger."""
+    claims = _jobs_code().count('"' + CRON + '"')
+    assert claims == 0, (
         f'the retired cron "{CRON}" is claimed by {claims} rows; '
-        "an enabled claim would keep dispatching it"
+        "any claim would keep dispatching it"
     )
-    assert '"' + CRON + '"' in _retired_row()
 
 
 def test_the_cron_is_not_in_the_wrangler_trigger() -> None:
@@ -391,9 +383,9 @@ def test_no_two_clocks_share_an_exact_cron_string() -> None:
     enabled clocks still fire on minute 17 (`17 6 * * *`, `17 6 1 * *`,
     `17 9 * * MON`, `17 12 * * MON-FRI`) and CTO condition D8.5 accepted it,
     since two jobs on one minute share a runner rather than delaying each
-    other. The retired check's own minute-17 clock is gone (DIG-4435), so
-    `CRON` here is pinned as claimed only by the disabled tombstone row and
-    absent from `wrangler.toml`.
+    other. The retired check's own minute-17 clock and the tombstone that
+    claimed it are both gone (DIG-4435), so `CRON` here is pinned as claimed by
+    no row and absent from `wrangler.toml`.
 
     A test that fails on ratified behaviour trains people to ignore it, so this
     pins the invariant the repo can actually keep — the same exact string

@@ -11,7 +11,7 @@ export type EmbedUiParams = {
   accent?: string;
   accentForeground?: string;
   /** `?wide=1` — drop the `.dc-session` 1080px cap. Opt-in per embedder (full-page
-   * hosts like digithings.ai /chat and /chat/occ), not a tenant-config default,
+   * hosts like digithings.ai /chat and /chat/<slug>), not a tenant-config default,
    * so narrow widget embeds elsewhere keep the readable-column width. */
   wide?: boolean;
   /** `?private=1` — start this session in private mode. ON-only, like `wide`:

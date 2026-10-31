@@ -49,6 +49,16 @@ describe("the stylesheets are well-formed template literals", () => {
   });
 });
 
+describe("an empty wrapper clone cannot claim a column", () => {
+  it("pins the height of the html/body clones the engine copies into a page box", () => {
+    // The site gives body a height of 100%. In print that resolves against the
+    // page's content box, so an empty clone measured a full page tall, took a
+    // whole column of the page flow, and pushed the cover off the first sheet.
+    expect(PAGED_CSS).toContain(".pagedjs_page html, .pagedjs_page body {");
+    expect(PAGED_CSS).toContain(".pagedjs_page html, .pagedjs_page body {\n  height: auto !important;");
+  });
+});
+
 describe("diagrams print once", () => {
   it("hides the other theme's render with a selector that outranks the viewport img rule", () => {
     // '.book-figure__viewport img' sets display: block !important; a bare
