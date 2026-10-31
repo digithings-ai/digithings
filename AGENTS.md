@@ -188,7 +188,7 @@ from every shipped surface, with what digiweb already carries marked.
 
 ## Azure: the `az` guard
 
-`az` on this machine may be [`scripts/az-guard/az`](scripts/az-guard/az) — a shim installed ahead of the real Azure CLI that reads the DataTap Azure access register, [`config/datatap_azure_access_register.json`](config/datatap_azure_access_register.json), and refuses any command aimed at a subscription that is not on it.
+`az` on this machine may be [`scripts/az-guard/az`](scripts/az-guard/az) — a shim installed ahead of the real Azure CLI that reads the Azure access register, [`config/azure_access_register.example.json`](config/azure_access_register.example.json), and refuses any command aimed at a subscription that is not on it. A private register supplied through `AZ_GUARD_REGISTER` still works.
 
 - **The register is empty. Every `az` command is refused.** That is the enforced state, not a broken install. Reads are refused like writes.
 - **A refusal exits 78 and prints `az guard: REFUSED (<reason>)`.** Nothing was executed. There is no bypass flag and no bypass environment variable; a test pins that.

@@ -3,8 +3,9 @@
 
 Why this file exists
 --------------------
-The DataTap Azure access register (config/datatap_azure_access_register.json, owned by
-Security on DIG-1674) lists zero authorised subscriptions. Until now the rule was enforced
+The Azure access register (config/azure_access_register.example.json) lists zero
+authorised subscriptions unless AZ_GUARD_REGISTER points at a private register.
+Until now the rule was enforced
 by nothing but agent memory, and that memory failed once already, on a SEV1. This shim is
 the enforcement point: it sits on PATH ahead of the real `az`, and it refuses.
 
@@ -88,7 +89,7 @@ SENSITIVE_HINTS = ("password", "secret", "token", "sas", "key", "cert")
 EXIT_REFUSED = 78
 
 #: Register, relative to the repo root (this file lives at <repo>/scripts/az-guard/az).
-REGISTER_RELPATH = "config/datatap_azure_access_register.json"
+REGISTER_RELPATH = "config/azure_access_register.example.json"
 
 #: Where `az` usually lives when it is not on PATH. Checked last; PATH wins.
 FALLBACK_AZ_PATHS = ("/opt/homebrew/bin/az", "/usr/local/bin/az", "/usr/bin/az")
