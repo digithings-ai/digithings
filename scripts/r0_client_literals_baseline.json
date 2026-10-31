@@ -90,7 +90,7 @@
       "ticket": "DIG-4043"
     },
     "apps/digichat/ARCHITECTURE.md": {
-      "count": 15,
+      "count": 14,
       "ticket": "DIG-3689"
     },
     "apps/digichat/CHANGELOG.md": {
@@ -662,7 +662,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/check_r0_no_client_literals.py": {
-      "count": 13,
+      "count": 12,
       "ticket": "DIG-3689"
     },
     "scripts/datatap_answer_integrity_check.py": {

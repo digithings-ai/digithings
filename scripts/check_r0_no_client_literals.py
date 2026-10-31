@@ -85,7 +85,6 @@ NON_R0_PREFIXES: tuple[str, ...] = (
     "apps/digichat/config/occ.yaml",
     "apps/digichat/src/lib/deploy-config/tenant-documents.equivalence.test.ts",
     "apps/digichat/config/examples/datatap-mcp.yaml",
-    "apps/digichat/config/examples/datatap-trial-deploy.md",
     "config/engagement-paths.json",
     "config/litellm.cheaperinference.yaml",
     "config/litellm.omniroute.yaml",
