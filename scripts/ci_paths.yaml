@@ -74,8 +74,8 @@ bun_suites:
   - clients/**
   # The retired lanes themselves: a change to a lane that lists the suites is a
   # change to what runs them, so it fires the gate (it names no suite, so it
-  # runs the list without adding a package).
-  - .github/workflows/test-bun-suites.yml
+  # runs the list without adding a package). test-bun-suites.yml was deleted
+  # with the GHA exit ledger.
   - .github/workflows/test-clients-tui.yml
 
 digiquant:
