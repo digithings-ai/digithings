@@ -893,10 +893,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "tests/scripts/test_check_digichat_image_binding.py": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "tests/scripts/test_check_gloomberb_ci_guard.py": {
       "count": 7,
       "ticket": "DIG-3689"
