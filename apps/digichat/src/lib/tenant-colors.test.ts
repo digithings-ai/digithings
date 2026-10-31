@@ -55,15 +55,15 @@ describe("tenant colors", () => {
 
   it("scopes each set to its own document theme", () => {
     const css = tenantColorsCss({ light: LIGHT, dark: { background: "#1b1b1b", userBubble: "#333a44" } });
-    expect(css.startsWith(':root:root[data-theme="light"],')).toBe(true);
+    expect(css.startsWith(':root:root[data-theme="light"]:not([data-palette]),')).toBe(true);
     expect(css).toContain('[data-stock-product]{--bg:#1b1b1b;');
     expect(css).toContain("--background:#ffffff");
     expect(css).toContain("--background:#1b1b1b");
-    expect(css).toContain(':root:root[data-theme="light"] .aui-md-a{color:var(--tenant-link)}');
-    expect(css).toContain(':root:root[data-theme="dark"] .aui-user-message-content{background:var(--tenant-user-bubble);}');
-    expect(css).toContain(':root:root[data-theme="light"] :focus-visible{outline-color:var(--tenant-focus-ring)}');
+    expect(css).toContain(':root:root[data-theme="light"]:not([data-palette]) .aui-md-a{color:var(--tenant-link)}');
+    expect(css).toContain(':root:root[data-theme="dark"]:not([data-palette]) .aui-user-message-content{background:var(--tenant-user-bubble);}');
+    expect(css).toContain(':root:root[data-theme="light"]:not([data-palette]) :focus-visible{outline-color:var(--tenant-focus-ring)}');
     // No link rule in dark: the dark set has no link.
-    expect(css).not.toContain(':root:root[data-theme="dark"] .aui-md-a');
+    expect(css).not.toContain(':root:root[data-theme="dark"]:not([data-palette]) .aui-md-a');
   });
 
   it("only ever writes validated hex values into the stylesheet", () => {
@@ -77,5 +77,26 @@ describe("tenant colors", () => {
   it("heading-font rule is scoped to the tenant wrapper attribute", () => {
     expect(TENANT_HEADING_FONT_CSS.startsWith("[data-tenant-heading-font] ")).toBe(true);
     expect(TENANT_HEADING_FONT_CSS).toContain("font-family:var(--font-heading)");
+  });
+});
+
+describe("tenant surface reaches the shadcn hover and secondary fills", () => {
+  it("derives --muted and --secondary off the surface toward the text, distinct from --popover", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#3d3d3d", text: "#fafafa" }));
+    expect(vars["--popover"]).toBe("#3d3d3d");
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #3d3d3d 92%, #fafafa)");
+    expect(vars["--secondary"]).toBe(vars["--muted"]);
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
+    expect(vars["--secondary-foreground"]).toBe("#fafafa");
+  });
+
+  it("mixes toward the theme foreground when the tenant sets no text colour", () => {
+    const vars = Object.fromEntries(tenantColorVars({ surface: "#f6f6f6" }));
+    expect(vars["--muted"]).toBe("color-mix(in oklch, #f6f6f6 92%, var(--foreground))");
+    expect(vars["--muted"]).not.toBe(vars["--popover"]);
+  });
+
+  it("sets no --muted without a surface", () => {
+    expect(Object.fromEntries(tenantColorVars({ text: "#111111" }))["--muted"]).toBeUndefined();
   });
 });

@@ -182,6 +182,8 @@ function paneStaysOpen(command: SlashDef, arg: string): boolean {
     case "mcp":
     case "byok":
       return !raw;
+    case "export":
+      return !raw || !isExportFormat(raw);
     default:
       return true;
   }
@@ -244,6 +246,26 @@ export function applyThemePick(api: EmbedChatPrefsApi, preference: ThemePreferen
   else applyDocumentTheme(preference, palette);
 }
 
+/**
+ * Paint a `/theme` row without storing it (palette hover). `null` paints
+ * `base` again. A host that owns the theme previews through its own state;
+ * the document theme repaints with `persist: false`.
+ */
+export function previewThemePick(
+  api: EmbedChatPrefsApi,
+  pick: { preference: ThemePreference; palette: string } | null,
+  base: ThemeState,
+): void {
+  if (api.setTheme) {
+    api.previewTheme?.(
+      pick ? { preference: pick.preference, palette: normalizePalette(pick.palette) } : null,
+    );
+    return;
+  }
+  const next = pick ?? base;
+  applyDocumentTheme(next.preference, next.palette, undefined, { persist: false });
+}
+
 /** Raw model id. Empty and the auto preset both read `auto`. */
 function modelChoiceValue(model: string | undefined): string {
   const value = model?.trim() ?? "";
@@ -252,11 +274,29 @@ function modelChoiceValue(model: string | undefined): string {
   return value;
 }
 
+/**
+ * The tenant's chat languages (what `setLanguage` accepts, else the chip's
+ * list), or null when the tenant sets none and every supported language is
+ * offered. Display only: `setLanguage` enforces the list itself.
+ */
+export function tenantLanguageCodes(
+  api: Pick<EmbedChatPrefsApi, "languageOptions" | "allowedLanguages">,
+): string[] | null {
+  const codes = api.allowedLanguages?.length
+    ? [...api.allowedLanguages]
+    : (api.languageOptions?.map((option) => option.code) ?? []);
+  return codes.length ? codes : null;
+}
+
 /** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
+  allowed: readonly string[] | null = null,
 ): ProductSlashCommand[] {
-  return FEATURED_LANGUAGE_CODES.map((code) => {
+  const codes = allowed
+    ? FEATURED_LANGUAGE_CODES.filter((code) => allowed.includes(code))
+    : FEATURED_LANGUAGE_CODES;
+  return codes.map((code) => {
     const label = languageLabel(code);
     return {
       id: label.toLowerCase(),
@@ -269,7 +309,8 @@ export function featuredLanguageCommands(
 
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashCommand[] {
   const vis = visibilityFromPrefs(api);
-  const { prefs } = api;
+  // Values read the chosen prefs, not a live hover preview.
+  const prefs = api.committedPrefs ?? api.prefs;
   const extra = extraSlashDefs(api);
   const rows: ProductSlashCommand[] = [];
 
@@ -308,7 +349,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
     }
 
     const id = def.id === "lang" ? "language" : def.id;
-    const insertName = def.id === "export" ? "/export md" : def.names[0];
+    const insertName = def.names[0];
     rows.push({
       id,
       label: insertName,
@@ -318,17 +359,9 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashC
         executeSlashDef(def, "", api);
       },
     });
-    if (def.id === "export") {
-      rows.push({
-        id: "export-html",
-        label: "/export html",
-        description: "Download this chat as HTML.",
-        execute: () => {},
-      });
-    }
   }
 
-  rows.push(...featuredLanguageCommands(api.setLanguage));
+  rows.push(...featuredLanguageCommands(api.setLanguage, tenantLanguageCodes(api)));
   rememberSlashValues(rows);
   return rows;
 }
@@ -340,8 +373,29 @@ export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): b
   return false;
 }
 
+/** `md`, `markdown`, `html`: the `/export` argument. */
+function isExportFormat(raw: string): boolean {
+  return exportFormat(raw) !== null;
+}
+
+function exportFormat(raw: string): "md" | "html" | null {
+  const value = raw.trim().toLowerCase().replace(/^\./, "");
+  if (value === "md" || value === "markdown") return "md";
+  if (value === "html" || value === "htm") return "html";
+  return null;
+}
+
 export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsApi): void {
   switch (def.id) {
+    case "export": {
+      // The whole conversation. The skin bound the runner (`bindThreadExport`).
+      // A private session exports nothing; the submit gate and the skin's
+      // runner refuse too, this is the check closest to the call.
+      if (isPrivateMode()) return;
+      const format = exportFormat(arg);
+      if (format) api.exportThread?.(format);
+      return;
+    }
     case "view": {
       const mode = arg.trim().toLowerCase();
       // `hidden` / `compact` / `detailed` are the retired ids; they fold
@@ -411,7 +465,11 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
         return;
       }
       const code = tryResolveLanguageInput(arg);
-      if (code) api.setLanguage(code);
+      // A tenant with a language list only offers those languages; any other
+      // pick opens the (filtered) page instead. setLanguage enforces the list
+      // too; this only keeps the page from silently doing nothing.
+      const allowed = tenantLanguageCodes(api);
+      if (code && (!allowed || allowed.includes(code))) api.setLanguage(code);
       else api.openLanguage();
       return;
     }
@@ -419,10 +477,10 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.openSettings();
       return;
     case "toolbar":
-      api.setToolbar(!api.prefs.toolbar);
+      api.setToolbar(!(api.committedPrefs ?? api.prefs).toolbar);
       return;
     case "scrollbar":
-      api.setScrollbars(api.prefs.scrollbars === "always" ? "auto" : "always");
+      api.setScrollbars((api.committedPrefs ?? api.prefs).scrollbars === "always" ? "auto" : "always");
       return;
     case "tools":
       api.openTools();
@@ -497,11 +555,22 @@ export function executeSlashFromComposer(
   if (def) executeSlashDef(def, arg, api);
 }
 
-export function languageSelectOptions(): {
+export function languageSelectOptions(allowed: readonly string[] | null = null): {
   value: string;
   label: string;
   native: string;
 }[] {
+  // A tenant language list (the chip's) is the whole page, in its order.
+  if (allowed) {
+    return allowed.map((code) => {
+      const row = LANGUAGES.find((l) => l.code === code);
+      return {
+        value: code,
+        label: row?.label ?? languageLabel(code),
+        native: row?.native ?? languageLabel(code),
+      };
+    });
+  }
   const featured = new Set<string>(FEATURED_LANGUAGE_CODES);
   const head = FEATURED_LANGUAGE_CODES.map((code) => {
     const row = LANGUAGES.find((l) => l.code === code);

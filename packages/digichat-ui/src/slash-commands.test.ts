@@ -386,6 +386,47 @@ describe("palette frame", () => {
     expect(submenuRows(rows, "English")).toEqual({ rows, cursor: 0 });
     expect(submenuRows(rows, "en").rows.map((row) => row.id)).toEqual(["en"]);
   });
+
+  it("matches model rows anywhere in the name or full id, case-insensitively, with contains", () => {
+    const model = (id: string) => {
+      const name = id.slice(id.lastIndexOf("/") + 1);
+      return { id, token: id, label: name, aliases: [name] };
+    };
+    const rows = [
+      model("deepseek/deepseek-v4.1-flash"),
+      model("google/gemini-3.8-flash"),
+      model("openai/gpt-6-luna"),
+      model("openai/gpt-oss-120b"),
+      model("z-ai/flash-lite"),
+    ];
+    const ids = (q: string) => submenuRows(rows, q, { contains: true }).rows.map((row) => row.id);
+    // A name that starts with the query ranks first, then list order.
+    expect(ids("flash")).toEqual([
+      "z-ai/flash-lite",
+      "deepseek/deepseek-v4.1-flash",
+      "google/gemini-3.8-flash",
+    ]);
+    expect(ids("LUNA")).toEqual(["openai/gpt-6-luna"]);
+    expect(ids("OpenAI")).toEqual(["openai/gpt-6-luna", "openai/gpt-oss-120b"]);
+    expect(ids("gpt")).toEqual(["openai/gpt-6-luna", "openai/gpt-oss-120b"]);
+    expect(ids("nomatch")).toEqual([]);
+    expect(submenuRows(rows, "flash", { contains: true }).cursor).toBe(0);
+    // Without contains the pane keeps start-of-key matching.
+    expect(submenuRows(rows, "flash").rows.map((row) => row.id)).toEqual(["z-ai/flash-lite"]);
+  });
+
+  it("ranks a start-of-id match above a match inside a name", () => {
+    const rows = [
+      { id: "x/alpha-mini", token: "x/alpha-mini", label: "alpha-mini" },
+      { id: "mini/beta", token: "mini/beta", label: "beta" },
+      { id: "y/mini-gamma", token: "y/mini-gamma", label: "mini-gamma" },
+    ];
+    expect(submenuRows(rows, "mini", { contains: true }).rows.map((row) => row.id)).toEqual([
+      "y/mini-gamma",
+      "mini/beta",
+      "x/alpha-mini",
+    ]);
+  });
 });
 
 describe("/artifacts visibility", () => {

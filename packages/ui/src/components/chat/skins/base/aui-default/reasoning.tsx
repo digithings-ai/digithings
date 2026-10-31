@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "./collapsible";
 import { cn } from "@/lib/utils";
+import { useTraceT } from "../../../trace-i18n";
 
 export const ANIMATION_DURATION = 200;
 
@@ -68,13 +69,13 @@ function ReasoningRoot({
   children,
   ...props
 }: ReasoningRootProps) {
-  const [initialOpen] = useState(defaultOpen);
+  const initialOpenRef = useRef(defaultOpen);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
 
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled
     ? controlledOpen
-    : (userOpen ?? (streaming || initialOpen));
+    : (userOpen ?? (streaming || initialOpenRef.current));
   const isPreview = streaming === true && isOpen;
 
   const prevStreamingRef = useRef(streaming);
@@ -83,10 +84,10 @@ function ReasoningRoot({
     prevStreamingRef.current = streaming;
     // A streaming transition only animates the panel when the resting state
     // is collapsed; with `defaultOpen` the disclosure stays open across it.
-    if (!isControlled && userOpen === null && !initialOpen) {
+    if (!isControlled && userOpen === null && !initialOpenRef.current) {
       onAnimationStart?.();
     }
-  }, [streaming, isControlled, userOpen, initialOpen, onAnimationStart]);
+  }, [streaming, isControlled, userOpen, onAnimationStart]);
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -170,6 +171,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+  const reasoningLabel = useTraceT().t("reasoning");
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -192,7 +194,7 @@ function ReasoningTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        Reasoning{durationText}
+        {reasoningLabel}{durationText}
       </span>
       <ChevronDownIcon
         data-slot="reasoning-trigger-chevron"

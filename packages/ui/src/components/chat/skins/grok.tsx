@@ -15,8 +15,10 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
+  Download,
   Mic,
   Moon,
+  MoreHorizontal,
   Paperclip,
   PencilIcon,
   RefreshCwIcon,
@@ -29,6 +31,7 @@ import {
 import { useState, type FC } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { GrokIcon } from "./grok-icon";
 import { SkinCredit, useComposerCopy } from "../stock";
 import {
@@ -42,7 +45,7 @@ import {
 
 export const Grok: FC = () => {
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-[#fdfdfd] px-4 dark:bg-[#141414]">
+    <ThreadPrimitive.Root data-export-thread="" className="flex h-full flex-col items-stretch bg-[#fdfdfd] px-4 dark:bg-[#141414]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <div className="relative flex h-full flex-col items-center justify-center">
             <GrokIcon className="mb-6 h-10 text-[#0d0d0d] dark:text-white" />
@@ -75,7 +78,7 @@ const Composer: FC = () => {
   );
 
   return (
-    <ComposerPrimitive.Root
+    <ComposerPrimitive.Root data-export-chrome=""
       className="group/composer mx-auto mb-1.5 w-full max-w-3xl"
       data-empty={isEmpty}
       data-running={isRunning}
@@ -192,8 +195,9 @@ const GrokModelPicker: FC = () => {
 };
 
 const ChatMessage: FC = () => {
+  const role = useAuiState((s) => s.message.role);
   return (
-    <MessagePrimitive.Root className="group/message relative mx-auto mb-2 flex w-full max-w-3xl flex-col pb-0.5">
+    <MessagePrimitive.Root data-role={role} className="group/message relative mx-auto mb-2 flex w-full max-w-3xl flex-col pb-0.5">
       <AuiIf condition={(s) => s.message.role === "user"}>
         <div className="flex flex-col items-end">
           <div className="relative max-w-[90%] rounded-3xl rounded-br-lg border border-[#e5e5e5] bg-[#f0f0f0] px-4 py-3 text-[#0d0d0d] dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:text-white">
@@ -207,7 +211,7 @@ const ChatMessage: FC = () => {
             </div>
           </div>
           <div className="mt-1 flex h-8 items-center justify-end gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
-            <ActionBarPrimitive.Root className="flex items-center gap-0.5">
+            <ActionBarPrimitive.Root data-export-chrome="" className="flex items-center gap-0.5">
               <ActionBarPrimitive.Edit className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] transition-colors hover:bg-[#e5e5e5] hover:text-[#0d0d0d] dark:text-[#9a9a9a] dark:hover:bg-[#2a2a2a] dark:hover:text-white">
                 <PencilIcon width={16} height={16} />
               </ActionBarPrimitive.Edit>
@@ -232,7 +236,7 @@ const ChatMessage: FC = () => {
             </div>
           </div>
           <div className="mt-1 flex h-8 w-full items-center justify-start gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
-            <ActionBarPrimitive.Root className="-ml-2 flex items-center gap-0.5">
+            <ActionBarPrimitive.Root data-export-chrome="" className="-ml-2 flex items-center gap-0.5">
               <ActionBarPrimitive.Reload className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] transition-colors hover:bg-[#e5e5e5] hover:text-[#0d0d0d] dark:text-[#9a9a9a] dark:hover:bg-[#2a2a2a] dark:hover:text-white">
                 <RefreshCwIcon width={16} height={16} />
               </ActionBarPrimitive.Reload>
@@ -245,6 +249,17 @@ const ChatMessage: FC = () => {
               <ActionBarPrimitive.FeedbackNegative className="flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] transition-colors hover:bg-[#e5e5e5] hover:text-[#0d0d0d] dark:text-[#9a9a9a] dark:hover:bg-[#2a2a2a] dark:hover:text-white">
                 <ThumbsDown width={16} height={16} />
               </ActionBarPrimitive.FeedbackNegative>
+              <MessageExportMenu
+                trigger={
+                  <button type="button" aria-label="More" className={"flex h-8 w-8 items-center justify-center rounded-full text-[#6b6b6b] transition-colors hover:bg-[#e5e5e5] hover:text-[#0d0d0d] dark:text-[#9a9a9a] dark:hover:bg-[#2a2a2a] dark:hover:text-white"}>
+                    <MoreHorizontal width={16} height={16} />
+                  </button>
+                }
+                icon={<Download className="size-4" />}
+                align="start"
+                contentClassName="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out z-50 min-w-40 overflow-hidden rounded-xl border p-1.5 shadow-md"
+                itemClassName="text-muted-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none"
+              />
               <MessageTimingDisplay />
             </ActionBarPrimitive.Root>
           </div>

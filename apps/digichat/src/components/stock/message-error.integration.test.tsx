@@ -24,6 +24,9 @@ vi.mock("@assistant-ui/react", async () => {
           },
         },
       }),
+    // The stock thread's trace builds its chain grouping at import time
+    // (`trace-grouping/chain-group-by.ts`); this suite never renders it.
+    groupPartByType: () => () => [],
     MessagePrimitive: {
       Error: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     },

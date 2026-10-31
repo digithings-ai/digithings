@@ -100,7 +100,7 @@ import {
 } from "@/lib/embed-trial-messages";
 import { EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { buildEmbedAccentStyle } from "@/lib/embed-accent-style";
-import { TENANT_HEADING_FONT_CSS, tenantFontStyle } from "@/lib/tenant-fonts";
+import { TENANT_HEADING_FONT_CSS, tenantFontStyle, tenantOverlayFontCss } from "@/lib/tenant-fonts";
 import { useEmbedUiParams } from "@/hooks/use-embed-ui-params";
 import { backendLabel } from "@/lib/provider-label";
 import type { EmbedUiParams } from "@/lib/embed-ui-params";
@@ -111,7 +111,16 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags, shouldRenderEmbedBrandHeader } from "@/lib/embed-ui-flags";
-import { DEFAULT_LANGUAGE_CODE, tryResolveLanguageInput } from "@/lib/languages";
+import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import {
+  languageChoiceKey,
+  localizeTenantCopy,
+  resolveTenantLanguage,
+  resolveTenantLanguagePick,
+  tenantAllowedLanguages,
+  tenantCredit,
+  tenantLanguageOptions,
+} from "@/lib/tenant-locales";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   buildReadyMessage,
@@ -326,7 +335,10 @@ function EmbedPageInner({
     () => readEmbedUserThemeRaw(userThemeKey),
     () => null,
   );
-  const userTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  const storedUserTheme = useMemo(() => parseEmbedUserTheme(userThemeRaw), [userThemeRaw]);
+  // Palette hover previews a /theme row: painted like a pick, never stored.
+  const [themePreview, setThemePreview] = useState<{ pick: EmbedUserTheme | null } | null>(null);
+  const userTheme = themePreview ? themePreview.pick : storedUserTheme;
   const setUserTheme = useCallback(
     (next: EmbedUserTheme | null) => {
       writeEmbedUserTheme(userThemeKey, next);
@@ -505,10 +517,16 @@ function EmbedPageInner({
   // left style=null after SSR/hydration while location.search still had the hex
   // (DataTap terracotta #b5562b regression).
   const urlColors = useEmbedUiParams();
-  const accentStyle = buildEmbedAccentStyle(
-    urlColors.accent ?? tenantCfg.accent?.color,
-    urlColors.accentForeground ?? tenantCfg.accent?.foreground,
-  );
+  // A named palette (a /theme pick, a parent's or ?palette=) brings its own
+  // accent. The brand hex is the default look only, so it steps aside while a
+  // palette is painted, the same way the tenant colours do (tenant-colors.ts).
+  const accentStyle =
+    effectivePalette === "default"
+      ? buildEmbedAccentStyle(
+          urlColors.accent ?? tenantCfg.accent?.color,
+          urlColors.accentForeground ?? tenantCfg.accent?.foreground,
+        )
+      : undefined;
   // When a brand hex is active, drop the named `.accent-*` class so the inline
   // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
@@ -529,10 +547,10 @@ function EmbedPageInner({
 
   return (
     <>
-      <style>{tenantCfg.fonts?.heading ? ACCENT_CSS + TENANT_HEADING_FONT_CSS : ACCENT_CSS}</style>
+      <style>{(tenantCfg.fonts?.heading ? ACCENT_CSS + TENANT_HEADING_FONT_CSS : ACCENT_CSS) + tenantOverlayFontCss(tenantCfg.fonts)}</style>
       {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive || effectivePalette !== "default" ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide || tenantCfg.skin === "digichat" ? "" : "bg-background"} text-foreground`}
         style={fontStyle ? { ...accentStyle, ...fontStyle } : accentStyle}
         data-tenant-heading-font={tenantCfg.fonts?.heading ? "" : undefined}
       >
@@ -546,6 +564,7 @@ function EmbedPageInner({
           bootLab={initialBoot}
           theme={{ mode: effectiveTheme, palette: effectivePalette }}
           onThemePick={setUserTheme}
+          onThemePreview={setThemePreview}
         />
       </div>
     </>
@@ -562,6 +581,7 @@ function EmbedChat({
   bootLab,
   theme,
   onThemePick,
+  onThemePreview,
 }: {
   accent: Accent;
   tenantCfg: EmbedTenantClientConfig;
@@ -573,6 +593,7 @@ function EmbedChat({
   /** What the embed paints now, and where a /theme pick goes (EmbedPageInner owns it). */
   theme: EmbedUserTheme;
   onThemePick: (next: EmbedUserTheme | null) => void;
+  onThemePreview?: (next: { pick: EmbedUserTheme | null } | null) => void;
 }) {
   const {
     key: byokKey,
@@ -627,6 +648,24 @@ function EmbedChat({
     extra: extraOffFromCatalog(catalogToolsFromClient(stockClient)),
   }));
   useStoredDensityAfterMount(setChatPrefs);
+  // Tenant chat languages (the composer chip): a stored explicit choice wins,
+  // else the browser's languages. Applied after mount so the first render
+  // matches the server. Resets (/new, /clear, /compact) keep the language.
+  const tenantLocales = tenantCfg.locales;
+  const languageSeedRef = useRef(tenantLanguage);
+  useEffect(() => {
+    if (!tenantLocales) return;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(languageChoiceKey(tenantCfg.slug));
+    } catch {
+      stored = null;
+    }
+    const lang = resolveTenantLanguage(tenantLocales, stored, window.navigator.languages);
+    languageSeedRef.current = lang;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot mount sync: the server cannot see the browser languages or storage.
+    setChatPrefs((p) => (p.language === lang ? p : { ...p, language: lang }));
+  }, [tenantLocales, tenantCfg.slug]);
   useStoredScrollAfterMount(setChatPrefs);
   const [composerMenu, setComposerMenu] = useState<null | ComposerMenuKind>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -652,6 +691,15 @@ function EmbedChat({
   }, []);
   const setComposerDraft = useCallback((text: string) => {
     draftSink.current(text);
+  }, []);
+  const exportSink = useRef<((format: "md" | "html") => void) | null>(null);
+  const [threadExportBound, setThreadExportBound] = useState(false);
+  const bindThreadExport = useCallback((run: (format: "md" | "html") => void) => {
+    exportSink.current = run;
+    setThreadExportBound(true);
+  }, []);
+  const exportThread = useCallback((format: "md" | "html") => {
+    exportSink.current?.(format);
   }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
@@ -1233,9 +1281,14 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [isTrialForm, host, unlockTrial]);
 
+  // The tenant's copy in the session language (the row's own copy without locales).
+  const copyCfg = useMemo(
+    () => localizeTenantCopy(tenantCfg, chatPrefs.language),
+    [tenantCfg, chatPrefs.language],
+  );
   const tenantWelcomeIntro = useMemo(() => {
     if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
+    if (copyCfg.welcome) return copyCfg.welcome;
     if (ungated) {
       return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
     }
@@ -1243,9 +1296,9 @@ function EmbedChat({
       "the first few turns are free",
       `the first ${EMBED_FREE_TURN_LIMIT} are free`,
     );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+  }, [uiParams.welcome, copyCfg.welcome, ungated]);
 
-  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
+  const tenantSuggestions = useEmbedSuggestions(uiParams.suggestions, copyCfg);
   // Private session: generic support-desk copy, so nothing names the tenant.
   const {
     welcome: welcomeIntro,
@@ -1254,7 +1307,7 @@ function EmbedChat({
     headerTitle,
   } = privateSessionChrome(privateChrome, {
     welcome: tenantWelcomeIntro,
-    placeholder: uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…",
+    placeholder: uiParams.placeholder ?? copyCfg.placeholder ?? "ask digichat…",
     suggestions: tenantSuggestions,
     headerTitle: tenantCfg.title,
   });
@@ -1322,6 +1375,9 @@ function EmbedChat({
     featureModelPicker: stockClient.features.modelPicker,
     available: stockClient.models.available,
   });
+  const languageOptions = useMemo(() => tenantLanguageOptions(tenantLocales), [tenantLocales]);
+  const allowedLanguages = useMemo(() => tenantAllowedLanguages(tenantLocales), [tenantLocales]);
+  const credit = tenantCredit(tenantLocales, chatPrefs.language);
   const prefsApi = useMemo<EmbedChatPrefsApi>(
     () => ({
       prefs: chatPrefs,
@@ -1342,12 +1398,28 @@ function EmbedChat({
           mcpCustom: p.mcpCustom.filter((s) => s.id !== id),
         })),
       setLanguage: (code) => {
-        const resolved = tryResolveLanguageInput(code) ?? DEFAULT_LANGUAGE_CODE;
+        // The tenant's language list is enforced here, once, for every caller
+        // (chip, /language, the model's session_set_language).
+        const resolved = resolveTenantLanguagePick(allowedLanguages, code);
+        if (!resolved) return;
+        if (tenantLocales) {
+          // An explicit pick (chip or /language) is remembered over the browser.
+          languageSeedRef.current = resolved;
+          try {
+            window.localStorage.setItem(languageChoiceKey(tenantCfg.slug), resolved);
+          } catch {
+            // storage blocked: the choice lasts for this page only
+          }
+        }
         setChatPrefs((p) => ({ ...p, language: resolved }));
       },
+      ...(languageOptions ? { languageOptions } : {}),
+      ...(allowedLanguages ? { allowedLanguages } : {}),
+      ...(credit ? { credit } : {}),
       setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
+      availableModels: stockClient.models.available,
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort: effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
@@ -1363,7 +1435,7 @@ function EmbedChat({
       reset: () =>
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1445,6 +1517,7 @@ function EmbedChat({
       ...embedThemePrefs({
         theme,
         onThemePick,
+        onThemePreview,
         openTheme: () => {
           setComposerMenu("theme");
         },
@@ -1460,7 +1533,7 @@ function EmbedChat({
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1478,7 +1551,7 @@ function EmbedChat({
       compactThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,
-          language: tenantLanguage,
+          language: languageSeedRef.current,
           view: stockClient.features.view,
           thinking: stockClient.features.thinking,
           ...resetChromePrefsFromDeploy({
@@ -1506,6 +1579,9 @@ function EmbedChat({
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
     }),
     [
@@ -1534,19 +1610,29 @@ function EmbedChat({
       theme.mode,
       theme.palette,
       onThemePick,
+      onThemePreview,
       stockClient.features.density,
       stockClient.backendType,
       stockClient.gate.lockSessionControls,
       stockClient.tools.allowUserToggle,
+      stockClient.models.available,
       paletteQuery,
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
       stockClient.features.effort,
       stockClient.gate.searchEngine,
       stockClient.chrome.toolbar,
       stockClient.chrome.scrollbars,
+      tenantLocales,
+      tenantCfg.slug,
+      languageOptions,
+      allowedLanguages,
+      credit,
     ],
   );
 

@@ -85,13 +85,42 @@ export type SkinPaletteBridgeProps = {
  * - Slash submits (block, pane, force, run) are caught in the capture phase
  *   and never reach the skin's own send handler.
  */
+/**
+ * The visual prefs a skin that is not digichat reads from its scope:
+ * `/density` respaces the messages and `/scrollbar` shows or hides the bars
+ * of the skin's scroll surfaces (chat-skin-palette.css). Prefs come through
+ * the provider overlay, so a hovered row in the `/` menu previews here too.
+ */
+function useSkinLook(): { density: string; scrollbars: "always" | "auto" } {
+  const chatPrefs = useEmbedChatPrefsOptional()?.prefs;
+  return {
+    density: chatPrefs?.density ?? "default",
+    scrollbars: chatPrefs?.scrollbars ?? "always",
+  };
+}
+
+/** The look attributes alone, for a skin mounted without the palette. */
+function SkinLookScope({ children }: { children: ReactNode }) {
+  const { density, scrollbars } = useSkinLook();
+  return (
+    <div
+      data-skin-look-scope=""
+      data-skin-density={density}
+      data-skin-scrollbars={scrollbars}
+      style={{ display: "contents" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function SkinPaletteBridge({
   slash,
   privateMode,
   children,
 }: SkinPaletteBridgeProps) {
   const palette = useSkinSlashPalette({ slash, privateMode });
-  if (!palette.enabled) return <>{children}</>;
+  if (!palette.enabled) return <SkinLookScope>{children}</SkinLookScope>;
   return <SkinPaletteScope palette={palette}>{children}</SkinPaletteScope>;
 }
 
@@ -105,7 +134,7 @@ function SkinPaletteScope({
   const scopeRef = useRef<HTMLDivElement | null>(null);
   // `/density` for skins that are not digichat: the scope carries the choice
   // and chat-skin-palette.css respaces the messages under it.
-  const density = useEmbedChatPrefsOptional()?.prefs.density ?? "default";
+  const { density, scrollbars } = useSkinLook();
   const [anchor, setAnchor] = useState<HTMLFormElement | null>(null);
   const submitRef = useRef(palette.handleSubmit);
   submitRef.current = palette.handleSubmit;
@@ -168,6 +197,7 @@ function SkinPaletteScope({
           ref={scopeRef}
           data-skin-palette-scope=""
           data-skin-density={density}
+          data-skin-scrollbars={scrollbars}
           style={{ display: "contents" }}
         >
           {children}

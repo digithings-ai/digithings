@@ -95,18 +95,36 @@ afterEach(() => {
   setDigichatWarmupPhase("idle");
 });
 
+/**
+ * The status line under test. Gallery: the indicator row itself. Base: the
+ * row is assistant-ui's stock pulsing dot, and the status sits beside it.
+ */
+const statusLine = (host: HTMLElement, stock: boolean) =>
+  visibleText(
+    stock
+      ? host.querySelector<HTMLElement>('[data-slot="aui_assistant-message-status"]')
+      : indicator(host),
+  );
+
 describe.each([
-  ["gallery skin", Gallery],
-  ["base skin", BaseThread as FC],
-])("pre-response loading row (%s)", (_name, Skin) => {
+  ["gallery skin", Gallery, false],
+  ["base skin", BaseThread as FC, true],
+] as const)("pre-response loading row (%s)", (_name, Skin, stock) => {
   it("shows the animation alone while we only wait for a response", async () => {
     const { adapter, step } = controlledAdapter();
     const { host, unmount } = await mount(Skin, adapter);
     await step([conn({ state: "connecting" })]);
     const row = indicator(host);
     expect(row).toBeTruthy();
-    expect(row?.querySelector('[data-slot="dot-matrix"], svg, [role="img"]')).toBeTruthy();
-    expect(visibleText(row)).toBe("");
+    if (stock) {
+      // assistant-ui's own indicator: the pulsing dot, nothing else.
+      expect(row?.textContent).toBe("\u25CF");
+      expect(row?.className).toContain("animate-pulse");
+      expect(host.querySelector('[data-slot="aui_assistant-message-status"]')).toBeNull();
+    } else {
+      expect(row?.querySelector('[data-slot="dot-matrix"], svg, [role="img"]')).toBeTruthy();
+      expect(visibleText(row)).toBe("");
+    }
     expect(host.textContent).not.toMatch(/Connecting|Warming up/);
     unmount();
   });
@@ -118,7 +136,7 @@ describe.each([
       conn({ state: "connecting" }),
       conn({ state: "warming_up", message: "Waiting for model capacity — retrying in 8s" }),
     ]);
-    expect(visibleText(indicator(host))).toBe("Waiting for model capacity — retrying in 8s");
+    expect(statusLine(host, stock)).toBe("Waiting for model capacity — retrying in 8s");
     unmount();
   });
 
@@ -127,7 +145,7 @@ describe.each([
     const { host, unmount } = await mount(Skin, adapter);
     await act(async () => setDigichatWarmupPhase("waking"));
     await step([conn({ state: "connecting" })]);
-    expect(visibleText(indicator(host))).toBe("Waking up services…");
+    expect(statusLine(host, stock)).toBe("Waking up services…");
     unmount();
   });
 });

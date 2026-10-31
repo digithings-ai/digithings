@@ -39,8 +39,11 @@
   text-align: start;
 }
 
+/* One row style for the slash palette and every composer menu page (theme,
+   view, density, language, models...): same inset, radius, padding. */
 [data-skin-palette-composer] .skin-palette.skin-palette [data-slot="composer-trigger-popover-item"],
-[data-skin-palette-composer] .skin-palette.skin-palette [role="option"] {
+[data-skin-palette-composer] .skin-palette.skin-palette [role="option"],
+[data-skin-palette-composer] .dc-composer-menu.dc-composer-menu [data-slot="composer-menu-row"] {
   margin-inline: 0.25rem;
   width: calc(100% - 0.5rem);
   border-radius: 0.5rem;
@@ -51,7 +54,9 @@
 
 /* A neutral wash mixed from the popover's own colours. --accent is not used:
    brand accent themes repoint it to a saturated colour. */
-[data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted] {
+[data-skin-palette-composer] .skin-palette.skin-palette [data-highlighted],
+[data-skin-palette-composer] .dc-composer-menu [data-cursor="true"],
+[data-skin-palette-composer] .dc-composer-menu.dc-composer-menu [data-slot="composer-menu-row"][data-cursor="true"] {
   background: color-mix(in oklab, var(--ink) 9%, var(--bg));
   color: var(--ink);
   outline: none;
@@ -60,12 +65,6 @@
 [data-skin-palette-composer] .skin-palette.skin-palette :is([data-slot="palette-value"], [data-slot="palette-detail"]),
 [data-skin-palette-composer] .skin-palette.skin-palette .text-ink-mute {
   color: var(--ink-mute);
-}
-
-/* The digichat chevron cursor belongs to the digichat look; here the
-   highlighted row is marked by the shared accent wash instead. */
-[data-skin-palette-composer] .skin-palette.skin-palette .aui-menu-cursor {
-  display: none;
 }
 
 /* Pane scroll indicator (the digichat stylesheet only loads with that skin). */
@@ -112,4 +111,28 @@
 [data-skin-density="airy"] [data-slot="aui_message-group"],
 [data-skin-density="airy"] :has(> [data-message-id] + [data-message-id]) {
   row-gap: 2.5rem;
+}
+
+/*
+ * `/scrollbar` for skins that are not digichat. The digichat thread keys its
+ * bars on its own root; here the scope's [data-skin-scrollbars] reaches the
+ * skin's scroll surfaces: the thread viewport (base marks it with
+ * data-slot; the clone skins only carry Tailwind overflow utilities) and any
+ * scrolling block inside it.
+ *   always — a thin visible bar in a reserved gutter.
+ *   auto   — no bar and no gutter (the content still scrolls).
+ */
+[data-skin-scrollbars="always"]
+  :is([data-slot="aui_thread-viewport"], .overflow-y-scroll, .overflow-y-auto, .overflow-auto) {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, currentColor 38%, transparent) transparent;
+}
+[data-skin-scrollbars="auto"]
+  :is([data-slot="aui_thread-viewport"], .overflow-y-scroll, .overflow-y-auto, .overflow-auto) {
+  /* The composer sits inside the viewport, so a hover or focus reveal would
+     show the bar nearly all the time; auto hides it and wheel, touch and
+     keyboard scrolling still work. */
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
 }

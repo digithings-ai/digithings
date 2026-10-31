@@ -94,6 +94,9 @@ _KNOWN_ENTRY_KEYS = frozenset(
         # Domains this tenant's web_search may reach. Absent: unpinned.
         "webSearchDomains",
         "web_search_domains",
+        # Most distinct hosts webSearchDomains may name (default 5).
+        "webSearchMaxHosts",
+        "web_search_max_hosts",
         # Pre-crawled page text served when a pinned page is a bot challenge.
         "webSearchPageCorpus",
         "web_search_page_corpus",
@@ -106,8 +109,26 @@ _KNOWN_ENTRY_KEYS = frozenset(
 # host (or a subdomain) whose path sits under ``/company/acme``.
 _DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _PIN_PATH = re.compile(r"^(/[a-z0-9._~%!$&'()*+,;=:@-]+)+$")
-# digisearch's WebSearchRequest takes at most five include_domains.
+# Optional exact query on a ``host/path`` pin, e.g. an app-store ``?id=...``.
+_PIN_QUERY = re.compile(r"^[a-z0-9._~%-]+=[a-z0-9._~%-]+(&[a-z0-9._~%-]+=[a-z0-9._~%-]+)*$")
+# Default ceiling on the distinct hosts one tenant may pin. A tenant raises it
+# with ``webSearchMaxHosts`` (up to _MAX_PIN_HOSTS_CEILING). The pin is an
+# allowlist the model aims single searches at, not a fan-out: each call still
+# sends at most the engine's own include_domains limit.
 _MAX_PIN_HOSTS = 5
+_MAX_PIN_HOSTS_CEILING = 50
+
+
+def _parse_max_hosts(raw: Any, slug: str) -> int:
+    """``webSearchMaxHosts``: an int in 1.._MAX_PIN_HOSTS_CEILING, else the default."""
+    if raw is None:
+        return _MAX_PIN_HOSTS
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 1 <= raw <= _MAX_PIN_HOSTS_CEILING:
+        logger.warning(
+            "%s[%s]: invalid webSearchMaxHosts; using %d", _ENV_VAR, slug, _MAX_PIN_HOSTS
+        )
+        return _MAX_PIN_HOSTS
+    return raw
 
 
 def _normalize_web_search_pin(value: Any) -> str | None:
@@ -115,8 +136,9 @@ def _normalize_web_search_pin(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     candidate = value.strip().lower()
-    if not candidate or "://" in candidate or "?" in candidate or "#" in candidate:
+    if not candidate or "://" in candidate or "#" in candidate:
         return None
+    candidate, qsep, query = candidate.partition("?")
     host, sep, path = candidate.partition("/")
     host = host.rstrip(".")
     if host.startswith("www."):
@@ -124,19 +146,38 @@ def _normalize_web_search_pin(value: Any) -> str | None:
     if not _DOMAIN.match(host):
         return None
     path = ("/" + path).rstrip("/") if sep else ""
+    # A trailing ``*`` pins a partial last segment, e.g. ``/posts/acme_*`` for
+    # every ``/posts/acme_<slug>`` page. The prefix itself must be non-empty
+    # and a bare ``/*`` (the whole host) is refused: pin the host instead.
+    prefix = path.endswith("*")
+    if prefix:
+        path = path[:-1]
+        if not path or path.endswith("/") or qsep:
+            return None
+    if "*" in path:
+        return None  # ``*`` only means "segment prefix", and only at the end
     if path and not _PIN_PATH.match(path):
         return None
+    if prefix:
+        return host + path + "*"
+    if qsep:
+        # A query narrows one exact page: it needs a path and a k=v form.
+        if not path or not _PIN_QUERY.match(query):
+            return None
+        return host + path + "?" + query
     return host + path
 
 
-def _parse_web_search_domains(raw: Any, slug: str) -> list[str] | None:
+def _parse_web_search_domains(
+    raw: Any, slug: str, max_hosts: int = _MAX_PIN_HOSTS
+) -> list[str] | None:
     """Validate ``webSearchDomains``: a list of ``host`` / ``host/path`` pins, or nothing.
 
     ``None`` (key absent) leaves web_search unpinned. A key that is present but
     unusable fails *closed* to an empty list, which refuses web_search for the
     tenant: widening to the open web after an operator tried to pin it would be
-    the one outcome they set the key to prevent. More than five distinct hosts
-    also fails closed: digisearch accepts at most five ``include_domains``.
+    the one outcome they set the key to prevent. More distinct hosts than
+    ``max_hosts`` (``webSearchMaxHosts``, default 5) also fails closed.
     """
     if raw is None:
         return None
@@ -153,12 +194,12 @@ def _parse_web_search_domains(raw: Any, slug: str) -> list[str] | None:
             continue
         if pin not in out:
             out.append(pin)
-    if len({p.split("/", 1)[0] for p in out}) > _MAX_PIN_HOSTS:
+    if len({p.split("?", 1)[0].split("/", 1)[0] for p in out}) > max_hosts:
         logger.warning(
             "%s[%s]: webSearchDomains names more than %d hosts; web_search refused",
             _ENV_VAR,
             slug,
-            _MAX_PIN_HOSTS,
+            max_hosts,
         )
         return []
     return out
@@ -353,7 +394,12 @@ def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
         )
         skills = _parse_skill_ids(value.get("skills", value.get("skill_ids")), normalized_slug)
         web_domains = _parse_web_search_domains(
-            value.get("webSearchDomains", value.get("web_search_domains")), normalized_slug
+            value.get("webSearchDomains", value.get("web_search_domains")),
+            normalized_slug,
+            _parse_max_hosts(
+                value.get("webSearchMaxHosts", value.get("web_search_max_hosts")),
+                normalized_slug,
+            ),
         )
         if not isinstance(lock, bool):
             # A known key carrying a bad value is a safety problem, not a

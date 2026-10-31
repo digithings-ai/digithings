@@ -26,7 +26,7 @@ describe("gallery Thread is the product digichat skin", () => {
 
   it("gallery Thread mounts registry slots and cube glyphs", () => {
     const thread = read("gallery-thread/thread.aui.tsx");
-    expect(thread).toMatch(/ActionBarMorePrimitive/);
+    expect(thread).toMatch(/MessageExportMenu/);
     expect(thread).toMatch(/ReasoningRoot/);
     expect(thread).toMatch(/ToolFallback/);
     expect(thread).toMatch(/MarkdownText/);

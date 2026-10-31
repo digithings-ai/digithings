@@ -4,6 +4,7 @@ import { lazy, Suspense, type FC, type LazyExoticComponent } from "react";
 import type { ComposerLayout } from "@digithings/ui/chat/thread";
 import { isCloneSkin, type CloneSkin, type ThreadSkin } from "./thread-skins";
 import type { DigichatSkinOptions } from "./digichat";
+import { ChatPrivateModeProvider } from "../stock/chat-private-mode";
 
 // Per-skin on-demand chunks (WS4 Step 5): each skin ships only when its id is
 // selected. The `.then` interop maps the named export to the default that
@@ -90,10 +91,14 @@ export function ThreadSkinView(props: ThreadSkinViewProps) {
   // Suspense boundary for the per-skin chunks above. Fallback is null so no
   // loading chrome flashes when a newly selected skin's chunk arrives late;
   // once loaded the render is identical to the static version (WS4 Step 5).
+  // Every skin reads the session's private flag from here (the message
+  // export menus hide, the export runners refuse), not only digichat.
   return (
-    <Suspense fallback={null}>
-      <ThreadSkinSwitch {...props} />
-    </Suspense>
+    <ChatPrivateModeProvider privateMode={props.digichat?.privateMode}>
+      <Suspense fallback={null}>
+        <ThreadSkinSwitch {...props} />
+      </Suspense>
+    </ChatPrivateModeProvider>
   );
 }
 

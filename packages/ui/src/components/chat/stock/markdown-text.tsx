@@ -19,6 +19,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 import { ArtifactLink, isArtifactBlobHref } from "./artifacts-panel";
 import { cn } from "@/lib/utils";
+import { stockRadius, useStockShape } from "./stock-shape";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];
@@ -69,8 +70,15 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
     copyToClipboard(code);
   };
 
+  const stock = useStockShape();
+
   return (
-    <div className="aui-code-header-root border-hair bg-surface-2/50 mt-3 flex items-center justify-between rounded-none border border-b-0 px-3.5 py-1.5 text-xs">
+    <div
+      className={cn(
+        "aui-code-header-root border-hair bg-surface-2/50 mt-3 flex items-center justify-between border border-b-0 px-3.5 py-1.5 text-xs",
+        stockRadius(stock, "rounded-t-xl"),
+      )}
+    >
       <span className="aui-code-header-language text-ink-mute font-medium lowercase">
         {language}
       </span>
@@ -219,15 +227,23 @@ export const defaultComponents = memoizeMarkdownComponents({
       />
     </div>
   ),
-  th: ({ className, ...props }) => (
-    <th
-      className={cn(
-        "aui-md-th bg-surface-2 px-3 py-1.5 text-start font-medium first:rounded-none last:rounded-none [[align=center]]:text-center [[align=right]]:text-right",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  th: function Th({ className, ...props }) {
+    const stock = useStockShape();
+    return (
+      <th
+        className={cn(
+          "aui-md-th bg-surface-2 px-3 py-1.5 text-start font-medium [[align=center]]:text-center [[align=right]]:text-right",
+          stockRadius(
+            stock,
+            "first:rounded-ss-lg last:rounded-se-lg",
+            "first:rounded-none last:rounded-none",
+          ),
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
   td: ({ className, ...props }) => (
     <td
       className={cn(
@@ -237,15 +253,23 @@ export const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  tr: ({ className, ...props }) => (
-    <tr
-      className={cn(
-        "aui-md-tr m-0 border-b p-0 first:border-t [&:last-child>td:first-child]:rounded-none [&:last-child>td:last-child]:rounded-none",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  tr: function Tr({ className, ...props }) {
+    const stock = useStockShape();
+    return (
+      <tr
+        className={cn(
+          "aui-md-tr m-0 border-b p-0 first:border-t",
+          stockRadius(
+            stock,
+            "[&:last-child>td:first-child]:rounded-es-lg [&:last-child>td:last-child]:rounded-ee-lg",
+            "[&:last-child>td:first-child]:rounded-none [&:last-child>td:last-child]:rounded-none",
+          ),
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
   li: ({ className, ...props }) => (
     <li className={cn("aui-md-li leading-relaxed", className)} {...props} />
   ),
@@ -261,22 +285,30 @@ export const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  pre: ({ className, ...props }) => (
-    <pre
-      className={cn(
-        "aui-md-pre border-hair bg-surface-2/30 overflow-x-auto rounded-t-none rounded-none border border-t-0 p-3.5 text-[13px] leading-relaxed",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  pre: function Pre({ className, ...props }) {
+    const stock = useStockShape();
+    return (
+      <pre
+        className={cn(
+          "aui-md-pre border-hair bg-surface-2/30 overflow-x-auto border border-t-0 p-3.5 text-[13px] leading-relaxed",
+          stockRadius(stock, "rounded-t-none rounded-b-xl", "rounded-t-none rounded-none"),
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
   code: function Code({ className, ...props }) {
     const isCodeBlock = useIsMarkdownCodeBlock();
+    const stock = useStockShape();
     return (
       <code
         className={cn(
           !isCodeBlock &&
-            "aui-md-inline-code bg-surface-2 rounded-none px-1.5 py-0.5 font-mono text-[0.85em]",
+            cn(
+              "aui-md-inline-code bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em]",
+              stockRadius(stock, "rounded-md"),
+            ),
           className,
         )}
         {...props}

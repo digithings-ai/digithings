@@ -192,7 +192,8 @@ export type StockComposerMenuKind =
   | "theme"
   | "thinking"
   | "provider"
-  | "help";
+  | "help"
+  | "export";
 
 const STOCK_COMPOSER_MENU_KINDS: readonly StockComposerMenuKind[] = [
   "settings",
@@ -208,6 +209,7 @@ const STOCK_COMPOSER_MENU_KINDS: readonly StockComposerMenuKind[] = [
   "thinking",
   "provider",
   "help",
+  "export",
 ];
 
 export function isStockComposerMenuKind(value: string): value is StockComposerMenuKind {
