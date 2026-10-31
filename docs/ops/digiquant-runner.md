@@ -53,9 +53,10 @@ no date, which selects `--mark-through <UTC today>` on the NAV write,
 commands. Exit 3 from metrics when there is no book is a real failure.
 
 The runner does not file GitHub issues (`GH_ISSUE_TOKEN` is not a binding;
-`commands.json` has no `failure_issue`). The GHA override files still carry
-`<!-- digiquant-tearsheets-tracker -->` and
-`<!-- digiquant-onchain-bitview-tracker -->`. Container failures show up in
+`commands.json` has no `failure_issue`). The tearsheets GHA override file still
+carries `<!-- digiquant-tearsheets-tracker -->`; the onchain override workflow
+(and its `<!-- digiquant-onchain-bitview-tracker -->` tracker) was deleted with
+the GHA exit ledger. Container failures show up in
 Workers Logs and `GET /runs/:run_id`.
 
 These workflows already have no `schedule:`. Do not add one. House-run is
