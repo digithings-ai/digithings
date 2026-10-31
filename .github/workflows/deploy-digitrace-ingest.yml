@@ -64,6 +64,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # DIG-5840: the first deploy of this Worker failed at the Cloudflare API
+      # call with `KV namespace '0000...' not found [code: 10041]`, after the
+      # production approval, the install and the bundle. The dry run below cannot
+      # catch it: a dry run never asks the account whether a namespace exists.
+      # So refuse an id that cannot exist before spending any of that.
+      - name: Refuse placeholder binding ids
+        run: python3 scripts/check_worker_bindings.py --config apps/digitrace-ingest/wrangler.toml
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

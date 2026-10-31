@@ -49,6 +49,12 @@ jobs:
           npm run typecheck --workspace digiquant-runner
           python3 apps/digiquant-runner/container/exec_job_test.py
 
+      # An all-zero binding id cannot exist in the account, so wrangler would fail
+      # at the API call, after this lane's approval. Refuse it here instead
+      # (DIG-5840, the digitrace-ingest first-deploy failure).
+      - name: Refuse placeholder binding ids
+        run: python3 scripts/check_worker_bindings.py --config apps/digiquant-runner/wrangler.toml
+
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
