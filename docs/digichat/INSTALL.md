@@ -30,7 +30,7 @@ chat app.
 > `ghcr.io` credential. The `v2.4.x`–`v2.6.3` tags still have no image behind
 > them. Without registry access, build from the repo root and record the digest
 > you deploy.
-> See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
+> The client deploy runbook for this path is kept in the private client repo.
 >
 > The **intended** primary install unit is a pinned published image — not npm
 > (`private: true`), not `:latest` in production.
@@ -50,8 +50,8 @@ docker build -f apps/digichat/Dockerfile \
 | Changelog | `apps/digichat/CHANGELOG.md` |
 | Current app version | `2.7.0` (`develop`) |
 
-**Existing clients (DataTap and others) are pinned to a digichat image already
-imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
+**Existing clients are pinned to a digichat image already
+imported into their own Azure registry.**
 Those registries are copies, so they keep working independently of GHCR; the
 claim that `ghcr.io/digithings-ai/digichat:v0.9.3` "remains published" can no
 longer be verified from this repo and should not be relied on.
