@@ -65,7 +65,7 @@ const GITHUB_LOCK_DISABLED_IDS = [
   "security-npm-audit",
 ] as const;
 
-const TWELVE_X_ENABLED_IDS = [
+const MARKET_RUNNER_ENABLED_IDS = [
   "twelve-x-asia",
   "twelve-x-london",
   "twelve-x-new-york",
@@ -272,7 +272,7 @@ describe("jobsForCron", () => {
         .map((job) => job.id)
         .sort(),
     ).toEqual(
-      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS, ...TENANT_RECRAWL_IDS].sort(),
+      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...MARKET_RUNNER_ENABLED_IDS, ...TENANT_RECRAWL_IDS].sort(),
     );
     // The full cron set this file used to hardcode is asserted against
     // wrangler.toml in src/trigger-contract.test.ts, alongside the required FX
@@ -311,7 +311,7 @@ describe("jobsForCron", () => {
     const archive = JOBS.find((job) => job.id === "twelve-x-archive-maintenance");
     expect(archive?.enabled).toBe(true);
     expect(archive?.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
-    for (const id of TWELVE_X_ENABLED_IDS) {
+    for (const id of MARKET_RUNNER_ENABLED_IDS) {
       const job = JOBS.find((row) => row.id === id);
       expect(job?.enabled).toBe(true);
       const onRunner =
