@@ -1,4 +1,4 @@
-"""Unit tests for scripts/datatap_answer_integrity_check.py (DIG-306, leaf A1).
+"""Unit tests for scripts/answer_integrity_check.py (DIG-306, leaf A1).
 
 These tests pin the one thing that must never be wrong: the exit-code split.
 This check runs hourly against a client production system we do not control.
@@ -28,7 +28,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
+SCRIPT = REPO_ROOT / "scripts" / "answer_integrity_check.py"
 
 # The script's imports are a closed set, and this is the list. Stdlib only — no
 # requests, no httpx, no new dependency. Nothing here can write anything (no
@@ -71,7 +71,7 @@ _ALLOWED_IMPORTS = {
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("datatap_answer_integrity_check", SCRIPT)
+    spec = importlib.util.spec_from_file_location("answer_integrity_check", SCRIPT)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module

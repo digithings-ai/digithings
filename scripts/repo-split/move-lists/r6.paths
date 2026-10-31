@@ -18,10 +18,10 @@ scripts/check_occ_rollout_auth_guard.py
 scripts/index_occ_tickets.py
 scripts/test_occ_rollout_scope_guard.sh
 scripts/check_tenant_corpus_map.py
-scripts/datatap_answer_integrity_check.py
+scripts/answer_integrity_check.py
 tests/scripts/test_check_tenant_corpus_map.py
 tests/dg/test_tenant_corpus_parity.py
 tests/dg/test_occ_ticket_payload_retired.py
 tests/scripts/test_datatap_answer_check_clock.py
-tests/scripts/test_datatap_answer_integrity_check.py
+tests/scripts/test_answer_integrity_check.py
 docs/ops/OCC_INVITE_KEY.md
