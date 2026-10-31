@@ -193,6 +193,15 @@ export function useStockChatPrefs({
   const setComposerDraft = useCallback((text: string) => {
     draftSink.current(text);
   }, []);
+  const exportSink = useRef<((format: "md" | "html") => void) | null>(null);
+  const [threadExportBound, setThreadExportBound] = useState(false);
+  const bindThreadExport = useCallback((run: (format: "md" | "html") => void) => {
+    exportSink.current = run;
+    setThreadExportBound(true);
+  }, []);
+  const exportThread = useCallback((format: "md" | "html") => {
+    exportSink.current?.(format);
+  }, []);
   const [providerSeed, setProviderSeed] = useState<string | undefined>();
   const [mcpSeed, setMcpSeed] = useState<string | undefined>();
   const chatPrefsRef = useRef(chatPrefs);
@@ -256,6 +265,7 @@ export function useStockChatPrefs({
       setView: (mode) => setChatPrefs((p) => ({ ...p, view: mode })),
       setThinking: (value) => setChatPrefs((p) => ({ ...p, thinking: value })),
       setModel: (id) => setChatPrefs((p) => ({ ...p, model: id })),
+      availableModels: config.availableModels,
       setEffort: (effort) => setChatPrefs((p) => ({ ...p, effort })),
       setSearchEngine: (engine) => setChatPrefs((p) => ({ ...p, searchEngine: engine })),
       setToolbar: (visible) => setChatPrefs((p) => ({ ...p, toolbar: visible })),
@@ -380,6 +390,9 @@ export function useStockChatPrefs({
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
     }),
     [
@@ -410,10 +423,14 @@ export function useStockChatPrefs({
       deps.defaultLanguageCode,
       deps.onOpenSessions,
       config.toolControl,
+      config.availableModels,
       paletteQuery,
       setComposerDraft,
       bindComposerDraft,
       composerDraftBound,
+      exportThread,
+      bindThreadExport,
+      threadExportBound,
       syncPalette,
     ],
   );

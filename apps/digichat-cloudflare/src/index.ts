@@ -21,7 +21,13 @@ import {
 } from "./paths";
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
-import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
+import {
+  parseGatedClaims,
+  resolveConfigYaml,
+  resolveEmbedTenants,
+  resolveGatedClaims,
+  unionGatedClaims,
+} from "./tenants-kv";
 import {
   bindOccApiCall,
   isChatApiPath,
@@ -32,8 +38,19 @@ import {
   type OccCookiePolicy,
   withoutInviteCookie,
 } from "./occ-gate";
+import {
+  INVITE_PAGES_VAR,
+  bindInvitePageApiCall,
+  invitePageEmbedGate,
+  invitePageFor,
+  invitePageGate,
+  invitePageKey,
+  parseInvitePages,
+  withoutInvitePageCookies,
+} from "./invite-pages";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
+import { pemEnvValue } from "./license-env";
 import {
   CONTAINER_UNAVAILABLE_BODY,
   describeValue,
@@ -114,6 +131,14 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
+    // Non-secret: which tenant hosts are invite-only beyond OCC (slug, host and
+    // the NAME of each key). The app uses it so an invite-only host never falls
+    // back to a generic chat; the key values are not in it.
+    DIGICHAT_INVITE_PAGES: workerVars.DIGICHAT_INVITE_PAGES ?? "",
+    // Durable gated-tenant claims (U1): normally read from KV `gated-claims`
+    // at boot and merged below; this var is the `[vars]` / `wrangler dev` seam.
+    // Hosts and slugs only, no secret values or names.
+    DIGICHAT_GATED_CLAIMS: workerVars.DIGICHAT_GATED_CLAIMS ?? "",
     // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
     // at boot and overwritten below; this var is the seam for `wrangler dev`
     // and for a deploy that pins the document in `[vars]`.
@@ -121,6 +146,12 @@ export class DigiChatContainer extends Container {
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
+    // License (spec §7.1): the JWT and the digikey public key that verifies it.
+    // Without both, digichat runs unlicensed, sends no X-Digi-License, and
+    // digigraph refuses hosted web search (the turn then runs without it).
+    DIGICHAT_LICENSE_JWT: workerVars.DIGICHAT_LICENSE_JWT ?? "",
+    DIGIKEY_PUBLIC_KEY_PEM: pemEnvValue(workerVars.DIGIKEY_PUBLIC_KEY_PEM),
+    DIGIKEY_ISSUER: workerVars.DIGIKEY_ISSUER ?? "https://key.digithings.ai",
     // The chat's API-key MCP identity (digikey). The container mints edge
     // tokens from the BFF session first, because that token names the turn's
     // tenant; this key is only the fallback for a deployment without
@@ -189,10 +220,20 @@ export class DigiChatContainer extends Container {
     // A stop overtook this read. Applying it would hand the next request a
     // value resolved against the boot that just ended, and would extend the
     // stale window by another TTL.
+    // Durable claims only accumulate: KV and the `[vars]` seam are unioned, and
+    // a failed read keeps what this container already has, never an empty list.
+    const claims = await resolveGatedClaims(workerVars.DIGICHAT_TENANTS_KV);
+    console.log(`[claims-kv] gated claims source=${claims.source} count=${claims.claims.length}`);
     if (epoch !== this.configEpoch) return;
+    const gatedClaims = unionGatedClaims(
+      parseGatedClaims(this.envVars.DIGICHAT_GATED_CLAIMS),
+      parseGatedClaims(workerVars.DIGICHAT_GATED_CLAIMS),
+      claims.claims,
+    );
     this.envVars = {
       ...this.envVars,
       DIGICHAT_EMBED_TENANTS: tenants,
+      DIGICHAT_GATED_CLAIMS: gatedClaims.length ? JSON.stringify(gatedClaims) : "",
       // KV wins over the `[vars]` seam; `none` leaves that seam in charge.
       ...(source === "kv" ? { DIGICHAT_CONFIG_YAML: yaml } : {}),
     };
@@ -286,6 +327,12 @@ export interface Env {
    */
   OCC_INVITE_MAX_AGE_DAYS?: string;
   /**
+   * Non-secret JSON: invite-only tenant pages beyond OCC,
+   * `{"<slug>": {"host": "<host>", "keyEnv": "<SECRET_NAME>"}}`. Each
+   * `keyEnv` names a Worker secret; see src/invite-pages.ts.
+   */
+  DIGICHAT_INVITE_PAGES?: string;
+  /**
    * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
    * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
    * Container (see `sharedDigichatContainerId`), so the Worker reads it and
@@ -310,11 +357,22 @@ export interface Env {
    * the local-dev / pinned-document seam and loses to KV when both exist.
    */
   DIGICHAT_CONFIG_YAML?: string;
+  /**
+   * Durable gated-tenant claims (U1), JSON array of `{slug, chatSlug, host}`.
+   * Normally KV `gated-claims`; this var is the `[vars]` / `wrangler dev` seam.
+   */
+  DIGICHAT_GATED_CLAIMS?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
+  /** digichat license JWT (owner-minted, `digikey license-mint`); forwarded to the container. */
+  DIGICHAT_LICENSE_JWT?: string;
+  /** digikey public key PEM that verifies the license; literal `\n` is expanded. */
+  DIGIKEY_PUBLIC_KEY_PEM?: string;
+  /** Expected license `iss`; must match the stack's digikey issuer. */
+  DIGIKEY_ISSUER?: string;
   /** Dedicated digikey API key for MCP `authScheme: jwt` rows (server-only). */
   DIGICHAT_MCP_IDENTITY_KEY?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
@@ -367,10 +425,32 @@ export default {
         occCookiePolicy(workerEnv),
       );
     }
+    // Configured invite-only pages (/chat/<slug>), gated like /chat/occ.
+    const invitePages = parseInvitePages(workerEnv[INVITE_PAGES_VAR]);
+    const secrets = workerEnv as unknown as Record<string, unknown>;
+    const invitePage = invitePageFor(invitePages, url.pathname);
+    if (invitePage) {
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return invitePageGate(
+        invitePage,
+        invitePages,
+        request,
+        invitePageKey(invitePage, secrets),
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
+      );
+    }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
     const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
     if (embedGate) return embedGate;
+    const pageEmbedGate = await invitePageEmbedGate(request, invitePages, secrets);
+    if (pageEmbedGate) return pageEmbedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
     // it destroys is the same derived id the proxy below addresses.
@@ -466,9 +546,11 @@ export default {
         workerEnv.OCC_INVITE_KEY,
         occCookiePolicy(workerEnv),
       );
+      await bindInvitePageApiCall(containerRequest, invitePages, secrets, occCookiePolicy(workerEnv));
     }
-    // The invite cookie stops at the edge on every path, like the edge key.
+    // The invite cookies stop at the edge on every path, like the edge key.
     withoutInviteCookie(containerRequest.headers);
+    withoutInvitePageCookies(containerRequest.headers, invitePages);
     // The edge key stops at the edge: the container never sees it. The header
     // is dropped from the COPY, so the original request still carries it.
     containerRequest.headers.delete(MCP_KEY_HEADER);

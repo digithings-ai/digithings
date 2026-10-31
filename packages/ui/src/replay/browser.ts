@@ -9,6 +9,7 @@ import { setExportKeepMounted } from "./export-mount";
 import { snapshotFilename } from "./filename";
 import {
   deploymentText,
+  keepAnswerOnly,
   messageAnchor,
   omitScrollLockCss,
   questionText,
@@ -167,8 +168,12 @@ export function showSnapshotError(doc: Document, message: string): void {
   banner.textContent = message;
 }
 
-async function saveSnapshot(doc: Document, shell: HTMLElement, exportedAt: string): Promise<void> {
-  const question = questionText(shell);
+async function saveSnapshot(
+  doc: Document,
+  shell: HTMLElement,
+  exportedAt: string,
+  question = questionText(shell),
+): Promise<void> {
   const css = await inlineAssetUrls(liveSheetText(doc));
   transformSnapshotDom(shell);
   await inlineDomAssets(shell);
@@ -208,6 +213,7 @@ export async function downloadMessageSnapshot(
   exportedAt = new Date().toISOString(),
   messageId = "",
   trigger: HTMLElement | null = null,
+  options: { answerOnly?: boolean } = {},
 ): Promise<void> {
   if (!doc?.documentElement) throw new Error(MISSING_THREAD_MESSAGE);
   setExportKeepMounted(true);
@@ -222,7 +228,10 @@ export async function downloadMessageSnapshot(
       showSnapshotError(doc, MISSING_MESSAGE_MESSAGE);
       throw new Error(MISSING_MESSAGE_MESSAGE);
     }
-    await saveSnapshot(doc, shell, exportedAt);
+    // The question names the file even when the file holds the answer only.
+    const question = questionText(shell);
+    if (options.answerOnly !== false) keepAnswerOnly(shell);
+    await saveSnapshot(doc, shell, exportedAt, question);
   } finally {
     setExportKeepMounted(false);
   }

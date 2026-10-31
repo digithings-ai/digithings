@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { MarkdownText } from "../stock/markdown-text";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { SkinCredit, useSkinChrome } from "../stock";
 import {
   ActionBarPrimitive,
@@ -21,7 +22,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
+  Download,
   FileIcon,
+  MoreHorizontal,
   PencilIcon,
   Plus,
   RefreshCwIcon,
@@ -55,7 +58,7 @@ export const Perplexity: FC = () => {
   const emptyPlaceholder = chrome.placeholder?.trim() || "Ask anything...";
   const followPlaceholder = chrome.placeholder?.trim() || "Ask a follow-up...";
   return (
-    <ThreadPrimitive.Root
+    <ThreadPrimitive.Root data-export-thread=""
         className="flex h-full flex-col bg-[#f6f2ec] text-[#1f1b17] dark:bg-[#171615] dark:text-[#f5f2ed]"
         style={{
           ["--thread-max-width" as string]: "40rem",
@@ -99,7 +102,7 @@ const EmptyState: FC<{ placeholder: string }> = ({ placeholder }) => {
 
 const Composer: FC<{ placeholder: string }> = ({ placeholder }) => {
   return (
-    <ComposerPrimitive.Root className="group/composer mx-auto flex w-full max-w-(--thread-max-width) flex-col rounded-3xl border border-[#d7d0c5] bg-[#fcfbf8] transition-colors focus-within:border-[#b8b0a5] dark:border-[#4a433b] dark:bg-[#23211f] dark:focus-within:border-[#6a6258]">
+    <ComposerPrimitive.Root data-export-chrome="" className="group/composer mx-auto flex w-full max-w-(--thread-max-width) flex-col rounded-3xl border border-[#d7d0c5] bg-[#fcfbf8] transition-colors focus-within:border-[#b8b0a5] dark:border-[#4a433b] dark:bg-[#23211f] dark:focus-within:border-[#6a6258]">
       <AuiIf condition={(s) => s.composer.attachments.length > 0}>
         <div className="flex flex-wrap gap-2 px-4 pt-4">
           <ComposerPrimitive.Attachments>
@@ -302,8 +305,9 @@ const ModelPicker: FC = () => {
 };
 
 const ChatMessage: FC = () => {
+  const role = useAuiState((s) => s.message.role);
   return (
-    <MessagePrimitive.Root className="group/message mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-2 py-4">
+    <MessagePrimitive.Root data-role={role} className="group/message mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-2 py-4">
       <AuiIf condition={(s) => s.message.role === "user"}>
         <div className="flex flex-col items-end gap-2">
           <div className="flex max-w-full flex-wrap justify-end gap-2">
@@ -313,7 +317,7 @@ const ChatMessage: FC = () => {
           </div>
 
           <div className="flex items-start gap-2">
-            <ActionBarPrimitive.Root className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+            <ActionBarPrimitive.Root data-export-chrome="" className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
               <ActionBarPrimitive.Copy className={messageActionClassName}>
                 <CopyIcon className="size-4" />
               </ActionBarPrimitive.Copy>
@@ -346,7 +350,7 @@ const ChatMessage: FC = () => {
 
             <div className="mt-2 flex items-center gap-2">
               <BranchPicker />
-              <ActionBarPrimitive.Root className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+              <ActionBarPrimitive.Root data-export-chrome="" className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
                 <ActionBarPrimitive.Reload className={messageActionClassName}>
                   <RefreshCwIcon className="size-4" />
                 </ActionBarPrimitive.Reload>
@@ -358,6 +362,17 @@ const ChatMessage: FC = () => {
                     <CopyIcon className="size-4" />
                   </AuiIf>
                 </ActionBarPrimitive.Copy>
+                <MessageExportMenu
+                  trigger={
+                    <button type="button" aria-label="More" className={messageActionClassName}>
+                      <MoreHorizontal width={16} height={16} />
+                    </button>
+                  }
+                  icon={<Download className="size-4" />}
+                  align="start"
+                  contentClassName="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out z-50 min-w-40 overflow-hidden rounded-xl border p-1.5 shadow-md"
+                  itemClassName="text-muted-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none"
+                />
               </ActionBarPrimitive.Root>
             </div>
           </div>
@@ -372,7 +387,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
   ...props
 }) => {
   return (
-    <BranchPickerPrimitive.Root
+    <BranchPickerPrimitive.Root data-export-chrome=""
       hideWhenSingleBranch
       className={cn(
         "inline-flex items-center gap-1 text-xs text-[#8a8176] dark:text-[#9f978e]",

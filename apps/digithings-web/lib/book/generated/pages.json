@@ -19,13 +19,13 @@
     "/book/19-local-stack/": 19,
     "/book/23-self-hosting/": 20
   },
-  "seed": 5374,
-  "contentHash": "579b9638a12685fb",
+  "seed": 91701,
+  "contentHash": "fe0d5df521bbce7d",
   "editions": [
     {
       "palette": "",
       "theme": "light",
-      "file": "the-digithings-book-9311558e.pdf"
+      "file": "the-digithings-book-bad2c937.pdf"
     }
   ]
 }

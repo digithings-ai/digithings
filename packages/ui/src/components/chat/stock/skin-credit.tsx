@@ -21,8 +21,9 @@
 import type { FC } from "react";
 import { cn } from "@/lib/utils";
 import { useAttribution } from "./skin-chrome";
+import { useEmbedChatPrefsOptional } from "./embed-chat-prefs";
 
-export const SKIN_CREDIT_TEXT = "powered by digichat — a digithings product.";
+export const SKIN_CREDIT_TEXT = "powered by digichat, a digithings product.";
 
 export const SkinCredit: FC<{
   className?: string;
@@ -34,6 +35,8 @@ export const SkinCredit: FC<{
   attribution?: boolean;
 }> = ({ className, attribution }) => {
   const fromContext = useAttribution();
+  // A tenant chat language may translate the words around the link.
+  const credit = useEmbedChatPrefsOptional()?.credit;
   if (attribution !== undefined ? !attribution : !fromContext) return null;
 
   return (
@@ -45,7 +48,7 @@ export const SkinCredit: FC<{
         className,
       )}
     >
-      powered by digichat — a{" "}
+      {credit?.lead ?? "powered by digichat, a"}{" "}
       <a
         href="https://digithings.ai"
         target="_blank"
@@ -53,8 +56,8 @@ export const SkinCredit: FC<{
         className="pointer-events-auto font-medium text-inherit underline-offset-2 hover:underline"
       >
         digithings
-      </a>{" "}
-      product.
+      </a>
+      {credit ? (/^[.,;:!?]/.test(credit.tail) ? "" : " ") + credit.tail : " product."}
     </p>
   );
 };

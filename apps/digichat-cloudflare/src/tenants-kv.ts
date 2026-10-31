@@ -173,3 +173,146 @@ export async function resolveConfigYaml(kv: KvLike | undefined): Promise<ConfigY
     return { yaml: "", source: "none" };
   }
 }
+
+/**
+ * Durable gated-tenant claims (U1), same KV namespace, key `gated-claims`.
+ *
+ * A JSON array of `{ "slug", "chatSlug", "host" }` rows naming every tenant
+ * that is served only behind an invite. It lives outside the tenant registry
+ * (`embed-tenants`) on purpose: if the registry is missing, unreadable or
+ * loses a row, the claims still say "this host is gated" and the container
+ * denies instead of falling through to the open house chat. The value holds
+ * no secret and no secret name. Writers only ever add to it
+ * ({@link addGatedClaims}); removing a claim is a deliberate manual edit.
+ *
+ * The Worker forwards the normalized list to the container as
+ * `DIGICHAT_GATED_CLAIMS`; the app merges it into its R0-side claims.
+ */
+export const GATED_CLAIMS_KV_KEY = "gated-claims";
+
+export type GatedClaim = { slug: string; chatSlug: string; host?: string };
+
+export type GatedClaimsResult = {
+  /** Normalized JSON array, or "" when there are no claims. */
+  json: string;
+  /** `error`: the KV read failed; the caller keeps what it already forwards. */
+  source: "kv" | "none" | "error";
+  claims: GatedClaim[];
+};
+
+const CLAIM_SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const CLAIM_HOST_RE = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/** One claim row, or null when it is not a valid claim. Never throws. */
+export function normalizeGatedClaim(value: unknown): GatedClaim | null {
+  if (!isObj(value)) return null;
+  const slug = typeof value.slug === "string" ? value.slug.trim().toLowerCase() : "";
+  if (!CLAIM_SLUG_RE.test(slug)) return null;
+  const chatSlugRaw = typeof value.chatSlug === "string" ? value.chatSlug.trim().toLowerCase() : "";
+  if (chatSlugRaw && !CLAIM_SLUG_RE.test(chatSlugRaw)) return null;
+  const hostRaw = typeof value.host === "string" ? value.host.trim().toLowerCase() : "";
+  if (hostRaw && !CLAIM_HOST_RE.test(hostRaw)) return null;
+  if (!chatSlugRaw && !hostRaw) return null;
+  return hostRaw ? { slug, chatSlug: chatSlugRaw, host: hostRaw } : { slug, chatSlug: chatSlugRaw };
+}
+
+function claimKey(c: GatedClaim): string {
+  return `${c.chatSlug}|${c.host ?? ""}`;
+}
+
+/**
+ * Parse a claims value. Invalid rows are skipped one by one (a bad row never
+ * hides the good ones); a value that is not a JSON array yields no claims.
+ * Duplicates (same `chatSlug|host`) are kept once, first wins.
+ */
+export function parseGatedClaims(raw: string | null | undefined): GatedClaim[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: GatedClaim[] = [];
+  const seen = new Set<string>();
+  for (const row of parsed) {
+    const claim = normalizeGatedClaim(row);
+    if (!claim) continue;
+    const key = claimKey(claim);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(claim);
+  }
+  return out;
+}
+
+/**
+ * Add-only merge for the tenant writer: every existing claim is kept as is,
+ * and only new `chatSlug|host` keys are appended. Throws on an existing value
+ * that is present but unparseable, so a writer never replaces claims it could
+ * not read, and on an invalid new claim.
+ */
+export function addGatedClaims(existingRaw: string | null | undefined, add: readonly unknown[]): string {
+  let existing: GatedClaim[] = [];
+  if (typeof existingRaw === "string" && existingRaw.trim()) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(existingRaw);
+    } catch {
+      throw new Error(`${GATED_CLAIMS_KV_KEY}: existing value is not JSON; refusing to overwrite it`);
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${GATED_CLAIMS_KV_KEY}: existing value is not a JSON array; refusing to overwrite it`);
+    }
+    existing = parseGatedClaims(existingRaw);
+    if (existing.length !== parsed.length) {
+      throw new Error(`${GATED_CLAIMS_KV_KEY}: existing value has invalid or duplicate rows; fix it by hand first`);
+    }
+  }
+  const out = [...existing];
+  const seen = new Set(out.map(claimKey));
+  for (const row of add) {
+    const claim = normalizeGatedClaim(row);
+    if (!claim) throw new Error(`${GATED_CLAIMS_KV_KEY}: refusing an invalid claim`);
+    const key = claimKey(claim);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(claim);
+  }
+  return JSON.stringify(out);
+}
+
+/** Union of claim lists, first wins on `chatSlug|host`. */
+export function unionGatedClaims(...lists: readonly GatedClaim[][]): GatedClaim[] {
+  const out: GatedClaim[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const claim of list) {
+      const key = claimKey(claim);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(claim);
+    }
+  }
+  return out;
+}
+
+/**
+ * Read the durable claims from KV. A missing binding or key is `none`; a read
+ * failure is `error` (logged, never thrown) so the caller can keep the claims
+ * it already forwarded rather than dropping them for this window.
+ */
+export async function resolveGatedClaims(kv: KvLike | undefined): Promise<GatedClaimsResult> {
+  if (!kv) return { json: "", source: "none", claims: [] };
+  let raw: string | null;
+  try {
+    raw = await kv.get(GATED_CLAIMS_KV_KEY);
+  } catch (e) {
+    console.error(`[claims-kv] KV ${GATED_CLAIMS_KV_KEY} read failed, keeping current claims: ${(e as Error).message}`);
+    return { json: "", source: "error", claims: [] };
+  }
+  if (typeof raw !== "string" || !raw.trim()) return { json: "", source: "none", claims: [] };
+  const claims = parseGatedClaims(raw);
+  return { json: claims.length ? JSON.stringify(claims) : "", source: "kv", claims };
+}

@@ -29,7 +29,7 @@ whose merges it gates, at the same version as the code it gates.
 | `launch_guard.py` | refuses a run that no trusted launcher started (DIG-4796) |
 | `import_preflight.py` | refuses a tick when a module the runner imports is missing from the install (DIG-5585) |
 | `check_required_context_producers.py` | asserts every required context has exactly one producer (DIG-4507) |
-| `review_applied.py` | decides `review-applied`: a review pass left findings and every thread is resolved or answered |
+| `review_applied.py` | decides `review-applied`: a review pass of the head left findings and every thread is resolved or answered; silent until the head is reviewed |
 | `pr_template.py` | checks a PR body against the required sections and the Human Gate question |
   (`pr_template.py` is byte-identical; the runner and the review check carry the small
 
@@ -314,6 +314,17 @@ Two things keep a receipt from being lost when a run dies (DIG-5135):
   last activity: a PR that is commented on is not pushed back to the end. The
   `review-applied` lane is served in the same order, so a pull request that
   waits for its review verdict does not wait behind every later arrival.
+- **no review, no row**: `review-applied` posts nothing on a head nobody has
+  reviewed yet: not pending, not failure (plan P1-3). Before any review there
+  is nothing to have applied, and the old answer, "no review pass left
+  comments", was 1,437 red rows that the merge queue does not read
+  (`review-applied` is in its `ignored_checks`). A head counts as reviewed when
+  it has a submitted review whose `commit_id` is that head, or a posted review
+  marker that names it. The next tick after that queues the head. An approve
+  of an earlier head is not a review pass for this one (#6543, #6567, #6635).
+  No label is read: the `reviewed:*` labels are retired. A review record that
+  cannot be read is not "no review": the head is checked and fails closed with
+  the reason.
 - **one run per head**: an explicit `--pr N` run is a run like any other and
   does not start on a head another run is checking, because two runs on one
   head post two `local-ci` rows on the required check.

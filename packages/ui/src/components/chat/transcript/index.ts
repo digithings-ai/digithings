@@ -7,3 +7,4 @@
 export * from "./transcript-markdown";
 export * from "./activity-view";
 export * from "./types";
+export * from "./chat-export";

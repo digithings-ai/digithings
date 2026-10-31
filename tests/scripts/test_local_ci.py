@@ -3552,12 +3552,70 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         aged = (datetime.now(timezone.utc)
                 - timedelta(seconds=_mod.REVIEW_RECHECK_SECS + 60)).strftime("%Y-%m-%dT%H:%M:%SZ")
         for pr in (old, new):
+            pr["_head_reviewed"] = True  # both heads carry a review
             self.rows[pr["headRefOid"]] = [
                 {"context": "review-applied", "state": "failure",
                  "description": "review-applied: no review pass left comments",
                  "created_at": aged}]
         self.assertEqual([p["number"] for p in _mod.pending_applied([new, old])], [1, 2],
                          "the review-applied lane is served in arrival order")
+
+    # --- review-applied waits for a review (plan P1-3) -----------------------
+
+    def _with_reviews(self, reviews):
+        """Answer the review read for every PR with ``reviews`` (None: unreadable)."""
+        gh = _mod.gh
+        self.addCleanup(setattr, _mod, "gh", gh)
+
+        def fake(*a):
+            argv = list(a)
+            if any("/reviews" in x for x in argv):
+                return "" if reviews is None else json.dumps(reviews)
+            if any("/issues/" in x and "/comments" in x for x in argv):
+                return "" if reviews is None else "[]"
+            return gh(*a)
+        _mod.gh = fake
+
+    def test_an_unreviewed_head_is_not_queued_for_review_applied(self):
+        self._with_reviews([])
+        self.assertEqual(_mod.pending_applied([self._pr(number=7)]), [],
+                         "no review of the head: review-applied posts nothing")
+
+    def test_a_reviewed_head_is_queued_for_review_applied(self):
+        pr = self._pr(number=7)
+        self._with_reviews([{"state": "APPROVED", "commit_id": pr["headRefOid"],
+                             "user": {"login": "reviewer"}, "body": ""}])
+        self.assertEqual([p["number"] for p in _mod.pending_applied([pr])], [7])
+
+    def test_a_review_of_an_earlier_head_does_not_queue_the_new_one(self):
+        self._with_reviews([{"state": "APPROVED", "commit_id": "f" * 40,
+                             "user": {"login": "reviewer"}, "body": ""}])
+        self.assertEqual(_mod.pending_applied([self._pr(number=7)]), [])
+
+    def test_an_unreadable_review_record_is_still_checked(self):
+        """Unreadable is not "no review": the run fails closed with the reason."""
+        self._with_reviews(None)
+        self.assertEqual([p["number"] for p in _mod.pending_applied([self._pr(number=7)])], [7])
+
+    def test_the_skip_path_posts_nothing_on_an_unreviewed_head(self):
+        """main() posts "local-ci skipped" only to heads pending_applied returns."""
+        self._with_reviews([])
+        posted = []
+        applied_status = _mod.applied_status
+        self.addCleanup(setattr, _mod, "applied_status", applied_status)
+        _mod.applied_status = lambda sha, st, desc: posted.append((sha, st))
+        for p in _mod.pending_applied([self._pr(number=7)]):
+            _mod.applied_status(p["headRefOid"], "failure", "local-ci skipped: x")
+        self.assertEqual(posted, [])
+
+    def test_process_applied_posts_no_row_before_a_review(self):
+        self._with_reviews([])
+        posted = []
+        applied_status = _mod.applied_status
+        self.addCleanup(setattr, _mod, "applied_status", applied_status)
+        _mod.applied_status = lambda sha, st, desc: posted.append((sha, st))
+        self.assertEqual(_mod.process_applied(self._pr(number=7), False), "skipped")
+        self.assertEqual(posted, [], "not pending, not failure: no row at all")
 
     # --- the order ----------------------------------------------------------
 

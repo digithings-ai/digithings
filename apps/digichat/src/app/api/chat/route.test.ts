@@ -1488,6 +1488,76 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     }
   });
 
+  it("a session-locked tenant keeps its own engine over a browser pick", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        gate: { searchEngine: "internal", lockSessionControls: true },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-search-engine": "exa",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Search-Engine"]).toBe("internal");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("an exclusive tool catalog disables the built-in families it does not name", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        tools: {
+          allowUserToggle: false,
+          exclusive: true,
+          catalog: [{ id: "web_search", default: true }],
+        },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      const disabled = (call?.headers?.["X-Digi-Disabled-Tools"] ?? "").split(",");
+      expect(disabled).toContain("digisearch");
+      expect(disabled).toContain("digivault");
+      expect(disabled).not.toContain("web_search");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("explicit browser auto beats tenant default via omission", async () => {
     const cfg = parseDigichatConfig({
       version: 1,

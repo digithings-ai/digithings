@@ -279,8 +279,11 @@ deleted_classes = ["DigiQuantMcpContainer"]
 # Cloudflare KV only, never as repo files. The namespace already exists, so this adds
 # no Cloudflare resource and needs no new binding grant; key layout is Counsel's
 # (DIG-3567).
-# BOUND BUT INERT: readTenantConfig() is not yet called from src/index.ts, so nothing
-# reads this binding at runtime today. See src/tenant-config.ts and DIG-3699.
+# Read at container cold start: DIGI_TENANT_FILES (site maps / page corpora,
+# src/tenant-files.ts) and DIGI_TENANT_CORPUS_MAP (client corpus map entries merged
+# under the house [vars] entry, src/tenant-corpus-kv.ts). An absent key leaves the
+# container env unchanged. readTenantConfig() (src/tenant-config.ts, DIG-3699) is
+# still not called for routing.
 # The account resource id lives HERE and never in config/contract/ -- an account id is
 # not a reproducible config value (DIG-3699 ruling element 1).
 [[kv_namespaces]]
