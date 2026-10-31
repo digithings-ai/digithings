@@ -908,11 +908,11 @@ consequences are handled in the queue:
   when `BLOCKED` stands with `merge-queue` already green, or in a repository the queue
   posts no status in. `BEHIND`, `DIRTY` and `UNKNOWN` refuse exactly as before.
 
-**twelve-x is not covered.** `digithings-ai/twelve-x` is not in `queue_status_repos` and its
-`develop` has no branch protection to require a status, so a write-access hand merge there
-still skips every queue gate. Release merges to its `main` are hand merges by design (the
-queue only takes `develop`): Chris runs them with `gh pr merge --match-head-commit <sha>`,
-never `--admin`. Nothing here changes either path.
+**Repositories outside the list are not covered.** A managed repository that is not in
+`queue_status_repos` has no branch protection on `develop` to require a status, so a
+write-access hand merge there still skips every queue gate. Release merges to `main` are
+hand merges by design (the queue only takes `develop`): Chris runs them with
+`gh pr merge --match-head-commit <sha>`, never `--admin`. Nothing here changes either path.
 
 **Rebase order with DIG-5812 / DIG-5818.** Those tickets touch the changes-requested hold
 (`mq-cr-hold`) and the queue's verdict functions next to `evaluate()`. As of 2026-10-27 the

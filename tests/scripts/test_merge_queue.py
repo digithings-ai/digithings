@@ -8715,11 +8715,19 @@ def test_blocked_with_a_green_queue_status_is_still_refused() -> None:
     assert any("mergeStateStatus=BLOCKED" in r for r in verdict.reasons)
 
 
-def test_twelve_x_posts_no_status_and_keeps_blocked_as_a_gate(gh_stub: Any) -> None:
-    """twelve-x has no branch protection to require the status, so nothing changes there."""
+def _managed_repo_without_queue_status() -> str:
+    """A repository the shipped policy manages but posts no `merge-queue` status in."""
+    policy = mq.load_policy()
+    unlisted = sorted(set(policy.required_checks_by_repo) - policy.queue_status_repos)
+    assert unlisted, "the shipped policy should manage a repo outside queue_status_repos"
+    return unlisted[0]
+
+
+def test_an_unlisted_repo_posts_no_status_and_keeps_blocked_as_a_gate(gh_stub: Any) -> None:
+    """A repo with no branch protection to require the status: nothing changes there."""
     prs = [_pr(13, approved=True, merge_state="BLOCKED"), _pr(14, approved=True)]
     stub = _status_stub(gh_stub, prs)
-    done = _run("run", "--repo", TWELVE_X_REPO, "--acting-role", "cto")
+    done = _run("run", "--repo", _managed_repo_without_queue_status(), "--acting-role", "cto")
     assert done.returncode == EXIT_OK, done.stderr
     assert _status_calls(stub) == []
     assert "mergeStateStatus=BLOCKED" in done.stdout or stub.matching("pr merge 14")
@@ -8820,7 +8828,7 @@ def test_the_shipped_policy_ignores_the_queue_status_and_posts_it_on_digithings(
     policy = mq.load_policy()
     assert mq.QUEUE_STATUS_CONTEXT in policy.ignored_checks
     assert policy.for_repo(DIGITHINGS_REPO).posts_queue_status
-    assert not policy.for_repo(TWELVE_X_REPO).posts_queue_status
+    assert not policy.for_repo(_managed_repo_without_queue_status()).posts_queue_status
 
 
 def test_a_bare_string_queue_status_repos_is_refused(tmp_path: Path) -> None:
@@ -8974,6 +8982,7 @@ def test_human_gate_section_ends_at_a_higher_level_heading() -> None:
     """The section still ends at a heading of higher level than the gate heading."""
     body = (
         "### Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n\n"
         "## Appendix\n\n- [x] unrelated checklist item\n"
     )
     assert "unrelated" not in mq._human_gate_section(body)
@@ -8985,3 +8994,106 @@ def test_human_gate_unclosed_fence_hiding_the_heading_fails_closed() -> None:
     body = "## Summary\n\n```\nexample\n\n## Human Gate\n\n- [x] Auth or crypto modified\n"
     assert mq._human_gate_section(body) == ""
     _assert_human_gate_blocks(9104, body)
+
+
+# --- DIG-6157: more shapes the Human Gate must fail closed on -----------------
+
+
+def _gate_body(boxes: str, answer: str = "**Is human review required?** No\n") -> str:
+    return "## Summary\n\nx\n\n## Human Gate\n\n" + boxes + "\n" + answer + "\n## Notes\n\nnone\n"
+
+
+@pytest.mark.parametrize("bullet", ["-", "*", "+", "1.", "1)", "12."])
+def test_human_gate_ticked_box_counts_for_every_list_marker(bullet: str) -> None:
+    """(a, b) `+` bullets and ordered items (`1.`, `1)`) are task-list boxes too."""
+    body = _gate_body(f"- [ ] Live-trading path modified\n{bullet} [x] Auth or crypto modified\n")
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "ticks a Human Gate box" in reason
+    _assert_human_gate_blocks(9201, body)
+
+
+def test_human_gate_two_headings_fail_closed_with_a_reason() -> None:
+    """(c) Two gate headings are ambiguous; a tick under the second must not be missed."""
+    body = (
+        "## Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n\n"
+        "## Human Gate\n\n- [x] Auth or crypto modified\n"
+    )
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "2 Human Gate headings" in reason
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9202, body)
+
+
+@pytest.mark.parametrize(
+    "decoy",
+    [
+        "<!-- ## Human Gate\n- [ ] Live-trading path modified -->\n",
+        "<!--\n## Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n-->\n",
+    ],
+    ids=["single-line", "multi-line"],
+)
+def test_human_gate_heading_inside_html_comment_is_not_the_section(decoy: str) -> None:
+    """(d) A decoy gate heading in an HTML comment must not shadow the real section."""
+    body = (
+        "## Summary\n\n"
+        + decoy
+        + "\n## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n\n"
+        "**Is human review required?** Yes\n"
+    )
+    assert "- [x] Auth" in mq._human_gate_section(body)
+    _assert_human_gate_blocks(9203, body)
+
+
+def test_human_gate_heading_only_inside_html_comment_fails_closed() -> None:
+    body = "## Summary\n\n<!--\n## Human Gate\n- [ ] Live-trading path modified\n-->\n"
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9204, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** Yes\n",
+        "**Is human review required?** **Yes**\n",
+        "**Is human review required? Yes**\n",
+        "Is human review required? __Yes__\n",
+        "**Is human review required?** Yes / No\n",
+    ],
+)
+def test_human_gate_answer_yes_requires_review_with_no_box_ticked(answer: str) -> None:
+    """One's policy: a Yes answer is REQUIRED even when every box is unticked."""
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "explicit No" in reason
+    _assert_human_gate_blocks(9205, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** No\n",
+        "**Is human review required?** **No**\n",
+        "**Is human review required? No**\n",
+        "Is human review required? no, docs only\n",
+    ],
+)
+def test_human_gate_explicit_no_is_allowed(answer: str) -> None:
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    assert mq._human_gate_refusal(body) is None
+    pr = _pr(9206, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize(
+    "answer",
+    ["**Is human review required?**\n", "**Is human review required?** TBD\n", ""],
+    ids=["empty", "not-yes-or-no", "question-missing"],
+)
+def test_human_gate_missing_answer_fails_closed(answer: str) -> None:
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "Is human review required?" in reason
+    _assert_human_gate_blocks(9207, body)

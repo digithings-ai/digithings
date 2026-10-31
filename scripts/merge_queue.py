@@ -3411,41 +3411,69 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
 def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     return _review_coverage(pr, repo)[0]
 
-_HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*[-*]\s*\[[xX]\]")
+# A ticked checkbox list item: `-`, `*` or `+` bullets and ordered items
+# (`1.` or `1)`), any of which GitHub renders as a task list (DIG-6157).
+_HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*(?:[-*+]|\d{1,9}[.)])\s*\[[xX]\]")
 # The section starts only at an ATX heading (`#` to `######`, then whitespace).
 # A sentence that merely mentions the gate is not the section: matching it
 # would start the section in prose, end it at the next heading, and miss a
 # ticked box in the real section further down (fail open).
 _HUMAN_GATE_HEADING_RE = re.compile(r"(?i)^ {0,3}(#{1,6})[ \t]+.*human gate")
 _ATX_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]|$)")
+_HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+_HUMAN_REVIEW_QUESTION_RE = re.compile(r"(?i)is human review required\?(?P<answer>.*)$")
+_HUMAN_GATE_NEEDS_OWNER = " — needs the `reviewed:owner` label"
+
+
+def _strip_html_comments(body: str) -> str:
+    """``body`` with HTML comments blanked, keeping every newline (DIG-6157).
+
+    A comment does not render, so a gate heading or answer inside one is not
+    part of the body a reader sees. An unclosed ``<!--`` runs to the end, which
+    can only hide a heading, so the caller fails closed.
+    """
+    return _HTML_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), body)
+
+
+def _visible_lines(body: str) -> list[str]:
+    """Body lines as rendered: fenced code and HTML comments blanked, count kept.
+
+    Fences go first, so a ``<!--`` shown inside code opens nothing. Both
+    helpers keep the line count, so indices map straight back onto the raw
+    body's ``splitlines()``.
+    """
+    return _strip_html_comments(_strip_fenced_blocks(body)).splitlines()
+
+
+def _human_gate_headings(visible: list[str]) -> list[tuple[int, int]]:
+    """(line index, level) of every Human Gate heading outside code and comments."""
+    found = []
+    for i, line in enumerate(visible):
+        m = _HUMAN_GATE_HEADING_RE.match(line)
+        if m:
+            found.append((i, len(m.group(1))))
+    return found
 
 
 def _human_gate_section_lines(body: str) -> list[str] | None:
-    """Original lines of the Human Gate section, or None when there is no gate heading.
+    """Original lines of the Human Gate section, or None when there is not exactly one.
 
-    Fenced code is ignored when looking for the gate heading and for the end
-    of the section, so a heading or `#` line inside a code block can neither
-    open a decoy section nor cut the real one short. The section runs until
-    the next heading of the same or a higher level (fewer or equal `#`), so a
-    subheading inside it stays part of it. The returned lines are the raw body
-    lines, fenced code included, so a ticked box can only add to the verdict.
+    Fenced code and HTML comments are ignored when looking for the gate heading
+    and for the end of the section, so a heading or `#` line inside either can
+    neither open a decoy section nor cut the real one short. The section runs
+    until the next heading of the same or a higher level (fewer or equal `#`),
+    so a subheading inside it stays part of it. The returned lines are the raw
+    body lines, code included, so a ticked box can only add to the verdict.
+    More than one gate heading is ambiguous and yields None (fail closed).
     """
     if not body:
         return None
     raw = body.splitlines()
-    # `_strip_fenced_blocks` blanks fenced lines but keeps the line count, so
-    # indices into `visible` map straight back onto `raw`. An unclosed fence
-    # runs to the end of the body, which can only hide a heading: the caller
-    # then fails closed (DIG-6137).
-    visible = _strip_fenced_blocks(body).splitlines()
-    start = level = None
-    for i, line in enumerate(visible):
-        m = _HUMAN_GATE_HEADING_RE.match(line)
-        if m:
-            start, level = i + 1, len(m.group(1))
-            break
-    if start is None:
+    visible = _visible_lines(body)
+    headings = _human_gate_headings(visible)
+    if len(headings) != 1:
         return None
+    start, level = headings[0][0] + 1, headings[0][1]
     end = len(raw)
     for j in range(start, len(visible)):
         h = _ATX_HEADING_RE.match(visible[j])
@@ -3456,10 +3484,10 @@ def _human_gate_section_lines(body: str) -> list[str] | None:
 
 
 def _human_gate_section(body: str) -> str:
-    """Text under the ATX heading that names the Human Gate section.
+    """Text under the single ATX heading that names the Human Gate section.
 
     The section ends at the next heading of the same or higher level; fenced
-    code never opens or ends it (DIG-6137).
+    code and HTML comments never open or end it (DIG-6137, DIG-6157).
     """
     lines = _human_gate_section_lines(body)
     if not lines:
@@ -3467,25 +3495,68 @@ def _human_gate_section(body: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _body_requires_human_review(pr: Any) -> bool:
-    """True when the PR body ticks a Human Gate box or asks for Chris's review.
+def _human_review_answer_is_no(answer: str) -> bool:
+    """True only for an explicit No (bold or plain, optional trailing text)."""
+    cleaned = re.sub(r"[*_`\s]+", " ", answer).strip(" :—-").strip()
+    return bool(re.match(r"(?i)no\b", cleaned)) and not re.search(r"(?i)\byes\b", cleaned)
 
-    Accepts either a PR dict (with a ``body`` key) or a body string, so callers
-    and tests can probe the rule directly.
+
+def _human_gate_refusal(pr: Any) -> str | None:
+    """Why the PR body needs owner review, or None when it does not.
+
+    Accepts either a PR dict (with a ``body`` key) or a body string. Fails
+    closed on anything the gate cannot read with certainty (DIG-6157):
+
+    - the body names the gate but has no gate heading outside code/comments;
+    - more than one gate heading;
+    - a ticked box in the section (any bullet or ordered item);
+    - an ``Is human review required?`` answer that is not an explicit No,
+      including a missing question in the section or an empty answer;
+    - ``Needs Chris's review`` anywhere.
     """
     if isinstance(pr, str):
         body = pr
     else:
         body = str((pr or {}).get("body") or "")
-    if re.search(r"(?i)human gate", body) and _human_gate_section_lines(body) is None:
-        # The body names the gate but has no gate heading outside code, so the
-        # boxes cannot be read: fail closed and ask for owner review.
-        return True
+    visible = _visible_lines(body)
+    headings = _human_gate_headings(visible)
+    if len(headings) > 1:
+        return (
+            f"Human Gate: PR body has {len(headings)} Human Gate headings; exactly one "
+            "is allowed" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    if re.search(r"(?i)human gate", body) and not headings:
+        # The body names the gate but has no gate heading outside code or
+        # comments, so the boxes cannot be read: fail closed.
+        return (
+            "Human Gate: PR body names the gate but has no readable Human Gate "
+            "heading" + _HUMAN_GATE_NEEDS_OWNER
+        )
     section = _human_gate_section(body)
     if section and _HUMAN_GATE_CHECKED_RE.search(section):
-        return True
+        return "Human Gate: PR body ticks a Human Gate box" + _HUMAN_GATE_NEEDS_OWNER
+    answers = [
+        m.group("answer") for line in visible if (m := _HUMAN_REVIEW_QUESTION_RE.search(line))
+    ]
+    if headings and not answers:
+        return (
+            "Human Gate: 'Is human review required?' is missing from the Human Gate "
+            "section" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    if any(not _human_review_answer_is_no(a) for a in answers):
+        return (
+            "Human Gate: 'Is human review required?' is not answered with an explicit "
+            "No" + _HUMAN_GATE_NEEDS_OWNER
+        )
     normalised = body.replace("\u2019", "'").lower()
-    return "needs chris's review" in normalised
+    if "needs chris's review" in normalised:
+        return "Human Gate: PR body says 'Needs Chris's review'" + _HUMAN_GATE_NEEDS_OWNER
+    return None
+
+
+def _body_requires_human_review(pr: Any) -> bool:
+    """True when the PR body needs owner review (see `_human_gate_refusal`)."""
+    return _human_gate_refusal(pr) is not None
 
 
 def _gate_human_gate(pr: dict[str, Any]) -> list[str]:
@@ -3498,12 +3569,8 @@ def _gate_human_gate(pr: dict[str, Any]) -> list[str]:
     """
     if "reviewed:owner" in _label_names(pr):
         return []
-    if _body_requires_human_review(pr):
-        return [
-            "Human Gate: PR body requires human review (ticked Human Gate box "
-            "or 'Needs Chris's review') — needs the `reviewed:owner` label"
-        ]
-    return []
+    reason = _human_gate_refusal(pr)
+    return [reason] if reason else []
 
 
 # --- reviewer independence: the review must come from another seat ------------
