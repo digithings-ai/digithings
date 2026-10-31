@@ -374,13 +374,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     module's prose and develop's newer DIG-2203 / DIG-4657 paragraphs changed
     the chunk boundaries from index 125 on — count 135, hashes re-recorded —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 136 for DIG-3585 (tenant-scoped index section,
+    index-name allowlist paragraph and module-map row in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 138 for DIG-3585 (the ingest rows and the Azure
+    single-index limitation in ARCHITECTURE.md) — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 135
+    assert len(chunks) == 138
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -395,9 +401,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5eaa545f6fd87479",
         "c1b340d871d4f198",
         "35bae5b21ed48559",
-        "6bb725ee96409565",
-        "2496b0331a6908ca",
-        "d79c9e4802601817",
+        "4ff1d7b5bf338818",
+        "5ed382a8f54b00aa",
+        "835637cf4772f008",
         "8135b004b65f5e71",
         "0dc944d1f2f84fbf",
         "601b25fe802c685b",
@@ -451,13 +457,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "5f32459eb46e4976",
-        "f7ef2f68779a303e",
-        "ed9fd383de98c694",
-        "cd4e7192b6baa3d3",
-        "a03c67e88e3c2999",
-        "8bb70d874a5aceb3",
-        "354bda51b13bec14",
+        "903f6049e9495bf9",
+        "4919fce1aa644520",
+        "a1c847c4b61b430e",
+        "c8935c81b3be7fd1",
+        "e0faa8234a76d0e4",
+        "c0a6b8a2691f5fb8",
+        "d32a1d05b498b935",
+        "0bf590b652b0098e",
+        "919b1f9a58b35212",
+        "351350091b79142d",
         "81a3302403f3eb85",
         "0a50c275d11604aa",
         "ef6a144c2e1e109e",

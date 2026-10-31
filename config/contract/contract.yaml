@@ -1,7 +1,3 @@
-# GENERATED ONCE by config/contract/bootstrap_contract.py, then maintained by hand.
-# This file is the SOURCE OF TRUTH. check_contract.py proves every wrangler var,
-# every wrangler binding and every compose interpolation maps to an entry here.
-# Never paste a secret value into this file.
 version: 1
 description: 'Self-host stack contract: services, ports, env, secrets and bindings. Source of truth for
   config/contract generators and for check_contract.py.'
@@ -206,23 +202,6 @@ services:
   - 127.0.0.1:4318:4318
   profiles:
   - otel
-- name: clickhouse
-  compose_file: apps/digitrace-langfuse/docker-compose.local.yml
-  image: clickhouse/clickhouse-server:25.12
-  build_context: null
-  ports:
-  - 8123:8123
-  - 9000:9000
-  profiles: []
-  note: local dev only
-- name: redis
-  compose_file: apps/digitrace-langfuse/docker-compose.local.yml
-  image: redis:7
-  build_context: null
-  ports:
-  - 6379:6379
-  profiles: []
-  note: local dev only
 ports:
 - name: digigraph
   container_port: 8000
@@ -395,38 +374,6 @@ env:
     - CHROMA_PATH
   wrangler_values:
     digithings-stack: /data/chroma
-- name: CLICKHOUSE_CLUSTER_ENABLED
-  description: '`false` runs single-node ClickHouse without ON CLUSTER.'
-  secret: false
-  sources:
-    wrangler_workers:
-    - digitrace-langfuse
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digitrace-langfuse: 'false'
-- name: CLICKHOUSE_DB
-  description: ClickHouse database name for the local Langfuse stack (container-internal, literal).
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files: []
-    env_example_files: []
-    compose_literal:
-    - CLICKHOUSE_DB
-  compose_literal_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-- name: CLICKHOUSE_MIGRATION_SSL
-  description: Whether Langfuse uses TLS for the ClickHouse migration connection.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - CLICKHOUSE_MIGRATION_SSL
 - name: CLOUDFLARE_ACCOUNT_ID
   description: Canonical Cloudflare account id for both Vectorize and D1.
   secret: false
@@ -1222,19 +1169,6 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-stack: '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings","researchSystemPrompt":"You are the digithings help assistant for digithings.ai chat. Answer questions about digithings: the products, the docs, and how the stack fits together. Use the docs and vault notes you retrieve, and cite the path or URL. Web search is on. Use it when the corpus does not cover the question, and say when an answer comes from the web. Do not invent features, pricing, or capabilities. If you do not have a grounded answer, say so. Politely decline questions that are not about digithings."}}'
-- name: DIGI_TENANT_CORPUS_MAP_EXTRA
-  description: Second half of the split per-tenant corpus map -- every tenant except the house
-    `digithings` entry. `src/index.ts` composes it with DIGI_TENANT_CORPUS_MAP at boot because one
-    Cloudflare text binding may not exceed 5.1 kB. Value copied verbatim from the stack Worker.
-  secret: false
-  sources:
-    wrangler_workers:
-    - digithings-stack
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digithings-stack: '{"occ":{"digisearchIndex":"occ_help","digisearchTools":{"digisearch_zammad_tickets":{"index":"occ-tickets","description":"Semantic search over past OCC support tickets (Zammad), refreshed daily at 05:00 Rome. Finds similar past cases and how they were resolved, in any language."}},"vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\nAnswer only from what you retrieve. You get several tool rounds per question.\n\nGround every answer in retrieved corpus from Help search (digisearch, index `occ_help`, help docs)\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\nFor similar past cases or how an issue was resolved before, use digisearch_zammad_tickets (semantic search over past Zammad tickets, refreshed daily at 05:00). For a specific ticket number, the tickets of a customer, current status or anything since this morning, use the live Zammad ticket tools.\nAlways cite help article URLs or PDF source paths from metadata.\n\nSearch results are excerpts, not whole documents. A row marked \"truncated\": true\nmeans you have not seen that note \u2014 run digivault_search_notes again with a narrower query\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\nevery row is a preview. Always do this when the question involves a\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\nstep that answers the question.\n\nNever say a policy, step, or exception does not exist unless you searched for it\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\nrest was not loaded.\n\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\nPDFs. Do not invent product features, pricing, or portal capabilities not\npresent in the retrieved sources. E-learning / YouTube videos are out of\nscope for this corpus \u2014 say so if asked.\n\nDo not cite digithings or digiquant internal architecture docs. If the\ncorpus has no grounded answer, say so clearly.\n\nChoosing a search tool: use digisearch with index `occ_help` for how-to questions, features, settings, manuals and any policy or procedure question. The help corpus does not contain support tickets; for live ticket lists, counts, status or details use the read-only zammad tools, and say so clearly when they do not ground the answer.\n\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\"in Bearbeitung\"), or: I searched for mailbox (\"Postfach\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\n\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\n\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\n\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true}}'
 - name: DIGI_WORKFLOW_PROFILE
   description: Workflow profile the digichat release runs (default research_rag).
   secret: false
@@ -1278,7 +1212,6 @@ env:
     - digithings-cron
     - digithings-digichat
     - digithings-stack
-    - digitrace-langfuse
     compose_files: []
     env_example_files:
     - .env.example
@@ -1305,7 +1238,6 @@ env:
     - digithings-cron
     - digithings-digichat
     - digithings-stack
-    - digitrace-langfuse
     compose_files: []
     env_example_files:
     - .env.example
@@ -1322,7 +1254,6 @@ env:
     - digithings-cron
     - digithings-digichat
     - digithings-stack
-    - digitrace-langfuse
     compose_files: []
     env_example_files:
     - .env.example
@@ -1417,70 +1348,6 @@ env:
     - INITIAL_PASSWORD
   compose_literal_files:
     - docker-compose.yml
-- name: LANGFUSE_INIT_USER_EMAIL
-  description: Email of the first Langfuse user created at boot.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - LANGFUSE_INIT_USER_EMAIL
-- name: LANGFUSE_INIT_USER_PASSWORD
-  description: Password of the first Langfuse user created at boot.
-  secret: true
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - LANGFUSE_INIT_USER_PASSWORD
-- name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
-  description: R2 bucket receiving Langfuse events.
-  secret: false
-  sources:
-    wrangler_workers:
-    - digitrace-langfuse
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digitrace-langfuse: digitrace-langfuse-events
-- name: LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE
-  description: R2 path-style addressing.
-  secret: false
-  sources:
-    wrangler_workers:
-    - digitrace-langfuse
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digitrace-langfuse: 'true'
-- name: LANGFUSE_S3_EVENT_UPLOAD_PREFIX
-  description: Key prefix for Langfuse event objects.
-  secret: false
-  sources:
-    wrangler_workers:
-    - digitrace-langfuse
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digitrace-langfuse: events/
-- name: LANGFUSE_S3_EVENT_UPLOAD_REGION
-  description: '`auto` is the R2 region convention.'
-  secret: false
-  sources:
-    wrangler_workers:
-    - digitrace-langfuse
-    compose_files: []
-    env_example_files: []
-    compose_literal: []
-  wrangler_values:
-    digitrace-langfuse: auto
 - name: LITELLM_MASTER_KEY
   description: LiteLLM master key. An empty value makes litellm exit 3.
   secret: true
@@ -1670,26 +1537,6 @@ env:
     env_example_files: []
     compose_literal:
     - PYTHONUNBUFFERED
-- name: REDIS_HOST
-  description: Redis host for the Langfuse stack.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - REDIS_HOST
-- name: REDIS_PORT
-  description: Redis port for the Langfuse stack.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - REDIS_PORT
 - name: SUPABASE_URL
   description: Shared Supabase project URL.
   secret: false
@@ -1697,22 +1544,14 @@ env:
     wrangler_workers:
     - dashboard-api
     - digithings-stack
+    - digitrace-ingest
     compose_files: []
     env_example_files: []
     compose_literal: []
   wrangler_values:
     dashboard-api: https://rwagjbkvxkdwqmouagad.supabase.co
     digithings-stack: https://rwagjbkvxkdwqmouagad.supabase.co
-- name: TELEMETRY_ENABLED
-  description: Whether Langfuse sends anonymous telemetry.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - apps/digitrace-langfuse/docker-compose.local.yml
-    env_example_files: []
-    compose_literal:
-    - TELEMETRY_ENABLED
+    digitrace-ingest: https://rwagjbkvxkdwqmouagad.supabase.co
 - name: XAI_API_KEY
   description: xAI credential.
   secret: true
@@ -1868,44 +1707,6 @@ secrets:
 - name: DIGICHAT_MONITOR_TOKENS
   worker: digithings-digichat
   required: false
-- name: DATABASE_URL
-  worker: digitrace-langfuse
-  required: true
-- name: NEXTAUTH_SECRET
-  worker: digitrace-langfuse
-  required: true
-- name: SALT
-  worker: digitrace-langfuse
-  required: true
-- name: ENCRYPTION_KEY
-  worker: digitrace-langfuse
-  required: true
-  note: openssl rand -hex 32
-- name: NEXTAUTH_URL
-  worker: digitrace-langfuse
-  required: true
-- name: CLICKHOUSE_URL
-  worker: digitrace-langfuse
-  required: true
-- name: CLICKHOUSE_MIGRATION_URL
-  worker: digitrace-langfuse
-  required: true
-- name: CLICKHOUSE_USER
-  worker: digitrace-langfuse
-  required: true
-- name: CLICKHOUSE_PASSWORD
-  worker: digitrace-langfuse
-  required: true
-- name: REDIS_CONNECTION_STRING
-  worker: digitrace-langfuse
-  required: false
-  note: preferred over REDIS_HOST/PORT/AUTH
-- name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
-  worker: digitrace-langfuse
-  required: true
-- name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
-  worker: digitrace-langfuse
-  required: true
 bindings:
 - worker: digiquant-runner
   type: container
@@ -1945,13 +1746,13 @@ bindings:
   name: TWELVEX_RUNNER
   service: twelvex-runner
   source: apps/digithings-cron/wrangler.toml
-# DIG-4487: two slots, so a deploy can start the new instance while the
-# previous id's instance drains. Mirrors apps/digichat-cloudflare/wrangler.toml.
+# DIG-4487: ten slots (t1702u), so a deploy can start the new instance while
+# the previous id's instance drains. Mirrors apps/digichat-cloudflare/wrangler.toml.
 - worker: digithings-digichat
   type: container
   class_name: DigiChatContainer
   image: ../../infra/docker/Dockerfile.digichat-cloudflare
-  max_instances: 2
+  max_instances: 10
   instance_type: null
   source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-digichat
@@ -1967,14 +1768,7 @@ bindings:
   type: container
   class_name: DigiStackContainer
   image: ../../infra/docker/Dockerfile.digithings-stack-cloudflare
-  max_instances: 5
-  instance_type: standard-2
-  source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digithings-stack
-  type: container
-  class_name: DigiQuantMcpContainer
-  image: ../../digiquant/Dockerfile.mcp
-  max_instances: 1
+  max_instances: 10
   instance_type: standard-2
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack
@@ -1982,45 +1776,50 @@ bindings:
   name: STACK
   class_name: DigiStackContainer
   source: apps/digithings-stack-cloudflare/wrangler.toml
+# DIG-2913 (#6466): the Worker-native market-data MCP that replaced the container
+# route. Its row was missing, so check_contract.py reported this binding as
+# unmapped and tests/config/test_config_contract.py went red on develop.
 - worker: digithings-stack
   type: durable_object
-  name: MCP_STACK
-  class_name: DigiQuantMcpContainer
+  name: DIGIQUANT_MCP
+  class_name: DigiQuantMcpAgent
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+# A Worker's binding to itself: the digikey JWKS on key.digithings.ai is served by
+# this Worker, so a plain fetch would re-enter its own public route. Same missing
+# row as DIGIQUANT_MCP above.
+- worker: digithings-stack
+  type: service
+  name: DIGIKEY_SELF
+  service: digithings-stack
   source: apps/digithings-stack-cloudflare/wrangler.toml
 - worker: digithings-stack
   type: r2_bucket
   name: MARKET_DATA
   bucket_name: digithings-archive
   source: apps/digithings-stack-cloudflare/wrangler.toml
-- worker: digitrace-langfuse
-  type: container
-  class_name: LangfuseWebContainer
-  image: ../../infra/docker/Dockerfile.digitrace-langfuse-web
-  max_instances: 2
-  instance_type: standard-2
-  source: apps/digitrace-langfuse/wrangler.toml
-- worker: digitrace-langfuse
-  type: container
-  class_name: LangfuseWorkerContainer
-  image: ../../infra/docker/Dockerfile.digitrace-langfuse-worker
-  max_instances: 1
-  instance_type: standard-2
-  source: apps/digitrace-langfuse/wrangler.toml
-- worker: digitrace-langfuse
-  type: durable_object
-  name: LANGFUSE_WEB
-  class_name: LangfuseWebContainer
-  source: apps/digitrace-langfuse/wrangler.toml
-- worker: digitrace-langfuse
-  type: durable_object
-  name: LANGFUSE_WORKER
-  class_name: LangfuseWorkerContainer
-  source: apps/digitrace-langfuse/wrangler.toml
-- worker: digitrace-langfuse
+# DIG-2657 / ADR-0036: the OTLP/HTTP ingest path. The receiver writes the queue,
+# the consumer writes the archive, the index and the aggregates.
+- worker: digitrace-ingest
   type: r2_bucket
-  name: LANGFUSE_EVENTS
-  bucket_name: digitrace-langfuse-events
-  source: apps/digitrace-langfuse/wrangler.toml
+  name: ARCHIVE
+  bucket_name: digitrace-archive
+  source: apps/digitrace-ingest/wrangler.toml
+- worker: digitrace-ingest
+  type: kv_namespace
+  name: INGEST_TOKENS
+  source: apps/digitrace-ingest/wrangler.toml
+- worker: digitrace-ingest
+  type: queue
+  name: INGEST_QUEUE
+  queue: digitrace-ingest
+  dead_letter_queue: digitrace-ingest-dlq
+  max_retries: 5
+  source: apps/digitrace-ingest/wrangler.toml
+- worker: digitrace-ingest
+  type: analytics_engine_dataset
+  name: ANALYTICS
+  dataset: digitrace_ingest
+  source: apps/digitrace-ingest/wrangler.toml
 # twelvex-runner has no public hostname: digithings-cron reaches it through the
 # TWELVEX_RUNNER service binding, and the container starts per request.
 - worker: twelvex-runner
@@ -2035,14 +1834,15 @@ bindings:
   name: TWELVEX_CONTAINER
   class_name: TwelveXRunnerContainer
   source: apps/twelvex-runner/wrangler.toml
-# DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
-# routes, no remote database); the binding exists so the parity contract can see
-# the name. A remote database_id is a cutover step and needs Chris's approval.
-- worker: digidata-api
+# twelve-x data API (DIG-2895, moved from the retired digidata-api Worker in
+# DIG-2887 S2). The D1 database id is a PLACEHOLDER (no remote database yet); the
+# binding exists so the parity contract can see the name. A remote database_id
+# is a cutover step and needs Chris's approval.
+- worker: twelvex-runner
   type: d1_database
   name: TWELVEX_DB
   database_name: twelvex
-  source: apps/digidata-api/wrangler.toml
+  source: apps/twelvex-runner/wrangler.toml
 # Daily corpus index. The KV id in wrangler.toml is a placeholder. The live
 # namespace id stays out of this repo. No production deploy workflow.
 - worker: corpus-index

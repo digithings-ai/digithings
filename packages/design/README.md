@@ -12,7 +12,7 @@ static sites).
 
 **Strategy:** [`EVOLUTION.md`](EVOLUTION.md) is the historical ledger. The competitor
 scans, design mine, landing demos, and the static spec/smoke pages were removed
-so the next design reference can be built in digiweb (`apps/reference`) instead
+so the next design reference can be built in digiweb (`apps/digiweb`) instead
 of extended here. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
 
 See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
@@ -121,9 +121,9 @@ Nothing else changes: the variable name is generic, so every consumer of
 the pending-port surfaces (`apps/digichat`, `apps/digithings-web`) still load
 their faces inline in their layouts until their port is redone.
 
-Out of scope for this system: `apps/reference/**` and
-`apps/digichat/reference/**` are type-specimen galleries that deliberately
-name alternatives.
+Out of scope for this system: `apps/digichat/reference/**` is a type-specimen
+gallery that deliberately names alternatives. `apps/digiweb` is the live
+reference and reads these tokens rather than restating them.
 
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |
@@ -212,7 +212,7 @@ digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
 The vanilla `starfield.js` and `typewriter.js` modules had no importer either
 (`apps/dashboard` only declared the starfield module). They were removed.
 `scroll-trigger.js` left in #5692. Do not revive them; the next design
-reference is `apps/reference`.
+reference is `apps/digiweb`.
 
 ---
 ## Non-goals
@@ -231,7 +231,7 @@ reference is `apps/reference`.
 Two primitives that live surfaces still import sit alongside the tokens.
 Each ships a CSS file and an ESM JS module. The static smoke page
 and the HTML spec were removed with the old design reference. Live specimens
-belong in `apps/reference`.
+belong in `apps/digiweb`.
 
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 

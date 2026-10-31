@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare stack — how it is wired</title>
+<style>
+  :root{
+    --bg:#0b0c0d; --surface:#121415; --surface-2:#171a1c;
+    --ink:#e8eaec; --ink-soft:#a8afb6; --ink-mute:#6f777e;
+    --hair:#24282b; --accent:#b55e2a; --up:#3f9e6a; --warn:#c9a227;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--mono)}
+  body{padding:40px 32px 80px;max-width:1180px;margin:0 auto}
+  h1{font-size:20px;font-weight:600;letter-spacing:-0.01em;margin:0 0 6px}
+  h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+  p{color:var(--ink-soft);margin:0 0 14px;max-width:76ch}
+  code{color:var(--ink);background:var(--surface-2);padding:1px 5px;border:1px solid var(--hair)}
+  .lede{color:var(--ink-soft);margin-bottom:28px}
+  .layer{border:1px solid var(--hair);background:var(--surface);padding:16px;margin-bottom:14px}
+  .layer h3{margin:0 0 12px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .box{flex:1 1 240px;border:1px solid var(--hair);background:var(--surface-2);padding:12px 14px}
+  .box strong{display:block;font-size:13px;margin-bottom:3px}
+  .box span{display:block;color:var(--ink-mute);font-size:11.5px;line-height:1.5}
+  .box .tag{display:inline-block;margin-top:8px;font-size:10.5px;letter-spacing:.06em;color:var(--accent);border:1px solid var(--hair);padding:1px 6px}
+  .arrow{text-align:center;color:var(--ink-mute);font-size:12px;padding:6px 0;letter-spacing:.06em}
+  .flow{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .flow .col{border:1px solid var(--hair);background:var(--surface);padding:16px}
+  .flow .col h4{margin:0 0 12px;font-size:12px;letter-spacing:.05em}
+  .step{border-left:2px solid var(--hair);padding:0 0 0 12px;margin:0 0 12px}
+  .step:last-child{margin-bottom:0}
+  .step b{display:block;font-size:12.5px;font-weight:600}
+  .step span{color:var(--ink-mute);font-size:11.5px}
+  .shared{border-left-color:var(--accent)}
+  .silo{border-left-color:var(--up)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{color:var(--ink-mute);font-weight:600;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+  td:first-child{color:var(--ink-soft);width:26%}
+  .k{color:var(--accent)}
+  .note{border:1px solid var(--hair);border-left:2px solid var(--warn);padding:12px 14px;color:var(--ink-soft);font-size:12.5px;margin-top:16px}
+  .legend{display:flex;gap:18px;font-size:11.5px;color:var(--ink-mute);margin:10px 0 0}
+  .legend i{display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle}
+  .foot{margin-top:48px;color:var(--ink-mute);font-size:11.5px;border-top:1px solid var(--hair);padding-top:14px}
+</style>
+</head>
+<body>
+
+<h1>Cloudflare stack — how it is wired</h1>
+<p class="lede">Pages serves the static sites. Workers own the hostnames and decide who passes. Containers run the stateful services. KV, R2 and D1 hold everything that must persist.</p>
+
+<h2>1. The layers</h2>
+
+<div class="layer">
+  <h3>Client</h3>
+  <div class="row">
+    <div class="box"><strong>Browser</strong><span>digithings.ai · digiquant.io · invite links</span></div>
+  </div>
+</div>
+<div class="arrow">↓</div>
+
+<div class="layer">
+  <h3>Cloudflare edge</h3>
+  <div class="row">
+    <div class="box"><strong>Pages</strong><span>digithings.ai · digiquant.io — static Next export, no server. Build proof: <code>/build-info.json</code></span><span class="tag">STATIC</span></div>
+    <div class="box"><strong>Worker: digithings-digichat</strong><span>/chat* · /chat/occ* · /embed* · /api/chat* · /api/mcp/helpdesk*</span><span class="tag">CHAT EDGE</span></div>
+    <div class="box"><strong>Worker: digithings-stack</strong><span>graph. · key. · search.digithings.ai</span><span class="tag">SERVICES EDGE</span></div>
+  </div>
+</div>
+<div class="arrow">↓ container binding, no public port</div>
+
+<div class="layer">
+  <h3>Containers</h3>
+  <div class="row">
+    <div class="box"><strong>DigiChatContainer</strong><span>:3000 · sleep 1m · Next.js chat (basePath /chat) + helpdesk-mcp :8770</span></div>
+    <div class="box"><strong>DigiStackContainer</strong><span>:8000 · sleep 5m · digigraph 8000 · digikey 8005 · digisearch 8002 · digivault 8004 · MCP 8765 / 8766 / 8769</span></div>
+    <div class="box"><strong>DigiQuantMcpContainer</strong><span>:8767 · sleep 1m · quant MCP</span></div>
+  </div>
+</div>
+<div class="arrow">↓</div>
+
+<div class="layer">
+  <h3>Storage</h3>
+  <div class="row">
+    <div class="box"><strong>KV · 361b710b…</strong><span>digichat: <code>embed-tenants</code>, <code>config-yaml</code><br>stack: <code>digikey-jwks</code></span><span class="tag">SHARED BY 2 WORKERS</span></div>
+    <div class="box"><strong>R2 · digithings-archive</strong><span>market data (stack) · archives (runner)</span></div>
+    <div class="box"><strong>D1 · twelvex</strong><span>twelvex-runner</span></div>
+  </div>
+</div>
+
+<h2>2. The two chat paths</h2>
+<div class="legend">
+  <span><i style="background:var(--up)"></i>siloed</span>
+  <span><i style="background:var(--accent)"></i>shared by both</span>
+</div>
+<div class="flow">
+  <div class="col">
+    <h4>digithings chat — <code>/chat</code></h4>
+    <div class="step silo"><b>Route /chat*</b><span>digichat Worker · no gate</span></div>
+    <div class="step silo"><b>Tenant = digithings.ai</b><span>KV <code>config-yaml</code> → <code>deployment</code></span></div>
+    <div class="step shared"><b>DigiChatContainer :3000</b><span>one instance for every tenant</span></div>
+    <div class="step shared"><b>/chat/api/chat</b><span>same route for house and OCC</span></div>
+    <div class="step shared"><b>MCP: digisearch, digivault</b><span>JWT minted in the app</span></div>
+  </div>
+  <div class="col">
+    <h4>OCC chat — <code>/chat/occ</code></h4>
+    <div class="step silo"><b>occGate</b><span><code>OCC_INVITE_KEY</code> · ?token= or occ_invite cookie · else the site's 404</span></div>
+    <div class="step silo"><b>Pages shell → /chat/occ/</b><span>second identical gate in a Pages Function</span></div>
+    <div class="step silo"><b>iframe /embed?host=the gated tenant host</b><span>hardcoded <code>embedHost</code> is the whole separation</span></div>
+    <div class="step shared"><b>DigiChatContainer :3000</b><span>same Worker, same container id</span></div>
+    <div class="step shared"><b>MCP: helpdesk, digisearch, digivault</b><span>tenant entry in KV <code>embed-tenants</code></span></div>
+  </div>
+</div>
+
+<h2>3. The MCP path</h2>
+<div class="layer">
+  <div class="step"><b>1 · chat container dials</b><span><code>https://search.digithings.ai/_stack/mcp/digisearch/mcp</code></span></div>
+  <div class="step"><b>2 · digithings-stack Worker</b><span>path prefix <code>/_stack/mcp</code> wins over host routing</span></div>
+  <div class="step"><b>3 · authorizeMcpEdge</b><span><code>x-digi-mcp-key</code> constant-time, else Bearer JWT: RS256, JWKS by kid, exp/iss/aud, scope <code>mcp:&lt;id&gt;</code></span></div>
+  <div class="step"><b>4 · host rewrite</b><span>Host becomes <code>127.0.0.1:&lt;port&gt;</code> — the Python MCP SDK answers 421 to anything else</span></div>
+  <div class="step"><b>5 · switchPort</b><span>digisearch :8765 · digivault :8769 inside DigiStackContainer</span></div>
+  <div class="note">A failed auth is a bare 401. The reason — <code>jwks_unavailable</code>, <code>missing_scope</code> — exists only in the Worker log.</div>
+</div>
+
+<h2>4. Shared versus siloed</h2>
+<table>
+  <tr><th></th><th>digithings chat</th><th>OCC chat</th></tr>
+  <tr><td>Entry</td><td><code>/chat</code>, open</td><td><code>/chat/occ</code>, invite key</td></tr>
+  <tr><td>Tenant key</td><td><code>digithings.ai</code></td><td><code>the gated tenant host</code></td></tr>
+  <tr><td>Config</td><td>KV <code>config-yaml</code></td><td>KV <code>embed-tenants</code> row</td></tr>
+  <tr><td>Worker</td><td colspan="2" class="k">the same: digithings-digichat</td></tr>
+  <tr><td>Container</td><td colspan="2" class="k">the same: shared-&lt;rev&gt;</td></tr>
+  <tr><td>KV namespace</td><td colspan="2" class="k">the same: 361b710b…</td></tr>
+  <tr><td>MCP servers</td><td>digisearch, digivault</td><td>helpdesk (static), digisearch, digivault</td></tr>
+  <tr><td>Skills pack</td><td>none</td><td><code>skill_library/occ/</code></td></tr>
+</table>
+
+<div class="note"><b>Why this matters.</b> There is no second Worker, container or namespace. A defect in tenant resolution is therefore not contained to one surface — which is exactly what happened when the MCP identity key was not forwarded: only the house tenant could mint a token, and OCC quietly lost its two search servers while helpdesk, on a static key, kept working.</div>
+
+<div class="foot">Sources: apps/digichat-cloudflare/wrangler.toml · apps/digithings-stack-cloudflare/wrangler.toml · apps/digichat-cloudflare/src/{index,paths,occ-gate,tenants-kv}.ts · apps/digithings-stack-cloudflare/src/{index,mcp-edge-auth,mcp-edge-target}.ts · apps/digithings-web/components/ChatEmbedShell.tsx · docs/architecture/cloudflare-stack-overview.md</div>
+
+</body>
+</html>

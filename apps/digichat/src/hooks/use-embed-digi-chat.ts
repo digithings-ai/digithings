@@ -28,6 +28,7 @@ import {
   takePendingTurnMode,
   takePendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
+import { privateModeHeaderEntries } from "@/lib/product-slash-commands";
 import {
   shapeUserMessageParts,
   type PageContextMessage,
@@ -84,6 +85,11 @@ function readEmbedUrlAuth(): { token?: string; host?: string } {
  * Same freeze reason as readEmbedUrlAuth (#1339): a `trialUnlocked` prop closed
  * over by DefaultChatTransport stays false after datatap:unlocked arrives, so
  * the client counter can show 100 while the server still returns trial_gate.
+ *
+ * The flag is the embed's own counter and nothing else: it is what the tenant
+ * page's datatap:unlocked message sets, and the server grants no relief for
+ * it — a client-asserted unlock header was deleted from the chat route
+ * (DIG-4525), so the gate's relief comes only from the server's own verdicts.
  */
 export function isEmbedTrialUnlockedAtSend(
   resolvedHost: string,
@@ -194,7 +200,6 @@ type UseEmbedDigiChatOptions = {
   byokKey?: string;
   byokProvider?: string;
   byokModel?: string;
-  trialUnlocked?: boolean;
   onGated?: () => void;
   /**
    * Called once for every turn the visitor submits, whichever way they started
@@ -257,6 +262,12 @@ type UseEmbedDigiChatOptions = {
   /** Send-time web-search engine: auto | internal | exa | tavily | parallel | firecrawl | tinyfish. */
   getSearchEngine?: () => string | undefined;
   /**
+   * Send-time accessor for private mode (`/private`, `?private=1`). The mode is
+   * resolved once at mount, but read here — a boolean closed over by the frozen
+   * transport (#1339) would stay at its mount value after a `/private` toggle.
+   */
+  getPrivateMode?: () => boolean;
+  /**
    * When false, omit regenerate/editLastUser so assistant-ui hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
@@ -273,7 +284,6 @@ export function useEmbedDigiChat({
   byokKey,
   byokProvider,
   byokModel,
-  trialUnlocked,
   onGated,
   onTurnCharge,
   getResponseLanguage,
@@ -283,6 +293,7 @@ export function useEmbedDigiChat({
   getMcpSession,
   getEffort,
   getSearchEngine,
+  getPrivateMode,
   planProof,
   getPlanProof,
   getTrialProof,
@@ -394,6 +405,12 @@ export function useEmbedDigiChat({
           ) {
             headers["X-Digi-Search-Engine"] = searchEngine;
           }
+          // Private mode: the chat route owns the substitution instruction and
+          // validates the value. The mode is a session setting, so it rides
+          // every request while on and disappears when `/private` turns it off.
+          // Same header the stock home transport sets.
+          const privateHeader = privateModeHeaderEntries(Boolean(getPrivateMode?.()));
+          if (privateHeader) headers[privateHeader[0]] = privateHeader[1];
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
             headers["X-Digi-Turn-Mode"] = turnMode;
@@ -403,11 +420,12 @@ export function useEmbedDigiChat({
             headers["X-Digi-Turn-Mode"] = "regenerate";
           }
           headers["X-Digi-Run-Id"] = crypto.randomUUID();
-          // Send-time unlock check — transport is frozen on first render (#1339),
-          // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
-          if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
-            headers["X-Embed-Trial-Unlock"] = "1";
-          }
+          // No client-asserted unlock header here. The client used to send one
+          // and the server used to believe it: a value the browser can set is
+          // not an entitlement. The gate's relief now comes only from the
+          // server's own verdicts — the tenant's quota service, a server-signed
+          // trial proof, an allowlisted monitor — never from the caller
+          // (DIG-4525).
           const chatToken = chatAccessTokenAtSend(resolvedHost);
           if (chatToken) {
             headers["X-Embed-Chat-Token"] = chatToken;
@@ -445,13 +463,13 @@ export function useEmbedDigiChat({
           };
         },
       }),
-    // trialUnlocked and getResponseLanguage both stay in the deps for the rare
-    // case useChat starts honoring transport identity; the send-time read
-    // (see the doc comment on getResponseLanguage above) is what actually
-    // keeps the outgoing language current today. Keeping getResponseLanguage
-    // here costs nothing — the caller builds it with useCallback(() => ...,
-    // []), so its identity never changes and the transport is never rebuilt
-    // on a language change — while satisfying react-hooks/exhaustive-deps.
+    // getResponseLanguage stays in the deps for the rare case useChat starts
+    // honoring transport identity; the send-time read (see the doc comment on
+    // getResponseLanguage above) is what actually keeps the outgoing language
+    // current today. Keeping getResponseLanguage here costs nothing — the
+    // caller builds it with useCallback(() => ..., []), so its identity never
+    // changes and the transport is never rebuilt on a language change — while
+    // satisfying react-hooks/exhaustive-deps.
       [
         accent,
         token,
@@ -460,7 +478,6 @@ export function useEmbedDigiChat({
         byokKey,
         byokProvider,
         byokModel,
-        trialUnlocked,
         getResponseLanguage,
         getEnableWebSearch,
         getDisabledTools,
@@ -468,6 +485,7 @@ export function useEmbedDigiChat({
         getMcpSession,
         getEffort,
         getSearchEngine,
+        getPrivateMode,
         getPlanProof,
         getTrialProof,
         allowClientTurnMutation,

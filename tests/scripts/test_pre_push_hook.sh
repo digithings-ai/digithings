@@ -16,6 +16,10 @@
 #         Paperclip harness checks out) are in the taxonomy, while the
 #         near-misses that a loose prefix match would also admit are not.
 #
+# DIG-4898 — rescue/<issue>-<date>, the branch kit/bin/dt-worktree-rescue pushes
+#         before it retires a worktree, is in the taxonomy: uppercase issue key
+#         and collision suffix included, so the helper's first name is legal.
+#
 # DIG-1589 — duplicate-work guard (resume-before-create):
 #         • a new branch rebuilding >=3 unmerged patch-ids on another unmerged
 #           origin/* branch is refused, and the refusal names the sibling, its
@@ -96,7 +100,7 @@ run_hook() {
   set +e
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) >/dev/null 2>&1
   local rc=$?
@@ -132,7 +136,7 @@ capture_hook() {
   shift 3
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) 2>&1
 }
@@ -200,7 +204,7 @@ run_hook_out() {
   shift 3
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH PRE_PUSH_SKIP_GITLEAKS=1 "$@" \
       bash "$HOOK" origin "$url"
   ) 2>&1 || true
 }
@@ -394,6 +398,32 @@ assert_exit 1 "DIG-47-refused-with-no-slug (slug required)" \
 assert_exit 1 "DIG-47-SLUG refused (slug is lowercase only)" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/DIG-47-SLUG $SAFE_TIP refs/heads/DIG-47-SLUG $DEV_SHA"
+
+# ── DIG-4898: rescue/<issue>-<date> — the branch the rescue helper pushes ────
+# `kit/bin/dt-worktree-rescue` pushes `rescue/<issue>-<date>` when it retires a
+# worktree that still holds work. With no arm, the push was refused, the helper
+# exited 2 and the worktree stayed — so this is run through the real hook, not
+# just the regex, because the refusal is the outcome the helper reads.
+RESCUE_BRANCH='rescue/DIG-4898-2026-10-21'
+assert_exit 0 "rescue/<issue>-<date> accepted (uppercase issue key)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/$RESCUE_BRANCH $SAFE_TIP refs/heads/$RESCUE_BRANCH $DEV_SHA"
+
+# The helper adds `-2`/`-3` when the name is already taken, so the arm has to
+# take a suffix as well — a rescue that collides must not be the one that fails.
+RESCUE_SUFFIXED='rescue/DIG-4898-2026-10-21-2'
+assert_exit 0 "rescue/<issue>-<date>-2 accepted (collision suffix)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/$RESCUE_SUFFIXED $SAFE_TIP refs/heads/$RESCUE_SUFFIXED $DEV_SHA"
+
+# The near-misses: the arm admits a rescue branch, not the word "rescue".
+assert_exit 1 "rescue/ with no name refused" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/rescue/ $SAFE_TIP refs/heads/rescue/ $DEV_SHA"
+
+assert_exit 1 "rescue/ nested further than one segment refused" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/rescue/DIG-4898/2026-10-21 $SAFE_TIP refs/heads/rescue/DIG-4898/2026-10-21 $DEV_SHA"
 
 # ── #2483: live-trading co-sign matrix ───────────────────────────────────────
 LIVE_BLOCKED="$(make_live_tip <<'EOF'
@@ -768,6 +798,34 @@ if awk '
   pass=$((pass + 1))
 else
   echo "FAIL [structure] Allowed-patterns help must list DIG-<n>-<slug>"
+  fail=$((fail + 1))
+fi
+
+# DIG-4898: same two properties for the rescue arm — present in the regex, and
+# named in the help. The uppercase character class is the load-bearing part: a
+# lowercase-only arm leaves the conventional name refused, which is the bug the
+# ticket is about.
+if awk '
+  /^[[:space:]]*#/ { next }
+  /branch_regex=/ && /rescue\/\[A-Za-z0-9-\]\+/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] rescue/<issue>-<date> present in branch_regex (uppercase allowed)"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch_regex missing rescue/[A-Za-z0-9-]+"
+  fail=$((fail + 1))
+fi
+
+if awk '
+  /^[[:space:]]*#/ { next }
+  /echo .*rescue\/<issue>-<date>/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] help text lists rescue/<issue>-<date>"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] Allowed-patterns help must list rescue/<issue>-<date>"
   fail=$((fail + 1))
 fi
 

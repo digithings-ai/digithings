@@ -837,6 +837,13 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
             "r0-client-literals-baseline-growth",
             "advisory",
         ),
+        # DIG-2887 S0: the Supabase exit's usage freeze, same shape as R0 growth.
+        (
+            "Supabase usage freeze (exit in progress)",
+            "ci.yml",
+            "supabase-freeze",
+            "advisory",
+        ),
         ("Workflow secret references", "ci.yml", "workflow-secret-refs", "advisory"),
         (
             "Workflow secret references (PR reporter)",

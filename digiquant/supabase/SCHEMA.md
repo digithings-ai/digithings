@@ -1266,6 +1266,106 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 > footprint but does not reduce the ~48 MB/day of write volume. Deferred from #1758
 > as a human-gated architecture change.
 
+## Tracing index — migration 144 (DIG-2658, ADR-0036)
+
+> **Moved off this project (DIG-2887 S1).** Migration 144 was never applied here and
+> is removed; the same four tables now live in the D1 database `digitrace`
+> (`apps/digitrace-ingest/migrations/0001_digitrace_index.sql`), where
+> `workspace_id` holds the tenant slug and the trace recompute is one SQL statement
+> in the Worker. The description below is kept for the column semantics.
+
+Four `public` tables holding the **queryable window** over the tracing pipeline.
+They are an index, not the record: span bodies live in the R2 bucket
+`digitrace-archive` and never reach Postgres (ADR-0036 §7). A span carries
+`input_hash` / `input_length` / `output_hash` / `output_length` and nothing else
+about its payload; the keys that reach `attributes` / `resource` come from an
+explicit allowlist in the ingest Worker (DIG-2656), never a blanket OTLP copy.
+
+| table | natural key | what it is |
+|---|---|---|
+| `digitrace_traces` | `(workspace_id, trace_id)` | one row per trace: source, name, service, start/end, duration, status, session, run, span count; the span-derived columns are repaired by `refresh_digitrace_trace` |
+| `digitrace_spans_index` | `(workspace_id, trace_id, span_id)` | one row per span: kind, parent, model, provider, tokens, `cost_usd`, hash + length of input and output |
+| `digitrace_scores` | `(workspace_id, trace_id, span_id, name)` | MLflow scores written back; `span_id = ''` is a trace-level score |
+| `digitrace_sessions` | `(workspace_id, session_id)` | one row per session: window, `last_activity_at`, rolled-up trace/span/token/cost totals, written by `refresh_digitrace_session` |
+
+- **Tenancy is the house column**, `workspace_id uuid NOT NULL REFERENCES
+  public.workspaces(id)`. A tenant slug is never the key: the consumer resolves the
+  claimed slug to a `workspaces` row server-side and stamps the id. The slug and its
+  verification flag are **edge values, not columns here** (ADR-0036 §5): the archive
+  object carries `tenant_slug` and `tenant_slug_verified` beside the raw spans, and the
+  index has exactly one tenancy column. A column the writer never populates would read
+  `NULL`/`false` on every row — "unverified" even for a resolved claim — so the index
+  stores only what it can keep true.
+- **`digitrace_traces` is an aggregate too, repaired by a function.** One trace can
+  arrive in several OTLP requests (an SDK timer flushing mid-trace), and the consumer's
+  per-request upsert replaces the earlier slice — the span count shrinks, the start moves
+  later, the name can come from a non-root span, and an error status flips back to OK.
+  `public.refresh_digitrace_trace(workspace_id, trace_id)` recomputes the span-derived
+  columns from `digitrace_spans_index` after a batch's spans are written: `span_count`,
+  the activity window and duration, the root span's name, and a status that never
+  downgrades once it is `STATUS_CODE_ERROR`. It is **UPDATE-only** — the consumer owns
+  the insert and the request-level columns (`source`, `service_name`, `attributes`,
+  `resource`), which are not derivable from the index — and a trace with no spans in the
+  index is left alone. Like the sessions writer it is `SECURITY INVOKER`,
+  `search_path = ''`, `service_role`-only, and serialised on a transaction-scoped
+  advisory lock, here keyed `trace:` + `(workspace_id, trace_id)` so it never collides
+  with the sessions lock. `ended_at` and `duration_ms` stay `NULL` while any span of the
+  trace is still open: a trace has ended only when all of its spans have.
+- **`digitrace_sessions` is an aggregate, written by a function.** PostgREST's
+  `merge-duplicates` upsert replaces a row, so it cannot maintain running counts;
+  `public.refresh_digitrace_session(workspace_id, session_id)` recomputes the row from
+  `digitrace_spans_index` and upserts it. It recomputes rather than accumulates because
+  the consumer's Queue is at-least-once: a redelivered batch must refresh the totals,
+  not double them. Refreshes for one session serialise on a transaction-scoped advisory
+  lock keyed on `(workspace_id, session_id)`: recompute is idempotent but not
+  concurrency-safe on its own, and without the lock the later writer can store the older
+  total. It is `SECURITY INVOKER` (the only grantee, `service_role`, already holds the DML
+  and the SELECT), `search_path = ''`, EXECUTE to `service_role` only.
+  The consumer (DIG-2657) calls it over PostgREST `rpc` once per (workspace, session)
+  after writing that batch's spans. There is no `title` column: nothing in the ingest
+  contract carries one, and the dashboard derives a label from the trace names.
+- **RLS is enabled on all four, and it is not the tenant boundary on the paths that
+  matter.** `service_role` holds BYPASSRLS and both the consumer Worker and
+  `dashboard-api` use it over PostgREST/REST; their boundary is the application-layer
+  `workspace_id = :resolved` predicate. DIG-2661 owns the test for that filter. The
+  `authenticated_select_own_workspace` policy (098's name and shape, via
+  `public.workspace_members`) is the defence for the dashboard's own session. `anon`
+  has nothing.
+- **Grants:** `authenticated` SELECT only; `service_role` SELECT/INSERT/UPDATE/DELETE;
+  `anon` and `PUBLIC` nothing, on tables and on the prune function.
+- **Retention is 90 days of index, 180 days of scores**, so a replay of a 91-180 day
+  window still has somewhere to write the scores it computes. The prune is
+  `public.prune_digitrace_index(index_retain_days DEFAULT 90, scores_retain_days
+  DEFAULT 180)`: SECURITY DEFINER, `search_path = ''`, every name schema-qualified,
+  both integers validated `>= 1`, EXECUTE revoked from `PUBLIC`/`anon`/`authenticated`,
+  so it is not reachable as a PostgREST RPC. Sessions are pruned on `last_activity_at`,
+  not `started_at`, so a session in flight is never pruned under the consumer.
+- **Schedule** follows 061 exactly: `digitrace-index-prune` at `40 5 * * *` and
+  `digitrace-index-vacuum` at `10 6 * * *`. The VACUUM is plain `(ANALYZE)`, never
+  `FULL`, and it lives in the cron job because VACUUM is illegal inside the transaction
+  the apply runs in.
+- **Pause:** `SELECT cron.unschedule('digitrace-index-prune');` /
+  `SELECT cron.unschedule('digitrace-index-vacuum');`
+- **Verify:** `SELECT jobname, username, schedule FROM cron.job WHERE jobname LIKE
+  'digitrace-%';` — expect two rows. The jobs run as the role that applied the
+  migration, and a non-owner prunes 0 rows silently, so 144 asserts ownership at apply
+  time the way 061 does.
+- **Days 91-180 are a deliberate cold tier.** The index row is gone, the R2 object is
+  not: `digitrace replay` enumerates R2 by prefix
+  `tenant=<slug>/date=<YYYY-MM-DD>/` with no index to help it. That is supported on
+  purpose, and it is not searchable from the dashboard.
+- **`mlflow` is a separate, machine-owned exception** and is not in 144. The tracking
+  store lives in its own `mlflow` schema reached by two dedicated roles
+  (`digitrace_mlflow_owner` owns it and runs the Alembic DDL; `digitrace_mlflow` is
+  runtime DML only, via `ALTER DEFAULT PRIVILEGES`), `anon`/`authenticated`/`PUBLIC`
+  revoked, `db_schemas` staying `public`. It needs role passwords, so it is a CHRIS
+  STEP, not a migration (ADR-0036 §4 as amended by PR #6277).
+
+> **Open:** applying 144 to `core` is manual. `.github/workflows/db-migrate.yml` was
+> removed in #4919, so the apply is the SQL plus a `public.digithings_schema_migrations`
+> ledger insert. Several places in [`README.md`](README.md) still describe the deleted
+> workflow as the apply path — that correction is its own change, not this one.
+
 ## Dead / deprecated
 
 - `sec_recent_filings` — dropped in migration 017.

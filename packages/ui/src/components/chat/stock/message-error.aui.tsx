@@ -10,6 +10,7 @@ import type { FC } from "react";
 import { ChatNoticeContent, ChatNoticeDetail, chatNoticeRootProps } from "./chat-notice";
 import { Button } from "@digithings/ui/ui";
 import { useSkinRuntime, type SkinErrorParsers } from "./skin-runtime";
+import { useStockShape } from "./stock-shape";
 
 function messageStatusErrorText(status: {
   type?: string;
@@ -37,6 +38,7 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
   formatError,
 }) => {
   const runtime = useSkinRuntime();
+  const stock = useStockShape();
   // Hosts provide the product parsers via SkinRuntimeProvider (errorParsers).
   // Without one the banner falls back to the raw message text (WS4).
   const parse = parseError ?? runtime.errorParsers?.parseError ?? (() => null);
@@ -57,7 +59,7 @@ export const MessageError: FC<Partial<SkinErrorParsers>> = ({
   // lines, on assistant-ui's ErrorPrimitive.Root.
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root {...chatNoticeRootProps("error", "aui-message-error-root mt-2")}>
+      <ErrorPrimitive.Root {...chatNoticeRootProps("error", "aui-message-error-root mt-2", stock)}>
         <ChatNoticeContent
           tone="error"
           title={

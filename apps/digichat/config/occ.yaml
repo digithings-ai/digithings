@@ -1,0 +1,109 @@
+version: 1
+# OCC (Online Compliance Center) — one complete deployment document.
+#
+# Derived from the LIVE tenant row (KV `embed-tenants`, `occ.digithings.ai`),
+# not from `config/examples/occ-embed.yaml`: that file is the old overlay and
+# differs on the index, the gate mode, llmAccess, the MCP URLs and the tool
+# lists. Slice 1 of docs/plans/digichat-one-config-epic.md.
+#
+# Nothing reads this file in production yet — the KV row still serves.
+# `src/lib/deploy-config/tenant-documents.equivalence.test.ts` holds the two to
+# each other.
+hosts:
+  occ.digithings.ai:
+    slug: occ
+    chrome:
+      # The live row says `layout: page`, which the legacy bridge resolves to
+      # `mode: app` — the full product chat rather than the embeddable widget.
+      # ChromeModeSchema has no "page", so this is that same mapping, written
+      # out. It is what keeps `/chat/occ` on the product chat.
+      mode: app
+      # The one value stated differently from the live row, which omits
+      # `theme` (so the tenant parser defaults it to dark). The OCC surface is
+      # light; the equivalence test asserts this as an explicit delta.
+      theme: light
+      skin: digichat
+      title: OCC help assistant
+      welcome: Ask about OCC.
+      attribution: true
+    features:
+      # The live row carries no `features` block, and the bridge resolves
+      # attachments to false (explicit-true-only). Stated here rather than left
+      # to the schema default, which is true.
+      attachments: false
+    models:
+      # Picker on: OCC opens with the catalog picker and no premium meter
+      # (Chris, 21 Oct 2026: "OCC has no token limits and no premium meter").
+      occPicker: true
+    backend:
+      type: digigraph
+      # Two corpora: the help centre plus the Zammad ticket export. The comma
+      # list is the live value and goes upstream whole as X-Digi-Corpus-Index.
+      digisearchIndex: "occ_help,occ-tickets"
+      vaultPathPrefix: clients/online-compliance-center
+    tools:
+      allowUserToggle: true
+      catalog:
+        - id: digisearch
+          default: true
+          label: digisearch
+          tools:
+            - id: digisearch
+            - id: digisearch_zammad_tickets
+        - id: digivault
+          default: true
+          label: digivault
+          tools:
+            - id: digivault_search_notes
+            - id: digivault_get_note
+            - id: digivault_search_tag
+            - id: digivault_backlinks
+    mcp:
+      allowUserServers: false
+      allowAddForm: false
+      servers:
+        # Zammad is the static shape: the Worker's edge key, sent under its own
+        # header. The name only — never a value. The allowlist is the whole
+        # tool grant; an omitted list denies every tool.
+        - id: zammad
+          url: https://digithings.ai/api/mcp/zammad/mcp
+          default: true
+          tokenEnv: ZAMMAD_EDGE_KEY
+          authHeader: x-digi-mcp-key
+          allowedTools:
+            - search_tickets
+            - list_tickets
+            - get_ticket
+            - ticket_report
+            - aggregate_tickets
+          mutatingTools: []
+        # digisearch and digivault are the jwt shape: the BFF mints a scoped
+        # digikey token per request and the MCP edge verifies it.
+        - id: digisearch
+          url: https://search.digithings.ai/_stack/mcp/digisearch/mcp
+          authScheme: jwt
+          default: true
+          setup:
+            index_name: occ_help
+        - id: digivault
+          url: https://graph.digithings.ai/_stack/mcp/digivault/mcp
+          authScheme: jwt
+          default: true
+          setup:
+            path_prefix: clients/online-compliance-center
+    gate:
+      # The invite link is the only gate, and the edge enforces it: without the
+      # credential the surface 404s before the app renders (embed-invite-only.ts
+      # and the Worker's occ-gate.ts). In the app `invite` accounts turns like
+      # `ungated` — no free-turn quota, no trial form — because the gate has
+      # already run by the time a request reaches the chat route.
+      mode: invite
+      activityDetail: full
+      llmAccess: free_then_byok
+      showByok: true
+      # OCC locks session tool/MCP toggles: visitors cannot widen the surface.
+      lockSessionControls: true
+      webSearch: false
+    # The invite key, named. Resolved from the container's environment at load
+    # and never projected to the browser — the file holds no secret.
+    tokenEnv: OCC_INVITE_KEY

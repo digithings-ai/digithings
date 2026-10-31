@@ -38,55 +38,87 @@ test("the CLI refuses an unknown flag, a missing value and a stray word", () => 
   expect(() => parseArgs(["--nope"])).toThrow(/unknown flag/);
   expect(() => parseArgs(["--out"])).toThrow(/needs a value/);
   expect(() => parseArgs(["--width"])).toThrow(/needs a value/);
-  expect(() => parseArgs(["--width", "0"])).toThrow(/positive number/);
-  expect(() => parseArgs(["--width", "wide"])).toThrow(/positive number/);
+  expect(() => parseArgs(["--width", "0"])).toThrow(/positive (whole )?number/);
+  expect(() => parseArgs(["--width", "wide"])).toThrow(/positive (whole )?number/);
+  expect(() => parseArgs(["--width", "80px"])).toThrow(/positive (whole )?number/);
+  expect(() => parseArgs(["--width", "12.9"])).toThrow(/positive (whole )?number/);
   expect(() => parseArgs(["--captured-at", "yesterday"])).toThrow(/zone/);
-  expect(() => parseArgs(["extra"])).toThrow(/unexpected argument/);
+  expect(() => parseArgs(["extra"])).toThrow(/(unexpected argument|unknown flag)/);
 });
 
-test("the CLI records the chat pane of the real client", async () => {
-  // The CLI runs in its own process: the client resolves its API base when
-  // its module loads, so the exporter must control the environment before
-  // that happens. The record it writes is what the dashboard renders.
-  const dir = await mkdtemp(join(tmpdir(), "digichat-tui-frame-"));
-  const out = join(dir, "frame.json");
-  const child = Bun.spawn(["bun", "src/export-frame.ts", "--out", out], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  expect(exitCode).toBe(0);
-  expect(stderr).not.toContain("error:");
-  expect(stdout).toContain("wrote");
+test(
+  "the CLI records the chat pane of the real client",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "digichat-tui-frame-"));
+    const out = join(dir, "frame.json");
+    const child = Bun.spawn(["bun", "src/export-frame.ts", "--out", out], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    // The child's own output is the only way to see why it failed, so it goes in
+    // the message rather than a bare exit code.
+    if (exitCode !== 0) {
+      throw new Error(`the exporter exited ${exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+    }
+    expect(stdout).toContain("wrote");
+    expect(stderr).not.toContain("error:");
+    expect(stderr).not.toContain("the digichat thread did not load");
 
-  const record = JSON.parse(await readFile(out, "utf8")) as {
-    source: string;
-    path: string;
-    capturedAt: string;
-    width: number;
-    height: number;
-    frame: string;
-  };
-  expect(record.source).toBe("digichat-tui");
-  expect(record.path).toBe("/thread");
-  expect(record.capturedAt.length).toBeGreaterThan(0);
-  expect(record.frame).toContain("captureCharFrame");
-  expect(record.frame).not.toContain("the official API could not be reached");
-  // The rail is cropped away: the session title lives only in the rail.
-  expect(record.frame).not.toContain("book");
-  expect(record.width).toBeLessThan(100);
-  expect(record.height).toBeGreaterThan(0);
-});
+    const record = JSON.parse(await readFile(out, "utf8")) as {
+      source: string;
+      path: string;
+      capturedAt: string;
+      width: number;
+      height: number;
+      frame: string;
+    };
+    expect(record.source).toBe("digichat-tui");
+    expect(record.path).toBe("/thread");
+    expect(record.capturedAt.length).toBeGreaterThan(0);
 
+    expect(record.frame).toContain("what is a recorded frame");
+    expect(record.frame).toContain("a recorded captureCharFrame() frame");
+    expect(record.frame).toContain("Ask digichat");
+    expect(record.frame).not.toContain("the official API could not be reached");
+
+    expect(record.frame).not.toContain("book");
+    for (const row of record.frame.split("\n")) {
+      if (row.trim() === "") continue;
+      expect(row.startsWith("  ")).toBe(true);
+    }
+
+    expect(record.width).toBeGreaterThan(0);
+    expect(record.height).toBe(record.frame.split("\n").length);
+    expect(record.width).toBe(
+      Math.max(...record.frame.split("\n").map((row) => row.length)),
+    );
+  },
+  // A cold `bun` child under the local-ci pool is routinely slower than bun's
+  // 5 s default, and a timeout there is a flake, not a finding.
+  60_000,
+);
 test("the committed fixture is what the exporter writes today", async () => {
-  // The artifact is committed, so the exporter can be checked against it: a
-  // hand-edited frame, a crop that drifted or a changed fixture all fail here.
-  // The capture time is pinned from the artifact, so the comparison holds.
   const committed = JSON.parse(await readFile(ARTIFACT, "utf8"));
   const record = await captureChatThread({ capturedAt: committed.capturedAt });
   expect(record).toEqual(committed);
 });
+
+test(
+  "a second capture in one process still proves it read the fixture",
+  async () => {
+    // Two captures in one process: the guard resets the fixture counter at the
+    // start of each capture, so the second frame must make its own reads. If
+    // the client stopped refetching per mount, this capture would read nothing
+    // and the guard would throw rather than record a stale frame.
+    const first = await captureChatThread({ capturedAt: "2026-10-22T06:00:00.000Z" });
+    const second = await captureChatThread({ capturedAt: "2026-10-22T06:00:00.000Z" });
+    expect(second.frame).toBe(first.frame);
+    expect(second.frame).toContain("what is a recorded frame");
+  },
+  30_000,
+);

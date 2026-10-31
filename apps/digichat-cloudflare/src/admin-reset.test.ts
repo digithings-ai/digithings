@@ -129,7 +129,9 @@ describe("DIGICHAT_ADMIN_KEY stays Worker-only", () => {
       /const containerId = sharedDigichatContainerId\(workerEnv\.DIGICHAT_CONTAINER_REV\)/,
     );
     const resetCall = indexSource.indexOf("digichatContainerReset(");
-    const proxyCall = indexSource.indexOf("getContainer(workerEnv.DIGICHAT, containerId)");
+    // The LAST getContainer is the proxy path; the OCC gate also builds a
+    // container handle earlier in the same handler, from the same id.
+    const proxyCall = indexSource.lastIndexOf("getContainer(workerEnv.DIGICHAT, containerId)");
     expect(resetCall).toBeGreaterThan(-1);
     expect(proxyCall).toBeGreaterThan(resetCall);
     const resetBlock = indexSource.slice(resetCall, indexSource.indexOf("});", resetCall));

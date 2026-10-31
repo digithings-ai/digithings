@@ -33,12 +33,13 @@ describe("the stack Worker imports the retry helper", () => {
 describe("every container-backed route retries once", () => {
   it("wraps every container.fetch call site", () => {
     const source = stackSource();
-    // Four container-backed routes: the digikey proxy, the in-container MCP
-    // edge proxy, the hostname proxy (graph./key./search.) and the reserved
-    // digiquant-mcp container.
+    // Three container-backed routes: the digikey proxy, the in-container MCP
+    // edge proxy and the hostname proxy (graph./key./search.). The reserved
+    // digiquant-mcp hostname is Worker-native since DIG-2913 (a Durable
+    // Object, no container.fetch), so it is deliberately not counted.
     const fetches = source.match(/container\.fetch\(/g) ?? [];
     const wrapped = source.match(/fetchWithContainerRetry\(/g) ?? [];
-    expect(fetches).toHaveLength(4);
+    expect(fetches).toHaveLength(3);
     // One wrapper per fetch: a new unwrapped call site would make the counts
     // diverge, and a wrapper without a fetch would make them diverge too.
     expect(wrapped).toHaveLength(fetches.length);
@@ -48,8 +49,8 @@ describe("every container-backed route retries once", () => {
     // The body of a consumed Request cannot be replayed, so each attempt
     // needs its own clone. One per container-backed route.
     const source = stackSource();
-    expect(source.match(/request\.clone\(\)/g) ?? []).toHaveLength(4);
-    // A clone hoisted ABOVE the retry closure would keep the count at 4 and
+    expect(source.match(/request\.clone\(\)/g) ?? []).toHaveLength(3);
+    // A clone hoisted ABOVE the retry closure would keep the count at 3 and
     // this test green, while attempt 2 then tries to re-send a consumed body
     // (TypeError) and the replay silently stops working. Every clone must be
     // an inline argument of the attempt.
@@ -58,16 +59,17 @@ describe("every container-backed route retries once", () => {
 
   it("wraps every container fetch in a closure", () => {
     const source = stackSource();
-    expect(source.match(/fetchWithContainerRetry\(\(\) =>/g) ?? []).toHaveLength(4);
+    expect(source.match(/fetchWithContainerRetry\(\(\) =>/g) ?? []).toHaveLength(3);
   });
 
   it("converts the containers package's 500 into the failed-container answer", () => {
     // @cloudflare/containers 0.3.7 answers a container that died mid-request
     // with a 500 instead of throwing, so the recycle has to be recognised on
-    // the RESPONSE — once per container class.
+    // the RESPONSE — once for the one remaining container class (the
+    // digiquant-mcp container was deleted in DIG-5558).
     const source = stackSource();
     expect(source).toContain("containerRestartMessage");
-    expect(source.split("await containerRestartMessage(response)").length - 1).toBe(2);
+    expect(source.split("await containerRestartMessage(response)").length - 1).toBe(1);
   });
 
   it("keeps the MCP edge proxy forwarding to the mapped port", () => {
@@ -90,28 +92,26 @@ describe("the container wrapper separates a failed container from a booting one"
     // reads the message out of the thrown value, the hop catch reads it out
     // of the classification (DIG-4928).
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const boot = `return containerFailedResponse("${service}", message);`;
-      const hop = `return containerFailedResponse("${service}", failure.message);`;
-      expect(source.split(boot).length - 1).toBe(1);
-      expect(source.split(hop).length - 1).toBe(1);
-    }
+    const boot = 'return containerFailedResponse("stack", message);';
+    const hop = 'return containerFailedResponse("stack", failure.message);';
+    expect(source.split(boot).length - 1).toBe(1);
+    expect(source.split(hop).length - 1).toBe(1);
+    // The deleted digiquant-mcp container (DIG-5558) must not wire this again.
+    expect(source).not.toContain('containerFailedResponse("mcp"');
   });
 
   it("keeps the boot 503 for a container that is still starting", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      expect(source).toContain(`return containerBootingResponse("${service}", message);`);
-    }
+    expect(source).toContain('return containerBootingResponse("stack", message);');
+    expect(source).not.toContain('containerBootingResponse("mcp"');
   });
 
   it("keeps the evicted 410 for a confirmed eviction", () => {
     const source = stackSource();
-    for (const service of ["stack", "mcp"]) {
-      const boot = `return containerEvictedResponse("${service}", message);`;
-      const hop = `return containerEvictedResponse("${service}", failure.message);`;
-      expect(source.split(boot).length - 1).toBe(1);
-      expect(source.split(hop).length - 1).toBe(1);
-    }
+    const boot = 'return containerEvictedResponse("stack", message);';
+    const hop = 'return containerEvictedResponse("stack", failure.message);';
+    expect(source.split(boot).length - 1).toBe(1);
+    expect(source.split(hop).length - 1).toBe(1);
+    expect(source).not.toContain('containerEvictedResponse("mcp"');
   });
 });

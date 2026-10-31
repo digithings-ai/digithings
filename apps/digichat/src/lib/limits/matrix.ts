@@ -58,7 +58,10 @@ export const SUPPORT_MATRIX: Record<string, Record<LimitKind, MatrixCell>> = {
     cost: "enforce",
     turns: "enforce",
     sessions: "enforce",
-    toolCalls: "best-effort",
+    // Enforced, not best-effort: digichat forwards the cap as
+    // X-Digi-Max-Tool-Calls and digigraph → digillm counts executed calls and
+    // wraps up tool-free at the cap. Silently — no notice in the UI.
+    toolCalls: "enforce",
     models: "enforce",
   },
   langgraph: {

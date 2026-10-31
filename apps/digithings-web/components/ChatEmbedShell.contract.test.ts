@@ -10,6 +10,7 @@ import {
   formatShellLoadDiagnostic,
   readParentDocumentPalette,
   readParentDocumentTheme,
+  readPrivateMode,
 } from "@/components/ChatEmbedShell";
 
 describe("ChatEmbedShell contracts", () => {
@@ -21,6 +22,16 @@ describe("ChatEmbedShell contracts", () => {
 
   it("allows cold-start before treating a missing ready as a load failure", () => {
     expect(EMBED_READY_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("forwards private mode only for an exact 1, for any tenant", () => {
+    expect(readPrivateMode("?private=1")).toBe(true);
+    expect(readPrivateMode("?private=0")).toBe(false);
+    expect(readPrivateMode("?private=true")).toBe(false);
+    expect(readPrivateMode("?private=")).toBe(false);
+    expect(readPrivateMode("?wide=1")).toBe(false);
+    expect(readPrivateMode("")).toBe(false);
+    expect(readPrivateMode(undefined)).toBe(false);
   });
 
   it("posts digichat:theme with light|dark and an optional palette", () => {
@@ -102,22 +113,29 @@ describe("ChatEmbedShell contracts", () => {
     expect(handler).toContain("buildEmbedThemeMessage");
   });
 
-  it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
+  it("covers the cold Container with the digichat hero banner until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
-    // and keep the cold-start window animated. The shell mounts the shared
-    // @digithings/ui tool-chain boot (the loader the embed itself runs), but only after
-    // WARMUP_DELAY_MS (warm loads stay flash-free) and only until ready; the
-    // iframe is opacity-0 underneath and .dc-chat-frame paints the theme
-    // canvas from the first HTML (see globals.css).
+    // and keep the cold-start window animated. One cover for every surface —
+    // /chat, /chat/occ, the landing pop-up and the host panels: the digichat
+    // hero banner's LOADING pass, the same animation digichat paints itself.
+    // The old BootLabOverlay tool-chain rows are gone on purpose; they
+    // simulated tool work the visitor never started and made the OCC chat
+    // differ from the digichat chat. Mounted only after WARMUP_DELAY_MS (warm
+    // loads stay flash-free) and only until ready; the iframe is opacity-0
+    // underneath and .dc-chat-frame paints the theme canvas from the first
+    // HTML (see globals.css).
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
-    expect(src).toContain("BootLabOverlay");
-    expect(src).toContain('variant="tooltask"');
+    // No caller can reach the old tool-call rows: the variant, the component
+    // and the switch that chose between them are all gone.
+    expect(src).not.toContain("BootLabOverlay");
+    expect(src).not.toContain("tooltask");
+    expect(src).not.toContain("warmupLoader");
     // Reveal waits on the iframe handshake AND the shared service warm-up.
     // Same gate for the landing pop-up, /chat, and /chat/occ.
-    expect(src).toContain("readyEdge={revealed}");
+    expect(src).toContain("aria-busy={!revealed}");
     expect(src).toContain("waitForServices");
     expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
     expect(src).toContain(`signalDigichatBootStep("services")`);
@@ -126,23 +144,22 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: revealed ? 1 : 0");
 
-    // The full-page routes paint the digichat hero banner in that same cover
-    // instead of the tool chain: /chat and /chat/occ are only the chat, so a
-    // simulated tool list would invent work the visitor never started. The
-    // landing pop-up leaves warmupLoader at its default ("toolchain") and
-    // keeps the BootLabOverlay branch above.
+    // The banner is the cover, unconditionally, and the screen-reader line with
+    // it. The error card is a sibling of this region (see EmbedLoadErrorCard
+    // below), so removing the tool-chain branch orphaned nothing.
     expect(src).toContain('from "@digithings/hero-banner/web"');
     expect(src).toContain('from "@digithings/hero-banner/definitions"');
-    expect(src).toContain('warmupLoader?: "toolchain" | "banner"');
-    expect(src).toContain('warmupLoader = "toolchain"');
-    expect(src).toContain('warmupLoader === "banner"');
     expect(src).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
+    expect(src).toContain("min(560px, 72vw)");
+    expect(src).toContain("Loading chat…");
+    expect(src).toContain("<EmbedLoadErrorCard onRetry={retryEmbed} />");
 
     const pageShellSrc = readFileSync(
       fileURLToPath(new URL("./ChatPageShell.tsx", import.meta.url)),
       "utf8",
     );
-    expect(pageShellSrc).toContain('warmupLoader="banner"');
+    // The full-page route no longer asks for the banner — it is the default.
+    expect(pageShellSrc).not.toContain("warmupLoader");
     // Curated per-host copy rides into the iframe URL. The strings themselves
     // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
     // same conversation with the same welcome — assert both halves: the URL
@@ -155,7 +172,7 @@ describe("ChatEmbedShell contracts", () => {
     const copyPath = fileURLToPath(new URL("../lib/embedCopy.ts", import.meta.url));
     const copy = readFileSync(copyPath, "utf8");
     expect(copy).toContain("Ask about digithings");
-    expect(copy).toContain("Ask about Online Compliance Center");
+    expect(copy).toContain('welcome: "Ask about OCC.",');
   });
 
   it("forwards the OCC invite key from the parent URL to the embed", async () => {
@@ -189,19 +206,19 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain('!current.includes("token=")');
   });
 
-  it("opts /chat/occ into the invite key and leaves /chat out", async () => {
-    const { readFileSync } = await import("node:fs");
+  it("serves OCC from the app, not a Pages shell (2026-10-27 consolidation)", async () => {
+    const { existsSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
-    const occ = readFileSync(
-      fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url)),
-      "utf8",
-    );
-    const chat = readFileSync(
-      fileURLToPath(new URL("../app/chat/page.tsx", import.meta.url)),
-      "utf8",
-    );
-    expect(occ).toContain("acceptsInviteToken");
-    expect(chat).not.toContain("acceptsInviteToken");
+    // The OCC shell and its Pages twin gate are gone: /chat/occ is the app's
+    // own embed route, gated once at the Worker and proxied to the container.
+    // A reappearing Pages copy would reintroduce the second secret and the
+    // second deploy surface this change removed.
+    expect(
+      existsSync(fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url))),
+    ).toBe(false);
+    expect(
+      existsSync(fileURLToPath(new URL("../functions/chat/occ/[[path]].ts", import.meta.url))),
+    ).toBe(false);
   });
 
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {
@@ -214,7 +231,11 @@ describe("ChatEmbedShell contracts", () => {
     const shellPath = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
     const shellSrc = readFileSync(shellPath, "utf8");
     expect(shellSrc).toContain('className="dc-chat-frame"');
-    expect(shellSrc).toContain("BootLabOverlay");
+    // First embed request carries the parent palette, not only light/dark.
+    expect(shellSrc).toContain("EMBED_FRAME_THEME_SCRIPT");
+    expect(shellSrc).toContain("url.searchParams.set('palette',palette)");
+    // The transparent overlay is the banner cover now, not the tool-chain rows.
+    expect(shellSrc).toContain("<HeroBanner def={DIGICHAT} replayLoading />");
     expect(shellSrc).toContain('background: "transparent"');
 
     const cssPath = fileURLToPath(new URL("../app/globals.css", import.meta.url));

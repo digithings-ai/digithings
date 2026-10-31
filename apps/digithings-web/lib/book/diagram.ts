@@ -93,7 +93,8 @@ export function findDiagramFences(body: string): DiagramFence[] {
   const out: DiagramFence[] = [];
   let i = 0;
   while (i < lines.length) {
-    const open = /^(\s*)(`{3,}|~{3,})\s*([A-Za-z0-9_+-]*)\s*$/.exec(lines[i]);
+    // Anything after the language is the info string (a diagram's caption).
+    const open = /^(\s*)(`{3,}|~{3,})\s*([A-Za-z0-9_+-]*)(?:\s+[^`]*)?$/.exec(lines[i]);
     if (!open) {
       i += 1;
       continue;

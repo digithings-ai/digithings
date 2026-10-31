@@ -14,16 +14,24 @@ and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-
 NOT gated (DIG-3605 owns the
 rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
-Also posts `Every commit reaching main was reviewed` (main's required context,
-same logic ci-review-coverage.yml runs via scripts/check_review_coverage.py) for
-same-repo develop->main promotion PRs (DIG-3743). Nothing else posts that name.
+Also judges same-repo develop->main promotion PRs with the same logic
+ci-review-coverage.yml runs via scripts/check_review_coverage.py (DIG-3743),
+and keeps the per-PR log as evidence only. It publishes no row for main's
+required review context: that verdict has one producer, the workflow
+(DIG-4507), and this runner asserts that with the producer guard.
 An explicit --pr N run resolves the pull request in any state: a closed or a
 merged one still gets a verdict that names it and its state, never a silent
 skip (DIG-4812).
+A failure that names only the PR metadata gates (`pr-title`, `pr-template`) is
+re-checked on the same head once the title or the body is corrected: that
+remedy does not touch the tree, so no commit and no review is thrown away for
+it (DIG-5695). A failure that names a code gate stays terminal.
 A run that no trusted launcher started is refused before anything happens:
 the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
+import concurrent.futures
+import hashlib
 import io
 import json
 import os
@@ -49,6 +57,10 @@ try:
     import launch_guard
 except ImportError:  # fail closed everywhere: a run without the guard does not run at all
     launch_guard = None
+try:
+    import import_preflight
+except ImportError:  # the install check itself is missing: _require_install refuses
+    import_preflight = None
 
 
 def _guard(ctx="local-ci"):
@@ -59,12 +71,62 @@ def _guard(ctx="local-ci"):
     through main(), so a guard that only lived in main() would not be asked on
     the path the live job takes. A run that no trusted launcher started is
     refused with exit 78 before the lock, the worktree, the log or GitHub.
+
+    A launcher that is trusted is not enough: the install has to be complete,
+    so the same entry points then check every module the runner imports
+    (DIG-5585). A helper that was never copied in binds to None and fails
+    closed, which reads as a real verdict on every PR; the tick is refused
+    instead, naming the module.
     """
     if launch_guard is None:
         sys.stderr.write("local_ci: the launch_guard module is missing; refusing to "
                          "run rather than run unguarded (DIG-4796)\n")
         sys.exit(78)
     launch_guard.enforce(__file__, ctx)
+    _require_install()
+
+
+#: Set once the install has been checked in this process: the guard is asked at
+#: every entry point, and rescanning the same files each time buys nothing.
+_INSTALL_CHECKED = False
+
+
+def _require_install(runner_path=None):
+    """Refuse to tick when a module this runner imports is absent (DIG-5585).
+
+    The runner imports its helpers with a ``None`` fallback and each helper
+    fails closed, so a module that was never copied in does not stop the tick:
+    it makes every verdict read as a real failure. On 24 Oct a checkout
+    without ``scripts/review_pass_filter.py`` left eight PRs red on
+    ``review-applied`` while the status blamed the review (DIG-4674).
+
+    A broken install is refused before anything else happens: no lock, no
+    worktree, no GitHub write. The refusal names the missing module and the
+    module that imports it, and exits 78 (EX_CONFIG).
+    """
+    global _INSTALL_CHECKED
+    if runner_path is None:
+        if _INSTALL_CHECKED:
+            return
+        runner_path = __file__
+    if import_preflight is None:
+        lines = ["local-ci: the import_preflight module is missing; refusing to tick "
+                 "rather than tick without the install check (DIG-5585)"]
+    else:
+        missing = import_preflight.check(runner_path)
+        if not missing:
+            _INSTALL_CHECKED = True
+            return
+        lines = import_preflight.report(missing, runner_path)
+    for line in lines:
+        sys.stderr.write(line + "\n")
+        try:
+            log(line)
+        except OSError:
+            # A log directory that cannot be written must not turn a refusal
+            # into a traceback: the refusal is the message.
+            pass
+    sys.exit(78)
 
 
 HOME = os.path.expanduser("~")
@@ -85,16 +147,15 @@ CLAIMS = f"{HOME}/.config/digithings/state/local-ci-claims"
 # ledger, or by the CI container, which keeps its own state directory - is given
 # this long before it is treated as lost. The window has to be longer than the
 # longest a producer can spend on one head, because a row that is younger than
-# that may still have a producer behind it: the runner's own step timeouts sum
-# to about 17100 s (gitleaks 1800 s, uv sync 1800 s, npm ci 1800 s, mypy
-# 1200 s, eight worker dry-runs of 300 s each and the rest). Taking a head
-# away earlier puts two producers on one head and two `local-ci` rows on the
-# required check, which is worse than a head that waits.
+# that may still have a producer behind it: the runner's own step budgets sum
+# to about 15000 s (gitleaks 600 s, uv sync 900 s, npm ci 600 s, mypy 600 s,
+# eight worker dry-runs of 300 s each, eight bun suites at 900 s each and the
+# rest), so anything shorter would take a head from a run that is still going.
 CLAIM_STALE_SECS = 21600
 # A claim held for longer than this is void: a run that legitimately takes
 # longer than this is hung, and a hung run owes the head a receipt. The window
-# is longer than the worst case a living run can take (about 4.75 h of step
-# timeouts), so a slow but alive run keeps the head it is checking and no
+# is longer than the worst case a living run can take (about 4.2 h of step
+# budgets), so a slow but alive run keeps the head it is checking and no
 # second run is started on top of it.
 CLAIM_MAX_SECS = 28800
 # The life of the tick lock: a lock whose holder is gone is taken over after
@@ -106,7 +167,7 @@ LOCK_MAX_AGE = 7200
 # mtime of that directory to decide whether the holder is wedged: it kills a
 # live holder that has held the lock for 1800 s (com.digithings.daemon-liveness,
 # MAX_HOLDER_SECONDS). A tick that gates one PR runs far longer than that - the
-# runner's own step timeouts sum to about 17100 s - so the supervisor killed a
+# runner's own step budgets sum to about 15000 s - so the supervisor killed a
 # healthy runner mid-run: the receipt never landed, the head kept a `pending`
 # row and the PR lost its required check until the next tick (DIG-5135).
 # The runner renews the lock while it works. A working tick stays fresh, and a
@@ -139,17 +200,20 @@ APP_CTX = "local-ci/app"
 APP_TOKEN_FILE = f"{HOME}/.config/digithings/secrets/app-token"
 # Primary memory gate (DIG-3783): skip below this system-wide free percentage,
 # the same signal the board driver uses. vm_stat reclaimable MB is the fallback.
-# Exact context name required by main's branch protection (ci-review-coverage.yml
-# job `review-coverage`). Posted by local-ci for develop->main promotion PRs while
-# GitHub Actions minutes are exhausted (DIG-3743). Never rename: protection matches
-# this string.
-REVIEW_CTX = "Every commit reaching main was reviewed"
 # One promotion review per tick: the range is ~1000 commits and takes minutes.
 REVIEW_MAX_PER_TICK = 1
-# A posted failure is re-checked at most hourly: reviews/approvals/labels may land
-# after the verdict, but re-running every 3 min tick would burn the Mac for nothing.
+# A judgement is repeated at most hourly: reviews, approvals and labels may land
+# after it, but re-walking a ~1000-commit range every 3 min tick would burn the
+# Mac for nothing.
 REVIEW_RECHECK_SECS = 3600
 SKIP_PREFIX = "local-ci skipped:"
+# A failure whose gates are all PR metadata (DIG-5695). These are the only
+# gates whose remedy does not touch the tree: the author edits the title or the
+# body, the head and every review on it stay as they are, and the head is worth
+# one more look on the same sha. A failure that names any other gate stays
+# terminal: re-queueing a code failure would loop the daemon on every tick and
+# re-run a whole lane for nothing.
+METADATA_GATES = frozenset({"pr-title", "pr-template"})
 # Memory gate (DIG-3706, fixed DIG-3783): vm.swapusage "free" is headroom inside
 # already-allocated swap files, which macOS grows on demand, so it false-trips
 # while the Mac is healthy (727-855MB free vs 900MB gate, with 81% system-wide
@@ -179,8 +243,9 @@ RUFF_PATHS_CANDIDATES = ("digibase/src", "digibot/src", "digigraph/src",
 
 # Worker dry-run build gate (DIG-4010): same worker app paths and build command as
 # ci.yml `worker-build` (PR #5802). Trips only on PRs touching a gated path.
-WORKER_APPS = ("digithings-cron", "dashboard-api", "digidata-api", "digiquant-runner",
-               "digitrace-langfuse", "digichat-cloudflare", "digithings-stack-cloudflare",
+WORKER_APPS = ("digithings-cron", "dashboard-api", "digiquant-runner",
+               "digitrace-ingest", "digichat-cloudflare",
+               "digithings-stack-cloudflare",
                # twelvex-runner is in the ci.yml worker-build matrix but was missing
                # here, so the local gate built one Worker less than CI does. It is
                # the build that proves the app's workspace imports bundle (DIG-4753).
@@ -217,6 +282,16 @@ BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digi
 BUN_PIN = "1.4.2"
 BUN_INSTALL_TIMEOUT = 600
 BUN_TEST_TIMEOUT = 300
+# --- how many independent gates run at once --------------------------------
+# Every gate below is its own process with its own temp paths, its own cwd and
+# its own report file, so nothing about them needs the others to have finished.
+# They ran one after another until this pool existed, and the tick paid every
+# step's full latency in series: on 2026-10-25 the same 25 steps measured 100 s
+# on an idle Mac and 51 min while the agent fleet was building (local-ci.log
+# 17:23:05 -> 18:14:09), because each step queued behind the others for a slot.
+# The pool is bounded well under the host's core count so one tick cannot crowd
+# out the rest of the machine - the failure mode the serial version had.
+STEP_POOL = 6
 os.makedirs(LOGD, exist_ok=True)
 # --- VPN proxy (DIG-4453) ------------------------------------------------------
 # Measured 2026-10-19: `npm exec -- wrangler deploy --dry-run` never returns when
@@ -254,9 +329,48 @@ ENV = build_env()
 # A scanner has to finish before the tree is judged, and the budget for that is
 # the machine's, not the guard's. On 2026-10-22 the post-merge run on develop
 # 8cfd404816a6 turned three scanners red on a 600 s timeout while the tree was
-# clean (DIG-5318). The budget is overridable so a slow host can be given more
-# room without a code change.
+# clean (DIG-5318). This is the scanner's own ceiling AND its step budget: a
+# scanner is not in STEP_BUDGETS, so before DIG-5724 it took the 180 s default
+# and min(180, 600) made this knob inert. On PR #6525 (2026-10-27) five
+# clean-tree scanners were killed at 182-183 s while the tree was clean; the
+# 600 s default is 3.3x that worst measurement, and LOCAL_CI_SCAN_TIMEOUT
+# raises both numbers at once for a slower host.
 SCAN_TIMEOUT = int(os.environ.get("LOCAL_CI_SCAN_TIMEOUT", "600") or 600)
+
+# A step's own wall-clock ceiling (2026-10-26). The gate does 99.6 s of real
+# work across all 25 steps, yet two runs recorded 32 m and 44 m: a check that
+# measures 10 s alone had hung, and the runner waited out a per-call timeout of
+# 1800 s. The cost was never the work, so every step now has a ceiling of
+# STEP_BUDGET seconds. A step that overruns is killed by process group (`sh`
+# already gives the child its own session), recorded as
+# `<step> exceeded <N>s and was killed`, and the tick moves on to the next step.
+# A step that legitimately needs longer names itself in STEP_BUDGETS (`*` is a
+# prefix, for the bun and worker-build families); an explicit `budget=` argument
+# wins over both. Tree scanners pass SCAN_TIMEOUT as that explicit budget
+# (DIG-5724), so their own knob reaches them. LOCAL_CI_STEP_BUDGET raises the
+# default for every other step on the host, and a caller `timeout` that is
+# tighter than the budget still wins.
+STEP_BUDGET = int(os.environ.get("LOCAL_CI_STEP_BUDGET", "180") or 180)
+STEP_BUDGETS = {
+    # A whole-history secret scan and a workspace dependency install are the
+    # slow steps; a full type-check is the other one.
+    "gitleaks": 600,
+    "uv-sync": 900,
+    "mypy": 600,
+    "ruff": 300,
+    # One npm install per worker-build run, then one dry-run per worker app.
+    "worker-build:npm-ci": 600,
+    "worker-build:*": 300,
+    # Bun suites (DIG-5203): install from the committed lockfile, then run.
+    "bun-install:*": 600,
+    "bun:*": 300,
+}
+# A step is attempted at most this many times, and the attempts share the one
+# budget: a timeout kill spends it, so a stalled step is not retried into a
+# second stall window.
+RETRY_CAP = 2
+# No new attempt starts with less than this left of the budget.
+RETRY_MIN_SECS = 5
 
 
 def no_fsmonitor_env(base):
@@ -318,7 +432,7 @@ def sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
         rc = 124
         if out: out.write(f"TIMEOUT {timeout}s {cmd}\n")
     finally:
-        _clear_child_state()
+        _clear_child_state(p.pid)
     if out: out.write(f"$ {cmd if isinstance(cmd,str) else ' '.join(cmd)}\n{stdout[-20000:]}{stderr[-20000:]}\n[rc={rc}]\n")
     return rc, stdout
 
@@ -581,21 +695,18 @@ def status(sha, state, desc, app=True):
     return True
 
 
-def review_status(sha, state, desc):
-    """Post under REVIEW_CTX: the exact context main's protection requires."""
-    gh("api", "-X", "POST", f"repos/{REPO}/statuses/{sha}", "-f", f"state={state}", "-f", f"context={REVIEW_CTX}", "-f", f"description={desc[:139]}")
+def review_judged_at(pr):
+    """When local-ci last judged this promotion head: the mtime of its per-PR log.
 
-
-def review_ci_status(sha):
-    """Latest (state, description, created_at) posted under REVIEW_CTX, or (None, None, None)."""
-    o = gh("api", f"repos/{REPO}/commits/{sha}/statuses", "--paginate")
-    try: rows = json.loads(o or "[]")
-    except ValueError: return None, None, None
-    rows = [r for r in rows if isinstance(r, dict) and r.get("context") == REVIEW_CTX]
-    if not rows: return None, None, None
-    rows.sort(key=lambda r: r.get("createdAt", r.get("created_at", "")))
-    last = rows[-1]
-    return last.get("state"), last.get("description") or "", last.get("createdAt", last.get("created_at", "")) or ""
+    Since DIG-4507 the runner publishes no verdict for main's required review
+    context, so there is no status row of ours to read back. The per-PR log is
+    the record of the judgement, and its mtime is the timestamp the hourly
+    re-check keys on.
+    """
+    n = pr.get("number"); sha = pr.get("headRefOid") or ""
+    if not n or not sha: return None
+    try: return os.path.getmtime(f"{LOGD}/pr{n}-review-{sha[:12]}.log")
+    except OSError: return None
 
 
 def _status_age_secs_or_none(created_at):
@@ -623,20 +734,23 @@ def is_promotion_pr(pr):
 
 
 def pending_reviews(prs):
-    """Promotion PRs still needing a review-coverage verdict: none posted yet, or
-    the last verdict is old enough to re-check (reviews may have landed since)."""
+    """Promotion PRs local-ci has not judged in the last hour.
+
+    The judgement is evidence only (see review_judged_at): the verdict that
+    gates main comes from the ci-review-coverage workflow, which is the single
+    producer of that required context since DIG-4507.
+
+    A judged head is re-walked once an hour on purpose, success included: the
+    walk is capped at REVIEW_MAX_PER_TICK per tick, so an open promotion costs
+    at most one extra walk per hour and the evidence stays fresh while reviews,
+    approvals and labels land on the head.
+    """
     out = []
     for p in prs:
         if not is_promotion_pr(p):
             continue
-        st, desc, ts = review_ci_status(p["headRefOid"])
-        if st == "success":
-            continue
-        if st in ("pending", "failure") and desc.startswith(SKIP_PREFIX):
-            out.append(p)  # gate cleared since the skip; re-check
-        elif st is None:
-            out.append(p)
-        elif st in ("pending", "failure") and _status_age_secs(ts) >= REVIEW_RECHECK_SECS:
+        t = review_judged_at(p)
+        if t is None or (time.time() - t) >= REVIEW_RECHECK_SECS:
             out.append(p)
     out.sort(key=lambda p: p["updatedAt"], reverse=True)
     return out
@@ -729,7 +843,6 @@ def process_review(pr, dry):
     sha = pr["headRefOid"]; n = pr["number"]
     logf = f"{LOGD}/pr{n}-review-{sha[:12]}.log"
     log(f"PR #{n} review-coverage {sha[:12]} start")
-    if not dry: review_status(sha, "pending", "local-ci: checking review coverage")
     t0 = time.time()
     with open(logf, "w") as out:
         ok_wt, why = prepare_wt(n, sha, pr["baseRefName"], out)
@@ -738,7 +851,6 @@ def process_review(pr, dry):
     if ok: st, desc = "success", f"review coverage: all {total} commits reviewed ({mins:.0f}m)"
     else: st, desc = "failure", f"review coverage: {unreviewed} unreviewed of {total} (see log) ({mins:.0f}m)"
     log(f"PR #{n} review-coverage {sha[:12]} {st}: {desc} log={logf}")
-    if not dry: review_status(sha, st, desc)
     return st
 
 def gitleaks_log_opts(base, sha, out):
@@ -1095,26 +1207,78 @@ def run_bun_suites(wt, step, out, fails):
     return ran
 
 
-def worker_build(wt, step):
+def buildable_worker_apps(wt):
+    """The WORKER_APPS this tree still has a ``wrangler.toml`` for.
+
+    WORKER_APPS is a fixed list, so it keeps naming an app after a retirement
+    PR deletes it. The dry-run then changes into ``apps/<app>`` and runs
+    wrangler there. When the directory itself is gone the step refuses by name
+    (the missing-cwd check in ``step``/``run_step_pool``), and when a previous
+    checkout of the same worktree left an ignored ``node_modules`` behind -
+    ``git clean -fdq -e node_modules`` keeps those - the directory still exists
+    and wrangler fails with "Could not detect a directory containing static
+    files" for a project that has no config any more. Either way the required
+    check is red for a tree that is correct: #6530, which retires
+    ``apps/digitrace-langfuse`` (DIG-5136), could not go green at all.
+
+    The dry run is defined by the app's ``wrangler.toml``: an app without one
+    is retired in this tree and is skipped, the same shape as the ruff path
+    list, which drops entries that do not exist so a removal cannot turn every
+    PR red. When ``apps/`` itself is missing (unit fixtures, an odd tree) the
+    list is returned unchanged, so nothing is skipped on a tree we cannot read.
+    """
+    apps_dir = os.path.join(wt, "apps")
+    if not os.path.isdir(apps_dir):
+        return list(WORKER_APPS)
+    live = []
+    for app in WORKER_APPS:
+        if os.path.isfile(os.path.join(apps_dir, app, "wrangler.toml")):
+            live.append(app)
+        else:
+            log(f"worker-build:{app} skipped: no apps/{app}/wrangler.toml in this tree")
+    if not live:
+        # A tree with apps/ and no buildable Worker is a broken checkout, not a
+        # retirement: retire them all and there is nothing left to deploy. Build
+        # the fixed list so the gate fails loudly instead of passing vacuously.
+        log("worker-build: no app in WORKER_APPS has a wrangler.toml; treating "
+            "this as a broken checkout and building the fixed list")
+        return list(WORKER_APPS)
+    return live
+
+
+def worker_build(wt, step, out=None):
     """Run the ci.yml worker-build dry-run over all WORKER_APPS. Failures record via step.
+
+    Each app gets its own ``--outdir``: the dry-run writes the bundle it just
+    built into that directory, so one shared directory would have the apps
+    overwriting each other once they run at the same time (STEP_POOL).
+
+    ``out`` is the tick's log. When it is given the apps are built in the pool;
+    without it they run one at a time through ``step``, which is the shape the
+    unit tests drive.
 
     Returns the failed step names (for tests/observability); run_checks discards it.
     """
-    failed = []
-    outdir = tempfile.mkdtemp(prefix="wrangler-dry-run-")
+    if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
+        return ["worker-build:npm-ci"]
+    apps = buildable_worker_apps(wt)
+    outdirs = {app: tempfile.mkdtemp(prefix=f"wrangler-dry-run-{app}-") for app in apps}
     try:
-        if not step("worker-build:npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
-            return ["worker-build:npm-ci"]
-        for app in WORKER_APPS:
-            ok = step(f"worker-build:{app}",
-                      ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
-                       "--containers-rollout=none", "--outdir", outdir],
-                      WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app))
-            if not ok:
-                failed.append(f"worker-build:{app}")
-        return failed
+        specs = [gate_spec(f"worker-build:{app}",
+                           ["npm", "exec", "--", "wrangler", "deploy", "--dry-run",
+                            "--containers-rollout=none", "--outdir", outdirs[app]],
+                           WORKER_DRY_RUN_TIMEOUT, os.path.join(wt, "apps", app), None, ())
+                 for app in apps]
+        if out is None:
+            failed = []
+            for name, cmd, timeout, cwd in ((s[0], s[1], s[2], s[3]) for s in specs):
+                if not step(name, cmd, timeout, cwd):
+                    failed.append(name)
+            return failed
+        return run_step_pool(specs, out)
     finally:
-        shutil.rmtree(outdir, ignore_errors=True)
+        for d in outdirs.values():
+            shutil.rmtree(d, ignore_errors=True)
 
 
 # The checks worktree checkout (DIG-5285). A healthy checkout of this tree
@@ -1482,6 +1646,47 @@ def ruff_paths_fallback(wt):
     return paths or None
 
 
+def step_budget(name, timeout=1800, budget=None):
+    """The wall-clock ceiling for one step, in seconds.
+
+    An explicit `budget` wins; then the exact name in STEP_BUDGETS, then a
+    matching `*` prefix (so `bun:digichat-tui` takes the `bun:*` budget), then
+    STEP_BUDGET. The caller's `timeout` is a ceiling too -
+    a tool that already declares it may not take more than N s is not given
+    more by this table - so the result is the smaller of the two.
+    """
+    chosen = budget
+    if chosen is None:
+        chosen = STEP_BUDGETS.get(name)
+        if chosen is None:
+            for pattern, secs in STEP_BUDGETS.items():
+                if pattern.endswith("*") and name.startswith(pattern[:-1]):
+                    chosen = secs
+                    break
+    if chosen is None:
+        chosen = STEP_BUDGET
+    return max(1, min(int(chosen), int(timeout)))
+
+
+def step_failed(fails, name):
+    """True when `name` is in the verdict, however the step was recorded.
+
+    An overrun is a sentence (`<step> exceeded <N>s and was killed`) so the
+    reader knows why, while a red check keeps its plain name. A caller that
+    gates later work on an earlier step has to match both.
+    """
+    return any(f == name or f.startswith(name + " ") for f in fails)
+
+
+def _step_duration(out, name, seconds, rc, attempts=1):
+    """The one-line duration table the next investigation reads from the log:
+    `step=<name> seconds=<n> rc=<n>` for every step, including failures."""
+    line = f"step={name} seconds={seconds:.1f} rc={rc}"
+    if attempts > 1:
+        line += f" attempts={attempts}/{RETRY_CAP}"
+    out.write(line + "\n")
+
+
 def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, env=None,
               stall_rcs=(124, 3)):
     """Run one content scanner and record how it answered.
@@ -1493,37 +1698,196 @@ def scan_step(name, cmd, timeout=SCAN_TIMEOUT, out=None, fails=None, cwd=None, e
     recorded as a stall: red, because the guard has not cleared the tree, but
     named as the stall it is.
 
+    ``timeout`` is the whole step's budget and the attempts share it (2026-10-26):
+    a scanner killed at its ceiling has spent the budget, so it is reported
+    instead of being retried into a second stall window.
+
     ``fails`` collects the verdict: the step name for a finding or the guard's
-    own error, ``"<name>:stall"`` for a scanner that did not answer at all.
-    Returns True when the scanner answered and found nothing.
+    own error, ``"<name> exceeded <N>s and was killed"`` for a scanner killed at
+    its budget, ``"<name>:stall"`` for one that answered badly without
+    overrunning. Returns True when the scanner answered and found nothing.
     """
     if out is None:
         out = sys.stdout
     if fails is None:
         fails = []
-    for attempt in (1, 2):
+    started = time.monotonic()
+    deadline = started + max(1, int(timeout))
+    rc = None
+    attempts = 0
+    for attempt in range(1, RETRY_CAP + 1):
+        remaining = deadline - time.monotonic()
+        if attempt > 1 and remaining < RETRY_MIN_SECS:
+            break
+        attempts = attempt
         out.write(f"\n===== {name}\n")
-        rc, _ = sh(cmd, cwd=cwd, timeout=timeout, out=out, name=name, env=env)
+        began = time.monotonic()
+        rc, _ = sh(cmd, cwd=cwd, timeout=max(1, int(remaining)), out=out, name=name, env=env)
+        took = time.monotonic() - began
         if rc == 0:
+            _step_duration(out, name, time.monotonic() - started, rc, attempts)
             return True
         if rc not in stall_rcs:
             # rc 1 is a finding; anything else is the guard's own error.
             fails.append(name)
+            _step_duration(out, name, time.monotonic() - started, rc, attempts)
             return False
+        if rc == 124:
+            # Killed at the budget. A second attempt would be another stall
+            # window, not another sample.
+            out.write(
+                f"{name}: did not answer (rc=124, {timeout}s budget, attempt "
+                f"{attempt}/{RETRY_CAP}, {took:.1f}s); killed at its budget\n"
+            )
+            break
         out.write(
             f"{name}: did not answer (rc={rc}, {timeout}s budget, attempt "
-            f"{attempt}/2); retrying once\n"
+            f"{attempt}/{RETRY_CAP}, {took:.1f}s); retrying\n"
         )
-    fails.append(f"{name}:stall")
-    out.write(
-        f"{name}: STALL -- the guard did not answer in {timeout}s twice. The tree "
-        "was not judged: this is a slow or wedged host, not a finding.\n"
-    )
+    _step_duration(out, name, time.monotonic() - started, rc, attempts)
+    if rc == 124:
+        why = f"{name} exceeded {timeout}s and was killed"
+        fails.append(why)
+        out.write(
+            f"{name}: STALL -- {why}. The tree was not judged: this is a slow or "
+            "wedged host, not a finding.\n"
+        )
+    else:
+        fails.append(f"{name}:stall")
+        out.write(
+            f"{name}: STALL -- the guard did not answer in {timeout}s twice. The tree "
+            "was not judged: this is a slow or wedged host, not a finding.\n"
+        )
     return False
 
 
+def gate_spec(name, cmd, timeout, cwd=None, env=None, stall_rcs=(), budget=None):
+    """One pool spec: a step's arguments plus the wall-clock budget it carries.
+
+    The budget is resolved once, here, so a pooled step runs with exactly the
+    ceiling the serial `step()` would have given the same name and timeout. An
+    explicit `budget` wins over the name table, which is how a tree scanner
+    takes SCAN_TIMEOUT instead of the 180 s default (DIG-5724).
+    """
+    return (name, cmd, timeout, cwd, env, stall_rcs,
+            step_budget(name, timeout, budget))
+
+
+def scan_spec(name, cmd, env=None, stall_rcs=()):
+    """One tree-scanner pool spec: SCAN_TIMEOUT is its ceiling and its budget.
+
+    Both scanner waves go through this helper so the two numbers cannot drift
+    apart. The scanner names stay out of STEP_BUDGETS on purpose: their runtime
+    belongs to the machine, and the one knob that raises it must raise the
+    caller ceiling and the step budget together. Passing the budget explicitly
+    is what makes LOCAL_CI_SCAN_TIMEOUT reach the step; without it step_budget()
+    chose the 180 s default and min(180, 600) left the knob inert (DIG-5724).
+    """
+    return gate_spec(name, cmd, SCAN_TIMEOUT, None, env, stall_rcs,
+                     budget=SCAN_TIMEOUT)
+
+
+def run_step_pool(specs, out, limit=STEP_POOL):
+    """Run independent gate steps concurrently; return (fails, ran) per step name.
+
+    `specs` is a list of (name, cmd, timeout, cwd, env, stall_rcs, budget) in the
+    order the log should print them; a spec without the trailing budget gets one
+    from its name and timeout. Each step gets its own StringIO, so the log still
+    reads as one block per gate in the declared order no matter which one
+    finished first, and a step's output is never interleaved with another's.
+
+    Nothing here decides a gate: the same budgeted `run_step` runs, with the
+    same cwd, the same environment and the same ``fails`` names, and a blocked
+    step is still killed by its own budget (sh() breaks the whole process tree)
+    and still recorded by the watchdog. Only the order in which the steps wait
+    changed.
+    """
+    bufs: dict[str, io.StringIO] = {}
+    step_fails: dict[str, list] = {}
+
+    def one(spec):
+        name, cmd, timeout, cwd, env, stall_rcs, *rest = spec
+        budget = rest[0] if rest else None
+        buf = io.StringIO()
+        bad = []
+        # Same refusal as the serial path: a step whose directory is missing
+        # fails by name and never runs, so a broken runner state cannot post a
+        # dozen plausible-looking failures.
+        if not os.path.isdir(cwd or WT):
+            buf.write(
+                f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n"
+            )
+            return name, [name], buf
+        # One budgeted run, the same one the serial `step()` takes: the ceiling,
+        # the process-group kill, the overrun sentence that names the step and
+        # the `step=<name> seconds=<n> rc=<n>` line all come from run_step.
+        # `cwd or WT`, exactly as the serial `step()` does. Passing the raw
+        # `cwd` (None for most specs) let the child inherit the runner's own
+        # working directory -- "/" under launchd -- so every check looked
+        # for `//scripts/...` and failed for a reason that was not its own.
+        run_step(name, cmd, timeout, out=buf, fails=bad, cwd=(cwd or WT), env=env,
+                 stall_rcs=stall_rcs, budget=budget)
+        return name, bad, buf
+
+    workers = max(1, min(int(limit), len(specs) or 1))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers,
+                                               thread_name_prefix="local-ci-step") as pool:
+        futures = {pool.submit(one, spec): spec[0] for spec in specs}
+        for fut in concurrent.futures.as_completed(futures):
+            name = futures[fut]
+            try:
+                _n, bad, buf = fut.result()
+            except Exception as exc:  # a crashed worker is a failed gate, never silence
+                bad, buf = [name], io.StringIO(f"\n===== {name}\nstep crashed: {exc}\n")
+            bufs[name], step_fails[name] = buf, bad
+    fails = []
+    for spec in specs:
+        name = spec[0]
+        out.write(bufs[name].getvalue())
+        fails.extend(step_fails.get(name, [name]))
+    return fails
+
+def run_step(name, cmd, timeout=1800, out=None, fails=None, cwd=None, env=None,
+             stall_rcs=(), budget=None):
+    """Run one gate step inside its own wall-clock budget.
+
+    The budget is `step_budget(name, timeout, budget)`. A step that overruns is
+    killed by process group (`sh` starts the child in its own session and kills
+    the tree), the failure names the step and the seconds it took, and the
+    caller carries on with the next step. A check that genuinely fails keeps its
+    plain name in the verdict: only an overrun reads as an overrun, so failure
+    semantics are unchanged for everything except a hang.
+    """
+    if out is None:
+        out = sys.stdout
+    if fails is None:
+        fails = []
+    cap = step_budget(name, timeout, budget)
+    if stall_rcs:
+        # A scanner that does not answer is a stall, not a finding.
+        return scan_step(name, cmd, timeout=cap, out=out, fails=fails, cwd=cwd, env=env,
+                         stall_rcs=stall_rcs)
+    out.write(f"\n===== {name}\n")
+    started = time.monotonic()
+    rc, _ = sh(cmd, cwd=cwd, timeout=cap, out=out, name=name, env=env)
+    elapsed = time.monotonic() - started
+    _step_duration(out, name, elapsed, rc)
+    if rc == 124:
+        # sh's timeout path: the process group was killed, so this is a stall
+        # and not a check that returned a red verdict.
+        why = f"{name} exceeded {cap}s and was killed"
+        fails.append(why)
+        out.write(why + "\n")
+        return False
+    if rc != 0:
+        fails.append(name)
+    return rc == 0
+
+
 def run_checks(pr, out, summary=None):
-    """Run every gate on the PR. Returns the list of failed gate names.
+    """Run every gate on the PR. Returns the list of failed gates: a plain step
+    name, a `<name>:stall`, or the overrun sentence that names the step and its
+    budget.
 
     `summary` is filled with what the receipt needs but the verdict does not
     (today: which bun suites ran, DIG-5203). It is an optional dict rather than
@@ -1531,17 +1895,42 @@ def run_checks(pr, out, summary=None):
     in-process and reads a plain list of failures.
     """
     _guard()
+    # A gate must never start in a directory that is not there. When the
+    # worktree root resolves wrong (empty, "/", a stale path) every check
+    # still runs, from the wrong cwd, and reports a real-looking failure for
+    # each one -- sixteen at once, none of them true. Refuse the tick instead
+    # of producing that verdict: the cause is the runner's own state, and
+    # naming it is the only useful thing to say about it.
+    if not (os.path.isdir(WT) and wt_is_ours(WT)):
+        raise SystemExit(
+            f"local-ci: worktree root {WT!r} is not this runner's worktree; "
+            "refusing to run gates"
+        )
     sha, base, title = pr["headRefOid"], pr["baseRefName"], pr["title"]
+    # The R0 allowance gate compares the PR's baseline with the base branch tip.
+    # prepare_wt fetched origin/<base>; a caller that knows the exact base commit
+    # may pass it as baseCommit (reserved for the post-merge driver, which has
+    # no base branch to name). Never guess a ref: an unresolvable one fails the
+    # gate closed, so a SHA is used as given.
+    base_commit = str(pr.get("baseCommit") or "")
+    if re.fullmatch(r"[0-9a-f]{40}", base_commit):
+        r0_base = base_commit
+    elif re.fullmatch(r"[0-9a-f]{40}", base or ""):
+        r0_base = base
+    else:
+        r0_base = "origin/" + base
     fails = []
-    def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=()):
-        if stall_rcs:
-            # A scanner that does not answer is a stall, not a finding.
-            return scan_step(name, cmd, timeout=timeout, out=out, fails=fails,
-                             cwd=(cwd or WT), env=env, stall_rcs=stall_rcs)
-        out.write(f"\n===== {name}\n")
-        rc, _ = sh(cmd, cwd=(cwd or WT), timeout=timeout, out=out, name=name, env=env)
-        if rc != 0: fails.append(name)
-        return rc == 0
+    def step(name, cmd, timeout=1800, cwd=None, env=None, stall_rcs=(), budget=None):
+        # The missing-directory refusal comes first: a step whose cwd is not
+        # there fails by name and never runs (DIG-5318's sibling, 2026-10-26).
+        if not os.path.isdir(cwd or WT):
+            fails.append(name)
+            out.write(f"\n===== {name}\n{name} FAIL: worktree root {(cwd or WT)!r} is not a directory\n")
+            return False
+        # Every step takes its own wall-clock budget, and the scanner path is
+        # inside run_step so a stall spends one budget instead of two windows.
+        return run_step(name, cmd, timeout, out=out, fails=fails, cwd=(cwd or WT),
+                        env=env, stall_rcs=stall_rcs, budget=budget)
     # PR title
     if not (title == "chore: promote develop to main" or re.match(r"^chore\([^)]*\):\s*release\s|^chore\(release\):\s", title)
             or re.match(rf"^({TYPES})\([^)]+\)!?: .+", title)):
@@ -1549,9 +1938,17 @@ def run_checks(pr, out, summary=None):
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
     # its workflow removal rides on DIG-3845)
     if pr_template is None:
-        fails.append("pr-template"); out.write("pr-template FAIL: checker module missing\n")
+        # A missing checker is a runner defect, not author metadata: the name
+        # keeps it out of METADATA_GATES, so the row stays terminal instead of
+        # buying a full lane on every title or body edit (DIG-5695 review).
+        fails.append("pr-template:checker-missing")
+        out.write("pr-template:checker-missing FAIL: checker module missing\n")
     else:
-        body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+        body = pr_body(pr)
+        if summary is not None and body is not None:
+            # What this gate judges, so the queue can tell a corrected title or
+            # body from the same failed one (DIG-5695).
+            summary["metadata_revision"] = metadata_revision(title, body)
         ok, reasons = pr_template.check_template(body or "")
         if not ok:
             fails.append("pr-template")
@@ -1561,9 +1958,12 @@ def run_checks(pr, out, summary=None):
     opts = gitleaks_log_opts(base, sha, out)
     if opts is None:
         fails.append("gitleaks")
-    else:
-        step("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml", "--redact", "--no-banner",
-                          "--report-format", "json", "--report-path", rep, f"--log-opts={opts}"])
+    # One wave for everything that only reads the tree. The npm install is NOT
+    # in this wave: it rewrites node_modules while the scanners walk the tree,
+    # and a scanner that rglobs a dependency directory then reads a directory
+    # being repopulated (check_doc_links measured 58 s pooled against npm ci
+    # versus 3 s alone). The install stays with the builds that need it.
+    scan_specs = []
     # 2026-10-18 (Board, DIG-4056/DIG-1415): check_vendor_content.py runs with --warn here.
     # Its 28 blocking hits are all in apps/twelvex-runner + the twelvex jobs in apps/digithings-cron;
     # they read as NEW only because the check baselines on merge-base(HEAD, origin/main) (2026-10-13)
@@ -1573,12 +1973,25 @@ def run_checks(pr, out, summary=None):
     for s in ["scripts/scan_customer_pii.py --json " + f"{LOGD}/pii-{sha[:12]}.json",
               "scripts/check_frontend_canon.py", "scripts/check_gloomberb_ci_guard.py", "scripts/check_vendor_content.py --warn",
               "scripts/check_plaintext_credentials.py", "scripts/check_example_credentials.py",
-              "scripts/check_r0_no_client_literals.py"]:
+              "scripts/check_r0_no_client_literals.py",
+              # DIG-5762: the R0 allowance may only shrink, and this is the PR
+              # lane that must refuse the growth. The gate lived only in the
+              # host runner for months, so #6500 grew the baseline and merged
+              # green (totals 1997 -> 2030) until the post-merge run caught it.
+              "scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base,
+              # DIG-2887 S0: Supabase usage may only shrink while the exit runs.
+              "scripts/check_supabase_freeze.py --base-ref " + r0_base,
+              "scripts/split/manifest.py --check"]:
         if os.path.exists(f"{WT}/{s.split()[0]}"):
-            step(s.split()[0], f"python3 {s}", SCAN_TIMEOUT, env=SCAN_ENV, stall_rcs=(124, 3))
-    step("actionlint", ["actionlint"], 300)
+            scan_specs.append(scan_spec(s.split()[0], f"python3 {s}", SCAN_ENV, (124, 3)))
+    scan_specs.append(gate_spec("actionlint", ["actionlint"], 300, None, None, ()))
+    if opts is not None:
+        scan_specs.append(gate_spec("gitleaks", ["gitleaks", "detect", "--source", ".", "--config", ".gitleaks.toml",
+                                                 "--redact", "--no-banner", "--report-format", "json",
+                                                 "--report-path", rep, f"--log-opts={opts}"], 1800, None, None, ()))
+    fails.extend(run_step_pool(scan_specs, out))
     step("uv-sync", "uv sync --frozen --all-packages --all-extras", 1800)
-    if "uv-sync" not in fails:
+    if not step_failed(fails, "uv-sync"):
         U = "uv run --frozen --no-sync "
         rpaths, rnote = ruff_paths_for_tree(WT)
         if rpaths is None:
@@ -1592,19 +2005,23 @@ def run_checks(pr, out, summary=None):
                 log("ruff: path list from ci.yml unavailable (%s); using the fallback list" % rnote)
         else:
             out.write("\nruff-paths: %s: %s\n" % (rnote, " ".join(rpaths)))
+        # Second wave: everything that needs the venv uv-sync just prepared.
+        uv_specs = []
         if rpaths:
-            step("ruff", U + "ruff check " + " ".join(rpaths), 600)
-        step("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200)
+            uv_specs.append(gate_spec("ruff", U + "ruff check " + " ".join(rpaths), 600, None, None, ()))
+        uv_specs.append(gate_spec("mypy", U + "mypy digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini", 1200, None, None, ()))
         for s in ["check_doc_links.py", "check_adr_numbering.py", "agents_init.py --check", "check_model_name_literals.py",
                   "generate_ci_path_filters.py --check"]:
-            if os.path.exists(f"{WT}/scripts/{s.split()[0]}"): step(s.split()[0], U + f"python scripts/{s}", 600)
+            if os.path.exists(f"{WT}/scripts/{s.split()[0]}"):
+                uv_specs.append(scan_spec(s.split()[0], U + f"python scripts/{s}"))
+        fails.extend(run_step_pool(uv_specs, out))
     n_files, hit = worker_gate(pr, WT)
     if hit is None and n_files is None:
         out.write("\n===== worker-build\nchanged-files fetch failed; failing closed\n")
         fails.append("worker-build: changed-files fetch failed")
     elif hit is not None:
         out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
-        worker_build(WT, step)
+        fails.extend(worker_build(WT, step, out=out))
     # Bun suites (DIG-5203): the required check has to prove a clients/** or
     # packages/** change, not report green over a suite nobody ran. The paths
     # come from the same `bun_suites` block the retired lane used, and a hit
@@ -1651,11 +2068,17 @@ def process(pr, dry):
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
     else: st, desc = "success", success_desc(mins, summary.get("bun"))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
-    if not dry and status(sha, st, desc):
-        # The verdict is in, so the claim is spent. When the verdict could not
-        # be posted the claim stays: the head is owed a receipt and the queue
-        # gives it one instead of waiting for a row that never came.
-        clear_claim(sha)
+    if not dry:
+        if metadata_failure_gates(desc) is not None:
+            # Remember what this verdict judged so the same failed metadata is
+            # not re-queued tick after tick (DIG-5695). A code failure records
+            # nothing: its row is terminal.
+            record_judged_metadata(pr, summary.get("metadata_revision"))
+        if status(sha, st, desc):
+            # The verdict is in, so the claim is spent. When the verdict could
+            # not be posted the claim stays: the head is owed a receipt and the
+            # queue gives it one instead of waiting for a row that never came.
+            clear_claim(sha)
     return st
 
 def skip_reason():
@@ -2082,6 +2505,105 @@ def ci_status(sha):
     return st, desc
 
 
+def metadata_failure_gates(desc):
+    """The gates a metadata-only failure names, or None.
+
+    A row names its failed gates after ``local-ci failed: `` and ends with the
+    run time in minutes. Only plain gate names count: a stall or an overrun
+    reads as a sentence, and one name outside METADATA_GATES makes the whole
+    verdict a code failure, whose row stays terminal (DIG-5695).
+    """
+    prefix = "local-ci failed: "
+    text = desc or ""
+    if not text.startswith(prefix):
+        return None
+    names = re.sub(r" \(\d+m\)$", "", text[len(prefix):])
+    gates = [g.strip() for g in names.split(",") if g.strip()]
+    if not gates or any(g not in METADATA_GATES for g in gates):
+        return None
+    return gates
+
+
+def metadata_revision(title, body):
+    """A stable digest of the metadata a metadata gate reads: title and body.
+
+    The timestamp is not the revision: GitHub moves `updatedAt` on every
+    comment and review, so a time comparison would re-run a full lane for a
+    conversation the gates never read.
+    """
+    h = hashlib.sha256()
+    h.update((title or "").encode("utf-8"))
+    h.update(b"\0")
+    h.update((body or "").encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+def pr_body(pr):
+    """The pull request's body, or None when GitHub could not be read."""
+    body = gh("pr", "view", str(pr["number"]), "-R", REPO, "--json", "body", "-q", ".body")
+    return None if body is None else body
+
+
+def judged_metadata_revision(sha):
+    """The metadata revision this head's last metadata verdict judged, or None.
+
+    Kept next to the gitleaks re-check sentinel, for the same reason: one
+    re-check per change, never one per tick.
+    """
+    try:
+        with open(f"{LOGD}/metadata-recheck-{sha}") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def record_judged_metadata(pr, revision=None):
+    """Remember the metadata a metadata-only verdict was judged on (DIG-5695).
+
+    `revision` is what the gates read during the run; when a run could not read
+    the body, the current body is hashed instead so the same failure cannot
+    re-queue for ever. An unreadable body records nothing: a revision nobody
+    saw is not a judgement, and the timestamp rule covers that head.
+    """
+    if revision is None:
+        body = pr_body(pr)
+        if body is None:
+            return
+        revision = metadata_revision(pr.get("title"), body)
+    try:
+        with open(f"{LOGD}/metadata-recheck-{pr['headRefOid']}", "w") as f:
+            f.write(revision + "\n")
+    except OSError:
+        pass
+
+
+def metadata_recheck_due(pr, desc, created):
+    """True when a metadata-only failure is worth one more look on the same head.
+
+    A metadata gate is the one class of failure whose remedy does not touch the
+    tree, so the head does not have to be replaced to clear it (DIG-5695, PR
+    #6513). The head is re-queued when the metadata it carries now differs from
+    the metadata its verdict judged.
+
+    A head with no record - a row from before this rule, or a run that could
+    not read the body - falls back to the row's own clock: the pull request
+    must have been updated after the row that judged it. Either way a metadata
+    failure buys at most one re-check per change.
+    """
+    if metadata_failure_gates(desc) is None:
+        return False
+    body = pr_body(pr)
+    if body is None:
+        return False  # nothing readable to judge: the row stays terminal
+    revision = metadata_revision(pr.get("title"), body)
+    judged = judged_metadata_revision(pr["headRefOid"])
+    if judged is not None:
+        return judged != revision
+    updated = _status_age_secs_or_none(pr.get("updatedAt"))
+    row = _status_age_secs_or_none(created)
+    return updated is not None and row is not None and updated < row
+
+
 def pending(prs, forks, dry=False):
     """Open PRs still needing a check, oldest first.
 
@@ -2094,9 +2616,11 @@ def pending(prs, forks, dry=False):
 
     A head is queued when it carries no `local-ci` row, when its only row is a
     re-checkable skip (DIG-3706), when its row is a gitleaks failure worth one
-    more try, when its row says the post itself failed (`error`), or when its
-    `pending` row belongs to a run that is gone: the claim ledger names the
-    holder, and a holder that is dead means the receipt is owed again.
+    more try, when its row says the post itself failed (`error`), when a
+    metadata-only failure has been overtaken by a corrected title or body
+    (DIG-5695), or when its `pending` row belongs to a run that is gone: the
+    claim ledger names the holder, and a holder that is dead means the receipt
+    is owed again.
 
     A head whose claim is held by a living run is left alone: it is not
     queued, not skipped, and its claim is not released. The run that took the
@@ -2120,6 +2644,9 @@ def pending(prs, forks, dry=False):
             # scanning commits already on the base. A second failure stays put.
             retry = (st == "failure" and (desc or "").startswith("local-ci failed: gitleaks")
                      and not os.path.exists(f"{LOGD}/gitleaks-recheck-{sha}"))
+            # A metadata-only failure is the one failure a corrected title or
+            # body can clear without touching the tree (DIG-5695).
+            meta = st == "failure" and metadata_recheck_due(p, desc, created)
             lost = st == "pending" and claim_is_lost(sha, created)
             if st in ("success", "failure", "error") and not dry:
                 # The verdict is in, or the row says the post itself failed:
@@ -2127,7 +2654,7 @@ def pending(prs, forks, dry=False):
                 # still holds is that run's to release.
                 clear_claim(sha)
             if (st is None or st == "error" or (desc or "").startswith(SKIP_PREFIX)
-                    or retry or lost):
+                    or retry or meta or lost):
                 out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))
@@ -2427,35 +2954,69 @@ def process_applied(pr, dry):
 CHILD_STATE = os.path.join(HOME, ".config/digithings/state/local-ci.child.json")
 WATCHDOG_GRACE_SECS = 120   # slack on top of a step's own budget
 KILL_GRACE_SECS = 3.0
+# pid -> {"pid", "name", "started", "budget"} for every step running right now.
+# Guarded by _CHILD_LOCK: the pool runs steps on worker threads.
+_LIVE_CHILDREN: dict[int, dict] = {}
+_CHILD_LOCK = threading.Lock()
 
 
 def _write_child_state(pid, name, budget):
-    """Record the running child so the next tick can spot a step that overran its budget."""
+    """Record the running child so the next tick can spot a step that overran its budget.
+
+    Steps now run in a pool (STEP_POOL), so the record has to hold every child
+    that is running at once: a single-slot file would forget all but the last
+    one and the watchdog could not reap the tick's other half.
+    """
+    with _CHILD_LOCK:
+        _LIVE_CHILDREN[int(pid)] = {"pid": int(pid), "name": str(name)[:120],
+                                    "started": time.time(), "budget": int(budget)}
+        _flush_child_state()
+
+
+def _clear_child_state(pid=None):
+    """Forget one finished child (pid) or every child (no argument)."""
+    with _CHILD_LOCK:
+        if pid is None:
+            _LIVE_CHILDREN.clear()
+        else:
+            _LIVE_CHILDREN.pop(int(pid), None)
+        _flush_child_state()
+
+
+def _flush_child_state():
+    """Write the live-child list; unlink it when nothing is running. Holds _CHILD_LOCK."""
     tmp = CHILD_STATE + ".tmp"
     try:
+        if not _LIVE_CHILDREN:
+            try:
+                os.unlink(CHILD_STATE)
+            except OSError:
+                pass
+            return
         os.makedirs(os.path.dirname(CHILD_STATE), exist_ok=True)
         with open(tmp, "w") as f:
-            json.dump({"pid": int(pid), "name": str(name)[:120], "started": time.time(),
-                       "budget": int(budget)}, f)
+            json.dump({"children": list(_LIVE_CHILDREN.values())}, f)
         os.replace(tmp, CHILD_STATE)
     except (OSError, ValueError):
         pass
 
 
-def _clear_child_state():
-    try:
-        os.unlink(CHILD_STATE)
-    except OSError:
-        pass
-
-
 def read_child_state():
+    """The recorded children, as {"children": [...]}.
+
+    A state file written before the pool holds one flat child; it is returned in
+    the same shape so a watchdog started after an upgrade reads both.
+    """
     try:
         with open(CHILD_STATE) as f:
             st = json.load(f)
-        return st if isinstance(st, dict) else None
     except (OSError, ValueError):
         return None
+    if not isinstance(st, dict):
+        return None
+    if isinstance(st.get("children"), list):
+        return {"children": [c for c in st["children"] if isinstance(c, dict)]}
+    return {"children": [st]}
 
 
 def _ppid_map():
@@ -2589,6 +3150,9 @@ def watchdog():
     version of this watchdog killed a healthy tick because it trusted the
     recorded start. The recorded age now only proves that the pid is still the
     process we spawned; the kill decision is the OS age.
+
+    Every child in the record is judged, not just one: a tick runs several gates
+    at once (STEP_POOL), so a wedged step can be any of them.
     """
     holder = lock_holder_alive()
     if holder is None:
@@ -2597,43 +3161,75 @@ def watchdog():
     st = read_child_state()
     if not st:
         return False
+    acted = False
+    keep = []
+    for child in st.get("children") or []:
+        killed, alive = _judge_child(holder, child)
+        acted = killed or acted
+        if alive:
+            keep.append(child)
+    # The record is this tick's input, not its own bookkeeping: a child that was
+    # reaped or is already gone is dropped, and one that is still inside its
+    # budget stays on the record for the next watchdog.
+    _rewrite_child_state(keep)
+    return acted
+
+
+def _rewrite_child_state(children):
+    """Replace the record with exactly `children`; unlink it when there are none."""
+    tmp = CHILD_STATE + ".tmp"
     try:
-        started = float(st.get("started") or 0)
-        budget = float(st.get("budget") or 0)
-        child = int(st.get("pid") or 0)
+        if not children:
+            try:
+                os.unlink(CHILD_STATE)
+            except OSError:
+                pass
+            return
+        os.makedirs(os.path.dirname(CHILD_STATE), exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump({"children": children}, f)
+        os.replace(tmp, CHILD_STATE)
+    except (OSError, ValueError):
+        pass
+
+
+def _judge_child(holder, child):
+    """Judge one recorded child: (killed, keep).
+
+    ``keep`` is True only for a child that is still running inside its budget;
+    everything else has been dealt with and leaves the record.
+    """
+    try:
+        started = float(child.get("started") or 0)
+        budget = float(child.get("budget") or 0)
+        pid = int(child.get("pid") or 0)
     except (TypeError, ValueError):
-        _clear_child_state()
-        return False
-    if child <= 0:
-        _clear_child_state()
-        return False
+        return False, False
+    if pid <= 0:
+        return False, False
     age_recorded = time.time() - started
-    age_os = _ps_etime(child)
+    age_os = _ps_etime(pid)
     if age_os is None:
         # the step leader is gone; only its process group can still leak
-        members = [(p, c) for p, c in _group_members(child)
+        members = [(p, c) for p, c in _group_members(pid)
                    if any(m in c for m in GATE_CMD_MARKERS)]
         if not members:
-            _clear_child_state()
-            return False
+            return False, False
         if age_recorded <= budget + WATCHDOG_GRACE_SECS:
-            return False
-        log(f"watchdog: tick {holder} group {child} ({st.get('name')}) age {age_recorded:.0f}s over budget {budget:.0f}s; killing {len(members)} leaked process(es)")
+            return False, False
+        log(f"watchdog: tick {holder} group {pid} ({child.get('name')}) age {age_recorded:.0f}s over budget {budget:.0f}s; killing {len(members)} leaked process(es)")
         for p, _c in members:
             kill_tree(p)
-        _clear_child_state()
-        return True
+        return True, False
     if abs(age_recorded - age_os) > WATCHDOG_PID_REUSE_TOLERANCE:
         # the pid is no longer the process we spawned: stale state, not an overrun
-        _clear_child_state()
-        return False
+        return False, False
     if age_os <= budget + WATCHDOG_GRACE_SECS:
-        return False
-    log(f"watchdog: tick {holder} child {child} ({st.get('name')}) age {age_os:.0f}s over budget {budget:.0f}s; killing child tree")
-    kill_tree(child)
-    _kill_group(child)
-    _clear_child_state()
-    return True
+        return False, True
+    log(f"watchdog: tick {holder} child {pid} ({child.get('name')}) age {age_os:.0f}s over budget {budget:.0f}s; killing child tree")
+    kill_tree(pid)
+    _kill_group(pid)
+    return True, False
 
 def wt_is_ours(path):
     """True only for a linked worktree this runner created from MAIN.
@@ -2748,6 +3344,55 @@ def explicit_run(only, dry):
     return st
 
 
+def check_required_context_producers():
+    """DIG-4507: one required context, one producer (recurrence guard).
+
+    A required context with two implementations has no single meaning: the
+    verdict then depends on which row a reader happens to look at. The guard
+    reads main's protection live and checks that every required context has
+    exactly one producer. A failure here is logged and is never fatal to the
+    tick: an unreadable protection is reported, not failed.
+
+    The report is logged per repo, because this is the only automated path:
+    the guard's own `main()` prints UNREADABLE, but the tick calls `run()`.
+    Printing `ok` for a repo whose protection could not be read would be a
+    silent pass - a tick that looks healthy while the guard is blind - so
+    `ok` is written only for the repos that were actually checked.
+    """
+    try:
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            "rcp_guard", os.path.join(here, "check_required_context_producers.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        def reader(repo):
+            # gh() returns raw stdout, not parsed JSON (see def gh): parse it here.
+            out = gh("api", f"repos/{repo}/branches/main/protection")
+            if out is None:
+                return False, None
+            try:
+                return True, json.loads(out)
+            except ValueError:
+                return False, None
+
+        rep = mod.run(host_dir=here, reader=reader)
+        readable = [r["repo"] for r in rep["repos"] if r.get("readable")]
+        for r in rep["repos"]:
+            if not r.get("readable"):
+                log("required-context producers: %s protection UNREADABLE (not failed)"
+                    % r["repo"])
+        if rep["violations"]:
+            log("required-context producers: VIOLATION " + json.dumps(rep["violations"]))
+        elif readable:
+            log("required-context producers: ok " + json.dumps(readable))
+        else:
+            log("required-context producers: nothing checked: no readable protection")
+    except Exception as e:
+        log(f"required-context producers: guard error {type(e).__name__}: {e}")
+
+
 def main():
     # The launch guard runs first, before any side effect: a run that no trusted
     # launcher started (a hand-run from any shell, a seat's shell, a detached
@@ -2789,8 +3434,6 @@ def main():
                     status(p["headRefOid"], "failure", FORK_DESC, app=False)
                 for p in pending_applied(prs)[:MAX_PER_TICK]:
                     applied_status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
-                for p in pending_reviews(main_prs)[:REVIEW_MAX_PER_TICK]:
-                    review_status(p["headRefOid"], "failure", f"local-ci skipped: {reason}")
             return
         if not dry:
             for p in pending(prs, True)[:MAX_PER_TICK]:
@@ -2807,6 +3450,7 @@ def main():
         for p in pending_reviews(main_prs):
             if reviewed >= REVIEW_MAX_PER_TICK: break
             process_review(p, dry); reviewed += 1
+        check_required_context_producers()
     finally:
         release_lock()
 

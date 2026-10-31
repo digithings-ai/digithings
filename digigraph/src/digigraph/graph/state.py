@@ -67,6 +67,12 @@ class WorkflowState(TypedDict, total=False):
     # the digisearch_index comment above; same LangGraph dropped-key pitfall.
     skill_pack: str | None
     skills: list[str] | None
+    # Tenant map webSearchDomains: hostnames web_search is pinned to (None: unpinned).
+    web_search_domains: list[str] | None
+    # Site graph id for the web_search tool description (DIGIGRAPH_WEB_SEARCH_SITES_DIR/<id>.md).
+    web_search_site: str | None
+    # Tenant map webSearchPageCorpus: digisearch page-corpus fallback id (None: off).
+    web_search_page_corpus: str | None
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None
@@ -87,6 +93,9 @@ class WorkflowState(TypedDict, total=False):
     web_search_provider: str | None
     # Per-request reasoning effort (X-Digi-Effort). Must be declared.
     effort: str | None
+    # Per-request hard tool-call cap (X-Digi-Max-Tool-Calls). Must be declared, or
+    # LangGraph drops the key and a prior turn's cap sticks on the checkpoint (#2097).
+    max_tool_calls: int | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None

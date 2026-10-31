@@ -4,6 +4,11 @@
  */
 
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
+
+/** Slash row plus the current setting the palette draws on the right. */
+export type ProductSlashCommand = Unstable_SlashCommand & {
+  value?: string;
+};
 import {
   commandOpensPane,
   isEffortCode,
@@ -41,7 +46,7 @@ import { applyThemeModeKeepingPalette, readEffectiveThemeState } from "@/lib/pal
 
 export type SlashSubmitAction =
   | { kind: "pass" }
-  | { kind: "block" }
+  | { kind: "block"; reason?: string }
   | { kind: "force"; forceTool: string; text: string }
   | { kind: "force-web"; text: string }
   | { kind: "pane"; command: SlashDef; arg: string }
@@ -59,6 +64,80 @@ export function catalogForceTool(forceTool: string | undefined): string | undefi
 export function extraSlashDefs(api: EmbedChatPrefsApi): SlashDef[] {
   void api;
   return [];
+}
+
+/**
+ * Session private mode (`?private=1`, then `/private` to toggle).
+ *
+ * Module scope, not React state: the slash wiring is a static function object
+ * (`digichat-skin-options`) and `slashSubmitAction` takes no session argument,
+ * so a state value would never reach the command. The transport is frozen on
+ * first render (#1339) for the same reason — its header accessor reads here.
+ * ON-only by construction: a session starts private from the URL or is switched
+ * to it; there is no `private=0`.
+ */
+let privateMode = false;
+const privateModeListeners = new Set<() => void>();
+
+export function isPrivateMode(): boolean {
+  return privateMode;
+}
+
+export function setPrivateMode(on: boolean): void {
+  if (privateMode === on) return;
+  privateMode = on;
+  for (const listener of privateModeListeners) listener();
+}
+
+export function togglePrivateMode(): void {
+  setPrivateMode(!privateMode);
+}
+
+/**
+ * Seed the session from the tenant opt-in and `?private=1`.
+ *
+ * Availability is applied first: a tenant that did not opt in cannot enter,
+ * and turning availability off clears a live flag. The URL only turns the
+ * mode on. `/private` is what turns it off again.
+ */
+export function seedPrivateMode(opts: { tenantOptIn: boolean; urlPrivate: boolean }): void {
+  setPrivateModeAvailable(opts.tenantOptIn);
+  if (opts.urlPrivate && opts.tenantOptIn) setPrivateMode(true);
+}
+
+/** The header both chat transports set while private mode is on. Exact value `1`. */
+export function privateModeHeaderEntries(on: boolean): readonly [name: string, value: string] | null {
+  return on ? ["X-Digi-Private", "1"] : null;
+}
+
+/** `useSyncExternalStore` subscription for the embed's session state. */
+export function subscribePrivateMode(listener: () => void): () => void {
+  privateModeListeners.add(listener);
+  return () => {
+    privateModeListeners.delete(listener);
+  };
+}
+
+/**
+ * Whether the resolved tenant offers private mode at all (`features.privateMode`).
+ *
+ * Separate from the session flag on purpose: the flag answers "is this session
+ * private", this answers "may it ever be". Starts false, so a session painted
+ * before the tenant config lands cannot enter the mode, and a tenant that never
+ * opted in cannot enter it at all — not from `?private=1`, not from `/private`.
+ * Turning availability off also drops a live session flag, or a tenant that
+ * stops offering the mode would leave one on for the rest of the session.
+ */
+let privateModeAvailable = false;
+
+export function isPrivateModeAvailable(): boolean {
+  return privateModeAvailable;
+}
+
+export function setPrivateModeAvailable(on: boolean): void {
+  if (privateModeAvailable === on) return;
+  privateModeAvailable = on;
+  if (!on) setPrivateMode(false);
 }
 
 function themeArgApplies(raw: string): boolean {
@@ -103,6 +182,8 @@ function paneStaysOpen(command: SlashDef, arg: string): boolean {
     case "mcp":
     case "byok":
       return !raw;
+    case "export":
+      return !raw || !isExportFormat(raw);
     default:
       return true;
   }
@@ -118,6 +199,14 @@ export function slashSubmitAction(raw: string, extra?: readonly SlashDef[]): Sla
   if (parsed.kind === "incomplete") return { kind: "block" };
   const { command, arg } = parsed;
   if (command.kind === "tool") return { kind: "block" };
+  // Export serialises the stored messages, which still hold the real text the
+  // user typed — handing over exactly what private mode is meant to hide.
+  if (isPrivateMode() && command.id === "export") {
+    return {
+      kind: "block",
+      reason: "Export is off in a private session — the stored thread still holds the real text.",
+    };
+  }
   if (paneStaysOpen(command, arg)) return { kind: "pane", command, arg };
   return { kind: "run", command, arg };
 }
@@ -157,27 +246,57 @@ export function applyThemePick(api: EmbedChatPrefsApi, preference: ThemePreferen
   else applyDocumentTheme(preference, palette);
 }
 
-function toggleHint(on: boolean, onText: string, offText: string): string {
-  return on ? `On · ${onText}` : `Off · ${offText}`;
+/**
+ * Paint a `/theme` row without storing it (palette hover). `null` paints
+ * `base` again. A host that owns the theme previews through its own state;
+ * the document theme repaints with `persist: false`.
+ */
+export function previewThemePick(
+  api: EmbedChatPrefsApi,
+  pick: { preference: ThemePreference; palette: string } | null,
+  base: ThemeState,
+): void {
+  if (api.setTheme) {
+    api.previewTheme?.(
+      pick ? { preference: pick.preference, palette: normalizePalette(pick.palette) } : null,
+    );
+    return;
+  }
+  const next = pick ?? base;
+  applyDocumentTheme(next.preference, next.palette, undefined, { persist: false });
 }
 
-/** Friendly /models hint. Preset tokens stay words; a concrete pick stays its id. */
-function modelChoiceLabel(model: string | undefined): string {
+/** Raw model id. Empty and the auto preset both read `auto`. */
+function modelChoiceValue(model: string | undefined): string {
   const value = model?.trim() ?? "";
-  if (!value) return "";
-  if (value === "auto" || value === "preset:auto") return "Auto";
-  if (value.startsWith("preset:")) {
-    const id = value.slice("preset:".length);
-    return id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
-  }
+  if (!value || value === "auto" || value === "preset:auto") return "auto";
+  if (value.startsWith("preset:")) return value.slice("preset:".length);
   return value;
+}
+
+/**
+ * The tenant's chat languages (what `setLanguage` accepts, else the chip's
+ * list), or null when the tenant sets none and every supported language is
+ * offered. Display only: `setLanguage` enforces the list itself.
+ */
+export function tenantLanguageCodes(
+  api: Pick<EmbedChatPrefsApi, "languageOptions" | "allowedLanguages">,
+): string[] | null {
+  const codes = api.allowedLanguages?.length
+    ? [...api.allowedLanguages]
+    : (api.languageOptions?.map((option) => option.code) ?? []);
+  return codes.length ? codes : null;
 }
 
 /** Featured language rows so `/dutch` etc. still resolve. */
 export function featuredLanguageCommands(
   setLanguage: (code: string) => void,
-): Unstable_SlashCommand[] {
-  return FEATURED_LANGUAGE_CODES.map((code) => {
+  allowed: readonly string[] | null = null,
+): ProductSlashCommand[] {
+  const codes = allowed
+    ? FEATURED_LANGUAGE_CODES.filter((code) => allowed.includes(code))
+    : FEATURED_LANGUAGE_CODES;
+  return codes.map((code) => {
     const label = languageLabel(code);
     return {
       id: label.toLowerCase(),
@@ -188,14 +307,17 @@ export function featuredLanguageCommands(
   });
 }
 
-export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
+export function buildProductSlashCommands(api: EmbedChatPrefsApi): ProductSlashCommand[] {
   const vis = visibilityFromPrefs(api);
-  const { prefs } = api;
+  // Values read the chosen prefs, not a live hover preview.
+  const prefs = api.committedPrefs ?? api.prefs;
   const extra = extraSlashDefs(api);
-  const rows: Unstable_SlashCommand[] = [];
+  const rows: ProductSlashCommand[] = [];
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
-    if (def.id === "search-engine" && !vis.webSearch) continue;
+    // A locked tool surface keeps the tenant's engine (the chat API ignores a
+    // visitor pick there too), so the picker is not offered.
+    if (def.id === "search-engine" && (!vis.webSearch || api.toolControl === "locked")) continue;
     if (def.id === "byok" && vis.byok === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
     if (def.id === "artifacts" && vis.artifacts !== true) continue;
@@ -203,54 +325,44 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if (def.id === "mcp" && vis.mcp === false) continue;
     if (def.id === "tools" && vis.tools === false) continue;
     if (def.id === "theme" && vis.theme === false) continue;
+    if (def.id === "private" && !isPrivateModeAvailable()) continue;
 
-    let description = def.hint;
-    if (def.id === "view") {
-      description = `View: ${prefs.view}`;
-    } else if (def.id === "density") {
-      description = `Density: ${prefs.density}`;
-    } else if (def.id === "theme") {
+    // The sentence stays the description. The right-hand column is the
+    // current setting, so opening the palette reads the session at a glance.
+    const description = def.hint;
+    let value = "";
+    if (def.id === "view") value = prefs.view;
+    else if (def.id === "density") value = prefs.density;
+    else if (def.id === "theme") {
       const state = currentThemeState(api);
-      description = matchThemeStep(state.preference, state.palette, state.resolved).label;
-    } else if (def.id === "thinking") {
-      description = `Thinking: ${prefs.thinking}`;
-    } else if (def.id === "lang") {
-      description = `Reply language (${languageLabel(prefs.language)})`;
-    } else if (def.id === "models") {
-      description = modelChoiceLabel(prefs.model) || def.hint;
-    } else if (def.id === "toolbar") {
-      description = toggleHint(prefs.toolbar, "visible", "hidden");
-    } else if (def.id === "scrollbar") {
-      description = prefs.scrollbars === "always" ? "always visible" : "on scroll";
-    } else if (def.id === "effort") {
-      description = prefs.effort || "medium";
-    } else if (def.id === "search-engine") {
-      description = prefs.searchEngine || "auto";
-    } else if (def.id === "export") {
-      description = "Markdown file of this thread";
+      value = matchThemeStep(state.preference, state.palette, state.resolved).label;
+    } else if (def.id === "thinking") value = prefs.thinking;
+    else if (def.id === "lang") value = prefs.language;
+    else if (def.id === "models") value = modelChoiceValue(prefs.model);
+    else if (def.id === "toolbar") value = prefs.toolbar ? "on" : "off";
+    else if (def.id === "scrollbar") value = prefs.scrollbars === "always" ? "always" : "auto";
+    else if (def.id === "effort") value = prefs.effort || "medium";
+    else if (def.id === "search-engine") value = prefs.searchEngine || "auto";
+    else if (def.id === "private") value = isPrivateMode() ? "on" : "off";
+    else if (def.id === "tools" && api.tenantAllowsWeb) {
+      value = prefs.webSearch ? "on" : "off";
     }
 
     const id = def.id === "lang" ? "language" : def.id;
-    const insertName = def.id === "export" ? "/export md" : def.names[0];
+    const insertName = def.names[0];
     rows.push({
       id,
       label: insertName,
       description,
+      ...(value ? { value } : {}),
       execute: () => {
         executeSlashDef(def, "", api);
       },
     });
-    if (def.id === "export") {
-      rows.push({
-        id: "export-html",
-        label: "/export html",
-        description: "Rendered HTML of this chat",
-        execute: () => {},
-      });
-    }
   }
 
-  rows.push(...featuredLanguageCommands(api.setLanguage));
+  rows.push(...featuredLanguageCommands(api.setLanguage, tenantLanguageCodes(api)));
+  rememberSlashValues(rows);
   return rows;
 }
 
@@ -261,8 +373,29 @@ export function shouldInsertToolDraft(id: string, extra: readonly SlashDef[]): b
   return false;
 }
 
+/** `md`, `markdown`, `html`: the `/export` argument. */
+function isExportFormat(raw: string): boolean {
+  return exportFormat(raw) !== null;
+}
+
+function exportFormat(raw: string): "md" | "html" | null {
+  const value = raw.trim().toLowerCase().replace(/^\./, "");
+  if (value === "md" || value === "markdown") return "md";
+  if (value === "html" || value === "htm") return "html";
+  return null;
+}
+
 export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsApi): void {
   switch (def.id) {
+    case "export": {
+      // The whole conversation. The skin bound the runner (`bindThreadExport`).
+      // A private session exports nothing; the submit gate and the skin's
+      // runner refuse too, this is the check closest to the call.
+      if (isPrivateMode()) return;
+      const format = exportFormat(arg);
+      if (format) api.exportThread?.(format);
+      return;
+    }
     case "view": {
       const mode = arg.trim().toLowerCase();
       // `hidden` / `compact` / `detailed` are the retired ids; they fold
@@ -319,13 +452,24 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       else api.openThinking();
       return;
     }
+    case "private":
+      // A session flag, not a turn: flips the mode and sends nothing. A tenant
+      // that did not opt in has no mode to flip, so the command does nothing
+      // even if a stale definition or a typed value reaches this far.
+      if (!privateModeAvailable) return;
+      togglePrivateMode();
+      return;
     case "lang": {
       if (!arg) {
         api.openLanguage();
         return;
       }
       const code = tryResolveLanguageInput(arg);
-      if (code) api.setLanguage(code);
+      // A tenant with a language list only offers those languages; any other
+      // pick opens the (filtered) page instead. setLanguage enforces the list
+      // too; this only keeps the page from silently doing nothing.
+      const allowed = tenantLanguageCodes(api);
+      if (code && (!allowed || allowed.includes(code))) api.setLanguage(code);
       else api.openLanguage();
       return;
     }
@@ -333,10 +477,10 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       api.openSettings();
       return;
     case "toolbar":
-      api.setToolbar(!api.prefs.toolbar);
+      api.setToolbar(!(api.committedPrefs ?? api.prefs).toolbar);
       return;
     case "scrollbar":
-      api.setScrollbars(api.prefs.scrollbars === "always" ? "auto" : "always");
+      api.setScrollbars((api.committedPrefs ?? api.prefs).scrollbars === "always" ? "auto" : "always");
       return;
     case "tools":
       api.openTools();
@@ -411,11 +555,22 @@ export function executeSlashFromComposer(
   if (def) executeSlashDef(def, arg, api);
 }
 
-export function languageSelectOptions(): {
+export function languageSelectOptions(allowed: readonly string[] | null = null): {
   value: string;
   label: string;
   native: string;
 }[] {
+  // A tenant language list (the chip's) is the whole page, in its order.
+  if (allowed) {
+    return allowed.map((code) => {
+      const row = LANGUAGES.find((l) => l.code === code);
+      return {
+        value: code,
+        label: row?.label ?? languageLabel(code),
+        native: row?.native ?? languageLabel(code),
+      };
+    });
+  }
   const featured = new Set<string>(FEATURED_LANGUAGE_CODES);
   const head = FEATURED_LANGUAGE_CODES.map((code) => {
     const row = LANGUAGES.find((l) => l.code === code);
@@ -451,6 +606,21 @@ type SlashAdapterLike = {
   categoryItems?: (categoryId: string) => readonly unknown[];
 };
 
+/**
+ * Current values for the `/` typeahead. The assistant-ui adapter copies
+ * label and description only, so the palette's value column would be empty
+ * there. `buildProductSlashCommands` records the values; the prefix adapter
+ * puts them back on each row as `metadata.value`.
+ */
+const slashValueById = new Map<string, string>();
+
+function rememberSlashValues(rows: readonly ProductSlashCommand[]): void {
+  slashValueById.clear();
+  for (const row of rows) {
+    if (row.value) slashValueById.set(row.id, row.value);
+  }
+}
+
 /** Prefix-match only — no category folders, so `/` is a navigable item list. */
 export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
   return {
@@ -459,7 +629,14 @@ export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
     categoryItems: () => [],
     search: (query: string) => {
       const raw = inner.search?.(query) ?? [];
-      return raw.filter((item) => slashItemPrefixMatch(item, query));
+      return raw
+        .filter((item) => slashItemPrefixMatch(item, query))
+        .map((item) => {
+          const value = slashValueById.get(item.id);
+          if (!value) return item;
+          const metadata = (item as { metadata?: Record<string, unknown> }).metadata;
+          return { ...item, metadata: { ...metadata, value } };
+        });
     },
   } as T;
 }

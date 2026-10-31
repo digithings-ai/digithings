@@ -5,17 +5,17 @@ summary: >-
   The same system at the edge: workers, containers and bindings. Some parts move unchanged; others change shape.
 ---
 
-Cloudflare is one of three homes, and the only one that runs on someone
-else's computers without becoming someone else's product. Workers handle
+Cloudflare is one of the homes the stack runs in, and the one where someone
+else's computers are used without the workload becoming their product. Workers handle
 request paths at the edge, containers run the workloads that need a full
 machine, and bindings connect them to state. The shape changes; the interface
 does not.
 
 ## What it is for
 
-The audience question is portability: if the system runs on a laptop today,
-what does it take to run it at the edge tomorrow? The answer the stack gives
-is: a deployment decision, not a rewrite. The same services, the same
+Portability is the question: if the system runs on a laptop today, what does
+it take to run it at the edge tomorrow? The stack's answer is a deployment
+decision, not a rewrite. The same services, the same
 contracts, the same identity checks, placed on Cloudflare's network instead
 of a local machine. An operator outgrows a laptop without outgrowing the
 system.

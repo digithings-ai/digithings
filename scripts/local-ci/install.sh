@@ -14,6 +14,12 @@
 # of its own on top of origin/develop. A working tree belongs to a person, and
 # the runner must not move it (DIG-5135).
 #
+# The checkout also has to be complete: the runner imports its helpers with a None
+# fallback and refuses every tick when one is absent, so a stale checkout that still
+# looks installable would leave the daemon running but the gate dark. The install asks
+# the checkout's own import_preflight.py before it renders or writes anything, and
+# refuses a tree whose modules do not all resolve (DIG-5585, DIG-5725).
+#
 # The install is staged: the new plist is rendered and linted before the live job is
 # touched, the previous plist is kept, and a failed bootstrap puts it back. A gate that
 # disappears because an installer half-finished is the failure this script exists to
@@ -22,6 +28,11 @@ set -eu
 : "${HOME:?install.sh: HOME is empty; refusing to install outside a user tree}"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LABEL=ai.digithings.local-ci
+# The interpreter the installed job runs. The install check below runs under the same
+# one, so a module that resolves for the check is a module the daemon can import.
+# A bare path, never flags: launch_guard.py refuses a job whose ProgramArguments do not
+# unpack to exactly an interpreter and a script.
+PYTHON=/usr/bin/python3
 CHECKOUT=""
 DRY=0
 ALLOW_WT=0
@@ -49,6 +60,39 @@ if [ ! -f "$SCRIPT" ]; then
   echo "install.sh: no runner at $SCRIPT" >&2
   exit 1
 fi
+if [ ! -f "$CHECKOUT/scripts/local-ci/launch_guard.py" ]; then
+  echo "install.sh: no launch_guard.py next to the runner; refusing to install a runner that cannot be guarded" >&2
+  echo "install.sh: a checkout from before DIG-4796 installs a runner any seat can start" >&2
+  exit 1
+fi
+# The runner refuses every tick when a module it imports is missing (exit 78), so a
+# checkout that is missing one is a checkout that installs a dark gate. Refuse it here,
+# before anything is written, and name what is missing (DIG-5585, DIG-5725).
+PREFLIGHT="$CHECKOUT/scripts/local-ci/import_preflight.py"
+if [ ! -f "$PREFLIGHT" ]; then
+  echo "install.sh: no import_preflight.py next to the runner; refusing to install a checkout that cannot check its own imports" >&2
+  echo "install.sh: the runner refuses every tick without it (exit 78, DIG-5585)" >&2
+  exit 1
+fi
+# The plist runs the runner under this interpreter, so the check that decides whether
+# the checkout is complete runs under it too: a module the check resolves elsewhere on
+# the host is not a module the daemon will find.
+if [ ! -x "$PYTHON" ]; then
+  echo "install.sh: no python at $PYTHON; the job this would install could not start" >&2
+  exit 1
+fi
+if "$PYTHON" "$PREFLIGHT" "$SCRIPT" > /dev/null; then
+  :
+else
+  status=$?
+  # The preflight writes the cause to stderr above: a missing module, a module that
+  # does not parse, or an interpreter that cannot run it. Do not name a cause here
+  # that it did not report - blaming the wrong thing is the failure this check
+  # exists to stop (DIG-4674).
+  echo "install.sh: refusing to install $CHECKOUT: the import check failed (exit $status); see the lines above" >&2
+  echo "install.sh: a daemon installed from this checkout could refuse every tick (exit 78)" >&2
+  exit 1
+fi
 if ! git -C "$CHECKOUT" rev-parse --verify -q HEAD > /dev/null 2>&1; then
   echo "install.sh: $CHECKOUT is not a git checkout; the runner fetches and needs one" >&2
   exit 1
@@ -59,7 +103,7 @@ if [ "$BRANCH" != "develop" ]; then
 fi
 # Paths go through sed; escape the three characters that would change the pattern.
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
-OUT=$(sed -e "s|__CHECKOUT__|$(esc "$CHECKOUT")|g" -e "s|__HOME__|$(esc "$HOME")|g" "$HERE/$LABEL.plist.template")
+OUT=$(sed -e "s|__CHECKOUT__|$(esc "$CHECKOUT")|g" -e "s|__HOME__|$(esc "$HOME")|g" -e "s|__PYTHON__|$(esc "$PYTHON")|g" "$HERE/$LABEL.plist.template")
 if [ "$DRY" = 1 ]; then
   printf '%s\n' "$OUT"
   exit 0

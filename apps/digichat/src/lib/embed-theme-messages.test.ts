@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   THEME_MESSAGE_TYPE,
   MAX_THEME_AGE_MS,
+  parseEmbedPaletteParam,
   parseEmbedThemeParam,
   buildThemeMessage,
   parseThemeMessage,
@@ -9,6 +10,7 @@ import {
   applyEmbedPalette,
   embedThemeColor,
   embedThemePick,
+  embedThemePrefs,
   embedUserThemeKey,
   resolveEmbedPalette,
   resolveEmbedTheme,
@@ -270,6 +272,25 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(resolveEmbedTheme({ pick: null, parent: null, url: null, tenant: undefined })).toBe(
       "dark",
     );
+    // A top-level site document beats the tenant default. A pin (no site) does not.
+    expect(
+      resolveEmbedTheme({
+        pick: null,
+        parent: null,
+        url: null,
+        tenant: "light",
+        site: "dark",
+      }),
+    ).toBe("dark");
+    expect(
+      resolveEmbedTheme({
+        pick: null,
+        parent: null,
+        url: "light",
+        tenant: "dark",
+        site: "dark",
+      }),
+    ).toBe("light");
     // Dropping the pick (/theme auto) returns to the tenant theme.
     expect(
       resolveEmbedTheme({
@@ -281,6 +302,14 @@ describe("embed /theme pick (2.6.6)", () => {
     ).toBe("light");
   });
 
+  it("reads ?palette= only when it is the default or a registry id", () => {
+    expect(parseEmbedPaletteParam(null)).toBeNull();
+    expect(parseEmbedPaletteParam("")).toBeNull();
+    expect(parseEmbedPaletteParam("nope")).toBeNull();
+    expect(parseEmbedPaletteParam("default")).toBe("default");
+    expect(parseEmbedPaletteParam("Dracula")).toBe("dracula");
+  });
+
   it("resolves the one palette channel: pick > parent > default", () => {
     const pick = { mode: "dark" as const, palette: "aura" as const };
     expect(resolveEmbedPalette({ pick, parent: "nord" })).toBe("aura");
@@ -289,6 +318,21 @@ describe("embed /theme pick (2.6.6)", () => {
     // A default-palette pick still beats the parent, so /theme "default" works.
     expect(
       resolveEmbedPalette({ pick: { mode: "dark", palette: "default" }, parent: "nord" }),
+    ).toBe("default");
+    // No parent message yet: the URL, then the site document, can still paint.
+    expect(
+      resolveEmbedPalette({ pick: null, parent: null, url: "dracula", site: "nord" }),
+    ).toBe("dracula");
+    expect(resolveEmbedPalette({ pick: null, parent: null, site: "nord" })).toBe("nord");
+    // A parent message that names no palette clears back to the default look.
+    expect(
+      resolveEmbedPalette({
+        pick: null,
+        parent: null,
+        parentSeen: true,
+        url: "dracula",
+        site: "nord",
+      }),
     ).toBe("default");
   });
 
@@ -314,3 +358,42 @@ describe("embed /theme pick (2.6.6)", () => {
     expect(meta.get("content")).toBe("#121417");
   });
 });
+
+describe("embed /theme hover preview", () => {
+  it("previews a pick through onThemePreview without touching the stored pick", () => {
+    const onThemePick = vi.fn();
+    const onThemePreview = vi.fn();
+    const session = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (k: string) => session.get(k) ?? null,
+      setItem: (k: string, v: string) => void session.set(k, v),
+      removeItem: (k: string) => void session.delete(k),
+    });
+    const api = embedThemePrefs({
+      theme: { mode: "light", palette: "default" },
+      onThemePick,
+      onThemePreview,
+      openTheme: () => {},
+    });
+    api.previewTheme!({ preference: "dark", palette: "aura" });
+    expect(onThemePreview).toHaveBeenLastCalledWith({ pick: { mode: "dark", palette: "aura" } });
+    // "auto" previews dropping the pick; null ends the preview.
+    api.previewTheme!({ preference: "auto", palette: "default" });
+    expect(onThemePreview).toHaveBeenLastCalledWith({ pick: null });
+    api.previewTheme!(null);
+    expect(onThemePreview).toHaveBeenLastCalledWith(null);
+    expect(onThemePick).not.toHaveBeenCalled();
+    expect(session.size).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("offers no preview when the host gives no preview hook", () => {
+    const api = embedThemePrefs({
+      theme: { mode: "light", palette: "default" },
+      onThemePick: vi.fn(),
+      openTheme: () => {},
+    });
+    expect(api.previewTheme).toBeUndefined();
+  });
+});
+

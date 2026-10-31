@@ -1,3 +1,7 @@
+import type { TenantLocales } from "@/lib/tenant-locales";
+import { constantTimeEqual } from "@/lib/constant-time-equal";
+import type { TenantFonts } from "@/lib/tenant-fonts";
+import type { TenantColors } from "@/lib/tenant-colors";
 import { mcpSubTools } from "@/lib/deploy-config/client-projection";
 /**
  * The client-safe projection of an embed tenant, and the two ways to obtain it.
@@ -35,17 +39,23 @@ import {
 
 export type EmbedTenantClientConfig = {
   slug: string;
-  gateMode: "turn_limited" | "ungated" | "trial_form";
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
   theme: "dark" | "light";
   /** assistant-ui Thread layout. See thread-skins.ts */
   skin?: ThreadSkin;
   accent: { color: string; foreground: string } | null;
+  /** Tenant heading/body faces (src/lib/tenant-fonts.ts); null when unset. */
+  fonts: TenantFonts | null;
+  /** Tenant light/dark colour sets (src/lib/tenant-colors.ts); null when unset. */
+  colors: TenantColors | null;
   attribution: boolean;
   title?: string;
   welcome?: string;
   welcomeBody?: string[];
   suggestions?: string[];
   placeholder?: string;
+  /** Chat languages and their copy (composer language chip). Omit = no chip. */
+  locales?: TenantLocales;
   /** User file picker. JSON omit / unresolved-tenant omit stays off except DEFAULT. */
   attachments?: boolean;
   /**
@@ -56,6 +66,11 @@ export type EmbedTenantClientConfig = {
   speech?: boolean;
   sources?: boolean;
   branchPicker?: boolean;
+  /**
+   * Tenant opt-in to session private mode (`/private`, `?private=1`). Omit =
+   * off: a tenant that never opted in cannot enter the mode from either path.
+   */
+  privateMode?: boolean;
   /** Seed language for the embed session. Omit = client default (English). */
   defaultLanguage?: string;
   /**
@@ -85,7 +100,7 @@ export type EmbedTenantClientConfig = {
   toolbar?: boolean;
   scrollbars?: "always" | "auto";
   searchEngine?: string;
-  /** OCC locks tool and MCP toggles. Omitted unless true. */
+  /** The gated tenant locks tool and MCP toggles. Omitted unless true. */
   lockSessionControls?: boolean;
   /** Catalog entries — no MCP URLs */
   tools?: {
@@ -114,7 +129,11 @@ export type EmbedTenantClientConfig = {
     allowPicker?: boolean;
     picker?: {
       presets: Array<{ id: string; label: string; model: string }>;
-      groups: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+      groups: Array<{
+        provider: string;
+        models: Array<{ id: string; label: string; premium?: boolean }>;
+        premium?: boolean;
+      }>;
       showFullList: boolean;
     };
   };
@@ -138,6 +157,8 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   theme: "dark",
   skin: BASELINE_EMBED_SKIN,
   accent: null,
+  fonts: null,
+  colors: null,
   attribution: true,
   welcome: BASELINE_EMBED_WELCOME,
   welcomeBody: [...BASELINE_EMBED_WELCOME_BODY],
@@ -155,10 +176,14 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   mcp: { servers: [], allowUserServers: false, allowAddForm: false },
 };
 
-/** Registry entry → client-safe config. Copies declared fields only; `token`
- *  and backend secrets (endpoints, agent names) have no branch here. The
- *  `backendType` discriminator is projected so the UI can enable Foundry-safe
- *  chrome (regen/edit) without learning relay URLs (#3475). */
+/** Registry entry → client-safe config, built from an allowlist of display
+ *  fields: nothing is copied whole from the document and then stripped.
+ *  `token`, `tokenEnv`, `access` (incl. `access.invite`) and backend secrets
+ *  (endpoints, agent names) have no branch here, and `tools`/`models` are
+ *  rebuilt field by field so server policy (caps, budgets, legacy flags) or a
+ *  field added later never reaches the browser. The `backendType`
+ *  discriminator is projected so the UI can enable Foundry-safe chrome
+ *  (regen/edit) without learning relay URLs (#3475). */
 export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientConfig {
   return {
     slug: cfg.slug,
@@ -166,18 +191,22 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     theme: cfg.theme,
     skin: cfg.skin ?? defaultThreadSkinForTenant({ slug: cfg.slug }),
     accent: cfg.accent ?? null,
+    fonts: cfg.fonts ?? null,
+    colors: cfg.colors ?? null,
     attribution: cfg.attribution,
     title: cfg.title,
     welcome: cfg.welcome,
     welcomeBody: cfg.welcomeBody?.length ? cfg.welcomeBody : undefined,
     suggestions: cfg.suggestions ?? getTenantSuggestionPool(cfg.slug),
     placeholder: cfg.placeholder,
+    ...(cfg.locales ? { locales: cfg.locales } : {}),
     lockedContact: cfg.lockedContact,
     attachments: cfg.attachments === true,
     dictation: cfg.dictation === true ? true : undefined,
     speech: cfg.speech === true ? true : undefined,
     sources: typeof cfg.sources === "boolean" ? cfg.sources : undefined,
     branchPicker: typeof cfg.branchPicker === "boolean" ? cfg.branchPicker : undefined,
+    privateMode: cfg.privateMode === true ? true : undefined,
     defaultLanguage: cfg.defaultLanguage,
     pageContext: cfg.pageContext ?? "visible",
     showByok: cfg.showByok ?? false,
@@ -200,7 +229,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     ...(cfg.scrollbars ? { scrollbars: cfg.scrollbars } : {}),
     ...(cfg.searchEngine ? { searchEngine: cfg.searchEngine } : {}),
     ...(cfg.lockSessionControls === true ? { lockSessionControls: true } : {}),
-    tools: cfg.tools,
+    tools: clientTools(cfg.tools),
     mcp: cfg.mcp
       ? {
           servers: cfg.mcp.servers.map((s) => {
@@ -216,8 +245,64 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
           allowAddForm: cfg.mcp.allowUserServers === true && cfg.mcp.allowAddForm === true,
         }
       : undefined,
-    models: cfg.models,
+    models: clientModels(cfg.models),
     backendType: cfg.backend.type,
+  };
+}
+
+/** Tool catalog for the browser: ids, labels and defaults only. */
+function clientTools(
+  tools: EmbedTenantConfig["tools"],
+): EmbedTenantClientConfig["tools"] {
+  if (!tools) return undefined;
+  return {
+    ...(typeof tools.allowUserToggle === "boolean"
+      ? { allowUserToggle: tools.allowUserToggle }
+      : {}),
+    catalog: (tools.catalog ?? []).map((entry) => ({
+      id: entry.id,
+      ...(typeof entry.default === "boolean" ? { default: entry.default } : {}),
+      ...(entry.label ? { label: entry.label } : {}),
+      ...(entry.tools
+        ? {
+            tools: entry.tools.map((t) => ({
+              id: t.id,
+              ...(t.label ? { label: t.label } : {}),
+              ...(t.group ? { group: t.group } : {}),
+            })),
+          }
+        : {}),
+    })),
+  };
+}
+
+/** Model offer for the browser: the picker's display fields only. */
+function clientModels(
+  models: EmbedTenantConfig["models"],
+): EmbedTenantClientConfig["models"] {
+  if (!models) return undefined;
+  const picker = models.picker;
+  return {
+    ...(models.default ? { default: models.default } : {}),
+    ...(models.available ? { available: [...models.available] } : {}),
+    ...(typeof models.allowPicker === "boolean" ? { allowPicker: models.allowPicker } : {}),
+    ...(picker
+      ? {
+          picker: {
+            presets: picker.presets.map((p) => ({ id: p.id, label: p.label, model: p.model })),
+            groups: picker.groups.map((g) => ({
+              provider: g.provider,
+              models: g.models.map((m) => ({
+                id: m.id,
+                label: m.label,
+                ...(typeof m.premium === "boolean" ? { premium: m.premium } : {}),
+              })),
+              ...(typeof g.premium === "boolean" ? { premium: g.premium } : {}),
+            })),
+            showFullList: picker.showFullList,
+          },
+        }
+      : {}),
   };
 }
 
@@ -242,7 +327,7 @@ export function resolveEmbedClientConfigFromParams(
   const registered = resolveEmbedTenantByHost(host);
   if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
   const trimmedToken = token?.trim();
-  if (trimmedToken && trimmedToken === registered.token) {
+  if (trimmedToken && registered.token && constantTimeEqual(trimmedToken, registered.token)) {
     return toEmbedClientConfig(registered);
   }
   // First-party tokenless paint requires a first-party browser-attested origin

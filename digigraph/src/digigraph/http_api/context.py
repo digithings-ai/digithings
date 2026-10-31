@@ -136,7 +136,10 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     if auth is not None:
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
-        if auth.tenant_slug:
+        # Only a signed tenant claim names the tenant (#2303, DIG-3585). The
+        # middleware no longer fills tenant_slug from a header; the flag check
+        # keeps that true for a context built any other way.
+        if auth.tenant_slug and getattr(auth, "tenant_slug_verified", False):
             updates["digi_trace_tenant"] = auth.tenant_slug
             tenant_from_auth = auth.tenant_slug
         if auth.project_id:
@@ -155,11 +158,9 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         corpus_map=corpus_map,
     )
     # The effective tenant slug, resolved exactly as resolve_corpus_override does
-    # (verified auth first, the unsigned routing hint only when auth named no
-    # tenant) so corpus and skills can never resolve to two different tenants.
-    tenant_slug = tenant_from_auth or (
-        _hget(http_request.headers, "X-Digi-Tenant", "x-digi-tenant").strip().lower() or None
-    )
+    # (the verified auth tenant only; no unsigned header) so corpus and skills
+    # can never resolve to two different tenants.
+    tenant_slug = tenant_from_auth
     # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
     # digisearch_index / vault_path_prefix must be written unconditionally so a client
     # body value cannot survive into graph state (digisearch has no server-side
@@ -174,6 +175,10 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     updates["lock_session_controls"] = bool(corpus.lock_session_controls)
     # Same rule: dedicated per-index search tools come only from the tenant map.
     updates["digisearch_tools"] = corpus.digisearch_tools
+    # Same rule: a tenant's web_search pin comes only from the tenant map.
+    updates["web_search_domains"] = corpus.web_search_domains
+    updates["web_search_site"] = corpus.web_search_site
+    updates["web_search_page_corpus"] = corpus.web_search_page_corpus
     # Same rule again: a tenant's skill documents are tenant content (DIG-2637).
     # Both keys are written unconditionally, so a client body value cannot select
     # a pack and a prior turn's set cannot survive: unmapped / unauthenticated
@@ -247,6 +252,18 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
         updates["force_tool"] = resolved_force
     effort = _hget(headers, "X-Digi-Effort", "x-digi-effort").strip().lower()
     updates["effort"] = effort if effort in ("low", "medium", "high") else None
+    # Hard tool-call cap for this turn: digichat forwards the deployment's
+    # guardrails.maxToolCallsPerTurn so digillm can stop the tool loop structurally
+    # instead of relying on the prompt sentence the chat-side notice sends. Only an
+    # integer 1..100 is a cap; anything else (absent, junk, out of range) is ignored.
+    # Unconditional like effort above, so a client-supplied body value cannot stick
+    # and a prior turn's cap never survives on the checkpoint.
+    cap_raw = _hget(headers, "X-Digi-Max-Tool-Calls", "x-digi-max-tool-calls").strip()
+    try:
+        cap = int(cap_raw)
+    except ValueError:
+        cap = None
+    updates["max_tool_calls"] = cap if cap is not None and 1 <= cap <= 100 else None
     return updates
 
 

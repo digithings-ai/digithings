@@ -242,6 +242,7 @@ run_tools(
     execute_tool: Callable[[str, dict], str | dict],
     *,
     temperature=0.2, max_tool_rounds=5,
+    max_tool_calls: int | None = None,
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
@@ -249,6 +250,17 @@ run_tools(
     reasoning_effort: str | None = None,
 ) -> str
 ```
+
+**Hard tool-call cap.** `max_tool_calls` bounds *executed calls*, not rounds: every
+dispatched call counts, so several parallel calls in one round consume several units
+of the budget. When a round would cross the cap, only the remaining allowance runs,
+the rest of that round is discarded unexecuted (never dispatched, never appended as a
+tool result) and the loop goes straight to the existing forced tool-free wrap-up, so
+the final answer is synthesised from the results already gathered. Callers see
+`("tool_call_limit_reached", {max_tool_calls})` once, immediately before that wrap-up
+(instead of `("round_limit_exhausted", …)`). `None` keeps the round budget alone.
+Consumers forward the deployment's cap as `X-Digi-Max-Tool-Calls` (digigraph →
+`research_node`/`run_research_agent` → `run_tools`).
 
 **Chat reasoning level.** `reasoning_effort` is the chat's /effort
 (low/medium/high). On streamed turns, `chat_reasoning_effort(model, requested)`

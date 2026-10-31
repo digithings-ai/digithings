@@ -4,7 +4,8 @@ import { normalizeEmbedHost, resolveEmbedTenantByHost } from "@/lib/embed-tenant
 export const FIRST_PARTY_EMBED_HOSTS: ReadonlySet<string> = new Set([
   "digithings.ai",
   "www.digithings.ai",
-  // occ.digithings.ai removed (DIG-1210 Act B2): OCC is reachable only with its invite key.
+  // Tenant hosts are never first-party (DIG-1210 Act B2): an invite-gated tenant is
+  // reachable only with its invite key.
 ]);
 
 /** Loopback hosts eligible for dev-only tokenless embed when registered. */

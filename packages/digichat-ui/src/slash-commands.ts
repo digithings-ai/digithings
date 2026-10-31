@@ -152,12 +152,18 @@ export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] =
   { id: "setup", label: "Setup" },
 ];
 
+/** `/export` formats. Values are the typed argument. */
+export const EXPORT_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "md", label: "Markdown (.md)" },
+  { value: "html", label: "HTML (.html)" },
+];
+
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
     id: "mcp",
     names: ["/mcp"],
     needsArg: false,
-    hint: "MCP JSON / auth / new",
+    hint: "Connect and edit MCP servers.",
     kind: "action",
     category: "tools",
     pane: true,
@@ -166,7 +172,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "tools",
     names: ["/tools"],
     needsArg: false,
-    hint: "Connected tools",
+    hint: "Turn connected tools on or off.",
     kind: "action",
     category: "tools",
     pane: true,
@@ -175,7 +181,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "lang",
     names: ["/language", "/lang"],
     needsArg: false,
-    hint: "en / Italian / Italiano",
+    hint: "Choose the reply language.",
     choiceOptions: LANG_CHOICES,
     kind: "client",
     category: "setup",
@@ -184,7 +190,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "models",
     names: ["/models"],
     needsArg: false,
-    hint: "Pick model",
+    hint: "Choose the model for this chat.",
     kind: "action",
     category: "setup",
     pane: true,
@@ -193,7 +199,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "effort",
     names: ["/effort"],
     needsArg: false,
-    hint: "low / medium / high",
+    hint: "Set how hard the model thinks.",
     choiceOptions: EFFORT_CHOICES,
     kind: "client",
     category: "setup",
@@ -202,7 +208,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "view",
     names: ["/view"],
     needsArg: false,
-    hint: "quiet / balanced / verbose",
+    hint: "Choose how much of the work to show.",
     choiceOptions: VIEW_CHOICES,
     kind: "client",
     category: "setup",
@@ -211,7 +217,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "density",
     names: ["/density"],
     needsArg: false,
-    hint: "compact / default / airy",
+    hint: "Set the spacing of the work trace.",
     choiceOptions: DENSITY_CHOICES,
     kind: "client",
     category: "setup",
@@ -220,7 +226,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "theme",
     names: ["/theme"],
     needsArg: false,
-    hint: "default dark, default light, then each palette",
+    hint: "Switch the colour theme.",
     kind: "client",
     category: "setup",
     pane: true,
@@ -229,7 +235,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "thinking",
     names: ["/thinking"],
     needsArg: false,
-    hint: "auto / collapsed / open",
+    hint: "Choose whether reasoning stays open.",
     choiceOptions: THINKING_CHOICES,
     kind: "client",
     category: "setup",
@@ -238,7 +244,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "search-engine",
     names: ["/search-engine"],
     needsArg: false,
-    hint: "auto / exa / tavily / parallel / firecrawl / tinyfish",
+    hint: "Choose the web search engine.",
     choiceOptions: SEARCH_ENGINE_CHOICES,
     kind: "client",
     category: "setup",
@@ -247,7 +253,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "byok",
     names: ["/provider", "/byok", "/key"],
     needsArg: false,
-    hint: "API provider",
+    hint: "Use your own model provider.",
     kind: "action",
     category: "setup",
     pane: true,
@@ -256,7 +262,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "settings",
     names: ["/settings"],
     needsArg: false,
-    hint: "Settings",
+    hint: "Open every setting.",
     kind: "action",
     category: "setup",
     pane: true,
@@ -265,7 +271,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "toolbar",
     names: ["/toolbar"],
     needsArg: false,
-    hint: "Composer toolbar",
+    hint: "Show or hide the composer toolbar.",
     kind: "action",
     category: "setup",
   },
@@ -273,7 +279,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "scrollbar",
     names: ["/scrollbar"],
     needsArg: false,
-    hint: "Scrollbars: always or on scroll",
+    hint: "Show scrollbars always or while scrolling.",
     kind: "action",
     category: "setup",
   },
@@ -281,15 +287,23 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "artifacts",
     names: ["/artifacts"],
     needsArg: false,
-    hint: "Files this session produced",
+    hint: "Open files from this session.",
     kind: "action",
+    category: "session",
+  },
+  {
+    id: "private",
+    names: ["/private"],
+    needsArg: false,
+    hint: "Ask the model to use stand-in names in its replies.",
+    kind: "toggle",
     category: "session",
   },
   {
     id: "sessions",
     names: ["/sessions", "/resume", "/continue"],
     needsArg: false,
-    hint: "Switch conversation",
+    hint: "Switch to another conversation.",
     kind: "action",
     category: "session",
   },
@@ -297,7 +311,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "new",
     names: ["/new"],
     needsArg: false,
-    hint: "Start a new conversation",
+    hint: "Start a new conversation.",
     kind: "client",
     category: "session",
   },
@@ -305,7 +319,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "clear",
     names: ["/clear"],
     needsArg: false,
-    hint: "New conversation (alias of /new)",
+    hint: "Start a new conversation.",
     kind: "client",
     category: "session",
   },
@@ -313,7 +327,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "compact",
     names: ["/compact", "/summarize"],
     needsArg: false,
-    hint: "Summarize this thread to free context",
+    hint: "Summarize this thread to free context.",
     kind: "client",
     category: "session",
   },
@@ -321,7 +335,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "undo",
     names: ["/undo"],
     needsArg: false,
-    hint: "Previous assistant branch",
+    hint: "Go back to the previous answer.",
     kind: "client",
     category: "actions",
   },
@@ -329,7 +343,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "redo",
     names: ["/redo"],
     needsArg: false,
-    hint: "Regenerate last answer",
+    hint: "Regenerate the last answer.",
     kind: "client",
     category: "actions",
   },
@@ -337,7 +351,7 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "copy",
     names: ["/copy"],
     needsArg: false,
-    hint: "Copy last answer as markdown",
+    hint: "Copy the last answer as markdown.",
     kind: "client",
     category: "actions",
   },
@@ -345,15 +359,17 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "export",
     names: ["/export"],
     needsArg: false,
-    hint: "Download this thread: /export md or /export html",
+    hint: "Download this conversation as a file.",
     kind: "client",
     category: "actions",
+    // A pane: `/export ` lists the formats, `/export md|html` runs one.
+    choiceOptions: EXPORT_CHOICES,
   },
   {
     id: "help",
     names: ["/help"],
     needsArg: false,
-    hint: "Show commands",
+    hint: "Show what you can ask.",
     kind: "client",
     category: "actions",
     pane: true,
@@ -609,21 +625,40 @@ export type SubmenuOption = {
 /**
  * Filter a pane. An exact option token keeps the full list and highlights
  * that row, so the next arrow still moves. A partial query uses startsWith
- * on the token, id, label, and aliases.
+ * on the token, id, label, and aliases. With `contains` (model lists), a
+ * case-insensitive substring match is enough, ranked: a name (label or
+ * alias) that starts with the query, then any key that starts with it, then
+ * a match inside a key; ties keep list order.
  */
 export function submenuRows<T extends SubmenuOption>(
   rows: readonly T[],
   filter: string,
+  opts: { contains?: boolean } = {},
 ): { rows: readonly T[]; cursor: number } {
   const q = filter.trim().toLowerCase();
   if (!q) return { rows, cursor: -1 };
   const exact = rows.findIndex((row) => optionKeys(row).includes(q));
   if (exact >= 0) return { rows, cursor: exact };
-  const matched = rows.filter((row) =>
-    [row.token, row.id, row.label ?? "", ...(row.aliases ?? [])].some((value) =>
-      value.trim().toLowerCase().startsWith(q),
-    ),
-  );
+  const keys = (row: T) =>
+    [row.token, row.id, row.label ?? "", ...(row.aliases ?? [])].map((value) =>
+      value.trim().toLowerCase(),
+    );
+  if (!opts.contains) {
+    const matched = rows.filter((row) => keys(row).some((value) => value.startsWith(q)));
+    return { rows: matched, cursor: matched.length ? 0 : -1 };
+  }
+  const rank = (row: T): number => {
+    const names = [row.label ?? "", ...(row.aliases ?? [])].map((value) => value.trim().toLowerCase());
+    if (names.some((value) => value.startsWith(q))) return 0;
+    const all = keys(row);
+    if (all.some((value) => value.startsWith(q))) return 1;
+    return all.some((value) => value.includes(q)) ? 2 : -1;
+  };
+  const matched = rows
+    .map((row, index) => ({ row, index, rank: rank(row) }))
+    .filter((entry) => entry.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.row);
   return { rows: matched, cursor: matched.length ? 0 : -1 };
 }
 

@@ -1,0 +1,87 @@
+# digitrace-ingest — OTLP/HTTP receiver Worker and Queue consumer (ADR-0036, DIG-2657).
+#
+# One Worker, two entry points:
+#   fetch  — POST /v1/traces, the OTLP/HTTP receiver (JSON and protobuf).
+#   queue  — the consumer that writes R2, the D1 `digitrace` index and Analytics Engine.
+#
+# HUMAN STEPS (prepared here, not performed; ADR-0036 §15):
+#   [ ] Confirm the account is on Workers Paid (Queues needs it).
+#   [ ] Create the R2 bucket `digitrace-archive`.
+#   [ ] Create the Queue `digitrace-ingest` and the dead-letter queue
+#       `digitrace-ingest-dlq`. max_retries is set explicitly below.
+#   [ ] Create the KV namespace for the ingest tokens and put its id below.
+#       Key = sha256 hex of the token; value = {"source": "...", "tenants": [...]}.
+#   [ ] Create the Analytics Engine dataset `digitrace_ingest`.
+#   [ ] `wrangler d1 create digitrace` and put its id in [[d1_databases]] below.
+#       The deploy workflow applies migrations/ before each deploy.
+#   [ ] Attach the custom domain route for trace.digithings.ai and create the DNS
+#       record, then approve the production deploy.
+#
+# The ingest token is NOT a Worker secret: it lives in KV so one namespace holds
+# one entry per source, and the KV key is the token's SHA-256 so the store never
+# holds a usable credential. Never print a token or a secret value.
+
+name = "digitrace-ingest"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+# Keep workers.dev off: ingest is a public write endpoint under a per-source
+# token, and a guessable *.workers.dev front is a second, unmanaged ingress.
+# The custom-domain route below is the only intended entry point.
+workers_dev = false
+
+[observability]
+enabled = true
+
+# Raw OTLP-JSON NDJSON, one object per queue message:
+#   tenant=<slug>/date=<YYYY-MM-DD>/<source>/<uuid>.ndjson
+# 180-day lifecycle rule is a human step (ADR-0036 §3).
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "digitrace-archive"
+
+# Per-source ingest tokens. PLACEHOLDER id: replace before the first deploy
+# (`wrangler kv namespace create digitrace-ingest-tokens`, Chris's go).
+[[kv_namespaces]]
+binding = "INGEST_TOKENS"
+id = "00000000000000000000000000000000"
+
+[[queues.producers]]
+binding = "INGEST_QUEUE"
+queue = "digitrace-ingest"
+
+# The must-fix of the DIG-2664 review: an explicit max_retries and a
+# dead-letter queue, so a poison batch lands somewhere inspectable instead of
+# retrying for ever or vanishing.
+[[queues.consumers]]
+queue = "digitrace-ingest"
+max_batch_size = 10
+max_batch_timeout = 5
+max_concurrency = 6
+max_retries = 5
+dead_letter_queue = "digitrace-ingest-dlq"
+
+# Per-tenant and per-model token, cost and latency aggregates. Fire-and-forget:
+# no read-after-write guarantee, sampled by Cloudflare under load (ADR-0036 §3).
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "digitrace_ingest"
+
+# The queryable trace index (DIG-2887 S1: D1, no longer the core Postgres project).
+# Schema: migrations/0001_digitrace_index.sql. D1 is reachable only through
+# this binding, so the tenant boundary is the `workspace_id` (tenant slug)
+# filter in Worker code (ADR-0036 §5). No secrets: the binding is the credential.
+# PLACEHOLDER id: replace after `wrangler d1 create digitrace` (Chris's go).
+# The deploy workflow skips the deploy while any id here is all zeros.
+[[d1_databases]]
+binding = "INDEX_DB"
+database_name = "digitrace"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# HUMAN GATE — infra/network: uncomment only with the DNS record and the
+# production deploy approval in hand.
+# [[routes]]
+# pattern = "trace.digithings.ai"
+# zone_name = "digithings.ai"
+# custom_domain = true

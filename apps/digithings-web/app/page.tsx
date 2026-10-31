@@ -5,6 +5,7 @@ import { DtNav } from "@/components/DtNav";
 import { FooterWordmark } from "@/components/landing/FooterWordmark";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { embedOriginForChat } from "@/lib/security-headers.mjs";
+import { SHARE_IMAGE } from "@/lib/share";
 
 // The landing page (v15, D1, #4429).
 //
@@ -13,8 +14,8 @@ import { embedOriginForChat } from "@/lib/security-headers.mjs";
 // the shell: the nav, the metadata, and the footer. The vertical rails live
 // in the root layout so every route shares them.
 //
-// The closing wordmark is the hero's pixel lockup (`PixelWordmark`) at page
-// width, so the footer mark and the header mark are the same family.
+// The closing wordmark is the studio mark (`BrandWordmark`) at page width,
+// the same component as the hero and the top bar.
 
 export const metadata: Metadata = {
   title: "digithings — AI infrastructure in a glass box",
@@ -26,6 +27,7 @@ export const metadata: Metadata = {
     description:
       "AI infrastructure you self-host: nine modules that drop into the stack you already run. " +
       "Your own keys and providers, every step traceable.",
+    images: [SHARE_IMAGE],
   },
 };
 

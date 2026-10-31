@@ -1,0 +1,452 @@
+/**
+ * The loading mark: the brand's Jenga logo, drawn from its own 60x60 artwork and
+ * held in the middle of the page while the book paginates.
+ *
+ * It is animated, but only in colour: the accent walks down the four rows of
+ * cubes, one per beat, then all four light together and it starts again. Nothing
+ * moves. A bouncing logo was too much for a wait this short — the page is ready
+ * in a second or two on a normal connection, and a mark crossing the sheet drew
+ * more attention than the book arriving.
+ *
+ * The artwork travels as rectangles in the bundle rather than as an SVG request:
+ * a mark that arrives late fills nothing. Source: packages/brand/studio/
+ * logo-mark.svg on the brand-studio branch.
+ */
+
+/** [x, y, width, row, opacity] in the mark's 60x60 space. */
+const MARK: readonly (readonly [number, number, number, number, number])[] = [
+  [18, 9, 2, 0, 1.0],
+  [31, 9, 2, 0, 1.0],
+  [44, 9, 2, 0, 1.0],
+  [16, 10, 5, 0, 1.0],
+  [30, 10, 5, 0, 1.0],
+  [43, 10, 5, 0, 1.0],
+  [15, 11, 8, 0, 1.0],
+  [28, 11, 8, 0, 1.0],
+  [41, 11, 9, 0, 1.0],
+  [13, 12, 12, 0, 1.0],
+  [26, 12, 12, 0, 1.0],
+  [39, 12, 12, 0, 1.0],
+  [12, 13, 26, 0, 1.0],
+  [39, 13, 13, 0, 1.0],
+  [14, 14, 10, 0, 1.0],
+  [27, 14, 10, 0, 1.0],
+  [40, 14, 10, 0, 1.0],
+  [16, 15, 6, 0, 1.0],
+  [29, 15, 6, 0, 1.0],
+  [42, 15, 7, 0, 1.0],
+  [17, 16, 3, 0, 1.0],
+  [31, 16, 3, 0, 1.0],
+  [44, 16, 3, 0, 1.0],
+  [38, 13, 1, 0, 0.78],
+  [12, 14, 2, 0, 0.78],
+  [25, 14, 2, 0, 0.78],
+  [38, 14, 2, 0, 0.78],
+  [12, 15, 4, 0, 0.78],
+  [25, 15, 4, 0, 0.78],
+  [38, 15, 4, 0, 0.78],
+  [12, 16, 5, 0, 0.78],
+  [25, 16, 6, 0, 0.78],
+  [38, 16, 6, 0, 0.78],
+  [13, 17, 6, 0, 0.78],
+  [25, 17, 7, 0, 0.78],
+  [38, 17, 7, 0, 0.78],
+  [15, 18, 4, 0, 0.78],
+  [28, 18, 4, 0, 0.78],
+  [41, 18, 4, 0, 0.78],
+  [16, 19, 3, 0, 0.78],
+  [29, 19, 3, 0, 0.78],
+  [43, 19, 2, 0, 0.78],
+  [18, 20, 1, 0, 0.78],
+  [31, 20, 1, 0, 0.78],
+  [44, 20, 1, 0, 0.78],
+  [52, 13, 1, 0, 0.56],
+  [24, 14, 1, 0, 0.56],
+  [37, 14, 1, 0, 0.56],
+  [50, 14, 3, 0, 0.56],
+  [22, 15, 3, 0, 0.56],
+  [35, 15, 3, 0, 0.56],
+  [49, 15, 4, 0, 0.56],
+  [20, 16, 5, 0, 0.56],
+  [34, 16, 4, 0, 0.56],
+  [47, 16, 6, 0, 0.56],
+  [19, 17, 6, 0, 0.56],
+  [32, 17, 6, 0, 0.56],
+  [45, 17, 8, 0, 0.56],
+  [19, 18, 5, 0, 0.56],
+  [32, 18, 5, 0, 0.56],
+  [45, 18, 8, 0, 0.56],
+  [19, 19, 3, 0, 0.56],
+  [32, 19, 3, 0, 0.56],
+  [45, 19, 8, 0, 0.56],
+  [19, 20, 1, 0, 0.56],
+  [32, 20, 2, 0, 0.56],
+  [45, 20, 8, 0, 0.56],
+  [46, 21, 7, 0, 0.56],
+  [46, 22, 5, 0, 0.56],
+  [46, 23, 3, 0, 0.56],
+  [46, 24, 2, 0, 0.56],
+  [12, 17, 1, 1, 1.0],
+  [11, 18, 4, 1, 1.0],
+  [24, 18, 4, 1, 1.0],
+  [37, 18, 4, 1, 1.0],
+  [9, 19, 7, 1, 1.0],
+  [22, 19, 7, 1, 1.0],
+  [35, 19, 8, 1, 1.0],
+  [7, 20, 11, 1, 1.0],
+  [20, 20, 11, 1, 1.0],
+  [34, 20, 10, 1, 1.0],
+  [5, 21, 41, 1, 1.0],
+  [7, 22, 11, 1, 1.0],
+  [20, 22, 12, 1, 1.0],
+  [33, 22, 12, 1, 1.0],
+  [9, 23, 8, 1, 1.0],
+  [22, 23, 8, 1, 1.0],
+  [35, 23, 8, 1, 1.0],
+  [10, 24, 5, 1, 1.0],
+  [24, 24, 4, 1, 1.0],
+  [37, 24, 4, 1, 1.0],
+  [12, 25, 1, 1, 1.0],
+  [25, 25, 1, 1, 1.0],
+  [38, 25, 2, 1, 1.0],
+  [5, 22, 2, 1, 0.78],
+  [19, 22, 1, 1, 0.78],
+  [32, 22, 1, 1, 0.78],
+  [5, 23, 4, 1, 0.78],
+  [19, 23, 3, 1, 0.78],
+  [32, 23, 3, 1, 0.78],
+  [5, 24, 5, 1, 0.78],
+  [19, 24, 5, 1, 0.78],
+  [32, 24, 5, 1, 0.78],
+  [5, 25, 7, 1, 0.78],
+  [19, 25, 6, 1, 0.78],
+  [32, 25, 6, 1, 0.78],
+  [5, 26, 8, 1, 0.78],
+  [20, 26, 6, 1, 0.78],
+  [33, 26, 6, 1, 0.78],
+  [5, 27, 8, 1, 0.78],
+  [22, 27, 4, 1, 0.78],
+  [35, 27, 4, 1, 0.78],
+  [5, 28, 8, 1, 0.78],
+  [24, 28, 2, 1, 0.78],
+  [37, 28, 2, 1, 0.78],
+  [5, 29, 7, 1, 0.78],
+  [25, 29, 1, 1, 0.78],
+  [6, 30, 6, 1, 0.78],
+  [8, 31, 4, 1, 0.78],
+  [10, 32, 2, 1, 0.78],
+  [11, 33, 1, 1, 0.78],
+  [18, 22, 1, 1, 0.56],
+  [45, 22, 1, 1, 0.56],
+  [17, 23, 2, 1, 0.56],
+  [30, 23, 2, 1, 0.56],
+  [43, 23, 3, 1, 0.56],
+  [15, 24, 4, 1, 0.56],
+  [28, 24, 4, 1, 0.56],
+  [41, 24, 5, 1, 0.56],
+  [13, 25, 6, 1, 0.56],
+  [26, 25, 6, 1, 0.56],
+  [40, 25, 6, 1, 0.56],
+  [13, 26, 5, 1, 0.56],
+  [26, 26, 5, 1, 0.56],
+  [39, 26, 5, 1, 0.56],
+  [13, 27, 3, 1, 0.56],
+  [26, 27, 3, 1, 0.56],
+  [39, 27, 3, 1, 0.56],
+  [13, 28, 1, 1, 0.56],
+  [26, 28, 1, 1, 0.56],
+  [39, 28, 2, 1, 0.56],
+  [18, 26, 2, 2, 0.52],
+  [31, 26, 2, 2, 0.52],
+  [44, 26, 3, 2, 0.52],
+  [16, 27, 6, 2, 0.52],
+  [29, 27, 6, 2, 0.52],
+  [42, 27, 6, 2, 0.52],
+  [14, 28, 10, 2, 0.52],
+  [27, 28, 10, 2, 0.52],
+  [41, 28, 9, 2, 0.52],
+  [12, 29, 13, 2, 0.52],
+  [26, 29, 26, 2, 0.52],
+  [12, 30, 13, 2, 0.52],
+  [26, 30, 12, 2, 0.52],
+  [39, 30, 13, 2, 0.52],
+  [14, 31, 10, 2, 0.52],
+  [27, 31, 10, 2, 0.52],
+  [41, 31, 9, 2, 0.52],
+  [16, 32, 6, 2, 0.52],
+  [29, 32, 6, 2, 0.52],
+  [42, 32, 6, 2, 0.52],
+  [18, 33, 2, 2, 0.52],
+  [31, 33, 2, 2, 0.52],
+  [44, 33, 3, 2, 0.52],
+  [25, 30, 1, 2, 0.41],
+  [38, 30, 1, 2, 0.41],
+  [12, 31, 2, 2, 0.41],
+  [25, 31, 2, 2, 0.41],
+  [38, 31, 3, 2, 0.41],
+  [12, 32, 4, 2, 0.41],
+  [25, 32, 4, 2, 0.41],
+  [38, 32, 4, 2, 0.41],
+  [12, 33, 6, 2, 0.41],
+  [25, 33, 6, 2, 0.41],
+  [38, 33, 6, 2, 0.41],
+  [12, 34, 2, 2, 0.41],
+  [15, 34, 4, 2, 0.41],
+  [25, 34, 2, 2, 0.41],
+  [28, 34, 4, 2, 0.41],
+  [38, 34, 3, 2, 0.41],
+  [42, 34, 3, 2, 0.41],
+  [17, 35, 2, 2, 0.41],
+  [25, 35, 1, 2, 0.41],
+  [30, 35, 2, 2, 0.41],
+  [38, 35, 1, 2, 0.41],
+  [43, 35, 2, 2, 0.41],
+  [52, 30, 1, 2, 0.29],
+  [24, 31, 1, 2, 0.29],
+  [37, 31, 1, 2, 0.29],
+  [50, 31, 3, 2, 0.29],
+  [22, 32, 3, 2, 0.29],
+  [35, 32, 3, 2, 0.29],
+  [48, 32, 5, 2, 0.29],
+  [20, 33, 5, 2, 0.29],
+  [33, 33, 5, 2, 0.29],
+  [47, 33, 6, 2, 0.29],
+  [19, 34, 6, 2, 0.29],
+  [32, 34, 6, 2, 0.29],
+  [45, 34, 8, 2, 0.29],
+  [19, 35, 6, 2, 0.29],
+  [32, 35, 6, 2, 0.29],
+  [45, 35, 8, 2, 0.29],
+  [19, 36, 5, 2, 0.29],
+  [32, 36, 5, 2, 0.29],
+  [45, 36, 8, 2, 0.29],
+  [20, 37, 2, 2, 0.29],
+  [34, 37, 1, 2, 0.29],
+  [47, 37, 6, 2, 0.29],
+  [48, 38, 4, 2, 0.29],
+  [48, 39, 3, 2, 0.29],
+  [48, 40, 1, 2, 0.29],
+  [14, 34, 1, 3, 0.26],
+  [27, 34, 1, 3, 0.26],
+  [41, 34, 1, 3, 0.26],
+  [12, 35, 5, 3, 0.26],
+  [26, 35, 4, 3, 0.26],
+  [39, 35, 4, 3, 0.26],
+  [11, 36, 8, 3, 0.26],
+  [24, 36, 8, 3, 0.26],
+  [37, 36, 8, 3, 0.26],
+  [9, 37, 11, 3, 0.26],
+  [22, 37, 12, 3, 0.26],
+  [35, 37, 12, 3, 0.26],
+  [8, 38, 40, 3, 0.26],
+  [9, 39, 11, 3, 0.26],
+  [23, 39, 10, 3, 0.26],
+  [36, 39, 10, 3, 0.26],
+  [11, 40, 7, 3, 0.26],
+  [24, 40, 8, 3, 0.26],
+  [37, 40, 8, 3, 0.26],
+  [13, 41, 4, 3, 0.26],
+  [26, 41, 4, 3, 0.26],
+  [39, 41, 4, 3, 0.26],
+  [7, 38, 1, 3, 0.2],
+  [7, 39, 2, 3, 0.2],
+  [21, 39, 2, 3, 0.2],
+  [34, 39, 2, 3, 0.2],
+  [7, 40, 4, 3, 0.2],
+  [21, 40, 3, 3, 0.2],
+  [34, 40, 3, 3, 0.2],
+  [7, 41, 6, 3, 0.2],
+  [21, 41, 5, 3, 0.2],
+  [34, 41, 5, 3, 0.2],
+  [7, 42, 8, 3, 0.2],
+  [21, 42, 7, 3, 0.2],
+  [34, 42, 7, 3, 0.2],
+  [7, 43, 8, 3, 0.2],
+  [21, 43, 7, 3, 0.2],
+  [34, 43, 7, 3, 0.2],
+  [7, 44, 8, 3, 0.2],
+  [21, 44, 7, 3, 0.2],
+  [34, 44, 7, 3, 0.2],
+  [7, 45, 8, 3, 0.2],
+  [21, 45, 7, 3, 0.2],
+  [34, 45, 7, 3, 0.2],
+  [7, 46, 8, 3, 0.2],
+  [21, 46, 7, 3, 0.2],
+  [34, 46, 7, 3, 0.2],
+  [9, 47, 6, 3, 0.2],
+  [22, 47, 6, 3, 0.2],
+  [35, 47, 6, 3, 0.2],
+  [10, 48, 5, 3, 0.2],
+  [24, 48, 4, 3, 0.2],
+  [37, 48, 4, 3, 0.2],
+  [12, 49, 3, 3, 0.2],
+  [25, 49, 3, 3, 0.2],
+  [39, 49, 2, 3, 0.2],
+  [14, 50, 1, 3, 0.2],
+  [27, 50, 1, 3, 0.2],
+  [40, 50, 1, 3, 0.2],
+  [20, 39, 1, 3, 0.15],
+  [33, 39, 1, 3, 0.15],
+  [46, 39, 2, 3, 0.15],
+  [18, 40, 3, 3, 0.15],
+  [32, 40, 2, 3, 0.15],
+  [45, 40, 3, 3, 0.15],
+  [17, 41, 4, 3, 0.15],
+  [30, 41, 4, 3, 0.15],
+  [43, 41, 5, 3, 0.15],
+  [15, 42, 6, 3, 0.15],
+  [28, 42, 6, 3, 0.15],
+  [41, 42, 7, 3, 0.15],
+  [15, 43, 6, 3, 0.15],
+  [28, 43, 6, 3, 0.15],
+  [41, 43, 7, 3, 0.15],
+  [15, 44, 6, 3, 0.15],
+  [28, 44, 6, 3, 0.15],
+  [41, 44, 7, 3, 0.15],
+  [15, 45, 6, 3, 0.15],
+  [28, 45, 6, 3, 0.15],
+  [41, 45, 7, 3, 0.15],
+  [15, 46, 6, 3, 0.15],
+  [28, 46, 6, 3, 0.15],
+  [41, 46, 7, 3, 0.15],
+  [15, 47, 6, 3, 0.15],
+  [28, 47, 6, 3, 0.15],
+  [41, 47, 6, 3, 0.15],
+  [15, 48, 4, 3, 0.15],
+  [28, 48, 4, 3, 0.15],
+  [41, 48, 4, 3, 0.15],
+  [15, 49, 2, 3, 0.15],
+  [28, 49, 2, 3, 0.15],
+  [41, 49, 3, 3, 0.15],
+  [15, 50, 1, 3, 0.15],
+  [28, 50, 1, 3, 0.15],
+  [41, 50, 1, 3, 0.15]
+];
+
+/**
+ * One beat per seam. The mark has four rows of cubes and three seams between
+ * them; the accent sits on a seam and steps down one at a time, which is the
+ * whole animation.
+ */
+const BEAT_MS = 620;
+const SEAMS = 4;
+
+/**
+ * How much ink each band of the mark takes, by height: faint at the top, solid at
+ * the foot. One ladder for both themes, because the ink is what changes — in a
+ * light theme that reads as a stack dark at the base and light above it, and in
+ * a dark theme as a stack whose foot glows and whose top recedes into the page.
+ * That is the brand's own shading, not an inversion of it.
+ */
+const TOP_INK = 0.34;
+const FOOT_INK = 1;
+
+/**
+ * The artwork carries its own face shading in each path's opacity, and the rows
+ * are lit very differently from one another. Using that number directly would
+ * double-shade the mark — a light row at the foot came out almost invisible.
+ * So each face is taken relative to the proudest face in its own row.
+ */
+const ROW_MAX = MARK.reduce<number[]>((max, [, , , row, opacity]) => {
+  max[row] = Math.max(max[row] ?? 0, opacity);
+  return max;
+}, []);
+
+type Tokens = { ink: string; accent: string; dark: boolean };
+
+/** The mark takes its ink and accent from the page it sits on. */
+function readTokens(): Tokens {
+  const root = document.documentElement;
+  const style = getComputedStyle(root);
+  const probe = document.createElement("span");
+  probe.style.color = style.getPropertyValue("--ink").trim() || "#14181b";
+  document.body.appendChild(probe);
+  const ink = getComputedStyle(probe).color;
+  probe.remove();
+  return {
+    ink,
+    accent: style.getPropertyValue("--accent").trim() || ink,
+    dark: root.getAttribute("data-theme") === "dark",
+  };
+}
+
+export type LoadingMarkOptions = {
+  /** Logical page, in the same units as the reader's stage. */
+  width: number;
+  height: number;
+  /** Mark width in those units. */
+  size?: number;
+  /** Draw one frame and stop — for readers who asked for reduced motion. */
+  still?: boolean;
+};
+
+/**
+ * Draw the mark, centred, and step the accent down its rows. Returns a stop
+ * function.
+ */
+export function startLoadingMark(
+  canvas: HTMLCanvasElement,
+  options: LoadingMarkOptions,
+): () => void {
+  const context = canvas.getContext("2d");
+  if (!context) return () => {};
+  const ctx: CanvasRenderingContext2D = context;
+  const { width, height, size = 150, still = false } = options;
+
+  const dpr = Math.min(2, typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+
+  const originX = (width - size) / 2;
+  const originY = (height - size) / 2;
+  const unit = size / 60;
+
+  function drawMark(seam: number, tokens: Tokens) {
+    for (const [mx, my, mw, row, opacity] of MARK) {
+      // Height in the mark, 0 at the top of the artwork and 1 at its foot.
+      const depth = Math.min(1, Math.max(0, (my + 0.5) / 60));
+      const ink = TOP_INK + (FOOT_INK - TOP_INK) * depth;
+      const face = 0.55 + 0.45 * (opacity / (ROW_MAX[row] || 1));
+      // The accent marks the seam: the band the seam opens onto.
+      const accented = row === seam;
+      ctx.fillStyle = accented
+        ? tokens.accent
+        : `color-mix(in srgb, ${tokens.ink} ${Math.round(ink * face * 100)}%, transparent)`;
+      ctx.fillRect(originX + mx * unit, originY + my * unit, mw * unit, unit + 0.4);
+    }
+  }
+
+  function render(seam: number) {
+    ctx.clearRect(0, 0, width, height);
+    drawMark(seam, tokens);
+  }
+
+  let tokens = readTokens();
+  let observer: MutationObserver | null = null;
+  const onTheme = () => {
+    tokens = readTokens();
+  };
+  observer = new MutationObserver(onTheme);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme", "data-palette"],
+  });
+
+  render(0);
+  if (still) return () => observer?.disconnect();
+
+  let raf = 0;
+  const t0 = performance.now();
+  const loop = (now: number) => {
+    const seam = Math.floor((now - t0) / BEAT_MS) % SEAMS;
+    render(seam);
+    raf = requestAnimationFrame(loop);
+  };
+  raf = requestAnimationFrame(loop);
+  return () => {
+    cancelAnimationFrame(raf);
+    observer?.disconnect();
+  };
+}

@@ -39,10 +39,24 @@ export function LayoutLines({ className }: { className?: string }) {
     <div
       aria-hidden="true"
       className={cn("pointer-events-none fixed inset-0 top-0 z-0 overflow-hidden", className)}
+      // Above a full-bleed chat canvas, under the site nav (z-index 210).
+      // Inline so a host that never scans the z-20 utility still stacks the rails.
+      style={{ zIndex: 20 }}
     >
       <div
         className="mx-auto h-full w-full max-w-[calc(var(--frame-w)+2*var(--line-pad,0px))] line-y line-dashed"
-        style={{ ["--line-pad" as string]: "var(--page-pad)" }}
+        style={{
+          ["--line-pad" as string]: "var(--page-pad)",
+          // Same column as web-theme.css `line-y` + the max-w utility. Inline so a
+          // host that never scans that arbitrary class still insets the rails.
+          width: "100%",
+          maxWidth: "calc(var(--frame-w) + 2 * var(--line-pad, 0px))",
+          marginInline: "auto",
+          // Same 1px dashed --hair-2 rails as web-theme.css `line-y` + `line-dashed`.
+          borderLeft: "1px dashed var(--hair-2)",
+          borderRight: "1px dashed var(--hair-2)",
+          boxSizing: "border-box",
+        }}
       />
     </div>
   );

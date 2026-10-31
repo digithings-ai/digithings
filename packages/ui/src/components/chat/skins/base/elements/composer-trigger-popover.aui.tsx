@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PaletteRowPreview } from "../../../stock/palette-row-preview";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -96,7 +97,7 @@ const Categories: FC<CategoriesProps> = ({
             <ComposerPrimitive.Unstable_TriggerPopoverCategoryItem
               key={cat.id}
               categoryId={cat.id}
-              className="hover:bg-accent focus:bg-accent data-[highlighted]:bg-accent flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition-colors outline-none"
+              className="hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[highlighted]:ring-2 data-[highlighted]:ring-ring data-[highlighted]:ring-inset flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm transition-colors outline-none"
             >
               <span className="flex items-center gap-2">
                 <Icon className="text-muted-foreground size-4" />
@@ -139,7 +140,7 @@ const Items: FC<ItemsProps> = ({
           data-slot="composer-trigger-popover-items"
           className="flex flex-col"
         >
-          <ComposerPrimitive.Unstable_TriggerPopoverBack className="text-muted-foreground hover:bg-accent flex cursor-pointer items-center gap-1.5 border-b px-3 py-2 text-xs tracking-wide uppercase transition-colors">
+          <ComposerPrimitive.Unstable_TriggerPopoverBack className="text-muted-foreground hover:bg-muted flex cursor-pointer items-center gap-1.5 border-b px-3 py-2 text-xs tracking-wide uppercase transition-colors">
             <ChevronLeftIcon className="size-3.5" />
             {backLabel}
           </ComposerPrimitive.Unstable_TriggerPopoverBack>
@@ -151,22 +152,38 @@ const Items: FC<ItemsProps> = ({
                   ? item.metadata.icon
                   : undefined;
               const Icon = resolveIcon(iconKey, iconMap, fallbackIcon);
+              const value =
+                typeof item.metadata?.value === "string" ? item.metadata.value : "";
+              const detailId = item.description ? `slash-desc-${item.id}` : undefined;
               return (
                 <ComposerPrimitive.Unstable_TriggerPopoverItem
                   key={item.id}
                   item={item}
                   index={index}
-                  className="hover:bg-accent focus:bg-accent data-[highlighted]:bg-accent flex w-full cursor-pointer flex-col items-start gap-0.5 px-3 py-2 text-start transition-colors outline-none"
+                  aria-describedby={detailId}
+                  className="group hover:bg-muted focus:bg-muted data-[highlighted]:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[highlighted]:ring-2 data-[highlighted]:ring-ring data-[highlighted]:ring-inset flex w-full cursor-pointer flex-col items-stretch gap-0.5 px-3 py-2 text-start transition-colors outline-none"
                 >
-                  <span className="flex items-center gap-2 text-sm font-medium">
+                  <span className="flex w-full items-center gap-2 text-sm font-medium">
                     <Icon className="text-primary size-3.5" />
-                    {item.label}
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    {value ? (
+                      <span
+                        data-slot="palette-value"
+                        className="text-muted-foreground ml-auto min-w-0 truncate text-end text-xs font-normal"
+                      >
+                        {value}
+                      </span>
+                    ) : null}
                   </span>
-                  {item.description && (
-                    <span className="text-muted-foreground ms-5.5 text-xs leading-tight">
+                  {item.description ? (
+                    <span
+                      id={detailId}
+                      data-slot="palette-detail"
+                      className="text-muted-foreground ms-5.5 hidden truncate text-xs leading-tight group-data-[highlighted]:block"
+                    >
                       {item.description}
                     </span>
-                  )}
+                  ) : null}
                 </ComposerPrimitive.Unstable_TriggerPopoverItem>
               );
             })}
@@ -231,6 +248,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
           removeOnExecute={action.removeOnExecute}
         />
       ) : null}
+      <PaletteRowPreview />
       <Categories
         iconMap={iconMap}
         fallbackIcon={fallbackIcon}

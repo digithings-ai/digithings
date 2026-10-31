@@ -5,9 +5,20 @@
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
 #   • pushes to `develop` without ALLOW_DEVELOP_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
+#   • pushes that introduce a secret, including a push made where gitleaks or
+#     .gitleaks.toml is unavailable (DIG-5722 — "we could not look" is a refusal)
 #
 # Warns, and never blocks (DIG-1579):
 #   • the branch being pushed is older than 10 days — see the policy pointer it prints
+#
+# Escaping the secret scan, in order of preference:
+#   1. install gitleaks (`brew install gitleaks`) — the scan then runs as below;
+#   2. `PRE_PUSH_SKIP_GITLEAKS=1` — skips the local secret scan for that push and
+#      prints the ref it did not scan. It exists for synthetic hook fixtures and
+#      for a machine that cannot install the binary. Nothing else scans the push:
+#      .github/workflows/security-gitleaks.yml covers pull requests and pushes to
+#      develop/main only, and the local forge has no scan yet (DIG-5722);
+#   3. `git push --no-verify` — genuine emergencies only (see below).
 #
 # Installed by `make hooks-install` (and by `make agents-init`), which installs
 # this file **as committed on origin/develop**, not your working copy — one hook
@@ -25,12 +36,14 @@ remote="${1:-}"
 url="${2:-}"
 
 # GitHub stays the public/release remote. Origin is the agent iteration host.
-# The mirror clone URL pass-throughs normal branches to GitHub. /local accepts
-# only refs/heads/origin/* and those refs never sync to GitHub.
+# The local Forgejo is the local working surface; /local on Origin accepts only
+# refs/heads/origin/* and those refs never sync to GitHub.
 github_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
 origin_mirror_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?$'
 origin_local_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?/local/?$'
 origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
+local_forge_url_regex='^http://(localhost|127\.0\.0\.1):3000/digithings-ai/digithings(\.git)?$'
+local_change_regex='^change/[a-z0-9][a-z0-9-]*$'
 
 # Allowed branch name taxonomy. Keep in sync with BRANCHING.md and
 # scripts/github-rulesets/01-branch-naming.json. That file is the desired
@@ -46,10 +59,20 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # not a branch name. Such a branch accumulates commits from unrelated issues and
 # must not be blanket pushed — see the execution-workspace rule in BRANCHING.md.
 #
+# `rescue/<issue>-<date>` is the branch `kit/bin/dt-worktree-rescue` pushes work
+# onto when a worktree is being retired. It is not a human-created name: the
+# helper produces it, so the taxonomy has to admit it or the rescue push is
+# refused and the worktree is kept forever — the leak DIG-4874 was about
+# (DIG-4898, DIG-4218). The arm allows UPPERCASE on purpose: the conventional
+# name carries an uppercase issue key, `rescue/DIG-1234-2026-10-21`, and a
+# lowercase-only arm refuses exactly the name the helper tries first. The `-2`/
+# `-3` suffix the helper adds when the name is taken is why this is a character
+# class rather than `rescue/DIG-[0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}`.
+#
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore|revert)/[a-z0-9-]+|bot/[a-z0-9-]+|rescue/[A-Za-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -63,11 +86,14 @@ is_zero_sha() {
 }
 
 is_origin_local=0
+is_local_forge=0
 if [[ "$url" =~ $origin_local_url_regex ]]; then
   is_origin_local=1
+elif [[ "$url" =~ $local_forge_url_regex ]]; then
+  is_local_forge=1
 elif [ -n "$url" ] && ! [[ "$url" =~ $github_url_regex || "$url" =~ $origin_mirror_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
-  echo "         Allowed: github.com/digithings-ai/digithings, or origin.cursor.com/chrizefan/digithings (and its /local endpoint)." >&2
+  echo "         Allowed: github.com/digithings-ai/digithings, origin.cursor.com/chrizefan/digithings (and its /local endpoint), or the local forge at localhost:3000." >&2
   exit 1
 fi
 
@@ -78,6 +104,7 @@ fi
 # after the loop. `while read` runs in this shell (git feeds stdin directly, no
 # pipeline), so `failed` survives the loop.
 failed=0
+gitleaks_skip_noted=0
 
 # Read refs being pushed from stdin: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -109,6 +136,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "         Publish Origin drafts with 'origin push local'. Promote with a task/, module/, or release/ branch." >&2
       failed=1
       continue
+    elif [ "$is_local_forge" -eq 1 ] && [[ "$branch_name" =~ $local_change_regex ]]; then
+      : # sctl change branches are local-forge only
     elif ! [[ "$branch_name" =~ $branch_regex ]]; then
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
       echo "         Allowed patterns (see BRANCHING.md):" >&2
@@ -123,8 +152,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {feat,fix,docs,chore,revert}/<slug>" >&2
       echo "           bot/<slug>  (pushed by agent-backlog-snapshot.yml" >&2
       echo "                        and pipeline-provider-review.yml)" >&2
+      echo "           rescue/<issue>-<date>  (kit/bin/dt-worktree-rescue;" >&2
+      echo "                        e.g. rescue/DIG-1234-2026-10-21)" >&2
       echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
       echo "                        per-issue, never blanket — BRANCHING.md)" >&2
+      echo "           change/<id>    (local Forgejo sctl change; local forge only)" >&2
       failed=1
       continue
     fi
@@ -154,7 +186,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # Determine the diff range: against the remote sha if present, else against origin/develop.
   if is_zero_sha "$remote_sha" || [ -z "$remote_sha" ]; then
-    base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    if [ "$is_local_forge" -eq 1 ]; then
+      base="$(git merge-base "$local_sha" local/develop 2>/dev/null \
+        || git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    else
+      base="$(git merge-base "$local_sha" origin/develop 2>/dev/null || echo '')"
+    fi
   else
     base="$remote_sha"
   fi
@@ -164,7 +201,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # the one guard standing between a live-trading edit and origin.
   if [ -z "$base" ]; then
     echo "pre-push: cannot determine a diff base for '$local_ref' — refusing to push unscanned." >&2
-    echo "         Usually origin/develop is just missing locally: run 'git fetch origin' and retry." >&2
+    echo "         Usually origin/develop (or local/develop for the local forge) is missing locally:" >&2
+    echo "         run 'git fetch origin' or 'git fetch local' and retry." >&2
     echo "         A ref whose history is unrelated to develop — an imported tag, a grafted" >&2
     echo "         branch — has no base by nature and cannot be scanned at all; that is the" >&2
     echo "         emergency the --no-verify escape at the top of this file exists for." >&2
@@ -216,6 +254,58 @@ while read -r local_ref local_sha remote_ref remote_sha; do
          | grep -E '[^[:space:]]' >/dev/null; then
       echo "pre-push: live-trading paths changed but no Human-Approved-By trailer found in commits." >&2
       echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the live-trading changes." >&2
+      failed=1
+      continue
+    fi
+  fi
+
+  # ── gitleaks: refuse a push that introduces a secret ───────────────────────
+  # Same diff base as the live-trading scan above. This is the only scan a
+  # topic-branch push gets: .github/workflows/security-gitleaks.yml runs on pull
+  # requests and on pushes to develop/main, and the local forge has no scan at
+  # all (scripts/forgejo-gitleaks-woodpecker-step.yml is a template with no
+  # .woodpecker.yml behind it). So an unusable scanner is a refusal, not a
+  # warning — "we could not look" must never read as "we looked and it was clean",
+  # the same reason the base check above refuses.
+  #
+  # DIG-5722. Before this, a missing binary or config printed a line claiming
+  # "CI still scans" and let the push through, which silently disarmed the guard
+  # on exactly the machines where it was the only one. PRE_PUSH_SKIP_GITLEAKS=1
+  # is the documented escape (see the header) and it is loud: it names the ref it
+  # did not scan, so the bypass is discoverable in the operator's own output.
+  gitleaks_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+  gitleaks_config="${gitleaks_root:+$gitleaks_root/.gitleaks.toml}"
+  if [ "${PRE_PUSH_SKIP_GITLEAKS:-0}" = "1" ]; then
+    if [ "$gitleaks_skip_noted" -eq 0 ]; then
+      echo "pre-push: WARNING: secret scan skipped — PRE_PUSH_SKIP_GITLEAKS=1." >&2
+      echo "         No other scan covers this push: GitHub gitleaks runs on pull" >&2
+      echo "         requests and develop/main pushes only, and the local forge has none." >&2
+      echo "         Use this for synthetic fixtures, not for a push you believe is clean." >&2
+      echo "         Refs not scanned:" >&2
+      gitleaks_skip_noted=1
+    fi
+    # One line per ref, not one per push: the header promises the escape prints
+    # which refs it skipped, and throttling the whole note would name only the
+    # first of a multi-ref push — the rest would read as scanned (DIG-5722 review).
+    echo "           ${branch_name:-$local_ref}" >&2
+  elif ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-push: gitleaks not found — refusing to push '${branch_name:-$local_ref}' unscanned." >&2
+    echo "         Install it ('brew install gitleaks'; see SECURITY.md \"Secrets scanning\")" >&2
+    echo "         and retry, or set PRE_PUSH_SKIP_GITLEAKS=1 to skip the scan for this" >&2
+    echo "         push — that prints what it skips." >&2
+    failed=1
+    continue
+  elif [ -z "$gitleaks_config" ] || [ ! -f "$gitleaks_config" ]; then
+    echo "pre-push: .gitleaks.toml not found in '${gitleaks_root:-this checkout}' — refusing to push '${branch_name:-$local_ref}' unscanned." >&2
+    echo "         Run this hook from a checkout of the repo and retry, or set" >&2
+    echo "         PRE_PUSH_SKIP_GITLEAKS=1 to skip the scan for this push." >&2
+    failed=1
+    continue
+  else
+    if ! gitleaks detect --source "$gitleaks_root" --config "$gitleaks_config" --redact --no-banner \
+         --log-opts="$base..$local_sha" >/dev/null 2>&1; then
+      echo "pre-push: gitleaks found a secret in $base..$local_sha — refusing to push." >&2
+      echo "         Remove the secret, rotate it if it was real, and retry." >&2
       failed=1
       continue
     fi

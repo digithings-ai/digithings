@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  __LABEL__: one digiquant batch clock on Chris's Mac (DIG-2915).
+
+  Rendered by scripts/digiquant-host-runner/schedule.py; do not edit in place.
+  Job: __JOB__. UTC cron: __CRON__.
+
+  StartCalendarInterval is local time and launchd has no time zone field, so the UTC
+  cron above was converted against the Mac's zone rules when this file was rendered.
+  A plist that crosses a DST change keeps the old local hour: re-run the installer with
+  its install and load steps, and it is reported as "stale" until you do.
+
+  The job reads its secrets from __ENVFILE__ (mode 600, outside this repository). No
+  secret is in this file, and none may be added. run_job.py writes one log per run
+  under __LOGDIR__; the paths below catch only what dies before it starts.
+-->
+<plist version="1.0">
+<dict>
+<key>Label</key><string>__LABEL__</string>
+<key>ProgramArguments</key>
+<array>
+<string>__PROGRAM__</string>
+<string>run</string>
+<string>--frozen</string>
+<string>--directory</string>
+<string>__CHECKOUT__</string>
+<string>python</string>
+<string>__SCRIPT__</string>
+<string>__JOB__</string>
+<string>--env-file</string>
+<string>__ENVFILE__</string>
+<string>--json</string>
+</array>
+<key>EnvironmentVariables</key>
+<dict>
+<key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+<key>HOME</key><string>__HOME__</string>
+<key>LANG</key><string>en_US.UTF-8</string>
+<key>DIGIQUANT_HOST_RUNNER</key><string>1</string>
+</dict>
+__INTERVALS__
+<key>RunAtLoad</key><false/>
+<key>StandardOutPath</key><string>__LOGDIR__/__LABEL__.stdout.log</string>
+<key>StandardErrorPath</key><string>__LOGDIR__/__LABEL__.stderr.log</string>
+</dict>
+</plist>

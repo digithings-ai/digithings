@@ -70,6 +70,8 @@ export type DigichatClientFeatures = {
   modelPicker: boolean;
   branchPicker: boolean;
   pageContext: PageContextMode;
+  /** Private demo mode: opt-in per tenant, refused for every other tenant. */
+  privateMode: boolean;
 };
 
 export type DigichatClientChrome = {
@@ -161,7 +163,7 @@ export type DigichatClientConfig = {
     allowAddForm: boolean;
   };
   gate: {
-    mode: "turn_limited" | "ungated" | "trial_form";
+    mode: "turn_limited" | "ungated" | "trial_form" | "invite";
     llmAccess?: DigichatDeployment["gate"]["llmAccess"];
     lockedContact?: string;
     showByok?: boolean;
@@ -218,6 +220,7 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     modelPicker: true,
     branchPicker: true,
     pageContext: "visible",
+    privateMode: false,
   },
   models: {
     default: HOUSE_CATALOG.default,

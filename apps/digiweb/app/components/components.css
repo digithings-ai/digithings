@@ -1,0 +1,56 @@
+/* Components — the kit index and its proof row. */
+
+.cp-proof {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.4rem;
+  padding: 1.2rem;
+  border: 1px solid var(--hair);
+}
+
+.cp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cp-input {
+  max-width: 24rem;
+}
+
+.cp-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0 1.4rem;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.cp-list--wide {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.cp-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--hair);
+}
+
+.cp-name {
+  color: var(--ink);
+}
+
+.cp-path {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -16,25 +16,25 @@ packages/ui/
 ├── CHARTS.md              finance chart house rules
 ├── CHAT_THEME.md          first-party digichat skin on /chatbot
 ├── ASSISTANT_UI_ELEMENTS.md  full assistant-ui elements catalog (fetch map)
-├── MANIFEST.json          generated machine index of every reference + kit component
+├── MANIFEST.json          generated machine index of every digiweb + kit component
 ├── scripts/
-│   └── build-manifest.mjs regenerates MANIFEST.json from the reference + kit sources
+│   └── build-manifest.mjs regenerates MANIFEST.json from the digiweb + kit sources
 ├── design/                @digithings/design — tokens.css + CSS primitives
 │   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
 │   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
 │   └── references/        external north-star scans (Cursor, herdr, …)
-├── brand/                 generated identity kit (avatars, headers, OG) — previewed at design-reference `/brand`, not on digithings.ai
+├── brand/                 generated identity kit (avatars, headers, OG) — previewed at digiweb `/brand`, not on digithings.ai
 ├── web/                   @digithings/ui — shared React component layer
-└── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/(gallery)/      family pages (foundations, iterate, controls, …)
-    ├── app/(chatbot)/      isolated /chatbot root — do not compile the gallery graph
-    ├── components/         the reusable patterns (one file each, docblock-headed)
-    └── README.md           the canon: tokens, livery, type, motion, chart rules
+└── digiweb/               the live reference app (Next.js 16 / React 19 / Tailwind v4 / Motion)
+    ├── app/               reference, foundations, components, rtl
+    ├── app/brand/         the upload kit (`/brand`) and the brand studio (`/brand/studio`)
+    ├── components/        the app-local patterns (site nav, brand studio, rtl proof)
+    └── README.md          what the app is and how it stays honest
 ```
-The **`/iterate`** family is the human preference gallery for the utilitarian
-terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
-locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
-rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
+The app is the **reference**, not a pattern dump: it renders the current
+generation from `@digithings/design` tokens, the `@digithings/ui` kit and the
+`@digithings/hero-banner` definitions. The old fifteen-family specimen gallery
+(`apps/reference`) was deleted in October 2026.
 
 Live apps import `@digithings/design` tokens and `@digithings/ui` primitives —
 they do not fork a second look. Phase 3 product-local fights on this branch:
@@ -161,7 +161,7 @@ pass: **Slider** (the vendored stock shadcn Base UI slider — single + range
 thumbs, token-bridged to the accent mechanic), **EmptyState**, **Skeleton**
 (+ `SkeletonGroup`), **RadioGroup**/**Radio**, **Field**, **IconButton**, and
 **SegmentedControl**. Every live consumer was repointed — the canon specimens
-(`apps/reference/components/controls/*`), the dashboard's empty-state/skeleton/
+(`apps/digiweb/components/controls/*`), the dashboard's empty-state/skeleton/
 icon-button/segmented-control files, `packages/digichat-ui`, and
 `packages/ui/src/components/ThemeProvider.tsx`. The controls copies stayed in
 place and kept exporting until the retirement batch; only the reference's local
@@ -292,6 +292,15 @@ folded once the answer starts — with closed rows inside it, and the work
 content not mounted while the rows stay closed. (`showDetails` is set by every
 level and read by no renderer yet; it is not part of the contract.)
 
+**Private mode is not a disclosure level.** `Thread` also takes `privateMode`,
+which drops the work parts and the chain node outright instead of folding them:
+the parts stop mounting, and `group-chainOfThought` returns its children so a
+turn does not show a Worked header that expands to nothing. It is a hard override
+rather than a level because reasoning text and tool-result JSON are user data,
+and the levels above decide only *how much* work is disclosed — none of them
+switches the reasoning off while it is still streaming. Display-only: the parts
+are still produced upstream and still reach the model; generation is unchanged.
+
 **Spacing.** The chain's vertical rhythm is the `--trace-space-1` … `--trace-space-7` scale
 and the `--trace-*` tokens, declared once on `.digichat-thread, .digichat-launcher` in
 `src/styles/chat-aui.css` (the skin, `chat-digichat.css`, only reads them). The scale is
@@ -349,14 +358,14 @@ components without reading every file. Shape:
 ```jsonc
 {
   "generatedAt": "<ISO timestamp>",
-  "source": "apps/reference",
+  "source": "apps/digiweb",
   "counts": { "components": 0, "described": 0, "families": 0 },
   "families": {
     "<family>": [
       {
-        "name": "PortfolioReference",       // exported component
-        "id": "portfolio",                   // file basename, -reference stripped
-        "path": "reference/components/portfolio-reference.tsx",
+        "name": "BrandStudio",               // exported component
+        "id": "brand-studio",                // file basename, -reference stripped
+        "path": "apps/digiweb/components/brand/studio/brand-studio.tsx",
         "summary": "…first sentence of the file's /** */ docblock…"
       }
     ]
@@ -375,31 +384,32 @@ the family a component is imported into, and the `summary` from the leading
 `/** … */` docblock. Components without a docblock appear with `summary: null` —
 the generator prints the coverage so gaps are visible and easy to backfill.
 
-Two indexing rules are worth calling out (#4225): next.js route groups
-(`(gallery)`, `(chatbot)`) are transparent, so family pages at
-`reference/app/(gallery)/<fam>/page.tsx` land under `<fam>` and
-`reference/app/(gallery)/page.tsx` under `foundations`; and the vendored shadcn
-kit at `web/src/ui/*.tsx` — importable only as the package export
-`@digithings/ui/ui`, so no reference page ever maps it — is indexed directly
-from source, one row per `<name>.tsx` with `path` relative to the digiweb root,
-under family `ui`.
+Two indexing rules are worth calling out (#4225): next.js route groups are
+transparent, so a family page at `app/<fam>/page.tsx` lands under `<fam>` and
+`app/page.tsx` under `foundations`; and the vendored shadcn kit at
+`web/src/ui/*.tsx` — importable only as the package export
+`@digithings/ui/ui`, so no digiweb page ever maps it — is indexed directly
+from source, one row per `<name>.tsx`, under family `ui`.
 
 ## Brand identity — the terminal marks
 
 `@digithings/ui` `components/symbols/terminal-marks.tsx` is the canonical
-identity; `reference/components/symbols/terminal-marks.tsx` re-exports it as the
-specimen. Three components, each matching the weight of the surface it imitates:
+identity; digiweb renders the same exports on `/components` and the home banner.
+Three components, each matching the weight of the surface it imitates:
 
 | export | form | weight | use |
 |--------|------|--------|-----|
 | `TerminalMark` | outlined SVG paths + a `<rect>` cursor | 400 | the mark. `variant="full"` is `digi` + cursor; `variant="compact"` is the `d` reduction |
-| `TerminalWordmark` | text, token-backed utilities | 400 | the default wordmark |
+| `TerminalWordmark` | text, token-backed utilities | 400 | mono product names other than the digithings lockup |
+| `BrandWordmark` | CSS mask of the studio 4×4 wordmark | — | the digithings wordmark on pages, nav, and the book |
 | `HairlineWordmark` | outlined SVG, stroked | 500 | display only, replicating the footer colophon |
 
 Three constraints that fail silently if broken:
 
-- **The mark and hairline are outlined paths, not text.** The mark because the
-  same artwork is the favicon source and must not depend on a loaded font; the
+- **The mark and hairline are outlined paths, not text.** The mark must not
+  depend on a loaded font. Favicons are not this mark: `packages/brand/build-favicon.py`
+  bakes the brand-studio logo (`studio/logo-mark.svg`). The digithings wordmark
+  on pages is `BrandWordmark`, masking `studio/wordmark-mask.svg`. The
   hairline because its overlapping contours are the design. `TerminalWordmark`
   is deliberately text — it is plain mono at tracking 0 with nothing to preserve,
   so outlining would ship ~9 KB of path data for a glyph-identical result.
@@ -427,19 +437,22 @@ that Next.js file convention overrides `metadata.icons` and would drop the
 queries silently.
 
 Each product app also owns explicit 32px fallback, 180px Apple touch, and
-192/512px web-app PNGs plus a maskable 512px variant. digithings and digiquant
-use the compact terminal mark; the digiquant dashboard uses the canonical four-stroke mark.
-Tab and Apple metadata publish light/dark pairs with media queries. Web App
-Manifest icons use one contrast-safe default because installed icons are cached
-by the operating system and the manifest standard has no live colour-scheme
-selector; changing those assets requires removing and reinstalling the shortcut.
+192/512px web-app PNGs plus a maskable 512px variant. digithings and digichat
+bake `studio/logo-mark.svg`. digiquant bakes the same logo with its up/down
+bands. The dashboard keeps its own icons. A small head script
+(`faviconThemeScript`) points the tab icon at the light or dark file from
+`data-theme`. Web App Manifest icons use one contrast-safe default because
+installed icons are cached by the operating system and the manifest standard
+has no live colour-scheme selector; changing those assets requires removing
+and reinstalling the shortcut.
 
 Off-repo uploads (GitHub, X, LinkedIn, slides, mail) are generated under
-`packages/brand/` — avatars from the favicon tile, OG cards and social
-headers from outlined Geist Mono + `HEADLINES` in `build-og.py`. Headers are a
-**compact stack**, not a cropped 1200×630 card. `build-header.py --check` keeps
-the served copies on the design-reference `/brand` page in sync (not on
-digithings.ai). See `packages/brand/README.md`.
+`packages/brand/`. Avatars come from `studio/logo-mark.svg`. Link-preview
+cards come from the studio field plus the wordmark (digiquant: the tinted
+logo). Social headers are still outlined Geist Mono + `HEADLINES` in
+`build-og.py` — a **compact stack**, not a cropped 1200×630 card.
+`build-header.py --check` keeps the served `og.png` copies in sync. See
+`packages/brand/README.md`.
 
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the
@@ -538,7 +551,7 @@ physical edge in the API; `.nav-shell-group-caret` and the
 logical `inline-start/end` rules); markdown-table `[[align=right]]:text-right`
 (HTML `align` is physical); toast-stack `inset` shorthand.
 
-**Proof route.** `apps/reference/app/(gallery)/rtl/page.tsx` renders the canon
+**Proof route.** `apps/digiweb/app/rtl/page.tsx` renders the canon
 behind an LTR/RTL toggle (`DirectionProvider root`), covering chrome, every
 button variant × size, fields, Select + `SelectPopup`, checkbox/switch, dropdown,
 dialog and both sheet sides, both tab systems, tooltip, pager/date-pager, a
@@ -558,7 +571,7 @@ kit sheet rule) so the state names the affordance instead of inheriting the
 base pointer.
 
 The convention is enforced: `scripts/check_frontend_canon.py` flags any
-`cursor-*` utility under `apps/**` (`apps/reference` is the exempt proof
+`cursor-*` utility under `apps/**` (`apps/digiweb` is the exempt proof
 surface). An app-local cursor is treated as a missing-kit signal — promote the
 part, or leave a reviewed `canon-allow: <reason>` on genuinely app-specific
 chrome (canvas gestures, native `<summary>`, custom timelines). See
@@ -567,15 +580,15 @@ chrome (canvas gestures, native `<summary>`, custom timelines). See
 ## Build / CI posture
 
 The reference app is **linted and type-checked** in CI by the `web` lane
-(`test-web.yml`), gated on `apps/reference/**`: `npm run lint` and
-`npm run typecheck` (`tsc --noEmit`) for the `@digithings/reference` workspace (#1981).
-Run the same two commands locally from `reference/`, plus a live browser check —
+(`test-web.yml`), gated on `apps/digiweb/**`: `npm run lint` and
+`npm run typecheck` (`tsc --noEmit`) for the `@digithings/digiweb` workspace (#1981).
+Run the same two commands locally from `apps/digiweb/`, plus a live browser check —
 that last half is the only one CI cannot do.
 
 It is deliberately **not built** in CI. Neither Cloudflare site compiles this
 workspace, so a `next build` here would cost two app builds with no consumer.
 
-Both Cloudflare deploy checks nevertheless watch `reference/package.json` in their
+Both Cloudflare deploy checks nevertheless watch `apps/digiweb/package.json` in their
 `paths:` filters (#1977). That is an *install* input, not a build input: the root
 `npm install` both build scripts run resolves all eight workspace manifests before
 either site compiles, so an unresolvable range here fails both production builds,
@@ -583,7 +596,7 @@ and of the eight this was the only manifest watched by nothing.
 `tests/scripts/test_deploy_build_inputs.py` now asserts no workspace manifest is
 orphaned, so a newly scaffolded workspace cannot silently reopen that hole. The
 *directory* stays out of those two filters — see the comment beside the entry —
-because neither site builds it; `apps/reference/**` is watched by the
+because neither site builds it; `apps/digiweb/**` is watched by the
 `web` lane instead, which lints and type-checks rather than building.
 
 Before #1981 nothing built, linted or type-checked this app, but "no coverage at
@@ -607,8 +620,7 @@ lose to them belongs in `components`. The reference's per-family sheets wrap
 their dress in `@layer components { … }` for exactly that reason; a rule that
 has to beat a utility stays unlayered and says so inline (the reference's
 `.sb-hint` vs the unlayered `.kbd`). `@import` lines stay ahead of the layer
-block. The reference `(chatbot)` root, which themes vendor assistant-ui CSS,
-keeps its own unlayered cascade. Full rule and the pinned test:
+block. Full rule and the pinned test:
 [MIGRATION.md § App family CSS layering](MIGRATION.md).
 
 ## Overlay scrollbar pointer contract (DIG-4600)
@@ -749,10 +761,40 @@ control that keeps its name from its glyph),
 `packages/ui/src/components/chat/gallery-thread/work-chain-status.test.tsx`
 (the chain trigger's name).
 
-## Chat HTML export
+## Chat export
 
-`/export` and `/export md` download the thread as markdown. Any other format shows an unsupported-format error. `/export html`
-downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
+One model for every skin (`components/chat/transcript/chat-export.ts`,
+`replay/chat-export-run.ts`): a format, `md` or `html`, and a scope.
+
+- The assistant message "…" menu (`stock/message-export-menu.tsx`) has
+  `Export ▸` with `Markdown (.md)` and `HTML (.html)` in a side panel. Both
+  save that assistant message only; the question names the file but is not
+  in it.
+- The chat-level `/export` (palette pane and the settings list) offers the
+  same two formats and saves the whole conversation, user and assistant turns
+  in order. Bare `/export` opens the pane; `/export md|html` runs one; any
+  other format shows an unsupported-format error.
+- Markdown is built from the runtime messages with `## User` / `## Assistant`
+  headings. HTML is a snapshot of the rendered thread.
+- Labels are English and French (`chatExportStrings`); other languages get
+  English.
+- The per-message file holds the answer text only in both formats: the HTML
+  snapshot drops the user turn and the reasoning, tool calls and work chain
+  (`keepAnswerOnly`; a skin marks anything else `data-export-work`).
+- A private session exports nothing, on every skin. `ThreadSkinView` wraps
+  each skin in `ChatPrivateModeProvider` (`stock/chat-private-mode.tsx`)
+  with the host's `privateMode`: the message menu renders nothing, and
+  `exportMessage` / `exportConversation` refuse while any private chat is
+  mounted. The stored messages still hold the typed text, and the file name
+  carries a slug of the question.
+
+Clone skins without the `aui-*` classes mark their thread
+`data-export-thread`, their composer, action bar and branch picker
+`data-export-chrome`, and each message `data-role`.
+
+### HTML snapshot
+
+`/export html` downloads the active thread as one file (`packages/ui/src/replay/`), not the memory
 sidebar or any other thread. Ancestors of that thread are attribute-only
 wrappers, so deployment rules scoped to `[data-stock-product]` still match,
 and a node the live page has computed as `display: none` or `visibility:

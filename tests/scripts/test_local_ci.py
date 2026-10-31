@@ -2,10 +2,12 @@
 """Unit tests for the local-ci memory gate parsers (DIG-3783). Stdlib only:
 `/usr/bin/python3 -m unittest test_local_ci -v`."""
 import ast
+import contextlib
 import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -150,6 +152,86 @@ class GateParserTest(unittest.TestCase):
         self.assertEqual(_mod.SKIP_PREFIX, "local-ci skipped:")
 
 
+class InstallPreflightTest(unittest.TestCase):
+    """DIG-5585: a tick never starts on an install that is missing a module.
+
+    The runner's helpers are optional imports bound to None and fail closed,
+    so a helper that was never copied in produced a false verdict on every PR
+    (eight red `review-applied` rows on 24 Oct) instead of stopping the tick.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._saved_log = _mod.log
+        self.log_lines = []
+        _mod.log = self.log_lines.append
+        self.checkout = os.path.join(self.tmp, "checkout")
+        runner_dir = os.path.join(self.checkout, "scripts", "local-ci")
+        os.makedirs(runner_dir)
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name), os.path.join(runner_dir, name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        self.runner = os.path.join(runner_dir, "local_ci.py")
+
+    def tearDown(self):
+        _mod.log = self._saved_log
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _refuse(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as caught:
+                _mod._require_install(self.runner)
+        return caught.exception.code, err.getvalue()
+
+    def test_a_checkout_missing_a_shared_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "review_pass_filter.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78, "an incomplete install is EX_CONFIG, like a refused run")
+        self.assertIn("review_pass_filter", err)
+        self.assertIn("refusing to tick", err)
+        self.assertTrue(
+            any("review_pass_filter" in line for line in self.log_lines),
+            "the refusal must reach the runner's log, not only stderr")
+
+    def test_a_checkout_missing_a_runner_module_is_refused(self):
+        os.remove(os.path.join(self.checkout, "scripts", "local-ci", "review_applied.py"))
+        code, err = self._refuse()
+        self.assertEqual(code, 78)
+        self.assertIn("review_applied", err)
+
+    def test_a_complete_checkout_starts(self):
+        _mod._require_install(self.runner)  # no SystemExit
+
+    def test_every_entry_point_that_asks_the_guard_asks_the_install_check(self):
+        """The post-merge driver never goes through main(); it still gets checked."""
+
+        class _Broken:
+            @staticmethod
+            def check(runner_path):
+                return [{"module": "review_pass_filter",
+                         "importer": "review_applied.py", "why": "not there"}]
+
+            @staticmethod
+            def report(problems, runner_path):
+                return ["local-ci: missing module review_pass_filter"]
+
+        saved_module = _mod.import_preflight
+        saved_checked = _mod._INSTALL_CHECKED
+        _mod.import_preflight = _Broken
+        _mod._INSTALL_CHECKED = False
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as caught:
+                    _mod._guard()
+        finally:
+            _mod.import_preflight = saved_module
+            _mod._INSTALL_CHECKED = saved_checked
+        self.assertEqual(caught.exception.code, 78)
+        self.assertIn("review_pass_filter", err.getvalue())
 
 
 class WorkerGateTest(unittest.TestCase):
@@ -296,6 +378,49 @@ class WorkerBuildTest(unittest.TestCase):
         calls, rec = self._rec(npm_ci_ok=False)
         self.assertEqual(_mod.worker_build("/wt-4010", rec), ["worker-build:npm-ci"])
         self.assertEqual(len(calls), 1)
+
+    def test_build_skips_an_app_the_tree_has_retired(self):
+        """A retirement PR deletes the app; the fixed WORKER_APPS still names it.
+
+        #6530 retires apps/digitrace-langfuse (DIG-5136) and could not go green:
+        the runner changed into the app directory and wrangler failed on a
+        project with no config. An app with no wrangler.toml in the tree is
+        retired in that tree and is not built; the rest still are.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            live = _mod.WORKER_APPS[0]
+            retired = _mod.WORKER_APPS[-1]
+            for app in (live, _mod.WORKER_APPS[1]):
+                os.makedirs(os.path.join(wt, "apps", app))
+                open(os.path.join(wt, "apps", app, "wrangler.toml"), "w").close()
+            # The retired app's directory can survive a checkout (ignored
+            # node_modules), so the filter must key on wrangler.toml, not the dir.
+            os.makedirs(os.path.join(wt, "apps", retired))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            built = [c[0].split(":", 1)[1] for c in calls[1:]]
+            self.assertEqual(built, [live, _mod.WORKER_APPS[1]])
+            self.assertNotIn(retired, built)
+
+    def test_build_with_no_apps_dir_builds_the_fixed_list(self):
+        """A unit fixture or an odd tree says nothing about retirement: build all."""
+        with tempfile.TemporaryDirectory() as wt:
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
+            calls, rec = self._rec()
+            self.assertEqual(_mod.worker_build(wt, rec), [])
+            self.assertEqual(len(calls), 1 + len(_mod.WORKER_APPS))
+
+    def test_a_tree_with_no_buildable_worker_fails_loudly(self):
+        """Every app retired is a broken checkout, not a clean tree.
+
+        Skipping each app because its wrangler.toml is absent would turn a
+        half-checked-out worktree into a green required check. Only a tree that
+        still has at least one buildable Worker is treated as a real tree.
+        """
+        with tempfile.TemporaryDirectory() as wt:
+            for app in _mod.WORKER_APPS:
+                os.makedirs(os.path.join(wt, "apps", app))
+            self.assertEqual(_mod.buildable_worker_apps(wt), list(_mod.WORKER_APPS))
 
 
 class BunSuiteGateTest(unittest.TestCase):
@@ -539,7 +664,92 @@ class StaticGateWiringTest(unittest.TestCase):
         names = [e.value for e in found[0].elts if isinstance(e, ast.Constant)]
         self.assertEqual(names.count("scripts/check_r0_no_client_literals.py"), 1)
 
+    def test_r0_allowance_gate_in_static_gate_list(self):
+        """A PR that grows the R0 allowance is refused here (DIG-5762).
+
+        The growth gate lived only in the host runner, so #6500 grew the
+        baseline (1997 -> 2030), merged green, and the post-merge run caught it
+        13 h later. The list entry is a string concatenation, so it is not an
+        ast.Constant: pin the command and the base-ref wiring in the source.
+        """
+        found = self._static_lists(self._tree())
+        self.assertEqual(len(found), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn(
+            '"scripts/check_r0_client_literals_baseline_growth.py --base-ref " + r0_base',
+            src,
+        )
+        # The base is the PR's own base branch, or a caller's exact commit.
+        self.assertIn('re.fullmatch(r"[0-9a-f]{40}", base_commit)', src)
+        self.assertIn('r0_base = "origin/" + base', src)
+
+    def test_supabase_freeze_gate_in_static_gate_list(self):
+        """New Supabase usage is refused on the PR, not after merge (DIG-2887 S0)."""
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn('"scripts/check_supabase_freeze.py --base-ref " + r0_base', src)
+
+    def test_run_checks_executes_the_allowance_gate(self):
+        """Functionally: a grown baseline makes `run_checks` return the gate.
+
+        The source pins above prove the command is written down; this proves the
+        static pool actually executes it and reports its non-zero exit as a
+        failed gate. That is the property #6500 merged without: the gate was
+        absent from run_checks, so a grown baseline changed nothing.
+        """
+        tmp = tempfile.mkdtemp()
+        gate = "scripts/check_r0_client_literals_baseline_growth.py"
+        os.makedirs(os.path.join(tmp, "scripts"))
+        with open(os.path.join(tmp, gate), "w") as f:
+            f.write("# fixture: existence is all run_checks tests\n")
+
+        saved = {name: getattr(_mod, name) for name in (
+            "WT", "sh", "_guard", "wt_is_ours", "pr_body", "gitleaks_log_opts",
+            "ruff_paths_for_tree", "ruff_paths_fallback", "worker_gate",
+            "bun_gate")}
+        commands: list[str] = []
+
+        def fake_sh(cmd, cwd=None, timeout=None, out=None, name=None, env=None):
+            text = cmd if isinstance(cmd, str) else " ".join(str(p) for p in cmd)
+            commands.append(text)
+            if gate in text:
+                if out is not None:
+                    out.write("r0-client-literal-baseline-growth: 1 finding(s)\n")
+                return 1, ""
+            return 0, ""
+
+        try:
+            _mod.WT = tmp
+            _mod.sh = fake_sh
+            _mod._guard = lambda: None
+            _mod.wt_is_ours = lambda path: True
+            _mod.pr_body = lambda pr: "Fixes DIG-5762\n"
+            _mod.gitleaks_log_opts = lambda base, sha, out: None
+            _mod.ruff_paths_for_tree = lambda wt: ("", "fixture")
+            _mod.ruff_paths_fallback = lambda wt: None
+            _mod.worker_gate = lambda pr, wt: (None, None)
+            _mod.bun_gate = lambda pr, wt: (0, None)
+            pr = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+                  "baseCommit": "b" * 40, "title": "fix(ci): fixture"}
+            fails = _mod.run_checks(pr, io.StringIO())
+        finally:
+            for name, value in saved.items():
+                setattr(_mod, name, value)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+        self.assertIn(gate, fails)
+        self.assertTrue(
+            any(f"{gate} --base-ref {'b' * 40}" in c for c in commands),
+            "the gate must compare against the caller's base commit",
+        )
+
     def test_static_list_drives_single_step_call(self):
+        """Each entry becomes exactly one spec, and the specs are what runs.
+
+        The list used to drive one `step(...)` call per entry. It now drives one
+        `scan_specs.append(...)` per entry, because the independent gates run in
+        a bounded pool (STEP_POOL); the property this pins is unchanged - every
+        entry in the list is executed exactly once, with its own command.
+        """
         tree = self._tree()
         found = self._static_lists(tree)
         self.assertEqual(len(found), 1)
@@ -548,16 +758,102 @@ class StaticGateWiringTest(unittest.TestCase):
             if isinstance(node, ast.For) and node.iter is found[0]
         ]
         self.assertEqual(len(loops), 1)
-        steps = [
+        appends = [
             node for node in ast.walk(loops[0])
             if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "step"
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "append"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "scan_specs"
         ]
-        self.assertEqual(len(steps), 1)
+        self.assertEqual(len(appends), 1)
+        src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
+        self.assertIn("fails.extend(run_step_pool(scan_specs, out))", src)
 
     def test_docstring_names_r0_scan(self):
         self.assertIn("R0 client-literal scan", ast.get_docstring(self._tree()))
+
+
+class StepPoolTest(unittest.TestCase):
+    """The independent gates run in a bounded pool (STEP_POOL)."""
+
+    def test_pool_runs_specs_concurrently_and_reports_in_declared_order(self):
+        import threading
+        barrier = threading.Barrier(2, timeout=5)
+        seen = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            seen.append(name)
+            barrier.wait()          # deadlocks (BrokenBarrierError) if serialised
+            if name == "second":
+                if out:
+                    out.write("boom\n")
+                return 1, ""
+            return 0, ""
+
+        specs = [("first", ["true"], 30, None, None, ()),
+                 ("second", ["false"], 30, None, None, ())]
+        log = io.StringIO()
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool(specs, log, limit=2)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(sorted(seen), ["first", "second"], "both specs must run")
+        self.assertEqual(fails, ["second"], "only the failing step is reported")
+        text = log.getvalue()
+        self.assertLess(text.index("===== first"), text.index("===== second"),
+                        "the log keeps the declared order, not the finish order")
+
+    def test_pool_stops_at_the_specs_it_was_given(self):
+        calls = []
+
+        def fake_sh(cmd, cwd=None, timeout=1800, out=None, name=None, env=None):
+            calls.append(name)
+            return 0, ""
+
+        saved = _mod.sh
+        _mod.sh = fake_sh
+        try:
+            fails = _mod.run_step_pool([("only", ["true"], 30, None, None, ())],
+                                       io.StringIO(), limit=6)
+        finally:
+            _mod.sh = saved
+        self.assertEqual(fails, [])
+        self.assertEqual(calls, ["only"])
+
+    def test_child_state_holds_every_live_step(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            _mod._write_child_state(111, "one", 30)
+            _mod._write_child_state(222, "two", 30)
+            self.assertEqual(len(_mod.read_child_state()["children"]), 2)
+            _mod._clear_child_state(111)
+            left = _mod.read_child_state()["children"]
+            self.assertEqual([c["pid"] for c in left], [222])
+            _mod._clear_child_state()
+            self.assertIsNone(_mod.read_child_state())
+        finally:
+            _mod._clear_child_state()
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_watchdog_reads_a_state_file_written_before_the_pool(self):
+        saved = _mod.CHILD_STATE
+        tmp = tempfile.mkdtemp()
+        _mod.CHILD_STATE = os.path.join(tmp, "child.json")
+        try:
+            with open(_mod.CHILD_STATE, "w") as f:
+                json.dump({"pid": 999999, "name": "old", "started": time.time(),
+                           "budget": 300}, f)
+            st = _mod.read_child_state()
+            self.assertEqual(st["children"][0]["pid"], 999999)
+        finally:
+            _mod.CHILD_STATE = saved
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class PrepareWorktreeTest(unittest.TestCase):
@@ -968,7 +1264,7 @@ class WorktreeSelfHealTest(unittest.TestCase):
         self.assertEqual(ran, [], "run_checks must not be called when the worktree failed")
         self.assertEqual(st, "failure")
         src = open(os.path.join(_SCRIPTS, "local_ci.py")).read()
-        self.assertIn("fails = run_checks(pr, out) if ok_wt else", src)
+        self.assertIn("fails = run_checks(pr, out, summary) if ok_wt else", src)
         self.assertIn('f"worktree checkout ({why})"', src)
 
     def test_the_rebuild_leaves_the_worktree_marked_as_ours(self):
@@ -1129,8 +1425,18 @@ class InstallMarkerTest(unittest.TestCase):
         git_env = _git_env(env)
         subprocess.check_call(["git", "init", "-q", "-b", "develop", checkout])
         os.makedirs(os.path.join(checkout, "scripts", "local-ci"))
-        shutil.copy(os.path.join(_SCRIPTS, "local_ci.py"),
-                    os.path.join(checkout, "scripts", "local-ci", "local_ci.py"))
+        # The install refuses a checkout that carries the runner without the
+        # guard (DIG-4796), and one where a module the runner imports does not
+        # resolve (DIG-5585). The clone therefore carries every module next to
+        # the runner, plus the shared module in `scripts/`, one directory up.
+        # Copying every `.py` keeps these cases about the marker: a helper
+        # added to the runner is in the clone without editing this list.
+        for name in os.listdir(_SCRIPTS):
+            if name.endswith(".py"):
+                shutil.copy(os.path.join(_SCRIPTS, name),
+                            os.path.join(checkout, "scripts", "local-ci", name))
+        shutil.copy(os.path.join(_SCRIPTS, "..", "review_pass_filter.py"),
+                    os.path.join(checkout, "scripts", "review_pass_filter.py"))
         subprocess.check_call(["git", "-C", checkout, "add", "-A"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "commit", "-q", "-m", "x"], env=git_env)
         subprocess.check_call(["git", "-C", checkout, "remote", "add", "origin", checkout],
@@ -1156,6 +1462,80 @@ class InstallMarkerTest(unittest.TestCase):
                          "the marker must name the checkout the runner was installed from")
         self.assertTrue(marker.get("self_update"),
                         "a clone on develop may be kept current by the runner")
+
+    def test_a_dry_run_renders_the_interpreter_the_job_will_run(self):
+        """The plist must name the same interpreter the install check used.
+
+        A `ProgramArguments` entry left as a placeholder lints cleanly and
+        fails only when launchd tries to spawn it, so a render that never
+        substituted the interpreter reads as an installed job and runs nothing
+        (DIG-5725).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"),
+                               "--dry-run", checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("__", done.stdout,
+                         "an unsubstituted placeholder is a plist launchd cannot run")
+        self.assertIn("<string>/usr/bin/python3</string>", done.stdout,
+                      "the job must run under the interpreter the install check used")
+
+    def test_a_checkout_without_the_guard_is_refused(self):
+        """An installer must not point the daemon at a pre-guard checkout.
+
+        The runner refuses to run without `launch_guard.py` next to it (exit
+        78), so installing that checkout would stop the only pre-merge
+        producer. The install refuses it up front instead (DIG-4796).
+        """
+        tmp, _home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "launch_guard.py"))
+        rc = subprocess.call(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout], env=env)
+        self.assertNotEqual(rc, 0, "a runner that cannot be guarded must not be installed")
+
+    def test_a_checkout_without_the_install_check_is_refused(self):
+        """An installer must not point the daemon at a checkout with no preflight.
+
+        The runner exits 78 on every tick when `import_preflight.py` is absent
+        (`_require_install`, DIG-5585), so installing from a stale checkout
+        leaves the daemon running and the gate dark. The install refuses the
+        tree before it writes anything (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "import_preflight.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout without the install check must not be installed")
+        self.assertIn("import_preflight.py", done.stderr,
+                      "the refusal must name the module the checkout is missing")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
+
+    def test_a_checkout_missing_an_imported_module_is_refused(self):
+        """A stale checkout can look complete: refuse it by import, not by name.
+
+        The runner imports `pr_template` and fails closed when it is None, so a
+        checkout that carries the runner but not a helper it imports still
+        looks installable. The install asks the checkout's own preflight, which
+        resolves every import, and refuses with the module named (DIG-5725).
+        """
+        tmp, home, env = self._sandbox()
+        checkout = self._clone(tmp, env)
+        os.remove(os.path.join(checkout, "scripts", "local-ci", "pr_template.py"))
+        done = subprocess.run(["sh", os.path.join(_SCRIPTS, "install.sh"), checkout],
+                              env=env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0,
+                            "a checkout missing an imported module must not be installed")
+        self.assertIn("pr_template", done.stderr,
+                      "the refusal must name the module that could not be resolved")
+        self.assertFalse(os.path.exists(os.path.join(
+            home, "Library", "LaunchAgents", "ai.digithings.local-ci.plist")),
+            "a refused install must not write a plist")
 
     def test_a_clone_without_the_word_is_never_moved_by_the_runner(self):
         """Without --self-update the runner keeps the commit it was installed on."""
@@ -1828,6 +2208,154 @@ class ExplicitPrStateTest(NoRealNetwork, unittest.TestCase):
         self.assertNotIn("process", self.calls)
 
 
+class ReviewCoverageEvidenceTest(unittest.TestCase):
+    """DIG-4507: the promotion judgement is evidence, not a second producer.
+
+    The runner used to post `Every commit reaching main was reviewed` as a
+    commit status with a user token while `ci-review-coverage.yml` posted the
+    same context as an app-owned check run. Two implementations of one required
+    context disagree, and the user-token row can never satisfy an app pin. The
+    workflow is the single producer; the runner keeps its per-PR log only.
+    """
+
+    SHA = "b84c114e0000000000000000000000000000000"
+
+    def setUp(self):
+        self._logd = _mod.LOGD
+        self._prepare_wt = _mod.prepare_wt
+        self._run_review_coverage = _mod.run_review_coverage
+        self._gh = _mod.gh
+        self.tmp = tempfile.mkdtemp()
+        _mod.LOGD = self.tmp
+        self.gh_calls = []
+        _mod.gh = lambda *a: self.gh_calls.append(list(a)) or "{}"
+
+    def tearDown(self):
+        _mod.LOGD = self._logd
+        _mod.prepare_wt = self._prepare_wt
+        _mod.run_review_coverage = self._run_review_coverage
+        _mod.gh = self._gh
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _pr(self, number=6400, updated="2026-10-25T10:00:00Z"):
+        return {"number": number, "headRefOid": self.SHA, "baseRefName": "main",
+                "title": "chore: promote develop to main", "isCrossRepository": False,
+                "updatedAt": updated}
+
+    def _log(self, number=6400, age_secs=0):
+        p = os.path.join(self.tmp, f"pr{number}-review-{self.SHA[:12]}.log")
+        with open(p, "w") as f:
+            f.write("judged\n")
+        old = time.time() - age_secs
+        os.utime(p, (old, old))
+        return p
+
+    def test_the_queue_keys_on_the_judgement_log_not_a_status_row(self):
+        pr = self._pr()
+        self.assertEqual(_mod.pending_reviews([pr]), [pr],
+                         "a head with no judgement log has not been judged")
+        self._log()
+        self.assertEqual(_mod.pending_reviews([pr]), [],
+                         "a fresh judgement is evidence and satisfies the hourly re-check")
+
+    def test_a_judgement_older_than_an_hour_is_rechecked(self):
+        pr = self._pr()
+        self._log(age_secs=_mod.REVIEW_RECHECK_SECS + 60)
+        self.assertEqual(_mod.pending_reviews([pr]), [pr])
+
+    def test_judging_a_promotion_posts_no_status(self):
+        pr = self._pr()
+        _mod.prepare_wt = lambda n, sha, base, out: (True, "ok")
+        _mod.run_review_coverage = lambda p, out: (True, 3, 0)
+        self.assertEqual(_mod.process_review(pr, dry=False), "success")
+        self.assertEqual(self.gh_calls, [],
+                         "the judgement is evidence: it must not publish a status row")
+        self.assertTrue(os.path.exists(
+            os.path.join(self.tmp, f"pr{pr['number']}-review-{self.SHA[:12]}.log")))
+
+    def test_the_runner_names_no_second_producer(self):
+        with open(os.path.join(_SCRIPTS, "local_ci.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn("Every commit reaching main was reviewed", src,
+                         "the workflow is the single producer of main's review context (DIG-4507)")
+        self.assertNotIn("def review_status(", src)
+        self.assertNotIn("def review_ci_status(", src)
+
+
+class ProducerGuardTickTest(NoRealNetwork, unittest.TestCase):
+    """DIG-4507: the tick asks the producer guard once, and survives its report.
+
+    The guard's own `main()` prints UNREADABLE, but the daemon calls `run()`,
+    so the per-tick call site owns the reporting. A tick that logged `ok` while
+    the protection could not be read would be a silent pass: healthy-looking
+    logs over a guard that cannot see. These tests pin the call itself, because
+    deleting it would otherwise leave the suite green.
+    """
+
+    def setUp(self):
+        self._isolate()
+        self._saved = {}
+        self.logs = []
+        self._saved_env = dict(os.environ)
+        os.environ["LOCAL_CI_MAIN"] = os.path.abspath(os.path.join(_HERE, "..", ".."))
+        os.environ.pop("LOCAL_CI_WT", None)
+        self._saved_argv = list(sys.argv)
+
+    def tearDown(self):
+        for name, value in self._saved.items():
+            setattr(_mod, name, value)
+        sys.argv = self._saved_argv
+        self._unisolate()
+
+    def _stub(self, name, value):
+        if name not in self._saved:
+            self._saved[name] = getattr(_mod, name)
+        setattr(_mod, name, value)
+
+    def _run_tick(self):
+        """main() with every side effect stubbed: only the guard stays real."""
+        self._stub("_guard", lambda *a, **kw: None)
+        self._stub("watchdog", lambda: None)
+        self._stub("acquire_lock", lambda: True)
+        self._stub("release_lock", lambda: None)
+        self._stub("prune_claims", lambda: None)
+        self._stub("refresh_checkout", lambda: None)
+        self._stub("list_prs", lambda base: [])
+        self._stub("skip_reason", lambda: None)
+        self._stub("pending", lambda prs, applied, dry=False: [])
+        self._stub("pending_applied", lambda prs: [])
+        self._stub("pending_reviews", lambda prs: [])
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", lambda *a: None)          # protection unreadable
+        sys.argv = ["local_ci.py"]
+        stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            _mod.main()
+        finally:
+            sys.stdout = stdout
+
+    def test_the_tick_asks_the_guard_once(self):
+        calls = []
+        self._stub("check_required_context_producers", lambda: calls.append(1))
+        self._run_tick()
+        self.assertEqual(calls, [1], "the tick must ask the guard exactly once")
+
+    def test_an_unreadable_protection_is_reported_and_never_logged_ok(self):
+        self._run_tick()
+        self.assertTrue(any("UNREADABLE (not failed)" in m for m in self.logs), self.logs)
+        self.assertFalse(any(m.startswith("required-context producers: ok") for m in self.logs),
+                         self.logs)
+
+    def test_a_guard_error_is_logged_and_never_raised(self):
+        def boom(*a):
+            raise RuntimeError("boom")
+        self._stub("log", lambda msg: self.logs.append(msg))
+        self._stub("gh", boom)
+        _mod.check_required_context_producers()   # must not raise
+        self.assertTrue(any("guard error" in m for m in self.logs), self.logs)
+
+
 class StatusTargetUrlTest(NoRealNetwork, unittest.TestCase):
     """DIG-4794: the `local-ci` status must name the build that made it green.
 
@@ -2397,6 +2925,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         os.makedirs(_mod.LOGD, exist_ok=True)
         self.rows = {}      # sha -> list of status rows
         self.posts = []     # (sha, state, description)
+        self.body = "Fixes DIG-5695\n<!-- test body -->\n"
+        self.bodies = {}    # pr number -> body, when a test needs its own
         _mod.gh = self._fake_gh
 
     def tearDown(self):
@@ -2417,6 +2947,8 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         if url:
             sha = url[0].split("/commits/")[1].split("/statuses")[0]
             return json.dumps(self.rows.get(sha, []))
+        if argv[:2] == ["pr", "view"]:
+            return self.bodies.get(argv[2], self.body)
         return "[]"
 
     def _row(self, state, desc, age_secs=0):
@@ -2430,6 +2962,11 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 "baseRefName": "develop", "title": "fix(x): something",
                 "isCrossRepository": False, "updatedAt": updated,
                 "createdAt": created or updated}
+
+    def _stamp(self, offset_secs=0):
+        """An ISO timestamp `offset_secs` from now, the shape GitHub returns."""
+        ts = datetime.now(timezone.utc) + timedelta(seconds=offset_secs)
+        return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _dead_pid(self):
         """A pid that is certainly gone: a process we started and reaped."""
@@ -2501,7 +3038,131 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
         pr = self._pr()
         self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)")]
         self.assertEqual(_mod.pending([pr], False), [],
-                         "a red verdict is the head's own answer")
+                         "a red verdict the pull request has not outlived is the head's own answer")
+
+    # --- metadata-only failures (DIG-5695) ---------------------------------
+
+    def _judge(self, sha, revision):
+        """Record a metadata revision the way a verdict does."""
+        with open(os.path.join(_mod.LOGD, f"metadata-recheck-{sha}"), "w") as f:
+            f.write(revision + "\n")
+
+    def test_a_metadata_failure_re_queues_when_the_title_or_body_was_fixed(self):
+        """The remedy for a metadata gate does not touch the tree (PR #6513).
+
+        The author corrected the title and the body after the row went out, so
+        the same head is worth one more look. No commit, and no review becomes
+        stale for it.
+        """
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-title, pr-template (1m)", age_secs=300)]
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a corrected title or body must re-check the same head")
+
+    def test_the_judged_metadata_is_not_re_queued_again(self):
+        """One re-check per change, not one per tick."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "the metadata already judged must not queue the head again")
+
+    def test_a_metadata_edit_after_the_judged_revision_re_queues(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-template (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], "0000000000000000")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a revision the gates have not judged is worth a look")
+
+    def test_the_revision_covers_the_body_and_the_title(self):
+        """The digest must tell a corrected title or body from the same one.
+
+        This is the part the rule turns on: a digest that ignores the body does
+        not re-queue the `pr-template` fix, and a constant digest never re-queues
+        anything after the first verdict. Both are asserted here directly, so a
+        later edit to `metadata_revision` cannot quietly take either shape.
+        """
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "body one"),
+                            _mod.metadata_revision("fix(x): a", "body two"),
+                            "the digest must change with the body")
+        self.assertNotEqual(_mod.metadata_revision("fix(x): a", "same"),
+                            _mod.metadata_revision("fix(y): b", "same"),
+                            "the digest must change with the title")
+
+    def test_a_body_only_correction_re_queues_a_judged_head(self):
+        """The body is the remedy for `pr-template` (PR #6513): it must re-queue."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template (1m)", age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        self.bodies[str(pr["number"])] = (
+            self.body + "\n## Testing Evidence\n```\nfixed\n```\n")
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a body-only correction must re-check the same head")
+
+    def test_a_title_only_correction_re_queues_a_judged_head(self):
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=300)]
+        self._judge(pr["headRefOid"], _mod.metadata_revision(pr["title"], self.body))
+        pr["title"] = "fix(x): the corrected title"
+        self.assertEqual([p["number"] for p in _mod.pending([pr], False)], [pr["number"]],
+                         "a title-only correction must re-check the same head")
+
+    def test_a_metadata_failure_the_pull_request_has_not_outlived_is_left_alone(self):
+        """No recorded revision and no edit after the row: nothing to re-check."""
+        pr = self._pr(updated=self._stamp(-600))
+        self.rows[pr["headRefOid"]] = [self._row("failure", "local-ci failed: pr-title (1m)",
+                                                 age_secs=60)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a row younger than every edit is the head's own answer")
+
+    def test_a_code_failure_is_never_re_queued(self):
+        """A code gate's remedy is a commit, so its row stays terminal."""
+        pr = self._pr(updated=self._stamp(-60))
+        for desc in ("local-ci failed: ruff (1m)",
+                     "local-ci failed: pr-title, ruff (1m)",
+                     "local-ci failed: pr-template, bun:digichat-tui (1m)"):
+            self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+            self.assertEqual(_mod.pending([pr], False), [],
+                             f"a code failure must stay terminal: {desc!r}")
+
+    def test_a_missing_pr_template_checker_is_not_a_metadata_failure(self):
+        """A runner defect must not buy a lane on every metadata edit."""
+        pr = self._pr(updated=self._stamp(-60))
+        desc = "local-ci failed: pr-template:checker-missing (0m)"
+        self.rows[pr["headRefOid"]] = [self._row("failure", desc, age_secs=300)]
+        self.assertIsNone(_mod.metadata_failure_gates(desc))
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a missing checker module is not author metadata")
+
+    def test_a_stalled_metadata_gate_is_not_re_queued(self):
+        """A stall names no plain gate: it is a code verdict about the runner."""
+        pr = self._pr(updated=self._stamp(-60))
+        self.rows[pr["headRefOid"]] = [
+            self._row("failure", "local-ci failed: pr-template exceeded 1800s and was killed (30m)",
+                      age_secs=300)]
+        self.assertEqual(_mod.pending([pr], False), [],
+                         "a stall must not be mistaken for a metadata failure")
+
+    def test_a_metadata_verdict_records_the_revision_the_gates_judged(self):
+        """The queue must be able to tell a fixed title or body from the same one."""
+        pr = self._pr()
+        self._run_process(pr, fails=["pr-title"], revision="0123456789abcdef")
+        path = os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")
+        with open(path) as f:
+            self.assertEqual(f.read().strip(), "0123456789abcdef",
+                             "the verdict must record the metadata it judged")
+
+    def test_a_code_verdict_records_no_metadata_revision(self):
+        pr = self._pr()
+        self._run_process(pr, fails=["ruff"], revision="0123456789abcdef")
+        self.assertFalse(os.path.exists(
+            os.path.join(_mod.LOGD, f"metadata-recheck-{pr['headRefOid']}")),
+            "a code verdict is terminal and must record no metadata revision")
 
     def test_a_head_with_no_row_at_all_is_queued(self):
         pr = self._pr()
@@ -2528,7 +3189,7 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
 
     # --- the runner takes and releases the claim ----------------------------
 
-    def _run_process(self, pr, verdict_posts=True):
+    def _run_process(self, pr, verdict_posts=True, fails=(), revision=None):
         """Run process() with the gates stubbed out; record what was posted."""
         self.posts = []
         seen = {}
@@ -2541,9 +3202,14 @@ class ClaimLedgerTest(NoRealNetwork, unittest.TestCase):
                 return False
             return True
 
+        def fake_run_checks(pr, out, summary=None):
+            if summary is not None and revision is not None:
+                summary["metadata_revision"] = revision
+            return list(fails)
+
         _mod.status = fake_status
         _mod.prepare_wt = lambda n, sha, base, out: (True, "")
-        _mod.run_checks = lambda pr, out, summary=None: []
+        _mod.run_checks = fake_run_checks
         _mod.process(pr, False)
         return seen
 
@@ -3283,3 +3949,247 @@ class LockHeartbeatTest(unittest.TestCase):
         self.assertEqual(_mod.lock_holder_alive(), os.getpid())
         _mod.release_lock()
 
+
+
+class WorktreeRootGuardTest(unittest.TestCase):
+    """A gate must not run in a directory that is not there.
+
+    2026-10-26: the runner ran a tick with its worktree root resolved to "/"
+    and posted sixteen failures -- every check ran from `/` and none of them
+    was a finding. The tick has to refuse instead of producing that verdict.
+    """
+
+    PR = {"number": 1, "headRefOid": "a" * 40, "baseRefName": "develop",
+          "title": "fix(x): y"}
+
+    def setUp(self):
+        self._saved = (_mod.WT, _mod._guard)
+        _mod._guard = lambda: None
+
+    def tearDown(self):
+        _mod.WT, _mod._guard = self._saved
+
+    def test_run_checks_refuses_a_root_that_is_not_our_worktree(self):
+        # The observed failure: the root resolved to "/", which IS a directory,
+        # so an isdir check would have passed it and run every gate from root.
+        _mod.WT = "/"
+        with self.assertRaises(SystemExit) as ctx:
+            _mod.run_checks(self.PR, io.StringIO())
+        self.assertIn("is not this runner's worktree", str(ctx.exception))
+        self.assertIn("refusing to run gates", str(ctx.exception))
+
+    def test_run_checks_refuses_a_missing_root(self):
+        _mod.WT = "/nonexistent-worktree-root-for-test"
+        with self.assertRaises(SystemExit):
+            _mod.run_checks(self.PR, io.StringIO())
+
+    def test_pool_step_with_a_missing_directory_fails_without_executing(self):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        ran = []
+        saved_sh = _mod.sh
+        _mod.sh = lambda *a, **kw: (ran.append(a), (0, ""))[1]
+        try:
+            fails = _mod.run_step_pool(
+                [("probe", ["true"], 5, "/nonexistent-worktree-root-for-test", None, ())],
+                io.StringIO(),
+            )
+        finally:
+            _mod.sh = saved_sh
+        self.assertIn("probe", fails)
+        self.assertEqual(ran, [], "the pool must not execute a step with no cwd")
+
+    def test_pool_step_without_an_explicit_cwd_runs_in_the_worktree_root(self):
+        """The regression: the pool passed cwd=None, so the child inherited
+        launchd's "/" and every check looked for `//scripts/...`."""
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        _mod.WT = tmp
+        seen = []
+        saved = _mod.sh
+        _mod.sh = lambda cmd, cwd=None, **kw: (seen.append(cwd), (0, ""))[1]
+        try:
+            _mod.run_step_pool([("probe", ["true"], 5, None, None, ())], io.StringIO())
+        finally:
+            _mod.sh = saved
+        self.assertEqual(seen, [tmp], "a step with no cwd must run in the worktree root")
+
+class StepBudgetTest(unittest.TestCase):
+    """Every gate step has a wall-clock ceiling of its own (2026-10-26).
+
+    The evidence was in the runner's own logs: a check that measures 10 s alone
+    had the tick recorded at 32 m and 44 m, while every step idle together took
+    99.6 s. The cost was a step hanging and the runner waiting on it, so the
+    ceiling is per step and the kill takes the whole process group. A red check
+    keeps its plain name: only an overrun is reported as an overrun.
+    """
+
+    def setUp(self):
+        self.out = io.StringIO()
+        self.fails = []
+
+    def _step_seconds(self, text):
+        """The duration the runner measured, read back from the log line."""
+        m = re.search(r"^step=(\S+) seconds=([\d.]+) rc=(-?\d+)", text, re.M)
+        self.assertIsNotNone(m, f"no `step=... seconds=... rc=...` line in:\n{text}")
+        return m.group(1), float(m.group(2)), int(m.group(3))
+
+    def test_a_step_that_overruns_its_budget_is_killed_and_named(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1)
+        took = time.monotonic() - started
+        self.assertFalse(ok)
+        self.assertLess(took, 20, "the step must be killed at its budget, not waited on")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        text = self.out.getvalue()
+        self.assertIn("scripts/check_slow.py exceeded 1s and was killed", text)
+        self.assertIn("[rc=124]", text, "the existing [rc=...] block must stay")
+        name, seconds, rc = self._step_seconds(text)
+        self.assertEqual((name, rc), ("scripts/check_slow.py", 124))
+        self.assertLess(seconds, 20, "the duration must be the measured one, not the budget")
+
+    def test_the_tick_moves_on_to_the_next_step(self):
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        ok = _mod.run_step("quick", ["/usr/bin/true"], 60, self.out, self.fails, budget=60)
+        self.assertTrue(ok)
+        self.assertEqual(self.fails, ["hung exceeded 1s and was killed"],
+                         "the next step must run and must not inherit the failure")
+        self.assertIn("step=quick seconds=", self.out.getvalue())
+
+    def test_a_step_under_its_budget_is_untouched(self):
+        ok = _mod.run_step("quick", ["/bin/sh", "-c", "sleep 0.2; exit 0"], 60,
+                           self.out, self.fails)
+        self.assertTrue(ok, "a healthy step must not be touched by the watchdog")
+        self.assertEqual(self.fails, [])
+        name, seconds, rc = self._step_seconds(self.out.getvalue())
+        self.assertEqual((name, rc), ("quick", 0))
+        self.assertGreaterEqual(seconds, 0.2, "the measured time must be reported")
+        self.assertNotIn("exceeded", self.out.getvalue())
+
+    def test_a_genuine_failure_still_reads_as_a_failure(self):
+        ok = _mod.run_step("ruff", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        self.assertFalse(ok)
+        self.assertEqual(self.fails, ["ruff"],
+                         "a red check is still named plainly, not called a stall")
+        self.assertNotIn("exceeded", self.out.getvalue())
+        self.assertNotIn("was killed", self.out.getvalue())
+
+    def test_a_stalled_step_is_not_retried_into_a_second_window(self):
+        ok = _mod.run_step("scripts/check_slow.py", ["/bin/sleep", "60"], 60,
+                           self.out, self.fails, budget=1, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_slow.py"), 1,
+                         "a step killed for overrunning must not get a second window")
+        self.assertEqual(self.fails, ["scripts/check_slow.py exceeded 1s and was killed"])
+        self.assertIn("step=scripts/check_slow.py seconds=", text)
+
+    def test_the_retry_cap_is_enforced(self):
+        started = time.monotonic()
+        ok = _mod.run_step("scripts/check_guard.py", ["/bin/sh", "-c", "exit 3"], 60,
+                           self.out, self.fails, stall_rcs=(124, 3))
+        self.assertFalse(ok)
+        text = self.out.getvalue()
+        self.assertEqual(text.count("===== scripts/check_guard.py"), _mod.RETRY_CAP,
+                         "the attempt cap must be the only bound on the retry loop")
+        self.assertIn(f"attempts={_mod.RETRY_CAP}/{_mod.RETRY_CAP}", text,
+                      "the log must say how many attempts ran")
+        self.assertEqual(self.fails, ["scripts/check_guard.py:stall"])
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_the_duration_line_is_emitted_for_every_step_including_failures(self):
+        _mod.run_step("green", ["/usr/bin/true"], 60, self.out, self.fails)
+        _mod.run_step("red", ["/bin/sh", "-c", "exit 1"], 60, self.out, self.fails)
+        _mod.run_step("hung", ["/bin/sleep", "60"], 60, self.out, self.fails, budget=1)
+        lines = [ln for ln in self.out.getvalue().splitlines() if ln.startswith("step=")]
+        self.assertEqual([ln.split()[0] for ln in lines],
+                         ["step=green", "step=red", "step=hung"],
+                         "one duration line per step, in the order the steps ran")
+        self.assertEqual([ln.rsplit("rc=", 1)[1] for ln in lines], ["0", "1", "124"])
+
+    def test_the_kill_takes_the_whole_process_group_down(self):
+        """A hung step is a tree: the shell that hung and the grandchild it left."""
+        tmp = tempfile.mkdtemp(prefix="local-ci-kill-")
+        pidfile = os.path.join(tmp, "grandchild.pid")
+        try:
+            cmd = ["/bin/sh", "-c", f"sleep 60 & echo $! > {pidfile}; wait"]
+            _mod.run_step("hung-tree", cmd, 60, self.out, self.fails, budget=1)
+            with open(pidfile) as f:
+                grandchild = int(f.read().strip())
+            deadline = time.monotonic() + 2
+            while _mod.pid_alive(grandchild) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(_mod.pid_alive(grandchild),
+                             "a grandchild must not survive the step's budget")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_the_default_budget_and_the_per_step_overrides(self):
+        self.assertEqual(_mod.STEP_BUDGET, 180)
+        for heavy in ("uv-sync", "mypy", "gitleaks", "worker-build:npm-ci"):
+            self.assertGreater(_mod.STEP_BUDGETS[heavy], _mod.STEP_BUDGET,
+                               f"{heavy} legitimately needs more than the default")
+        for light in ("actionlint", "pr-title"):
+            self.assertNotIn(light, _mod.STEP_BUDGETS,
+                             f"{light} is measured in seconds; it takes the default")
+
+    def test_a_tree_scanner_budget_is_the_scan_timeout(self):
+        """The scanners are not in STEP_BUDGETS, so before DIG-5724 they took
+        the 180 s default and a clean tree false-red at 182-183 s (PR #6525)."""
+        spec = _mod.scan_spec("scripts/scan_customer_pii.py",
+                              "python3 scripts/scan_customer_pii.py")
+        self.assertEqual(spec[2], _mod.SCAN_TIMEOUT,
+                         "SCAN_TIMEOUT is the scanner's caller ceiling")
+        self.assertEqual(spec[6], _mod.SCAN_TIMEOUT,
+                         "and its step budget, not the 180 s STEP_BUDGET default")
+        self.assertGreaterEqual(_mod.SCAN_TIMEOUT, 3 * 183,
+                                "the budget keeps a 3x margin over the worst "
+                                "measured clean-tree runtime (183 s, PR #6525)")
+
+    def test_the_scan_timeout_env_raises_a_scanners_budget(self):
+        """LOCAL_CI_SCAN_TIMEOUT must reach the budget, not only the ceiling."""
+        code = (
+            "import importlib.util, sys;"
+            f"sys.path.insert(0, {_SCRIPTS!r});"
+            "s=importlib.util.spec_from_file_location('local_ci_scan_env', "
+            f"{os.path.join(_SCRIPTS, 'local_ci.py')!r});"
+            "m=importlib.util.module_from_spec(s);sys.modules['local_ci_scan_env']=m;"
+            "s.loader.exec_module(m);"
+            "print(m.SCAN_TIMEOUT, m.scan_spec('scripts/check_doc_links.py', 'true')[6])"
+        )
+        env = dict(os.environ, LOCAL_CI_SCAN_TIMEOUT="900")
+        env.pop("LOCAL_CI_STEP_BUDGET", None)
+        got = subprocess.check_output([sys.executable, "-c", code], env=env,
+                                      text=True, cwd=_SCRIPTS).strip()
+        self.assertEqual(got, "900 900",
+                         "the env knob must raise the ceiling and the budget together")
+
+    def test_both_scanner_waves_take_the_scan_budget(self):
+        """A wave that calls gate_spec directly silently loses the scan budget."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertGreaterEqual(src.count("scan_spec("), 2,
+                                "the pre-uv-sync and post-uv-sync scanner waves must both "
+                                "use scan_spec (DIG-5724)")
+
+    def test_the_budget_is_per_step_and_never_above_the_caller_ceiling(self):
+        self.assertEqual(_mod.step_budget("actionlint", 300), 180,
+                         "a non-scanner step still takes the 180 s default")
+        self.assertEqual(_mod.step_budget("uv-sync", 1800), _mod.STEP_BUDGETS["uv-sync"])
+        self.assertEqual(_mod.step_budget("bun:digichat-tui", 1800), _mod.STEP_BUDGETS["bun:*"])
+        self.assertEqual(_mod.step_budget("uv-sync", 120), 120,
+                         "a tighter caller ceiling still wins")
+        self.assertEqual(_mod.step_budget("anything", 1800, budget=7), 7)
+        self.assertEqual(_mod.gate_spec("anything", "true", 1800, budget=7)[6], 7,
+                         "gate_spec must pass an explicit budget through")
+
+    def test_run_checks_routes_every_step_through_the_budgeted_runner(self):
+        """A step that bypasses run_step has no budget, so the gate cannot
+        prevent the next 44 m tick."""
+        import inspect
+        src = inspect.getsource(_mod.run_checks)
+        self.assertIn("return run_step(", src)
+        self.assertEqual(src.count("sh("), 0,
+                         "run_checks must not call sh directly: every step takes a budget")

@@ -3,6 +3,11 @@
  * Never includes tokens, MCP URLs, or backend credentials.
  *
  * GET /api/deploy/chrome?host=<hostname>
+ *
+ * An invite-only host (DIG-3585) answers 404 unless the request carries that
+ * deployment's own token in `X-Embed-Token`. The edge adds that header on the
+ * invite page's own calls. The token is never read from the query string, so
+ * it stays out of URLs and logs.
  */
 
 import {
@@ -14,8 +19,17 @@ import {
   resolveDeploymentForHost,
   getPrimaryDeployment,
 } from "@/lib/deploy-config/loader";
+import { tokenMatches } from "@/lib/embed-chat-tenant";
+import { isInviteOnlyDeployment } from "@/lib/embed-invite-only";
 
 export const dynamic = "force-dynamic";
+
+function notFound(): Response {
+  return new Response(JSON.stringify({ error: "not_found" }), {
+    status: 404,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
@@ -25,6 +39,12 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const cfg = getDigichatConfig();
     const dep = resolveDeploymentForHost(host, cfg) ?? getPrimaryDeployment(cfg);
+    if (
+      isInviteOnlyDeployment(host, dep?.slug) &&
+      !(dep && tokenMatches(dep.token ?? "", req.headers.get("x-embed-token")))
+    ) {
+      return notFound();
+    }
     body = dep
       ? toChromeClientConfig(dep)
       : {
@@ -34,6 +54,9 @@ export async function GET(req: Request): Promise<Response> {
           auth: DEFAULT_CLIENT_CONFIG.auth,
         };
   } catch {
+    // Fail closed: an unreadable config never serves the open default to a
+    // host a gated tenant claims (claims live outside the document).
+    if (isInviteOnlyDeployment(host, undefined)) return notFound();
     body = {
       slug: DEFAULT_CLIENT_CONFIG.slug,
       ...DEFAULT_CLIENT_CONFIG.chrome,

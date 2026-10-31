@@ -1,30 +1,52 @@
-import Link from "next/link";
+import type { Metadata } from "next";
 
-import { PageHead } from "@digithings/ui";
-
-import BookDownloadButton from "@/components/book/BookDownloadButton";
-import BookToc from "@/components/book/BookToc";
+import BookDocument from "@/components/book/BookDocument";
+import BookLive from "@/components/book/BookLive";
+import pages from "@/lib/book/generated/pages.json";
+import { briefChapters } from "@/lib/book/brief";
 import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
 
-/** The book's index: every chapter, in the order its author chose. */
-export default function BookIndexPage() {
-  const chapters = chapterRefs(loadChapters(process.cwd()));
+export const metadata: Metadata = {
+  title: "the digithings book",
+  description:
+    "An open-core AI stack, explained module by module: why it runs where you put it, how the parts fit, and how to start on one machine.",
+};
+
+/**
+ * The book, read the way it is printed (DIG-2821 follow-up).
+ *
+ * The pages are the paginated document itself, not pictures of it. That is what
+ * lets the book follow the reader's theme and palette: the site's tokens are on
+ * <html> and pagedjs copies them into every page box, so switching theme
+ * repaints the book along with the rest of the site instead of serving a second
+ * set of images. Pagination is stable at any window width because the page
+ * boxes are A4 from `@page`, which is why the numbers beside the contents can
+ * be the printed numbers — both come from the same pass the PDF is printed
+ * from (`lib/book/generated/pages.json`).
+ *
+ * The deeper web chapters remain at `/book/<chapter>/`; this page is the book,
+ * not the documentation, and it carries the download rather than a chapter
+ * index.
+ */
+export default async function BookIndexPage() {
+  const chapters = briefChapters(loadChapters(process.cwd()));
+  const refs = briefChapters(chapterRefs(chapters)).map((chapter, index) => ({
+    ...chapter,
+    order: index + 1,
+    page: pages.map[chapter.href as keyof typeof pages.map] ?? 0,
+  }));
+
   return (
-    <article className="pt-[clamp(3rem,7vw,5rem)]">
-      <PageHead kicker="// digibook" title="digibook">
-        A short, philosophical book about self-hosted AI infrastructure: why it matters, how it
-        scales, and what it costs. It is not a technical manual for digithings — the docs cover
-        that — this is the thinking behind choosing to own your own stack at all.
-      </PageHead>
-      <div className="mt-[clamp(2rem,4vw,3rem)] max-w-[64ch]">
-        <BookToc chapters={chapters} />
-      </div>
-      <p className="book-screen-only mt-10 flex flex-wrap items-baseline gap-x-4 gap-y-2 font-mono text-[0.8rem] text-ink-soft">
-        <BookDownloadButton className="inline-flex min-h-11 items-center border-hair border-b text-accent hover:text-ink" />
-        <Link href="/book/print/" className="text-accent hover:text-ink">
-          printable edition
-        </Link>
-      </p>
-    </article>
+    <BookLive
+      chapters={refs.map((chapter) => ({
+        slug: chapter.slug,
+        title: chapter.title,
+        order: chapter.order,
+        page: chapter.page,
+      }))}
+      pageCount={pages.pages}
+    >
+      <BookDocument />
+    </BookLive>
   );
 }

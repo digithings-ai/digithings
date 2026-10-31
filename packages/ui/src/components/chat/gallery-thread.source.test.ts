@@ -26,7 +26,7 @@ describe("gallery Thread is the product digichat skin", () => {
 
   it("gallery Thread mounts registry slots and cube glyphs", () => {
     const thread = read("gallery-thread/thread.aui.tsx");
-    expect(thread).toMatch(/ActionBarMorePrimitive/);
+    expect(thread).toMatch(/MessageExportMenu/);
     expect(thread).toMatch(/ReasoningRoot/);
     expect(thread).toMatch(/ToolFallback/);
     expect(thread).toMatch(/MarkdownText/);
@@ -63,18 +63,6 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(reasoning).toMatch(/DisclosureChevron/);
   });
 
-  it("container no longer COPYs gallery chatbot.css (grammar lives in the package)", () => {
-    const root = join(here, "../../../../../");
-    const cf = readFileSync(join(root, "infra/docker/Dockerfile.digichat-cloudflare"), "utf8");
-    const app = readFileSync(join(root, "apps/digichat/Dockerfile"), "utf8");
-    const copy = "apps/reference/app/(chatbot)/chatbot/chatbot.css";
-    expect(cf).not.toContain(copy);
-    expect(app).not.toContain(copy);
-    expect(existsSync(join(root, "packages/ui/src/styles/chat-digichat.css"))).toBe(
-      true,
-    );
-  });
-
   it("portaled More-menu CSS is gated so catalog skins keep their menus", () => {
     const gate =
       ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-action-bar-more-content';
@@ -106,10 +94,8 @@ describe("gallery Thread is the product digichat skin", () => {
   it("product tooltip suppresses the canonical kit rotated-square arrow", () => {
     const product = read("gallery-thread/ui/tooltip.tsx");
     // The single canonical tooltip is the kit's; the chat adapter opts out of
-    // its arrow via the kit's `hideArrow` prop (no CSS-hack override). The
-    // reference canon uses the kit tooltip directly (the old unreferenced
-    // `apps/reference/components/ui/tooltip.tsx` radix duplicate was deleted in
-    // the #4306 consolidation).
+    // its arrow via the kit's `hideArrow` prop (no CSS-hack override). The old
+    // unreferenced radix duplicate was deleted in the #4306 consolidation.
     expect(product).toContain("hideArrow");
     expect(product).not.toMatch(/\[&>\[aria-hidden\]\]:hidden/);
     const kit = read("../../ui/tooltip.tsx");
@@ -143,33 +129,6 @@ describe("gallery Thread is the product digichat skin", () => {
       ':is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) [data-slot="tooltip-content"] svg';
     expect(chatbot).toContain(hide);
     expect(aui).toContain(hide);
-  });
-
-  it("gallery /chatbot specimens import the product Thread subpath", () => {
-    const specimen = read(
-      "../../../../../apps/reference/components/chatbot/chatbot-thread-specimen.tsx",
-    );
-    const chrome = read(
-      "../../../../../apps/reference/components/chatbot/chatbot-chrome-specimen.tsx",
-    );
-    expect(specimen).toMatch(/from ["']@digithings\/ui\/chat\/thread["']/);
-    expect(chrome).toMatch(/from ["']@digithings\/ui\/chat\/thread["']/);
-    expect(specimen).not.toMatch(/assistant-ui\/elements\/thread/);
-    expect(chrome).not.toMatch(/assistant-ui\/elements\/thread/);
-  });
-
-  it("does not keep a second registry Thread under the reference app", () => {
-    const fork = join(
-      here,
-      "../../../../../apps/reference/components/assistant-ui/elements/thread.aui.tsx",
-    );
-    expect(existsSync(fork)).toBe(false);
-  });
-
-  it("gallery DotMatrix re-exports the chat subpath, not the main barrel", () => {
-    const reexport = read("../../../../../apps/reference/components/ui/dot-matrix.tsx");
-    expect(reexport).toMatch(/from ["']@digithings\/ui\/chat\/dot-matrix["']/);
-    expect(reexport).not.toMatch(/from ["']@digithings\/ui["']/);
   });
 
   it("web package exposes Thread on a chat subpath, not the main barrel", () => {

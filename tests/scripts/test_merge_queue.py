@@ -1006,6 +1006,280 @@ def test_a_comment_without_the_marker_is_ignored() -> None:
     assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
+# --- a marker a comment only *shows* is not a verdict (#4990) ------------------
+#
+# #6197 merged on the author's own 18:43 reply. The reply was a write-up, and it
+# quoted the reviewer template inside a ``` fence — including a
+# `verdict=approve` marker and a `digithings-review` line with
+# `agent=<your-seat-uuid>`. The queue read the quoted approve as the newest
+# verdict on the PR and merged over three standing changes-requested verdicts.
+# #6196 had already taught the reader about sentences and blockquotes; a fence
+# is neither, so the quote still read as a claim.
+
+_QUOTED_TEMPLATE_REPLY = """\
+Guard's write-up of what happened here, with the template I was asked to use:
+
+```
+<!-- opencode-power-pack:code-review verdict=approve scope=digithings-ai/digithings#6197@{head} -->
+<!-- digithings-review agent=<your-seat-uuid> run=<your-run-id> head={head} -->
+```
+
+That is the marker the reviewer should post once the finding is fixed.
+"""
+
+
+def test_a_quoted_approve_inside_a_fence_does_not_clear_a_block() -> None:
+    """The exact #6197 shape: an author reply quoting the template is not an approve."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T17:11:00Z"),
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T18:05:00Z"),
+            {
+                "id": "IC_kwDO6197_reply",
+                "author": {"login": "author-seat"},
+                "body": _QUOTED_TEMPLATE_REPLY.format(head=head),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_approve_inside_an_inline_code_span_does_not_clear_a_block() -> None:
+    """An inline span is code too: `<!-- … verdict=approve … -->` in a sentence."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    f"Reviewers post `<!-- opencode-power-pack:code-review verdict=approve "
+                    f"scope=digithings-ai/digithings#6197@{head} -->` when done.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_prose_approve_in_an_inline_span_does_not_clear_a_block() -> None:
+    """A `Review verdict:` line is a verdict too: shown in backticks it claims nothing."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer wrote `Review verdict: approve` before the finding was "
+                    f"closed; the block still stands at `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_prose_changes_requested_in_an_inline_span_does_not_block() -> None:
+    """The same rule the other way round: a shown block is not a block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="approve", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_inline_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "When a finding is open, write `Review verdict: changes requested` "
+                    f"and name the head `{head[:12]}`.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_prose_verdict_with_the_verdict_word_in_backticks_is_still_read() -> None:
+    """Only a shown *token* is a quote: `Review verdict: `approve`` is posted."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_prose_value_inline",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "Review verdict: `approve`\n\n"
+                    f"At `{head[:12]}` the finding is closed.\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_quoted_approve_inside_a_tilde_fence_does_not_clear_a_block() -> None:
+    """`~~~` fences a block as surely as ``` does."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_tilde",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "~~~\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                    "~~~\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_an_unterminated_fence_still_quotes_the_marker() -> None:
+    """A fence nobody closed still renders as code, so it still quotes."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", head_sha=head, created="2026-10-21T16:02:00Z"),
+            {
+                "id": "IC_kwDO6197_open_fence",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=approve scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_quoted_changes_requested_does_not_block() -> None:
+    """The rule cuts both ways: quoting a block writes no block."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_quote_block",
+                "author": {"login": "author-seat"},
+                "body": (
+                    "The reviewer's earlier verdict was:\n\n"
+                    "```\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested "
+                    f"scope=#6197@{head} -->\n"
+                    "```\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
+
+
+def test_a_marker_outside_the_fence_is_still_read() -> None:
+    """Stripping code must not blind the reader to the marker posted below it."""
+    head = "a" * 40
+    pr = _pr(
+        6197,
+        head_sha=head,
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDO6197_posted",
+                "author": {"login": "reviewer"},
+                "body": (
+                    "Example of the template:\n\n"
+                    "```\n<!-- opencode-power-pack:code-review verdict=approve -->\n```\n\n"
+                    f"<!-- opencode-power-pack:code-review verdict=changes_requested scope=#6197@{head} -->\n"
+                ),
+                "createdAt": "2026-10-21T18:43:00Z",
+            },
+        ],
+        commits=[{"oid": head}],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_provenance_marker_that_is_not_a_uuid_names_no_seat() -> None:
+    """`<your-seat-uuid>` is a placeholder, not a seat the queue can hold a block to."""
+    assert mq._comment_seat({"agent": "<your-seat-uuid>"}) == ""
+    assert mq._comment_seat({"agent": "opencode seat"}) == ""
+    assert mq._comment_seat({"agent": "6AAB1CEA-7E42-4D2B-9E3E-9D3F5C1B2A10"}) == (
+        "6aab1cea-7e42-4d2b-9e3e-9d3f5c1b2a10"
+    )
+
+
+def test_a_quoted_provenance_marker_is_not_read_as_provenance() -> None:
+    """A quoted `digithings-review` line is an example, not a claim about a seat."""
+    body = (
+        "```\n"
+        "<!-- digithings-review agent=54a431af-501a-47d9-83a9-c1d5808809c4 "
+        "run=11111111-1111-4111-8111-111111111111 head=" + "a" * 40 + " -->\n"
+        "```\n"
+    )
+    assert mq._provenance_fields(body) == {}
+
+
 def test_a_pr_without_a_comments_key_is_not_a_clearance() -> None:
     """A missing key is a missing signal: not an exception, and not a clearance.
 
@@ -1510,6 +1784,8 @@ def _seat_verdict_comment(
     comment_id: str = "",
     scope_sha: str = "",
     provenance_head: str = "",
+    withdraws: str = "",
+    scope_field: str = "",
 ) -> dict[str, Any]:
     """A verdict comment as the fleet posts it: both markers and a prose line.
 
@@ -1521,15 +1797,25 @@ def _seat_verdict_comment(
     provenance marker's `head=`. Both default to `head_sha`, which is what the
     fleet writes; they are separate arguments so a comment whose marker names a
     different head than its provenance marker can be built.
+
+    `scope_field` replaces the whole `scope=` value, for a `scope=` the queue
+    cannot read (DIG-5630). It is written verbatim, so `head_sha` means a
+    `scope=` with no `@` on it.
+
+    `withdraws` is the target of a `Withdraws:` line in the same comment
+    (DIG-5246). Empty means the comment carries no withdrawal line.
     """
     scope = scope_sha or head_sha
     provenance = provenance_head or head_sha
+    scope_value = scope_field or f"@{scope}"
     body = (
         f"<!-- digithings-review agent={seat} "
         f"run=00000000-0000-0000-0000-000000000000 head={provenance} -->\n"
-        f"<!-- opencode-power-pack:code-review verdict={verdict} scope=@{scope} -->\n\n"
+        f"<!-- opencode-power-pack:code-review verdict={verdict} scope={scope_value} -->\n\n"
         f"Review verdict: {verdict.replace('_', ' ')}\n"
     )
+    if withdraws:
+        body += f"Withdraws: changes requested on {withdraws}\n"
     return {
         "id": comment_id or f"IC_kwDO{seat[:8]}_{created}",
         "author": {"login": "chrizefan"},
@@ -1671,8 +1957,15 @@ def test_a_block_from_one_seat_is_not_cleared_by_another_seats_approve() -> None
     assert any(SECURITY_SEAT in r and "changes_requested" in r for r in verdict.reasons)
 
 
-def test_a_seat_clears_its_own_block_with_an_approve_naming_the_head() -> None:
-    """The seat that blocked can clear it — by approving the head."""
+def test_a_same_head_approve_does_not_clear_the_seats_block_by_itself() -> None:
+    """DIG-5246, the #6280 timeline: an approve is not a withdrawal.
+
+    The code reviewer posted `changes_requested` on `b1c5fde73ef8` at 10:21 and
+    then approved the same, unchanged head at 12:04 with the two blockers still
+    open. The queue merged at 12:08. An approve says the code is good; it does
+    not say the finding was dealt with, so the block stands until the seat says
+    so on the record — a `Withdraws:` line, or a new head with a fresh approve.
+    """
     head = "c" * 40
     pr = _pr(
         6170,
@@ -1682,6 +1975,615 @@ def test_a_seat_clears_its_own_block_with_an_approve_naming_the_head() -> None:
                 seat=SECURITY_SEAT,
                 verdict="changes_requested",
                 head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        SECURITY_SEAT in reason
+        and "does not clear the block" in reason
+        and "`Withdraws:`" in reason
+        for reason in verdict.reasons
+    )
+
+
+# --- a clearance names a seat that did not write the PR -------------------------
+#
+# DIG-4990, item 3. Clause 2 read the newest readable verdict, so a
+# `changes_requested` whose seat could not be read was cleared by the next
+# comment that said "approve" — including the author's own reply. #6197 is the
+# shape: the author's write-up was the newest verdict, and the queue read it as
+# one. The block now survives an approve that names no seat, and an approve
+# from a seat that wrote the PR.
+
+
+def _clearance_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    comments: list[dict[str, Any]],
+    *,
+    head: str = "d" * 40,
+    prov: Any = None,
+) -> list[str]:
+    """The value gate's reasons for one comment record, with Paperclip faked."""
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    pr = _reviewed_pr(comments, head_sha=head)
+    return mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="enforce"), prov or _paperclip()
+    )
+
+
+def test_an_author_seats_approve_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The author's own reply is not a second sign-off (#6197, item 3).
+
+    The block carries no seat — the shape 31 verdicts since #6196 were written
+    in — so clause 1 has nothing to hold it to and clause 2 decides. The newest
+    approve comes from the seat whose commits are on the branch, so the block
+    stands.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in reasons
+    ), reasons
+
+
+def test_an_approve_with_no_seat_does_not_clear_a_changes_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A quotation-free "approve" with no provenance is still not a clearance.
+
+    This is the second half of the same defect: the comment says approve and
+    names the head, but no `agent=` says who said it, so the queue cannot show
+    it came from a seat that did not write the PR.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert any("names no reviewer seat" in reason for reason in reasons), reasons
+
+
+def test_a_non_author_seats_approve_clears_a_seatless_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The way out is unchanged: another seat's approve on the head clears it."""
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=REVIEWER_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_shadow_mode_measures_a_clearance_without_refusing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shadow keeps merging: the new condition is enforced only in `enforce`.
+
+    `shadow` is a measurement of the reviewer gate, and a measurement that
+    refuses is not a measurement. The shipped policy is `enforce`; this pins
+    the switch so a shadow run does not silently become a second gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "shadow")
+    head = "d" * 40
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    reasons = mq._verdict_value_reason(
+        pr, mq.ReviewIndependence(mode="shadow"), _paperclip()
+    )
+    assert reasons == []
+
+
+def test_an_approve_with_no_seat_is_enough_when_no_block_stands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The condition is on a clearance, not on every approve.
+
+    A PR with no `changes_requested` on its head is judged by the coverage gate
+    and by nothing new: this change must not demand provenance from a review
+    that clears nothing.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_a_block_on_a_head_the_pr_left_needs_no_non_author_approve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The head moving is not a clearance: the stale block is already spent.
+
+    A block scoped to a commit the PR has left asks no seat for anything
+    (`verdict_applies_to_head`), so an approve on the new head is not read as
+    clearing it.
+    """
+    head = "d" * 40
+    reasons = _clearance_reasons(
+        monkeypatch,
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha="e" * 40,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat="",
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head=head,
+    )
+    assert reasons == []
+
+
+def test_the_author_seats_approve_does_not_clear_the_block_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wiring, not just the helper: `evaluate` refuses on the value gate.
+
+    The same PR also fails the reviewer-independence gate, which is the point:
+    the two gates agree, and the value gate no longer lets the author's reply
+    spend a block the coverage gate then refuses to count.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+    head = "d" * 40
+    run = "00000000-0000-0000-0000-000000000000"
+    pr = _reviewed_pr(
+        [
+            _seat_verdict_comment(
+                seat="",
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-20T09:10:00Z",
+            ),
+            _seat_verdict_comment(
+                seat=AUTHOR_AGENT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-20T09:20:00Z",
+            ),
+        ],
+        head_sha=head,
+    )
+    prov = _paperclip(
+        author_runs=[_paperclip_run(AUTHOR_RUN, AUTHOR_AGENT)],
+        runs=[_paperclip_run(run, AUTHOR_AGENT)],
+    )
+    verdict = _judge(pr, prov)
+    assert not verdict.eligible
+    assert any(
+        "authoring seat" in reason and "cannot clear the block" in reason
+        for reason in verdict.reasons
+    ), verdict.reasons
+
+
+def test_a_same_head_approve_withdrawing_the_block_clears_it() -> None:
+    """The way out: the approving comment says it withdraws the block.
+
+    The line names the head the block named, so the queue can tie the
+    withdrawal to the finding it spends — an approve with no such line is not
+    read as one (DIG-5246).
+    """
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws=head,
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_withdrawal_naming_another_head_does_not_clear_the_block() -> None:
+    """A withdrawal is read against the head the block names, not as a password.
+
+    Naming some other commit says the seat withdrew something else. The block on
+    this head stands, so a copied `Withdraws:` line cannot spend it.
+    """
+    head = "c" * 40
+    other = "d" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws=other,
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_naming_no_head_does_not_clear_a_scoped_block() -> None:
+    """A bare line withdraws only blocks that name no head.
+
+    Saying "I withdraw it" without naming the commit the block was about is not
+    enough to spend a block that names one; otherwise the line would be a
+    password rather than a statement about a finding (DIG-5246).
+    """
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=head,
+                created="2026-10-21T14:59:53Z",
+                withdraws="the finding",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def _approve_with_withdrawal_line(*, head: str, line: str) -> dict[str, Any]:
+    """The same-seat approve on the head, carrying `line` as its withdrawal."""
+    comment = _seat_verdict_comment(
+        seat=SECURITY_SEAT,
+        verdict="approve",
+        head_sha=head,
+        created="2026-10-21T14:59:53Z",
+    )
+    comment["body"] += line
+    return comment
+
+
+def _pr_with_same_head_block(approve: dict[str, Any]) -> dict[str, Any]:
+    """A PR whose security-desk block on the current head is the open finding."""
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=head,
+                created="2026-10-21T12:28:36Z",
+            ),
+            approve,
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": head}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    return pr
+
+
+def test_a_withdrawal_quoted_in_an_inline_span_does_not_clear_the_block() -> None:
+    """#4990: a line a comment only shows is not a claim, even a `Withdraws:` line.
+
+    The verdict readers stop at code (#6197). `Withdraws:` arrived later
+    (DIG-5246) and was read from the raw comment, so a reviewer who quoted the
+    syntax beside an approve cleared their own block by accident.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"Do not paste this:\n\n`Withdraws: {head}`\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.verdict == "approve"
+    assert not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_quoted_in_a_fence_does_not_clear_the_block() -> None:
+    """The fenced half of the same rule: a template in a fence withdraws nothing."""
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(
+        head=head, line=f"```\nWithdraws: {head}\n```\n"
+    )
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and not posted.withdrawal
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not verdict.eligible
+    assert any("does not clear the block" in reason for reason in verdict.reasons)
+
+
+def test_a_withdrawal_with_the_sha_in_backticks_still_clears_the_block() -> None:
+    """The quote rule must not break the real line: a sha in backticks is a sha.
+
+    The `Withdraws:` token is outside code here, so the line is a claim about
+    the commit it names — which is exactly how a reviewer writes it.
+    """
+    head = "c" * 40
+    approve = _approve_with_withdrawal_line(head=head, line=f"Withdraws: `{head}`\n")
+    posted = mq._comment_verdict(approve)
+    assert posted is not None and posted.withdrawal
+    assert posted.withdrawn_heads == (head,)
+    verdict = mq.evaluate(
+        _pr_with_same_head_block(approve), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert verdict.eligible, verdict.reasons
+
+
+# --- a block whose `scope=` did not parse (DIG-5630) ---------------------------
+#
+# `#6426`'s `changes_requested` carried a `scope=` the sha pattern could not read,
+# so the block bound no head at all. The two remedies the queue prescribed for it
+# were both false: a later approve naming "the head it covers" clears nothing
+# (the block covers no head), and moving the PR to a new head leaves nothing
+# behind to spend. Only the seat's approve naming the current head plus a
+# `Withdraws:` line with no sha clears it, and the handback has to say so —
+# `#6426` took 20+ handbacks over two days following the old text.
+
+UNBOUND_HEAD = "e" * 40  # `#6426`'s `dea4349365`, widened to a full sha
+
+
+def _unbound_block_comment(seat: str = SECURITY_SEAT) -> dict[str, Any]:
+    """A blocking verdict whose `scope=` is written without its `@` anchor."""
+    return _seat_verdict_comment(
+        seat=seat,
+        verdict="changes_requested",
+        head_sha=UNBOUND_HEAD,
+        created="2026-10-25T22:55:00Z",
+        scope_field=UNBOUND_HEAD,
+    )
+
+
+def test_the_handback_for_an_unbound_block_states_the_bare_withdrawal() -> None:
+    """The seat-scoped handback: no "new head" alternative, and a bare line.
+
+    The queue cannot read this block's head, so the branch moving cannot spend
+    it. The approving comment has to name the current head and carry
+    `Withdraws:` with no sha on it; a line naming a sha spends nothing.
+    """
+    pr = _pr(
+        6426,
+        head_sha=UNBOUND_HEAD,
+        comments=[
+            _unbound_block_comment(),
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="approve",
+                head_sha=UNBOUND_HEAD,
+                created="2026-10-26T10:07:00Z",
+            ),
+            _in_session_review_comment(),
+        ],
+        commits=[{"oid": UNBOUND_HEAD}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reasons = [reason for reason in verdict.reasons if SECURITY_SEAT in reason]
+    assert len(reasons) == 1, verdict.reasons
+    reason = reasons[0]
+    assert "`Withdraws:` line with no sha" in reason
+    assert "naming no head" in reason
+    assert "not spent by the PR moving to a new head" in reason
+    assert "move the PR to a new head" not in reason
+    assert "until that seat posts a later approve naming the head it covers" not in reason
+
+
+def test_the_newest_verdict_handback_for_an_unbound_block_says_the_same() -> None:
+    """The newest-verdict handback (`_verdict_value_reason`) states one remedy.
+
+    A block whose seat cannot be read is judged by the newest readable verdict.
+    The same false remedies apply there, so the same words do.
+    """
+    block = {
+        "id": "IC_unbound_noseat",
+        "author": {"login": "chrizefan"},
+        "authorAssociation": "MEMBER",
+        "body": (
+            "<!-- opencode-power-pack:code-review "
+            f"verdict=changes_requested scope={UNBOUND_HEAD} -->\n\n"
+            "Review verdict: changes requested\n"
+        ),
+        "createdAt": "2026-10-25T22:55:00Z",
+    }
+    pr = _pr(
+        6426,
+        head_sha=UNBOUND_HEAD,
+        comments=[block, _in_session_review_comment()],
+        commits=[{"oid": UNBOUND_HEAD}],
+    )
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    reasons = [reason for reason in verdict.reasons if "latest review verdict" in reason]
+    assert len(reasons) == 1, verdict.reasons
+    reason = reasons[0]
+    assert "`Withdraws:` line with no sha" in reason
+    assert "naming no head" in reason
+    assert "not spent by the PR moving to a new head" in reason
+    assert "until a later approve names the head it covers" not in reason
+
+
+def test_only_the_bare_withdrawal_clears_a_block_that_names_no_head() -> None:
+    """The matrix from the ticket: which clearing comments actually work.
+
+    Approve of the head with no line, and with a line naming the sha, both leave
+    the block standing; the bare line clears it; and an approve of a new head
+    does not spend it either.
+    """
+    new_head = "f" * 40
+
+    def _reasons(withdraws: str, head_sha: str, approve_head: str) -> list[str]:
+        pr = _pr(
+            6426,
+            head_sha=head_sha,
+            comments=[
+                _unbound_block_comment(),
+                _seat_verdict_comment(
+                    seat=SECURITY_SEAT,
+                    verdict="approve",
+                    head_sha=approve_head,
+                    created="2026-10-26T10:07:00Z",
+                    withdraws=withdraws,
+                ),
+                _in_session_review_comment(),
+            ],
+            commits=[{"oid": head_sha}],
+        )
+        pr["labels"] = [{"name": "reviewed:agent"}]
+        return mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").reasons
+
+    assert any(SECURITY_SEAT in r for r in _reasons("", UNBOUND_HEAD, UNBOUND_HEAD))
+    assert any(
+        SECURITY_SEAT in r for r in _reasons(UNBOUND_HEAD, UNBOUND_HEAD, UNBOUND_HEAD)
+    )
+    assert not _reasons("the finding", UNBOUND_HEAD, UNBOUND_HEAD)
+    assert any(SECURITY_SEAT in r for r in _reasons("", new_head, new_head))
+
+
+def test_an_approve_on_a_new_head_clears_the_seats_earlier_block() -> None:
+    """The other way out: the PR moved, and the seat approved the new head.
+
+    The block named a commit the PR has left, so it is spent by the branch
+    moving and the fresh approve on the current head needs no withdrawal.
+    """
+    old = "d" * 40
+    head = "c" * 40
+    pr = _pr(
+        6170,
+        head_sha=head,
+        comments=[
+            _seat_verdict_comment(
+                seat=SECURITY_SEAT,
+                verdict="changes_requested",
+                head_sha=old,
                 created="2026-10-21T12:28:36Z",
             ),
             _seat_verdict_comment(
@@ -4275,6 +5177,10 @@ class _FakeWoodpeckerResponse:
         chunk, self._body = self._body[:size], self._body[size:]
         return chunk
 
+    def read1(self, size: int | None = None) -> bytes:
+        """One socket read: the production loop reads through `read1`."""
+        return self.read(size)
+
     def geturl(self) -> str:
         return self._url
 
@@ -4358,6 +5264,15 @@ class _TriclingResponse:
         self._sent = 0
 
     def read(self, size: int | None = None) -> bytes:
+        """Not called: `read(n)` blocks until `n` bytes or EOF, which is the bug.
+
+        A body that trickles can only be given up on if the loop reads one
+        socket read at a time, and `read1` is the method that does that. This
+        raises so the test fails if the production read goes back to `read`.
+        """
+        raise AssertionError("the read must use read1, not read(n)")
+
+    def read1(self, size: int | None = None) -> bytes:
         self._clock.now += 0.02
         self._sent += 1
         if self._sent > 50:
@@ -5257,6 +6172,10 @@ class _FakePaperclip:
         #: never ask about a value that cannot be a run id: the API has no
         #: answer for one, and the failed read reads as a broken API.
         self.asked_runs: list[str] = []
+        #: Every ticket whose runs the gate asked for, with the freshness the
+        #: gate asked them to be good to. A run list may stand in for a read
+        #: only for the commits written before it was read.
+        self.fresh_advice: list[tuple[str, float]] = []
 
     def ticket(self, key: str) -> dict[str, Any] | None:
         return self._tickets.get(key)
@@ -5265,7 +6184,10 @@ class _FakePaperclip:
         self.asked_runs.append(run_id)
         return self._runs.get(run_id)
 
-    def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+    def issue_runs(
+        self, issue_id: str, *, fresh_after: float = 0.0
+    ) -> list[dict[str, Any]]:
+        self.fresh_advice.append((issue_id, fresh_after))
         return list(self._issue_runs.get(issue_id, []))
 
 
@@ -6507,14 +7429,16 @@ def test_a_ticket_the_api_does_not_know_is_not_a_crash(
     assert "authoring seat could not be identified" in reason
 
 
-def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
+def test_an_api_that_cannot_be_read_defers_the_pr_and_publishes_no_gate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The API going away is not a verdict. The PR waits, and nothing crashes.
+    """The API going away is not a verdict, and it is not published as one.
 
-    A partial judgement is not a judgement: if the queue cannot read the
-    run record, it cannot say the reviewer was another seat, so it refuses
-    the PR — and it says why.
+    A partial judgement is not a judgement: if the queue cannot read the run
+    record, it cannot say the reviewer was another seat, so the PR waits. But
+    the wait is a fact about the API, not a gate the branch failed, so it is
+    kept out of `reasons` — the list the handback comment publishes — and
+    recorded as `deferred` instead (DIG-5573).
     """
     monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
 
@@ -6522,7 +7446,9 @@ def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
         def run(self, run_id: str) -> dict[str, Any] | None:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
-        def issue_runs(self, issue_id: str) -> list[dict[str, Any]]:
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
             raise mq._PaperclipUnavailable("Paperclip could not be read")
 
     prov = _BrokenPaperclip(
@@ -6531,9 +7457,143 @@ def test_an_api_that_cannot_be_read_leaves_the_pr_unverifiable(
     pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
     verdict = _judge(pr, prov)
     assert not verdict.eligible
-    reason = " ".join(verdict.reasons)
-    assert "reviewer independence" in reason
-    assert "could not be checked" in reason
+    assert verdict.reasons == ()
+    assert verdict.deferred.startswith("reviewer independence:")
+    assert "could not be checked" in verdict.deferred
+
+
+def test_a_transient_read_failure_does_not_change_the_gate_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure that made #6418 re-post 42 handbacks: the reasons alternate.
+
+    The live driver keys its handback comment on the reasons it is given, so a
+    transient that appears in that set is a change of reasons on every other
+    tick — and each change is a new comment. The same PR, judged once with a
+    working API and once with a failing one, must produce the same reason set:
+    the transient says nothing about the branch, so it adds no reason.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    healthy = _judge(pr, _paperclip(runs=[_paperclip_run(REVIEWER_RUN, REVIEWER_AGENT)]))
+    broken = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert healthy.reasons == broken.reasons == ()
+    assert healthy.eligible
+    assert not broken.eligible
+    assert broken.deferred
+
+
+def test_a_deferred_pr_beside_a_real_gate_publishes_only_the_gate(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A PR that also fails a real gate keeps that gate and adds no transient.
+
+    The gate set must stay the set a reader can act on: the branch is a draft,
+    and that is what the handback says. The unreadable fact is logged, not
+    published, so the next tick — with a working API — reports the same gate.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    pr["isDraft"] = True
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert verdict.reasons == ("draft",)
+    assert verdict.deferred
+
+    mq.print_queue([verdict], queued_only=False)
+    out = capsys.readouterr().out
+    assert "blocked (1)" in out
+    assert "· draft" in out
+    assert "deferred (1)" in out
+    assert "could not be checked" in out
+
+
+def test_a_deferred_row_is_listed_apart_from_the_blocked_gates(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A deferred PR is reported for the log, in its own list, with no reason.
+
+    The run summary is what an operator reads to know whether anything needs a
+    hand. A read failure that appeared under `blocked` would say the branch is
+    broken; it is not, so it is named apart and the next tick asks again.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    mq.print_queue([verdict], queued_only=False)
+    out = capsys.readouterr().out
+    assert "deferred (1)" in out
+    assert "could not be checked" in out
+    assert "blocked" not in out
+    assert "queued: none" in out
+
+
+def test_a_deferred_read_does_not_make_a_behind_branch_updatable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A branch update spends a CI run, so it needs every gate to be read.
+
+    `BEHIND` alone is the one stale state an update can clear. A gate the queue
+    could not read is not "every other gate passed": an update would spend a
+    full CI run while leaving the PR unjudged, and it would do it again next
+    tick. So the deferred fact keeps the row out of the update path.
+    """
+    monkeypatch.setenv("MQ_REVIEW_INDEPENDENCE", "enforce")
+
+    class _BrokenPaperclip(_FakePaperclip):
+        def issue_runs(
+            self, issue_id: str, *, fresh_after: float = 0.0
+        ) -> list[dict[str, Any]]:
+            raise mq._PaperclipUnavailable("Paperclip could not be read")
+
+    pr = _reviewed_pr([_provenance_comment(agent=REVIEWER_AGENT, run=REVIEWER_RUN)])
+    pr["mergeStateStatus"] = "BEHIND"
+    verdict = _judge(
+        pr,
+        _BrokenPaperclip(
+            tickets={TICKET: {"id": TICKET_ID, "assigneeAgentId": AUTHOR_AGENT}},
+        ),
+    )
+    assert verdict.reasons == (
+        "mergeStateStatus=BEHIND (base moved since the checks ran)",
+    )
+    assert verdict.deferred
+    assert not verdict.stale_base_only
 
 
 def test_a_404_from_the_api_is_an_answer_and_not_a_failure(
@@ -6689,7 +7749,7 @@ class _FakeResponse:
     """The shape `urlopen` returns: a context manager whose `read` is bytes."""
 
     def __init__(self, payload: Any) -> None:
-        self._payload = payload
+        self._payload = json.dumps(payload).encode("utf-8")
 
     def __enter__(self) -> "_FakeResponse":
         return self
@@ -6697,8 +7757,21 @@ class _FakeResponse:
     def __exit__(self, *exc: Any) -> bool:
         return False
 
-    def read(self) -> bytes:
-        return json.dumps(self._payload).encode("utf-8")
+    def read(self, size: int | None = None) -> bytes:
+        """The body, in chunks of `size` when one is asked for.
+
+        The production read asks for a chunk at a time so the deadline can be
+        checked between them; a fake that ignored `size` would hand the whole
+        body over in one call and hide that.
+        """
+        if size is None:
+            return self._payload
+        chunk, self._payload = self._payload[:size], self._payload[size:]
+        return chunk
+
+    def read1(self, size: int | None = None) -> bytes:
+        """One socket read: the production loop reads through `read1`."""
+        return self.read(size)
 
 
 def test_a_slow_read_that_times_out_once_is_asked_again(
@@ -6850,19 +7923,301 @@ def test_a_server_error_is_asked_for_again(
     assert len(timeouts) == 2
 
 
+def _cached_reader(
+    path: Path, now: list[float], **cfg: Any
+) -> Any:
+    """A reader whose answers outlive the tick, over a cache file in `path`."""
+    return mq.ReviewerProvenance(
+        mq.ReviewIndependence(
+            mode="enforce",
+            api_url="http://127.0.0.1:3100",
+            cache_path=str(path),
+            **cfg,
+        ),
+        now=lambda: now[0],
+    )
+
+
+def test_a_provenance_answer_outlives_the_tick_that_read_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fact about a run does not change, so the second tick must not re-ask.
+
+    The driver fires every 180 s and reads every open pull request of both
+    repos. The reader lived for one tick, so every tick asked for every ticket,
+    every ticket's run list and every named run again — at 12 s a ticket and
+    28-144 s a run list, a tick that outran its own interval by an order of
+    magnitude and wrote nothing to its log until it was over (DIG-5632).
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse(
+            {"id": "issue-0000"} if "/api/issues/" in str(request.full_url) else {
+                "id": "run-0000",
+                "agentId": "seat-0000",
+            }
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    assert first.ticket("DIG-4795")["id"] == "issue-0000"
+    assert first.run("run-0000")["agentId"] == "seat-0000"
+    first._store.flush()
+    assert asked == [
+        "http://127.0.0.1:3100/api/issues/DIG-4795",
+        "http://127.0.0.1:3100/api/heartbeat-runs/run-0000",
+    ]
+
+    asked.clear()
+    now[0] += mq.PROVENANCE_CACHE_MISS_TTL
+    second = _cached_reader(cache, now)
+    assert second.ticket("DIG-4795")["id"] == "issue-0000"
+    assert second.run("run-0000")["agentId"] == "seat-0000"
+    assert asked == []
+
+
+def test_the_cache_keeps_the_facts_the_gate_reads_and_not_the_whole_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A ticket answer carries the ticket's body; the cache must not keep it.
+
+    The file sits beside the queue's log on this Mac, so it is cut down to the
+    fields the gate reads before it is written.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(
+        mq.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse(
+            {
+                "id": "issue-0000",
+                "identifier": "DIG-4795",
+                "description": "a confidential brief",
+                "comments": [{"body": "a confidential comment"}],
+            }
+        ),
+    )
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+    reader = _cached_reader(cache, now)
+    assert reader.ticket("DIG-4795") == {
+        "id": "issue-0000",
+        "identifier": "DIG-4795",
+        "description": "a confidential brief",
+        "comments": [{"body": "a confidential comment"}],
+    }
+    reader._store.flush()
+    written = cache.read_text(encoding="utf-8")
+    assert "confidential" not in written
+    assert "issue-0000" in written
+
+
+def test_a_run_list_is_read_again_for_a_commit_written_after_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The cache may not hide a run that would make the reviewer the author.
+
+    A run that covered a commit existed before that commit was written, so a
+    run list read afterwards already names it and is as good as a fresh read
+    for that commit. A commit written after the read is not covered by that
+    promise: a run may have started in between, and that run is the one that
+    would make the reviewing seat the authoring seat. So it forces a read.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse([])
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    first.issue_runs("issue-0000", fresh_after=now[0] - 60)
+    first._store.flush()
+    assert len(asked) == 1
+
+    asked.clear()
+    now[0] += 180
+    second = _cached_reader(cache, now)
+    # A commit older than the read is covered by the answer.
+    second.issue_runs("issue-0000", fresh_after=now[0] - 300)
+    assert asked == []
+    # A commit newer than the read is not, and asks again.
+    second.issue_runs("issue-0000", fresh_after=now[0] + 1)
+    assert asked == ["http://127.0.0.1:3100/api/issues/issue-0000/runs"]
+
+
+def test_a_record_the_api_does_not_have_is_remembered_and_then_forgotten(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A 404 is a fact, and a key that does not exist yet can start existing.
+
+    Every tick re-asking for the same missing ticket is the read the cache
+    exists to remove, and believing "no such ticket" forever would hide a
+    ticket filed a minute later. So the negative answer is kept for a minute.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        raise urllib.error.HTTPError(
+            str(request.full_url), 404, "Not Found", {}, None
+        )
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    now = [1_000_000.0]
+    cache = tmp_path / "provenance-cache.json"
+
+    first = _cached_reader(cache, now)
+    assert first.ticket("DIG-9999") is None
+    first._store.flush()
+    assert len(asked) == 1
+
+    asked.clear()
+    now[0] += 1
+    second = _cached_reader(cache, now)
+    assert second.ticket("DIG-9999") is None
+    assert asked == []
+
+    asked.clear()
+    now[0] += mq.PROVENANCE_CACHE_MISS_TTL + 1
+    third = _cached_reader(cache, now)
+    assert third.ticket("DIG-9999") is None
+    assert len(asked) == 1
+
+
+def test_a_read_is_not_started_after_the_tick_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A spent tick budget stops the read, and the gate defers instead of refusing.
+
+    The cache fixes the steady state; this bounds the worst one. One PR was
+    measured at 313.6 s of reads against a 180 s interval, and no budget between
+    PRs can bound that because the cost is inside one PR. What the deadline must
+    *not* do is cut a read in half: a read that never finishes is a fact the cache
+    never keeps, so the PR costs the same on every later tick and the queue never
+    converges.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    asked: list[str] = []
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        asked.append(str(request.full_url))
+        return _FakeResponse({"id": "issue-0000"})
+
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, str(mq.time.time() - 1))
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable):
+        reader.ticket("DIG-4795")
+    assert asked == []
+
+
+def test_a_deadline_that_cannot_be_read_is_no_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed deadline must not stop the queue reading anything."""
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(
+        mq.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse({"id": "issue-0000"}),
+    )
+    monkeypatch.setenv(mq.PAPERCLIP_DEADLINE_ENV, "later, please")
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    assert reader.ticket("DIG-4795") == {"id": "issue-0000"}
+
+
 def test_the_read_numbers_are_the_measured_ones() -> None:
     """The four numbers are the fix, so the suite has to pin them.
 
-    The slowest answer measured on 2026-10-21 was 36.5 s, so a timeout below
-    45 s turns a slow API back into a refusal — the exact failure this change
-    exists to remove. A budget below the timeout leaves no room for the second
-    attempt, and a backoff of zero hammers a control plane that is already
-    struggling.
+    On 2026-10-26 the slowest answer measured was 119.9 s for
+    `GET /api/issues/{id}/runs` (41 296 bytes, HTTP 200), while the same read
+    on two other tickets in the same minute took 34.6 s and 38.9 s. A timeout
+    below that turns a slow API back into a refusal — the exact failure this
+    change exists to remove — and a budget below two timeouts plus the backoff
+    leaves no room for the second attempt after a slow first one. A backoff of
+    zero hammers a control plane that is already struggling.
+
+    The bounded window (`?limit=`) is not an alternative: the server ignores it
+    and returns the same 41 296 bytes, so the numbers are the whole fix.
     """
-    assert mq.PAPERCLIP_READ_TIMEOUT >= 45
-    assert mq.PAPERCLIP_READ_BUDGET >= mq.PAPERCLIP_READ_TIMEOUT
+    assert mq.PAPERCLIP_READ_TIMEOUT > 119.9
+    assert (
+        mq.PAPERCLIP_READ_BUDGET
+        >= 2 * mq.PAPERCLIP_READ_TIMEOUT + mq.PAPERCLIP_RETRY_BACKOFF
+    )
     assert mq.PAPERCLIP_READ_ATTEMPTS == 2
     assert mq.PAPERCLIP_RETRY_BACKOFF == 3.0
+
+
+def test_a_paperclip_body_that_trickles_cannot_outlast_the_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A socket timeout bounds one operation, not the whole body.
+
+    A server can answer the headers immediately and then send the body a byte
+    at a time: every single read is inside the socket timeout, and the read
+    still never ends. That is why the loop reads through `read1` — `read(n)`
+    waits for `n` bytes or the end of the body — and checks the budget between
+    the pieces, so the read gives up at the deadline instead of holding the
+    tick open.
+    """
+    monkeypatch.setenv("PAPERCLIP_API_KEY", "not-a-real-key")
+    clock = {"now": 1_000.0}
+    trickle = 20.0
+
+    class _Trickle:
+        def __enter__(self) -> "_Trickle":
+            return self
+
+        def __exit__(self, *exc: Any) -> bool:
+            return False
+
+        def read(self, size: int | None = None) -> bytes:
+            """Not called: `read(n)` blocks until `n` bytes or EOF.
+
+            A fake whose `read` returned one chunk per call hid that, so this
+            one refuses and the test fails if the read goes back to `read`.
+            """
+            raise AssertionError("the read must use read1, not read(n)")
+
+        def read1(self, size: int | None = None) -> bytes:
+            clock["now"] += trickle
+            return b" " * 8
+
+    def _sleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        return _Trickle()
+
+    monkeypatch.setattr(mq.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(mq.time, "sleep", _sleep)
+    monkeypatch.setattr(mq.urllib.request, "urlopen", _urlopen)
+    reader = mq.ReviewerProvenance(
+        mq.ReviewIndependence(mode="enforce", api_url="http://127.0.0.1:3100")
+    )
+    with pytest.raises(mq._PaperclipUnavailable) as excinfo:
+        reader.ticket("DIG-4795")
+    assert "exceeded its budget" in str(excinfo.value)
+    # The deadline is checked between chunks, so the read can overshoot it by
+    # the one chunk that was in flight — never by the rest of the body.
+    assert clock["now"] - 1_000.0 <= mq.PAPERCLIP_READ_BUDGET + trickle
 
 
 def test_a_read_stays_inside_its_budget(

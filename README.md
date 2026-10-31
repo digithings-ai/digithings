@@ -50,7 +50,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digisearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
+| **digitrace** | In-house OTLP tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | **digibot** | Heartbeat, audit, MCP skill → digigraph | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
@@ -159,13 +159,13 @@ With venv: `pytest -v` or `pytest -m unit -v`.
 
 ```
 digithings/
-├── apps/         # 15 apps. digithings-web (marketing + digibook),
+├── apps/         # 14 apps. digithings-web (marketing + digibook),
 │                 # digiquant-web (the desk at /app), digichat, dashboard,
 │                 # reference (pattern gallery), plus the API, runner and
-│                 # worker apps: dashboard-api, digidata-api, corpus-index,
+│                 # worker apps: dashboard-api, corpus-index,
 │                 # digiquant-runner, twelvex-runner, digithings-cron,
 │                 # digichat-cloudflare, digithings-stack-cloudflare,
-│                 # digitrace-langfuse, and digiquant-app (parked).
+│                 # and digiquant-app (parked).
 ├── packages/     # 10 shared npm packages: ui, design, brand, catalog,
 │                 # contract, digichat-ui, hero-banner, surface-config,
 │                 # tui-frame, durable-object-reconnect.

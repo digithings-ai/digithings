@@ -282,7 +282,6 @@ class TestOpenAICompatible:
         # Accepted AND carried: the lock must reach the request, not be dropped.
         assert seen["req"].lock_session_controls is True
 
-
     def test_chat_completions_stream_project_rag_alone_uses_neutral_formatter(
         self, client: TestClient
     ) -> None:
@@ -587,7 +586,9 @@ class TestCorpusTrustBoundary:
                 '"vaultPathPrefix":"clients/online-compliance-center"}}'
             ),
         )
-        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        auth = DigiAuthContext(
+            subject="user-1", tenant_slug="digithings", tenant_slug_verified=True
+        )
         req = WorkflowRequest(
             prompt="hi",
             digisearch_index="occ_help",
@@ -615,7 +616,9 @@ class TestCorpusTrustBoundary:
             "DIGI_TENANT_CORPUS_MAP",
             '{"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/occ"}}',
         )
-        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        auth = DigiAuthContext(
+            subject="user-1", tenant_slug="digithings", tenant_slug_verified=True
+        )
         req = WorkflowRequest(prompt="hi", digisearch_index="occ_help")
         out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
         assert out.digisearch_index is None

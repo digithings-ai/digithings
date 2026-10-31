@@ -1,0 +1,398 @@
+{
+ "aura": {
+  "dark": {
+   "bg": "#15141b",
+   "ink": "#edecee",
+   "accent": "#a277ff"
+  },
+  "light": {
+   "bg": "#f5f0ff",
+   "ink": "#2d2640",
+   "accent": "color-mix(in srgb, #a277ff 97%, #000000)"
+  }
+ },
+ "ayu": {
+  "dark": {
+   "bg": "#0f1419",
+   "ink": "#d6dae0",
+   "accent": "#3fb7e3"
+  },
+  "light": {
+   "bg": "#fdfaf4",
+   "ink": "#4f5964",
+   "accent": "color-mix(in srgb, #4aa8c8 93%, #000000)"
+  }
+ },
+ "catppuccin": {
+  "dark": {
+   "bg": "#1e1e2e",
+   "ink": "#cdd6f4",
+   "accent": "#b4befe"
+  },
+  "light": {
+   "bg": "#f5e0dc",
+   "ink": "#4c4f69",
+   "accent": "color-mix(in srgb, #7287fd 90%, #000000)"
+  }
+ },
+ "catppuccin-frappe": {
+  "dark": {
+   "bg": "#303446",
+   "ink": "#c6d0f5",
+   "accent": "#8da4e2"
+  },
+  "light": {
+   "bg": "#303446",
+   "ink": "#c6d0f5",
+   "accent": "#8da4e2"
+  }
+ },
+ "catppuccin-macchiato": {
+  "dark": {
+   "bg": "#24273a",
+   "ink": "#cad3f5",
+   "accent": "#8aadf4"
+  },
+  "light": {
+   "bg": "#24273a",
+   "ink": "#cad3f5",
+   "accent": "#8aadf4"
+  }
+ },
+ "cobalt2": {
+  "dark": {
+   "bg": "#193549",
+   "ink": "#ffffff",
+   "accent": "#0088ff"
+  },
+  "light": {
+   "bg": "#ffffff",
+   "ink": "#193549",
+   "accent": "#0066cc"
+  }
+ },
+ "cursor": {
+  "dark": {
+   "bg": "#181818",
+   "ink": "#e4e4e4",
+   "accent": "#88c0d0"
+  },
+  "light": {
+   "bg": "#fcfcfc",
+   "ink": "#141414",
+   "accent": "color-mix(in srgb, #6f9ba6 99%, #000000)"
+  }
+ },
+ "dracula": {
+  "dark": {
+   "bg": "#1d1e28",
+   "ink": "#f8f8f2",
+   "accent": "#bd93f9"
+  },
+  "light": {
+   "bg": "#f8f8f2",
+   "ink": "#1f1f2f",
+   "accent": "#7c6bf5"
+  }
+ },
+ "everforest": {
+  "dark": {
+   "bg": "#2d353b",
+   "ink": "#d3c6aa",
+   "accent": "#a7c080"
+  },
+  "light": {
+   "bg": "#fdf6e3",
+   "ink": "#5c6a72",
+   "accent": "color-mix(in srgb, #8da101 94%, #000000)"
+  }
+ },
+ "flexoki": {
+  "dark": {
+   "bg": "#100F0F",
+   "ink": "#CECDC3",
+   "accent": "#DA702C"
+  },
+  "light": {
+   "bg": "#FFFCF0",
+   "ink": "#100F0F",
+   "accent": "#205EA6"
+  }
+ },
+ "github": {
+  "dark": {
+   "bg": "#0d1117",
+   "ink": "#c9d1d9",
+   "accent": "#58a6ff"
+  },
+  "light": {
+   "bg": "#ffffff",
+   "ink": "#24292f",
+   "accent": "#0969da"
+  }
+ },
+ "gruvbox": {
+  "dark": {
+   "bg": "#282828",
+   "ink": "#ebdbb2",
+   "accent": "#83a598"
+  },
+  "light": {
+   "bg": "#fbf1c7",
+   "ink": "#3c3836",
+   "accent": "#076678"
+  }
+ },
+ "kanagawa": {
+  "dark": {
+   "bg": "#1F1F28",
+   "ink": "#DCD7BA",
+   "accent": "#7E9CD8"
+  },
+  "light": {
+   "bg": "#F2E9DE",
+   "ink": "#54433A",
+   "accent": "#2D4F67"
+  }
+ },
+ "material": {
+  "dark": {
+   "bg": "#263238",
+   "ink": "#eeffff",
+   "accent": "#82aaff"
+  },
+  "light": {
+   "bg": "#fafafa",
+   "ink": "#263238",
+   "accent": "#6182b8"
+  }
+ },
+ "matrix": {
+  "dark": {
+   "bg": "#0a0e0a",
+   "ink": "#62ff94",
+   "accent": "#2eff6a"
+  },
+  "light": {
+   "bg": "#eef3ea",
+   "ink": "#203022",
+   "accent": "color-mix(in srgb, #1cc24b 83%, #000000)"
+  }
+ },
+ "mercury": {
+  "dark": {
+   "bg": "#171721",
+   "ink": "#dddde5",
+   "accent": "#8da4f5"
+  },
+  "light": {
+   "bg": "#ffffff",
+   "ink": "#363644",
+   "accent": "#5266eb"
+  }
+ },
+ "monokai": {
+  "dark": {
+   "bg": "#272822",
+   "ink": "#f8f8f2",
+   "accent": "#ae81ff"
+  },
+  "light": {
+   "bg": "#fdf8ec",
+   "ink": "#292318",
+   "accent": "color-mix(in srgb, #bf7bff 93%, #000000)"
+  }
+ },
+ "nightowl": {
+  "dark": {
+   "bg": "#011627",
+   "ink": "#d6deeb",
+   "accent": "#82aaff"
+  },
+  "light": {
+   "bg": "#f0f0f0",
+   "ink": "#403f53",
+   "accent": "#4876d6"
+  }
+ },
+ "nord": {
+  "dark": {
+   "bg": "#2e3440",
+   "ink": "#e5e9f0",
+   "accent": "#88c0d0"
+  },
+  "light": {
+   "bg": "#eceff4",
+   "ink": "#2e3440",
+   "accent": "#5e81ac"
+  }
+ },
+ "one-dark": {
+  "dark": {
+   "bg": "#282c34",
+   "ink": "#abb2bf",
+   "accent": "#61afef"
+  },
+  "light": {
+   "bg": "#fafafa",
+   "ink": "#383a42",
+   "accent": "#4078f2"
+  }
+ },
+ "osaka-jade": {
+  "dark": {
+   "bg": "#111c18",
+   "ink": "#C1C497",
+   "accent": "#2DD5B7"
+  },
+  "light": {
+   "bg": "#F6F5DD",
+   "ink": "#111c18",
+   "accent": "color-mix(in srgb, #1faa90 93%, #000000)"
+  }
+ },
+ "orng": {
+  "dark": {
+   "bg": "#0a0a0a",
+   "ink": "#eeeeee",
+   "accent": "#EC5B2B"
+  },
+  "light": {
+   "bg": "#ffffff",
+   "ink": "#1a1a1a",
+   "accent": "#EC5B2B"
+  }
+ },
+ "lucent-orng": {
+  "dark": {
+   "bg": "#2a1a15",
+   "ink": "#eeeeee",
+   "accent": "#EC5B2B"
+  },
+  "light": {
+   "bg": "#fff5f0",
+   "ink": "#1a1a1a",
+   "accent": "#EC5B2B"
+  }
+ },
+ "palenight": {
+  "dark": {
+   "bg": "#292d3e",
+   "ink": "#a6accd",
+   "accent": "#82aaff"
+  },
+  "light": {
+   "bg": "#fafafa",
+   "ink": "#292d3e",
+   "accent": "#4976eb"
+  }
+ },
+ "rosepine": {
+  "dark": {
+   "bg": "#191724",
+   "ink": "#e0def4",
+   "accent": "#9ccfd8"
+  },
+  "light": {
+   "bg": "#faf4ed",
+   "ink": "#575279",
+   "accent": "#31748f"
+  }
+ },
+ "solarized": {
+  "dark": {
+   "bg": "#002b36",
+   "ink": "#93a1a1",
+   "accent": "#6c71c4"
+  },
+  "light": {
+   "bg": "#fdf6e3",
+   "ink": "#586e75",
+   "accent": "#268bd2"
+  }
+ },
+ "synthwave84": {
+  "dark": {
+   "bg": "#262335",
+   "ink": "#ffffff",
+   "accent": "#36f9f6"
+  },
+  "light": {
+   "bg": "#fafafa",
+   "ink": "#262335",
+   "accent": "color-mix(in srgb, #00bcd4 85%, #000000)"
+  }
+ },
+ "tokyonight": {
+  "dark": {
+   "bg": "#1a1b26",
+   "ink": "#c0caf5",
+   "accent": "#7aa2f7"
+  },
+  "light": {
+   "bg": "#e1e2e7",
+   "ink": "#273153",
+   "accent": "#2e7de9"
+  }
+ },
+ "vesper": {
+  "dark": {
+   "bg": "#101010",
+   "ink": "#FFFFFF",
+   "accent": "#FFC799"
+  },
+  "light": {
+   "bg": "#F0F0F0",
+   "ink": "#101010",
+   "accent": "color-mix(in srgb, #FFC799 66%, #000000)"
+  }
+ },
+ "vercel": {
+  "dark": {
+   "bg": "#000000",
+   "ink": "#EDEDED",
+   "accent": "#0070F3"
+  },
+  "light": {
+   "bg": "#FFFFFF",
+   "ink": "#171717",
+   "accent": "#0070F3"
+  }
+ },
+ "zenburn": {
+  "dark": {
+   "bg": "#3f3f3f",
+   "ink": "#dcdccc",
+   "accent": "#8cd0d3"
+  },
+  "light": {
+   "bg": "#ffffef",
+   "ink": "#3f3f3f",
+   "accent": "#5f7f8f"
+  }
+ },
+ "carbonfox": {
+  "dark": {
+   "bg": "#393939",
+   "ink": "#f2f4f8",
+   "accent": "#33b1ff"
+  },
+  "light": {
+   "bg": "#8e8e8e",
+   "ink": "#161616",
+   "accent": "color-mix(in srgb, #0072c3 60%, #000000)"
+  }
+ },
+ "default": {
+  "dark": {
+   "bg": "#0A0E0C",
+   "ink": "#ECEEF0",
+   "accent": "#3DD6C4"
+  },
+  "light": {
+   "bg": "#FBFBF9",
+   "ink": "#14181B",
+   "accent": "#0C7C71"
+  }
+ }
+}

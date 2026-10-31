@@ -45,3 +45,24 @@ DEFAULT_BFF_SESSION_SCOPES: list[str] = [
     "digisearch:screen",
     "digivault:read",
 ]
+
+#: Scopes a ``bff_session`` caller may *request*: the default set plus the MCP
+#: edge scopes (DIG-5635). digichat mints its MCP-edge token with
+#: ``requested_scopes: ["mcp:digisearch", "mcp:digivault"]``, so the exchange has
+#: to grant them.
+#:
+#: They are deliberately NOT in :data:`DEFAULT_BFF_SESSION_SCOPES`: a token
+#: minted with no ``requested_scopes`` inherits the defaults, and it must not
+#: silently gain edge access. Requesting is the only way in.
+BFF_SESSION_GRANTABLE_SCOPES: list[str] = [
+    *DEFAULT_BFF_SESSION_SCOPES,
+    "mcp:digisearch",
+    "mcp:digivault",
+]
+
+#: Scope the MCP edge requires for a digivault *write* tool (`create_note`;
+#: ``MCP_EDGE_WRITE_SCOPES`` in ``apps/digithings-stack-cloudflare``). It is
+#: deliberately **not** in :data:`BFF_SESSION_GRANTABLE_SCOPES`: ``mcp:digivault``
+#: is read-only, so a BFF session can never mint a write-capable edge token.
+#: Only an admin-issued API key that already carries it can write (DIG-5723).
+MCP_DIGIVAULT_WRITE_SCOPE = "mcp:digivault:write"

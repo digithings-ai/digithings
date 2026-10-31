@@ -115,35 +115,29 @@ def _wrangler_vars() -> dict[str, str]:
     return tomllib.loads(_text(WRANGLER_BLOB)).get("vars", {})
 
 
-def _occ_map_from_wrangler() -> dict:
-    """The deployed OCC entry, read from the joined ``[vars]`` pair.
+def _wrangler_tenant_slugs() -> set[str]:
+    """Every tenant slug the public wrangler ``[vars]`` carries in a corpus map.
 
-    Since 2026-10-25 the map is split in two because one Cloudflare text binding
-    may not exceed 5.1 kB: ``DIGI_TENANT_CORPUS_MAP`` holds the house entry and
-    ``DIGI_TENANT_CORPUS_MAP_EXTRA`` holds every other tenant, OCC included. The
-    primary half wins a slug collision, mirroring ``composeCorpusMap``.
+    Since DIG-3585 only the house entry ships there; every other tenant (OCC
+    included) is the ``DIGI_TENANT_CORPUS_MAP_PRIVATE`` Worker secret, which is
+    not in the repo and so is not asserted here.
     """
     variables = _wrangler_vars()
-    merged: dict = {}
+    slugs: set[str] = set()
     for name in ("DIGI_TENANT_CORPUS_MAP", "DIGI_TENANT_CORPUS_MAP_EXTRA"):
         raw = variables.get(name)
-        if not isinstance(raw, str) or not raw.strip():
-            continue
-        for slug, entry in json.loads(raw).items():
-            merged.setdefault(slug, entry)
-    assert "occ" in merged, (
-        "the OCC tenant is in neither wrangler [vars] half; the deployed container "
-        "would lose the tenant entirely rather than fall back"
-    )
-    return merged["occ"]
+        if isinstance(raw, str) and raw.strip():
+            slugs.update(json.loads(raw))
+    return slugs
 
 
 def _prompts() -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = [
         ("compose-override", _compose_corpus_map()["researchSystemPrompt"]),
     ]
-    # index.ts has no prompt of its own since the split: it composes the pair.
-    out.append(("wrangler-toml", _occ_map_from_wrangler()["researchSystemPrompt"]))
+    # index.ts has no prompt of its own and wrangler.toml no longer carries the
+    # OCC entry (it is a Worker secret since DIG-3585), so compose is the only
+    # in-repo copy left to assert.
     return out
 
 
@@ -194,8 +188,10 @@ def test_compose_corpus_map_index_is_occ_help_only() -> None:
     assert _compose_corpus_map()["digisearchIndex"] == "occ_help"
 
 
-def test_wrangler_occ_index_is_occ_help_only() -> None:
-    assert _occ_map_from_wrangler()["digisearchIndex"] == "occ_help"
+def test_wrangler_carries_no_occ_tenant() -> None:
+    """DIG-3585: the OCC entry is client config and lives in a Worker secret."""
+    assert "occ" not in _wrangler_tenant_slugs()
+    assert "DIGI_TENANT_CORPUS_MAP_EXTRA" not in _wrangler_vars()
 
 
 def test_index_ts_carries_no_corpus_literal() -> None:
@@ -215,7 +211,6 @@ def test_occ_tenant_keeps_its_vault_prefix() -> None:
     prefix = "clients/online-compliance-center"
     assert _compose_embed_backend()["vaultPathPrefix"] == prefix
     assert _compose_corpus_map()["vaultPathPrefix"] == prefix
-    assert _occ_map_from_wrangler()["vaultPathPrefix"] == prefix
 
 
 def test_corpus_map_drift_gate_passes() -> None:

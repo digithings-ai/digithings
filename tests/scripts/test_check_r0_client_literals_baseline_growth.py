@@ -59,10 +59,14 @@ def _init_repo(root: Path) -> None:
     _git(root, "config", "user.name", "Guard Test")
 
 
-def _commit_baseline(root: Path, entries: dict[str, int]) -> str:
+def _commit_baseline(root: Path, entries: dict[str, int], files: list[str] = ()) -> str:
     """Write and commit a baseline; returns the commit sha (the base ref)."""
+    for rel in files:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic body\n", encoding="utf-8")
     _write_baseline(root, entries)
-    _git(root, "add", BASELINE_REL)
+    _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "synthetic baseline")
     return _git(root, "rev-parse", "HEAD").strip()
 
@@ -218,3 +222,72 @@ def test_missing_head_baseline_fails_closed(tmp_path, capsys):
 
     assert rc == 2
     assert "tool error" in out
+
+
+# --- moved files keep their allowance (DIG-5531) ---------------------------
+#
+# The baseline is keyed by path, so moving a file that carries a grandfathered
+# literal re-keys its entry. Compared by path alone that reads as a new entry
+# plus a shrink, and the gate refused a change that grandfathered nothing
+# (develop went red after #6423 moved four skill documents under `occ/`).
+
+MOVED = "apps/example-service/pkg/occ/one.ts"
+COPIED = "apps/example-service/pkg/copy/one.ts"
+
+
+def _move_baselined_file(root: Path) -> None:
+    """Move ONE to MOVED, keeping its bytes so git sees a pure rename.
+
+    Staged, because ``git diff <commit>`` does not report an untracked file and
+    an unstaged move is therefore invisible to rename detection - the same
+    staging caveat ``scripts/check_r0_no_client_literals.py`` documents.
+    """
+    target = root / MOVED
+    target.parent.mkdir(parents=True, exist_ok=True)
+    (root / ONE).rename(target)
+    _git(root, "add", "-A")
+
+
+def test_pure_rename_keeps_the_allowance_and_passes(tmp_path, capsys):
+    """A git-detected rename with the same count is not growth."""
+    _init_repo(tmp_path)
+    _commit_baseline(tmp_path, {ONE: 3}, files=[ONE])
+    _move_baselined_file(tmp_path)
+    _write_baseline(tmp_path, {MOVED: 3})
+
+    rc = _run(tmp_path)
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "clean" in out
+    assert "RENAMES: 1 baselined file(s) moved" in out
+
+
+def test_rename_that_raises_the_count_still_fails(tmp_path, capsys):
+    """The move is neutral, the higher count is not."""
+    _init_repo(tmp_path)
+    _commit_baseline(tmp_path, {ONE: 3}, files=[ONE])
+    _move_baselined_file(tmp_path)
+    _write_baseline(tmp_path, {MOVED: 5})
+
+    rc = _run(tmp_path)
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert f"GROW {MOVED}: baseline count 3 -> 5" in out
+
+
+def test_copy_of_a_baselined_file_is_a_new_entry(tmp_path, capsys):
+    """Only a move is neutral: a copy is a second grandfathered file."""
+    _init_repo(tmp_path)
+    _commit_baseline(tmp_path, {ONE: 2}, files=[ONE])
+    target = tmp_path / COPIED
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text((tmp_path / ONE).read_text(encoding="utf-8"), encoding="utf-8")
+    _write_baseline(tmp_path, {ONE: 2, COPIED: 2})
+
+    rc = _run(tmp_path)
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert f"NEW {COPIED}" in out

@@ -1,0 +1,31 @@
+{
+  "pages": 20,
+  "map": {
+    "/book/01-why-a-book/": 3,
+    "/book/02-why-self-hosted/": 4,
+    "/book/03-open-core/": 5,
+    "/book/03-how-it-scales/": 6,
+    "/book/05-environment/": 7,
+    "/book/05b-built-from-parts-you-know/": 8,
+    "/book/06-use-cases/": 9,
+    "/book/10-digigraph/": 11,
+    "/book/11-digillm/": 12,
+    "/book/20-mcp/": 13,
+    "/book/17-digisearch/": 14,
+    "/book/13-digiquant/": 15,
+    "/book/12-digichat/": 16,
+    "/book/15-digikey/": 17,
+    "/book/16-digitrace/": 18,
+    "/book/19-local-stack/": 19,
+    "/book/23-self-hosting/": 20
+  },
+  "seed": 91701,
+  "contentHash": "fe0d5df521bbce7d",
+  "editions": [
+    {
+      "palette": "",
+      "theme": "light",
+      "file": "the-digithings-book-bad2c937.pdf"
+    }
+  ]
+}

@@ -1200,7 +1200,7 @@ export function DevkitEditors({
         <SelectRow
           label="mode"
           value={dep?.gate.mode ?? "ungated"}
-          options={["turn_limited", "ungated", "trial_form"]}
+          options={["turn_limited", "ungated", "trial_form", "invite"]}
           onCommit={(v) => scalar(["gate", "mode"], v)}
         />
         <SelectRow

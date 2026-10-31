@@ -36,7 +36,13 @@ _UNLOCKED_TENANT_MAP = '{"tenant-a":{"digisearchIndex":"tenant_docs"}}'
 
 def test_locked_session_tools_cover_model_mcp_and_toggles() -> None:
     assert LOCKED_SESSION_TOOLS == frozenset(
-        {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
+        {
+            "session_set_model",
+            "session_upsert_mcp",
+            "session_remove_mcp",
+            "session_toggle_tool",
+            "session_set_search_engine",
+        }
     )
 
 
@@ -75,6 +81,7 @@ def _locked_tenant_request() -> SimpleNamespace:
                 subject="",
                 key_prefix=None,
                 tenant_slug="tenant-a",
+                tenant_slug_verified=True,
                 project_id=None,
                 jti=None,
             ),

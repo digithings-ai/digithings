@@ -1,5 +1,6 @@
 "use client";
 
+import { useViewDisclosure } from "./deploy-ui-context";
 import { memo, useCallback, useRef, useState } from "react";
 import { DisclosureChevron } from "../disclosure-chevron";
 import { DotMatrix, type DotMatrixState } from "../DotMatrix";
@@ -27,6 +28,13 @@ import { Textarea } from "./ui/textarea";
 import { readGloomberbAttribution } from "@digithings/ui";
 import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
 import { JsonView } from "./json-view";
+import { stockRadius, useStockShape } from "./stock-shape";
+import { EN_TRACE_T, useTraceT, type TraceT } from "../trace-i18n";
+import {
+  effectiveToolStatus,
+  resolveToolStatus,
+  toolRowStatus,
+} from "../trace-grouping/tool-row";
 
 const ANIMATION_DURATION = 200;
 
@@ -43,24 +51,8 @@ export const formatToolDuration = (ms: number) => {
   return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s${whole}`;
 };
 
-/**
- * assistant-ui's `toMessagePartStatus` returns `{ type: "complete" }` for any
- * tool-call part with a defined `result` — even when `isError` is set, because
- * an `output-error` part carries `result = { error }`. Derive the error state
- * from `isError` so a failed or orphaned row does not render as success.
- */
-function resolveToolStatus(
-  status: ToolCallMessagePartStatus | undefined,
-  isError: boolean | undefined,
-  result: unknown,
-): ToolCallMessagePartStatus | undefined {
-  if (!isError || status?.type === "incomplete") return status;
-  const error =
-    result && typeof result === "object" && "error" in result
-      ? (result as { error?: unknown }).error
-      : undefined;
-  return { type: "incomplete", reason: "error", error };
-}
+// Shared with the base skins' tool rows (`trace-grouping/tool-row.ts`).
+export { resolveToolStatus };
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -149,6 +141,27 @@ function ToolFallbackDuration({
   );
 }
 
+/**
+ * The row's words and glyph for a tool status: upstream assistant-ui wording,
+ * one word per state. Shared with the private-session row
+ * (`gallery-thread/private-work-step.tsx`), which must read exactly the same.
+ */
+export function toolTriggerLabel(
+  status: ToolCallMessagePartStatus | undefined,
+  tr: TraceT = EN_TRACE_T,
+): {
+  label: string;
+  matrixState: DotMatrixState;
+  isRunning: boolean;
+  isCancelled: boolean;
+} {
+  const { label, statusType, isRunning, isCancelled } = toolRowStatus(status, tr);
+  const matrixState: DotMatrixState = isCancelled
+    ? "idle"
+    : statusMatrix[statusType];
+  return { label, matrixState, isRunning, isCancelled };
+}
+
 function ToolFallbackTrigger({
   toolName,
   title,
@@ -160,26 +173,7 @@ function ToolFallbackTrigger({
   title?: string;
   status?: ToolCallMessagePartStatus;
 }) {
-  const statusType = status?.type ?? "complete";
-  const isRunning = statusType === "running";
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
-  const isErrorStatus =
-    status?.type === "incomplete" && status.reason === "error";
-
-  // Upstream assistant-ui wording, one word per state.
-  const label = isCancelled
-    ? "Cancelled tool"
-    : isErrorStatus
-      ? "Failed tool"
-      : statusType === "running"
-        ? "Running tool"
-        : statusType === "requires-action"
-          ? "Waiting on tool"
-          : "Used tool";
-  const matrixState: DotMatrixState = isCancelled
-    ? "idle"
-    : statusMatrix[statusType];
+  const { label, matrixState, isRunning, isCancelled } = toolTriggerLabel(status, useTraceT());
 
   return (
     <CollapsibleTrigger
@@ -368,6 +362,8 @@ function ToolFallbackError({
 }: React.ComponentProps<"div"> & {
   status?: ToolCallMessagePartStatus;
 }) {
+  const tr = useTraceT();
+  const stock = useStockShape();
   if (status?.type !== "incomplete") return null;
 
   const errorText = toolErrorText(status.error);
@@ -382,7 +378,7 @@ function ToolFallbackError({
 
   return (
     <div
-      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className))}
+      {...chatNoticeRootProps(tone, cn("aui-tool-fallback-error", className), stock)}
       data-slot="tool-fallback-error"
       {...props}
     >
@@ -391,7 +387,7 @@ function ToolFallbackError({
         title={
           <>
             <span className="aui-tool-fallback-error-header">
-              {isCancelled ? "Cancelled: " : "Error: "}
+              {isCancelled ? tr.t("cancelledPrefix") : tr.t("errorPrefix")}{" "}
             </span>
             <span className="aui-tool-fallback-error-reason">{firstLine}</span>
           </>
@@ -462,6 +458,7 @@ function ToolFallbackApproval({
     interrupt?: ToolCallMessagePart["interrupt"];
     approval?: ToolCallMessagePart["approval"];
   }) {
+  const stock = useStockShape();
   const [submitted, setSubmitted] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
@@ -623,7 +620,7 @@ function ToolFallbackApproval({
           <ul className="aui-tool-fallback-approval-confirm-grants flex flex-col gap-1">
             {confirming.grants.map((grant) => (
               <li key={grant}>
-                <code className="aui-tool-fallback-approval-confirm-grant bg-surface-2 rounded-none px-1.5 py-0.5 text-xs">
+                <code className={cn("aui-tool-fallback-approval-confirm-grant bg-surface-2 px-1.5 py-0.5 text-xs", stockRadius(stock, "rounded"))}>
                   {grant}
                 </code>
               </li>
@@ -773,12 +770,11 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   // A call still waiting on a result when the turn was stopped will never
   // get one: show it cancelled, not "Waiting on tool". A call that waits on
   // the visitor (approval, interrupt) keeps its controls.
-  const effectiveStatus: ToolCallMessagePartStatus | undefined =
-    outcome === "stopped" &&
-    resolved?.type === "requires-action" &&
-    !offersInterruptAction(resolved, approval, interrupt)
-      ? { type: "incomplete", reason: "cancelled" }
-      : resolved;
+  const effectiveStatus = effectiveToolStatus(
+    resolved,
+    outcome,
+    offersInterruptAction(resolved, approval, interrupt),
+  );
   const isCancelled =
     effectiveStatus?.type === "incomplete" &&
     effectiveStatus.reason === "cancelled";
@@ -790,7 +786,9 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
     isRequiresAction &&
     offersInterruptAction(effectiveStatus, approval, interrupt);
 
-  const [open, setOpen] = useState(isRequiresAction);
+  // /view verbose opens the cards; a call that waits on the visitor always does.
+  const { toolCardOpen } = useViewDisclosure();
+  const [open, setOpen] = useState(isRequiresAction || toolCardOpen);
   const [prevRequiresAction, setPrevRequiresAction] =
     useState(isRequiresAction);
   if (isRequiresAction !== prevRequiresAction) {
@@ -864,4 +862,5 @@ export {
   ToolFallbackError,
   ToolFallbackApproval,
   ToolFallbackAttribution,
+  ToolFallbackDuration,
 };

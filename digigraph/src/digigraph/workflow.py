@@ -384,6 +384,10 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     # would hand one tenant's skill documents to the next request on it.
     initial["skill_pack"] = req.skill_pack
     initial["skills"] = req.skills
+    # Tenant web_search pin. Unconditional, same reason: never sticks across turns.
+    initial["web_search_domains"] = req.web_search_domains
+    initial["web_search_site"] = req.web_search_site
+    initial["web_search_page_corpus"] = req.web_search_page_corpus
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
@@ -401,6 +405,9 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     ]
     initial["disabled_tools"] = list(req.disabled_tools) if req.disabled_tools else None
     initial["effort"] = req.effort
+    # Per-request tool-call cap (X-Digi-Max-Tool-Calls). Unconditional, same reason
+    # as effort: a cap from a prior turn must never stick to the next one.
+    initial["max_tool_calls"] = req.max_tool_calls
     return initial
 
 

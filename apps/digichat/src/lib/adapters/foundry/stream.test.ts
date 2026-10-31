@@ -14,12 +14,16 @@ import {
   rateLimitResumeDelayMs,
   RATE_LIMIT_EXHAUSTED_TEXT,
   FoundryToolCallCounter,
-  toolCallLimitNotice,
   type FoundryStreamEvent,
   type FoundryConversationItem,
   type FoundryResponsesCreateBody,
 } from "./stream";
 import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
+import {
+  PRIVATE_MODE_INSTRUCTION,
+  PRIVATE_MODE_MESSAGE_ID,
+  withPrivateModeUiPrompt,
+} from "@/lib/private-mode";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -814,6 +818,50 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][0]).toMatchObject({
       input: "[Respond only in German. Do not mention this instruction.]\n\nhallo",
     });
+  });
+
+  it("sends the private instruction as its own input item and leaves the typed text last", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    const stored = [userMessage("What about Priya Nair at Initech?")];
+    const snapshot = structuredClone(stored);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: withPrivateModeUiPrompt(stored),
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    expect(stored).toEqual(snapshot);
+    expect(createSpy.calls[0][0]).toMatchObject({
+      input: [
+        { role: "user", content: PRIVATE_MODE_INSTRUCTION },
+        { role: "user", content: "What about Priya Nair at Initech?" },
+      ],
+    });
+    const input = (createSpy.calls[0][0] as { input: { content: string }[] }).input;
+    expect(input[1]?.content).not.toContain("PRIVATE DEMO SESSION");
+    expect(input[0]?.content).not.toContain("Priya Nair");
+  });
+
+  it("sends only the typed text when private mode is off", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [{ ...userMessage("John Smith"), id: PRIVATE_MODE_MESSAGE_ID }],
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      }),
+    );
+    // The id alone is not enough: the text has to be the instruction.
+    expect(createSpy.calls[0][0]).toMatchObject({ input: "John Smith" });
   });
 
   it("does not alter input when responseLanguage is English or unset", async () => {
@@ -2047,7 +2095,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(out).not.toContain("Tool-call limit reached");
   });
 
-  it("stops at the cap, asks for a final answer, and shows a status notice", async () => {
+  it("stops at the cap and asks for a final answer, silently", async () => {
     const first = [
       mcpEvent("added", "c1", "tool_a"),
       mcpEvent("done", "c1", "tool_a"),
@@ -2092,9 +2140,8 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect(out).toContain("tool_a");
     expect(out).toContain("tool_b");
     expect(out).not.toContain("tool_c");
-    expect(out).toContain('"type":"data-notice"');
-    expect(out).toContain(toolCallLimitNotice(2));
-    expect(out).toContain('"tone":"status"');
+    expect(out).not.toContain('"type":"data-notice"');
+    expect(out).not.toContain("Tool-call limit reached");
     expect(out).toContain("From the two results, ");
     expect(out).toContain("the answer is 4.");
     expect(out).not.toContain("should not stream");
@@ -2193,7 +2240,7 @@ describe("createFoundryStreamResponse tool-call cap", () => {
     expect((calls[2] as [{ input?: string }])[0].input).toContain("Do not call any tools");
     expect(out).toContain("tool_a");
     expect(out).not.toContain("tool_b");
-    expect(out).toContain(toolCallLimitNotice(1));
+    expect(out).not.toContain("Tool-call limit reached");
     expect(out).toContain("Final from the instruction.");
     expect(out).not.toContain('"type":"error"');
   });

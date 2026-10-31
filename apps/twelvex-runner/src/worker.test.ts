@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { decideAlert, SESSION_LABEL, SOURCE_LABEL, TRANSPORT_LABEL } from "./alerts";
 import type { Env } from "./env";
-import { handle, type RunResult } from "./worker";
+import { handle, reasonFor, type RunResult } from "./worker";
 import { RUNNER_UNAVAILABLE_DETAIL } from "./unavailable";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,6 +51,27 @@ function containerResult(over: Partial<RunResult> = {}): RunResult {
 }
 
 describe("routing and auth", () => {
+  it("serves the twelve-x data API without the runner token or the container", async () => {
+    const container = vi.fn();
+    const health = await handle(
+      new Request("https://twelvex-runner/v1/health"),
+      env(),
+      stubOf(container),
+    );
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ ok: true, backend: "supabase" });
+    // The runner bearer is not the data API bearer: it must not open /v1.
+    const denied = await handle(
+      new Request("https://twelvex-runner/v1/twelvex/fx_daily_digest", {
+        headers: { Authorization: "Bearer runner-token" },
+      }),
+      env(),
+      stubOf(container),
+    );
+    expect(denied.status).toBe(401);
+    expect(container).not.toHaveBeenCalled();
+  });
+
   it("healthz does not call the container", async () => {
     const container = vi.fn();
     const res = await handle(new Request("https://twelvex-runner/healthz"), env(), stubOf(container));
@@ -342,6 +363,74 @@ describe("alerts", () => {
       open: [],
     });
     expect(failed).toMatchObject({ action: "create", label: SESSION_LABEL, assignees: ["chrizefan"] });
+  });
+});
+
+describe("the reason leaves the container", () => {
+  const VERDICT_TAIL = [
+    "$ python -m twelve_x.scripts.ingest_market_context intraday",
+    "MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview",
+  ].join("\n");
+
+  it("carries the same reason in the log line, the response and the alert", async () => {
+    const container = vi.fn(async () =>
+      Response.json(containerResult({ exit_code: 1, log_tail: VERDICT_TAIL })),
+    );
+    const writes: string[] = [];
+    const github = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") writes.push(String(init.body ?? ""));
+      return Response.json([]);
+    });
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      logged.push(String(line));
+    });
+    try {
+      const res = await handle(
+        post("ingest", { job_id: "twelve-x-market-context-intraday", bucket: "intraday" }),
+        env(),
+        stubOf(container),
+        github as unknown as typeof fetch,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as RunResult;
+      expect(body.reason).toBe("source: 2 source(s) failed: dmx-overview");
+
+      const exitLine = logged
+        .map((row) => JSON.parse(row) as Record<string, unknown>)
+        .find((row) => row.event === "exit");
+      expect(exitLine?.reason).toBe("source: 2 source(s) failed: dmx-overview");
+
+      expect(writes.length).toBeGreaterThan(0);
+      expect(writes.join("\n")).toContain("Reason: source: 2 source(s) failed: dmx-overview");
+      expect(writes.join("\n")).not.toContain("no verdict line was recorded");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("carries no reason on a run that passed", async () => {
+    const container = vi.fn(async () =>
+      Response.json(containerResult({ exit_code: 0, log_tail: "done" })),
+    );
+    const github = vi.fn();
+    const res = await handle(
+      post("ingest", { job_id: "twelve-x-market-context-daily", bucket: "daily" }),
+      env(),
+      stubOf(container),
+      github as unknown as typeof fetch,
+    );
+    const body = (await res.json()) as RunResult;
+    expect(body.reason).toBeNull();
+    expect(github).not.toHaveBeenCalled();
+  });
+
+  it("names the transport failure the pinned ingest reports", () => {
+    expect(reasonFor("ingest", "MARKET_CONTEXT_VERDICT=transport: connection refused")).toBe(
+      "transport: connection refused",
+    );
+    expect(reasonFor("session", "the graph stopped")).toBe("the graph stopped");
+    expect(reasonFor("heartbeat", "")).toBe("session probe failed");
   });
 });
 

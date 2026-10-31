@@ -56,11 +56,9 @@ Returns a `TraceStatus` object describing the runtime tracing configuration:
   "langsmith_sdk_installed": true,
   "langsmith_host": "api.smith.langchain.com",
   "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10",
-  "langfuse_configured": false,
   "otel_export_configured": false,
   "dual_export": false,
-  "export_backend": "langsmith",
-  "langfuse_host": null
+  "export_backend": "langsmith"
 }
 ```
 
@@ -73,9 +71,8 @@ Semantics:
   `api.smith.langchain.com` when the variable is unset.
 - `request_id` echoes the request's `X-Request-ID` (via the shared
   request-ID middleware) so operators can correlate the response with logs.
-- `export_backend` is one of `dual`, `langsmith`, `langfuse-otlp`, `otel`,
-  or `none`. `langfuse_host` is a hostname only. `SmithStatus` remains a
-  compat alias of `TraceStatus`.
+- `export_backend` is one of `dual`, `langsmith`, `otel`, or `none`.
+  `SmithStatus` remains a compat alias of `TraceStatus`.
 - The response is public metadata by design: it never contains the API key
   or the full endpoint URL. Tests assert the key material appears nowhere
   in the response body.

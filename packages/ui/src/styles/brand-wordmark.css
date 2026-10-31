@@ -1,0 +1,11 @@
+/* The digithings wordmark. One mask, currentColor, 88×10 from the studio. */
+.brand-wordmark {
+  display: block;
+  color: inherit;
+  background: currentColor;
+  aspect-ratio: 88 / 10;
+  -webkit-mask: var(--brand-wordmark, url("/wordmark-mask.svg")) center / contain no-repeat;
+  mask: var(--brand-wordmark, url("/wordmark-mask.svg")) center / contain no-repeat;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}

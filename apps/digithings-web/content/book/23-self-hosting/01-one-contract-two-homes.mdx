@@ -25,12 +25,14 @@ flowchart TD
   OK -->|no| RED[change fails until the names agree]
 ```
 
-Three properties make the contract hold. Settings are named once, in one
-manifest, and both homes read from it. Secrets are rendered per home from
-that manifest with strict file permissions, and never echoed. And the
-parity checks run automatically: they compare the two homes' settings and
-fail the change when they disagree, so drift is caught at review time
-rather than discovered during an outage.
+Today the contract is a convention: both homes use the same setting names
+and the same port layout, and the reference lists them. The diagram shows
+where it is going, and that part is planned, not built. Three properties will
+make it hold. Settings named once, in one manifest both homes read. Secrets
+rendered per home from that manifest with strict file permissions, never
+echoed. And parity checks that compare the two homes and fail a change when
+they disagree, so drift is caught at review time rather than during an
+outage.
 
 <Reference kind="guide" href="repo:docs/SELF_HOST.md" title="Self-hosting reference">
   The contract, the profiles, and what each plan slice adds.
@@ -38,4 +40,5 @@ rather than discovered during an outage.
 
 > **Why digithings.** Configuration drift is how most self-hosted setups
 > die: the documented path rots while production moves on. A contract both
-> homes read, checked on every change, keeps the documented path alive.
+> homes read, and in time one checked on every change, keeps the documented
+> path alive.

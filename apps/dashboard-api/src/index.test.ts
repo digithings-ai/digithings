@@ -65,8 +65,21 @@ describe("GET /healthz", () => {
 });
 
 describe("FX Hub mount", () => {
+  const FX_ON: Env = { FX_HUB_WORKER_ROUTES: "1" };
+
+  it.each(["/fx-hub-session", "/fx-hub-grant-sync"])(
+    "answers %s with 404 while FX_HUB_WORKER_ROUTES is off (the default)",
+    async (path) => {
+      for (const env of [NO_ENV, { FX_HUB_WORKER_ROUTES: "true" } as Env]) {
+        const res = await app.fetch(new Request(`https://x${path}`, { method: "POST" }), env);
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({ ok: false, code: "NOT_FOUND" });
+      }
+    },
+  );
+
   it("answers GET /fx-hub-session from the mounted module", async () => {
-    const res = await app.fetch(new Request("https://x/fx-hub-session"), NO_ENV);
+    const res = await app.fetch(new Request("https://x/fx-hub-session"), FX_ON);
     expect(res.status).toBe(405);
     expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
   });
@@ -74,16 +87,32 @@ describe("FX Hub mount", () => {
   it("answers POST /fx-hub-grant-sync with no secret as unauthorized", async () => {
     const res = await app.fetch(
       new Request("https://x/fx-hub-grant-sync", { method: "POST" }),
-      NO_ENV,
+      FX_ON,
     );
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ ok: false, code: "UNAUTHORIZED" });
   });
 
   it("strips a trailing slash before the FX Hub dispatch", async () => {
-    const res = await app.fetch(new Request("https://x/fx-hub-session/"), NO_ENV);
+    const res = await app.fetch(new Request("https://x/fx-hub-session/"), FX_ON);
     expect(res.status).toBe(405);
     expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
+  });
+});
+
+describe("prices-live mount (Supabase exit S4)", () => {
+  it("is not mounted while PRICES_LIVE_WORKER_ROUTES is off (the default)", async () => {
+    const res = await app.fetch(new Request("https://x/prices-live", { method: "POST" }), NO_ENV);
+    expect(res.status).not.toBe(401);
+    const quotes = await app.fetch(new Request("https://x/prices-live/quotes"), NO_ENV);
+    expect(quotes.status).toBe(400);
+  });
+
+  it("mounts behind the flag, and the refresh still needs the cron token", async () => {
+    const env: Env = { PRICES_LIVE_WORKER_ROUTES: "1" };
+    const res = await app.fetch(new Request("https://x/prices-live", { method: "POST" }), env);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
   });
 });
 

@@ -10,6 +10,8 @@ export {
   type ThemePreference,
 } from "./components/ThemeProvider";
 export { themeInitScript } from "./components/themeInit";
+export { faviconThemeScript, type FaviconThemePaths } from "./components/faviconTheme";
+export { BrandWordmark } from "./components/brand/BrandWordmark";
 export { MotionProvider, Reveal, Stagger, HeroEntrance, useMotionSafe, m, EASE } from "./motion/primitives";
 export {
   useScrollyFeatures,

@@ -24,22 +24,63 @@
  * unreachable, unknown kid after one refetch, unparseable key) refuses the
  * request; it never degrades to "allow". The failure modes are separated only
  * by status code: no/invalid credential is 401, a *valid* token that lacks the
- * server's scope is 403. That distinction is what lets a caller tell "get a
- * token" from "you were not granted this server".
+ * server's scope is 403, and a valid token whose JSON-RPC frame the edge cannot
+ * inspect is 400. That distinction is what lets a caller tell "get a token"
+ * from "you were not granted this server".
+ *
+ * `mcp:<serverId>` is read-only. A mutating tool (see `MCP_EDGE_WRITE_SCOPES`)
+ * needs its own scope, checked against the tool name in the JSON-RPC body of a
+ * JWT-authenticated POST. The static-key path is unchanged: it is the
+ * compose/self-host compat credential, and its write surface stays gated by the
+ * server's own env flag (`DIGIVAULT_MCP_WRITE`).
  *
  * Never log the token, a prefix of it, or the key. The decision log carries the
  * server id, which credential path won, the scope and a fixed reason string.
  */
 
-/** Scope each edge server requires. One entry per `MCP_EDGE_SERVERS` id. */
+/**
+ * Scope each edge server requires to be reached at all. One entry per
+ * `MCP_EDGE_SERVERS` id. This is the *read* scope: it opens the server, and
+ * every tool not listed in `MCP_EDGE_WRITE_SCOPES` is reachable with it.
+ */
 export const MCP_EDGE_SCOPES: Record<string, string> = {
   digisearch: "mcp:digisearch",
   digivault: "mcp:digivault",
+  // The digiquant MCP surface reuses the scope its HTTP API already mints
+  // (`digiquant_path_scopes()` in digikey); no new scope is introduced.
+  digiquant: "digiquant:backtest",
+};
+
+/**
+ * Tools that mutate, and the extra scope each one needs. `mcp:<serverId>` is
+ * therefore read-only: a token minted for it may search and lint, never write
+ * (DIG-5723). The tool names are the wire names the MCP server advertises
+ * (`@mcp.tool(name=…)` in `digivault/tool_dispatch.py`), not the
+ * `digivault_`-prefixed orchestrator ids.
+ *
+ * The write scope is deliberately absent from digikey's
+ * `BFF_SESSION_GRANTABLE_SCOPES`: a BFF session cannot ask for it, so the chat
+ * can never mint a write-capable edge token. Only an admin-issued API key that
+ * already carries `mcp:digivault:write` can.
+ */
+export const MCP_EDGE_WRITE_SCOPES: Record<string, Record<string, string>> = {
+  digivault: { create_note: "mcp:digivault:write" },
 };
 
 /** The scope a caller must hold to reach `serverId`, or "" when unmapped. */
 export function mcpScopeForServer(serverId: string): string {
   return MCP_EDGE_SCOPES[serverId] ?? "";
+}
+
+/**
+ * The write scope `tool` needs on `serverId`, or "" when the tool is read-only
+ * (or unnamed). Unknown tools need nothing extra: the server rejects a name it
+ * does not advertise, and the read scope still had to pass.
+ */
+export function mcpWriteScopeForTool(serverId: string, tool: string): string {
+  const tools = MCP_EDGE_WRITE_SCOPES[serverId];
+  if (!tools) return "";
+  return tools[tool] ?? "";
 }
 
 /**
@@ -65,16 +106,32 @@ export type McpEdgeAuthEnv = {
   DIGIKEY_ISSUER?: string;
   /** Expected `aud`. Defaults to the deployment's digikey audience. */
   DIGIKEY_AUDIENCE?: string;
+  /**
+   * Service binding to this same Worker. The JWKS lives on `key.digithings.ai`,
+   * which is served by this Worker, so a plain `fetch` re-enters its own public
+   * route and fails — the verification then fails closed and every MCP call
+   * 401s. Through the binding the subrequest never leaves the Worker.
+   */
+  DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /**
+   * Read-through cache for the public JWKS. Keys survive a cold digikey, whose
+   * first response took 43 s against a 5 s fetch cap — long enough that the
+   * verifier gave up before the container answered.
+   */
+  TENANT_CONFIG?: {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  };
 };
 
 export type McpEdgeAuthResult =
   | { ok: true; via: "key" | "jwt"; scope?: string }
   | {
       ok: false;
-      status: 401 | 403;
+      status: 400 | 401 | 403;
       /**
        * Fixed, token-free reason. `missing_scope` is the only 403; everything
-       * else is a 401.
+       * else is a 401, except `uninspectable_body`, a 400.
        */
       reason:
         | "no_credential"
@@ -89,7 +146,8 @@ export type McpEdgeAuthResult =
         | "not_yet_valid"
         | "wrong_issuer"
         | "wrong_audience"
-        | "missing_scope";
+        | "missing_scope"
+        | "uninspectable_body";
     };
 
 type Header = { alg?: unknown; kid?: unknown; typ?: unknown };
@@ -180,25 +238,81 @@ async function importJwk(raw: unknown): Promise<[string, CryptoKey] | null> {
 /** Cap on one JWKS fetch, ms. A hung digikey must not hang the MCP request. */
 export const MCP_EDGE_JWKS_TIMEOUT_MS = 5_000;
 
-async function fetchJwks(url: string): Promise<JwksState | null> {
+/**
+ * KV key holding the last good JWKS. Public keys only — no secret is cached
+ * here. Written on every successful fetch and read before any network call, so
+ * a cold digikey cannot take MCP down.
+ *
+ * Rotation: digikey publishes a new key under a new `kid`; the unknown-`kid`
+ * path forces one refetch, which overwrites this key. If digikey is
+ * unreachable at that moment the call fails closed, and the next successful
+ * fetch repairs the cache. There is deliberately no TTL: expiring the key on a
+ * timer would re-break every MCP call while digikey sleeps.
+ */
+export const MCP_EDGE_JWKS_KV_KEY = "digikey-jwks";
+
+type JwksBody = { keys?: unknown };
+
+/** Read the cached JWKS body, or null when absent/unusable. */
+async function readCachedJwks(env: McpEdgeAuthEnv): Promise<JwksBody | null> {
+  const kv = env.TENANT_CONFIG;
+  if (!kv) return null;
   try {
-    const res = await fetch(url, {
+    const raw = await kv.get(MCP_EDGE_JWKS_KV_KEY);
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    const parsed = JSON.parse(raw) as JwksBody | null;
+    return parsed && Array.isArray(parsed.keys) && parsed.keys.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort cache write. A failure here must not fail verification. */
+async function writeCachedJwks(env: McpEdgeAuthEnv, body: JwksBody): Promise<void> {
+  const kv = env.TENANT_CONFIG;
+  if (!kv) return;
+  try {
+    await kv.put(MCP_EDGE_JWKS_KV_KEY, JSON.stringify(body));
+  } catch {
+    // the caller already has usable keys; caching is an optimisation
+  }
+}
+
+async function fetchJwks(url: string, env: McpEdgeAuthEnv): Promise<JwksState | null> {
+  const cached = await readCachedJwks(env);
+  const body = cached ?? (await fetchJwksBody(url, env));
+  if (!body) return null;
+  if (!cached) await writeCachedJwks(env, body);
+  const list = body.keys;
+  if (!Array.isArray(list)) return null;
+  const keys = new Map<string, CryptoKey>();
+  for (const entry of list) {
+    const imported = await importJwk(entry);
+    if (imported) keys.set(imported[0], imported[1]);
+  }
+  // An empty key set is not a usable JWKS: refuse rather than cache nothing
+  // and retry on every request.
+  if (!keys.size) return null;
+  return { keys, fetchedAtMs: Date.now() };
+}
+
+/**
+ * One network read of the JWKS. Goes through the service binding when bound:
+ * `key.digithings.ai` is this Worker's own route, and fetching it from inside
+ * the Worker does not complete.
+ */
+async function fetchJwksBody(url: string, env: McpEdgeAuthEnv): Promise<JwksBody | null> {
+  try {
+    const init: RequestInit = {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(MCP_EDGE_JWKS_TIMEOUT_MS),
-    });
+    };
+    const res = env.DIGIKEY_SELF ? await env.DIGIKEY_SELF.fetch(url, init) : await fetch(url, init);
     if (!res.ok) return null;
-    const body: unknown = await res.json();
-    const list = (body as { keys?: unknown } | null)?.keys;
-    if (!Array.isArray(list)) return null;
-    const keys = new Map<string, CryptoKey>();
-    for (const entry of list) {
-      const imported = await importJwk(entry);
-      if (imported) keys.set(imported[0], imported[1]);
-    }
-    // An empty key set is not a usable JWKS: refuse rather than cache nothing
-    // and retry on every request.
-    if (!keys.size) return null;
-    return { keys, fetchedAtMs: Date.now() };
+    const body = (await res.json()) as JwksBody | null;
+    const list = body?.keys;
+    if (!Array.isArray(list) || !list.length) return null;
+    return body;
   } catch {
     // Network error, timeout, non-JSON body. Caller treats null as "no keys".
     return null;
@@ -213,12 +327,12 @@ async function fetchJwks(url: string): Promise<JwksState | null> {
  * Concurrent callers join one in-flight fetch: a burst of requests after a cold
  * start must not produce a burst of JWKS calls.
  */
-function getJwks(url: string, force: boolean): Promise<JwksState | null> {
+function getJwks(url: string, force: boolean, env: McpEdgeAuthEnv): Promise<JwksState | null> {
   if (!force && jwksCache && Date.now() - jwksCache.fetchedAtMs < MCP_EDGE_JWKS_TTL_MS) {
     return Promise.resolve(jwksCache);
   }
   if (jwksInflight) return jwksInflight;
-  const fetchPromise = fetchJwks(url)
+  const fetchPromise = fetchJwks(url, env)
     .then((state) => {
       if (state) jwksCache = state;
       jwksInflight = null;
@@ -323,7 +437,7 @@ export async function verifyDigikeyJwt(
     return { ok: false, reason: "jwks_not_configured" };
   }
 
-  let state = await getJwks(jwksUrl, false);
+  let state = await getJwks(jwksUrl, false, env);
   if (!state) return { ok: false, reason: "jwks_unavailable" };
 
   let key = state.keys.get(header.kid);
@@ -331,7 +445,7 @@ export async function verifyDigikeyJwt(
     // Unknown kid: the one refetch that makes rotation work without waiting
     // out the TTL. If the refetch cannot run, the key stays unknown and the
     // request is refused — never allowed on the strength of a failed fetch.
-    const refreshed = await getJwks(jwksUrl, true);
+    const refreshed = await getJwks(jwksUrl, true, env);
     if (!refreshed) return { ok: false, reason: "jwks_unavailable" };
     state = refreshed;
     key = state.keys.get(header.kid);
@@ -414,6 +528,79 @@ function logDecision(opts: {
 }
 
 /**
+ * Largest JSON-RPC frame the edge will buffer to look for a write tool. Well
+ * above a realistic note body; a frame bigger than this is refused rather than
+ * passed uninspected, so "too big to check" can never become "allowed".
+ */
+export const MCP_EDGE_MAX_INSPECT_BYTES = 8 * 1024 * 1024;
+
+/** One JSON-RPC member of a frame (a single request or one batch element). */
+type JsonRpcFrame = { method?: unknown; params?: unknown };
+
+/**
+ * The tool names a frame calls, across a single request and a JSON-RPC batch.
+ * Anything that is not a `tools/call` contributes nothing. A malformed member
+ * contributes nothing either: the MCP server rejects it on its own, so it
+ * cannot execute a tool the edge did not see.
+ */
+function calledToolNames(frame: unknown): string[] {
+  const members = Array.isArray(frame) ? frame : [frame];
+  const names: string[] = [];
+  for (const member of members) {
+    if (!member || typeof member !== "object") continue;
+    const call = member as JsonRpcFrame;
+    if (call.method !== "tools/call") continue;
+    if (!call.params || typeof call.params !== "object") continue;
+    const name = (call.params as { name?: unknown }).name;
+    if (typeof name === "string" && name) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Write scopes the request's tool calls require. `null` means the body could
+ * not be inspected (unreadable, oversized, not JSON) and the request must be
+ * refused: the whole point is that a write cannot slip past unchecked.
+ *
+ * Only POST carries JSON-RPC requests; GET opens the SSE stream and DELETE ends
+ * the session, neither of which executes a tool.
+ */
+async function requiredWriteScopesForRequest(
+  request: Request,
+  serverId: string,
+): Promise<string[] | null> {
+  if (request.method !== "POST") return [];
+  if (!MCP_EDGE_WRITE_SCOPES[serverId]) return [];
+
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declared) && declared > MCP_EDGE_MAX_INSPECT_BYTES) return null;
+
+  let text: string;
+  try {
+    text = await request.clone().text();
+  } catch {
+    return null;
+  }
+  // `text.length` is UTF-16 units, so it can undercount bytes; a bounded
+  // overshoot here is harmless, the cap only exists to stop a huge buffer.
+  if (text.length > MCP_EDGE_MAX_INSPECT_BYTES) return null;
+
+  let frame: unknown;
+  try {
+    frame = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  const required: string[] = [];
+  for (const tool of calledToolNames(frame)) {
+    const scope = mcpWriteScopeForTool(serverId, tool);
+    if (scope && !required.includes(scope)) required.push(scope);
+  }
+  return required;
+}
+
+/**
  * Authorize one MCP edge request.
  *
  * `expectedKey` is the server's static edge key (`mcpEdgeKeyFor`); pass "" when
@@ -458,6 +645,27 @@ export async function authorizeMcpEdge(opts: {
     // from "your credential is bad".
     logDecision({ serverId, ok: false, status: 403, reason: "missing_scope", scope: required });
     return { ok: false, status: 403, reason: "missing_scope" };
+  }
+
+  // `mcp:<serverId>` opens the server but not its mutating tools. The tool name
+  // lives in the JSON-RPC body, so a body the edge cannot read is refused: an
+  // uninspected frame must never reach a write tool (DIG-5723).
+  const writeScopes = await requiredWriteScopesForRequest(request, serverId);
+  if (writeScopes === null) {
+    logDecision({ serverId, ok: false, status: 400, reason: "uninspectable_body" });
+    return { ok: false, status: 400, reason: "uninspectable_body" };
+  }
+  for (const writeScope of writeScopes) {
+    if (!scopeGrants(verified.scopes, writeScope)) {
+      logDecision({
+        serverId,
+        ok: false,
+        status: 403,
+        reason: "missing_scope",
+        scope: writeScope,
+      });
+      return { ok: false, status: 403, reason: "missing_scope" };
+    }
   }
 
   logDecision({ serverId, ok: true, via: "jwt", scope: required });

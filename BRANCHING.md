@@ -108,6 +108,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
 | `revert/<slug>` | Reverting or rolling back an earlier change (e.g. a `git revert` of a merged PR, or restoring paths to a known-good commit). Name what is being undone. | `revert/digiquant-to-7de39ec9a` |
+| `rescue/<issue>-<date>` | The branch `kit/bin/dt-worktree-rescue` pushes onto when it retires a worktree that still holds work. Not a human-created name — the helper produces it, so the taxonomy admits it or the push is refused and the worktree is kept. The issue key is uppercase and a `-2`/`-3` suffix is added when the name is taken, so the arm is `rescue/[A-Za-z0-9-]+`. | `rescue/DIG-1234-2026-10-21` |
 | `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.

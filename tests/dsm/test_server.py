@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 _client = TestClient(app)
 
+_OTLP_ENVS = ("DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+
 
 @pytest.mark.unit
 def test_health() -> None:
@@ -18,14 +20,27 @@ def test_health() -> None:
 
 @pytest.mark.unit
 def test_status_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    for key in (*_OTLP_ENVS, "LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT"):
+        monkeypatch.delenv(key, raising=False)
     r = _client.get("/v1/status")
     assert r.status_code == 200
     body = r.json()
     assert "version" in body
-    assert body["tracing_configured"] in (True, False)
-    assert body["langsmith_sdk_installed"] in (True, False)
-    assert "langsmith_host" in body
+    assert body["tracing_configured"] is False
+    assert body["otel_export_configured"] is False
+    assert body["export_backend"] == "none"
+    # Optional integrations report their (absent) state without implying a vendor backend.
+    assert body["dual_export"] is False
+    assert body["langsmith_host"] is None
+
+
+@pytest.mark.unit
+def test_status_defaults_to_in_house_otel(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    monkeypatch.setenv("DIGI_OTEL_ENDPOINT", "http://digitrace:8003/v1/otlp")
+    body = _client.get("/v1/status").json()
+    assert body["export_backend"] == "otel"
+    assert body["tracing_configured"] is True
 
 
 @pytest.mark.unit

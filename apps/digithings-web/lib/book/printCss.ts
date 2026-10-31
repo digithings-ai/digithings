@@ -27,6 +27,12 @@ export const PRINT_CSS = `
 
 /* Diagrams: one file per theme, picked by the page's data-theme. Light is the
    default and the only one print ever shows. */
+/* A figure's width is decided by the viewport in the site's own stylesheet, so
+   the same diagram was 549px on a desktop and 257px on a phone — and the
+   narrower one let the use-cases chapter fit on one page instead of two, which
+   put every later chapter a page early against the printed book. Pinning the
+   width to the printed measure makes every viewport paginate the same book. */
+.book-figure { width: 100% !important; max-width: 549px !important; margin-inline: auto !important; }
 .book-figure__dark { display: none; }
 :root[data-theme="dark"] .book-figure__light { display: none; }
 :root[data-theme="dark"] .book-figure__dark { display: block; }
@@ -34,6 +40,11 @@ export const PRINT_CSS = `
 .book-figure:fullscreen { background: var(--bg); display: flex; flex-direction: column; padding: 1.5rem; }
 .book-figure:fullscreen .book-figure__viewport { flex: 1; }
 .book-figure__viewport[data-active] { outline: 1px solid var(--ink-soft); }
+
+/* Web reader sheets take focus when a page is turned, so screen readers land
+   on the new page; the sidebar already marks it, and a ring round the whole
+   sheet reads as a selection. */
+[data-book-sheet]:focus-visible { outline: none; }
 
 /* Reference cards: the MDX paragraph inside keeps the card's own rhythm. */
 .book-reference__body p { margin: 0; max-width: none; font-size: inherit; }
@@ -45,7 +56,27 @@ export const PRINT_CSS = `
 
 /* The book uses the same mono voice as the rest of digithings.ai. */
 .book-root { --font-mono: var(--font-stack-mono); }
+/* The site sets --accent to ink, so the whole app is one colour on one paper.
+   The book is the one place that shows the palette: the accent marks what a
+   reader follows — the pixel field, the chapter number, the folio, the edition
+   line, the rule over a table, the arrows in a diagram. Values mirror the
+   accent in packages/design/tokens.css, which is what the diagram renderer
+   bakes in too, so the page and its figures agree. */
+/* On :root, not on .book-root: the pagination engine appends its page boxes to
+   <html>, outside this layout's subtree, so an accent set lower down never
+   reaches the folio, the field or the chapter number. This sheet is only loaded
+   under /book, which is the scope that matters. */
 
+
+/* The print route is paginated and screenshotted under screen media, so the
+   site chrome has to be hidden outside @media print — a rule in there never
+   runs. Scoped to the route's own marker, because this sheet is shared with the
+   reader, which keeps its header and contents. */
+html:has(.book-print) body > header,
+html:has(.book-print) body > footer,
+html:has(.book-print) .site-rails,
+html:has(.book-print) a[href="#main"],
+html:has(.book-print) .book-paged-status { display: none !important; }
 
 @media print {
   html, body { background: transparent; }
@@ -117,13 +148,32 @@ export const PRINT_CSS = `
  * day it is printed.
  */
 export const PAGED_CSS = `
+/* Same pin as the print sheet, and here it is the one that matters: this is the
+   sheet pagedjs actually lays the book out with, on both routes. */
+.book-figure { width: 100% !important; max-width: 549px !important; margin-inline: auto !important; }
+
+/* Diagrams are capped by viewport height in the site's own sheet (75vh). A
+   taller window therefore gave a taller figure, which changed how the text
+   flowed around it — the same book paginated to twenty pages on a desktop and
+   nineteen on a phone. The page box is a fixed A4 sheet; nothing inside it may
+   depend on the window. */
+.pagedjs_page .book-figure__diagram svg,
+.pagedjs_page .book-figure svg { max-height: none !important; }
+
 @page { size: A4 !important; margin: 20mm 18mm 18mm !important; }
 
 /* The site chrome and any live status line are not part of the book. This
    sheet is the ONLY one pagedjs gets, so it — not the site's '@media print'
-   block — is what decides what a page box contains. */
-.site-rails, header, footer, nav, .book-screen-only, .book-print-only, .running-element,
-.book-paged-status, [role="status"], .skip-link, a[href="#main"] { display: none !important; }
+   block — is what decides what a page box contains.
+
+   Scoped to the page boxes on purpose: pagedjs injects this sheet into the live
+   document, so an unscoped header or nav rule also hides the site's own
+   header and the reader's contents on /book. */
+.pagedjs_page .site-rails, .pagedjs_page header, .pagedjs_page footer,
+.pagedjs_page nav, .pagedjs_page .book-screen-only, .pagedjs_page .book-print-only,
+.pagedjs_page .running-element, .pagedjs_page .book-paged-status,
+.pagedjs_page [role="status"], .pagedjs_page .skip-link,
+.pagedjs_page a[href="#main"] { display: none !important; }
 
 html, body, .pagedjs_pages { margin: 0; padding: 0; }
 body {
@@ -139,7 +189,12 @@ body {
    inset on each side; the @page margin is the only frame a printed page needs.
    Body copy also inherited the site's 16px base and its 92% max-width, which
    is what made the text look like a narrow column. */
-.book-root > div, .book-flow, [data-paged-content] {
+/* The first selector is the print route's wrapper, and it has to stay scoped:
+   unscoped it also matched the reader's own wrapper, which then lost its
+   max-width and padding a second after load — the page visibly jumped left.
+   The other two are the paginated content itself, which needs the reset on both
+   routes because it is what the page boxes are made of. */
+html:has(.book-print) .book-root > div, .book-flow, [data-paged-content] {
   width: auto !important;
   max-width: none !important;
   margin-left: 0 !important;
@@ -181,7 +236,8 @@ body {
   width: 90mm;
   margin: 0 0 14mm;
 }
-.book-cover__mark svg { display: block; width: 100%; height: auto; }
+.book-cover__mark svg,
+.book-cover__mark .brand-wordmark { display: block; width: 100%; height: auto; color: var(--ink); }
 .book-cover__title, .book-cover__subtitle, .book-cover__meta { position: relative; }
 .book-cover__kicker {
   margin: 0 0 22mm;
@@ -235,12 +291,13 @@ body {
 .book-toc__leader {
   flex: 1 1 auto;
   min-width: 8mm;
-  margin: 0 2.5mm;
-  border-bottom: 0.4pt dotted var(--ink-mute);
+  margin: 0 1.5mm;
+  border-bottom: 0.6pt dotted var(--ink-soft);
   transform: translateY(-0.5mm);
 }
 .book-toc__ref {
-  flex: 0 0 8mm;
+  flex: 0 0 auto;
+  min-width: 5mm;
   text-align: right;
   font-family: var(--font-sans), monospace;
   font-size: 9pt;
@@ -340,18 +397,26 @@ table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 0 0 3mm;
 thead { display: table-header-group; }
 th, td { border-bottom: 0.4pt solid var(--hair); padding: 1.6mm 2mm; text-align: left; vertical-align: top; }
 th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing: 0.04em; color: var(--ink); }
+thead th { border-bottom-color: var(--accent) !important; }
+/* A section heading inside a chapter is a signpost, not a title: it takes the
+   theme's accent so the eye finds it, while the chapter title stays ink. On the
+   default theme the accent is the ink itself, so nothing changes there. */
+.book-chapter h2, .book-chapter h3, .book-chapter h4,
+.pagedjs_page h2, .pagedjs_page h3, .pagedjs_page h4 { color: var(--accent); }
 
-/* Folios sit in the bottom outer margin, alternating by parity. */
+/* Folios sit bottom right: the PDF is read one page at a time on screen, so
+   there is no spread and no outer margin to alternate into. */
 .pagedjs_page::after {
   content: attr(data-book-page);
   position: absolute;
   bottom: 8mm;
   font-family: var(--font-sans), monospace;
   font-size: 8pt;
-  color: var(--ink-soft);
+  color: var(--accent);
 }
-.pagedjs_page:nth-child(odd)::after { left: 18mm; }
-.pagedjs_page:nth-child(even)::after { right: 18mm; }
+.pagedjs_page::after { right: 18mm; }
+/* The last page carries its number like every other: a reader flipping to the
+   end should not find the book stopped counting. */
 
 /* Paged.js paints its margin boxes (the slots that would hold a running
    header) with the page background. Over the injected field those slots read
@@ -381,7 +446,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   color: var(--ink) !important;
   text-align: left !important;
 }
-.pagedjs_page p { margin: 0 0 2.4mm !important; orphans: 4; widows: 4; }
+.pagedjs_page p { margin: 0 0 2.4mm !important; orphans: 4; widows: 4; text-wrap: pretty; }
 .pagedjs_page p:last-child { margin-bottom: 0 !important; }
 .pagedjs_page ul,
 .pagedjs_page ol { margin: 0 0 3mm 5mm !important; padding: 0 !important; }
@@ -402,8 +467,10 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   font-size: 20pt !important;
   line-height: 1.08 !important;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
-.pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; }
+.pagedjs_page .book-chapter__head > p:first-of-type { font-size: 8.5pt !important; margin: 0 0 2mm !important; color: var(--accent) !important; }
+.pagedjs_page .book-chapter__num { color: var(--accent) !important; }
 .pagedjs_page .book-chapter__head > p:nth-of-type(2) {
   margin: 0 0 4mm !important;
   font-size: 10pt !important;
@@ -426,6 +493,8 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 }
 .pagedjs_page table { margin: 0 0 3mm !important; font-size: 8.5pt !important; }
 .pagedjs_page th, .pagedjs_page td { padding: 1.6mm 2mm !important; }
+/* Tables are reference matter beside the prose: one step down from body. */
+.pagedjs_page td { font-size: 9pt !important; line-height: 1.4 !important; }
 .pagedjs_page th { font-size: 7.5pt !important; }
 .pagedjs_page figure { margin: 0 0 4mm !important; width: 100% !important; }
 .book-figure {
@@ -449,10 +518,16 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
   width: auto !important;
   height: auto !important;
   max-width: 100% !important;
-  max-height: 78mm !important;
+  max-height: 52mm !important;
   margin: 0 auto !important;
   display: block !important;
 }
+/* The rule above outranks '.book-figure__dark' on specificity, which printed
+   every diagram twice: the light render and, under it, a faint dark one. The
+   theme switch has to be at least as specific as the rule it overrides. */
+.book-figure__viewport img.book-figure__dark { display: none !important; }
+:root[data-theme="dark"] .book-figure__viewport img.book-figure__light { display: none !important; }
+:root[data-theme="dark"] .book-figure__viewport img.book-figure__dark { display: block !important; }
 .pagedjs_page figcaption { margin-top: 2mm !important; font-size: 8pt !important; }
 
 /* "Go deeper" is a web affordance. On paper the links cannot be followed, so
@@ -467,28 +542,101 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 }
 .pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
 
+/* The 549px pin above is the READER's column, and on paper it made every figure
+   a narrower box than the text: a drawing wide enough to fill that box (chapter
+   15's credential chain) ended about 27mm short of the text's right edge and
+   read as jammed left, while a short one (chapter 02's three homes) centred
+   inside the narrow box and hid it. The A4 pixel box is 174mm wide, so on the
+   page the figure takes the full measure: a wide drawing starts and ends with
+   the body text, a narrow one centres on the text's centre, and the caption
+   stays flush with the column's left edge in both cases. */
+.pagedjs_page .book-figure { max-width: none !important; }
 
-/* Cover: edition/version, the hero banner, the title. Nothing else. */
-.book-cover {
-  text-align: center !important;
-  padding-top: 28mm !important;
+
+/* The welcome page's field, behind the cover. It fades out before the
+   wordmark, so the mark and the edition keep a clean ground to sit on. */
+.book-cover__field {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  color: var(--ink) !important;
+  accent-color: var(--accent) !important;
+  opacity: 0.72 !important;
+  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 62%, transparent 84%) !important;
+  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 62%, transparent 84%) !important;
 }
-.book-cover__kicker {
-  margin: 0 0 10mm !important;
+
+/* The contents page: the same field, quiet enough to read a list over. */
+/* The field painter reads its hue off accent-color (pixel-field-core), with a
+   hard-coded teal fallback. Point it at the theme accent so the cover and the
+   contents are tinted rather than merely shaded. */
+.book-cover__field, .book-cover__field--quiet { accent-color: var(--accent); }
+
+.book-cover__field--quiet {
+  opacity: 0.45 !important;
+  -webkit-mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 55%, transparent 92%) !important;
+  mask-image: linear-gradient(to bottom, currentColor 0%, currentColor 55%, transparent 92%) !important;
+}
+
+/* The edition and version, set opposite the folio on every page. */
+.pagedjs_page .book-page-imprint {
+  position: absolute !important;
+  bottom: 8mm !important;
+  left: 18mm !important;
+  font-family: var(--font-mono) !important;
+  font-size: 7.5pt !important;
+  letter-spacing: 0.04em !important;
+  color: var(--accent) !important;
+}
+
+/* Cover: the hero banner, a hairline, and the title set at footer scale —
+   the same composition as the colophon, at the front instead of the back. */.book-cover {
+  text-align: left !important;
+  min-height: 232mm !important;
+  position: relative !important;
+}
+.book-cover__mark {
+  position: absolute !important;
+  left: 0 !important;
+  bottom: 34mm !important;
+  width: 142mm !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+.book-cover__foot {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 14mm !important;
+  padding-top: 4mm !important;
+  border-top: 0.4pt solid var(--hair) !important;
+}
+.book-cover__title {
+  margin: 0 !important;
+  font-family: var(--font-mono) !important;
   font-size: 8pt !important;
   letter-spacing: 0.12em !important;
-  text-transform: none !important;
+  line-height: 1.4 !important;
   color: var(--ink-soft) !important;
-}
-.book-cover__mark { width: 150mm !important; max-width: 100% !important; margin: 0 auto 12mm !important; }
-.book-cover__title {
-  margin: 0 auto !important;
-  font-size: 24pt !important;
-  line-height: 1.1 !important;
   white-space: normal !important;
 }
+.book-cover__kicker { display: none !important; }
 .book-cover__subtitle { display: none !important; }
 .book-cover__meta { display: none !important; }
+.book-cover__imprint {
+  position: absolute !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 7.5pt !important;
+  letter-spacing: 0.04em !important;
+  color: var(--accent) !important;
+  color: var(--ink-soft) !important;
+}
 
 .book-colophon { min-height: 220mm !important; }
 .book-colophon__title { font-size: 18pt !important; line-height: 1.2 !important; }
@@ -498,6 +646,7 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-colophon__kicker { font-size: 8pt !important; margin: 0 0 4mm !important; }
 .pagedjs_page .book-colophon__title { font-size: 17pt !important; line-height: 1.25 !important; margin: 0 0 6mm !important; }
 .book-colophon {
+  border-top: 0 !important;
   position: relative !important;
   display: block !important;
   min-height: 232mm !important;
@@ -505,11 +654,10 @@ th { font-family: var(--font-sans), monospace; font-size: 7.5pt; letter-spacing:
 .pagedjs_page .book-colophon__mark {
   position: absolute !important;
   left: 0 !important;
-  right: 0 !important;
-  bottom: 18mm !important;
+  bottom: 26mm !important;
   width: 142mm !important;
   max-width: 100% !important;
-  margin: 0 auto !important;
+  margin: 0 !important;
 }
 .pagedjs_page .book-colophon__mark svg { display: block; width: 100%; height: auto; }
 .pagedjs_page .book-colophon__foot {

@@ -69,11 +69,11 @@
       "port": 4012
     },
     {
-      "name": "@digithings/reference",
+      "name": "@digithings/digiweb",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "@digithings/reference",
+        "@digithings/digiweb",
         "run",
         "dev"
       ],

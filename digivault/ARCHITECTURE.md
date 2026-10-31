@@ -149,7 +149,9 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   unless `DIGIVAULT_MCP_WRITE=1`, and `digivault_get_note` stays
   orchestrator-only.
   Vault-local tools carry no JWT check, so the MCP sidecar sets no `DIGIKEY_*` —
-  treat a wider bind like a network API with gateway auth.
+  treat a wider bind like a network API with gateway auth. The gateway is the
+  scope gate: `mcp:digivault` is read-only, and the edge additionally requires
+  `mcp:digivault:write` for `create_note` (DIG-5723).
 - **Rate limiting:** per-IP sliding window (in-process `deque` + lock), mirrors
   `digisearch/server.py`. `/v1/orchestrator_invoke`: 10/min; `/v1/orchestrator_tools`:
   30/min; everything else except `/healthz`: 30/min default. Reads the IP from
@@ -261,8 +263,8 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `request.state.digi_auth.tenant_slug` (the same verified claim
   `_require_tool_scope` already reads `.scopes` off of — `digikey` populates
   it on every token its own `/v1/oauth/token` issues; see `tenant_scope.py`'s
-  module docstring for a known, tracked residual dependency on that claim's
-  trustworthiness, #2303) and checks it against `DIGI_TENANT_CORPUS_MAP`
+  module docstring: since DIG-3585 the claim is never filled from the
+  unsigned `X-Digi-Tenant` header, #2303) and checks it against `DIGI_TENANT_CORPUS_MAP`
   (the same env var digigraph's own `corpus_routing.py` reads, parsed
   independently here so digivault stays installable standalone). It is a
   no-op when that map is genuinely unset — single-tenant deployments (local

@@ -17,7 +17,7 @@ exactly the "UI in one place, deployment in another" shape that was expected.
 The problem is that the boundary is crossed in both directions:
 
 - a **package re-exports a file that lives in an app**
-  (`packages/ui/src/styles/chatbot.css` → `../../../../apps/reference/.../chatbot.css`);
+  (`packages/ui/src/styles/chatbot.css` → `../../../../apps/digiweb/.../chatbot.css`);
 - an **app route folder is the shared component library for all skins**
   (`apps/digichat/src/app/(baseline)/stock/` is imported by 10+ skins);
 - **skins and their registry live in the app** while the Thread they mount
@@ -36,7 +36,7 @@ So the fix is not "move the UI into one folder". It is **move ownership down**
 | Design tokens (`--bg/--ink/--term-*`, `[data-theme]`) | `packages/design/tokens.css` | unchanged |
 | Tailwind v4 `@theme inline` bridge | `packages/ui/src/styles/web-theme.css` | unchanged |
 | digichat skin palette (`.digichat-thread` dark/light + portal mirrors) | `packages/ui/src/styles/chat-aui.css` | merge into one theme file |
-| digichat theme **grammar** (caret, radii, composer, markdown, tooltips) | `apps/reference/app/(chatbot)/chatbot/chatbot.css`, re-exported by a 4-line package shim | **move into `packages/ui/src/styles/`** |
+| digichat theme **grammar** (caret, radii, composer, markdown, tooltips) | `apps/digiweb/app/(chatbot)/chatbot/chatbot.css`, re-exported by a 4-line package shim | **move into `packages/ui/src/styles/`** |
 | First-party Thread + DotMatrix + caret + boot loader | `packages/ui/src/components/chat/` | unchanged |
 | 12 skins + registry + dispatch | `apps/digichat/src/components/assistant-ui/skins/`, `apps/digichat/src/lib/thread-skins.ts` | **move into the package** |
 | Shared primitives for the catalog skins | `apps/digichat/src/app/(baseline)/stock/` | **move out of a route folder** |
@@ -52,17 +52,17 @@ So the fix is not "move the UI into one folder". It is **move ownership down**
 `packages/ui/src/styles/chatbot.css` is four lines:
 
 ```css
-@import "../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css";
+@import "../../../../apps/digiweb/app/(chatbot)/chatbot/chatbot.css";
 ```
 
-The canonical first-party theme sheet physically lives in `apps/reference` and
+The canonical first-party theme sheet physically lives in `apps/digiweb` and
 `packages/ui` imports it by relative path. A published package cannot depend on
 an app's file tree; the file only works because the monorepo checkout has that
 layout, and it is pinned by
 `packages/ui/src/components/chat/chatbot-css.share.test.ts`.
 
 **Direction:** move the sheet into `packages/ui/src/styles/` as the real file
-(e.g. `chat-digichat.css`) and have `apps/reference` import *it*. Delete the shim.
+(e.g. `chat-digichat.css`) and have `apps/digiweb` import *it*. Delete the shim.
 
 ### F2 — Three palettes, three bridges, one product
 
@@ -72,7 +72,7 @@ disagree:
 1. `packages/design/tokens.css` — `[data-theme="dark"|"light"]` semantic palette.
 2. `packages/ui/src/styles/chat-aui.css` — `.digichat-thread` palette + the
    `html:has([data-thread-skin="digichat"])` portal mirrors.
-3. `apps/reference/.../chatbot.css` — the `:is(.aui-theme-stage, [data-thread-skin="digichat"])`
+3. `apps/digiweb/.../chatbot.css` — the `:is(.aui-theme-stage, [data-thread-skin="digichat"])`
    grammar, which re-declares `--accent/--on-accent/--radius/--composer-radius`.
 
 On top of that, **two app entry sheets each re-declare their own `@theme inline`
@@ -242,7 +242,7 @@ Suggested order: **WS6 → WS2 → WS1 → WS3 → WS4 → WS5.** Each step must
 1. Is the goal **structural cleanliness** (ownership/boundaries) or also a
    **visual consolidation** (fewer, larger files)? They pull in different
    directions.
-2. Is `apps/reference` allowed to import from `packages/ui` for its chatbot
+2. Is `apps/digiweb` allowed to import from `packages/ui` for its chatbot
    sheet (i.e. is the reference app willing to consume the canonical theme), or
    must it stay standalone?
 3. Are the vendored `apps/digichat/reference/assistant-ui-templates/` sources

@@ -15,7 +15,9 @@
 > What ADR-0036 supersedes is the **platform** philosophy: "no database, no background worker,
 > no queue" no longer holds for digitrace as a component (DIG-2657 lands the pipeline). It does
 > **not** supersede the **library** contract: `digitrace.trace` keeps its zero-mandatory-
-> dependency rule, and after the LangSmith cut the OTel leg is its only leg.
+> dependency rule. **In-house digitrace over OTLP is the default export; LangSmith remains
+> a supported, optional integration** and is never selected implicitly. ADR-0036 retired the
+> self-hosted Langfuse *deployment* and its OTLP export mode with it.
 
 ---
 
@@ -23,9 +25,9 @@
 
 digitrace occupies the observability role in the digithings stack. It has two distinct faces:
 
-**As a Python library** (`digitrace.trace`, `digitrace.config`), it provides a thin conditional wrapper around the LangSmith SDK. Every service in the stack can import it and immediately get LangSmith tracing for key functions — or get a transparent no-op when LangSmith is not configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the LangSmith SDK is a soft optional (`digitrace[tracing]`). After ADR-0036 this library is the OTel emit wrapper: it gains the `gen_ai` attributes and the tenant, run and session ids (DIG-2656), and the LangSmith leg is removed from the code at the cut (DIG-2663). The zero-mandatory-dependency rule above still holds.
+**As a Python library** (`digitrace.trace`, `digitrace.config`), it provides a thin conditional wrapper over the OpenTelemetry SDK, exporting by default to the in-house digitrace OTLP ingest. Every service in the stack can import it and get spans for key functions — or a transparent no-op when no export leg is configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the OTLP leg is the soft optional `digitrace[tracing]` extra. LangSmith (`digitrace[langsmith]`, `LANGSMITH_API_KEY`) remains a **supported, optional integration**, never the default. After ADR-0036 the library is the OTel emit wrapper: it gains the `gen_ai` attributes and the tenant, run and session ids (DIG-2656).
 
-**As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards whether tracing is active, which LangSmith host is configured, and whether the SDK is installed — all without ever surfacing a secret.
+**As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards which export backend resolved (in-house `otel` by default), and — only when an operator configured one — the sanitized host of the optional LangSmith leg, all without ever surfacing a secret.
 
 ### Phase 1 hosting target: Cloudflare-native ingest and store (was self-hosted Langfuse; now ADR-0036)
 
@@ -39,8 +41,8 @@ The hosting target is now the ADR-0036 pipeline:
 apps → OTLP/HTTP → digitrace-ingest Worker → Queue → consumer
      → R2 digitrace-archive (system of record; OTLP-JSON NDJSON, one object per batch,
        key `tenant=<slug>/date=<YYYY-MM-DD>/<source>/<uuid>.ndjson`)
-     → Supabase core / public (digitrace_traces, digitrace_spans_index, digitrace_scores,
-       digitrace_sessions) with per-table RLS on workspace_id
+     → D1 digitrace (digitrace_traces, digitrace_spans_index, digitrace_scores,
+       digitrace_sessions), tenant-scoped on workspace_id in Worker code (DIG-2887 S1)
      → Workers Analytics Engine (tokens, cost, latency per tenant and model)
 dashboard Traces tab reads through dashboard-api; `digitrace replay` loads an R2 window into
 MLflow 3.10+ with the [genai] extra over OTLP/HTTP /v1/traces, on the Mac or on a scale-to-zero
@@ -48,39 +50,50 @@ Cloudflare Container.
 ```
 
 Decision record: [ADR-0036](../docs/adr/0036-digitrace-cloudflare-native-tracing.md).
-The Langfuse operator runbook ([`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md))
-and the app ([`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/)) are retired **by** that
-ADR. The runbook is superseded here; the code removal is a separate mechanical leaf (DIG-5136,
-owner: Repo, CI & Release Engineer), so the app is still in the tree until that leaf lands.
+Self-hosted Langfuse is retired **by** that ADR. It was **never deployed** — the Worker
+`digitrace-langfuse` was never created on the Cloudflare account — and the app, its
+Dockerfiles, its deploy job and its runbook steps were removed by DIG-5136. The tombstone is
+[`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md).
 
 Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
-Do not point `LANGSMITH_ENDPOINT` at Langfuse.
+Do not point `LANGSMITH_ENDPOINT` at a trace store.
+
+**Position on vendors (ADR-0036):** in-house digitrace over OTLP is
+the default; LangSmith is a supported, optional integration, selected only by its own
+environment variables and never implicitly.
 
 ### Phase 2 dual-export (shipped, #4931)
 
-`digitrace.trace.traceable` now fans out per call to **both** backends:
+`digitrace.trace.traceable` fans out per call to whichever legs are configured, with the
+in-house OTel leg as the default:
 
-- **LangSmith leg** — as before, when `LANGSMITH_API_KEY` is set (PII
-  redaction via `process_inputs` / `process_outputs`).
-- **OTel leg** — when an OTLP endpoint env var is set
-  (`DIGITRACE_LANGFUSE_OTLP_ENDPOINT`, `LANGFUSE_OTLP_ENDPOINT`,
-  `DIGI_OTEL_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`). Opens one span per
-  call named `digitrace.<name>` carrying only the run name plus short
-  correlation ids (`digi.workflow_id`, `digi.request_id`, `digi.session_id`).
-  Against Langfuse, point the endpoint at `/api/public/otel` and pass the
-  public:secret Basic auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`
-  (parsed by `digibase.otel`, #4934).
+- **OTel leg (default)** — when an OTLP endpoint env var is set through
+  `digibase.otel` (`DIGI_OTEL_ENDPOINT`, falling back to
+  `OTEL_EXPORTER_OTLP_ENDPOINT`; the Langfuse-only aliases are gone with the
+  app, DIG-5136). Opens one span per call named `digitrace.<name>` carrying the
+  allowlisted `gen_ai.*` / OpenInference attributes (model, provider, token
+  counts, span kind), the ADR-0036 ids (`tenant.id`, `pipeline.run_id`,
+  `session.id`), the pre-existing `digi.*` correlation ids, and a SHA-256 hash
+  plus character count of the redacted input and output. No prompt or
+  completion text is exported; a redacted preview is opt-in only
+  (`DIGI_TRACE_CONTENT_PREVIEW=1`, off by default). Headers are parsed by
+  `digibase.otel` (`DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`).
+- **LangSmith leg (optional integration)** — only when `LANGSMITH_API_KEY` is
+  set and the SDK is installed (PII redaction via `process_inputs` /
+  `process_outputs`). Selecting it is an operator choice; with the key plus an
+  OTLP endpoint the backend is `dual`.
+
 
 Either leg degrades to the other; both missing is a pure no-op. Backend
 summary helpers live in `digitrace.config` (`export_backend()` →
-`dual|langsmith|langfuse-otlp|otel|none`) and are surfaced secret-free on
+`dual|langsmith|otel|none`) and are surfaced secret-free on
 `GET /v1/status`. digigraph wraps its three workflow entry points in a shared
 `digigraph_workflow_run` span plus per-node spans for the plain-function
 nodes (supervisor / validate / backtest / optimize); the compiled research
 subgraph stays unwrapped so `graph.stream(..., subgraphs=True)` custom events
-keep flowing — its spans come from LangSmith auto-instrumentation
-(`LANGSMITH_TRACING` defaulted on by `digigraph.tracing`). `LANGSMITH_ENDPOINT`
-remains the real LangSmith API.
+keep flowing — its spans come from OTel auto-instrumentation when a vendor
+auto-instrumentor is installed. `LANGSMITH_ENDPOINT` remains the real LangSmith
+API.
 
 ### Current scope vs. intended platform
 
@@ -115,11 +128,11 @@ digitrace ships exactly five source files under `digitrace/src/digitrace/`:
 |------|------|------------------|--------------------|
 | `__init__.py` | Package identity, `__version__ = "0.1.0"` | Version string | Everything else |
 | `config.py` | Environment introspection + `TraceStatus` model | All four public symbols | Nothing deferred |
-| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback, PII redaction hookup | Span attribute enforcement, sampling |
-| `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
+| `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback, PII redaction hookup, allowlisted `gen_ai.*` / OpenInference span attributes, hash + length content, ADR-0036 ids | Sampling |
+| `redaction.py` | `PiiRedactor` — value-pattern and structural redaction for trace payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras, credential key names, long-document hash summarisation | Nothing deferred |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
-As shipped today there is no database, no background worker, no queue, and no internal LangGraph graph: digitrace does not receive traces; it emits them — to LangSmith today and, via the Phase 2 OTel/HTTP dual-export leg (#4931), to an OTLP endpoint.
+As shipped today there is no database, no background worker, no queue, and no internal LangGraph graph: digitrace does not receive traces; it emits them — by default to the in-house digitrace OTLP endpoint, and optionally to LangSmith when an operator configures it.
 
 ---
 
@@ -145,13 +158,22 @@ HTTP 200 OK
 {
   "version": "0.1.0",
   "tracing_configured": true,
-  "langsmith_sdk_installed": true,
-  "langsmith_host": "api.smith.langchain.com",
-  "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10"
+  "langsmith_sdk_installed": false,
+  "langsmith_host": null,
+  "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10",
+  "otel_export_configured": true,
+  "dual_export": false,
+  "export_backend": "otel"
 }
 ```
 
-`tracing_configured` is `true` iff `LANGSMITH_API_KEY` is non-empty **and** `langsmith` is importable. `langsmith_host` is the hostname extracted from `LANGSMITH_ENDPOINT` (no path, no credentials, no query string). If `LANGSMITH_ENDPOINT` is not set, the default `api.smith.langchain.com` appears. `request_id` echoes the `X-Request-ID` of the call that produced this response (sourced from `digibase.http.install_request_id_middleware`) so operators can correlate the status response with logs and traces (task #213).
+`export_backend` resolves to `otel` (the in-house digitrace ingest, the default), `none`
+when no OTLP endpoint exists, and to `langsmith` or `dual` only when the operator has set
+that vendor's own variables. `tracing_configured` is `true` iff at least
+one export leg is configured. `langsmith_host` is the hostname extracted from
+`LANGSMITH_ENDPOINT` (no path, no credentials, no query string) and is `null` unless
+`LANGSMITH_API_KEY` or `LANGSMITH_ENDPOINT` is set, so status never implies a vendor
+backend nobody selected. `request_id` echoes the `X-Request-ID` of the call that produced this response (sourced from `digibase.http.install_request_id_middleware`) so operators can correlate the status response with logs and traces (task #213).
 
 ### Python library: `digitrace.trace.traceable`
 
@@ -162,7 +184,11 @@ from digitrace.trace import traceable
 def chat_completion(...): ...
 ```
 
-A higher-order decorator. When `LANGSMITH_API_KEY` is set and `langsmith` is importable, wraps the function with `langsmith.traceable(name=name)`. Otherwise returns the original function unmodified. The decorator is applied at module import time; there is no per-call check.
+A higher-order decorator. The OTel leg wraps the function in one span per call when an
+OTLP endpoint is configured and the OpenTelemetry SDK is importable. The optional
+LangSmith leg, when `LANGSMITH_API_KEY` is set and `langsmith` is importable, wraps it
+with `langsmith.traceable(name=name)` first (with PII redaction) and the OTel span sits
+outside it. With neither leg active it returns the original function unmodified.
 
 ### Python library: `digitrace.config.tracing_enabled`
 
@@ -173,7 +199,9 @@ if tracing_enabled():
     ...
 ```
 
-A runtime boolean function. Re-reads `LANGSMITH_API_KEY` on each call, so it is safe to use in tests that manipulate environment variables.
+A runtime boolean function: true when `export_backend()` is anything but `none`. It
+re-reads the environment on each call, so it is safe to use in tests that manipulate
+environment variables.
 
 ---
 
@@ -190,28 +218,66 @@ class TraceStatus(BaseModel):
     langsmith_sdk_installed: bool
     langsmith_host: str | None = None
     request_id: str | None = None
+    otel_export_configured: bool = False
+    dual_export: bool = False
+    export_backend: str = "none"
 ```
 
 All fields are non-secret by construction. The model is used directly as the FastAPI `response_model` for `GET /v1/status`.
 
 ### Span attribute contract
 
-digitrace defines a contract (documented in `ARCHITECTURE.md`) for what span attributes LangSmith traces SHOULD carry. This is a documentation contract, not an enforced schema:
+The OTel leg's span attribute contract is **enforced at runtime** (ADR-0036 §7,
+DIG-2656). `digitrace.trace.SPAN_ATTRIBUTE_ALLOWLIST` is the one place a key may
+come from; `apply_span_allowlist()` drops every key that is not on it, so a
+caller cannot add arbitrary keyword arguments to a span.
 
-**Required (SHOULD include when known):**
-- `workflow_id` — correlates spans to a single digigraph workflow execution
-- `request_id` — mirrors the `X-Request-ID` header for cross-service correlation
-- `session_id` — links spans to a user session
-- `job_id` — backtest job identifier from digiquant
-- tool or run name — e.g. `chat_completion`, `orchestrator_tool_id`
+**Identity and correlation (kept):**
+- `digi.run_name` — the decorated function's span name
+- `digi.workflow_id` — correlates spans to a single digigraph workflow execution
+- `digi.request_id` — mirrors the `X-Request-ID` header for cross-service correlation
+- `digi.session_id` — links spans to a user session
+- `tenant.id` — the tenant (ADR-0036; from `tenant_id` / `tenant` / `tenant_slug`)
+- `pipeline.run_id` — the pipeline run (from `pipeline_run_id` / `run_id`)
+- `session.id` — the ADR-0036 name for the same session id
+
+**Model and usage (OTel GenAI + OpenInference):**
+- `gen_ai.request.model` / `llm.model_name` — the requested model
+- `gen_ai.system`, `gen_ai.provider.name`, `llm.provider` — the provider
+  (explicit `provider` keyword, else the model prefix before `/`)
+- `gen_ai.usage.input_tokens` / `output_tokens` / `total_tokens` and
+  `llm.token_count.prompt` / `completion` / `total` — from the result's `usage`
+  block when it reports one
+- `gen_ai.operation.name` — `chat` (LLM), `invoke_agent` (agent),
+  `execute_tool` (tool), `embeddings` (embedding)
+- `openinference.span.kind` — `LLM`, `CHAIN`, `TOOL`, `AGENT`, `RETRIEVER`,
+  `EMBEDDING`, `RERANKER` or `UNKNOWN`; inferred from the span name or pinned
+  with `traceable(..., span_kind=...)`
+
+**Content (hash + length only):**
+- `digi.input.sha256` / `digi.input.length`
+- `digi.output.sha256` / `digi.output.length`
+- `digi.input.preview` / `digi.output.preview` — **only** when
+  `DIGI_TRACE_CONTENT_PREVIEW` is set (off by default); the preview is the
+  already-redacted payload truncated to `DIGI_TRACE_PREVIEW_CHARS` (default
+  200, maximum 1000)
+
+The hash is over the redacted payload, so the same PII does not change the
+digest.
+
+**Failure:**
+- `error.type` — the exception class name only. The message and the stack
+  trace are never recorded, because both can carry prompt or document text.
 
 **Forbidden (MUST NOT include):**
-- Raw LLM prompts or completions
+- Raw LLM prompts or completions (even redacted — hash and length only)
 - API keys or bearer tokens
 - File paths outside approved workspace roots
 - Full document bodies (summarize or hash instead)
 
-This contract is referenced by digigraph and digiquant but is not enforced by any runtime validator. See Section 6 for the security implications.
+This contract is enforced for the OTel leg. The LangSmith leg keeps its
+documented-but-unenforced contract until it is cut (DIG-2663). See Section 6 for
+the security implications.
 
 ---
 
@@ -251,7 +317,7 @@ except ImportError:
 
 digitrace imposes no mandatory runtime dependency on any other digithings service. digigraph (the primary consumer) imports `digitrace.trace.traceable` directly as a decorator on `chat_completion` and `chat_completion_with_tools` in `digigraph/src/digigraph/llm.py`. If `digitrace` is not installed, digigraph fails at startup — so the library is a hard dependency of digigraph's image, but the LangSmith SDK inside it is soft.
 
-The digitrace HTTP service is never called by digigraph for tracing. Traces go directly from the LangSmith SDK embedded in digigraph's process to the LangSmith API endpoint. The HTTP service exists solely for status introspection.
+The digitrace HTTP service is never called by digigraph for tracing. Spans go directly from the exporter embedded in digigraph's process to the configured OTLP endpoint — in-house digitrace by default, or the LangSmith API when that optional integration is selected. The HTTP service exists solely for status introspection.
 
 ### OTel integration path
 
@@ -299,7 +365,11 @@ the redactor is never constructed.
 
 ### Span attribute contract not enforced at ingestion
 
-The contract documented in `ARCHITECTURE.md` is advisory only. No validator checks that `workflow_id` is present, that forbidden fields are absent, or that document bodies are not embedded. Enforcement relies entirely on developer discipline.
+The emit-side contract is enforced (Section 4, DIG-2656): the OTel leg only
+writes allowlisted keys and never writes raw prompt/completion text. Ingestion
+is a different boundary: the ingest Worker does not re-validate span
+attributes, so a non-digitrace source can still send any attribute its emitter
+writes. That validation belongs with the ingest contract (DIG-2657).
 
 ### LangSmith API key in environment
 
@@ -334,7 +404,7 @@ For digitrace's current traffic profile (health checks + status polls), this is 
 
 ### No-op decorator overhead
 
-When `LANGSMITH_API_KEY` is absent or `langsmith` is not installed, `traceable()` returns the original function unchanged. The decoration itself happens once at module import. Per-call overhead is zero — no closure, no wrapper, no conditional check.
+When no export leg is configured — no OTLP endpoint and no `LANGSMITH_API_KEY`, or the SDKs are not installed — `traceable()` returns the original function unchanged. The decoration itself happens at module import. Per-call overhead is zero — no closure, no wrapper, no conditional check.
 
 When tracing is active, `langsmith.traceable` adds a function wrapper that:
 1. Captures `*args` and `**kwargs` at call entry
@@ -428,13 +498,14 @@ Unlike digigraph, digitrace does not depend on any other service in Compose. It 
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. Removed from the code at the LangSmith cut (DIG-2663). |
-| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at Langfuse. Cut with the LangSmith leg (DIG-2663). |
-| `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** The Langfuse OTLP ingest URL. Langfuse is dropped by ADR-0036; the env name goes with the app. |
-| `LANGFUSE_OTLP_ENDPOINT` | No | **Retired (DIG-5136).** Alias for the Langfuse OTLP ingest URL. |
-| `LANGFUSE_HOST` / `LANGFUSE_URL` | No | **Retired (DIG-5136).** Langfuse host (status display only). |
-| `DIGI_OTEL_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint. Under ADR-0036 it is the ingest endpoint `https://<ingest-host>/v1/traces`. Parsed by `digibase.otel`; `digitrace.config` keeps no second copy. |
+| `LANGSMITH_API_KEY` | No | Optional LangSmith integration: enables LangSmith trace export when set **and** the SDK is installed. Absent by default; the in-house OTLP leg is the default path. |
+| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL for the optional integration. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status` only when the integration is configured. Never point at a trace store. |
+| `DIGI_OTEL_ENDPOINT` / `DIGITRACE_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` | No | OTLP endpoint. Under ADR-0036 it is the in-house digitrace ingest endpoint `https://<ingest-host>/v1/traces`. Parsed by `digibase.otel`; `digitrace.config` keeps no second copy. |
 | `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` | No | OTLP headers. Under ADR-0036 they carry `x-digitrace-token` and `x-digitrace-tenant`. Parsed by `digibase.otel`. |
+| `DIGI_TRACE_CONTENT_PREVIEW` | No | **Opt-in, off by default.** Set to `1`/`true` to add a redacted, truncated `digi.input.preview` / `digi.output.preview` attribute to OTel spans. Leave unset for hash + length only. |
+| `DIGI_TRACE_PREVIEW_CHARS` | No | Preview length when `DIGI_TRACE_CONTENT_PREVIEW` is on. Default 200, capped at 1000. |
+| `DIGI_PII_MAX_DOCUMENT_CHARS` | No | Strings longer than this are replaced by `[DOCUMENT sha256:<digest> chars:<n>]` in redacted payloads. Default 4000; `0` disables summarisation. |
+| `DIGI_PII_PATTERNS` | No | Comma-separated extra redaction regexes, appended to the built-in email / API-key / phone rules. |
 
 The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digitrace container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.
 
@@ -451,13 +522,16 @@ precedent.
 
 ## 11. Phase 2+ Gaps and Roadmap
 
-### PII validation and redaction layer — IMPLEMENTED (#214)
+### PII validation and redaction layer — IMPLEMENTED (#214, DIG-2656)
 
-Baseline value-pattern redaction now ships in `digitrace.redaction.PiiRedactor`
-and is wired into `traceable` via LangSmith's `process_inputs`/`process_outputs`
-callbacks. Remaining follow-ups: length-based document body summarization,
-hash-and-count replacement for large blobs, and key-name deny-lists shared
-with `digibase.audit`.
+`digitrace.redaction.PiiRedactor` covers value patterns (email, API-key
+prefixes, phone, `DIGI_PII_PATTERNS`), credential key names (a whole value
+becomes `[REDACTED]`; token *counts* are exempt), and long-document
+summarisation (hash + character count). It is wired into LangSmith's
+`process_inputs`/`process_outputs` callbacks and reused on the OTel leg, where
+only a SHA-256 digest and a length of the redacted payload reach the span.
+Remaining follow-up: share the credential key-name rules with
+`digibase.audit`.
 
 ### Custom trace samplers
 
@@ -481,16 +555,23 @@ The span attribute contract (Section 4) is documented but unenforced. No Pydanti
 
 The following are specific, actionable changes that would materially improve digitrace's production readiness. They are ordered by risk reduction impact.
 
-> **Re-framed by ADR-0036 (2026-10-09):** (e) is **decided** — OTel-first is the architecture, and the LangSmith leg is removed at the cut (DIG-2663). (a) becomes "redaction and an allowlisted, hash-and-length span payload before any data reaches the store" and is owned by DIG-2656. (f) becomes "a sampling rate per workflow, decided after the DIG-2663 parity window" and is owned by DIG-2657. The rest of the section stays as the recommendation list it was.
+> **Re-framed by ADR-0036 (2026-10-09):** (e) is **decided** — OTel-first is the architecture: the in-house ingest is the default, and LangSmith is an optional integration that is never the default and is scheduled for removal at the cut (DIG-2663). (a) becomes "redaction and an allowlisted, hash-and-length span payload before any data reaches the store" and is delivered by DIG-2656. (f) becomes "a sampling rate per workflow, decided after the DIG-2663 parity window" and is owned by DIG-2657. The rest of the section stays as the recommendation list it was.
 
-### (a) Enforce PII redaction as middleware before LangSmith export
 
-`langsmith.traceable` accepts `process_inputs` and `process_outputs` callbacks for filtering span data before export. digitrace should define a standard `_sanitize_llm_inputs` function that:
-- Strips or truncates `messages` list entries longer than a configurable character limit
-- Removes any dict key matching a deny-list pattern (e.g. `api_key`, `token`, `password`, `secret`)
-- Replaces full document body strings with a hash and character count
+### (a) Enforce PII redaction as middleware before export — IMPLEMENTED (DIG-2656)
 
-This function should be applied in the `traceable` decorator wrapper, not left to each consumer to implement.
+`langsmith.traceable` accepts `process_inputs` and `process_outputs` callbacks
+for filtering span data before export, and `digitrace.trace.traceable` wires
+`PiiRedactor` into them. The same redactor runs on the OTel leg before the
+payload is reduced to a digest and a length. It covers:
+- credential key names (`api_key`, `openai_api_key`, `authorization`,
+  `password`, `session_token`, …) — the whole value becomes `[REDACTED]`;
+  token counts such as `total_tokens` are exempt
+- full document bodies → `[DOCUMENT sha256:<digest> chars:<n>]`
+- the built-in value patterns plus `DIGI_PII_PATTERNS`
+
+The OTel span carries no prompt or completion text at all; see the span
+attribute contract in Section 4. A redacted preview is opt-in only.
 
 ### (b) Add trace-derived counters on existing `/metrics`
 
@@ -523,9 +604,10 @@ This endpoint should require internal authentication (e.g. a service token) sinc
 ### (e) Consider an OpenTelemetry-first approach, replacing LangSmith dependency — decided by ADR-0036
 
 **Decision:** ADR-0036 (accepted 2026-10-09) adopts the OTel-first approach: digitrace emits
-OTel to a Cloudflare-native ingest pipeline and MLflow is the on-demand analysis surface, and
-the LangSmith leg is removed at the cut (DIG-2663). The reasoning below is kept as the record
-of the decision.
+OTel to a Cloudflare-native ingest pipeline and MLflow is the on-demand analysis surface.
+In-house digitrace is the default export; the LangSmith integration is kept as a supported,
+optional integration and is never the default. The reasoning below is
+kept as the record of the decision.
 
 LangSmith is an external SaaS product with a per-trace billing model and opinionated data format. An OTel-first design would:
 - Use `opentelemetry-api` spans with standard attributes for all LLM calls

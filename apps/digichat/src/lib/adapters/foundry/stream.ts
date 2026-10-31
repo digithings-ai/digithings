@@ -21,6 +21,7 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { lastUserMessageText } from "@/lib/adapters/shared/messages";
+import { privateModeInstructionText } from "@/lib/private-mode";
 import { LANGUAGES } from "@/lib/languages";
 import {
   applyActivityDetail,
@@ -32,10 +33,7 @@ import {
 import type { DigiTurnMode } from "@/lib/turn-mode";
 import { isMutatingTurnMode } from "@/lib/turn-mode";
 import { abortableSleep, waitOutRateLimit } from "@/lib/rate-limit-wait";
-import {
-  TOOL_CAP_INSTRUCTION,
-  toolCallLimitNotice,
-} from "@/lib/guardrails/budget";
+import { TOOL_CAP_INSTRUCTION } from "@/lib/guardrails/budget";
 import type { TurnGuard } from "@/lib/guardrails/turn";
 import {
   CONVERSATION_PART_TYPE,
@@ -166,7 +164,11 @@ export interface OpenAIResponsesClientLike {
   };
   responses: {
     create(
-      params: { conversation: string; input?: string; stream: true },
+      params: {
+        conversation: string;
+        input?: string | ReadonlyArray<{ role: "user"; content: string }>;
+        stream: true;
+      },
       options: {
         signal?: AbortSignal;
         /** SDK-level retries; the adapter owns capacity retries (#5979). */
@@ -258,9 +260,6 @@ export class FoundryToolCallCounter {
     return "new";
   }
 }
-
-/** Status line shown when the adapter stops a turn at the tool-call cap. */
-export { toolCallLimitNotice };
 
 function normalizeMaxToolCalls(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -1625,6 +1624,9 @@ export async function createFoundryStreamResponse(opts: {
   }
 
   const message = applyLanguageDirective(lastUserMessageText(opts.messages), opts.responseLanguage);
+  // Own message, not part of `message`: edit_last_user persists `message`,
+  // and the tool query is the typed text. The instruction rides beside it.
+  const privateInstruction = privateModeInstructionText(opts.messages);
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "foundry error"),
@@ -1683,7 +1685,11 @@ export async function createFoundryStreamResponse(opts: {
 
         // send: append last user text. regenerate/edit: items already on the
         // thread — create a response with no new input (official Foundry sample shape).
-        const createParams: { conversation: string; input?: string; stream: true } = {
+        const createParams: {
+          conversation: string;
+          input?: string | ReadonlyArray<{ role: "user"; content: string }>;
+          stream: true;
+        } = {
           conversation: conversationId,
           stream: true,
         };
@@ -1691,8 +1697,15 @@ export async function createFoundryStreamResponse(opts: {
           // Grounding goes here and not into `message` at the top: `message` is
           // reused as `editedUserText` below, so prepending there would write the
           // block into the conversation as a literal user utterance, brackets
-          // and all, on edit_last_user.
-          createParams.input = createdConversation ? applyGroundingDirective(message) : message;
+          // and all, on edit_last_user. The private instruction is its own
+          // input item so the typed text stays the typed text.
+          const spoken = createdConversation ? applyGroundingDirective(message) : message;
+          createParams.input = privateInstruction
+            ? [
+                { role: "user", content: privateInstruction },
+                { role: "user", content: spoken },
+              ]
+            : spoken;
         }
 
         // Set when Foundry refuses max_tool_calls / tool_choice beside
@@ -1711,7 +1724,11 @@ export async function createFoundryStreamResponse(opts: {
         });
 
         const createWithCapacityRetry = async (
-          params: { conversation: string; input?: string; stream: true },
+          params: {
+            conversation: string;
+            input?: string | ReadonlyArray<{ role: "user"; content: string }>;
+            stream: true;
+          },
           extras?: { toolChoice?: "none"; signal?: AbortSignal },
         ) => {
           const schedule = opts.capacityRetryDelaysMs ?? DEFAULT_CAPACITY_RETRY_DELAYS_MS;
@@ -1899,17 +1916,31 @@ export async function createFoundryStreamResponse(opts: {
           return "done";
         };
 
-        const clearForGuard = async (
-          next: { conversation: string; input?: string; stream: true },
-        ) => {
+        const clearForGuard = async (next: {
+          conversation: string;
+          input?: string | ReadonlyArray<{ role: "user"; content: string }>;
+          stream: true;
+        }) => {
           if (!opts.guard?.active) return next;
+          const pendingText =
+            typeof next.input === "string"
+              ? next.input
+              : (next.input?.map((item) => item.content).join("\n") ?? "");
           const clearance = await opts.guard.beforeRound({
             writer,
-            pendingText: next.input ?? "",
+            pendingText,
             toolCallsSoFar: toolCalls.count,
             signal: opts.signal,
           });
           if (clearance.action === "proceed") return next;
+          // A private turn's input is already a list. The guard's extra
+          // instruction is another item, so it does not glue onto the question.
+          if (next.input && typeof next.input !== "string") {
+            return {
+              ...next,
+              input: [...next.input, { role: "user" as const, content: clearance.instruction }],
+            };
+          }
           const input = next.input
             ? `${next.input}\n\n${clearance.instruction}`
             : clearance.instruction;
@@ -1973,21 +2004,18 @@ export async function createFoundryStreamResponse(opts: {
         }
 
         if (hitToolCap && toolCap !== undefined) {
-          // Status, not an error: the turn continues into a final answer.
-          // The shared guard writes the notice when it is the one enforcing
-          // the cap; otherwise this adapter writes the same line.
-          let finalParams: { conversation: string; input?: string; stream: true } = {
+          // Silent, not an error: the turn continues straight into a final
+          // answer, with no notice in the UI.
+          let finalParams: {
+            conversation: string;
+            input?: string | ReadonlyArray<{ role: "user"; content: string }>;
+            stream: true;
+          } = {
             conversation: conversationId,
             stream: true,
           };
           if (opts.guard?.active) {
             finalParams = await clearForGuard(finalParams);
-          } else {
-            writer.write({
-              type: "data-notice",
-              id: "foundry-tool-call-limit",
-              data: { tone: "status", message: toolCallLimitNotice(toolCap) },
-            });
           }
           resumeSeparatorPending = wroteText;
           try {

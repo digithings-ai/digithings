@@ -5,7 +5,9 @@
  *
  * Website paths (different chats, same Container):
  *   digithings.ai/chat      → the digichat app (DIG-5121; built with basePath /chat)
- *   digithings.ai/chat/occ  → Pages iframe → /embed?host=occ.digithings.ai
+ *   digithings.ai/chat/occ  → invite gate (this Worker) → the app's /chat/embed,
+ *                             OCC tenant; its /chat/api/* calls are bound to the
+ *                             invite here too (see bindOccApiCall)
  */
 import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
@@ -19,10 +21,36 @@ import {
 } from "./paths";
 import { MCP_KEY_HEADER, evaluateMcpGate } from "./mcp-gate";
 import { legacyEmbedEnabledValue } from "./embed-flag";
-import { resolveConfigYaml, resolveEmbedTenants } from "./tenants-kv";
-import { isOccShellPath, occEmbedGate, occGate } from "./occ-gate";
+import {
+  parseGatedClaims,
+  resolveConfigYaml,
+  resolveEmbedTenants,
+  resolveGatedClaims,
+  unionGatedClaims,
+} from "./tenants-kv";
+import {
+  bindOccApiCall,
+  isChatApiPath,
+  isOccShellPath,
+  occEmbedGate,
+  occGate,
+  occInviteMaxAgeSeconds,
+  type OccCookiePolicy,
+  withoutInviteCookie,
+} from "./occ-gate";
+import {
+  INVITE_PAGES_VAR,
+  bindInvitePageApiCall,
+  invitePageEmbedGate,
+  invitePageFor,
+  invitePageGate,
+  invitePageKey,
+  parseInvitePages,
+  withoutInvitePageCookies,
+} from "./invite-pages";
 import { frameSafeErrorResponse } from "./frame-safe-error";
 import { digichatContainerReset } from "./admin-reset";
+import { pemEnvValue } from "./license-env";
 import {
   CONTAINER_UNAVAILABLE_BODY,
   describeValue,
@@ -47,6 +75,17 @@ const workerVars = env as unknown as Env;
 const DIGICHAT_ADMIN_RESET_PATH = "/_digichat-admin/container/reset";
 
 /**
+ * How long a resolved tenant registry + deployment document is reused before
+ * KV is read again. The bound exists because a Container instance outlives a
+ * Worker deploy: the container id is derived from the deploying commit, so a
+ * redeploy of the same commit reuses the instance, its boot env, and a
+ * "resolved once per boot" config — a KV edit then never reaches the container
+ * at all. Short by design: it bounds how stale an edit can be, not how often an
+ * operator edits.
+ */
+export const BOOT_CONFIG_TTL_MS = 30_000;
+
+/**
  * True when a thrown value is an Error, asked in a way that cannot throw.
  *
  * `instanceof` walks the prototype chain, and a value that cannot be
@@ -63,8 +102,13 @@ function isRealError(value: unknown): boolean {
 
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
-  /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "1m";
+  /**
+   * Idle tail: each wake bills for the whole sleepAfter window. 5m (was 1m),
+   * matching the stack: short enough that an idle or old-rev instance frees
+   * its slot quickly, long enough that a reader pausing between turns does not
+   * pay a cold start each time (t1702u).
+   */
+  sleepAfter = "5m";
   /**
    * Runtime env for the digichat Node process. Secrets come from
    * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.
@@ -87,6 +131,14 @@ export class DigiChatContainer extends Container {
     DIGICHAT_ENABLED_SERVICES: workerVars.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: workerVars.AUTH_SECRET ?? "",
     DIGICHAT_EMBED_TENANTS: workerVars.DIGICHAT_EMBED_TENANTS ?? "",
+    // Non-secret: which tenant hosts are invite-only beyond OCC (slug, host and
+    // the NAME of each key). The app uses it so an invite-only host never falls
+    // back to a generic chat; the key values are not in it.
+    DIGICHAT_INVITE_PAGES: workerVars.DIGICHAT_INVITE_PAGES ?? "",
+    // Durable gated-tenant claims (U1): normally read from KV `gated-claims`
+    // at boot and merged below; this var is the `[vars]` / `wrangler dev` seam.
+    // Hosts and slugs only, no secret values or names.
+    DIGICHAT_GATED_CLAIMS: workerVars.DIGICHAT_GATED_CLAIMS ?? "",
     // Deployment document (YAML/JSON text). Normally read from KV `config-yaml`
     // at boot and overwritten below; this var is the seam for `wrangler dev`
     // and for a deploy that pins the document in `[vars]`.
@@ -94,6 +146,17 @@ export class DigiChatContainer extends Container {
     DIGIGRAPH_INTERNAL_URL: workerVars.DIGIGRAPH_INTERNAL_URL ?? "",
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
+    // License (spec §7.1): the JWT and the digikey public key that verifies it.
+    // Without both, digichat runs unlicensed, sends no X-Digi-License, and
+    // digigraph refuses hosted web search (the turn then runs without it).
+    DIGICHAT_LICENSE_JWT: workerVars.DIGICHAT_LICENSE_JWT ?? "",
+    DIGIKEY_PUBLIC_KEY_PEM: pemEnvValue(workerVars.DIGIKEY_PUBLIC_KEY_PEM),
+    DIGIKEY_ISSUER: workerVars.DIGIKEY_ISSUER ?? "https://key.digithings.ai",
+    // The chat's API-key MCP identity (digikey). The container mints edge
+    // tokens from the BFF session first, because that token names the turn's
+    // tenant; this key is only the fallback for a deployment without
+    // DIGIKEY_BFF_TOKEN (its token carries the key's own tenant).
+    DIGICHAT_MCP_IDENTITY_KEY: workerVars.DIGICHAT_MCP_IDENTITY_KEY ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
     DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
@@ -109,47 +172,105 @@ export class DigiChatContainer extends Container {
     DIGICHAT_MCP_EDGE_KEY: workerVars.DIGICHAT_MCP_EDGE_KEY ?? "",
   };
 
-  /** One boot = one KV read of both the tenant registry and the config document. */
-  private bootConfigResolved = false;
+  /** When the current KV resolution was applied; null means "read again now". */
+  private configResolvedAt: number | null = null;
 
   /**
-   * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
-   * tenant config (secret refs resolved from Worker secrets), falling back to
-   * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   * The KV resolution in flight. Requests that arrive while one is running
+   * await it instead of starting their own, so a burst costs one read per key
+   * rather than one read per request.
+   */
+  private configResolution: Promise<void> | null = null;
+
+  /**
+   * Bumped by `onStop()`. A resolution that straddles a stop is discarded
+   * rather than marking itself fresh against the boot that just ended.
+   */
+  private configEpoch = 0;
+
+  /**
+   * Resolve the tenant registry and the deployment document from KV and apply
+   * them to the container's env. Never throws: both failures have a documented
+   * fail-soft value, and this runs on the request path.
    *
-   * Then read the deployment document itself from the same namespace's
-   * `config-yaml` key and forward it as DIGICHAT_CONFIG_YAML, so the container's
-   * config lives outside both the image and the Worker. Both reads happen once
-   * per boot; `onStop()` re-arms them, so a KV edit plus the container's idle
-   * sleep is all a config change needs — no redeploy.
+   * Precedence is unchanged — `resolveEmbedTenants(kv, legacySecret, env)` then
+   * `resolveConfigYaml(kv)`, with KV winning over the `[vars]` seam.
+   */
+  private async resolveBootConfig(epoch: number): Promise<void> {
+    let tenants = "";
+    try {
+      const resolved = await resolveEmbedTenants(
+        workerVars.DIGICHAT_TENANTS_KV,
+        workerVars.DIGICHAT_EMBED_TENANTS,
+        workerVars as unknown as Record<string, unknown>,
+      );
+      tenants = resolved.json;
+      console.log(`[tenants-kv] embed tenants source=${resolved.source}`);
+    } catch (e) {
+      // A tenant-config failure must not 500 every proxied request (embed,
+      // chat, assets, /healthz). Fail closed to no tenants for this window;
+      // the next window retries, and onStop() re-arms immediately.
+      console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
+    }
+    // `resolveConfigYaml` never throws: a missing key or failed read is logged
+    // there and leaves the container on its own file/defaults, which is the
+    // documented precedence.
+    const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
+    console.log(`[config-kv] digichat config source=${source}`);
+    // A stop overtook this read. Applying it would hand the next request a
+    // value resolved against the boot that just ended, and would extend the
+    // stale window by another TTL.
+    // Durable claims only accumulate: KV and the `[vars]` seam are unioned, and
+    // a failed read keeps what this container already has, never an empty list.
+    const claims = await resolveGatedClaims(workerVars.DIGICHAT_TENANTS_KV);
+    console.log(`[claims-kv] gated claims source=${claims.source} count=${claims.claims.length}`);
+    if (epoch !== this.configEpoch) return;
+    const gatedClaims = unionGatedClaims(
+      parseGatedClaims(this.envVars.DIGICHAT_GATED_CLAIMS),
+      parseGatedClaims(workerVars.DIGICHAT_GATED_CLAIMS),
+      claims.claims,
+    );
+    this.envVars = {
+      ...this.envVars,
+      DIGICHAT_EMBED_TENANTS: tenants,
+      DIGICHAT_GATED_CLAIMS: gatedClaims.length ? JSON.stringify(gatedClaims) : "",
+      // KV wins over the `[vars]` seam; `none` leaves that seam in charge.
+      ...(source === "kv" ? { DIGICHAT_CONFIG_YAML: yaml } : {}),
+    };
+    this.configResolvedAt = Date.now();
+  }
+
+  /**
+   * One KV resolution per {@link BOOT_CONFIG_TTL_MS} window, shared by every
+   * request inside it. `bootConfigResolved` used to be a one-shot latch, which
+   * made a KV edit invisible until the container itself was recycled.
+   */
+  private async ensureBootConfig(): Promise<void> {
+    if (this.configResolvedAt !== null && Date.now() - this.configResolvedAt < BOOT_CONFIG_TTL_MS) {
+      return;
+    }
+    if (this.configResolution) return this.configResolution;
+    const resolution = this.resolveBootConfig(this.configEpoch);
+    this.configResolution = resolution;
+    try {
+      await resolution;
+    } finally {
+      // Only the resolution that owns the slot clears it: onStop() may already
+      // have replaced it with a fresh one.
+      if (this.configResolution === resolution) this.configResolution = null;
+    }
+  }
+
+  /**
+   * Before the container is asked for anything, make sure this window's
+   * tenant registry and deployment document are resolved, then proxy.
+   *
+   * The config lives in KV, outside both the image and the Worker, so an
+   * operator edit needs no redeploy of either half — it is picked up when the
+   * window expires (or on the next request after `onStop()`).
    */
   override async fetch(request: Request): Promise<Response> {
-    if (!this.bootConfigResolved) {
-      try {
-        const { json, source } = await resolveEmbedTenants(
-          workerVars.DIGICHAT_TENANTS_KV,
-          workerVars.DIGICHAT_EMBED_TENANTS,
-          workerVars as unknown as Record<string, unknown>,
-        );
-        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
-        console.log(`[tenants-kv] embed tenants source=${source}`);
-      } catch (e) {
-        // A tenant-config failure must not 500 every proxied request (embed,
-        // chat, assets, /healthz). Fail closed to no tenants for this boot;
-        // onStop() re-arms the resolution for the next boot.
-        console.error(`[tenants-kv] tenant config unavailable, serving no tenants: ${(e as Error).message}`);
-        this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: "" };
-      }
-      // KV wins over the `[vars]` seam. `resolveConfigYaml` never throws: a
-      // missing key or failed read is logged there and leaves the container on
-      // its own file/defaults, which is the documented precedence.
-      const { yaml, source } = await resolveConfigYaml(workerVars.DIGICHAT_TENANTS_KV);
-      if (source === "kv") {
-        this.envVars = { ...this.envVars, DIGICHAT_CONFIG_YAML: yaml };
-      }
-      console.log(`[config-kv] digichat config source=${source}`);
-      this.bootConfigResolved = true;
-    }
+    await this.ensureBootConfig();
     try {
       return await super.fetch(request);
     } catch (cause) {
@@ -176,16 +297,41 @@ export class DigiChatContainer extends Container {
     }
   }
 
-  /** Re-read KV tenant + config on the next boot (the DO outlives container sleeps). */
+  /**
+   * Re-arm on stop: the DO outlives container sleeps, so the next request after
+   * a stop re-reads KV even inside the TTL window. The epoch makes a read that
+   * was already in flight when the stop landed discard itself.
+   */
   override onStop(): void {
-    this.bootConfigResolved = false;
+    this.configEpoch += 1;
+    this.configResolvedAt = null;
+    this.configResolution = null;
   }
+}
+
+/** The `occ_invite` cookie lifetime from the non-secret var (default 30 days). */
+function occCookiePolicy(env: Env): OccCookiePolicy {
+  return { maxAgeSeconds: occInviteMaxAgeSeconds(env.OCC_INVITE_MAX_AGE_DAYS) };
 }
 
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
-  /** DIG-1210 invite key gating the /chat/occ Pages shell. Worker-only. */
+  /**
+   * DIG-1210 invite key gating /chat/occ and binding the OCC page's
+   * /chat/api/* calls to the invite. Worker-only; never forwarded.
+   */
   OCC_INVITE_KEY?: string;
+  /**
+   * Non-secret: how many days an `occ_invite` cookie is honoured after the
+   * invite link set it (whole days, 1-365; default 30). Worker-only.
+   */
+  OCC_INVITE_MAX_AGE_DAYS?: string;
+  /**
+   * Non-secret JSON: invite-only tenant pages beyond OCC,
+   * `{"<slug>": {"host": "<host>", "keyEnv": "<SECRET_NAME>"}}`. Each
+   * `keyEnv` names a Worker secret; see src/invite-pages.ts.
+   */
+  DIGICHAT_INVITE_PAGES?: string;
   /**
    * Short sha of the deploying commit, injected by `scripts/deploy.mjs` via
    * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the
@@ -211,11 +357,24 @@ export interface Env {
    * the local-dev / pinned-document seam and loses to KV when both exist.
    */
   DIGICHAT_CONFIG_YAML?: string;
+  /**
+   * Durable gated-tenant claims (U1), JSON array of `{slug, chatSlug, host}`.
+   * Normally KV `gated-claims`; this var is the `[vars]` / `wrangler dev` seam.
+   */
+  DIGICHAT_GATED_CLAIMS?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
+  /** digichat license JWT (owner-minted, `digikey license-mint`); forwarded to the container. */
+  DIGICHAT_LICENSE_JWT?: string;
+  /** digikey public key PEM that verifies the license; literal `\n` is expanded. */
+  DIGIKEY_PUBLIC_KEY_PEM?: string;
+  /** Expected license `iss`; must match the stack's digikey issuer. */
+  DIGIKEY_ISSUER?: string;
+  /** Dedicated digikey API key for MCP `authScheme: jwt` rows (server-only). */
+  DIGICHAT_MCP_IDENTITY_KEY?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
@@ -241,18 +400,60 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    // Computed before the invite gate because /chat/occ is served by the same
+    // container as /chat: the gate validates, then proxies there. The id is
+    // derived from the deploy's rev, never hand-pinned.
+    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
     if (isOccShellPath(url.pathname)) {
-      return occGate(request, workerEnv.OCC_INVITE_KEY);
+      // One gate, one secret, one path: the invite is checked here and the
+      // request goes to the container's own embed route. Nothing is fetched
+      // from this Worker's own URL, and Pages is not in the chain.
+      //
+      // The upstream is wrapped exactly like the /chat proxy above, so a
+      // draining slot or a dropped connection on this path answers the same
+      // retryable 503 / inline HTML `/chat` answers, instead of a raw 5xx.
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return occGate(
+        request,
+        workerEnv.OCC_INVITE_KEY,
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
+      );
+    }
+    // Configured invite-only pages (/chat/<slug>), gated like /chat/occ.
+    const invitePages = parseInvitePages(workerEnv[INVITE_PAGES_VAR]);
+    const secrets = workerEnv as unknown as Record<string, unknown>;
+    const invitePage = invitePageFor(invitePages, url.pathname);
+    if (invitePage) {
+      const container = getContainer(workerEnv.DIGICHAT, containerId);
+      return invitePageGate(
+        invitePage,
+        invitePages,
+        request,
+        invitePageKey(invitePage, secrets),
+        async (req) =>
+          frameSafeErrorResponse(
+            req,
+            await fetchContainerWithRetry(req, (r) => container.fetch(r)),
+          ),
+        fetch,
+        occCookiePolicy(workerEnv),
+      );
     }
     // The /embed?host=<invite-only tenant> form without its key: the site 404,
     // byte-for-byte, before the container is ever asked.
     const embedGate = await occEmbedGate(request, workerEnv.OCC_INVITE_KEY);
     if (embedGate) return embedGate;
+    const pageEmbedGate = await invitePageEmbedGate(request, invitePages, secrets);
+    if (pageEmbedGate) return pageEmbedGate;
     // Worker-owned reset lever: intercepted here, before any container proxy,
     // and fail-closed with a 404 that never discloses the route. The instance
-    // it destroys is the same derived id the proxy below addresses, computed
-    // once here from the deploy's rev.
-    const containerId = sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV);
+    // it destroys is the same derived id the proxy below addresses.
     if (url.pathname === DIGICHAT_ADMIN_RESET_PATH) {
       return digichatContainerReset(
         request,
@@ -332,6 +533,24 @@ export default {
     // routes are moved under it and the canonical /chat paths are passed
     // through unchanged.
     const containerRequest = withContainerPath(request, url.pathname);
+    // DIG-3585: the OCC page's API calls. After the invite link's 302 the
+    // browser holds the invite only as the occ_invite cookie, so the edge is
+    // what makes a /chat/api/* call from /chat/occ an OCC call — and the only
+    // thing that can: the client's own tenant headers are dropped on those
+    // calls, and a house page's calls are never upgraded by the cookie.
+    // Judged on the path the container sees, so a legacy /api/* alias is bound
+    // the same way as its /chat/api/* target.
+    if (isChatApiPath(new URL(containerRequest.url).pathname)) {
+      await bindOccApiCall(
+        containerRequest,
+        workerEnv.OCC_INVITE_KEY,
+        occCookiePolicy(workerEnv),
+      );
+      await bindInvitePageApiCall(containerRequest, invitePages, secrets, occCookiePolicy(workerEnv));
+    }
+    // The invite cookies stop at the edge on every path, like the edge key.
+    withoutInviteCookie(containerRequest.headers);
+    withoutInvitePageCookies(containerRequest.headers, invitePages);
     // The edge key stops at the edge: the container never sees it. The header
     // is dropped from the COPY, so the original request still carries it.
     containerRequest.headers.delete(MCP_KEY_HEADER);

@@ -267,6 +267,18 @@ checks:
       `check_required_policy_checks.py` were both failing before DIG-4717
       landed; both are fixed here.
 
+  - context: Supabase usage freeze (exit in progress)
+    workflow: ci.yml
+    job: supabase-freeze
+    enforcement: advisory
+    owner: DevOps
+    gated_by: Required checks passed
+    reason: >-
+      DIG-2887 S0. Pull-request only, folded into `Required checks passed` (in
+      its `needs:`), where a failure blocks the merge, same shape as the R0
+      baseline growth guard above. Retired with the Supabase exit, when the
+      baseline is empty.
+
   - context: Workflow secret references
     workflow: ci.yml
     job: workflow-secret-refs

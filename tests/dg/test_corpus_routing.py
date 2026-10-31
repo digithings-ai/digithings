@@ -261,7 +261,7 @@ def test_broken_map_surfaces_503_at_request_boundary(
     from digikey.models import DigiAuthContext
 
     monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not-json")
-    auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+    auth = DigiAuthContext(subject="user-1", tenant_slug="digithings", tenant_slug_verified=True)
     req = WorkflowRequest(prompt="hi", digisearch_index="occ_help")
     http = SimpleNamespace(
         state=SimpleNamespace(digi_auth=auth, digi_bearer=None),
@@ -325,7 +325,10 @@ def _merge_http(auth_tenant: str | None) -> object:
 
     from digikey.models import DigiAuthContext
 
-    auth = DigiAuthContext(subject="user-1", tenant_slug=auth_tenant)
+    # A signed claim, as claims_to_context builds it: verified when non-empty.
+    auth = DigiAuthContext(
+        subject="user-1", tenant_slug=auth_tenant, tenant_slug_verified=bool(auth_tenant)
+    )
     return SimpleNamespace(
         state=SimpleNamespace(digi_auth=auth, digi_bearer=None),
         headers={},

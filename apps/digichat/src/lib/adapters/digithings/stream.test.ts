@@ -1,5 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
+import { PRIVATE_MODE_INSTRUCTION, withPrivateModeUiPrompt } from "@/lib/private-mode";
 import { createTurnGuard, type TurnGuard } from "@/lib/guardrails/turn";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
@@ -675,6 +676,41 @@ it("relays llm_error detail for the embed disclosure", () => {
     message: "No endpoints found for this model.",
     detail: "Error code: 404",
   });
+});
+
+// One case per code shape: the colon form (the live failure), the bare
+// underscore form (`art9_refused`, same module's refusal code), and a
+// hyphenated segment (`art9:health:field-name`, what the screen tests use).
+// All three are operator detail; none of them is copy.
+it.each(["art9:genetic:rs_id", "art9_refused", "art9:health:field-name"])(
+  "never relays the internal reason code %s as the user message",
+  (reason) => {
+    const payload = digigraphErrorToEmbedPayload({
+      code: "llm_error",
+      message: reason,
+      detail: reason,
+    });
+    expect(JSON.parse(payload)).toEqual({ error: "llm_error" });
+    expect(payload).not.toContain("art9");
+  },
+);
+
+it("drops a machine reason code in detail even when the message is human", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+    detail: "art9:genetic:rs_id",
+  });
+  expect(JSON.parse(payload)).toEqual({ error: "llm_error", message: "The model timed out." });
+  expect(payload).not.toContain("art9");
+});
+
+it("still relays a human sentence from upstream", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "llm_error",
+    message: "The model timed out.",
+  });
+  expect(JSON.parse(payload).message).toBe("The model timed out.");
 });
 
 it("drops upstream message for BYOK remediable digigraph_error codes", () => {
@@ -1858,7 +1894,6 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
     capToolPayload(value) {
       return value;
     },
-    noteToolCap() {},
   };
 
   const res = await createDigigraphTraceStreamResponse({
@@ -1877,7 +1912,7 @@ it("appends a guardrail wrap-up instruction to the digigraph request and release
   expect(released).toBe(true);
 });
 
-it("writes a tool-call limit notice when a digigraph trace hits the cap", async () => {
+it("keeps the tool-call cap silent when a digigraph trace hits the cap", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       [
@@ -1915,9 +1950,10 @@ it("writes a tool-call limit notice when a digigraph trace hits the cap", async 
   });
   const body = await new Response(res.body).text();
 
-  expect(body).toContain("tool-call-limit");
-  expect(body).toContain("Tool-call limit reached (1 this turn)");
-  // The house loop is not aborted: the answer after the notice still arrives.
+  expect(body).not.toContain("tool-call-limit");
+  expect(body).not.toContain("Tool-call limit reached");
+  expect(body).not.toContain('"type":"data-notice"');
+  // The house loop is not aborted: the answer still arrives.
   expect(body).toContain("Done.");
 });
 
@@ -2091,4 +2127,67 @@ it("charges reported usage once when the trace stream finishes", async () => {
     outputTokens: 1,
     totalTokens: 4,
   });
+});
+
+it("sends the private instruction as its own message and leaves the typed question last", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response("", { status: 200 });
+  });
+  const stored = [
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [{ type: "text", text: "ticket ACME-1 is John Smith" }],
+    },
+    {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "What about Priya Nair at Initech?" }],
+    },
+  ] as UIMessage[];
+  const snapshot = structuredClone(stored);
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: withPrivateModeUiPrompt(stored),
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  await new Response(res.body).text();
+
+  expect(stored).toEqual(snapshot);
+  const messages = sent?.messages ?? [];
+  expect(messages.at(-1)).toEqual({
+    role: "user",
+    content: "What about Priya Nair at Initech?",
+  });
+  expect(messages.at(-2)).toEqual({ role: "user", content: PRIVATE_MODE_INSTRUCTION });
+  expect(messages.find((message) => message.role === "assistant")?.content).toBe(
+    "ticket ACME-1 is John Smith",
+  );
+  expect(messages.filter((message) => message.content.includes("PRIVATE DEMO SESSION"))).toHaveLength(
+    1,
+  );
+});
+
+it("does not send the private instruction when the turn is not private", async () => {
+  let sent: { messages?: { role: string; content: string }[] } | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    sent = JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] };
+    return new Response("", { status: 200 });
+  });
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("What about John Smith at Acme?")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  await new Response(res.body).text();
+  expect(sent?.messages).toEqual([
+    { role: "user", content: "What about John Smith at Acme?" },
+  ]);
 });

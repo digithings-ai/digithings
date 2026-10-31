@@ -80,7 +80,7 @@ limits:
       onExceed: block             # pause is rejected
   toolCalls:
     perTurn:                      # perQuestion is the same gate. Set only one.
-      max: 5
+      max: 20
       onExceed: pause             # fallback-auto is rejected
   models:
     standard:
@@ -124,7 +124,7 @@ the reason on `limits.warnings`. Nothing unsupported is silently kept.
 
 | Backend | Tokens | Cost | Turns | Sessions | Tool calls | Model tiers |
 |---|---|---|---|---|---|---|
-| digigraph | enforce | enforce | enforce | enforce | best-effort | enforce |
+| digigraph | enforce | enforce | enforce | enforce | enforce | enforce |
 | langgraph | best-effort | best-effort | enforce | enforce | best-effort | enforce |
 | openai-completions, openai-responses, anthropic, google-vertex | enforce | enforce | enforce | enforce | enforce | enforce |
 | foundry (Azure AI Foundry agent) | partial | unsupported | enforce | enforce | enforce | unsupported |
@@ -137,10 +137,13 @@ any window other than a minute are rejected. The deployment does not choose
 the model, so cost and model tiers are rejected too. Tool calls, turns, and
 session or IP gates are enforced in the BFF.
 
-digigraph and LangGraph tool calls are best-effort: the upstream loop is not
-aborted. The BFF sends a wrap-up on the next round it can see. LangGraph
-token and cost settlement is best-effort because that stream does not report
-usage. AG-UI has no usage channel and no model pick, so tokens, cost, and
+digigraph tool calls are enforced, not best-effort: `POST /api/chat` forwards
+the cap as `X-Digi-Max-Tool-Calls`, digigraph shares that one budget across the
+turn's main loop and its continuations, and digillm stops at that many executed
+calls and answers tool-free. Nothing is shown in the UI. LangGraph tool calls
+stay best-effort: the upstream loop is not aborted, and the BFF sends a
+wrap-up on the next round it can see. LangGraph token and cost settlement is
+best-effort because that stream does not report usage. AG-UI has no usage channel and no model pick, so tokens, cost, and
 model tiers are rejected. Its tool-call cap is an instruction on the one
 request, not an abort. A2A does not expose countable tool calls, so that gate
 is rejected. Turns and sessions are counted in the BFF on every backend.

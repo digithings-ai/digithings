@@ -3,7 +3,30 @@
  */
 
 import { LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
+import { gateMetersTurns } from "@/lib/deploy-config/schema";
 import type { EmbedLlmAccess } from "@/lib/embed-tenants";
+
+/**
+ * Whether a string is a stable internal reason code rather than user copy.
+ *
+ * `art9-screen.ts` documents the family: `art9:<category>:<signal>` ("stable
+ * reason code, never the value"), hyphenated segments such as
+ * `art9:health:field-name`, and bare codes such as `art9_refused` (the refusal
+ * code in the same module). Two shapes therefore count:
+ *
+ *   `<prefix>:<segment>[:<segment>...]`  `art9:genetic:rs_id`, `art9:health:field-name`
+ *   `<prefix>_<segment>[...]`            `art9_refused`, `art9_screen_unavailable`
+ *
+ * No shape admits a space, so an upstream human sentence ("The model timed
+ * out.") is never mistaken for a code.
+ */
+const INTERNAL_REASON_CODE_RE =
+  /^(?:[a-z][a-z0-9_]*(?::[a-z0-9_-]+)+|[a-z][a-z0-9]*_[a-z0-9_-]+)$/;
+
+/** One place that decides "machine code, not copy" — the SSE and embed paths share it. */
+export function isInternalReasonCode(value: string): boolean {
+  return INTERNAL_REASON_CODE_RE.test(value.trim());
+}
 
 const NETWORK_ERROR_RE =
   /\b(fetch failed|failed to fetch|networkerror|network error|econnrefused)\b/i;
@@ -134,7 +157,7 @@ function isInfraEmbedFailure(errorCode?: string, errorMessage?: string | null): 
 export function shouldSuggestByokOnEmbedError(args: {
   llmAccess?: EmbedLlmAccess;
   showByok?: boolean;
-  gateMode?: "turn_limited" | "ungated" | "trial_form";
+  gateMode?: "turn_limited" | "ungated" | "trial_form" | "invite";
   errorCode?: string;
   errorMessage?: string | null;
 }): boolean {
@@ -152,8 +175,12 @@ export function shouldSuggestByokOnEmbedError(args: {
     return showByok === true && (quota || !!errorCode);
   }
 
-  // Legacy: no llmAccess — ungated suppresses; gated + showByok suggests on quota.
-  if (gateMode === "ungated") return false;
+  // Legacy: no llmAccess — an unmetered surface suppresses the BYOK prompt.
+  // `gateMetersTurns` is the one place `invite` is classified as unmetered, for
+  // the same reason it accounts turns like `ungated`: the credential is checked
+  // at the edge, so a quota error here cannot be an invite tenant's own
+  // free-turn budget.
+  if (gateMode !== undefined && !gateMetersTurns(gateMode)) return false;
   if (showByok !== true) return false;
   return quota;
 }
@@ -163,6 +190,13 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   if (!parsed) return null;
 
   const { code, message, raw } = parsed;
+  // `llm_error` carries the provider's own failure. A human sentence from upstream
+  // is still shown (see the test that pins it); a machine reason code like
+  // `art9:genetic:rs_id` is not, because it is operator detail that reached a live
+  // transcript. When there is nothing but a code, the user gets plain copy.
+  if (code === "llm_error" && (message === undefined || isInternalReasonCode(message))) {
+    return "That answer could not be completed. Try a narrower question, or ask again.";
+  }
   if (message) {
     return message;
   }

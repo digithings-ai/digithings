@@ -19,14 +19,12 @@ but the clock is gone (DIG-4435).
 These pins therefore assert that the clock cannot dispatch anything:
 
 * no ``[triggers] crons`` entry in ``wrangler.toml`` carries its cron, so the
-  next deploy leaves the Worker without the trigger;
-* the ``wd()`` row in ``jobs.ts`` that names the job is **disabled**, so the
-  tick stays quiet (and the row leaves ``uniqueEnabledCrons()``, which is the
-  set the deploy contract compares to ``wrangler.toml``);
-* the retired cron is carried by no enabled row — the deployed Worker still
-  holds the ``17 * * * *`` trigger until the next deploy, and a deployed cron
-  that no job row claims at all is an ``unrecognised_cron`` violation, which
-  would red local-ci and deadlock the merge that has to remove the clock.
+  deploy left the Worker without the trigger;
+* no ``wd()`` row in ``jobs.ts`` names the job at all — the disabled tombstone
+  that held the claim until the deploy was deleted once the live Worker stopped
+  carrying the trigger;
+* the retired cron is claimed by no row, because a deployed cron with no
+  claimant is an ``unrecognised_cron`` violation and no such cron is deployed.
 
 The workflow keeps its ``workflow_dispatch``-only shape.
 
@@ -147,6 +145,163 @@ def test_the_workflow_supplies_the_host_allowlist_the_check_needs() -> None:
     assert "vars.ANSWER_CHECK_EMBED_HOSTS" in body
 
 
+# --------------------------------------------------------------------------- #
+# The allowlist guard (DIG-5790). An unset repository variable used to reach the
+# script, which left with "COULD NOT RUN … exit 2" — the same code a client
+# platform that did not answer produces, so 115 consecutive runs could not be
+# told apart from a real fabrication finding without reading each log. The guard
+# is a separate first step, and these tests execute it rather than grep its text.
+# --------------------------------------------------------------------------- #
+
+GUARD_MARKER = "embed-host allowlist resolves to no host"
+
+
+def _guard_step_index() -> int:
+    steps = _workflow()["jobs"]["check"]["steps"]
+    hits = [
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step.get("run"), str) and GUARD_MARKER in step["run"]
+    ]
+    assert hits, "the check job has no step that refuses an empty host allowlist"
+    assert len(hits) == 1, f"expected exactly one allowlist guard, found {len(hits)}"
+    return hits[0]
+
+
+def _guard_script() -> str:
+    steps = _workflow()["jobs"]["check"]["steps"]
+    return steps[_guard_step_index()]["run"]
+
+
+def _run_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> subprocess.CompletedProcess[str]:
+    """Run the guard as Actions would, with the allowlist as the only input.
+
+    `None` removes the variable from the environment entirely, which is what an
+    unset repository variable looks like to the step; `""` and separator-only
+    strings are the present-but-useless cases.
+    """
+    if value is None:
+        monkeypatch.delenv("ANSWER_CHECK_EMBED_HOSTS", raising=False)
+    else:
+        monkeypatch.setenv("ANSWER_CHECK_EMBED_HOSTS", value)
+
+    script = tmp_path / "guard.sh"
+    script.write_text(_guard_script())
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(None, id="unset"),
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="whitespace-only"),
+        pytest.param(",", id="one-separator"),
+        pytest.param(" , , ", id="separators-and-space"),
+    ],
+)
+def test_the_guard_fails_closed_on_an_unusable_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    """An allowlist with no host in it must never reach the probe.
+
+    Exit 2 and not 1 on purpose: the script's contract says 1 only ever means a
+    fabrication finding, and a missing variable is the check being blind.
+    """
+    result = _run_guard(tmp_path, monkeypatch, value)
+    assert result.returncode == 2, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "::error::" in result.stdout, result.stdout
+    assert GUARD_MARKER in result.stdout, result.stdout
+    assert "repository variable" in result.stdout, result.stdout
+    assert "configuration gap, not a finding" in result.stdout, result.stdout
+
+
+def test_the_guard_passes_a_configured_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real list reaches the probe: the guard reads the value, it does not vet it.
+
+    Vetting is the script's job (it compares the host the page named against this
+    list and refuses a miss), and doing it twice would be a second source of truth.
+    The value is counted and never echoed: the log is public, and this workflow's
+    own header says the host name stays out of the repository.
+    """
+    host = "embed.example.test"
+    result = _run_guard(tmp_path, monkeypatch, host)
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
+    assert host not in result.stdout, "the allowlist value reached the public log"
+    assert "::error::" not in result.stdout, result.stdout
+
+
+def test_the_guard_cannot_be_used_to_forge_an_annotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dispatch input is free text; a line break in it must not become a command.
+
+    Actions reads `::…::` at the start of a line as a workflow command, so a value
+    echoed raw would let a dispatcher mint a passing annotation. The count line is
+    the only place the value is touched.
+    """
+    result = _run_guard(tmp_path, monkeypatch, "embed.example.test\n::error::forged")
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "::error::forged" not in result.stdout, result.stdout
+    assert "resolves to 1 host(s)" in result.stdout, result.stdout
+
+
+def test_the_guard_runs_before_the_probe() -> None:
+    """The point is refusing *before* the probe spends a client turn."""
+    steps = _workflow()["jobs"]["check"]["steps"]
+    probe = [
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step.get("run"), str) and MAKE_TARGET in step["run"]
+    ]
+    assert probe, "the check job has no step that runs the probe"
+    assert _guard_step_index() < probe[0], (
+        "the allowlist guard runs after the probe: an empty list would still spend "
+        "a probe before failing"
+    )
+
+
+def test_a_dispatch_can_name_the_allowlist_without_the_variable() -> None:
+    """The variable is the default; one dispatch may override it (DIG-5790).
+
+    The workflow is manual only and the host changes when the client redeploys,
+    so a run must be able to name the host it is testing without a repository
+    admin setting a variable first. The default is still the variable, so an
+    ordinary dispatch needs nothing typed.
+    """
+    doc = _workflow()
+    on = _on(doc)
+    assert isinstance(on, dict), "on: must be a mapping to declare an input"
+    inputs = on["workflow_dispatch"]["inputs"]
+    assert "embed_host" in inputs, "the dispatch declares no embed_host input"
+    assert inputs["embed_host"].get("required") is False, (
+        "a required input would make an ordinary dispatch impossible to run from "
+        "the default"
+    )
+
+    env = doc["jobs"]["check"]["env"]
+    expression = env["ANSWER_CHECK_EMBED_HOSTS"]
+    assert "inputs.embed_host" in expression, "the input is declared but not read"
+    assert "vars.ANSWER_CHECK_EMBED_HOSTS" in expression, (
+        "the repository variable is no longer the default: an ordinary dispatch "
+        "would now need the host typed in"
+    )
+    assert expression.index("inputs.embed_host") < expression.index(
+        "vars.ANSWER_CHECK_EMBED_HOSTS"
+    ), "the variable must be the fallback, not the override"
+
+
 def _jobs_code() -> str:
     """jobs.ts with `//` comments stripped, so a pin counts rows, not prose.
 
@@ -169,42 +324,36 @@ def _retired_row() -> str:
     return match.group(0) if match else ""
 
 
-def test_the_clock_row_is_disabled_in_the_cron_worker() -> None:
-    """Retired 2026-10-18 (Chris). The row may stay, but it may not dispatch.
+def test_the_clock_row_is_gone_from_the_cron_worker() -> None:
+    """Retired 2026-10-18 (Chris); deleted once the deploy dropped its trigger.
 
-    The row is a tombstone, not a deletion. The deployed Worker still carries
-    the `17 * * * *` trigger until the next digithings-cron deploy, and the
-    deployed-trigger contract fails a deployed cron that no job row claims —
-    deleting the row would red local-ci and deadlock the merge. A disabled row
-    still claims its cron, and the tick stays quiet.
+    The row stayed as a disabled tombstone only while the deployed Worker still
+    carried the `17 * * * *` trigger, because the deployed-trigger contract
+    fails a deployed cron that no job row claims and the merge that removes the
+    trigger could not land with the row gone. The digithings-cron deploy of
+    2026-10-27T01:26:47Z dropped the trigger and no :17 dispatch has fired
+    since, so the tombstone has no claim left to hold.
     """
-    row = _retired_row()
-    assert row, f'jobs.ts carries no wd("{JOB_ID}", …) row at all: the retired check lost its tombstone'
-    assert "enabled: false" in row, (
-        f'jobs.ts still enables wd("{JOB_ID}", …): the retired check would keep dispatching'
+    assert not _retired_row(), (
+        f'jobs.ts still carries a wd("{JOB_ID}", …) row: the retired check has a claimant again'
     )
-    assert f'"{CRON}"' in row, "the tombstone row no longer carries the retired cron"
 
 
 def test_no_clock_row_targets_this_workflow() -> None:
-    """No enabled Worker row may dispatch this workflow file any more."""
+    """No Worker row may name this workflow file any more."""
     text = _jobs_code()
-    assert text.count("datatap-answer-check.yml") == 1, (
-        "more than one jobs.ts row names that workflow file: an enabled row "
-        "would still dispatch the retired check"
+    assert "datatap-answer-check.yml" not in text, (
+        "a jobs.ts row names that workflow file: it would dispatch the retired check"
     )
-    assert "enabled: false" in _retired_row(), "the only row naming the workflow is enabled"
 
 
-def test_the_retired_cron_is_carried_by_no_enabled_row() -> None:
-    """The retired cron may only be claimed by the disabled tombstone row."""
-    text = _jobs_code()
-    claims = text.count('"' + CRON + '"')
-    assert claims == 1, (
+def test_the_retired_cron_is_claimed_by_no_row() -> None:
+    """The retired cron belongs to no Worker row and no trigger."""
+    claims = _jobs_code().count('"' + CRON + '"')
+    assert claims == 0, (
         f'the retired cron "{CRON}" is claimed by {claims} rows; '
-        "an enabled claim would keep dispatching it"
+        "any claim would keep dispatching it"
     )
-    assert '"' + CRON + '"' in _retired_row()
 
 
 def test_the_cron_is_not_in_the_wrangler_trigger() -> None:
@@ -234,9 +383,9 @@ def test_no_two_clocks_share_an_exact_cron_string() -> None:
     enabled clocks still fire on minute 17 (`17 6 * * *`, `17 6 1 * *`,
     `17 9 * * MON`, `17 12 * * MON-FRI`) and CTO condition D8.5 accepted it,
     since two jobs on one minute share a runner rather than delaying each
-    other. The retired check's own minute-17 clock is gone (DIG-4435), so
-    `CRON` here is pinned as claimed only by the disabled tombstone row and
-    absent from `wrangler.toml`.
+    other. The retired check's own minute-17 clock and the tombstone that
+    claimed it are both gone (DIG-4435), so `CRON` here is pinned as claimed by
+    no row and absent from `wrangler.toml`.
 
     A test that fails on ratified behaviour trains people to ignore it, so this
     pins the invariant the repo can actually keep — the same exact string

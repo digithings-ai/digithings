@@ -9,8 +9,8 @@ import {
   type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import { cn } from "./cn";
-import { DotMatrix } from "../DotMatrix";
 import { OverlayScrollbar } from "../overlay-scrollbar";
+import { PaletteRowPreview } from "../stock/palette-row-preview";
 
 type IconComponent = FC<{ className?: string }>;
 
@@ -82,26 +82,46 @@ const Items: FC<ItemsProps> = ({ emptyLabel, loadingLabel }) => {
               ?.scrollIntoView({ block: "nearest" });
           }}
         >
-          {items.map((item, index) => (
+          {items.map((item, index) => {
+            const direct = (item as unknown as { value?: unknown }).value;
+            const value =
+              typeof direct === "string"
+                ? direct
+                : typeof item.metadata?.value === "string"
+                  ? item.metadata.value
+                  : "";
+            const detailId = item.description ? `slash-desc-${item.id}` : undefined;
+            return (
             <ComposerPrimitive.Unstable_TriggerPopoverItem
               key={item.id}
               item={item}
               index={index}
-              className="flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-start text-sm outline-none"
+              aria-describedby={detailId}
+              className="group flex w-full cursor-pointer flex-col items-stretch px-2 py-1 text-start text-sm outline-none"
             >
-              {/* Same mark language as the composer menu: the highlighted
-                  row gets the user-message chevron and shifts right. */}
-              <span className="aui-menu-cursor" aria-hidden>
-                <DotMatrix state="user" decorative className="size-3.5" />
-              </span>
+              <span className="flex w-full items-center gap-2">
               <span className="shrink-0 font-medium">{item.label}</span>
+              {value ? (
+                <span
+                  data-slot="palette-value"
+                  className="text-ink-mute ml-auto min-w-0 truncate text-end text-xs leading-tight"
+                >
+                  {value}
+                </span>
+              ) : null}
+              </span>
               {item.description ? (
-                <span className="text-ink-mute ml-auto min-w-0 truncate text-end text-xs leading-tight">
+                <span
+                  id={detailId}
+                  data-slot="palette-detail"
+                  className="text-ink-mute hidden truncate text-xs leading-tight group-data-[highlighted]:block"
+                >
                   {item.description}
                 </span>
               ) : null}
             </ComposerPrimitive.Unstable_TriggerPopoverItem>
-          ))}
+            );
+          })}
           {items.length === 0 && (
             <div className="text-ink-mute px-3 py-2 text-sm">
               {isLoading ? loadingLabel : emptyLabel}
@@ -203,6 +223,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
         />
       ) : null}
       <TriggerPopoverArrowKeys />
+      <PaletteRowPreview />
       <Items emptyLabel={emptyItemsLabel} loadingLabel={loadingLabel} />
     </ComposerPrimitive.Unstable_TriggerPopover>
   );

@@ -6,26 +6,46 @@ main = "src/index.ts"
 compatibility_date = "2026-08-01"
 compatibility_flags = ["nodejs_compat"]
 
+# DIG-3585: no *.workers.dev hostname. The zone routes below are the only way
+# in, so the edge gates (OCC invite, MCP edge key) cannot be reached on a
+# second hostname. Nothing in the repo uses the workers.dev URL. Takes effect
+# on the next deploy.
+workers_dev = false
+
 # Workers Logs (free at this volume — Workers Paid includes 20M events/mo).
 # Enabled so container wake frequency is measurable; full sampling is fine at
 # ~4.6k requests/week.
 [observability]
 enabled = true
+# The OCC invite link carries its key as ?token= on its first hit. On
+# /chat/occ the edge swaps it for a cookie and 302s to the clean address
+# before any app code logs or proxies it; the legacy /embed?host=...&token=
+# door still hands the URL on, and the app does not log request URLs. The
+# platform's invocation log, however, records the request URL itself, so
+# query strings are dropped from this Worker's logs and traces (the repo's
+# wrangler 4.133 pin validates the key). Pinned in occ-route.contract.test.ts.
+redact_query_string = true
 
 # ROUTE OWNERSHIP (this file owns the digichat surface; the 2026-10-18
 # "ROUTE HOLD" note is retired — DIG-5121, 2026-10-22).
 #
 # That note said the zone routes had been folded into digithings-stack in code
 # (cost epic: one DigiChat container, not two) and that the seven routes below
-# would MOVE there once that cutover was deployed. The fold is dead. Chris
-# decided on 2026-10-19 (recorded in
-# apps/digithings-stack-cloudflare/wrangler.toml) that OCC is client work and
-# must not ride the base digithings platform: every digithings.ai digichat path
-# — embed, api/chat, api/embed, api/byok, api/plan-proof, api/health, _dtchat,
-# chat/occ and now chat* — is owned by THIS Worker and its own container. The
-# stack Worker serves only its own custom domains (graph/key/search), which is
-# what ended every stack deploy failing with `Can't deploy routes that are
-# assigned to another worker`.
+# would MOVE there once that cutover was deployed. The fold is dead: every
+# digithings.ai digichat path — embed, api/chat, api/embed, api/byok,
+# api/plan-proof, api/health, _dtchat, chat/occ and now chat* — is owned by
+# THIS Worker and its one shared container. The stack Worker serves only its
+# own custom domains (graph/key/search), which is what ended every stack deploy
+# failing with `Can't deploy routes that are assigned to another worker`.
+#
+# Superseded rationale (2026-10-19 → 2026-10-27, DIG-3585): this note used to
+# say OCC is client work that must not ride the shared digithings platform.
+# Chris reversed that on 2026-10-27: OCC is one tenant of the shared stack and
+# of this Worker's one container, like the house chat. What keeps it apart is
+# not a separate deployment but the gate — the invite link (src/occ-gate.ts)
+# is the only way in to /chat/occ, its API calls are bound to the OCC tenant
+# at this edge only from that page with a valid invite cookie, and the OCC
+# indexes answer only the OCC tenant. The route ownership above is unchanged.
 #
 # So the seven routes below are this Worker's live surface and they STAY here.
 # They are not a temporary bridge with a stack move behind them, and the stack
@@ -46,12 +66,13 @@ enabled = true
 # src/paths.ts: containerPathFor).
 #
 # Compatibility window (ADR 0018): the seven routes below stay declared.
-# /embed* stays for good — the OCC shell's iframe points at
-# digithings.ai/embed?host=… and the marketing site's own shell points it at
-# digithings.ai/embed?host=digithings.ai, so that route is not a temporary
-# bridge. The /api/* routes below are the legacy spelling of what the app now
-# serves under /chat/api/*; they are reviewed once the cutover is verified
-# live. The OCC shell (/chat/occ*) stays a Pages shell behind the invite gate.
+# /embed* stays for good — the marketing site's own shell points it at
+# digithings.ai/embed?host=digithings.ai and customer embeds use it, so that
+# route is not a temporary bridge (its host=occ door stays invite-gated: see
+# occEmbedGate). The /api/* routes below are the legacy spelling of what the
+# app now serves under /chat/api/*; they are reviewed once the cutover is
+# verified live. /chat/occ* is no Pages shell any more: this Worker's invite
+# gate serves the app itself there (DIG-3585).
 #
 # To roll back: this exact route list IS the rollback shape.
 [[routes]]
@@ -111,8 +132,10 @@ zone_name = "digithings.ai"
 pattern = "digithings.ai/api/mcp/zammad*"
 zone_name = "digithings.ai"
 
-# DIG-3585: the invite-gated OCC Pages shell. Valid ?token= or the
-# occ_invite cookie passes through to Pages.
+# DIG-3585: the invite-gated OCC page. This Worker answers /chat/occ itself
+# (src/occ-gate.ts): a valid ?token= is traded for the occ_invite cookie, and a
+# valid cookie gets the app's own embed route from the Container. Pages is not
+# in this path; anything else gets the site's 404.
 [[routes]]
 pattern = "digithings.ai/chat/occ*"
 zone_name = "digithings.ai"
@@ -124,10 +147,10 @@ zone_name = "digithings.ai"
 # the Pages trailing-slash redirect — the same shape as the /embed* and
 # /api/chat* routes above.
 #
-# The OCC shell stays a Pages shell because THIS Worker gates it: every
-# request is matched by the /chat* pattern below, and the Worker answers
-# /chat/occ itself (src/occ-gate.ts) before anything is proxied. That in-Worker
-# gate is the guarantee — it holds whichever order the routes are matched in.
+# /chat/occ needs no route of its own for safety: every request is matched by
+# the /chat* pattern below, and the Worker answers /chat/occ itself
+# (src/occ-gate.ts) before anything is proxied. That in-Worker gate is the
+# guarantee, whichever order the routes are matched in.
 [[routes]]
 pattern = "digithings.ai/chat*"
 zone_name = "digithings.ai"
@@ -144,17 +167,17 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-# Two slots, not one: a rolling deploy must be able to start the new revision
-# while the old one drains, or the account's container-instance cap refuses the
-# start (DIG-4459). The digichat container id is derived from the deploying
-# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
-# id's instance is still running — warm, or draining for up to 15 minutes after
-# the rollout's SIGTERM. With one slot the new instance cannot start until the
-# old one has fully exited, so every request that needs a container start then
-# fails with "Maximum number of running container instances exceeded"
-# (DIG-4487). Only one instance serves traffic once the rollout settles; the
-# second slot is rollout headroom, not steady-state cost.
-max_instances = 2
+# Ten slots (owner call, t1702u; was two). A rolling deploy must be able to
+# start the new revision while the old one drains, or the container-instance
+# cap refuses the start (DIG-4459). The id is derived from the deploying commit
+# (src/paths.ts), so every deploy addresses a NEW id while the previous id's
+# instance is still running, warm or draining for up to 15 minutes after the
+# rollout's SIGTERM, and a start then fails with "Maximum number of running
+# container instances exceeded" (DIG-4487). All traffic routes to that ONE id,
+# so ten slots are rollover headroom (back-to-back deploys, a stuck draining
+# instance), not per-user capacity. Billing is per running instance: steady
+# state is still one instance; idle slots cost nothing.
+max_instances = 10
 instance_type = "basic"
 
 [[durable_objects.bindings]]
@@ -172,6 +195,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
+#   DIGICHAT_LICENSE_JWT     # optional: owner-minted license (digikey license-mint); without it
+#                            # the chat is unlicensed and hosted web search is refused upstream
+#   DIGIKEY_PUBLIC_KEY_PEM   # optional: digikey public key that verifies that license (not secret)
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
@@ -180,6 +206,12 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
 #   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
 #   DIGICHAT_ADMIN_KEY       # Worker-only /_digichat-admin container reset lever; never forwarded
+#   DIGICHAT_INVITE_PAGES    # optional JSON of invite-only /chat/<slug> pages beyond OCC (slug ->
+#                            # host + keyEnv NAME; src/invite-pages.ts). Not secret, but kept out
+#                            # of this public file and out of [vars] so tenant names never land in
+#                            # the repo and a deploy cannot drop it. Forwarded so the app knows
+#                            # which hosts are invite-only.
+#   <keyEnv of each page>    # one Worker-only invite key per configured page, e.g. EXAMPLE_INVITE_KEY
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to
@@ -226,6 +258,13 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
 # / digiquant / digitrace from /api/health (defaults would be unreachable).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
+# Issuer the chat expects on its license JWT. Must match the stack's
+# DIGIKEY_ISSUER; without it the container falls back to the local dev issuer.
+DIGIKEY_ISSUER = "https://key.digithings.ai"
+# /chat/occ invite cookie lifetime in whole days (1-365). Non-secret: the cookie
+# carries its issued-at inside the MAC, and the edge refuses it once it is older
+# than this. Reopening the invite link issues a fresh one. Worker-only.
+OCC_INVITE_MAX_AGE_DAYS = "30"
 
 # BEGIN config-contract (generated by scripts/render_config_contract.py — do not hand-edit)
 DT_VARIANT = "hosted"

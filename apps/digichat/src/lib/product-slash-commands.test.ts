@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { slashHelpText } from "@digithings/digichat-ui";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { SLASH_COMMANDS, slashHelpText } from "@digithings/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
@@ -10,9 +10,17 @@ import {
   catalogForceTool,
   executeSlashDef,
   extraSlashDefs,
+  isPrivateMode,
+  isPrivateModeAvailable,
+  languageSelectOptions,
   prefixSlashAdapter,
+  privateModeHeaderEntries,
+  seedPrivateMode,
+  setPrivateMode,
+  setPrivateModeAvailable,
   slashItemPrefixMatch,
   slashSubmitAction,
+  tenantLanguageCodes,
 } from "./product-slash-commands";
 
 function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
@@ -186,32 +194,41 @@ describe("buildProductSlashCommands", () => {
     expect(ids).toContain("tools");
   });
 
-  it("lists /export md and /export html, and bare /export stays markdown", () => {
+  it("lists one /export row whose pane offers Markdown (.md) and HTML (.html)", () => {
     const rows = buildProductSlashCommands(api());
-    const md = rows.find((c) => c.id === "export");
-    const html = rows.find((c) => c.id === "export-html");
-    expect(md?.label).toBe("/export md");
-    expect(html?.label).toBe("/export html");
-    expect(rows.indexOf(html!) - rows.indexOf(md!)).toBe(1);
-    expect(slashItemPrefixMatch({ id: "export", label: "/export md" }, "export md")).toBe(true);
-    expect(slashItemPrefixMatch({ id: "export-html", label: "/export html" }, "export html")).toBe(
-      true,
-    );
-    expect(slashSubmitAction("/export md")).toMatchObject({
-      kind: "run",
-      command: { id: "export" },
-      arg: "md",
-    });
-    expect(slashSubmitAction("/export html")).toMatchObject({
-      kind: "run",
-      command: { id: "export" },
-      arg: "html",
-    });
-    expect(slashSubmitAction("/export")).toMatchObject({
-      kind: "run",
-      command: { id: "export" },
-      arg: "",
-    });
+    const exportRows = rows.filter((c) => c.id.startsWith("export"));
+    expect(exportRows.map((c) => c.id)).toEqual(["export"]);
+    expect(exportRows[0]?.label).toBe("/export");
+    const def = SLASH_COMMANDS.find((d) => d.id === "export");
+    expect(def?.choiceOptions?.map((o) => [o.value, o.label])).toEqual([
+      ["md", "Markdown (.md)"],
+      ["html", "HTML (.html)"],
+    ]);
+    // Bare /export opens the format pane instead of guessing a format.
+    expect(slashSubmitAction("/export")).toMatchObject({ kind: "pane", command: { id: "export" } });
+    expect(slashSubmitAction("/export pdf")).toMatchObject({ kind: "pane" });
+    for (const [typed, arg] of [
+      ["/export md", "md"],
+      ["/export markdown", "markdown"],
+      ["/export html", "html"],
+    ] as const) {
+      expect(slashSubmitAction(typed)).toMatchObject({
+        kind: "run",
+        command: { id: "export" },
+        arg,
+      });
+    }
+  });
+
+  it("runs the bound conversation export with the chosen format", () => {
+    const exportThread = vi.fn();
+    const a = api({ exportThread });
+    const def = { id: "export" as const, names: ["/export"], needsArg: false, hint: "" };
+    executeSlashDef(def, "md", a);
+    executeSlashDef(def, " HTML ", a);
+    executeSlashDef(def, "markdown", a);
+    executeSlashDef(def, "pdf", a);
+    expect(exportThread.mock.calls).toEqual([["md"], ["html"], ["md"]]);
   });
 });
 
@@ -270,6 +287,46 @@ describe("executeSlashDef", () => {
     expect(a.setLanguage).toHaveBeenCalledWith("it");
     executeSlashDef(def, "espanol", a);
     expect(a.setLanguage).toHaveBeenCalledWith("es");
+  });
+
+  it("keeps /language to the tenant's languages when a list is set, unchanged when unset", () => {
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    const fenced = api({
+      languageOptions: [
+        { code: "en", short: "EN", label: "English" },
+        { code: "fr", short: "FR", label: "Français" },
+      ],
+    });
+    executeSlashDef(def, "fr", fenced);
+    expect(fenced.setLanguage).toHaveBeenCalledWith("fr");
+    executeSlashDef(def, "dutch", fenced);
+    expect(fenced.setLanguage).not.toHaveBeenCalledWith("nl");
+    expect(fenced.openLanguage).toHaveBeenCalledOnce();
+    expect(languageSelectOptions(tenantLanguageCodes(fenced)).map((o) => o.value)).toEqual([
+      "en",
+      "fr",
+    ]);
+    const ids = buildProductSlashCommands(fenced).map((c) => c.id);
+    expect(ids).toContain("language");
+    expect(ids).not.toContain("dutch");
+
+    const open = api();
+    expect(tenantLanguageCodes(open)).toBeNull();
+    expect(languageSelectOptions(tenantLanguageCodes(open))).toEqual(languageSelectOptions());
+    executeSlashDef(def, "dutch", open);
+    expect(open.setLanguage).toHaveBeenCalledWith("nl");
+    expect(buildProductSlashCommands(open).map((c) => c.id)).toContain("dutch");
+  });
+
+  it("keeps a single-language tenant on its language for typed /language", () => {
+    const def = { id: "lang" as const, names: ["/language", "/lang"], needsArg: false, hint: "" };
+    const one = api({ allowedLanguages: ["fr"] });
+    expect(tenantLanguageCodes(one)).toEqual(["fr"]);
+    expect(languageSelectOptions(tenantLanguageCodes(one)).map((o) => o.value)).toEqual(["fr"]);
+    executeSlashDef(def, "en", one);
+    expect(one.setLanguage).not.toHaveBeenCalled();
+    expect(one.openLanguage).toHaveBeenCalledOnce();
+    expect(buildProductSlashCommands(one).map((c) => c.id)).not.toContain("dutch");
   });
 
   it("opens /provider and seeds a provider from the remainder", () => {
@@ -400,10 +457,14 @@ describe("/toolbar and /scrollbar", () => {
     expect(ids).toContain("scrollbar");
   });
 
-  it("describes the current values", () => {
+  it("puts the current values in the value column", () => {
     const on = new Map(buildProductSlashCommands(chrome()).map((c) => [c.id, c]));
-    expect(on.get("toolbar")?.description).toBe("On · visible");
-    expect(on.get("scrollbar")?.description).toBe("always visible");
+    expect(on.get("toolbar")?.value).toBe("on");
+    expect(on.get("toolbar")?.description).toBe("Show or hide the composer toolbar.");
+    expect(on.get("scrollbar")?.value).toBe("always");
+    expect(on.get("scrollbar")?.description).toBe(
+      "Show scrollbars always or while scrolling.",
+    );
 
     const off = new Map(
       buildProductSlashCommands(chrome({ toolbar: false, scrollbars: "auto" })).map((c) => [
@@ -411,8 +472,8 @@ describe("/toolbar and /scrollbar", () => {
         c,
       ]),
     );
-    expect(off.get("toolbar")?.description).toBe("Off · hidden");
-    expect(off.get("scrollbar")?.description).toBe("on scroll");
+    expect(off.get("toolbar")?.value).toBe("off");
+    expect(off.get("scrollbar")?.value).toBe("auto");
   });
 
   it("flips the visible toolbar off", () => {
@@ -435,5 +496,100 @@ describe("/toolbar and /scrollbar", () => {
     expect(row).toBeDefined();
     row?.execute?.();
     expect(a.setToolbar).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("private mode availability", () => {
+  const def = { id: "private" as const, names: ["/private"], needsArg: false, hint: "" };
+
+  afterEach(() => {
+    setPrivateModeAvailable(false);
+    setPrivateMode(false);
+  });
+
+  it("ignores /private when the tenant did not opt in", () => {
+    executeSlashDef(def, "", api());
+    expect(isPrivateModeAvailable()).toBe(false);
+    expect(isPrivateMode()).toBe(false);
+    expect(slashSubmitAction("/export md")).toMatchObject({ kind: "run" });
+  });
+
+  it("toggles once the tenant opts in, and export stays blocked while private", () => {
+    setPrivateModeAvailable(true);
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(true);
+    expect(slashSubmitAction("/export")).toMatchObject({ kind: "block" });
+    expect(slashSubmitAction("/export md")).toMatchObject({ kind: "block" });
+  });
+
+  it("runs no export while private, even when the gate is skipped", () => {
+    setPrivateModeAvailable(true);
+    setPrivateMode(true);
+    const exportThread = vi.fn();
+    const exportDef = { id: "export" as const, names: ["/export"], needsArg: false, hint: "" };
+    executeSlashDef(exportDef, "md", api({ exportThread }));
+    executeSlashDef(exportDef, "html", api({ exportThread }));
+    expect(exportThread).not.toHaveBeenCalled();
+    setPrivateMode(false);
+    executeSlashDef(exportDef, "md", api({ exportThread }));
+    expect(exportThread.mock.calls).toEqual([["md"]]);
+  });
+
+  it("turns on from ?private=1 only when the tenant opted in", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    expect(isPrivateModeAvailable()).toBe(true);
+    expect(isPrivateMode()).toBe(true);
+    expect(privateModeHeaderEntries(isPrivateMode())).toEqual(["X-Digi-Private", "1"]);
+
+    seedPrivateMode({ tenantOptIn: false, urlPrivate: true });
+    expect(isPrivateMode()).toBe(false);
+    expect(privateModeHeaderEntries(isPrivateMode())).toBeNull();
+
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: false });
+    expect(isPrivateModeAvailable()).toBe(true);
+    expect(isPrivateMode()).toBe(false);
+  });
+
+  it("toggles /private off and on, and the palette value follows", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(false);
+    expect(buildProductSlashCommands(api()).find((c) => c.id === "private")?.value).toBe("off");
+    executeSlashDef(def, "", api());
+    expect(isPrivateMode()).toBe(true);
+    const row = buildProductSlashCommands(api()).find((c) => c.id === "private");
+    expect(row?.label).toBe("/private");
+    expect(row?.value).toBe("on");
+    expect(row?.description).toBe("Ask the model to use stand-in names in its replies.");
+  });
+
+  it("hides /private until the tenant opts in", () => {
+    seedPrivateMode({ tenantOptIn: false, urlPrivate: true });
+    expect(buildProductSlashCommands(api()).some((c) => c.id === "private")).toBe(false);
+  });
+
+  it("puts the current value back on the typeahead row", () => {
+    seedPrivateMode({ tenantOptIn: true, urlPrivate: true });
+    buildProductSlashCommands(api());
+    const wrapped = prefixSlashAdapter({
+      search: () => [{ id: "private", label: "private", description: "sentence." }],
+    });
+    expect(wrapped.search?.("pri")).toEqual([
+      {
+        id: "private",
+        label: "private",
+        description: "sentence.",
+        metadata: { value: "on" },
+      },
+    ]);
+  });
+
+  it("drops a live session flag when the tenant stops offering the mode", () => {
+    setPrivateModeAvailable(true);
+    setPrivateMode(true);
+    setPrivateModeAvailable(false);
+    expect(isPrivateModeAvailable()).toBe(false);
+    expect(isPrivateMode()).toBe(false);
+    expect(slashSubmitAction("/export md")).toMatchObject({ kind: "run" });
   });
 });

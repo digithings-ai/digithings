@@ -258,6 +258,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    max_tool_calls: int | None = None,
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     final_response_format: JsonSchemaResponseFormat | None = None,
@@ -281,6 +282,11 @@ def run_tools(
     digillm, which maps it to the model's ``reasoning_effort`` where the level is
     configurable (the ``reasoning_effort`` policy in ``config/model-policy.json``,
     registered above) and keeps the model's default when it is ``None``.
+
+    ``max_tool_calls`` is the chat's hard call cap (``X-Digi-Max-Tool-Calls``),
+    forwarded to digillm, which stops the loop after that many *executed* calls
+    (parallel calls count individually) and answers tool-free from the results
+    gathered. ``None`` leaves the round budget alone.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -295,6 +301,7 @@ def run_tools(
             execute_tool,
             temperature=temperature,
             max_tool_rounds=max_tool_rounds,
+            max_tool_calls=max_tool_calls,
             tool_choice=tool_choice,
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
@@ -314,6 +321,10 @@ def digifetch_web_search(
     usage_kind: str = "web_search",
     provider: str | None = None,
     context: Any | None = None,
+    recency_days: int | None = None,
+    url_filter: Callable[[str], bool] | None = None,
+    page_corpus: str | None = None,
+    fence: list[str] | None = None,
 ) -> tuple[str, list[str]]:
     """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
@@ -322,7 +333,13 @@ def digifetch_web_search(
     retires in a later task). ``provider`` names the search engine and is
     forwarded only when set and not ``auto`` (see ``call_digisearch_web_search``,
     #4722). The bearer threads via ``context`` (Task 2 seam:
-    ``ToolContext.state["digi_bearer"]``).
+    ``ToolContext.state["digi_bearer"]``). ``recency_days`` is forwarded only
+    when set (digisearch keeps its own default otherwise). ``url_filter`` drops
+    rows before the summary is built, so a dropped row leaves no trace in it.
+    ``page_corpus`` (forwarded only when set) names the pre-crawled page text
+    digisearch may use when a live page fetch is a bot challenge or fails.
+    ``fence`` (a pinned tenant's sites, forwarded only when set) makes digisearch
+    refuse any enrichment fetch hop that leaves them.
     """
     del model, usage_kind
     from digigraph.orchestration.web_search_tools import call_digisearch_web_search
@@ -334,8 +351,13 @@ def digifetch_web_search(
         max_results=max_results,
         provider=provider,
         context=context,
+        **({"recency_days": recency_days} if recency_days is not None else {}),
+        **({"page_corpus": page_corpus} if page_corpus else {}),
+        **({"fence": fence} if fence else {}),
     )
     rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []
+    if url_filter is not None:
+        rows = [r for r in rows if url_filter(str(r.get("doc_id", "")))]
     if not rows:
         raise RuntimeError(f"web_search tool returned no rows for query={query!r}")
     summary = "\n".join(f"- {r.get('content', '')} ({r.get('doc_id', '')})" for r in rows)

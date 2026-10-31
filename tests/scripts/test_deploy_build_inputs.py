@@ -180,11 +180,11 @@ def test_every_workspace_manifest_is_watched_by_some_filter() -> None:
 
     The root ``npm install`` resolves all eight workspace manifests before either site
     compiles, so a bad range in any of them fails both production builds. Seven were
-    reached by some filter; ``apps/reference/package.json`` was in none at
+    reached by some filter; ``apps/digiweb/package.json`` was in none at
     all, and both deploy checks now name it.
 
     Naming it fixed the instance. This fixes the class: the set of workspaces moves —
-    ``apps/reference`` was itself scaffolded and then moved into place — and
+    ``apps/digiweb`` was itself scaffolded and then moved into place — and
     a ninth one lands unwatched by default, reopening the identical hole with no test
     failing. So assert the union, not a list.
 

@@ -174,6 +174,18 @@
   }
 }
 
+/* Every other skin has no painted overlay, so the block caret and its
+   transparent fallback above would leave it with an accent-coloured caret
+   (pale where the skin's accent is a surface token) or none at all on
+   engines without `caret-shape`. These skins get the engine's normal
+   blinking bar in the text colour, which is readable on any palette. The
+   contenteditable composer (Lexical) is covered too. */
+.dc-embed-shell [data-thread-skin]:not([data-thread-skin="digichat"]) .aui-composer-input,
+.dc-embed-shell [data-thread-skin]:not([data-thread-skin="digichat"]) .aui-composer-input [contenteditable="true"] {
+  caret-color: auto;
+  caret-shape: auto;
+}
+
 .dc-embed-shell [data-thread-skin] .aui-block-caret {
   --caret-pad-left: 0.375rem;
   --caret-row-h: 1.375rem;
@@ -409,22 +421,15 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--term-ink);
 }
 
+/* Site canvas. site-chat.css repeats this at higher specificity so a named
+   palette and the light token both stay on var(--bg), not the terminal hex. */
 body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #08090b;
+  background: var(--bg);
 }
 
-:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
-  background: #f1f0eb;
-}
-
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread__footer,
-[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread-list {
-  --bg: transparent;
-  --surface: transparent;
-  --hair: var(--term-hair);
-  background: transparent;
-}
+/* The thread column (footer, list) sits on the page canvas: see the
+   "one canvas" rule in site-chat.css, which covers every palette and both
+   site surfaces (/chat and the top-level /chat/occ). */
 
 /* Box rules: the sidebar header and the tool row share one height, so their
    bottom rules run as a single line across the page. */

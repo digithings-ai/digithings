@@ -64,7 +64,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def _stub_results(client: TestClient) -> str:
-    idx = "__unit_test_facets__"
+    idx = "unit_test_facets"
     add_chunks(
         idx,
         [Chunk(id="c1", content="Content one", doc_id="d1", embedding=None, metadata={})],

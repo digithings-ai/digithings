@@ -290,7 +290,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-suggestion-pools.ts": {
-      "count": 6,
+      "count": 5,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.test.ts": {
@@ -298,7 +298,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.ts": {
-      "count": 5,
+      "count": 4,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-trial-messages.test.ts": {
@@ -362,7 +362,7 @@
       "ticket": "DIG-3689"
     },
     "config/contract/contract.yaml": {
-      "count": 19,
+      "count": 18,
       "ticket": "DIG-3689"
     },
     "config/contract/generated/compose.env": {
@@ -371,10 +371,6 @@
     },
     "config/contract/generated/env.example": {
       "count": 9,
-      "ticket": "DIG-3689"
-    },
-    "config/contract/generated/wrangler.vars.digithings-stack.json": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "config/contract/secrets.yaml": {
@@ -641,10 +637,6 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "packages/ui/src/components/chat/skins/digichat.tsx": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "packages/ui/src/components/chat/skins/thread-skins.test.ts": {
       "count": 2,
       "ticket": "DIG-3689"
@@ -834,7 +826,7 @@
       "ticket": "DIG-3689"
     },
     "tests/dg/test_occ_ticket_payload_retired.py": {
-      "count": 23,
+      "count": 21,
       "ticket": "DIG-3689"
     },
     "tests/dg/test_skill_library.py": {
@@ -902,7 +894,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_answer_integrity_check.py": {
-      "count": 9,
+      "count": 8,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_az_guard.py": {

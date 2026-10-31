@@ -20,6 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { OverlayScrollbar } from "../overlay-scrollbar";
+import { useTraceT } from "../trace-i18n";
+import { stockRadius, useStockShape } from "./stock-shape";
 
 export const ANIMATION_DURATION = 200;
 
@@ -28,9 +30,9 @@ const ReasoningPreviewContext = createContext(false);
 const reasoningVariants = cva("aui-reasoning-root mb-4 w-full", {
   variants: {
     variant: {
-      outline: "rounded-none border px-3 py-2",
+      outline: "border px-3 py-2",
       ghost: "",
-      muted: "bg-surface-2/50 rounded-none px-3 py-2",
+      muted: "bg-surface-2/50 px-3 py-2",
     },
   },
   defaultVariants: {
@@ -71,6 +73,7 @@ function ReasoningRoot({
   children,
   ...props
 }: ReasoningRootProps) {
+  const stock = useStockShape();
   const initialOpenRef = useRef(defaultOpen);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
 
@@ -110,7 +113,10 @@ function ReasoningRoot({
       onOpenChange={handleOpenChange}
       className={cn(
         "group/reasoning-root",
-        reasoningVariants({ variant, className }),
+        // assistant-ui's outline/muted reasoning box is rounded-lg.
+        reasoningVariants({ variant }),
+        (variant ?? "outline") !== "ghost" && stockRadius(stock, "rounded-lg"),
+        className,
       )}
       style={
         {
@@ -173,6 +179,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+  const reasoningLabel = useTraceT().t("reasoning");
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -195,7 +202,7 @@ function ReasoningTrigger({
           "aui-reasoning-trigger-label-wrapper inline-block leading-none tabular-nums",
         )}
       >
-        Reasoning{durationText}
+        {reasoningLabel}{durationText}
       </span>
       <DisclosureChevron />
     </CollapsibleTrigger>

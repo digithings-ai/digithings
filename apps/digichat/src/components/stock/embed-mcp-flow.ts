@@ -3,6 +3,13 @@
  * session JSON the user can edit. Operator URLs never appear here.
  */
 
+import {
+  connectedToolIsOn as sharedConnectedToolIsOn,
+  expandToolRows,
+  HOUSE_BUILTIN_TOOL_IDS,
+  HOUSE_SERVER_IDS as SHARED_HOUSE_SERVER_IDS,
+} from "@digithings/ui/chat/tool-surface";
+
 export const MCP_AUTH = ["none", "bearer", "oauth"] as const;
 export type McpAuthKind = (typeof MCP_AUTH)[number];
 
@@ -34,24 +41,24 @@ export type ConnectedToolRow = {
    * deployment names none. They follow the service's switch; they are not
    * per-tool toggles, because the chat route only disables configured ids.
    */
-  builtinTools?: ReadonlyArray<{ id: string; label: string }>;
+  builtinTools?: ReadonlyArray<{ id: string }>;
 };
 
 /**
  * The digisearch tools that follow the digisearch switch: the set digigraph's
  * tool policy turns on and off with it (digigraph/src/digigraph/tool_policy.py).
- * Not every tool the service offers; keep this list in step with that policy.
+ * Ids only — a row names a backend tool by its id and by nothing else. The
+ * expansion lives in `@digithings/ui/chat/tool-surface` so the composer toolbar
+ * counts exactly what `/tools` lists.
  */
-export const DIGISEARCH_BUILTIN_TOOLS = [
-  { id: "digisearch", label: "search" },
-  { id: "digisearch_fetch_all", label: "fetch_all" },
-] as const;
+export const DIGISEARCH_BUILTIN_TOOLS: ReadonlyArray<{ id: string }> = (
+  HOUSE_BUILTIN_TOOL_IDS.digisearch ?? []
+).map((id) => ({ id }));
 
 /** The digivault tools that follow the digivault switch (same policy file). */
-export const DIGIVAULT_BUILTIN_TOOLS = [
-  { id: "digivault_search_notes", label: "search_notes" },
-  { id: "digivault_get_note", label: "get_note" },
-] as const;
+export const DIGIVAULT_BUILTIN_TOOLS: ReadonlyArray<{ id: string }> = (
+  HOUSE_BUILTIN_TOOL_IDS.digivault ?? []
+).map((id) => ({ id }));
 
 type CatalogRef = {
   id: string;
@@ -199,29 +206,20 @@ export function catalogSlashId(id: string): string {
   return id === "web_search" ? "websearch" : id;
 }
 
-export function connectedToolIsOn(
-  id: string,
-  input: {
-    digisearch: boolean;
-    vault: boolean;
-    webSearch: boolean;
-    extraToolOn: (id: string) => boolean;
-  },
-): boolean {
-  if (id === "digisearch") return input.digisearch;
-  if (id === "digivault") return input.vault;
-  if (id === "websearch" || id === "web_search") return input.webSearch;
-  return input.extraToolOn(id);
-}
-
 /**
  * The house services whose backend id is also their only public name. A
- * deployment used to label them "Search"/"Vault"; a tenant document (or an
- * OCC row) that still does must not leak that vocabulary into `/tools`, `/mcp`
+ * deployment used to label them "Search"/"Vault"; a tenant document (or a
+ * legacy registry row) that still does must not leak that vocabulary into `/tools`, `/mcp`
  * or the menu summaries. Individual tools already render raw backend ids
  * (digivault_get_note), so the group cannot use a different vocabulary.
  */
-export const HOUSE_SERVER_IDS: ReadonlySet<string> = new Set(["digisearch", "digivault"]);
+export const HOUSE_SERVER_IDS: ReadonlySet<string> = SHARED_HOUSE_SERVER_IDS;
+
+/**
+ * Whether a row is on. The rule lives in `@digithings/ui/chat/tool-surface` and the
+ * composer toolbar counts with the same one.
+ */
+export const connectedToolIsOn = sharedConnectedToolIsOn;
 
 /**
  * The rendered name of a server row: the backend id for the house services,
@@ -246,16 +244,18 @@ export function connectedTools(input: {  hasDigisearch: boolean;
   const mcpIds = new Set(mcp.map((s) => s.id));
   /**
    * Labels are raw backend ids everywhere: `serverRowLabel` returns the id,
-   * and the web search row uses the backend's own `web_search`.
+   * and the web search row uses the backend's own `web_search`. The sub-tool
+   * list comes from the one expansion the toolbar counts with, so a house row
+   * the deployment did not break down shows the built-in pair here and is
+   * counted as that pair there.
    */
   const subsOf = (id: string) => {
-    const hit =
+    const declared =
       input.catalogTools.find((t) => t.id === id)?.tools ??
       input.mcpServers.find((t) => t.id === id)?.tools;
-    if (hit?.length) return { tools: hit };
-    if (id === "digisearch") return { builtinTools: DIGISEARCH_BUILTIN_TOOLS };
-    if (id === "digivault") return { builtinTools: DIGIVAULT_BUILTIN_TOOLS };
-    return {};
+    const row = expandToolRows([{ id, tools: declared }])[0]!;
+    if (row.builtin) return { builtinTools: row.tools.map((toolId) => ({ id: toolId })) };
+    return row.tools.length ? { tools: declared } : {};
   };
   const rows: ConnectedToolRow[] = [];
   if (input.hasDigisearch) {

@@ -67,8 +67,11 @@ export {
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,
+  committedChatPrefs,
+  slashRowPreview,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
+  type EmbedChatPrefsPreview,
   type CatalogToolRow,
 } from "./embed-chat-prefs";
 export {
@@ -103,6 +106,17 @@ export {
   type ToolFallbackRootProps,
 } from "./tool-fallback.aui";
 export { toolRowTitle } from "./tool-display";
+
+export {
+  HOUSE_BUILTIN_TOOL_IDS,
+  HOUSE_SERVER_IDS,
+  connectedToolIsOn,
+  countToolSurface,
+  expandToolRows,
+  type ToolSurfaceCount,
+  type ToolSurfaceRow,
+  type ToolSurfaceRowInput,
+} from "./tool-surface";
 
 export {
   DEFAULT_SCROLL_MODE,

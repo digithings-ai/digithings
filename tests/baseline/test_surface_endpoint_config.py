@@ -95,6 +95,15 @@ _HOST_RE = re.compile(
 # www.digithings.ai 82 -> 68. Deleting the root copy of
 # review-5061-digichat-mcp-tool-allowlist.md drops one more
 # mcp.digithings.ai literal, 56 -> 55. Decreases only.
+# DIG-5136 retired the digitrace Langfuse app and its runbook: the
+# langfuse.digithings.ai pin (3) leaves with them, and trace.digithings.ai
+# drops 19 -> 10: the app (8), the old runbook (9) and its smoke script (1)
+# went with the retirement. The ten that remain belong to DIG-2657's ingest
+# Worker (CONTRACT.md 2, receiver.test.ts 3, wrangler-config.test.ts 1,
+# wrangler.toml 2), the contract service row (1) and the local-proxy
+# Caddyfile comment (1). Re-measured with this file's own scanner at the
+# head that carries develop's digitrace-ingest texts; the earlier "1" was
+# measured on a base without them (DIG-5136 review, 27 Oct).
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 1,
@@ -108,11 +117,10 @@ PINNED_CENSUS = {
     "hosts.digithings.ai": 1,
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
-    "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 55,
     "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
-    "trace.digithings.ai": 20,
+    "trace.digithings.ai": 10,
     "www.digiquant.io": 15,
     "www.digithings.ai": 68,
 }

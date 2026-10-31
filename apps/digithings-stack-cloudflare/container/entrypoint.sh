@@ -18,6 +18,13 @@ if ! mkdir -p "$DATA_CHROMA" "$DATA_VAULT" /data/digikey /var/log/supervisor; th
   exit 1
 fi
 
+# Tenant site graphs and page corpora from KV (src/tenant-files.ts). Never
+# fatal: without them a pinned tenant keeps its pin and only loses the site
+# map text and the challenge-page fallback.
+if [ -n "${DIGI_TENANT_FILES_PARTS:-}" ]; then
+  python3 /unpack_tenant_files.py /data/tenant-files || true
+fi
+
 # Stable digikey issuer defaults for CF custom domains (overridable via envVars).
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-https://key.digithings.ai}"
 export DIGIKEY_JWKS_URL="${DIGIKEY_JWKS_URL:-http://127.0.0.1:8005/.well-known/jwks.json}"
@@ -218,6 +225,21 @@ if [ "$pem_ok" -ne 1 ]; then
     echo "digithings-stack: WARN DIGIKEY_PRIVATE_KEY_PEM missing/invalid; ephemeral key allowed for this boot"
   else
     echo "digithings-stack: ERROR DIGIKEY_PRIVATE_KEY_PEM missing/invalid and DIGIKEY_ALLOW_EPHEMERAL_KEY!=1; digikey will fail closed"
+  fi
+fi
+
+# digigraph checks digichat's license (X-Digi-License) against DIGIKEY_PUBLIC_KEY_PEM
+# before it allows a hosted capability such as web search (spec §7). Licenses are
+# signed with this stack's digikey key, so derive the public half from it unless an
+# operator pinned one. Without it every license fails to verify and web search is
+# refused with 403, which digichat then drops silently. Public material only.
+if [ "$pem_ok" -eq 1 ] && [ -z "${DIGIKEY_PUBLIC_KEY_PEM:-}" ]; then
+  DIGIKEY_PUBLIC_KEY_PEM=$(python3 /license_public_key.py 2>/dev/null || true)
+  if [ -n "$DIGIKEY_PUBLIC_KEY_PEM" ]; then
+    export DIGIKEY_PUBLIC_KEY_PEM
+  else
+    unset DIGIKEY_PUBLIC_KEY_PEM
+    echo "digithings-stack: WARN could not derive DIGIKEY_PUBLIC_KEY_PEM; licensed hosted features stay off"
   fi
 fi
 

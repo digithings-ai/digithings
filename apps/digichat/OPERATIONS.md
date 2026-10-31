@@ -13,7 +13,7 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 ## Design
 
-digichat follows the **digithings.ai** marketing palette from **digiweb** tokens / `apps/digithings-web` (the deleted `cloudflare/website/` landing is not a source of truth): near-black page background, elevated panels, borders, primary/muted text. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is the compact digithings **d + block** mark, vendored as [`src/app/icon.svg`](src/app/icon.svg) (and [`src/app/apple-icon.png`](src/app/apple-icon.png) for Apple touch). Refresh both from `apps/digithings-web/public/icons/digi-app-dark.svg` / `digi-app-touch-dark.png` when the shared brand tile changes — never reintroduce the retired QR mark.
+digichat follows the **digithings.ai** marketing palette from **digiweb** tokens / `apps/digithings-web` (the deleted `cloudflare/website/` landing is not a source of truth): near-black page background, elevated panels, borders, primary/muted text. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is the studio logo, written by `packages/brand/build-favicon.py` to [`src/app/icon.svg`](src/app/icon.svg), [`src/app/apple-icon.png`](src/app/apple-icon.png), and `public/icons/`. Do not draw a tile by hand.
 
 ## Features
 

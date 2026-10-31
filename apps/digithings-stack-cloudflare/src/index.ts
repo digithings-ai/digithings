@@ -6,8 +6,10 @@
  *   key.digithings.ai    → digikey    :8005
  *   search.digithings.ai → digisearch :8002 (digikey JWT `digisearch:query`;
  *                          new external route #4063, owner-approved)
- *   mcp.digithings.ai    → digiquant-mcp :8767 (reserved; see HUMAN GATE in
- *                          wrangler.toml — route enabled only with edge auth)
+ *   mcp.digithings.ai    → digiquant market-data MCP, Worker-native
+ *                          (Durable Object + direct R2 reads; see
+ *                          src/digiquant-mcp.ts). Reserved; see HUMAN GATE in
+ *                          wrangler.toml — route enabled only with edge auth.
  *
  * workers.dev fallbacks:
  *   /healthz            → digigraph
@@ -20,7 +22,10 @@
  * matching MCP_EDGE_KEY / MCP_EDGE_KEYS (compose and self-host, where no
  * digikey mints a token). Fail-closed 401 otherwise, 403 for a valid token
  * without the server's scope. See ./mcp-edge-auth.
- * mcp.digithings.ai stays reserved and answers only behind its JWT gate.)
+ * mcp.digithings.ai is Worker-native (#DIG-2913): POST /mcp on the
+ * DigiQuantMcpAgent Durable Object, reading sealed R2 generations directly
+ * behind that same edge gate (scope `digiquant:backtest`). The hostname route
+ * stays reserved (HUMAN GATE).
  *
  * /dashboard-api/* → folded dashboard-api routes (#4687: portfolio,
  * allocations, brief, performance, kpis/live, nav-series, benchmarks, ledger,
@@ -53,9 +58,12 @@ import {
 } from "./container-errors";
 import { fetchWithContainerRetry } from "./container-retry";
 import { authorizeMcpEdge } from "./mcp-edge-auth";
+import { mcpEdgeTarget } from "./mcp-edge-target";
 import { getStackStatus, runIsolated } from "./route-modules";
 import { SESSION_MODEL_ALLOWLIST_DEFAULT } from "./session-model-allowlist";
 import { composeCorpusMap } from "./tenant-config";
+import { composeCorpusMapWithKv, readTenantCorpusMapKv } from "./tenant-corpus-kv";
+import { applyTenantFilesEnv, readTenantFilesEnv } from "./tenant-files";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
 // the file is dependency-free constants, so it cannot fail independently of
@@ -67,7 +75,6 @@ import {
   DIGIKEY_PORT,
   DIGISEARCH_PORT,
   DIGIQUANT_MCP_HOSTNAME,
-  DIGIQUANT_MCP_PORT,
   MCP_CONTAINER_ID,
   portForHostname,
   sharedStackContainerId,
@@ -87,6 +94,12 @@ import {
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
+
+/**
+ * Durable Object class for the Worker-native digiquant MCP (DIG-2913).
+ * Wrangler requires DO classes to be exported from the entry module.
+ */
+export { DigiQuantMcpAgent } from "./digiquant-mcp-do";
 
 export class DigiStackContainer extends Container {
   defaultPort = DIGIGRAPH_PORT;
@@ -165,14 +178,15 @@ export class DigiStackContainer extends Container {
     // query vector does not match the stored vectors and retrieval silently
     // misses. Digisearch reads the list per query (search/_stub.py).
     DIGISEARCH_WORKERS_AI_INDEXES: env.DIGISEARCH_WORKERS_AI_INDEXES ?? "",
-    // Cloudflare caps a text binding at 5.1 kB and the whole map was 5285 bytes,
-    // so `wrangler deploy` failed with code 10054 and wrangler.toml now ships it
-    // as two vars. This joins them; ./tenant-config owns the merge rule (primary
-    // wins on a slug collision, digithings-only floor when neither half is
-    // usable). The composed string is byte-identical to the old single var.
+    // The house entry is a public [vars] value; every other tenant is client
+    // config held in the DIGI_TENANT_CORPUS_MAP_PRIVATE Worker secret, so it never
+    // sits in the public repo. This joins them; ./tenant-config owns the merge rule
+    // (house wins on a slug collision, digithings-only floor when neither half is
+    // usable). At cold start fetch() recomposes this with any client entries
+    // from KV (./tenant-corpus-kv); with no KV key the value is exactly this one.
     DIGI_TENANT_CORPUS_MAP: composeCorpusMap(
       env.DIGI_TENANT_CORPUS_MAP,
-      env.DIGI_TENANT_CORPUS_MAP_EXTRA,
+      env.DIGI_TENANT_CORPUS_MAP_PRIVATE,
     ),
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
@@ -219,6 +233,21 @@ export class DigiStackContainer extends Container {
     // ignores that header and always uses defaultPort (digigraph :8000) — which
     // made key.digithings.ai / JWKS / bff_session hit digigraph (smoke NO-GO).
     const targetPort = targetPortFromRequest(request);
+    // Cold start only: tenant site graphs and page corpora ride into the new
+    // container's env from KV (./tenant-files; no key = byte-identical env).
+    // A running container already has them, so a warm request reads nothing.
+    if (!this.ctx.container?.running) {
+      // Replace, not merge: a shrunk or removed bundle must not leave stale chunks.
+      applyTenantFilesEnv(this.envVars, await readTenantFilesEnv(env.TENANT_CONFIG));
+      // Client corpus map entries ride in the same way (./tenant-corpus-kv).
+      // Recomposed from env on every cold start, so a removed or broken KV
+      // value falls back to the env-only map rather than keeping a stale one.
+      this.envVars.DIGI_TENANT_CORPUS_MAP = composeCorpusMapWithKv(
+        env.DIGI_TENANT_CORPUS_MAP,
+        env.DIGI_TENANT_CORPUS_MAP_PRIVATE,
+        await readTenantCorpusMapKv(env.TENANT_CONFIG),
+      );
+    }
     try {
       await this.startAndWaitForPorts({
         // digigraph binds first for every request, so it is unconditional.
@@ -321,128 +350,6 @@ export class DigiStackContainer extends Container {
   }
 }
 
-/**
- * Dedicated digiquant-mcp market-data container (#3780 Task 8).
- *
- * Separate image (digiquant/Dockerfile.mcp: [research]+[mcp] extras,
- * streamable-http :8767) — NOT part of the Profile A stack container above
- * (Option B rejected: it would bloat the chat-only profile and couple deploys).
- * Single pinned instance (MCP_CONTAINER_ID, max_instances = 1 in
- * wrangler.toml): the MCP read path assumes a single replica (in-memory 900s
- * TTL keyed by as_of + manifest version).
- */
-export class DigiQuantMcpContainer extends Container {
-  defaultPort = DIGIQUANT_MCP_PORT;
-  requiredPorts = [DIGIQUANT_MCP_PORT];
-  /**
-   * Cold-start policy: a cold start pays only the FastMCP import, never a data
-   * load (R2 is the cache), so the container may sleep freely; a 1-minute idle
-   * tail keeps the billed wake window minimal.
-   */
-  sleepAfter = "1m";
-
-  /**
-   * Runtime env for the MCP process. Secrets from `wrangler secret put`.
-   * Pass-through, no silent default flip: unset/empty keeps the library
-   * default (`supabase`); operators set this to "r2" explicitly via env.
-   * Scope is the one deliberate hosted default: the container runs `read`
-   * ONLY (`full` never leaves localhost); local runs keep defaulting to
-   * `full` in `digiquant/mcp_server.py`.
-   */
-  envVars = {
-    DIGIQUANT_MCP_SCOPE: env.DIGIQUANT_MCP_SCOPE ?? "read",
-    DIGIQUANT_MARKET_DATA_BACKEND: env.DIGIQUANT_MARKET_DATA_BACKEND ?? "",
-    GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? "",
-    R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
-    R2_BUCKET: env.R2_BUCKET ?? "",
-    R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? "",
-    R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
-  };
-
-  /**
-   * Do not let the idle alarm stop a container a request is waiting on — see
-   * the DigiStackContainer note: nothing renews the activity timer during
-   * `startAndWaitForPorts`, so a cold start longer than sleepAfter is killed
-   * mid-boot.
-   */
-  private keepAwakeForRequest = false;
-
-  override async onActivityExpired(): Promise<void> {
-    if (this.keepAwakeForRequest) return;
-    await super.onActivityExpired();
-  }
-
-  override async fetch(request: Request): Promise<Response> {
-    this.keepAwakeForRequest = true;
-    try {
-      await this.startAndWaitForPorts({
-        ports: [DIGIQUANT_MCP_PORT],
-        cancellationOptions: {
-          portReadyTimeoutMS: 180_000,
-          instanceGetTimeoutMS: 60_000,
-        },
-      });
-    } catch (err) {
-      const message = safeErrorMessage(err);
-      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
-      if (isContainerEvictedError(message)) {
-        return containerEvictedResponse("mcp", message);
-      }
-      // DIG-4477: recycled / failed container -> retryable 503, one fresh
-      // attempt from the Worker (see ./container-retry.ts).
-      if (isContainerFailedError(message)) {
-        return containerFailedResponse("mcp", message);
-      }
-      return containerBootingResponse("mcp", message);
-    } finally {
-      this.keepAwakeForRequest = false;
-    }
-    let response: Response;
-    try {
-      response = await this.containerFetch(request, DIGIQUANT_MCP_PORT);
-    } catch (err) {
-      // A hop that rejected with a value that is not an Error (DIG-4928): the
-      // @cloudflare/containers package rethrows such a value verbatim from its
-      // proxy catch, so it would leave this Durable Object as an uncaught
-      // exception and the platform would record it as it stands — a thrown
-      // Date leaves nothing but a bare date in the log.
-      //
-      // Such a value states no failure of its own, so it is neither an
-      // eviction nor a failed container: it cannot be classified, and it is
-      // not replayed either (a value that came out of the hop says nothing
-      // about whether the request reached the container). The client is told
-      // to come back instead.
-      //
-      // The classification is decided in ONE place (classifyContainerHopFailure),
-      // so the order of the checks cannot drift between the two container
-      // classes: a value that is not an Error is read before the eviction and
-      // the failed vocabulary, whatever its text says.
-      const failure = classifyContainerHopFailure(err);
-      if (failure.kind === "unavailable") {
-        console.error(
-          "digithings-stack: container could not be reached: the container hop rejected with a value that is not an Error:",
-          failure.description,
-        );
-        return containerUnavailableResponse("mcp");
-      }
-      if (failure.kind === "evicted") {
-        return containerEvictedResponse("mcp", failure.message);
-      }
-      if (failure.kind === "failed") {
-        return containerFailedResponse("mcp", failure.message);
-      }
-      throw err;
-    }
-    // A container that died mid-request answers with a 500, not a throw —
-    // see the DigiStackContainer note and ./container-errors.ts.
-    const restart = await containerRestartMessage(response);
-    if (restart !== null) {
-      return containerFailedResponse("mcp", restart);
-    }
-    return response;
-  }
-}
-
 function targetPortFromRequest(request: Request): number {
   const header = request.headers.get("cf-container-target-port");
   if (header) {
@@ -486,7 +393,22 @@ export function containerBootingResponse(
 
 export interface Env {
   STACK: DurableObjectNamespace<DigiStackContainer>;
-  MCP_STACK: DurableObjectNamespace<DigiQuantMcpContainer>;
+  /**
+   * Tenant config KV (wrangler `kv_namespaces`). Read only at a container cold
+   * start, for the `DIGI_TENANT_FILES` bundle (./tenant-files).
+   */
+  TENANT_CONFIG?: KVNamespace;
+  /**
+   * Service binding to this same Worker, used only for the digikey JWKS:
+   * `key.digithings.ai` is this Worker's own route, so a plain fetch cannot
+   * reach it from inside (see mcp-edge-auth).
+   */
+  DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /**
+   * Worker-native digiquant market-data MCP (DIG-2913). One pinned id
+   * (`MCP_CONTAINER_ID`) owns the 900s read cache; no container involved.
+   */
+  DIGIQUANT_MCP: DurableObjectNamespace;
   DIGIKEY_ISSUER?: string;
   DIGIKEY_AUDIENCE?: string;
   DIGIKEY_ALLOW_EPHEMERAL_KEY?: string;
@@ -533,7 +455,8 @@ export interface Env {
    * except the house `digithings` entry. Worker-scoped -- it is read to build
    * the container's `DIGI_TENANT_CORPUS_MAP` and never forwarded itself.
    */
-  DIGI_TENANT_CORPUS_MAP_EXTRA?: string;
+  /** Worker secret: every non-house tenant's corpus map (client config). */
+  DIGI_TENANT_CORPUS_MAP_PRIVATE?: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   OPENAI_API_KEY?: string;
@@ -750,6 +673,9 @@ export default {
         if (!decision.ok) {
           // The body names neither the credential nor the reason: the status is
           // the whole answer to the caller, and the decision log has the rest.
+          if (decision.status === 400) {
+            return new Response("digithings-stack: bad request", { status: 400 });
+          }
           return new Response(
             decision.status === 403
               ? "digithings-stack: forbidden"
@@ -768,8 +694,7 @@ export default {
           // 307s `/mcp/`, and a rewritten path breaks clients that do not
           // replay the body on the redirect.
           const stripped = slash === -1 ? "/" : rest.slice(slash);
-          const target = new URL(url.toString());
-          target.pathname = stripped;
+          const target = mcpEdgeTarget(url, stripped, port);
           const container = stackContainer(workerEnv);
           // DIG-4477: retry once on a recycled container (see
           // ./container-retry.ts); the clone per attempt is what makes the
@@ -821,21 +746,23 @@ export default {
     // surface never rides the base platform, and so a deploy of this Worker
     // stops fighting another Worker for the same digithings.ai routes.
 
-    // Dedicated digiquant-mcp container (#3780 Task 8): reachable only via the
-    // reserved mcp.digithings.ai hostname once its route is enabled (HUMAN GATE
-    // in wrangler.toml — needs Worker-edge digikey JWT enforcement first; the
-    // MCP tools are unauthenticated localhost today). No workers.dev forwarding
-    // route ships: an unauthenticated /_stack/mcp/* forwarder must not go live.
+    // digiquant market-data MCP (DIG-2913): Worker-native. The tools read the
+    // sealed R2 generations directly (src/digiquant-mcp.ts) inside a Durable
+    // Object (src/digiquant-mcp-do.ts), so the read path no longer boots a
+    // Firecracker container. Still reachable only via the reserved
+    // mcp.digithings.ai hostname once its route is enabled (HUMAN GATE in
+    // wrangler.toml), behind the shared edge gate (`./mcp-edge-auth`: a digikey
+    // JWT carrying `digiquant:backtest`, or `x-digi-mcp-key` vs MCP_EDGE_KEY —
+    // fail-closed 503/401/403). No workers.dev forwarding route ships: an
+    // unauthenticated /_stack/mcp/* forwarder must not go live.
+    // The legacy digiquant-mcp container and its MCP_STACK binding are gone
+    // (DIG-5558); this Durable Object is the only MCP read path.
     if (isMcpHostname(url.hostname)) {
-      // Lazy ports import per route group (#4685).
-      return runIsolated("container-routes", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
-        const container = getContainer(workerEnv.MCP_STACK, MCP_CONTAINER_ID);
-        // DIG-4477: retry once on a recycled container (see
-        // ./container-retry.ts). DIG-4928: the answer for a hop that rejected
-        // with a value that is not an Error names the container it came from.
-        return fetchWithContainerRetry(() => container.fetch(request.clone()), {
-          service: "mcp",
-        });
+      return runIsolated("digiquant-mcp", () => import("./ports"), async ({ MCP_CONTAINER_ID }) => {
+        // Same pinned id the container used: one DO instance owns the 900s
+        // read cache, which is the coherence the single-replica rule bought.
+        const id = workerEnv.DIGIQUANT_MCP.idFromName(MCP_CONTAINER_ID);
+        return workerEnv.DIGIQUANT_MCP.get(id).fetch(request);
       });
     }
 

@@ -2507,8 +2507,8 @@ def test_discovery_never_takes_a_token_from_a_neighbouring_object() -> None:
 # digithings-stack surface we operate (DIG-718). That only works if the target
 # is something the caller hands in, so the discovery URL and the embed host
 # become explicit inputs: the command line first, then the environment, then
-# the datatap.stream default that the still-live retired clock keeps using
-# until the DIG-4435 deploy retires it.
+# the datatap.stream default, kept for a manual dispatch of the retired check
+# (DIG-4435 retired the clock and 2026-10-27 deleted its row).
 #
 # These six cases are the EM's. The worker makes them pass and may not edit
 # them.
@@ -2609,11 +2609,11 @@ def test_a_non_https_discovery_url_is_refused_and_never_reports_a_pass() -> None
 
 
 def test_with_nothing_given_the_target_is_still_datatap_stream() -> None:
-    """The default stays where it was until the retired clock is gone.
+    """The default stays where it was; a dispatch can still name its target.
 
-    The datatap-answer-check row in apps/digithings-cron/src/jobs.ts still
-    fires every hour until the DIG-4435 deploy lands, and until then that
-    clock has to keep reading the surface it was built for.
+    The retired clock's row is gone (DIG-4435, deleted after the 2026-10-27
+    deploy dropped the trigger), but a human can still dispatch the workflow by
+    hand, and a bare dispatch still reads the surface the script was built for.
     """
     code, fake = _run_main(_both_probes_clean())
     assert code == mod.OK

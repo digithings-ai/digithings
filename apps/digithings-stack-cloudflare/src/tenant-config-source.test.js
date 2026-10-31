@@ -66,14 +66,14 @@ function digithingsEmbedEntry() {
 }
 
 describe("tenant-config: the digithings-only constant is the only copy left", () => {
-  it("composes the split [vars] pair in index.ts (non-vacuity)", () => {
+  it("composes the house var and the private secret in index.ts (non-vacuity)", () => {
     // Without this the assertions below could pass on a source that simply says
     // nothing about the corpus map at all.
     const entry = corpusMapEntry();
     expect(entry).not.toBeNull();
     expect(entry).toContain("composeCorpusMap(");
     expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP");
-    expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP_EXTRA");
+    expect(entry).toContain("env.DIGI_TENANT_CORPUS_MAP_PRIVATE");
   });
 
   it("carries no tenant corpus map in index.ts", () => {
@@ -84,10 +84,15 @@ describe("tenant-config: the digithings-only constant is the only copy left", ()
     expect(indexSource()).not.toContain("digisearchIndex");
   });
 
-  it("carries exactly the first-party tenant", () => {
+  it("carries exactly the first-party tenant, under both house slugs", () => {
     // A client tenant inside the first-party-only constant would keep that
-    // tenant alive after the literal is retired -- the fail-open direction.
-    expect(Object.keys(DIGITHINGS_ONLY_CORPUS_MAP)).toEqual(["digithings"]);
+    // tenant alive after the literal is retired -- the fail-open direction. The
+    // two house keys are one tenant, and both are needed: the live embed slug is
+    // `digithings-ai`, while old callers read `digithings` (DIG-5638).
+    expect(Object.keys(DIGITHINGS_ONLY_CORPUS_MAP)).toEqual(["digithings", "digithings-ai"]);
+    expect(DIGITHINGS_ONLY_CORPUS_MAP["digithings-ai"]).toEqual(
+      DIGITHINGS_ONLY_CORPUS_MAP.digithings,
+    );
   });
 
   it("agrees with the routed fields the retired literal carried", () => {

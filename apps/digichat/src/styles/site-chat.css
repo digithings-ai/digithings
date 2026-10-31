@@ -1,0 +1,197 @@
+/* Site chat surfaces (/chat product app, top-level /chat/occ) paint with
+   packages/design/tokens.css — the same source as digithings.ai.
+   Framed embeds (dashboard modal, customer hosts) opt out below so importing
+   that sheet does not restyle them. */
+
+/* Undo tokens.css on a document that is not a site chat. */
+:root:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
+  --bg: initial;
+  --surface: initial;
+  --surface-2: initial;
+  --hair: initial;
+  --hair-2: initial;
+  --hair-strong: initial;
+  --ink: initial;
+  --ink-soft: initial;
+  --ink-mute: initial;
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-weak: initial;
+  --on-accent: initial;
+  --term-bg: initial;
+  --term-ink: initial;
+  --term-mute: initial;
+  --term-hair: initial;
+  --term-fill: initial;
+  --frame-w: initial;
+  --page-pad: initial;
+  --gutter: initial;
+  --wrap: initial;
+  --font-sans: var(--font-sans-face, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-family: var(--font-sans);
+  --font-display: var(--font-sans);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+:root.dark:not([data-site-theme="1"]):not(:has([data-chrome-mode="app"])) {
+  --accent: oklch(0.274 0.006 286.033);
+}
+
+/* tokens.css accent classes would paint module livery on the site chat.
+   Framed embeds keep their own accent class (and any inline hex). */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])) [class^="accent-"],
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])) [class*=" accent-"] {
+  --accent: unset;
+  --on-accent: unset;
+}
+
+/* Default theme matches the website: accent collapses to ink. A palette
+   selector is more specific and wins when data-palette is set. */
+:root[data-theme="dark"]:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-palette]) {
+  --accent: var(--ink);
+  --on-accent: var(--bg);
+  --accent-weak: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+:root[data-theme="light"]:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-palette]) {
+  --accent: var(--ink);
+  --on-accent: var(--surface);
+  --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+:root[data-theme="dark"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]),
+:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"],
+:root[data-theme="light"] [data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] {
+  --term-bg: var(--bg);
+  --term-ink: var(--ink);
+  --term-mute: var(--ink-mute);
+  --term-hair: var(--hair);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Stock skins sit in an embed wrapper that carries shadcn's .dark class and
+   paints bg-background, which .dark redeclares as zinc (0.141). With a named
+   palette the base skin's chat area therefore showed near-black instead of
+   the palette canvas (lucent-orng dark: #2a1a15). Point the wrapper's
+   --background at the palette's --bg for the base and chatgpt skins. No
+   palette: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="base"]),
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="chatgpt"]) {
+  --background: var(--bg);
+}
+
+/* The chatgpt skin paints its own dark canvas (thread root and composer
+   footer, #000 by default) through --chat-skin-canvas. With a named palette
+   in dark it takes the palette canvas instead, as the base skin does above.
+   No palette, light, or any other skin: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell [data-stock-product][data-thread-skin="chatgpt"] {
+  --chat-skin-canvas: var(--bg);
+}
+
+/* Thread-local hexes lose to the site tokens. App mode stays transparent so
+   the body canvas (and the rails) show through; a top-level embed paints --bg. */
+:root[data-theme]:is([data-site-theme="1"], :has([data-chrome-mode="app"])) .digichat-thread {
+  --bg: inherit;
+  --surface: inherit;
+  --surface-2: inherit;
+  --hair: inherit;
+  --hair-2: inherit;
+  --ink: inherit;
+  --ink-soft: inherit;
+  --ink-mute: inherit;
+  --accent: inherit;
+  --accent-weak: inherit;
+  --on-accent: inherit;
+  --term-bg: var(--bg);
+  --term-ink: var(--ink);
+  --term-mute: var(--ink-mute);
+  --term-hair: var(--hair);
+  --term-fill: color-mix(in srgb, var(--ink) 5%, var(--bg));
+  --up: inherit;
+  --down: inherit;
+  --danger: inherit;
+  --warn: inherit;
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --muted: var(--term-fill);
+  --muted-foreground: var(--ink-mute);
+  --border: var(--hair);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --composer-bg: var(--surface);
+  /* Resolved here, above the footer that clears --bg and --surface, so the
+     menus inside it can still reach the palette's canvas and surface. */
+  --site-menu-canvas: var(--bg);
+  --site-menu-surface: var(--surface);
+  color: var(--ink);
+}
+
+:root[data-theme]:has([data-chrome-mode="app"]) .digichat-thread {
+  background: transparent;
+}
+
+:root[data-site-theme="1"]:not(:has([data-chrome-mode="app"])) .digichat-thread {
+  background: var(--bg);
+}
+
+/* One canvas. On a site chat (/chat and the top-level /chat/occ) the thread
+   column has no background of its own: the welcome, the examples and the
+   composer sit straight on the page --bg, between the rails, exactly as on
+   digithings.ai. This used to live in product-chrome.css behind
+   :root:not([data-palette]) and [data-chrome-mode="app"], so every named
+   palette, and the OCC page in every palette, painted the footer
+   `bg-surface` as a tinted box around the welcome block. No palette gate:
+   palettes.css still owns --term-hair and every root token. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.digichat-thread__footer, .digichat-thread-list) {
+  --bg: transparent;
+  --surface: transparent;
+  --hair: var(--term-hair);
+  background: transparent;
+}
+
+/* The command palette and the composer (settings) menu are positioned inside
+   that footer, so they inherit its cleared --bg and --surface. Their own
+   background is var(--bg), which made both menus see-through on the
+   top-level /chat/occ page in every palette (the welcome painted through
+   them). Only app mode had a --term-bg override (chat-digichat.css), so
+   /chat looked right and OCC did not. --term-bg is not enough on OCC: the
+   composer menu carries its own data-thread-skin, so product-chrome.css
+   re-points --term-bg on the menu element to the embed default (#08090b in
+   dark). --site-menu-canvas and --site-menu-surface are resolved on
+   .digichat-thread and nothing below re-points them: hand both back to the
+   menu and everything inside it. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.aui-composer-trigger-popover, .dc-composer-menu) {
+  --bg: var(--site-menu-canvas);
+  --surface: var(--site-menu-surface);
+  --term-bg: var(--site-menu-canvas);
+  background: var(--site-menu-canvas);
+}
+
+/* The boot loader paints the page canvas, not --surface. On a site chat the
+   chat that replaces it sits straight on --bg, so a --surface overlay read as
+   a lighter (light) or lighter-grey (dark) frame that then jumped to the
+   chat's canvas. Wide embeds keep their transparent overlay (product-chrome.css). */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-embed-wide="1"])
+  [data-stock-product]
+  > .dboot-overlay {
+  background: var(--bg);
+}
+
+/* Embed rails mount on every embed document and hide unless this is the
+   top-level page. The product app uses .site-rails and is not gated here. */
+html:not([data-site-rails="1"]) .dc-site-rails {
+  display: none;
+}

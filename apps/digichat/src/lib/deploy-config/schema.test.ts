@@ -357,7 +357,9 @@ describe("DigichatConfigSchema", () => {
       maxToolCallsPerTurn: 5,
       tokensPerMinute: { deployment: 100_000, user: 80_000 },
     });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("notice/best-effort"));
+    // digigraph enforces the cap upstream (X-Digi-Max-Tool-Calls reaches digillm's
+    // tool loop), so a cap here is no longer a notice-only configuration.
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("notice/best-effort"));
     warn.mockRestore();
     expect(() =>
       parseDigichatConfig({
@@ -388,7 +390,7 @@ describe("DigichatConfigSchema", () => {
       trialFile,
     );
     expect(trial.deployment?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: true,
@@ -566,7 +568,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.gate.webSearch).toBe(true);
     expect(dt?.gate.showContextMeter).toBe(true);
     expect(dt?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: true,
@@ -584,7 +586,7 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
     expect(occHost?.guardrails).toEqual({
-      maxToolCallsPerTurn: 5,
+      maxToolCallsPerTurn: 20,
       answerAt: 0.7,
       pauseAt: 0.9,
       rateLimit: false,

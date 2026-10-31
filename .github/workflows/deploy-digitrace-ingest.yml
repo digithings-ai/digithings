@@ -1,0 +1,101 @@
+# Deploys the digitrace OTLP/HTTP ingest Worker (DIG-2657, ADR-0036).
+#
+# One Worker, two entry points: `fetch` is POST /v1/traces, `queue` is the
+# consumer that writes R2, the D1 `digitrace` index and Analytics Engine. It is not
+# tracked by release-please; this workflow is its release.
+#
+# Push to main (path-filtered) or workflow_dispatch. develop is not a deploy
+# path: a change there is validated by the CI `web` lane (test-web.yml, which
+# runs this workspace's Vitest + typecheck) and by the `worker-build` dry run, and
+# reaches production only when develop is promoted into main.
+#
+# environment: production — a deploy is a human gate. The first deploy also needs
+# the day-one resources and the route, which are human steps: the R2 bucket, the
+# Queue and its dead-letter queue, the KV namespace, the D1 database, the
+# Analytics Engine dataset, the DNS record and the custom domain.
+#
+# Until those exist, wrangler.toml carries all-zero placeholder ids. The
+# `preflight` job reads them and skips the deploy job (no approval prompt, no
+# Cloudflare error 10041) instead of failing on main (DIG-2887 S1).
+name: "Deploy: digitrace-ingest"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/digitrace-ingest/**"
+      - ".github/workflows/deploy-digitrace-ingest.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Per-run group, same reasoning as the sibling deploy lanes: a shared group
+  # with cancel-in-progress: false queues every later deploy behind an approval
+  # wait (#2541). An in-flight dispatch is not cancelled either.
+  group: deploy-digitrace-ingest-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.ids.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse placeholder resource ids
+        id: ids
+        working-directory: apps/digitrace-ingest
+        run: |
+          if grep -Eq '^(id|database_id) = "0{8}-?0{4}-?0{4}-?0{4}-?0{12}"' wrangler.toml; then
+            echo "::warning title=digitrace-ingest not provisioned::wrangler.toml still has placeholder KV/D1 ids; deploy skipped. Create the resources (human step) and put the ids in wrangler.toml."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install package dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test + typecheck
+        run: |
+          npm run test --workspace digitrace-ingest
+          npm run typecheck --workspace digitrace-ingest
+
+      # The dry run is the same gate the PR pays, repeated against the deploy
+      # tree: it is the only step that proves the Worker bundles before wrangler
+      # talks to the API.
+      - name: Build (dry run)
+        run: npm exec -- wrangler deploy --dry-run --outdir "$RUNNER_TEMP/wrangler-dry-run"
+        working-directory: apps/digitrace-ingest
+
+      # Idempotent: wrangler applies only the migrations D1 has not recorded.
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/digitrace-ingest
+          command: d1 migrations apply digitrace --remote
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/digitrace-ingest
+          command: deploy

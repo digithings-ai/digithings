@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
+import { HashScrollManager, MotionProvider, ThemeProvider, faviconThemeScript } from "@digithings/ui";
 import { SiteChrome } from "@/components/site-chrome";
 import { HERO_PLAYED_SCRIPT } from "@/lib/hero-play";
 import { fontVariables } from "./fonts";
@@ -20,20 +20,16 @@ export const metadata: Metadata = {
     title: "digiquant",
     statusBarStyle: "black-translucent",
   },
-  // Cache-busting paths ensure browsers leave the retired QR mark behind.
-  // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
-  // cursor artwork rather than a browser-generated initial.
+  // The page is pinned dark. The script still selects the dark quant tile so an
+  // OS light scheme cannot swap in the light file before paint.
   icons: {
     icon: [
-      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
-      { url: "/icons/digi-app-light.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "48x48" },
       { url: "/icons/digi-app-32.png", type: "image/png", sizes: "32x32" },
     ],
-    shortcut: "/icons/digi-app-32.png",
-    apple: [
-      { url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: dark)" },
-      { url: "/icons/digi-app-touch-light.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: light)" },
-    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180" }],
   },
   openGraph: {
     title: "digiquant — a quant research desk in a glass box you own",
@@ -51,7 +47,19 @@ export const metadata: Metadata = {
     ],
     type: "website",
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "digiquant — a quant research desk in a glass box you own",
+    images: ["/og.png"],
+  },
 };
+
+const faviconInit = faviconThemeScript({
+  dark: "/icons/digi-app-dark.svg",
+  light: "/icons/digi-app-light.svg",
+  touchDark: "/icons/digi-app-touch-dark.png",
+  touchLight: "/icons/digi-app-touch-light.png",
+});
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: the inline script sets data-theme before hydration;
@@ -62,6 +70,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* One solid black canvas: the page is pinned to the dark theme, so the
             system-light flip themeInitScript does is deliberately not used. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.setAttribute('data-theme','dark')" }} />
+        <script dangerouslySetInnerHTML={{ __html: faviconInit }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}

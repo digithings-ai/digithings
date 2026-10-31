@@ -19,6 +19,7 @@ import {
   takePendingForceTool,
   takePendingTurnMode,
 } from "@/lib/pending-chat-headers";
+import { isPrivateMode, privateModeHeaderEntries } from "@/lib/product-slash-commands";
 import {
   DEFAULT_CLIENT_CONFIG,
   type DigichatClientConfig,
@@ -36,6 +37,12 @@ export type ChatPanelProps = {
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
+  /**
+   * Session private mode. The sidebar title is a fixed neutral label, because
+   * the derived title is the first user message — a demo starting "Hi, John
+   * Smith here…" would put a real name beside the chat.
+   */
+  privateMode?: boolean;
   /** Deploy client projection (features, tools, chrome). */
   clientConfig?: DigichatClientConfig;
 };
@@ -56,6 +63,7 @@ export function ChatPanel({
   onAllowTruncate,
   headerSlot,
   byokMode = false,
+  privateMode = false,
   onByokModeChange,
   clientConfig = DEFAULT_CLIENT_CONFIG,
 }: ChatPanelProps) {
@@ -101,6 +109,11 @@ export function ChatPanel({
             h.set("X-Digi-Force-Tool", forceTool);
           }
           h.set("X-Digi-Run-Id", crypto.randomUUID());
+          // Read at send time. useChat keeps the first transport (#1339), so a
+          // `privateMode` prop closed over here would stay at its mount value
+          // after `/private`.
+          const privateHeader = privateModeHeaderEntries(isPrivateMode());
+          if (privateHeader) h.set(privateHeader[0], privateHeader[1]);
           if (webSearchAllowed) {
             h.set("X-Digi-Enable-Web-Search", "1");
           }
@@ -132,7 +145,9 @@ export function ChatPanel({
         .filter(Boolean);
       const first = userTexts[0];
       if (first && (threadTitle === "New chat" || threadTitle.trim() === "") && onTitleDerived) {
-        const t = first.slice(0, 52) + (first.length > 52 ? "…" : "");
+        const t = privateMode
+          ? "Private session"
+          : first.slice(0, 52) + (first.length > 52 ? "…" : "");
         onTitleDerived(threadId, t);
       }
     },

@@ -1,8 +1,9 @@
-"""DigiAuthContext.tenant_slug_verified provenance flag (#2303).
+"""DigiAuthContext tenant provenance (#2303, DIG-3585).
 
-A JWT-derived tenant_slug is authoritative; a header-filled fallback is not.
-Downstream services doing real tenant authorization must be able to tell them
-apart via this flag rather than trusting tenant_slug alone.
+Only the signed JWT claim names the tenant. The unsigned X-Digi-Tenant /
+X-Digichat-Tenant headers are never read by the middleware, so a token with no
+tenant claim has no tenant whatever the caller sends (fail closed), and a
+token with a claim keeps its own tenant against a header naming another one.
 """
 
 from __future__ import annotations
@@ -76,17 +77,41 @@ def test_jwt_tenant_slug_is_verified(monkeypatch):
 
 
 @pytest.mark.unit
-def test_header_fallback_tenant_slug_is_not_verified(monkeypatch):
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-Digi-Tenant": "attacker-tenant"},
+        {"X-Digichat-Tenant": "attacker-tenant"},
+        {"x-digi-tenant": "attacker-tenant", "x-digichat-tenant": "attacker-tenant"},
+    ],
+)
+def test_claimless_token_gets_no_tenant_from_unsigned_headers(monkeypatch, headers):
+    """Fail closed: the header no longer fills an empty claim (#2303, DIG-3585)."""
     priv = _configure(monkeypatch)
     token = _mint(priv, tenant_slug="")
 
     client = TestClient(_make_app())
+    r = client.get("/protected", headers={"Authorization": f"Bearer {token}", **headers})
+    assert r.status_code == 200
+    assert r.json() == {"tenant_slug": "", "tenant_slug_verified": False}
+
+
+@pytest.mark.unit
+def test_header_naming_another_tenant_does_not_replace_the_claim(monkeypatch):
+    priv = _configure(monkeypatch)
+    token = _mint(priv, tenant_slug="acme")
+
+    client = TestClient(_make_app())
     r = client.get(
         "/protected",
-        headers={"Authorization": f"Bearer {token}", "X-Digi-Tenant": "attacker-tenant"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Digi-Tenant": "attacker-tenant",
+            "X-Digichat-Tenant": "attacker-tenant",
+        },
     )
     assert r.status_code == 200
-    assert r.json() == {"tenant_slug": "attacker-tenant", "tenant_slug_verified": False}
+    assert r.json() == {"tenant_slug": "acme", "tenant_slug_verified": True}
 
 
 @pytest.mark.unit

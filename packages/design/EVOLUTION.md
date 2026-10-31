@@ -1,6 +1,6 @@
 # digithings design evolution
 
-**Status:** Historical ledger. The competitor scans, design mine, landing demos, spec HTML, and smoke page were removed (DIG-3422). Build the next design reference in digiweb (`apps/reference`). Do not extend this file.
+**Status:** Historical ledger. The competitor scans, design mine, landing demos, spec HTML, and smoke page were removed (DIG-3422). Build the next design reference in digiweb (`apps/digiweb`). Do not extend this file.
 
 **Last updated:** 2026-07-05
 
@@ -38,7 +38,7 @@ only reference to it was an unused `styles.css` import — no `.term-*` class
 was ever consumed, since digichat's real chat UI uses its own `.dc-term-*`
 system instead.
 
-**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200). The competitor scans and the design-evolution backlog index are gone. Live specimens are in `apps/reference`.
+**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200). The competitor scans and the design-evolution backlog index are gone. Live specimens are in `apps/digiweb`.
 
 **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
 

@@ -42,7 +42,13 @@ logger = logging.getLogger(__name__)
 # Session controls a client tenant must never drive (DIG-1210): the model,
 # MCP servers and tool toggles stay operator-configured.
 LOCKED_SESSION_TOOLS = frozenset(
-    {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
+    {
+        "session_set_model",
+        "session_upsert_mcp",
+        "session_remove_mcp",
+        "session_toggle_tool",
+        "session_set_search_engine",
+    }
 )
 
 
@@ -483,6 +489,22 @@ def _run_document_rag_path(
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
+    # Pinned tenant (corpus map webSearchDomains): its web_search definition says
+    # where it may search and carries the tenant's site graph. The pin itself is
+    # enforced in the handler; this only changes what the model reads.
+    from digigraph.orchestration.web_search_tools import (
+        WEB_SEARCH_TOOL_NAME,
+        web_search_tool_for_tenant,
+    )
+
+    _tenant_web_search = web_search_tool_for_tenant(
+        state.get("web_search_domains"), state.get("web_search_site")
+    )
+    if _tenant_web_search is not None:
+        tools_for_llm = [
+            _tenant_web_search if _tool_def_name(t) == WEB_SEARCH_TOOL_NAME else t
+            for t in tools_for_llm
+        ]
     # Dedicated per-index search tools (DIG-3269): when the tenant map names them,
     # the model picks which corpus to search by picking the tool. The generic
     # digisearch tools (which fan out over the tenant index) are hidden, and each
@@ -518,7 +540,19 @@ def _run_document_rag_path(
 
     writer = _safe_stream_writer()
 
+    # One tool-call budget for the *turn*, not one per ``run_tools`` invocation.
+    # ``max_tool_calls`` is forwarded per call, so a main loop plus two
+    # continuations would otherwise spend the whole cap again each time. A
+    # ``tool_call`` event is emitted exactly once per executed tool call, so
+    # counting those is the turn's spend; the remaining allowance is recomputed
+    # from it at every call site. ``None`` (no header) stays uncapped.
+    turn_tool_budget: int | None = state.get("max_tool_calls")
+    counted_tool_calls = 0
+
     def stream_callback(event_type: str, data: Any) -> None:
+        nonlocal counted_tool_calls
+        if event_type == "tool_call":
+            counted_tool_calls += 1
         if (
             event_type == "tool_call"
             and data
@@ -528,6 +562,12 @@ def _run_document_rag_path(
         elif event_type == "tool_call" and data and data.get("name") in tenant_search_tools:
             data = {**data, "index_name": tenant_search_tools[data["name"]]["index"]}
         writer((event_type, data))
+
+    def remaining_tool_calls() -> int | None:
+        """Calls left in the turn's budget. 0 means wrap up with no tools."""
+        if turn_tool_budget is None:
+            return None
+        return max(0, turn_tool_budget - counted_tool_calls)
 
     def execute_one(name: str, args: dict) -> str | dict:
         if name in tenant_search_tools:
@@ -569,6 +609,8 @@ def _run_document_rag_path(
                 locate_tool=name,
                 locate_result=result,
                 execute_fn=execute_one,
+                # Same counter as the main loop: a nested auto-load call is a
+                # call, and must not see a fresh budget.
                 emit=stream_callback,
                 allowed_names=_allowed_names,
             )
@@ -686,6 +728,12 @@ def _run_document_rag_path(
         # 6, not 4: OCC ticket breakdowns page through list results and
         # ran out of rounds, ending in a tool-free wrap-up (DIG-3089).
         max_tool_rounds=6,
+        # The deployment's hard call cap (guardrails.maxToolCallsPerTurn, forwarded by
+        # digichat as X-Digi-Max-Tool-Calls): rounds above bound the loop's shape, this
+        # bounds the calls it actually makes, and the loop answers tool-free at the cap.
+        # What is passed is the turn's *remaining* allowance, not the cap: calls already
+        # spent by the forced hop count, and the continuations below get what is left.
+        max_tool_calls=remaining_tool_calls(),
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced
@@ -706,6 +754,7 @@ def _run_document_rag_path(
             tools=tools_for_llm,
             execute_tool=execute_search,
             max_tool_rounds=4,
+            max_tool_calls=remaining_tool_calls(),
             on_tool_step=stream_callback,
             tool_choice="auto",
             reasoning_effort=state.get("effort"),

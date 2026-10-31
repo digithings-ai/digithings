@@ -409,7 +409,6 @@ describe("non-AI-SDK guardrail instruction", () => {
       capToolPayload(value) {
         return value;
       },
-      noteToolCap() {},
     };
   }
 
@@ -489,7 +488,10 @@ describe("non-AI-SDK guardrail instruction", () => {
     const body = await bodyOf(res);
     expect(body).toContain("first");
     expect(body).not.toContain("second");
-    expect(body).toContain("tool-call-limit");
+    // The cap is silent: no notice on the notice channel, no user-facing text.
+    expect(body).not.toContain("tool-call-limit");
+    expect(body).not.toContain('"type":"data-notice"');
+    expect(body).not.toContain("Tool-call limit reached");
     expect(body).not.toContain("after");
   });
 
@@ -512,7 +514,10 @@ describe("non-AI-SDK guardrail instruction", () => {
     const body = await bodyOf(res);
     expect(body).toContain("first");
     expect(body).not.toContain("second");
-    expect(body).toContain("tool-call-limit");
+    // The cap is silent: no notice on the notice channel, no user-facing text.
+    expect(body).not.toContain("tool-call-limit");
+    expect(body).not.toContain('"type":"data-notice"');
+    expect(body).not.toContain("Tool-call limit reached");
     expect(body).not.toContain("after");
   });
 });

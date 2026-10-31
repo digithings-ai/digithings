@@ -49,7 +49,6 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 EXPECTED_WRANGLER_FILES = 9
 COMPOSE_FILES = (
     "docker-compose.yml",
-    "apps/digitrace-langfuse/docker-compose.local.yml",
     "docs/templates/project/docker-compose.yml",
     "infra/digichat-release/compose.digichat-release.yml",
     "infra/digichat-release/compose.profile-a-bundle.override.yml",

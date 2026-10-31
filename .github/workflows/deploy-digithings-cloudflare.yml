@@ -116,7 +116,7 @@ on:
       # And be equally plain about what has NOT happened: across all 38, some lane
       # running a root install always fired, so nothing has yet reached production
       # through this hole. The one manifest with no lane of its own was
-      # apps/reference, named at the end of this list. (An earlier draft counted
+      # apps/digiweb, named at the end of this list. (An earlier draft counted
       # digichat-ui here too; that was wrong — ci.yml's `digichat` and `web` filters both
       # list packages/digichat-ui/**, and both lanes install at the root.) This closes a
       # structural hole before it bites. It is not the fix for an incident.
@@ -140,14 +140,14 @@ on:
       # those lanes run `npm ci`, which catches a bad range by a different route than the
       # distinction drawn above: not by resolving it, but by refusing to run at all when
       # manifest and lock disagree. Cover either way. The fourth,
-      # apps/reference, was in no path filter in this repo at all — of the
+      # apps/digiweb, was in no path filter in this repo at all — of the
       # eight it was the one manifest watched by nothing — so a bad range there *would*
       # take both production sites down with no CI job running. Counterfactual, not
       # history: nothing has reached production through this hole. (#1956 reports
       # verifying the failure empirically — ETARGET out of the root install. Not re-run
       # here; the mechanism is just what `npm install` does with a workspaces root.)
       #
-      # Only the manifest, not `apps/reference/**`. Nothing anywhere in CI
+      # Only the manifest, not `apps/digiweb/**`. Nothing anywhere in CI
       # *builds* that app; since #1981 ci.yml's `web` lane does lint and type-check it,
       # gated on that directory, which is why this filter is the narrower of the two —
       # an install input here, a lint/typecheck input there, and no `next build` in
@@ -165,7 +165,7 @@ on:
       # Containers Worker). Pages does not build it; name the manifest so it is
       # not an orphan under tests/scripts/test_deploy_build_inputs.py.
       - "apps/digithings-stack-cloudflare/package.json"
-      - "apps/reference/package.json"
+      - "apps/digiweb/package.json"
   workflow_dispatch:
 
 concurrency:

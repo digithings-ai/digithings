@@ -66,6 +66,9 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
+brand-studio-check:
+	python3 packages/brand/build-studio.py --check
+
 # docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. Same check as CI docs job (#3524).
 adr-check:
 	python3 scripts/check_adr_numbering.py

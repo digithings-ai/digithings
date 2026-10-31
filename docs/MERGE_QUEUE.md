@@ -95,7 +95,7 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. An in-session review counts only when the reviewer-independence gate accepts its marker as another seat's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
 | Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
-| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
+| Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. **An approve on the same, unchanged head the block names clears it only when it also carries a `Withdraws:` line naming that block (DIG-5246)**: an approve says the code is good, not that the finding was dealt with. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
 
 Three of these are deliberate choices worth stating plainly.
@@ -172,18 +172,51 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
 1. **A seat's own block stands until that seat clears it.** A blocking verdict on the
    current head belongs to the seat that posted it. That seat's later approve clears it,
    and only when the approve names the head the PR stands at. An approve naming another
-   head clears nothing, and **another seat's approve clears nothing either**. `#6170`
-   (DIG-4911) merged into `develop` on 2026-10-21 with the security desk's `changes
-   requested` still on the branch: the code reviewer's later approve on the head was the
-   newest readable verdict, and nothing had ever asked the queue to wait for the second
-   sign-off. (The block in that timeline named `fb309e6458`, a commit the merged head had
-   left, so under the rule above it no longer holds a later head — the seat rule is
-   unchanged for a block that names the head.)
+   head clears nothing, and **another seat's approve clears nothing either**. **When the
+   approve names the same, unchanged head the block names, it must also carry a
+   `Withdraws:` line naming that block** (DIG-5246): an approve is a statement about the
+   code, and the queue does not read it as a statement that the finding was withdrawn.
+   `#6280` merged on 2026-10-22 because the code reviewer's 12:04 approve on the same
+   head `b1c5fde73ef8` silently cleared its own 10:21 `changes requested`; the two
+   blockers were still open and landed in `develop` (fix routed as DIG-5245). Going the
+   other way needs no line: **a new head with a fresh approve** clears, because the old
+   block named a commit the PR has left. That is not true of a block that names no head
+   (its `scope=` did not parse, DIG-5630): it is spent only by the seat's approve naming
+   the current head plus a `Withdraws:` line with no sha on it, and the queue's handback
+   for it says so. `#6170` (DIG-4911) merged into `develop` on
+   2026-10-21 with the security desk's `changes requested` still on the branch: the code
+   reviewer's later approve on the head was the newest readable verdict, and nothing had
+   ever asked the queue to wait for the second sign-off. (The block in that timeline named
+   `fb309e6458`, a commit the merged head had left, so under the rule above it no longer
+   holds a later head — the seat rule is unchanged for a block that names the head.)
 2. **Everything else is judged by the newest readable verdict.** The newest readable
    verdict is the one that counts: a blocking verdict blocks when it names the head the PR
    stands at (or names no head at all, which cannot be stale); an approve clears only when
    it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
+
+**A clearance names a seat that did not write the PR.** When a `changes_requested` on the
+current head would be cleared by the newest approve, that approve must carry the
+provenance marker's `agent=`, and that seat must not be one of the seats that wrote the
+PR (#4990, item 3). A comment that says "approve" with no marker, or one from an
+authoring seat, clears nothing while the block stands: `#6197` merged on the author's own
+write-up, and that write-up was the newest verdict. The authoring seats are read from the
+commits and their Paperclip runs (`_author_context`), never from the ticket's assignee —
+the assignee is the seat asked to move the ticket along, and reading it as the author
+refused the ticket owner's review on `#6145` (DIG-4809). When the queue cannot read who
+wrote the PR — the API is down, or a commit names an author it cannot resolve — this
+condition adds no gate of its own: the reviewer-independence row above is where that
+failure is reported, and it defers the PR rather than clearing it.
+
+**A marker inside code is quoted, not posted.** No clause reads a marker, a provenance
+line or a `Review verdict:` line that sits inside a fenced code block (``` or ~~~) or an
+inline code span: what a reader sees as code is being shown, not claimed, and a quote
+must neither block nor clear anything. `#6197` merged on the author's own write-up, which
+quoted the reviewer template inside a fence; #6196 had taught the reader about sentences
+and blockquotes, and a fence is neither (#4990). A fence nobody closed swallows the rest
+of the comment, because that is how Markdown renders it. The `review-applied` producer
+reads the same rule: its verdict line comes from the shared parser in
+`scripts/review_pass_filter.py`, which takes fenced blocks out before it reads a line.
 
 Clause 1 needs to know the seat, and the seat is written in one place only: the
 provenance marker's `agent=` field (`<!-- digithings-review agent=… -->`). Every seat
@@ -209,16 +242,54 @@ written once:
   marker and cleared the block through the provenance head.
 - A **prose verdict names the head** through any sha written in the comment — on the
   verdict line, in the sentence after it, or in the scope line the review opens with —
-  and through the provenance marker's `head=`.
+  and through the provenance marker's `head=`. Inline code is kept here, because a sha
+  a reviewer writes in backticks (`3f2a9c1d4b5e`) is still the sha they named; only the
+  `Review verdict:` token has to sit outside a span to count as posted (#4990).
 
 A binding of 7 characters or more that prefixes the head binds it, which is the width
 the reviewer-independence gate reads.
 
+**The withdrawal line.** A block on the current head is cleared by the same seat's
+approve on that head only when the approving comment carries a line that opens with
+`Withdraws:`. The line is read beside the verdict, in the same comment, and only the
+token at the start of a line counts — a "withdraw" somewhere in prose is not a
+withdrawal.
+
+```
+Review verdict: approved
+Withdraws: changes requested on 3f2a9c1d4b5e
+```
+
+- The line names the block by **a sha the block names**, at 7 characters or more
+  (`3f2a9c1d4b5e` above, or the full 40). The block's own `scope=`, a sha in its prose,
+  or its provenance `head=` all count, because all three are how a block names a head.
+- A line naming **no sha** withdraws only the seat's blocks that name no head. It never
+  spends a block scoped to a commit: the reviewer names what they are withdrawing.
+- A line naming **another head** spends nothing. The line is a statement about the block
+  it names, not a password that unlocks the seat.
+- The withdrawal is **part of the approve**: a `Withdraws:` line on its own, in a comment
+  with no approving verdict, still leaves the block standing.
+- Do not paste the line into a comment to show someone the syntax: a `Withdraws:`
+  line inside a fenced block or an inline code span is a quote, not a claim, and it
+  withdraws nothing — the same rule the verdict readers follow (#4990). Write it
+  outside code, and it is a live withdrawal.
+
+The line is what `#6280` was missing: two blocking findings were still open when the same
+seat approved the same head 1h43m later, and the queue read the later verdict as a
+clearance. The rule now asks the seat to say that it withdraws the finding, or to approve
+a new head (DIG-5246).
+
+**A verdict whose seat cannot be read is judged by clause 2**, so this line is the seat
+rule's business only: without the provenance marker the queue cannot tell a same-seat
+approve from another seat's, and the newest readable verdict decides. Post the marker.
+
 Three consequences worth stating plainly.
 
-- **A withdrawal is not a clearance.** The queue reads verdicts, not announcements: the
-  only thing that clears a block is a later approve naming the head. A seat that
-  withdraws a block by comment still has to post the approve.
+- **A withdrawal is not a clearance on its own.** The queue reads verdicts, not
+  announcements: a block is cleared by a later approve naming the head, and — when the
+  head has not moved — by that approve also carrying the withdrawal line. A `Withdraws:`
+  comment with no approving verdict, or a withdrawal line in a different comment from the
+  approve, leaves the block standing (DIG-5246).
 - **The queue has no notion of a required second sign-off.** It reads verdicts, not
   requests. A seat that needs two signatures asks for them itself — a hold file, a
   label — and the merge captain is the decider for that, not this gate.
@@ -229,7 +300,9 @@ Three consequences worth stating plainly.
   variant is not shipped because the marker only appeared on 2026-10-21: it would hold
   a PR whose blocking seat's earlier verdict carries no marker and whose later clearance
   does, and there is no way for that seat to clear it. The hole this closes is the
-  future one.
+  future one. The measurement predates the withdrawal clause (DIG-5246, 2026-10-26),
+  which was not re-measured: it changes only the same-head path, and `#6280` is the
+  one PR it is known to have taken.
 
 ### The `local-ci` provenance gate (DIG-4794)
 
@@ -311,9 +384,10 @@ short timeouts.
 **A dropped connection is not an answer about the build.** A read that never reached the
 API is tried again before it is believed — three attempts, a short pause between them,
 inside one budget, so a single path cannot cost the budget once per attempt. The budget is
-a deadline and not a sum of timeouts: the body is read in chunks and the read gives up
-when the deadline has passed, so a server that answers the headers and then trickles the
-body cannot hold the read open past it. A read the API *answered* — any status code, and a
+a deadline and not a sum of timeouts: the body is read one socket read at a time
+(`read1`, so one trickled byte gives the loop control back) and the read gives up when the
+deadline has passed, so a server that answers the headers and then trickles the body
+cannot hold the read open past it. A read the API *answered* — any status code, and a
 refused redirect — is an answer, and it is cached for the life of the process like every
 other answer: the API answered, and its answer is the same until the next tick. And a host
 that could not be read is asked once more, briefly, before the tick falls back on the
@@ -636,6 +710,79 @@ judgement, so the queue concludes nothing about the marker and refuses the PR,
 naming the reason. It refuses only that: a PR covered by Bugbot or by a human
 approval still merges, because the marker was never what cleared it.
 
+**A read failure is not a gate, and is never published as one.** The two
+"cannot judge" cases above are not the same thing, and the queue keeps them
+apart (DIG-5573). "The authoring seat could not be identified" is a fact about
+the commits on this branch — the remedy is on the branch, so it is a gate and
+appears in `reasons`. "Paperclip could not be read" says nothing about the
+branch at all: the queue records it in the verdict's `deferred` field, lists it
+in its own `deferred` block in the run summary, and leaves the PR out of the
+`blocked` list for that tick. Nothing is merged on an unread gate — a deferred
+PR is not eligible — and the next tick asks again.
+
+That separation is what stops the handback storm. The live driver keys its
+handback comment on the `reasons` it is given (`docs` cannot enforce that, it is
+the driver's own contract), so a transient read failure in that list is a
+*change of reasons* on every other tick, and each change is a new comment:
+**42 handbacks on #6418 in 29 h**, alternating between "the review seats could
+not be checked" and the real gate, several of them saying "nothing here needs a
+human". With the transient out of `reasons`, the gate set is stable, so the
+driver has nothing to re-post — and a PR cannot be held after its review lands
+by a slow read.
+
+**The read budget.** Each read of the Paperclip API is a GET with two attempts
+inside one deadline. On 2026-10-26 `GET /api/issues/{id}/runs` took **119.9 s**
+for 41 296 bytes on one ticket while the same read on two others in the same
+minute took 34.6 s and 38.9 s — the read is load-dependent, not PR-dependent.
+The socket timeout is **150 s** and the budget is **310 s** (two timeouts plus
+the 3 s backoff), so a 120-second answer fits and a slow first attempt still
+leaves room for the second. A bounded window is not available: the server
+ignores `?limit=` on that endpoint and returns the identical payload (measured
+at `?limit=5` twice), so there is no cheaper form of the same read to switch to
+— and the URL, the facts and the judgement are unchanged. The budget is a
+deadline, not a sum of timeouts: the body is read one socket read at a time
+(`read1`, so a body sent one byte at a time still returns to the loop between
+bytes) and the deadline is checked between them, so a server that answers the
+headers and then trickles the body cannot hold the tick open. A slow tick is the
+accepted price; a false handback re-posts itself every other tick, which is not.
+
+**The cache, and why a slow tick stopped being an acceptable price.** The budget
+above was chosen so a slow answer would not read as a refusal, and that is still
+right. What it did not account for is that the reader lived for exactly one tick:
+every tick asked for every ticket, every ticket's run list and every named run
+again, over every open pull request of both repos. At the measured cost — 12 s
+for a ticket, 28-144 s for a ticket's run list — a tick took 3 to 13 minutes
+against a 180 s interval, and it wrote nothing to its log until every PR had been
+judged. So the job read as alive and silent, `develop` moved about once every
+quarter of an hour instead of once every three minutes, and the liveness check
+paged for a queue that was working (DIG-5632, 26 Oct 2026).
+
+The answers are now kept between ticks in
+`~/.config/digithings/merge-queue/provenance-cache.json`, and the rule that makes
+that safe is narrow: **an answer may stand in for a read only for the commits that
+were already written when the answer was taken.** A run that covered such a commit
+existed by then, so the answer names it; a run that started after the answer was
+taken cannot have covered an older commit; and a commit written after the answer
+forces the fresh read that would see it. A run's seat and a ticket's id never
+change, so those answers do not expire at all. "The API has no such record" is
+believed for 60 s only, because a ticket can be filed and a run can start. Only
+the fields the gate reads are written down — a ticket's body and its comments are
+not — and a cache the queue cannot write is a slower queue, not a stopped one.
+
+The cache is the steady state; it is not the worst case. A cold cache, or a batch
+of branches that all moved at once, still asks for facts the cache cannot answer,
+and one pull request was measured at **313.6 s** of reads on its own — longer than
+the whole interval, and inside one PR, where a budget between PRs cannot reach. So
+the driver states a deadline (`MQ_PAPERCLIP_DEADLINE`, epoch seconds, one tick's
+budget) and the reader **does not start** a Paperclip read after it passes. It does
+not cut a read in half: a read that never finishes is a fact the cache never keeps,
+so the PR would cost the same on every later tick and the queue would never
+converge. A read refused at the deadline is `_PaperclipUnavailable`, which the gate
+already treats as `transient` — nothing concluded, nothing published as a gate, the
+PR judged again next tick (DIG-5573). Measured over five consecutive ticks against
+the live queue: 261 s, 151 s, 64 s, 21 s, 23 s. It converges, and every tick in
+between made progress and merged.
+
 **What this cannot prove.** Every seat pushes under one GitHub login, so GitHub
 cannot tell who typed a comment. The gate checks the marker's *declared*
 provenance against the Paperclip record — it cannot check the keystroke. Per-seat
@@ -698,6 +845,11 @@ against the new base first, so it queues on a later tick.
 Each merge passes `--match-head-commit`, so a push landing between evaluation and merge
 aborts the merge rather than landing a commit that was never gated. The queue never passes
 `--admin`.
+
+`list` and `run` end with four lists: `queued`, `stale` (nobody has to act; a tick
+updates them), `blocked` (each row with the gates it failed) and `deferred` (a fact the
+queue could not read). A deferred row is not a gate and is never published as one: it
+carries no reason, says what could not be read, and the next tick asks again.
 
 Every merge leaves an audit comment on the PR naming the role, the head SHA, the merge
 method, the review basis and the checks that were green. That comment is the answer to

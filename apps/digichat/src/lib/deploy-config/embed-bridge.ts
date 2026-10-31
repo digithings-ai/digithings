@@ -87,6 +87,8 @@ export function clientConfigFromEmbedTenant(
       suggestions: embed.suggestions ?? base.chrome.suggestions,
       placeholder: embed.placeholder ?? base.chrome.placeholder,
       accent: embed.accent,
+      ...(embed.fonts ? { fonts: embed.fonts } : {}),
+      ...(embed.colors ? { colors: embed.colors } : {}),
       attribution: embed.attribution,
       defaultLanguage: embed.defaultLanguage ?? base.chrome.defaultLanguage,
       toolbar: embed.toolbar ?? base.chrome.toolbar,
@@ -107,6 +109,7 @@ export function clientConfigFromEmbedTenant(
       speech: embed.speech ?? base.features.speech,
       sources: embed.sources ?? base.features.sources,
       branchPicker: embed.branchPicker ?? base.features.branchPicker,
+      privateMode: embed.privateMode ?? base.features.privateMode,
       modelPicker: allowPicker,
     },
     // A Foundry tenant is answered by its own agent: the model is the

@@ -62,6 +62,29 @@ other module path or any copy of an argv.
 `POST /run/*` requires `Authorization: Bearer $RUNNER_AUTH_TOKEN`. `GET /healthz`
 does not, and it does not start the container.
 
+## twelve-x data API (`/v1/*`)
+
+The data API that used to be the separate `digidata-api` Worker lives here
+(`src/data/`, DIG-2887 S2), so the one Worker that touches twelve-x data binds
+nothing of core. PostgREST-style reads (`GET /v1/twelvex/<table>?col=eq.v`) and
+upserts (`POST /v1/twelvex/<table>?on_conflict=a,b`, 1 to 500 rows) over an
+allowlist generated from `d1/twelvex/0001_init.sql`. Every call except
+`GET /v1/health` needs `Authorization: Bearer $DATA_API_TOKEN`, a different
+token from `RUNNER_AUTH_TOKEN`. It never starts the container.
+
+`DATA_BACKEND` picks the store: `supabase` (default until cutover, through the
+`TWELVEX_SUPABASE_*` secrets this Worker already holds) or `d1` (the
+`TWELVEX_DB` binding, database `twelvex`). The D1 id in `wrangler.toml` is a
+placeholder until `wrangler d1 create twelvex`. Local: `npm run d1:local:twelvex`.
+
+## Leaving the core project
+
+`TWELVEX_FORWARD_CORE_KEY = "0"` stops forwarding `CORE_SUPABASE_SERVICE_KEY`
+into the container. Unset keeps forwarding it, because the pinned twelve-x graph
+still writes the core economic calendar and reads two core market tables, and
+refuses to start without the key. Flip it only after that change lands in the
+twelve-x repo.
+
 ## Durable Object recycle
 
 The platform recycles the container Durable Object instance on its own
@@ -105,8 +128,33 @@ Failure uses the same GitHub labels as the workflows, on `digithings-ai/twelve-x
 - heartbeat exit 0 → comment and close open `primemarket-session-expired` issues
 
 A fresh open issue inside 24 hours gets a comment instead of a new issue.
-Logs record job, start, exit, and duration. They do not record the log tail
-or any secret.
+Logs record job, start, exit, duration and the one line reason of a failed
+run. They do not record the log tail or any secret.
+
+## The reason of a failed run
+
+A reason that stays inside the container is a reason the run watch cannot
+read, so the reason travels with the exit:
+
+- the container keeps the head and the tail of the log. The ingest prints its
+  verdict line on stdout and stdout comes first, so a log that keeps only the
+  end drops the line that names the cause.
+- the Worker reads the reason off the log tail and puts it in the exit log
+  line, in the response body and in the alert.
+- `digithings-cron` logs the reason and puts it in the error it throws. That
+  message is what the Worker error column holds.
+
+The reason is one line. It is never a secret: the container redacts the log
+before it leaves the image.
+
+The pinned twelve-x prints one machine-readable line per failed exit, and
+splits a transport failure into exit 3:
+
+    MARKET_CONTEXT_VERDICT=source: 2 source(s) failed: dmx-overview
+
+Both come from the twelve-x head in `twelvex-ref.txt`. An older pin has
+neither: the Worker then falls back to the `market_context:` log marker and
+then to the last line the run said.
 
 ## Secrets to set before a deploy
 
@@ -118,9 +166,10 @@ Names only. Never commit values. `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_T
 | `GH_ISSUES_TOKEN` | this Worker. Issues read/write on `digithings-ai/twelve-x` only |
 | `PRIMEMARKET_SESSION_TOKEN` | this Worker, forwarded into the container |
 | `TWELVEX_SUPABASE_SERVICE_KEY` | this Worker, forwarded into the container |
-| `TWELVEX_SUPABASE_URL` | optional. twelve-x has a code default |
+| `TWELVEX_SUPABASE_URL` | required for the `/v1` data API while `DATA_BACKEND` is `supabase` (it has no default). The container alone can do without it: twelve-x has a code default |
 | `CHEAPERINFERENCE_API_KEY` | the session route only. The model key, forwarded into the container as `OPENAI_API_KEY` |
-| `CORE_SUPABASE_SERVICE_KEY` | the session route only. The shared core calendar writes |
+| `CORE_SUPABASE_SERVICE_KEY` | the session route only. The shared core calendar writes. Removed once `TWELVEX_FORWARD_CORE_KEY = "0"` |
+| `DATA_API_TOKEN` | the `/v1` data API only. Bearer for its callers |
 
 `OPENAI_API_BASE` is not a secret. It is the model endpoint the house path
 uses, a plain var on this Worker (`[vars]` in `wrangler.toml`) with the same

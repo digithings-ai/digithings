@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DIGICHAT } from "@digithings/hero-banner/definitions";
 import { HeroBanner } from "@digithings/hero-banner/web";
-import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { ChatNoticeContent, chatNoticeRootProps } from "@digithings/ui/chat/notice";
 import { Button } from "@digithings/ui/ui";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
@@ -16,6 +15,15 @@ const READY = "digichat:ready";
 const SEED = "digichat:seed";
 /** Keep in sync with digichat `THEME_MESSAGE_TYPE` (`embed-theme-messages.ts`). */
 export const THEME = "digichat:theme";
+
+/**
+ * Pre-paint: the iframe ships `theme=light` and the real mode and palette
+ * are already on this document (`themeInitScript`). Rewrite `src` before the
+ * frame commits so the first embed request carries both. No request data is
+ * interpolated; the script reads the parent document.
+ */
+export const EMBED_FRAME_THEME_SCRIPT =
+  "try{var root=document.documentElement;var theme=root.getAttribute('data-theme')==='light'?'light':'dark';var palette=root.getAttribute('data-palette');var frame=document.getElementById('dc-digichat-frame');var src=frame&&frame.getAttribute('src');if(src){var url=new URL(src,window.location.href);var changed=false;if(url.searchParams.get('theme')!==theme){url.searchParams.set('theme',theme);changed=true}if(palette){if(url.searchParams.get('palette')!==palette){url.searchParams.set('palette',palette);changed=true}}else if(url.searchParams.has('palette')){url.searchParams.delete('palette');changed=true}if(changed)frame.setAttribute('src',url.toString())}}catch(e){}";
 /** Keep in sync with digichat `PARENT_ERROR_MESSAGE_TYPE`. */
 export const PARENT_ERROR = "digichat:parent-error";
 
@@ -47,8 +55,6 @@ export const WARMUP_PATH = "/api/embed/warmup";
 export const SERVICES_BUDGET_MS = 240_000;
 const SERVICES_POLL_MS = 3_000;
 const SERVICES_PROBE_TIMEOUT_MS = 60_000;
-/** Shown on the step before the first probe answers. */
-const DEFAULT_SERVICES = ["auth", "assistant"] as const;
 
 export type WarmupProbe = { ready?: boolean; services?: Record<string, string> };
 
@@ -252,11 +258,31 @@ function parseOrigin(raw: string): string {
   }
 }
 
+/** Query key carrying the OCC private-mode opt-in, on the parent and embed URL. */
+export const PRIVATE_MODE_PARAM = "private";
+
+/**
+ * Read the private-mode opt-in off a parent URL query string.
+ *
+ * Same shape as `readInviteToken` (live `window.location.search`, never a value
+ * baked into the exported HTML), but its own key: the invite reader is bound to
+ * `token` and a second name for one secret is the reason that helper exists.
+ *
+ * ON-only by construction — exactly `"1"` turns it on. Absent, empty or any
+ * other value is off, so the flag can only ever be added to the embed URL,
+ * never used to switch a tenant's retention back on from the address bar.
+ */
+export function readPrivateMode(search: string | undefined): boolean {
+  if (!search) return false;
+  return new URLSearchParams(search).get(PRIVATE_MODE_PARAM) === "1";
+}
+
 function embedSrc(
   origin: string,
   embedHost: string,
   theme: EmbedShellTheme,
   inviteToken?: string,
+  privateMode = false,
 ): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(`${base}/embed`);
@@ -269,6 +295,10 @@ function embedSrc(
   // Invite key for a gated tenant (DIG-1210). Omitted entirely when absent so a
   // tokenless embed URL is byte-identical to the pre-invite one.
   if (inviteToken) url.searchParams.set("token", inviteToken);
+  // OCC private mode (display-side substitution for demos). Set only when the parent said
+  // exactly `private=1`; omitted otherwise, so the flag is ON-only and an
+  // ordinary embed URL keeps the params it had.
+  if (privateMode) url.searchParams.set(PRIVATE_MODE_PARAM, "1");
   const copy = EMBED_SHELL_COPY[embedHost];
   if (copy) {
     url.searchParams.set("welcome", copy.welcome);
@@ -302,14 +332,6 @@ export type ChatEmbedShellProps = {
    * source, exactly as before.
    */
   theme?: EmbedShellTheme;
-  /**
-   * What the cold-start cover paints. `"toolchain"` is the shared
-   * BootLabOverlay tool-chain (the landing pop-up's LiveAsk keeps it);
-   * `"banner"` is the digichat hero banner alone, for the full-page /chat and
-   * /chat/occ routes, where the page is nothing but the chat and a simulated
-   * tool list would be inventing work the visitor never started.
-   */
-  warmupLoader?: "toolchain" | "banner";
 };
 
 /**
@@ -322,12 +344,17 @@ export type ChatEmbedShellProps = {
  *
  * Boot: digichat's in-app boot chain owns the warm path (it yields on warm
  * nav), but a cold Container has no document to run it in. Until the frame
- * paints, this shell covers the wait with the same `@digithings/ui`
- * BootLabOverlay tool-chain the embed uses — shown only after WARMUP_DELAY_MS so
- * warm loads never flash it, and crossfaded out on `digichat:ready`. Full-page
- * routes (`ChatPageShell`) pass `warmupLoader="banner"` and get the digichat
- * hero banner in the same cover instead. The
- * iframe stays opacity-0 underneath and the frame slot is painted from the
+ * paints, this shell covers the wait with the digichat hero banner's LOADING
+ * pass — the same animation digichat runs itself — shown only after
+ * WARMUP_DELAY_MS so warm loads never flash it, and crossfaded out on
+ * `digichat:ready`. One cover for every surface: the full-page /chat and
+ * /chat/occ routes, the landing pop-up, and the host panels. The old
+ * tool-chain rows are gone on purpose — they simulated tool
+ * work the visitor never started, and they made the OCC chat differ from the
+ * digichat chat. `?boot=classic` remains the explicit escape hatch *inside*
+ * digichat; the shell cover always paints the banner.
+ *
+ * The iframe stays opacity-0 underneath and the frame slot is painted from the
  * first HTML by `.dc-chat-frame` in globals.css (`--chat-frame-canvas` per
  * `[data-theme]`), so a white default document never flashes.
  *
@@ -340,7 +367,6 @@ export function ChatEmbedShell({
   embedOrigin,
   embedHost = DEFAULT_CHAT_EMBED_HOST,
   acceptsInviteToken = false,
-  warmupLoader = "toolchain",
   theme: themeProp,
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -355,7 +381,6 @@ export function ChatEmbedShell({
   const [embedReady, setEmbedReady] = useState(false);
   // Every sleep-on-idle service answered warm-up (or the budget was spent).
   const [servicesReady, setServicesReady] = useState(false);
-  const [serviceNames, setServiceNames] = useState<string[]>([...DEFAULT_SERVICES]);
   // Ready-timeout / load-error paths reveal the frame regardless of warm-up,
   // so the in-chat error line is visible.
   const [forceReveal, setForceReveal] = useState(false);
@@ -405,6 +430,11 @@ export function ChatEmbedShell({
       // than during render: the SSR pass cannot see the query, and the exported
       // HTML must not carry one visitor's key to the next.
       const token = acceptsInviteToken ? readInviteToken(window.location.search) : undefined;
+      // Private mode is a capability any embed can opt into, not a property of
+      // the invite gate: any tenant link can carry `?private=1`, and the flag is
+      // inert unless digichat is built to honour it. `acceptsInviteToken` is
+      // deliberately not consulted — a tokenless tenant gets the flag too.
+      const privateMode = readPrivateMode(window.location.search);
       // The key has been read and now lives only in this effect's local state
       // for the session, so it has no further reason to sit in the address bar
       // (DIG-1437). Never a store, a cookie or sessionStorage.
@@ -419,8 +449,12 @@ export function ChatEmbedShell({
       // extra src swap on hydration even when the theme already agrees. Any
       // other visitor's src is left alone: no token means no rebuild.
       const missingToken = Boolean(token) && !current.includes("token=");
-      if (!current.includes(`theme=${theme}`) || missingToken) {
-        setSrc(embedSrc(embedOrigin, embedHost, theme, token));
+      // Same one-swap rule as the key: the exported first paint cannot carry a
+      // per-visitor flag, so an opt-in link needs the rebuild even when the
+      // theme already agrees. Any other visitor's src is left alone.
+      const missingPrivate = privateMode && !current.includes(`${PRIVATE_MODE_PARAM}=`);
+      if (!current.includes(`theme=${theme}`) || missingToken || missingPrivate) {
+        setSrc(embedSrc(embedOrigin, embedHost, theme, token, privateMode));
       }
     });
 
@@ -523,12 +557,7 @@ export function ChatEmbedShell({
     const sameOrigin = targetOrigin === window.location.origin;
     void (async () => {
       if (sameOrigin) {
-        await waitForServices(targetOrigin, {
-          isCancelled: () => cancelled,
-          onServices: (names) => {
-            if (!cancelled && names.length) setServiceNames(names);
-          },
-        });
+        await waitForServices(targetOrigin, { isCancelled: () => cancelled });
       }
       if (cancelled) return;
       signalDigichatBootStep("services");
@@ -653,47 +682,25 @@ export function ChatEmbedShell({
             background: "transparent",
           }}
         >
-          {warmupLoader === "banner" ? (
-            // Full-page chat (/chat, /chat/occ): the digichat hero banner
-            // alone, centered both ways. No copy and no spinner — the page is
-            // the chat, so the cover is the product's own mark playing its
-            // LOADING pass. The wrapper is what gives the canvas a width;
-            // HeroBanner sizes itself to its container.
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "100%",
-                height: "100%",
-              }}
-            >
-              <div style={{ width: "min(560px, 72vw)" }}>
-                <HeroBanner def={DIGICHAT} replayLoading />
-              </div>
-              <span className="sr-only">Loading chat…</span>
+          {/* The one cold-start cover: the digichat hero banner alone, centered
+              both ways. No copy and no spinner — the page is the chat, so the
+              cover is the product's own mark playing its LOADING pass, which
+              is what digichat itself paints. The wrapper is what gives the
+              canvas a width; HeroBanner sizes itself to its container. */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            <div style={{ width: "min(560px, 72vw)" }}>
+              <HeroBanner def={DIGICHAT} replayLoading />
             </div>
-          ) : (
-            <BootLabOverlay
-              // The canonical tool-chain boot: rows pull the image, mount the
-              // configuration, warm the runtime, then the last row waits for the
-              // app's real ready edge — the digichat:ready postMessage, passed
-              // through as readyEdge because the app runs in another document.
-              // Facts are the deployment's real values (never invented counts):
-              // both live tenants run the digigraph backend.
-              variant="tooltask"
-              // The last rows wait on real edges: "wake up services" on the
-              // warm-up probe, "wire in the backend" on digichat:ready.
-              ready={revealed}
-              readyEdge={revealed}
-              onSettled={() => {}}
-              facts={{
-                starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
-                backend: "digigraph",
-                services: serviceNames,
-              }}
-            />
-          )}
+            <span className="sr-only">Loading chat…</span>
+          </div>
         </div>
       ) : null}
 
@@ -745,8 +752,7 @@ export function ChatEmbedShell({
           // ran). Rewrite the iframe's src before its document commits so dark
           // readers never see the light frame. Inert after hydration.
           dangerouslySetInnerHTML={{
-            __html:
-              "try{var t=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';if(t==='dark'){var f=document.getElementById('dc-digichat-frame');var s=f&&f.getAttribute('src');if(s&&s.indexOf('theme=light')>-1){f.setAttribute('src',s.replace('theme=light','theme=dark'));}}}catch(e){}",
+            __html: EMBED_FRAME_THEME_SCRIPT,
           }}
         />
       ) : null}

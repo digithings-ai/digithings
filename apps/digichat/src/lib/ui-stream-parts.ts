@@ -137,7 +137,7 @@ export type StandardActivityContext = {
    * Identity keys of the sources already written this turn (see
    * `src/lib/document-identity.ts`). Every retrieve span (digisearch,
    * digivault_get_note, …) re-reports the same hits; writing each again stacked
-   * duplicate citation parts (OCC #185). A document is a duplicate when any of
+   * duplicate citation parts (#185). A document is a duplicate when any of
    * its keys was already seen — one key per location or handle, so the same
    * document arriving under two paths is written once, while two documents
    * that merely share a title are both written.

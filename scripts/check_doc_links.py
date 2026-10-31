@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -109,30 +110,48 @@ def _gitignore_paths(candidates: set[str]) -> frozenset[str]:
     )
 
 
+# Directories a markdown walk must never descend into. These mirror the
+# dependency and build trees _is_excluded already drops per file.
+_SKIP_DIRS = frozenset({
+    ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", ".next", ".turbo", ".wrangler", "dist",
+    "build", "coverage", "htmlcov", ".worktrees", ".paperclip",
+})
+
+
 def _collect_markdown_files() -> list[Path]:
     out: list[Path] = []
-    for p in REPO_ROOT.rglob("*.md"):
-        try:
-            rel = p.relative_to(REPO_ROOT)
-        except ValueError:
-            continue
-        rel_posix = rel.as_posix()
-        if _is_excluded(rel_posix):
-            continue
-        name = rel.name
-        parts = rel.parts
-        if rel_posix.startswith("docs/"):
-            out.append(p)
-            continue
-        if len(parts) == 1 and name in ROOT_DOC_NAMES:
-            out.append(p)
-            continue
-        if name == "AGENTS.md" or name == "CLAUDE.md":
-            out.append(p)
-            continue
-        if name.startswith("DIGI") and name.endswith(".md"):
-            out.append(p)
-            continue
+    # Prune during the walk, not after it: an unpruned rglob descends into
+    # node_modules, .venv and every agent worktree to reach the handful of
+    # markdown files this repo actually ships (166k files walked to read 420).
+    # _SKIP_DIRS is the directory-level form of _is_excluded, so the selected
+    # file set is unchanged; the walk just stops opening what it then discards.
+    for dirpath, dirnames, filenames in os.walk(REPO_ROOT):
+        dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
+        for name in filenames:
+            if not name.endswith(".md"):
+                continue
+            p = Path(dirpath) / name
+            try:
+                rel = p.relative_to(REPO_ROOT)
+            except ValueError:
+                continue
+            rel_posix = rel.as_posix()
+            if _is_excluded(rel_posix):
+                continue
+            parts = rel.parts
+            if rel_posix.startswith("docs/"):
+                out.append(p)
+                continue
+            if len(parts) == 1 and name in ROOT_DOC_NAMES:
+                out.append(p)
+                continue
+            if name == "AGENTS.md" or name == "CLAUDE.md":
+                out.append(p)
+                continue
+            if name.startswith("DIGI") and name.endswith(".md"):
+                out.append(p)
+                continue
     # Build output and vendored checkouts hold a copy of component docs
     # (AGENTS.md among them), and the relative links inside a copy do not
     # resolve from the copy's own location — so `npm run build` in

@@ -1,3 +1,4 @@
+import { safeEqualStr } from "@/lib/safe-equal";
 import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
@@ -64,7 +65,7 @@ function devProvider(): NextAuthConfig["providers"][number] | null {
         typeof creds?.password === "string"
           ? creds.password.trim()
           : String(creds?.password ?? "").trim();
-      if (got === want) {
+      if (safeEqualStr(got, want)) {
         return {
           id: "dev-local",
           name: "Local Dev",
@@ -92,7 +93,7 @@ function localBootstrapProvider(): NextAuthConfig["providers"][number] | null {
         typeof creds?.key === "string"
           ? creds.key.trim()
           : String(creds?.key ?? "").trim();
-      if (got && got === secret) {
+      if (got && safeEqualStr(got, secret)) {
         return {
           id: "dev-local",
           name: "Local Dev",

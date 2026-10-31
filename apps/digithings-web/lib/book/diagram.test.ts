@@ -108,6 +108,9 @@ describe("findDiagramFences", () => {
 
   it("CONTROL: a body with no fence yields none, and one with two yields two", () => {
     expect(findDiagramFences("just prose\n")).toEqual([]);
+    // A caption after the language must not hide the fence from the renderer:
+    // the page would link an SVG the build never wrote.
+    expect(findDiagramFences("```mermaid the caption\na\n```\n")).toEqual([{ index: 0, source: "a" }]);
     expect(findDiagramFences("```mermaid\na\n```\n```mermaid\nb\n```\n")).toHaveLength(2);
   });
 });

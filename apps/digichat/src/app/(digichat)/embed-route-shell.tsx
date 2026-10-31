@@ -17,26 +17,26 @@ import { resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
 import { embedOriginHostOf, resolveEmbedClientConfigForPaint } from "@/lib/embed-chat-tenant";
 import { resolveEmbedRenderToken } from "@/lib/embed-token-transport";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
+import {
+  SITE_EMBED_CANVAS_CSS,
+  SITE_RAILS_SCRIPT,
+  embedPalettePinScript,
+  themePinScript,
+} from "@/lib/embed-site-theme";
+import { LayoutLines } from "@digithings/ui";
+import { skinShowsSiteRails } from "@digithings/ui/chat/skins";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
+import { isPrivateUrlParam, privateFirstPaintTenant } from "@/lib/private-chrome";
+import { tenantColorsCss } from "@/lib/tenant-colors";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
-   head scripts so it deliberately wins over them; mirrors [data-theme] onto
-   the .dark/.light classes. No value from the request is interpolated into
-   these strings — the two scripts are complete literals selected by a
-   boolean, so there is no concatenation path for request data to reach the
-   document. */
-const THEME_PIN_SCRIPTS = {
-  light:
-    "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('light');e.classList.remove('dark');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#f1f0eb')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
-  dark: "try{var e=document.documentElement;e.setAttribute('data-theme','dark');e.setAttribute('data-theme-pin','1');e.removeAttribute('data-palette');e.classList.add('dark');e.classList.remove('light');var m=document.querySelector('meta[name=theme-color]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content','#121417')}catch(t){}", // canon-allow: the theme-color meta matches the embed canvas pair below and is read by the browser chrome, not the cascade
-} as const;
-
-function themePinScript(theme: "dark" | "light"): string {
-  return theme === "light" ? THEME_PIN_SCRIPTS.light : THEME_PIN_SCRIPTS.dark;
-}
+   head scripts. A top-level page with no ?theme= (a /chat/<slug> tenant document)
+   leaves themeInitScript's dt-theme / dt-palette paint in place. An iframe
+   or a ?theme= lock still pins the tenant/parent mode. The script bodies
+   live in embed-site-theme.ts and contain no request data. */
 
 const first = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
@@ -62,12 +62,17 @@ export default async function EmbedRouteShell({
     requestedHost,
     embedOriginHostOf(hdrs),
   );
-  // Invite-only hosts (OCC, DIG-1210): no valid invite token -> the standard
+  // Invite-only hosts (DIG-1210; claims in embed-invite-only.ts): no valid invite token -> the standard
   // 404, no hint, no branding, no chat.
   if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
     notFound();
   }
-  const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
+  const { seeded: tenantSeededCfg, urlTheme } = resolveEmbedSeededTenant(initialTenantCfg, params);
+  // A private page (`?private=1`, or a reload of one) for a tenant that opted
+  // in paints the generic support-desk copy from the first byte: the tenant's
+  // welcome, title, placeholder and chips never reach the HTML or the client
+  // props serialised into it. Normal mode keeps the tenant's own copy.
+  const seededCfg = privateFirstPaintTenant(tenantSeededCfg, isPrivateUrlParam(params.private));
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
   // The host's URL overrides (welcome / placeholder / suggestions / accent)
   // seed the first paint too: the client hook applies them post-mount, which
@@ -86,6 +91,8 @@ export default async function EmbedRouteShell({
         ? "#121417" // canon-allow: the first parsed byte has no CSS var to read yet
         : "#f1f0eb" // canon-allow: same literal pair as the product-chrome.css term-bg fallback
       : "var(--background)";
+
+  const tenantCfgColorsCss = tenantColorsCss(seededCfg.colors);
 
   return (
     <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
@@ -123,17 +130,33 @@ export default async function EmbedRouteShell({
             first(params.host) || token
               ? "body.bg-background{background:var(--embed-canvas)}.dc-embed-shell{background:var(--embed-canvas)}"
               : "body.bg-background{background:transparent!important}body *{background:transparent!important}"
-          }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
+          }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}${SITE_EMBED_CANVAS_CSS}`,
         }}
       />
+      {/* Tenant colours (src/lib/tenant-colors.ts): the tenant's own light and
+          dark hexes, validated #rrggbb only, painted from the first byte. Later
+          in the document than the canvas rule above, and :root:root beats it. */}
+      {tenantCfgColorsCss ? (
+        <style data-tenant-colors="" dangerouslySetInnerHTML={{ __html: tenantCfgColorsCss }} />
+      ) : null}
       <script dangerouslySetInnerHTML={{ __html: themePinScript(paintTheme) }} />
+      <script dangerouslySetInnerHTML={{ __html: embedPalettePinScript() }} />
       <script
         dangerouslySetInnerHTML={{
           __html:
             "try{document.documentElement.dataset.embedWide=/[?&]wide=1(?:&|$)/.test(window.location.search)?'1':'0';}catch(e){}",
         }}
       />
-      <EmbedClient initialTenantCfg={seededCfg} initialBoot={first(params.boot) ?? null} />
+      <script dangerouslySetInnerHTML={{ __html: SITE_RAILS_SCRIPT }} />
+      {/* Hidden unless the pre-paint script marked this document top-level,
+          so an iframed dashboard or website embed does not draw a second pair.
+          The lines are the house look: only a skin that carries them mounts them. */}
+      {skinShowsSiteRails(seededCfg.skin) ? <LayoutLines className="dc-site-rails" /> : null}
+      <EmbedClient
+        initialTenantCfg={seededCfg}
+        initialBoot={first(params.boot) ?? null}
+        initialHost={first(params.host) ?? null}
+      />
     </div>
   );
 }

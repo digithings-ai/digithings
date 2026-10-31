@@ -27,11 +27,10 @@
  *
  * PRECEDENCE (highest first)
  *   1. the KV namespace, when bound and readable;
- *   2. the wrangler `[vars]` pair, the interim source;
+ *   2. the house `[vars]` value plus the private-tenant secret, the interim source;
  *   3. `DIGITHINGS_ONLY_CORPUS_MAP`, first-party only.
- * Arm 2 is NOT this leaf's to remove. `wrangler.toml` `[vars]` still carries the
- * live OCC entry and the `TENANT_CONFIG` namespace does not exist yet, so
- * deleting arm 2 now would strip tenant config off the deployed Worker. It is
+ * Arm 2 is NOT this leaf's to remove: it is what the deployed Worker serves
+ * today, so deleting it would strip tenant config off the Worker. It is
  * removed by the scrub that owns the corpus-map literal (DIG-3689). Arms are
  * REPLACED, not merged: merging would keep a client tenant alive from a source
  * that is supposed to have been retired, which is the fail-open direction.
@@ -41,11 +40,15 @@
  * the OCC research prompt alone is 4239 of them -- so `wrangler deploy` failed
  * with code 10054 and the Worker could not ship. The value is now two vars,
  * `DIGI_TENANT_CORPUS_MAP` (the house `digithings` entry alone) and
- * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant, today just `occ`), and
+ * `DIGI_TENANT_CORPUS_MAP_EXTRA` (every other tenant), and
  * {@link composeCorpusMap} joins them into the one string the container reads.
+ * DIG-3585 then moved that second half out of `[vars]` into the Worker secret
+ * `DIGI_TENANT_CORPUS_MAP_PRIVATE`: it is client config and must not ship in a
+ * public file. The house entry stays a `[vars]` value.
  * The house entry keeps the unsuffixed name because digigraph reads that name
- * directly; splitting is a binding-size workaround, not a shape change, so the
- * composed value is byte-identical to the map that used to sit in one var.
+ * directly; splitting is a binding-size workaround, not a shape change. The
+ * composed value is the old map plus the house-slug alias (`digithings-ai`,
+ * DIG-5638); every other byte is unchanged.
  *
  * FAIL CLOSED, EVERYWHERE
  * An unbound namespace, a KV read that throws, malformed JSON, a non-object
@@ -72,17 +75,80 @@ export interface TenantCorpusEntry {
 export type TenantCorpusMap = Record<string, TenantCorpusEntry>;
 
 /**
+ * The house (first-party) tenant slug and the live embed slug.
+ *
+ * `digithings` is the key the corpus map has always used and old callers still
+ * read. The live digichat deployment resolves its house tenant as
+ * `digithings-ai` (GET https://digithings.ai/api/embed/tenant-config returns
+ * `"slug":"digithings-ai"`), and both digigraph's corpus routing and digivault's
+ * `tenant_scope` look a slug up verbatim. A map carrying only one of the two
+ * leaves the live chat on an unknown tenant: digivault answers 403. So every
+ * arm of the map carries BOTH keys with the SAME entry (DIG-5638).
+ */
+export const HOUSE_TENANT_SLUG = "digithings";
+export const LIVE_HOUSE_TENANT_SLUG = "digithings-ai";
+
+/** The first-party corpus routing, shared by both house slug keys. */
+const DIGITHINGS_CORPUS_ENTRY: TenantCorpusEntry = {
+  digisearchIndex: "digithings_docs",
+  vaultPathPrefix: "clients/digithings",
+};
+
+/** True when an entry is a usable corpus, by the same rule the KV projection uses. */
+function hasCorpus(entry: TenantCorpusEntry | undefined): entry is TenantCorpusEntry {
+  return typeof entry?.digisearchIndex === "string" && entry.digisearchIndex.trim() !== "";
+}
+
+/**
+ * Give both house slugs the same corpus entry; leave every other key alone.
+ *
+ * The canonical {@link HOUSE_TENANT_SLUG} entry wins when a map carries both
+ * usable keys, so a stale alias can never widen or narrow the house corpus. An
+ * entry with no `digisearchIndex` is not usable and never shadows one that is,
+ * so an empty-but-valid `{"digithings": {}}` cannot silently narrow the corpus
+ * a good `digithings-ai` entry already provided. When a map carries only the
+ * live {@link LIVE_HOUSE_TENANT_SLUG} slug -- the shape the live KV document
+ * uses today -- the canonical key is added for old callers. The two keys are
+ * emitted together, canonical first, so the serialised map is deterministic
+ * whichever slug the source happened to carry.
+ *
+ * A map with neither usable house slug is returned unchanged: this adds an
+ * alias, it never invents a tenant.
+ */
+export function withHouseSlugAlias(map: TenantCorpusMap): TenantCorpusMap {
+  const house = hasCorpus(map[HOUSE_TENANT_SLUG])
+    ? map[HOUSE_TENANT_SLUG]
+    : hasCorpus(map[LIVE_HOUSE_TENANT_SLUG])
+      ? map[LIVE_HOUSE_TENANT_SLUG]
+      : undefined;
+  if (house === undefined) return map;
+
+  const aliased: TenantCorpusMap = {};
+  for (const [slug, entry] of Object.entries(map)) {
+    if (slug === HOUSE_TENANT_SLUG || slug === LIVE_HOUSE_TENANT_SLUG) {
+      if (!(HOUSE_TENANT_SLUG in aliased)) {
+        aliased[HOUSE_TENANT_SLUG] = house;
+        aliased[LIVE_HOUSE_TENANT_SLUG] = house;
+      }
+      continue;
+    }
+    aliased[slug] = entry;
+  }
+  return aliased;
+}
+
+/**
  * The first-party tenant only, used when neither KV nor `[vars]` yields
  * anything. Digithings must keep a corpus whether or not a client tenant is
  * configured, so this is the floor rather than an empty map: an empty map makes
  * every tenant unknown, which the container reads as a refusal.
+ *
+ * It carries both house slugs, because a fallback that answered only
+ * `digithings` would still refuse the live `digithings-ai` chat.
  */
-export const DIGITHINGS_ONLY_CORPUS_MAP: TenantCorpusMap = {
-  digithings: {
-    digisearchIndex: "digithings_docs",
-    vaultPathPrefix: "clients/digithings",
-  },
-};
+export const DIGITHINGS_ONLY_CORPUS_MAP: TenantCorpusMap = withHouseSlugAlias({
+  [HOUSE_TENANT_SLUG]: DIGITHINGS_CORPUS_ENTRY,
+});
 
 /** `DIGITHINGS_ONLY_CORPUS_MAP` pre-serialised for the container env var. */
 export const DIGITHINGS_ONLY_CORPUS_JSON = JSON.stringify(DIGITHINGS_ONLY_CORPUS_MAP);
@@ -136,6 +202,10 @@ function parseJson(raw: string | null | undefined): unknown {
  * `vaultPathPrefix` becomes `""` here, where `str(value)` would yield e.g.
  * `"None"` or `"123"`. A stringified sentinel can be mistaken downstream for a
  * configured prefix; an empty string cannot.
+ *
+ * The projected map carries both house slugs (see {@link withHouseSlugAlias}):
+ * the live KV document names the house tenant `digithings-ai`, while the map has
+ * historically been read as `digithings`. Unknown tenants are never added.
  */
 export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusMap {
   if (!isPlainObject(document)) return {};
@@ -166,11 +236,15 @@ export function projectEmbedTenantsToCorpusMap(document: unknown): TenantCorpusM
     }
     projected[slug.trim()] = corpus;
   }
-  return projected;
+  return withHouseSlugAlias(projected);
 }
 
-/** Wrangler `[vars]` name for the second half of the split corpus map. */
-export const CORPUS_MAP_EXTRA_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_EXTRA";
+/**
+ * Worker SECRET holding every non-house tenant's corpus map. It used to be the
+ * `DIGI_TENANT_CORPUS_MAP_EXTRA` `[vars]` value, which put client routing and a
+ * client research prompt in the public repo (DIG-3585).
+ */
+export const CORPUS_MAP_PRIVATE_ENV_VAR = "DIGI_TENANT_CORPUS_MAP_PRIVATE";
 
 /**
  * Parse a `DIGI_TENANT_CORPUS_MAP` value (the `[vars]` legacy arm).
@@ -204,11 +278,88 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
 }
 
 /**
+ * The form every consumer keys a tenant by: digigraph's corpus routing and
+ * digivault's tenant scope both `strip()` and `lower()` the slug (last wins),
+ * so the Worker must judge collisions on this form, not on the raw JSON key.
+ */
+export function normalizeTenantSlug(slug: string): string {
+  return slug.trim().toLowerCase();
+}
+
+/** digigraph's own slug rule (`_SLUG` in digigraph/corpus_routing.py). */
+const TENANT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * JS `trim()` and Python `str.strip()` disagree outside ASCII whitespace
+ * (Python also strips U+001C-U+001F and U+0085; `lower()` folds some non-ASCII
+ * letters to ASCII). Accepting only all-ASCII raw keys whose normalised form
+ * passes digigraph's rule makes the two normalisations agree on every key that
+ * ships.
+ */
+const ASCII_ONLY_RE = /^[\x00-\x7f]*$/;
+
+/**
+ * Short, stable tag for a rejected slug (FNV-1a 32-bit), so a warning can say
+ * which key was dropped without writing a tenant name into the Worker logs.
+ */
+function slugTag(raw: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i += 1) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `#${h.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * Client (non-house) entries keyed by their normalised slug, safe to merge
+ * under the house map. Dropped with one warning each (a hash tag and a reason,
+ * never the raw slug):
+ * - a slug whose raw key is not all ASCII, or whose normalised form fails
+ *   digigraph's `^[a-z0-9][a-z0-9-]*$` (blank, control characters, ...);
+ * - a slug that normalises to a house slug (`digithings`, `digithings-ai`),
+ *   because a consumer would otherwise read it as the house tenant;
+ * - every slug in a group that normalises to the same value (`Acme` and
+ *   `acme `): which one a consumer keeps is order-dependent, so none ships.
+ * A map with only canonical (trimmed, lower-case), distinct, non-house slugs
+ * comes back with the same keys, values and order.
+ */
+export function sanitizeClientCorpusMap(
+  map: TenantCorpusMap | undefined,
+  label: string,
+): TenantCorpusMap {
+  const drop = (raws: string[], reason: string) =>
+    console.warn(`[tenant-config] ${label}: dropping slug ${raws.map(slugTag).join(",")}: ${reason}`);
+  const groups = new Map<string, string[]>();
+  for (const raw of Object.keys(map ?? {})) {
+    const norm = normalizeTenantSlug(raw);
+    if (!ASCII_ONLY_RE.test(raw) || !TENANT_SLUG_RE.test(norm)) {
+      drop([raw], "not a valid tenant slug");
+      continue;
+    }
+    groups.set(norm, [...(groups.get(norm) ?? []), raw]);
+  }
+  const out: TenantCorpusMap = {};
+  for (const [norm, raws] of groups) {
+    if (norm === HOUSE_TENANT_SLUG || norm === LIVE_HOUSE_TENANT_SLUG) {
+      drop(raws, "names the house tenant");
+    } else if (raws.length > 1) {
+      drop(raws, "slugs collide once trimmed and lower-cased");
+    } else {
+      out[norm] = (map as TenantCorpusMap)[raws[0]];
+    }
+  }
+  return out;
+}
+
+/**
  * Join the split `[vars]` pair into the single corpus map the container reads.
  *
  * The merge rule is one sentence: the primary half wins on every slug collision,
- * so a stale `DIGI_TENANT_CORPUS_MAP_EXTRA` can never shadow or widen the house
- * entry it does not own. Extra entries therefore only ADD tenants.
+ * so a stale `DIGI_TENANT_CORPUS_MAP_PRIVATE` can never shadow or widen the house
+ * entry it does not own. Extra entries therefore only ADD tenants. Extra slugs
+ * are normalised first ({@link sanitizeClientCorpusMap}): a house look-alike or
+ * a case/whitespace collision is dropped with a warning.
  *
  * Never returns an empty string. A half that does not parse is dropped with a
  * warning and the other half still ships; when neither is usable (unset, blank
@@ -216,20 +367,29 @@ function parseCorpusMapArm(raw: string | undefined, label: string): TenantCorpus
  * first-party corpus must survive a missing `[vars]` and an empty map would make
  * every tenant unknown, which the container reads as a refusal.
  *
- * Byte-for-byte the pre-split value for the current pair: primary keys keep
- * their order, then the non-colliding extra keys, serialised compact.
+ * Byte-for-byte the pre-split value for the current pair, plus the house alias:
+ * primary keys keep their order (with `digithings-ai` emitted next to the
+ * canonical `digithings` entry), then the non-colliding extra keys, serialised
+ * compact. See {@link withHouseSlugAlias}.
  */
 export function composeCorpusMap(primary?: string, extra?: string): string {
   const house = parseCorpusMapArm(primary, "DIGI_TENANT_CORPUS_MAP");
-  const others = parseCorpusMapArm(extra, CORPUS_MAP_EXTRA_ENV_VAR);
+  const others = parseCorpusMapArm(extra, CORPUS_MAP_PRIVATE_ENV_VAR);
   if (house === undefined && others === undefined) return DIGITHINGS_ONLY_CORPUS_JSON;
 
   const merged: TenantCorpusMap = { ...house };
-  for (const [slug, entry] of Object.entries(others ?? {})) {
-    if (slug in merged) continue;
+  // Collisions are judged on the consumers' slug form (see
+  // normalizeTenantSlug), so `DIGITHINGS` or ` digithings-ai` cannot ride past
+  // an exact-match check and replace the house entry downstream.
+  const taken = new Set(Object.keys(merged).map(normalizeTenantSlug));
+  for (const [slug, entry] of Object.entries(sanitizeClientCorpusMap(others, CORPUS_MAP_PRIVATE_ENV_VAR))) {
+    if (taken.has(slug)) continue;
     merged[slug] = entry;
   }
-  return JSON.stringify(merged);
+  // Everything dropped and no house half: keep the first-party floor rather
+  // than ship an empty map.
+  if (Object.keys(merged).length === 0) return DIGITHINGS_ONLY_CORPUS_JSON;
+  return JSON.stringify(withHouseSlugAlias(merged));
 }
 
 function nonEmpty(map: TenantCorpusMap | undefined): map is TenantCorpusMap {
@@ -244,7 +404,8 @@ export async function readTenantConfig(env: {
   store?: TenantConfigStore;
   legacyJson?: string;
 }): Promise<ResolvedTenantConfig> {
-  const legacy = parseCorpusMapJson(env.legacyJson);
+  const legacyRaw = parseCorpusMapJson(env.legacyJson);
+  const legacy = legacyRaw === undefined ? undefined : withHouseSlugAlias(legacyRaw);
 
   if (env.store) {
     try {

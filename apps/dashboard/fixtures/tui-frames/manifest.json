@@ -13,6 +13,12 @@
       "path": "/thread",
       "file": "digichat-tui.json",
       "exporter": "clients/digichat-tui/src/export-frame.ts"
+    },
+    {
+      "source": "digivoice-tui",
+      "path": "/setup",
+      "file": "digivoice-tui.json",
+      "exporter": "clients/digivoice-tui/src/export-frame.ts"
     }
   ],
   "screenshots": [
@@ -35,6 +41,16 @@
       "source": "digichat-tui",
       "viewport": "desktop",
       "file": "screenshots/digichat-tui-desktop.png"
+    },
+    {
+      "source": "digivoice-tui",
+      "viewport": "mobile",
+      "file": "screenshots/digivoice-tui-phone.png"
+    },
+    {
+      "source": "digivoice-tui",
+      "viewport": "desktop",
+      "file": "screenshots/digivoice-tui-desktop.png"
     }
   ]
 }

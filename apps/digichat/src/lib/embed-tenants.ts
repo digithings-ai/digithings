@@ -13,9 +13,13 @@
  */
 
 import type { ActivityDetail } from "@/lib/chat-activity";
+import { parseTenantLocales, type TenantLocales } from "@/lib/tenant-locales";
+import { parseTenantFonts, type TenantFonts } from "@/lib/tenant-fonts";
+import { parseTenantColors, type TenantColors } from "@/lib/tenant-colors";
 import {
   GuardrailsSchema,
   SEARCH_ENGINES,
+  productChatTpmIssue,
   toolCallCapIssue,
   type GuardrailsConfig,
   type ModelOffer,
@@ -32,6 +36,14 @@ import {
   MAX_MCP_TOOL_NAME_LENGTH,
 } from "@/lib/deploy-config/mcp-servers";
 import { HEX_COLOR } from "@/lib/hex-color";
+import {
+  TenantAccessSchema,
+  rememberGatedTenantDocs,
+  resolveTenantChatSlug,
+  validateTenantChatSlug,
+  type TenantAccess,
+  type TenantChatSlugClaim,
+} from "@/lib/deploy-config/tenant-chrome";
 import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
 import { LANGUAGES } from "@/lib/languages";
 import {
@@ -55,7 +67,7 @@ const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 /**
  * digichat Node backends: digigraph (digithings stack) or foundry (client Azure).
  * Optional digigraph corpus fields isolate multi-tenant embeds on one digigraph
- * (e.g. occ.digithings.ai → occ_help + clients/online-compliance-center).
+ * (e.g. a tenant host → its own search index + corpus prefix).
  */
 export type EmbedBackendConfig =
   | {
@@ -148,7 +160,7 @@ export type EmbedTenantConfig = {
   guardrails?: GuardrailsConfig;
   /** Canonical limits. Omit and every gate is off. See docs/digichat/LIMITS.md. */
   limits?: LimitsConfig;
-  gateMode: "turn_limited" | "ungated" | "trial_form";
+  gateMode: "turn_limited" | "ungated" | "trial_form" | "invite";
   theme: "dark" | "light";
   /**
    * Seed language for this tenant's embed session (#4532). Omit falls back to
@@ -158,6 +170,10 @@ export type EmbedTenantConfig = {
   /** Which vendored assistant-ui Thread to mount. */
   skin?: ThreadSkin;
   accent?: { color: string; foreground: string };
+  /** Heading and body faces, as font variables only (src/lib/tenant-fonts.ts). */
+  fonts?: TenantFonts;
+  /** Light and dark colour sets, validated hex only (src/lib/tenant-colors.ts). */
+  colors?: TenantColors;
   attribution: boolean;
   /** Branded embed header title (e.g. "Chat for Help"). */
   title?: string;
@@ -165,10 +181,24 @@ export type EmbedTenantConfig = {
   welcome?: string;
   /** Subparagraphs under the welcome headline. */
   welcomeBody?: string[];
-  /** Default suggestion chips (URL ?suggestions= wins). */
+  /** Default suggestion chips (URL ?suggestions= wins). Omitted: the house pool. */
   suggestions?: string[];
+  /**
+   * Tenant chat slug (`chrome.slug` in the document). R0 builds the path
+   * `/chat/<slug>`; see deploy-config/tenant-chrome.ts.
+   */
+  chatSlug?: string;
+  /** A tenant product chat (`chrome.productChat`). See schema.ts `productChat`. */
+  productChat?: boolean;
+  /**
+   * Server-only access block (`access.invite`). Never projected to the
+   * browser; the client config is an allowlist of display fields.
+   */
+  access?: TenantAccess;
   /** Default input placeholder (URL ?placeholder= wins). */
   placeholder?: string;
+  /** Chat languages and their translated copy (the composer language chip). */
+  locales?: TenantLocales;
   /**
    * Contact email shown when the free-turn gate locks (turn_limited tenants).
    * When set, the paywall becomes a "contact us" message with a mailto link
@@ -295,6 +325,8 @@ export type EmbedTenantConfig = {
   speech?: boolean;
   sources?: boolean;
   branchPicker?: boolean;
+  /** Tenant opt-in to session private mode (`/private`, `?private=1`). */
+  privateMode?: boolean;
   /**
    * Popup widget page-context injection. `off` ignores `digichat:page-context`
    * messages; `silent` still sends the snapshot to the model but renders no
@@ -303,6 +335,8 @@ export type EmbedTenantConfig = {
   pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
+    /** Only the catalog's tools reach the model (see ToolsSchema.exclusive). */
+    exclusive?: boolean;
     catalog: Array<{
       id: string;
       default?: boolean;
@@ -599,8 +633,19 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     );
   }
 
-  if (v.gateMode !== "turn_limited" && v.gateMode !== "ungated" && v.gateMode !== "trial_form") {
-    throw new Error(`${ctx}: gateMode must be "turn_limited", "ungated", or "trial_form"`);
+  // `invite` round-trips a deployment document whose gate is enforced at the
+  // edge (`deploymentToEmbedTenant`); the registry does not enforce it and the
+  // app accounts its turns like `ungated` (see `gateMetersTurns` in
+  // deploy-config/schema.ts).
+  if (
+    v.gateMode !== "turn_limited" &&
+    v.gateMode !== "ungated" &&
+    v.gateMode !== "trial_form" &&
+    v.gateMode !== "invite"
+  ) {
+    throw new Error(
+      `${ctx}: gateMode must be "turn_limited", "ungated", "trial_form", or "invite"`,
+    );
   }
 
   let gate: EmbedTenantConfig["gate"];
@@ -640,12 +685,30 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     accent = { color: a.color, foreground: a.foreground };
   }
 
+  const fonts = parseTenantFonts(v.fonts, ctx);
+  const colors = parseTenantColors(v.colors, ctx);
+
   if (v.aliases !== undefined && (!Array.isArray(v.aliases) || v.aliases.some((x) => typeof x !== "string"))) {
     throw new Error(`${ctx}: aliases must be an array of strings`);
   }
 
   if (typeof v.token !== "string" || !v.token.trim()) {
     throw new Error(`${ctx}: "token" must be a non-empty string`);
+  }
+
+  // `chatSlug` (TODO(P-exit): or a legacy full `pathPrefix`, /chat/<slug>).
+  const chatSlugResult = resolveTenantChatSlug({ slug: v.chatSlug, pathPrefix: v.pathPrefix });
+  if (!chatSlugResult.ok) throw new Error(`${ctx}: ${chatSlugResult.detail}`);
+  const chatSlug = chatSlugResult.slug;
+  if (v.productChat !== undefined && typeof v.productChat !== "boolean") {
+    throw new Error(`${ctx}: productChat must be a boolean`);
+  }
+  let access: TenantAccess | undefined;
+  if (v.access !== undefined) {
+    const parsedAccess = TenantAccessSchema.safeParse(v.access);
+    // Never echo the block: it may hold the invite key reference.
+    if (!parsedAccess.success) throw new Error(`${ctx}: access is invalid`);
+    access = parsedAccess.data;
   }
 
   let suggestions: string[] | undefined;
@@ -751,7 +814,13 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     throw new Error(`${ctx}: attachments must be a boolean`);
   }
   // Feature parity with the YAML `features:` block (#4532).
-  for (const key of ["dictation", "speech", "sources", "branchPicker"] as const) {
+  for (const key of [
+    "dictation",
+    "speech",
+    "sources",
+    "branchPicker",
+    "privateMode",
+  ] as const) {
     if (v[key] !== undefined && typeof v[key] !== "boolean") {
       throw new Error(`${ctx}: ${key} must be a boolean`);
     }
@@ -770,6 +839,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       throw new Error(`${ctx}: pageContext must be "off", "silent", or "visible"`);
     }
   }
+  const locales = parseTenantLocales(v.locales, ctx);
   let welcomeBody: string[] | undefined;
   if (v.welcomeBody !== undefined) {
     if (typeof v.welcomeBody === "string") {
@@ -932,6 +1002,11 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     }
     guardrails = parsed.data;
   }
+  const tpmIssue = productChatTpmIssue(
+    typeof v.productChat === "boolean" ? v.productChat : undefined,
+    guardrails,
+  );
+  if (tpmIssue) throw new Error(`${ctx}: ${tpmIssue}`);
   const capIssue = toolCallCapIssue(
     backendCfg.type,
     guardrails?.maxToolCallsPerTurn ??
@@ -974,13 +1049,19 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         aliases: v.aliases as string[] | undefined,
       }),
     accent,
+    ...(fonts ? { fonts } : {}),
+    ...(colors ? { colors } : {}),
     attribution: v.attribution !== false,
     token: v.token,
     title: typeof v.title === "string" ? v.title : undefined,
     welcome: typeof v.welcome === "string" ? v.welcome : undefined,
     welcomeBody,
     suggestions,
+    ...(chatSlug ? { chatSlug } : {}),
+    ...(typeof v.productChat === "boolean" ? { productChat: v.productChat } : {}),
+    ...(access ? { access } : {}),
     placeholder: typeof v.placeholder === "string" ? v.placeholder : undefined,
+    ...(locales ? { locales } : {}),
     lockedContact: typeof v.lockedContact === "string" ? v.lockedContact : undefined,
     activityDetail: (v.activityDetail as ActivityDetail | undefined) ?? "labels",
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
@@ -1018,6 +1099,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     speech: typeof v.speech === "boolean" ? v.speech : undefined,
     sources: typeof v.sources === "boolean" ? v.sources : undefined,
     branchPicker: typeof v.branchPicker === "boolean" ? v.branchPicker : undefined,
+    privateMode: typeof v.privateMode === "boolean" ? v.privateMode : undefined,
     defaultLanguage:
       typeof v.defaultLanguage === "string" && LANGUAGE_CODES.has(v.defaultLanguage)
         ? v.defaultLanguage
@@ -1077,6 +1159,7 @@ function parseTenantTools(
   return {
     tools: {
       ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      ...(r.exclusive === true ? { exclusive: true } : {}),
       catalog,
     },
   };
@@ -1111,8 +1194,12 @@ function parseTenantModels(
   if (r.catalog !== undefined && typeof r.catalog !== "boolean") {
     throw new Error(`embed tenant "${hostKey}": models.catalog must be a boolean`);
   }
+  // TODO(P-exit): legacy alias of allowPicker, accepted for one release.
   if (r.occPicker !== undefined && typeof r.occPicker !== "boolean") {
     throw new Error(`embed tenant "${hostKey}": models.occPicker must be a boolean`);
+  }
+  if (r.premiumMeter !== undefined && typeof r.premiumMeter !== "boolean") {
+    throw new Error(`embed tenant "${hostKey}": models.premiumMeter must be a boolean`);
   }
   if (
     r.priceCapUsdPerMillion !== undefined &&
@@ -1172,6 +1259,7 @@ function parseTenantModels(
       ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
       ...(r.catalog === true ? { catalog: true } : {}),
       ...(typeof r.occPicker === "boolean" ? { occPicker: r.occPicker } : {}),
+      ...(typeof r.premiumMeter === "boolean" ? { premiumMeter: r.premiumMeter } : {}),
       ...(typeof r.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: r.priceCapUsdPerMillion }
         : {}),
@@ -1200,8 +1288,18 @@ export function parseEmbedTenants(raw: string | undefined): Map<string, EmbedTen
     throw new Error("DIGICHAT_EMBED_TENANTS must be a JSON object keyed by hostname");
   }
 
+  const chatSlugClaims: TenantChatSlugClaim[] = [];
   for (const [hostKey, value] of Object.entries(parsed as Record<string, unknown>)) {
     const cfg = validateEntry(hostKey, value);
+    if (cfg.chatSlug) {
+      // Two tenants may not use one chat slug; rows of one tenant may.
+      const result = validateTenantChatSlug(cfg.chatSlug, {
+        tenant: cfg.slug,
+        others: chatSlugClaims,
+      });
+      if (!result.ok) throw new Error(`DIGICHAT_EMBED_TENANTS["${hostKey}"]: ${result.detail}`);
+      chatSlugClaims.push({ tenant: cfg.slug, chatSlug: cfg.chatSlug });
+    }
     const hosts = [hostKey, ...(cfg.aliases ?? [])];
     for (const candidate of hosts) {
       const host = normalizeEmbedHost(candidate);
@@ -1218,6 +1316,16 @@ let cachedRegistry: Map<string, EmbedTenantConfig> | null = null;
 export function getEmbedTenantRegistry(): Map<string, EmbedTenantConfig> {
   if (!cachedRegistry) {
     cachedRegistry = parseEmbedTenants(process.env.DIGICHAT_EMBED_TENANTS);
+    // Last-good copy of the gated claims, so a later unreadable registry
+    // still keeps these tenants gated (tenant-chrome.ts).
+    rememberGatedTenantDocs(
+      [...cachedRegistry.entries()].map(([host, cfg]) => ({
+        slug: cfg.slug,
+        host,
+        chatSlug: cfg.chatSlug,
+        gated: isGatedEmbedTenant(cfg),
+      })),
+    );
     if (cachedRegistry.size > 0) {
       console.log(
         `[embed-tenants] loaded ${cachedRegistry.size} host mapping(s): ${[...cachedRegistry.keys()].join(", ")}`
@@ -1225,6 +1333,11 @@ export function getEmbedTenantRegistry(): Map<string, EmbedTenantConfig> {
     }
   }
   return cachedRegistry;
+}
+
+/** A gated tenant: invite gate mode, or an `access.invite` block. */
+export function isGatedEmbedTenant(cfg: Pick<EmbedTenantConfig, "gateMode" | "access">): boolean {
+  return cfg.gateMode === "invite" || cfg.access?.invite !== undefined;
 }
 
 /** Test hook — clears the module-level cache so stubbed envs take effect. */
@@ -1311,6 +1424,21 @@ export function isDigiquantDashboardTenantConfig(cfg: EmbedTenantConfig): boolea
     cfg.requiredPlanTier !== undefined &&
     DESK_PLUS_PLAN_TIERS.has(cfg.requiredPlanTier)
   );
+}
+
+/**
+ * True when this embed tenant refuses a visitor's own API key, so the chat
+ * API rejects one instead of routing the turn through it. A row that sets
+ * `showByok: false` has switched BYOK off. An `operator` tenant pays with the
+ * operator's keys and, unless it shows the BYOK surface, has no sanctioned way
+ * for a visitor to bring a key either.
+ */
+export function embedTenantRefusesByok(
+  cfg: Pick<EmbedTenantConfig, "llmAccess" | "showByok"> | null | undefined,
+): boolean {
+  if (!cfg) return false;
+  if (cfg.showByok === false) return true;
+  return cfg.llmAccess === "operator" && cfg.showByok !== true;
 }
 
 /** Plan-tier ordering for the runtime tier gate (lower index = lower tier). */
