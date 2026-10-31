@@ -638,16 +638,18 @@ export default {
       // Lazy ports import per route group (#4685): a failing import degrades
       // only these paths (503); every other group keeps serving.
       return runIsolated("key-proxy", () => import("./ports"), async ({ DIGIKEY_PORT }) => {
-        const container = stackContainer(workerEnv);
-        // DIG-4477: a recycled container must not fail the client request —
-        // the Durable Object id is a NAME, so one fresh attempt reaches the
-        // live instance (see ./container-retry.ts). The clone per attempt is
-        // what makes the replay possible: a consumed body cannot be re-sent.
-        return fetchWithContainerRetry(() =>
-          container.fetch(
+        // DIG-4477/DIG-5989: a recycled container must not fail the client
+        // request — the Durable Object id is a NAME, so one fresh attempt
+        // reaches the live instance (see ./container-retry.ts). The stub is
+        // resolved INSIDE the attempt so the reconnect addresses a fresh
+        // instance instead of the closed one; the clone per attempt is what
+        // makes the replay possible: a consumed body cannot be re-sent.
+        return fetchWithContainerRetry(() => {
+          const container = stackContainer(workerEnv);
+          return container.fetch(
             switchPort(rewriteKeyStackPath(request.clone()), DIGIKEY_PORT),
-          ),
-        );
+          );
+        });
       });
     }
 
@@ -695,11 +697,12 @@ export default {
           // replay the body on the redirect.
           const stripped = slash === -1 ? "/" : rest.slice(slash);
           const target = mcpEdgeTarget(url, stripped, port);
-          const container = stackContainer(workerEnv);
-          // DIG-4477: retry once on a recycled container (see
-          // ./container-retry.ts); the clone per attempt is what makes the
-          // replay possible.
+          // DIG-4477/DIG-5989: retry once on a recycled container (see
+          // ./container-retry.ts); the stub is resolved INSIDE the attempt so
+          // the reconnect addresses a fresh instance; the clone per attempt is
+          // what makes the replay possible.
           return fetchWithContainerRetry(() => {
+            const container = stackContainer(workerEnv);
             const forwarded = new Request(target.toString(), request.clone());
             return container.fetch(switchPort(forwarded, port));
           });
@@ -782,11 +785,14 @@ export default {
       if (isScannerPath(url.pathname)) {
         return scannerResponse();
       }
-      const container = stackContainer(workerEnv);
+      // DIG-4477/DIG-5989: the stub is resolved per call so a recycled
+      // instance is re-addressed instead of reused. The health probe resolves
+      // its own stub; a closed instance leaves the probe reporting asleep,
+      // which is the safe answer (the container wakes on the next real request).
       if (isHealthProbe(request, url.pathname)) {
         let status: string | undefined;
         try {
-          status = (await container.getState()).status;
+          status = (await stackContainer(workerEnv).getState()).status;
         } catch {
           status = undefined;
         }
@@ -796,10 +802,13 @@ export default {
       }
       // DIG-4477: retry once on a recycled container (see
       // ./container-retry.ts). The clone per attempt is what makes the replay
-      // possible: a consumed body cannot be re-sent.
-      return fetchWithContainerRetry(() =>
-        container.fetch(switchPort(request.clone(), port)),
-      );
+      // possible: a consumed body cannot be re-sent. The stub is resolved
+      // INSIDE the attempt so the reconnect addresses a fresh instance
+      // instead of the closed one.
+      return fetchWithContainerRetry(() => {
+        const container = stackContainer(workerEnv);
+        return container.fetch(switchPort(request.clone(), port));
+      });
     });
   },
 };

@@ -234,8 +234,10 @@ describe("the deploy path carries both revs", () => {
     const direct = index.match(/getContainer\(workerEnv\.STACK,/g);
     expect(direct).toHaveLength(1);
     const throughHelper = index.match(/stackContainer\(workerEnv\)/g);
-    // 1 declaration is not a call: 3 route groups call it.
-    expect(throughHelper).toHaveLength(3);
+    // 1 declaration is not a call: the three route groups resolve the stub
+    // per attempt (reconnect), and the hostname route also resolves it for the
+    // health probe, so four call sites in total.
+    expect(throughHelper).toHaveLength(4);
   });
 
   it("the ONE helper that builds the id reads the rev var and passes it on", () => {
