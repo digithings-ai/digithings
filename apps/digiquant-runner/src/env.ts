@@ -23,6 +23,9 @@ export interface Env {
   CHEAPERINFERENCE_API_BASE?: string;
   LANGSMITH_API_KEY?: string;
   DIGI_OTEL_HEADERS?: string;
+  /** Plain var (S4b, DIG-2887). "sqlite" moves house-run checkpoints off
+   * Postgres onto a container file carried through R2. Unset keeps postgres. */
+  DIGIQUANT_CHECKPOINTER?: string;
   /** Skip ledger on digithings-archive. Not forwarded into the container. */
   ARCHIVE?: HouseLedger;
 }
@@ -63,6 +66,7 @@ const FORWARDED_ENV_NAMES = [
   "CHEAPERINFERENCE_API_BASE",
   "LANGSMITH_API_KEY",
   "DIGI_OTEL_HEADERS",
+  "DIGIQUANT_CHECKPOINTER",
 ] as const;
 
 /** Container envVars whitelist. Omits RUNNER_AUTH_TOKEN.

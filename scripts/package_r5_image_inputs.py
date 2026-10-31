@@ -46,7 +46,7 @@ STACK_PACKAGES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 RUNNER_EXPORTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("digiquant", ("prices", "research", "nautilus")),
-    ("digigraph", ("checkpoint-postgres",)),
+    ("digigraph", ("checkpoint-postgres", "checkpoint-sqlite")),
 )
 RUNNER_WHEELS = (
     "digibase",
@@ -59,7 +59,7 @@ RUNNER_WHEELS = (
 )
 RUNNER_WHEEL_EXTRAS: dict[str, tuple[str, ...]] = {
     "digiquant": ("prices", "research", "nautilus"),
-    "digigraph": ("checkpoint-postgres",),
+    "digigraph": ("checkpoint-postgres", "checkpoint-sqlite"),
 }
 NPM_PACKAGES = (
     "@digithings/design",

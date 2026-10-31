@@ -25,7 +25,7 @@
 #
 # DIG-3701: do not COPY sibling module trees. scripts/package_r5_image_inputs.py
 # exports the root lock with `uv export --frozen` for
-# digiquant[prices,research,nautilus] and digigraph[checkpoint-postgres]
+# digiquant[prices,research,nautilus] and digigraph[checkpoint-postgres,checkpoint-sqlite]
 # (the second sync stays inexact by union, not by a second sync that would
 # remove psycopg), builds the workspace wheels, and packs the runner payload.
 # `uv sync --frozen` installs that generated project. Push target default is
@@ -55,7 +55,7 @@ LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
 COPY image-packages/runner/project/pyproject.toml image-packages/runner/project/uv.lock ./
 COPY image-packages/runner/project/wheels ./wheels
 # Frozen pins: the lock is `uv export --frozen` of the workspace lock for
-# digiquant[prices,research,nautilus] plus digigraph[checkpoint-postgres],
+# digiquant[prices,research,nautilus] plus digigraph[checkpoint-postgres,checkpoint-sqlite],
 # then `uv lock` with those exact pins. --no-install-project skips the
 # synthetic project; the wheels install from ./wheels.
 RUN uv sync --frozen --no-install-project --no-dev

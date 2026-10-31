@@ -49,6 +49,14 @@ _BASELINE_ENV = (
 )
 _FORBIDDEN_ENV = frozenset({"RUNNER_AUTH_TOKEN", "GH_ISSUE_TOKEN"})
 
+# S4b (DIG-2887): Worker plain var that moves the house-run LangGraph
+# checkpoints off Postgres. Unset or anything but "sqlite" keeps the pipeline
+# file's DIGI_CHECKPOINTER (postgres today). "sqlite" points digigraph's
+# SqliteSaver at a file on the container disk and carries that file through
+# R2 next to interrupted.json, so a resumed run finds its thread again.
+CHECKPOINTER_FLAG = "DIGIQUANT_CHECKPOINTER"
+CHECKPOINT_DIR = Path(os.environ.get("RUNNER_CHECKPOINT_DIR", "/tmp/runner-checkpoints"))
+
 _lock = threading.Lock()
 _current: dict[str, str | int] = {
     "run_id": "",
@@ -315,6 +323,9 @@ def build_child_env(
             child[exported] = value
     if spec.get("checkpoint_run_id"):
         child["GITHUB_RUN_ID"] = run_id
+    if spec.get("checkpoint_run_id") and sqlite_checkpoints_on(source):
+        child["DIGI_CHECKPOINTER"] = "sqlite"
+        child["DIGI_CHECKPOINTER_SQLITE_URI"] = str(checkpoint_file(str(provided.get("run_date", ""))))
     child["RUN_ID"] = run_id
     child.pop("RUNNER_AUTH_TOKEN", None)
     child.pop("GH_ISSUE_TOKEN", None)
@@ -332,6 +343,92 @@ def interrupted_body(run_id: str, run_date: str) -> dict[str, str]:
 
 def interrupted_key(run_date: str) -> str:
     return f"pipeline-runs/house-run/{_clean_run_date(run_date)}/interrupted.json"
+
+
+def sqlite_checkpoints_on(environ: dict[str, str]) -> bool:
+    """True only for the exact value "sqlite"; everything else keeps Postgres."""
+    return str(environ.get(CHECKPOINTER_FLAG, "")).strip().lower() == "sqlite"
+
+
+def checkpoint_file(run_date: str) -> Path:
+    """One file per house-run date, so a resume of that date reopens it."""
+    day = _clean_run_date(run_date) or "undated"
+    if "/" in day or day.startswith(".") or ".." in day:
+        raise RuntimeError("invalid run_date")
+    return CHECKPOINT_DIR / f"house-run-{day}.sqlite"
+
+
+def checkpoint_key(run_date: str) -> str:
+    return f"pipeline-runs/house-run/{_clean_run_date(run_date)}/checkpoints.sqlite"
+
+
+def snapshot_checkpoints(src: Path, dest: Path) -> bool:
+    """Consistent copy of a live SQLite file (the child may still be writing).
+
+    Uses the sqlite3 backup API rather than a byte copy, so a half-written
+    page never reaches R2. False when there is nothing to save.
+    """
+    if not src.is_file():
+        return False
+    import sqlite3
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    source = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=5)
+    try:
+        target = sqlite3.connect(str(dest))
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+    return True
+
+
+def upload_checkpoints(run_date: str, client: Any | None = None, bucket: str = "") -> bool:
+    """Save the run date's checkpoint file to R2. False when there is none."""
+    if not _clean_run_date(run_date):
+        return False
+    src = checkpoint_file(run_date)
+    snap = src.with_suffix(".upload")
+    if not snapshot_checkpoints(src, snap):
+        return False
+    if client is None:
+        client, bucket = _require_r2()
+    try:
+        client.upload_file(str(snap), bucket, checkpoint_key(run_date))
+    finally:
+        snap.unlink(missing_ok=True)
+    return True
+
+
+def restore_checkpoints(run_date: str, client: Any | None = None, bucket: str = "") -> bool:
+    """Fetch a saved checkpoint file before a resume. Missing object = fresh start."""
+    if not _clean_run_date(run_date):
+        return False
+    if client is None:
+        found = _r2_client()
+        if found is None:
+            return False
+        client, bucket = found
+    dest = checkpoint_file(run_date)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(".download")
+    try:
+        client.download_file(bucket, checkpoint_key(run_date), str(tmp))
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        return False
+    tmp.replace(dest)
+    return True
+
+
+def _checkpoints_best_effort(action: Callable[[str], bool], run_date: str, label: str) -> None:
+    """Never fail a run over the checkpoint file; say so in the container log."""
+    try:
+        action(run_date)
+    except Exception as exc:  # noqa: BLE001 - logged by type only, no secrets
+        sys.stderr.write(f"digiquant-runner checkpoint {label} failed: {type(exc).__name__}\n")
 
 
 _PRODUCER_KEYS = ("source_workflow", "producer_workflow", "producer", "workflow")
@@ -520,12 +617,24 @@ def _prepare_shadow_plans(
 
 
 def _apply_resume(spec: dict[str, Any], args: dict[str, str], child_env: dict[str, str]) -> None:
+    run_date = str(args.get("run_date", "")).strip()
+    sqlite_on = child_env.get("DIGI_CHECKPOINTER") == "sqlite"
+    if sqlite_on:
+        # SqliteSaver cannot create parent directories, and digigraph only
+        # makes its own default directory, so make ours before the child runs.
+        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     export_args = spec.get("export_args") or []
-    if "resume_run_id" not in export_args or child_env.get("RESUME_RUN_ID"):
+    if "resume_run_id" not in export_args:
         return
-    resumed = _read_interrupted_resume(str(args.get("run_date", "")).strip())
-    if resumed:
-        child_env["RESUME_RUN_ID"] = resumed
+    if not child_env.get("RESUME_RUN_ID"):
+        resumed = _read_interrupted_resume(run_date)
+        if resumed:
+            child_env["RESUME_RUN_ID"] = resumed
+    # Restore for either resume path: the interrupted marker above, or an
+    # explicit resume_run_id (the only path after a fail or timeout, which save
+    # the file but write no marker).
+    if child_env.get("RESUME_RUN_ID") and sqlite_on:
+        _checkpoints_best_effort(restore_checkpoints, run_date, "restore")
 
 
 def _now() -> str:
@@ -791,6 +900,8 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
             )
             if hard_failure:
                 outcome = "failed"
+    if outcome != "succeeded" and child_env.get("DIGI_CHECKPOINTER") == "sqlite":
+        _checkpoints_best_effort(upload_checkpoints, str(args.get("run_date", "")).strip(), "upload")
     publish_paths = _selected_publish_paths(spec)
     publish_dir = spec.get("publish_dir")
     if isinstance(publish_dir, str) and publish_dir:
@@ -849,6 +960,16 @@ def _on_sigterm(signum: int, _frame: object) -> None:
         _write_status(run_id, existing)
     if command == "house-run":
         _upload_interrupted_best_effort(run_id, run_date)
+        if sqlite_checkpoints_on(dict(os.environ)):
+            # Bounded like the interrupted marker: SIGTERM has a grace window.
+            saver = threading.Thread(
+                target=_checkpoints_best_effort,
+                args=(upload_checkpoints, run_date, "upload"),
+                name="checkpoint-upload",
+                daemon=True,
+            )
+            saver.start()
+            saver.join(20)
     if pgid:
         try:
             os.killpg(pgid, signal.SIGTERM)
