@@ -75,8 +75,8 @@ bun_suites:
   # The retired lanes themselves: a change to a lane that lists the suites is a
   # change to what runs them, so it fires the gate (it names no suite, so it
   # runs the list without adding a package).
+  # test-clients-tui.yml was deleted with the GHA exit ledger.
   - .github/workflows/test-bun-suites.yml
-  - .github/workflows/test-clients-tui.yml
 
 digiquant:
   - digiquant/**
@@ -274,26 +274,6 @@ web:
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
-
-# Bun TUI clients. One lane (test-clients-tui.yml) covers all three, so this is a
-# single key with three directory globs rather than three keys (#2072). Before it,
-# `clients/**` matched no filter and no workflow mentioned bun: each client has
-# `"test": "bun test"` in its manifest (147 tests in digiquant-tui, 11 in
-# digichat-tui, 11 in digichat-devkit) and none of them ran in CI, so every green
-# number reported for these clients was developer-local.
-#
-# `clients/**` rather than three per-directory globs: these are private client
-# packages, not repo-root components, so the tree is the unit and a new client/
-# should fire the lane by default. The lane's own matrix-completeness step fails
-# if a client with a bun test script is missing from the matrix, so this cannot
-# silently under-cover a new client — the filter says "something under clients/
-# changed", the matrix guard says "and it is covered".
-clients_tui:
-  - clients/**
-  # DIG-5212: both clients import the shared recorded-frame package, so a change
-  # there changes what their tests exercise.
-  - packages/tui-frame/**
-  - .github/workflows/test-clients-tui.yml
 
 e2e_contract:
   - tests/test_e2e.py

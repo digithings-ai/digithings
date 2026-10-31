@@ -78,7 +78,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `sync-digiquant-runner-digikey-secret.yml` | Ops: sync digiquant-runner house secrets | dispatch | Put digikey and tracing secrets onto digiquant-runner (#4761); never prints values | Working | none |
 | `sync-digiquant-runner-mail-secrets.yml` | Ops: sync digiquant-runner mail secrets | dispatch | Put mail/notify secrets onto digiquant-runner (#4761); never prints values | Working | none |
 | `test-bun-suites.yml` | Test: bun suites | workflow_call (from `ci.yml`) | Run the `bun test` packages (DIG-2940) | Working | via `ci.yml` |
-| `test-clients-tui.yml` | Test: clients (TUI) | workflow_call (from `ci.yml`) | Run the `clients/` bun packages (DIG-2072) | Working | via `ci.yml` |
 | `test-digifetch.yml` | Test: digifetch | workflow_call (from `ci.yml`) | digifetch unit tests from the committed `uv.lock` | Working | via `ci.yml` |
 | `test-digillm.yml` | Test: digillm | workflow_call (from `ci.yml`) | digillm unit tests from the committed `uv.lock` | Working | via `ci.yml` |
 | `test-digivoice.yml` | Test: digivoice | workflow_call (from `ci.yml`) | digivoice unit tests from the committed `uv.lock` | Working | via `ci.yml` |
