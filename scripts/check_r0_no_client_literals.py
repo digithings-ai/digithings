@@ -97,7 +97,6 @@ NON_R0_PREFIXES: tuple[str, ...] = (
     "tests/dq/strategies/",
     "tests/dg/test_tenant_corpus_parity.py",
     "tests/scripts/test_check_tenant_corpus_map.py",
-    ".github/workflows/datatap-answer-check.yml",
     ".github/workflows/occ-invite-key-rollout.yml",
 )
 
