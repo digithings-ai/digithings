@@ -70,7 +70,8 @@ def test_example_tenant_keeps_the_product_chat_safe_default() -> None:
     (row,) = _doc()["hosts"].values()
     models = row.get("models") or {}
     assert models.get("allowPicker") is not True
-    assert "occPicker" not in models, "legacy alias; write models.allowPicker if anything"
+    legacy = [k for k in models if k.endswith("Picker") and k != "allowPicker"]
+    assert not legacy, "legacy alias; write models.allowPicker if anything"
     assert models.get("premiumMeter") is not False
     guardrails = row.get("guardrails") or {}
     assert guardrails.get("tpmLimit") is not False
