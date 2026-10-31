@@ -43,7 +43,7 @@
  * container network address for its public route; in-container callers keep
  * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
  */
-import { Container, getContainer, switchPort } from "@cloudflare/containers";
+import { Container, getContainer, switchPort, type StopParams } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
 import {
   CONTAINER_RETRY_AFTER_SECONDS,
@@ -52,6 +52,7 @@ import {
   containerFailedResponse,
   containerRestartMessage,
   containerUnavailableResponse,
+  isContainerCapacityError,
   isContainerEvictedError,
   isContainerFailedError,
   safeErrorMessage,
@@ -222,6 +223,23 @@ export class DigiStackContainer extends Container {
   }
 
   /**
+   * Graceful drain on version rollout (DIG-5945): the platform sends SIGTERM
+   * to the container process and waits up to 15m for it to exit. The Durable
+   * Object side mirrors that by logging the drain so the instance is
+   * identifiable in observability while it finishes in-flight work instead of
+   * being killed outright. `rollout_active_grace_period` in wrangler.toml keeps
+   * freshly-started instances out of the rollout window in the first place.
+   */
+  override async onStop(params: StopParams): Promise<void> {
+    console.error(
+      "digithings-stack: container draining gracefully on stop/rollout",
+      params.reason,
+      params.exitCode,
+    );
+    await super.onStop(params);
+  }
+
+  /**
    * Wait longer than the default ~20s portReadyTimeout while supervisord
    * brings up digigraph (and the requested service) under Firecracker.
    */
@@ -293,6 +311,15 @@ export class DigiStackContainer extends Container {
       if (isContainerFailedError(message)) {
         return containerFailedResponse("stack", message);
       }
+      // DIG-5945: surface capacity exhaustion as an explicit alert so the
+      // condition is visible in observability even though it is answered as a
+      // retryable boot 503 (a retry cannot conjure a slot, DIG-4422).
+      if (isContainerCapacityError(message)) {
+        console.error(
+          "digithings-stack: container capacity exhausted (no instance available):",
+          message,
+        );
+      }
       return containerBootingResponse("stack", message);
     } finally {
       this.keepAwakeForRequest = false;
@@ -333,6 +360,15 @@ export class DigiStackContainer extends Container {
       }
       if (failure.kind === "failed") {
         return containerFailedResponse("stack", failure.message);
+      }
+      // DIG-5945: alert on capacity exhaustion at the hop boundary too.
+      // unavailable, evicted, and failed have already returned. `unknown`
+      // carries no message, so match the thrown value itself.
+      if (isContainerCapacityError(err)) {
+        console.error(
+          "digithings-stack: container capacity exhausted (hop):",
+          safeErrorMessage(err),
+        );
       }
       throw err;
     }
