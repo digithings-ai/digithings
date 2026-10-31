@@ -172,6 +172,8 @@ This is the model we want to make standard. It already runs. This proposal only 
 
 Chris directed that the migration must leave GitHub Actions. GitHub Actions minutes are exhausted. Cursor Origin is available. The Mac is available.
 
+*2026-10-31: Origin is no longer the private home. Since 2026-10-29 (D-C1) the private repos live on local Forgejo in the `digithings-ai` org, with Woodpecker on the Mac as CI; the deploy design below is unchanged, because it runs on the Mac either way.*
+
 ### 5.1 The rule
 
 Run the build on the Mac. Run the deploy on the Mac. Do not use GitHub Actions for either step. Record the local test result in the PR body.

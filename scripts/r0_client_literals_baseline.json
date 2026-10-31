@@ -694,7 +694,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/repo-split/README.md": {
-      "count": 2,
+      "count": 1,
       "ticket": "DIG-3895"
     },
     "scripts/repo-split/move-lists/r5.drop": {

@@ -1,5 +1,9 @@
 # R2 digiquant-stack: file inventory and move list
 
+> **2026-10-31:** dated record. Since 2026-10-29 (D-C1) the private repos live on local Forgejo in the
+> `digithings-ai` org, not on Cursor Origin; R6 is replaced by per-client repos `digithings-ai/<client-slug>`
+> (D-C2). Where this file says Origin, read it as the 14 Oct plan. See [README.md](README.md#where-things-live-2026-10-31).
+
 Measured against `github/develop` = `d227b6ed526202aaa095b8e645804ef308dde813`
 (2026-10-14T20:25:21+02:00, "feat(digiquant): make the desk settings page persist and apply (#5583)").
 Tree census: `git ls-tree -r` = 6615 paths, 6615 unique.

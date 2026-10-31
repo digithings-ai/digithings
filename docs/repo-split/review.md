@@ -6,6 +6,12 @@ and the live state of `digithings-ai` on GitHub and Cloudflare at `develop` 58e1
 Scope: repository layout, GitHub org settings, Cloudflare Worker inventory. I did not read
 production data, run any deploy, or open the Cloudflare dashboard.
 
+> **2026-10-31 note:** this review is the 14 Oct record. Since 2026-10-29 (D-C1) the private repos
+> live on local Forgejo in the `digithings-ai` org, not on Cursor Origin, and R6 is replaced by one
+> `digithings-ai/<client-slug>` repo per client (D-C2). The Origin section below is historical; see
+> [Forgejo as the private home](#forgejo-as-the-private-home-2026-10-29-docs-re-homed-2026-10-31)
+> for how its findings map to Forgejo.
+
 ## Verdict: MODIFY
 
 **Agree with the topology** (R0 public + R1–R7 private, the boundaries and the dependency
@@ -64,6 +70,8 @@ keep-awake, Worker fallback, cost comparison) is DIG-3561's deliverable, not thi
 
 ## Cursor Origin as the source-control home (direction of 2026-10-14)
 
+*Historical: superseded on 2026-10-29 by D-C1 (Forgejo). Kept as the record of the 14 Oct check.*
+
 Chris's direction: the seven private repos live on **Cursor Origin** as primary. The public
 `digithings` (R0) stays **GitHub-primary** with an Origin inbound mirror (D-O1, answered (a) below).
 I checked Origin against Cursor's own docs and OpenAPI spec (fetched 2026-10-14; Origin is
@@ -107,12 +115,29 @@ What this means for the plan:
   push. The plan forbids installing it (P0) and keeps deploys on the signed-tag gate.
 - **O6 — Beta risk.** Names are permanent during beta, the API had a breaking change two weeks ago,
   and controls "may expand during early beta". `<client-slug>` is a client repo (**D-O5**). **Answered:** Chris confirms no client contract applies and he
-  has full control of the codebase; `<client-slug>` moves to Origin in P4.7 with no extra gate.
+  has full control of the codebase; `<client-slug>` moves to Origin in P4.7 with no extra gate. *(P4.7 struck 23:18; R7 on hold.)*
 - **O7 — GitHub Packages is gone for private repos.** D-Q7 (`@digiquant/contract` from GitHub
   Packages npm) needs a replacement: a git dependency pinned to a tag on Origin.
 
-Details are in [migration-plan.md § Origin](migration-plan.md#source-control-on-cursor-origin) and
+Details were in the Origin section of the migration plan (now
+[migration-plan.md § Before 2026-10-29: Cursor Origin](migration-plan.md#before-2026-10-29-cursor-origin-historical)) and
 the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-answered).
+
+## Forgejo as the private home (2026-10-29; docs re-homed 2026-10-31)
+
+D-C1 moved the private repos to local Forgejo (digiforge) on Chris's Mac, org `digithings-ai`,
+with a private GitHub backup per repo that the owner pushes at releases only. What that does to
+the Origin findings above:
+
+| Finding | With Forgejo |
+|---|---|
+| O1 public repo / mirror direction | Unchanged in substance: R0 stays GitHub-primary and public (D-O1). The Forgejo copy of R0 is the local review loop; changes reach GitHub only through `sctl publish`. |
+| O2 private repos gain real protection | Holds: Forgejo branch protection works on private repos (no direct push, 1 approval, self-approval refused). Each agent platform has its own Forgejo identity, so no agent is a bypass actor. Live matrix: [docs/ops/forgejo-branch-protection.md](../ops/forgejo-branch-protection.md). |
+| O3 tag deploy gate | Holds: the gate still runs `git verify-tag` against `allowed_signers` (D-G6); it does not depend on a forge feature. |
+| O4 CI vendor | Woodpecker on the Mac, driven by Forgejo webhooks, with statuses on the Forgejo PR. |
+| O5 silent auto-deploy | Holds: no Worker or Pages project is connected to any repo for auto-deploy; Forgejo webhooks drive CI only. |
+| O6 beta risk | Gone for the forge itself (Forgejo is self-hosted); replaced by a single-machine risk: the Mac is the only host, so the GitHub backup (at releases) and a nightly encrypted Forgejo dump are the recovery path. |
+| O7 package registry | Forgejo has PyPI and npm registries (owner `digithings-ai`): dev and private builds go there; stable builds go to PyPI `digithings-<module>` and npm `@digithings-ai/*` (D-C5, D-C6). |
 
 ## Review by dimension
 

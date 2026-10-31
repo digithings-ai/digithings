@@ -1,5 +1,12 @@
 # Cursor Origin capability matrix
 
+> **Historical — superseded 2026-10-29.** The private repos live on local Forgejo (digiforge) in the
+> `digithings-ai` org since D-C1 (2026-10-29); Cursor Origin was the planned home only from
+> 2026-10-14 until then and is not used by the plan any more. This file is kept unchanged below as
+> the evidence of the 14 Oct check. For the current setup see
+> [migration-plan.md § Source control on Forgejo](migration-plan.md#source-control-on-forgejo) and
+> [decisions.md § Re-home record](decisions.md#re-home-record--2026-10-31).
+
 Checked 2026-10-14 for DIG-3558 against the repo-split plan in PR #5695 (`docs/repo-split/decisions.md`, `review.md`). This file is evidence. It does not create repos, change mirror state, or deploy.
 
 Confidence labels: **CONFIRMED** (primary doc or a read-only live call), **LIKELY** (docs agree, not executed), **UNKNOWN** (not in the sources below).

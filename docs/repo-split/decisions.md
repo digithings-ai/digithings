@@ -2,6 +2,9 @@
 
 > **2026-10-29:** private repos move to Forgejo and R6 becomes one repo per client. See
 > [Client repos and Forgejo homes](#client-repos-and-forgejo-homes--answered-2026-10-29).
+>
+> **2026-10-31:** the split docs are re-homed to Forgejo; the Origin rows below are kept as the
+> record and marked superseded. See [Re-home record](#re-home-record--2026-10-31).
 
 Decisions Chris must take, with the recommended default. The proposal's own decisions
 (D-1 … D-14) are kept; where this review changes the recommendation the ID carries a `′`.
@@ -36,11 +39,11 @@ Answered by Chris on 2026-10-14.
 
 | ID | Question | Answer | What it means for the plan |
 |---|---|---|---|
-| **D-O1** [scope] | Origin has **no public repos** and **no outbound mirror** to GitHub. Where is the public R0 primary? | **GitHub primary, Origin inbound mirror.** | R0 stays on GitHub (public); Chris adds an Origin inbound mirror after P3 with `origin repo create-mirrored`. External PRs, CI and PyPI publishing stay native on GitHub. No push mirror is built. This changes the direction for R0 only. |
-| **D-O2** [scope] | Which Origin namespace owns R1–R7? The name **cannot be changed during beta**. | **Chris's existing personal namespace.** | R1–R7 are private repos in that namespace, shared by collaborator invite. No Teams plan, so no `internal` visibility and no team bypass actors. |
+| **D-O1** [scope] | Origin has **no public repos** and **no outbound mirror** to GitHub. Where is the public R0 primary? | **GitHub primary, Origin inbound mirror.** | R0 stays on GitHub (public); Chris adds an Origin inbound mirror after P3 with `origin repo create-mirrored`. External PRs, CI and PyPI publishing stay native on GitHub. No push mirror is built. This changes the direction for R0 only. *2026-10-31: "GitHub primary" stands; the Origin mirror part is superseded by the Forgejo copy of R0 (re-home record).* |
+| **D-O2** [scope] | Which Origin namespace owns R1–R7? The name **cannot be changed during beta**. | **Chris's existing personal namespace.** | R1–R7 are private repos in that namespace, shared by collaborator invite. No Teams plan, so no `internal` visibility and no team bypass actors. *Superseded by D-C1 / D-C4 (Forgejo org `digithings-ai`).* |
 | **D-O3** [money] [external] | CI for Origin repos. | ~~**Buildkite**, Origin as repository provider, **self-hosted agents**~~ **STRUCK 23:18 — runner is local-ci on Chris's Mac** (DIG-3561 dispatcher + N §5); no Buildkite org, no CloneKit (`clone-fast` fails on Ultra — Matrix finding 6). Queues are local-ci job config, not Buildkite queues. |
-| **D-O4** [money] [security] | Which identity do agents use on Origin? | **Agents keep using Chris's account.** | 23:18 revision: the 'advisory' reading is struck — rulesets that must hold are **`active`**, and the agent identity is **not** a bypass actor (no agent seat holds bypass; Chris alone does). D-G6 is now mandatory (below), so the deploy control is technical (local-ci `verify-tag`), not merely procedural. No second Cursor plan. |
-| **D-O5** [client] [security] | `<client-slug>` on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the `<client-slug>` desk moves** — P4.7 struck, no detach scheduled. `<client-slug>` stays as-is (GitHub private + existing inbound mirror). |
+| **D-O4** [money] [security] | Which identity do agents use on Origin? | **Agents keep using Chris's account.** | 23:18 revision: the 'advisory' reading is struck — rulesets that must hold are **`active`**, and the agent identity is **not** a bypass actor (no agent seat holds bypass; Chris alone does). D-G6 is now mandatory (below), so the deploy control is technical (local-ci `verify-tag`), not merely procedural. No second Cursor plan. *Superseded by D-C1: one Forgejo identity per agent platform.* |
+| **D-O5** [client] [security] | `<client-slug>` on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the `<client-slug>` desk moves** — P4.7 struck, no detach scheduled. `<client-slug>` stays as-is (GitHub private + existing inbound mirror). *2026-10-31: the "move to Origin" part is superseded by D-C1; the hold stands, and the Forgejo copy replaces the Origin mirror.* |
 
 Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac instead of a dedicated host (Buildkite struck 23:36). D-G6 is MANDATORY everywhere since 23:18 (Origin has no signed-tag rule type, so the check lives in local-ci `verify-tag`; an unsigned tag is refused).
 
@@ -48,9 +51,9 @@ Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac in
 
 | ID | Direction | What it means for the plan |
 |---|---|---|
-| **D-X1** | GitHub Actions minutes exhausted: **migration off GitHub comes first** (local Mac CI + Cloudflare Worker fallback + Cursor Origin readiness ahead of extraction). | P0 leads with the Mac dispatcher (DIG-3561), Origin checks-API verification (DIG-3558) and the R0 mirror-lag watch (DIG-3560). Missing GitHub Actions checks are **not** failures; every PR records its local test pass in its body. |
+| **D-X1** | GitHub Actions minutes exhausted: **migration off GitHub comes first** (local Mac CI + Cloudflare Worker fallback + Cursor Origin readiness ahead of extraction). | P0 leads with the Mac dispatcher (DIG-3561), Origin checks-API verification (DIG-3558) and the R0 mirror-lag watch (DIG-3560). Missing GitHub Actions checks are **not** failures; every PR records its local test pass in its body. *"Cursor Origin readiness" superseded by D-C1: Forgejo + Woodpecker readiness.* |
 | **D-X2** | **No GitHub Packages, GHCR, or GitHub Actions dependence** in any moved repo. | R1/R2/R3/R4 registries move to non-GitHub homes (TBD, Chris); workflows become local-ci/cron jobs; deploys via per-package protected release branches (pending Chris approval). P2 steps 3–4 and P3 step 9 annotated accordingly. |
-| **D-X3** | Docs/code PRs into `develop` via feature branch stay fine; **no** Origin/GitHub repo creation, **no** history push, **no** Cloudflare config changes, **no** `main` merges, **no** production deploys. | Hard limits stand; anything needing those goes to Chris as a decision. Slices A–N, P deliver planning artefacts + develop PRs only. |
+| **D-X3** | Docs/code PRs into `develop` via feature branch stay fine; **no** Origin/GitHub repo creation, **no** history push, **no** Cloudflare config changes, **no** `main` merges, **no** production deploys. | Hard limits stand; anything needing those goes to Chris as a decision. Slices A–N, P deliver planning artefacts + develop PRs only. *2026-10-31: for P4, creating a new Forgejo repo and a dry run is allowed (re-home record); history push to GitHub, Cloudflare changes, `main` merges and production deploys keep their gates.* |
 
 | **D-R5-1..D-R5-6** [scope] | R5 image/parity/zammad/dead-rows/build/dispatch questions (+ added cron-transport item), asked on card `cd158e1f` (DIG-3566). | **Answered 2026-10-14T20:14:46Z, all six**: keep producing + build locally + non-GitHub registry; parity homes in R5 with R0-published contract; zammad private; delete both dead rows (follow-up H1); shared local-ci pipeline with repo arg; re-point 30 dispatch rows off GHA (new). Follow-ups H1–H6 routed incl. F15 (R0 digillm lane). |
 | **D-2318-1..5** [scope] | Send-back review (Chris 23:18, per DIG-3660 critique): R0-detach ban, P4.7 strike, Buildkite strike, no-fallback statement, order gates, local-ci merge rule. | **Applied same night**: R0 sentence added + P4.7 struck (§3 rewritten); Buildkite/`clone-fast`/'advisory' struck (§4 CI, §7 rulesets, D-O3/D-O4 rows); dark-Mac-blocks-merges stated; DIG-3605-before-DIG-3608 + develop-first + KV-proof gates added; skip-posts-failure + fork path + gated-lane list added. |
@@ -85,13 +88,34 @@ Superseded by this section: the Origin rows (D-O2, D-O4) for new private repos; 
 target table; the refactor 1.7 "KV only" ruling for client repos; D-T2 and D-R5 for client-specific MCP
 servers; D-P1's naming.
 
+## Re-home record — 2026-10-31
+
+Applies the 2026-10-29 answers (D-C1 … D-C13) to the rest of the split docs. The owner's
+2026-10-31 direction set the items marked **(31 Oct)**; the others restate earlier answers. No
+earlier row is rewritten; superseded rows carry a marker.
+
+| Item | Now | Supersedes |
+|---|---|---|
+| Private home | R1–R5 and all client repos on local Forgejo (digiforge), org **`digithings-ai`** **(31 Oct: R1–R5 in the same org as the client repos)** | D-O2, D-O4; D-C1's "R1–R5 in a private org, name chosen when they move" |
+| Origin | History only: the planned home from 2026-10-14 until 2026-10-29. No new Origin repo, mirror, ruleset, App or token. [origin-capabilities.md](origin-capabilities.md) is marked historical | Origin parts of D-O1, D-O5, D-X1 |
+| Public org | GitHub `digithings-ai`. R0 stays GitHub-primary and public (D-O1 unchanged); its Forgejo copy carries the local review loop only | — |
+| GitHub backups | One private GitHub repo per private Forgejo repo, pushed **only at releases** and **only by the owner**; agents never push a backup (D-C1, D-C4) | — |
+| R6 | Superseded by one repo per client, `digithings-ai/<client-slug>`, from `digithings-ai/client-template`; the client repo is the source of its tenant config and its deploy writes KV (D-C2, D-C3) | R6 rows of the target table; P4.1 |
+| Packages | PyPI `digithings-<module>`, npm `@digithings-ai/*`; dev and private builds on the Forgejo registry; client repos consume R0 via pinned releases in their lock file (D-C5, D-C6, D-C8) | D-Q7′ (git tag pins on Origin) |
+| P4 | **(31 Oct)** Extractions into new Forgejo repos in the order R1 → R2 → R5 → R3 → R4. Creating the repo and a dry run need no further gate; moving a deploy is gated per repo | P4 order with R6 first and R7 last; the "no repo creation" part of D-X3 for Forgejo P4 targets |
+| Scrub and cutover | **HOLD (Chris):** the D-12′ history scrub and the P3 public-repo cutover need a force-push or a visibility flip | — (restated) |
+
+Open, flagged for the owner (no answer assumed here): D-C4 names the GitHub backups of client
+repos `digithings-ai/client-<slug>`, while the Forgejo repos have no prefix. These docs keep D-C4 as
+written until the owner confirms one form.
+
 ## Changed recommendations
 
 | ID | Proposal | Recommended now | Why |
 |---|---|---|---|
 | D-Q2′ | dashboard-api own Worker, reached via R5 service binding | **Own Worker on its own zone route** (no R5 → R2 edge) | An R5 deploy can never take the desk API down. |
 | D-Q6′ | R0 ships a minimal self-host schema, R2 owns 184 files | **Layered migrations:** R0 owns `engine/` migrations for tables the open pipeline uses; R2 owns `prod/` migrations applied after | One definition per table; no drift between open engine and production. |
-| D-Q7′ (new) | R1 published to GitHub Packages (PyPI); `@digiquant/contract` on GitHub Packages npm | **Git tag pins on Origin** for both (`uv.lock` SHA for R1; git dependency on an R2 tag for the contract), read with a short-lived Origin token | GitHub Packages has no Python registry, and Origin has no package registry. |
+| D-Q7′ (new) | R1 published to GitHub Packages (PyPI); `@digiquant/contract` on GitHub Packages npm | **Git tag pins on Origin** for both (`uv.lock` SHA for R1; git dependency on an R2 tag for the contract), read with a short-lived Origin token | GitHub Packages has no Python registry, and Origin has no package registry. *Superseded by D-C6: private and dev builds use the Forgejo PyPI/npm registries.* |
 | D-R3 (new) | 16 protected `release/<module>` branches in R0 | **Tags + release-please on `main` in R0** (answered: yes). In R2–R6 a `release/*` branch is kept as the place a release is cut from, but on Free it is not protected; the gate is the signed tag (D-G6). | Nothing deploys from R0. |
 | D-11′ | `@digithings-ai/*` on npm (renamed 02:24), interim GitHub Packages | **npmjs only, no interim** | GitHub Packages npm needs a PAT even for public installs. D-P2 SATISFIED: Chris owns the `digithings-ai` npm org (02:18); nothing publishes until he provides a token. |
 | D-13′ | Delete agent wiring dirs from public | **Move only after confirming nothing reads them**; private `digithings-ops` if still used | They drive the fleet today. |

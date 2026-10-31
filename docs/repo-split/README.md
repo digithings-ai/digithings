@@ -4,14 +4,21 @@ Plan for splitting the digithings monorepo into one public repo and seven privat
 with per-repo release branches and no Cloudflare deploys from `main`.
 **Updated 2026-10-29:** private repos live on local Forgejo, and the single tenants repo (R6)
 is replaced by one repo per client. See [below](#2026-10-29-client-repos-forgejo-homes-package-releases-d-c1--d-c13).
+**Updated 2026-10-31:** every file in this folder is re-homed to Forgejo; Cursor Origin appears only
+as history (the planned home from 2026-10-14 until 2026-10-29). See [Where things live](#where-things-live-2026-10-31).
 
 | File | What it is |
 |---|---|
 | [review.md](review.md) | Critical review of the 8-repo proposal. **Verdict: MODIFY** — topology agreed, mechanics changed. |
 | [migration-plan.md](migration-plan.md) | Phased plan P0–P6: order of moves, per-repo recipe, validation, rollback, docs to update. |
 | [client-template/](client-template/) | Generic skeleton for every `digithings-ai/<client-slug>` repo (reference copy of the Forgejo template). |
-| [decisions.md](decisions.md) | Decision register: gate decisions for Chris, changed and unchanged recommendations. |
-| [repo-split.mmd](repo-split.mmd) / [repo-split.png](repo-split.png) | Target topology after the modifications. |
+| [decisions.md](decisions.md) | Decision register: gate decisions for Chris, changed and unchanged recommendations, the 2026-10-31 re-home record. |
+| [repo-split.mmd](repo-split.mmd) / [repo-split.png](repo-split.png) | Target topology after the modifications (Forgejo homes, client repos). |
+| [mirror-sync-r0.md](mirror-sync-r0.md) | How the public R0 on GitHub and its Forgejo copy stay in sync. |
+| [cloudflare-deploy-map.md](cloudflare-deploy-map.md) | Which repo deploys which Worker or Pages project, and the local deploy design. |
+| [secrets-access-inventory.md](secrets-access-inventory.md) | Secret **names** per repo and who holds what after the move (no values). |
+| [origin-capabilities.md](origin-capabilities.md) | **Historical (superseded 2026-10-29):** the Cursor Origin capability check of 2026-10-14. |
+| Inventories and reports | [r2-digiquant-stack-inventory.md](r2-digiquant-stack-inventory.md), [r7-client-desk-inventory.md](r7-client-desk-inventory.md), [3569-extraction-report.md](3569-extraction-report.md): dated 14 Oct measurements. |
 
 The original proposal (with the file:line coupling inventory) and the per-path manifest are kept on
 the tracking issue (DIG-3518), not in this public repo: they map where non-public files sit in history.
@@ -27,11 +34,11 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 | R4 | `digithings-web` | private (Forgejo, was Origin) | digithings.ai, digibook, brand |
 | R5 | `digithings-stack` | private (Forgejo, was Origin) | shared production platform (stack, digichat Worker, cron) |
 | ~~R6~~ | ~~`digichat-tenants`~~ | superseded 2026-10-29 | one private `digithings-ai/<client-slug>` repo per client (D-C2) |
-| R7 | `<client-slug>` (exists) | private (Origin) | client desk + digidata-api |
+| R7 | `<client-slug>` (exists) | private (GitHub + Forgejo copy; was an Origin mirror until 2026-10-29) | client desk + digidata-api (move on hold) |
 
 ## Status
 
-Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). D-O1, D-O2, D-O4, D-O5 answered the same day (R0 stays GitHub-primary, agents on Chris's account); D-O3 (Buildkite) STRUCK 23:36, runner is local-ci; D-G6 mandatory since 23:18. D-G5 / D-G6 answered 2026-10-14 17:40 CEST (deploys + CI on Chris's Mac under his normal user, Cloudflare Worker as fallback; signed tags mandatory, D-G6). Nothing has moved yet.
+Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). D-O1, D-O2, D-O4, D-O5 answered the same day (R0 stays GitHub-primary, agents on Chris's account); D-O3 (Buildkite) STRUCK 23:36, runner is local-ci; D-G6 mandatory since 23:18. D-G5 / D-G6 answered 2026-10-14 17:40 CEST (deploys + CI on Chris's Mac under his normal user, Cloudflare Worker as fallback; signed tags mandatory, D-G6). Nothing has moved yet. *(The Origin direction of 14 Oct is superseded by D-C1, below; it is kept here as the record.)*
 
 **Update 2026-10-29:** the private homes changed from Cursor Origin to Forgejo (digiforge), and per-client repos replace R6. See [2026-10-29: client repos, Forgejo homes, package releases](#2026-10-29-client-repos-forgejo-homes-package-releases-d-c1--d-c13). Client repos live in the Forgejo `digithings-ai` org, and the template repo `digithings-ai/client-template` exists there (naming revised 22:56, see [decisions.md](decisions.md)); no monorepo code has moved yet.
 
@@ -73,3 +80,16 @@ Changes land here first by pull request, then sync to Forgejo.
 | R7 (exists) | unchanged (hold stands); gets the template docs in place |
 | `digithings-ai/client-template` | Forgejo template repo (private) |
 | `digithings-ai/<client-slug>` | Forgejo (private) + private GitHub backup at releases |
+
+## Where things live (2026-10-31)
+
+| What | Where |
+|---|---|
+| Private repos (R1–R5, client repos, the template) | Local Forgejo (digiforge) on Chris's Mac, org `digithings-ai`. Origin was the planned home until 2026-10-29 and is not used any more. |
+| Public org | GitHub `digithings-ai`: R0 `digithings` (primary, public) |
+| Backups of private repos | A private GitHub repo each, pushed at releases only, by the owner only. Agents never push a backup. |
+| Client repos | `digithings-ai/<client-slug>` from `digithings-ai/client-template`; each is the source of its tenant config and its deploy writes KV |
+| Packages | PyPI `digithings-<module>`, npm `@digithings-ai/*`; dev builds on the Forgejo registry; client repos pin R0 releases in their lock file |
+| CI | Woodpecker on the Mac for Forgejo repos; GitHub-hosted runners for R0 |
+| Next extractions (P4) | New Forgejo repos in the order R1 → R2 → R5 → R3 → R4 |
+| On hold for Chris | D-12′ history scrub and the P3 public-repo cutover (force-push / visibility flip); the R7 desk-surface move |

@@ -1,5 +1,10 @@
 # R7 `<client-slug>`: inventory of what moves into the existing repo (DIG-3568)
 
+> **2026-10-31:** dated record. Since 2026-10-29 (D-C1) the private repos live on local Forgejo in the
+> `digithings-ai` org, not on Cursor Origin; R6 is replaced by per-client repos `digithings-ai/<client-slug>`
+> (D-C2). Where this file says Origin, read it as the 14 Oct plan. See [README.md](README.md#where-things-live-2026-10-31).
+> R7 itself stays as-is (GitHub private + Forgejo copy); the desk-surface move is still on hold.
+
 Parent epic DIG-3518. Source: plan PR #5695 (`docs(root): repo split review and
 phased migration plan`, open) and `repo-split.md` section R7 plus section 1g/3.
 

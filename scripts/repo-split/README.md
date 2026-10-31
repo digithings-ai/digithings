@@ -9,12 +9,18 @@ HARD LIMITS (board orders, Chris 14 Oct): planning, dry runs and PRs into
 of history, NO Cloudflare config changes, NO `main` merges, no Paperclip restart.
 Anything needing those goes to Chris as a decision.
 
+*2026-10-31 (docs re-home):* the private home is local Forgejo, org `digithings-ai`, not Cursor
+Origin (D-C1, 2026-10-29), and R6 is replaced by per-client repos (D-C2). P4 extracts into new
+Forgejo repos in the order R1 → R2 → R5 → R3 → R4; creating the Forgejo repo and a dry run need no
+further gate (see `docs/repo-split/decisions.md`, re-home record). These scripts are unchanged:
+they still never push, and `extract-all.sh` keeps its 14 Oct order.
+
 ## Layout
 
 - `move-lists/r1.paths … r7.paths` — one repo-relative path per line (`#` comments
   allowed). Directories keep the whole subtree. Verified present at
   `github/develop d227b6ed5` (2026-10-14) by `dry-run.sh`.
-- `move-lists/r5.drop` — second-pass removals from the R5 extraction (the 10 OCC
+- `move-lists/r5.drop` — second-pass removals from the R5 extraction (the 10 client
   seed files that move to R6), applied as `filter-repo --invert`.
 - `move-lists/overlaps-known.txt` — documented cross-repo overlaps (see below).
 - `dry-run.sh [REF] [REPO]` — validates every move-list path exists at REF.
@@ -38,8 +44,8 @@ Anything needing those goes to Chris as a decision.
   R1 wins at migration (plan extracts R1 before R2); R2 executor drops them.
 - R3/R4 `.github/workflows/test-web.yml` — shared lane; each repo keeps its section
   (split at migration, per DIG-3565).
-- R5/R6 `scripts/{verify_occ_invite_key,test_verify_occ_invite_key}.sh`,
-  `scripts/occ_invite_key_fixture_server.mjs` — guard R5+R6 surfaces (DIG-3566 F13);
+- R5/R6 `scripts/{verify_<client-slug>_invite_key,test_verify_<client-slug>_invite_key}.sh`,
+  `scripts/<client-slug>_invite_key_fixture_server.mjs` — guard R5+R6 surfaces (DIG-3566 F13);
   ruling owed by DIG-3567 (R6 owner).
 
 ## Rev 3 — send-back applied (Chris via One 01:26, R5 rev 5 accepted on DIG-3566)
@@ -64,7 +70,7 @@ Anything needing those goes to Chris as a decision.
   double-counted hardlinked packs and are superseded.
 - `infra/local-proxy/Caddyfile` is contested (H7) and unassigned: excluded from
   every list, noted here. `devkit-looks.*` stays R0 (unassigned by J rev 2 and
-  the send-back). `test_verify_occ_invite_key.sh` stays R6 (tests R6's verify
+  the send-back). `test_verify_<client-slug>_invite_key.sh` stays R6 (tests R6's verify
   script; no other claimant).
 - r2 net 515 = doc 480 + rev-1 §1.7 root items (runner Dockerfile, root
   ops scripts, config jsons) the 12-block table does not enumerate.
@@ -75,7 +81,7 @@ R6 follows DIG-3567 (done), R7 follows DIG-3568 (in_review); both re-verified
 path-by-path at `github/develop d227b6ed5` by these scripts' own gates. Three
 ref-specific discrepancies were measured while regenerating and are recorded in
 `move-lists/r6.paths` notes 1-3 (`start_digiseed.sh` name miss, devkit-looks
-presence, occ_help 4-vs-6 count). The R5/R6 double-claim on 9 rollout scripts +
+presence, `<client-slug>_help` 4-vs-6 count). The R5/R6 double-claim on 9 rollout scripts +
 runbook (DIG-3566 E.1/F13 vs DIG-3567 section D) is recorded in
 `overlaps-known.txt`; the ruling is owed by those owners, not resolved here.
 
