@@ -181,17 +181,6 @@ ROWS: tuple[Row, ...] = (
     ),
     Row(
         "R6",
-        ".github/workflows/datatap-answer-check.yml",
-        "manual-dispatch",
-        note=(
-            "Retired 2026-10-18 (Chris): the client manages their own "
-            "infrastructure, so we do not probe them on a schedule. No clock "
-            "row and no [triggers] entry (DIG-4435). The file stays on develop "
-            "and a human can still start it by hand."
-        ),
-    ),
-    Row(
-        "R6",
         ".github/workflows/occ-invite-key-rollout.yml",
         "local-ci",
         anchor="scripts/check_occ_rollout_auth_guard.py",

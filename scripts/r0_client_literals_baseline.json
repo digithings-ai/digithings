@@ -510,7 +510,7 @@
       "ticket": "DIG-3689"
     },
     "docs/agents/CI_CONVENTIONS.md": {
-      "count": 2,
+      "count": 1,
       "ticket": "DIG-3689"
     },
     "docs/architecture/digichat-config-program-plan.md": {
@@ -574,10 +574,6 @@
       "ticket": "DIG-3689"
     },
     "docs/ops/paperclip-routine-watch.md": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "docs/ops/repo-split-workflow-map.md": {
       "count": 1,
       "ticket": "DIG-3689"
     },
@@ -666,7 +662,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/check_r0_no_client_literals.py": {
-      "count": 14,
+      "count": 13,
       "ticket": "DIG-3689"
     },
     "scripts/datatap_answer_integrity_check.py": {
@@ -708,10 +704,6 @@
     "scripts/repo-split/move-lists/r6.paths": {
       "count": 6,
       "ticket": "DIG-3895"
-    },
-    "scripts/repo_split_workflow_map.py": {
-      "count": 1,
-      "ticket": "DIG-3689"
     },
     "scripts/scan_customer_pii.py": {
       "count": 4,
@@ -910,7 +902,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_check_clock.py": {
-      "count": 23,
+      "count": 6,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
@@ -942,10 +934,6 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_publish_digichat_image_workflow.py": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "tests/scripts/test_repo_split_workflow_map.py": {
       "count": 1,
       "ticket": "DIG-3689"
     },

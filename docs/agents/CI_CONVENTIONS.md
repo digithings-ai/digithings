@@ -58,7 +58,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `book-pdf.yml` | Book: print the PDF | push, dispatch | Build the digibook's printed PDF as an artifact (DIG-2821) | Working | `paths:` filter |
 | `ci-pr-title.yml` | CI: PR title | pull_request | Conventional Commit title lint with the module scope list; squash merges use the PR title | Working | none |
 | `ci-review-coverage.yml` | CI: review coverage | pull_request | Gate before production: every PR in a promotion must carry a review | Working | none |
-| `datatap-answer-check.yml` | Check: DataTap answer integrity | dispatch (manual only — the CF clock was retired 2026-10-18, DIG-4435) | Answer-integrity probe against DataTap production (DIG-306). Retired: the client manages their own infrastructure, so we do not probe them on a schedule. | Retired (manual dispatch only) | none |
 | `deploy-digiquant-runner.yml` | Deploy: digiquant-runner | push (`main`), dispatch | Deploy the private digiquant-runner Worker and container image (#4761) | Working | `paths:` filter |
 | `deploy-digithings-cron.yml` | Deploy: digithings-cron | push (`main`), dispatch | Deploy the digithings-cron Worker that owns production clocks (#3579) | Working | `paths:` filter |
 | `execution-cron-check.yml` | Pipeline: execution cron check | dispatch (CF clock) | Fail-closed probe for overlay dispatch env and execution sync; never `--execute` | Working | none |
