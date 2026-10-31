@@ -32,6 +32,12 @@ export const NAV: NavGroup[] = [
       },
       { path: '/pipeline', label: 'Pipeline' },
       {
+        // digitrace Traces tab (DIG-2661). Kept under /observability so it
+        // reuses that route family; the legacy /observability redirect that
+        // lands on /pipeline is untouched.
+        path: '/observability/traces', label: 'Traces',
+      },
+      {
         path: '/strategies',
         label: 'Strategies',
         status: 'wip',
