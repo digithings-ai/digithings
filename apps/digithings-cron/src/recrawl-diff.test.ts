@@ -9,7 +9,7 @@ import {
   type CrawledDoc,
   type RecrawlStore,
   type StoredDoc,
-} from "./occ-help-recrawl";
+} from "./recrawl-diff";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

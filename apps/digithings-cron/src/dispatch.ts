@@ -15,6 +15,7 @@ import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
 import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
+import { EMPTY_TENANT_READER, runTenantRecrawlTick, type TenantDocReader } from "./tenant-recrawl";
 import { dispatchTwelvex } from "./twelvex-dispatch";
 import { runTwelvexWatch, sessionCatchupDue, type WatchOutcome } from "./twelvex-watch";
 
@@ -176,10 +177,10 @@ function usesGithub(job: Job, env: Env): boolean {
   ) {
     return githubOverrideIds(env).includes(job.id);
   }
-  // "occ-recrawl" (DIG-3576) never uses GitHub: there is no workflow behind the
-  // id, so even a GITHUB_OVERRIDE_JOBS listing must not redirect it into
+  // "tenant-recrawl" never uses GitHub: there is no workflow behind the id,
+  // so even a GITHUB_OVERRIDE_JOBS listing must not redirect it into
   // dispatchGithub with an undefined workflow. Worker-native, always.
-  if (job.kind === "occ-recrawl") {
+  if (job.kind === "tenant-recrawl") {
     return false;
   }
   return true;
@@ -411,7 +412,7 @@ export async function dispatch(
   job: Job,
   cron: string,
   scheduledTime = 0,
-  opts: { args?: Record<string, string>; force?: boolean } = {},
+  opts: { args?: Record<string, string>; force?: boolean; tenants?: TenantDocReader } = {},
 ): Promise<DispatchResult> {
   if (usesGithub(job, env)) {
     if (job.gate === "twelvex-session-due" && !opts.force && env.DRY_RUN !== "1") {
@@ -468,20 +469,20 @@ export async function dispatch(
     logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, ...out });
     return { ok: out.ok, status: out.ok ? 200 : 0, dry_run: false, twelvex: out };
   }
-  if (job.kind === "occ-recrawl") {
-    if (!job.occRecrawl) throw new Error(`job ${job.id}: occ-recrawl requires occRecrawl`);
-    if (env.DRY_RUN === "1") {
-      logLine({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, dry_run: true });
-      return { ok: true, status: 0, dry_run: true };
+  if (job.kind === "tenant-recrawl") {
+    if (env.DRY_RUN !== "1") {
+      // Live crawl stays unwired. Fail closed: no store, no writes.
+      console.error(JSON.stringify({ cron, repo: job.repo, job: job.id, error: "store_unwired" }));
+      return { ok: false, status: 0, dry_run: false };
     }
-    // Live crawl + D1/Vectorize store land once the Vectorize token prerequisite
-    // is granted (ticket prerequisite; Chris grants). Fail closed until then:
-    // a weekly tick that cannot reach its store must read as a failure, never
-    // as a silent green week.
-    console.error(
-      JSON.stringify({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, error: "store_unwired" }),
-    );
-    return { ok: false, status: 0, dry_run: false };
+    // The tick catches per-tenant faults. A thrown list still must not escape
+    // scheduled(), so a failure here stays a dry-run result.
+    const tick = await runTenantRecrawlTick({
+      now: new Date(scheduledTime > 0 ? scheduledTime : Date.now()),
+      reader: opts.tenants ?? EMPTY_TENANT_READER,
+    }).catch(() => ({ dryRun: true as const, ran: [], skipped: [] }));
+    logLine({ cron, repo: job.repo, job: job.id, dry_run: true, ran: tick.ran });
+    return { ok: true, status: 0, dry_run: true };
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
