@@ -167,17 +167,17 @@ image_build_context = "../.."
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside infra/docker/Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-# Two slots, not one: a rolling deploy must be able to start the new revision
-# while the old one drains, or the account's container-instance cap refuses the
-# start (DIG-4459). The digichat container id is derived from the deploying
-# commit (src/paths.ts), so every deploy addresses a NEW id while the previous
-# id's instance is still running — warm, or draining for up to 15 minutes after
-# the rollout's SIGTERM. With one slot the new instance cannot start until the
-# old one has fully exited, so every request that needs a container start then
-# fails with "Maximum number of running container instances exceeded"
-# (DIG-4487). Only one instance serves traffic once the rollout settles; the
-# second slot is rollout headroom, not steady-state cost.
-max_instances = 2
+# Ten slots (owner call, t1702u; was two). A rolling deploy must be able to
+# start the new revision while the old one drains, or the container-instance
+# cap refuses the start (DIG-4459). The id is derived from the deploying commit
+# (src/paths.ts), so every deploy addresses a NEW id while the previous id's
+# instance is still running, warm or draining for up to 15 minutes after the
+# rollout's SIGTERM, and a start then fails with "Maximum number of running
+# container instances exceeded" (DIG-4487). All traffic routes to that ONE id,
+# so ten slots are rollover headroom (back-to-back deploys, a stuck draining
+# instance), not per-user capacity. Billing is per running instance: steady
+# state is still one instance; idle slots cost nothing.
+max_instances = 10
 instance_type = "basic"
 
 [[durable_objects.bindings]]
@@ -195,6 +195,9 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
+#   DIGICHAT_LICENSE_JWT     # optional: owner-minted license (digikey license-mint); without it
+#                            # the chat is unlicensed and hosted web search is refused upstream
+#   DIGIKEY_PUBLIC_KEY_PEM   # optional: digikey public key that verifies that license (not secret)
 #   DIGICHAT_PLAN_PROOF_SECRET
 #   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
@@ -203,6 +206,12 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   ZAMMAD_BASE_URL          # Zammad base URL for that MCP (optional; client default otherwise)
 #   ZAMMAD_EDGE_KEY          # Worker-only /api/mcp/zammad gate; never forwarded to the container
 #   DIGICHAT_ADMIN_KEY       # Worker-only /_digichat-admin container reset lever; never forwarded
+#   DIGICHAT_INVITE_PAGES    # optional JSON of invite-only /chat/<slug> pages beyond OCC (slug ->
+#                            # host + keyEnv NAME; src/invite-pages.ts). Not secret, but kept out
+#                            # of this public file and out of [vars] so tenant names never land in
+#                            # the repo and a deploy cannot drop it. Forwarded so the app knows
+#                            # which hosts are invite-only.
+#   <keyEnv of each page>    # one Worker-only invite key per configured page, e.g. EXAMPLE_INVITE_KEY
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
 # It is deliberately NOT forwarded to the Container. This Cloudflare deployment
 # is DB-less (no Postgres instance or secret), so digichat falls back to
@@ -249,6 +258,9 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
 # / digiquant / digitrace from /api/health (defaults would be unreachable).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
+# Issuer the chat expects on its license JWT. Must match the stack's
+# DIGIKEY_ISSUER; without it the container falls back to the local dev issuer.
+DIGIKEY_ISSUER = "https://key.digithings.ai"
 # /chat/occ invite cookie lifetime in whole days (1-365). Non-secret: the cookie
 # carries its issued-at inside the MAC, and the edge refuses it once it is older
 # than this. Reopening the invite link issues a fresh one. Worker-only.

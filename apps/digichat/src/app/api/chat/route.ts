@@ -24,6 +24,12 @@ import {
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import { demoChatResponse, isDemoChatEnabled } from "@/lib/demo-chat";
 import { isPrivateMode, withPrivateModeUiPrompt } from "@/lib/private-mode";
+import { privateTermsFor, privatizeChatResponse } from "@/lib/private-stream";
+import {
+  privateToolRecorder,
+  privateToolScope,
+  rehydratePrivateToolParts,
+} from "@/lib/private-tool-cache";
 import {
   DIGIKEY_UNAVAILABLE_RETRY_AFTER_SECONDS,
   DigigraphUpstreamAuthError,
@@ -72,7 +78,7 @@ import {
   resolveAnonymousDeploymentChat,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
-import { isPlanTierSatisfied } from "@/lib/embed-tenants";
+import { embedTenantRefusesByok, isPlanTierSatisfied } from "@/lib/embed-tenants";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 import { verifyPlanProof } from "@/lib/plan-proof";
 import {
@@ -134,6 +140,17 @@ export async function POST(req: Request) {
   const { tenantSlug, ownerUserSub } = tenantCtx;
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
   const embedConfig = embedConfigOf(tenantCtx);
+  // An operator-paid tenant without the BYOK surface takes no visitor key:
+  // refuse it here rather than only hiding the menu.
+  if (byokKey && embedTenantRefusesByok(embedConfig)) {
+    return new Response(
+      JSON.stringify({
+        error: "byok_disabled",
+        message: "This chat does not accept your own API key.",
+      }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
 
   // Resolve the deployment before the request limiter. The limiter is
   // per deployment (`guardrails.rateLimit`), and an own key skips it.
@@ -166,7 +183,7 @@ export async function POST(req: Request) {
   }
 
   const spendGuardrails = embedConfig?.guardrails ?? dep?.guardrails;
-  // Own key: not our inference budget. OCC sets rateLimit false for everyone.
+  // Own key: not our inference budget. The gated tenant sets rateLimit false for everyone.
   const skipOurRequestLimit =
     byokKey.length > 0 || !deploymentRateLimitEnabled(spendGuardrails);
 
@@ -442,7 +459,28 @@ export async function POST(req: Request) {
     );
   }
 
-  const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
+  // Private demo session (`x-digi-private: 1`), honoured only for a tenant
+  // that opted in. The instruction rides the UI messages (below); the stream
+  // wrapper strips tool and reasoning payloads and the tenant's own names
+  // before anything reaches the browser (`lib/private-stream.ts`).
+  const privateMode =
+    isPrivateMode(req.headers) &&
+    (embedConfig?.privateMode === true || dep?.features?.privateMode === true);
+  const privateTerms = privateMode ? privateTermsFor(embedConfig ?? dep) : [];
+  // Server-side memory of this session's full tool calls (the browser only
+  // holds stripped steps), so a follow-up turn keeps its tool context.
+  const toolScope = privateToolScope({
+    tenantSlug,
+    ownerUserSub,
+    sessionHeader: req.headers.get("x-digichat-session") ?? req.headers.get("x-session-id"),
+  });
+  const finish = (res: Response) =>
+    releaseChatRunLockOnResponseEnd(
+      privateMode
+        ? privatizeChatResponse(res, privateTerms, privateToolRecorder(toolScope))
+        : res,
+      runLock.release,
+    );
 
   // Deploy `models.available` allowlist (fail closed when non-empty). Resolved
   // before the backend branch so it applies to foundry too, not just digigraph.
@@ -450,8 +488,8 @@ export async function POST(req: Request) {
   // provider models — the CI picker must not reject those ids (#3829).
   // The tenant's curated default wins over the deployment-wide fallback:
   // `models.default` is what the picker shows as selected, so using it here
-  // keeps the first turn on the same model the visitor sees (v4.1-flash for
-  // OCC) instead of the digigraph operator default. Only a slug the tenant
+  // keeps the first turn on the same model the visitor sees (the tenant's
+  // default) instead of the digigraph operator default. Only a slug the tenant
   // actually offers is trusted; anything else falls back.
   // ONE artefact decides the session lock and the model allowlist (DIG-4589).
   // On the embed surface that artefact is the request's tenant: in production
@@ -578,15 +616,16 @@ export async function POST(req: Request) {
   const reasoningEffort =
     effortRaw === "low" || effortRaw === "medium" || effortRaw === "high" ? effortRaw : undefined;
 
-  // Private demo mode: the client sends x-digi-private: 1 when the transcript
-  // may be shown to the party it names, so every turn is told to substitute the
+  // Private demo mode (resolved above): every turn is told to substitute the
   // real names and identifiers it is given.
-  const privateMode = isPrivateMode(req.headers);
   // The instruction is applied to the UI messages here, before the adapter
   // branch, because every path consumes `messages` — including the digigraph
   // trace stream, which is the default and converts them itself. Patching the
   // converted model messages later would reach only the legacy `streamText`
-  // pair and leave private mode a silent no-op on the path OCC actually uses.
+  // pair and leave private mode a silent no-op on the path tenant chats actually use.
+  // The browser holds only stripped tool steps; put this session's kept
+  // payloads back so a follow-up turn still has its earlier tool results.
+  if (privateMode) messages = rehydratePrivateToolParts(messages, toolScope);
   if (privateMode) messages = withPrivateModeUiPrompt(messages);
 
   // models.costPerWindow stays on the premium budget above. The limits block
@@ -845,7 +884,10 @@ export async function POST(req: Request) {
     v === "parallel" ||
     v === "firecrawl" ||
     v === "tinyfish";
-  const browserEngine = isEngineName(engineRaw) ? engineRaw : undefined;
+  // A tenant that locks session controls keeps its own engine: a visitor
+  // cannot move its searches onto another (possibly paid) engine.
+  const engineLocked = dep?.gate?.lockSessionControls === true;
+  const browserEngine = !engineLocked && isEngineName(engineRaw) ? engineRaw : undefined;
   const tenantEngine =
     tenantEngineRaw !== "auto" && isEngineName(tenantEngineRaw) ? tenantEngineRaw : undefined;
   const effectiveEngine = browserEngine === "auto" ? undefined : (browserEngine ?? tenantEngine);
@@ -862,6 +904,7 @@ export async function POST(req: Request) {
     const {
       filterForceToolHeader,
       filterDisabledToolsHeader,
+      exclusiveCatalogDisabledIds,
       omitForcedCatalogIds,
       mcpServersHeaderValue,
       operatorMcpServersForUpstream,
@@ -903,10 +946,13 @@ export async function POST(req: Request) {
         ? filterForceToolHeader(dep, forceToolRaw)
         : undefined;
     if (allowed) upstreamHeaders["X-Digi-Force-Tool"] = allowed;
-    const disabled = omitForcedCatalogIds(
-      filterDisabledToolsHeader(dep, disabledToolsRaw),
-      allowed,
-    );
+    const disabled = [
+      ...new Set([
+        ...omitForcedCatalogIds(filterDisabledToolsHeader(dep, disabledToolsRaw), allowed),
+        // An exclusive catalog is the whole tool surface (fail closed upstream).
+        ...exclusiveCatalogDisabledIds(dep),
+      ]),
+    ];
     // Forward catalog ids as-is (#3807): digigraph `expand_disabled_tool_tokens`
     // expands digisearch/digivault aliases upstream. Do not expand to tool
     // names here — that would break the upstream contract.

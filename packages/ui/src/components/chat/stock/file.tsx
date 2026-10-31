@@ -15,7 +15,7 @@ import type { FileMessagePartComponent } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
 
 const fileVariants = cva(
-  "aui-file-root inline-flex items-center gap-3 rounded-none transition-colors",
+  "aui-file-root inline-flex items-center gap-3 rounded-lg transition-colors",
   {
     variants: {
       variant: {
@@ -196,7 +196,7 @@ function FileDownload({
       download={filename || "download"}
       {...(kind === "url" && { target: "_blank", rel: "noopener noreferrer" })}
       className={cn(
-        "text-ink-mute hover:bg-accent hover:text-accent-foreground shrink-0 rounded-none p-1 transition-colors",
+        "text-ink-mute hover:bg-accent hover:text-accent-foreground shrink-0 rounded-md p-1 transition-colors",
         className,
       )}
       {...props}

@@ -76,6 +76,25 @@
   color: var(--ink);
 }
 
+/* Stock skins sit in an embed wrapper that carries shadcn's .dark class and
+   paints bg-background, which .dark redeclares as zinc (0.141). With a named
+   palette the base skin's chat area therefore showed near-black instead of
+   the palette canvas (lucent-orng dark: #2a1a15). Point the wrapper's
+   --background at the palette's --bg for the base and chatgpt skins. No
+   palette: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="base"]),
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="chatgpt"]) {
+  --background: var(--bg);
+}
+
+/* The chatgpt skin paints its own dark canvas (thread root and composer
+   footer, #000 by default) through --chat-skin-canvas. With a named palette
+   in dark it takes the palette canvas instead, as the base skin does above.
+   No palette, light, or any other skin: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell [data-stock-product][data-thread-skin="chatgpt"] {
+  --chat-skin-canvas: var(--bg);
+}
+
 /* Thread-local hexes lose to the site tokens. App mode stays transparent so
    the body canvas (and the rails) show through; a top-level embed paints --bg. */
 :root[data-theme]:is([data-site-theme="1"], :has([data-chrome-mode="app"])) .digichat-thread {
@@ -109,6 +128,10 @@
   --primary: var(--ink);
   --primary-foreground: var(--bg);
   --composer-bg: var(--surface);
+  /* Resolved here, above the footer that clears --bg and --surface, so the
+     menus inside it can still reach the palette's canvas and surface. */
+  --site-menu-canvas: var(--bg);
+  --site-menu-surface: var(--surface);
   color: var(--ink);
 }
 
@@ -117,6 +140,53 @@
 }
 
 :root[data-site-theme="1"]:not(:has([data-chrome-mode="app"])) .digichat-thread {
+  background: var(--bg);
+}
+
+/* One canvas. On a site chat (/chat and the top-level /chat/occ) the thread
+   column has no background of its own: the welcome, the examples and the
+   composer sit straight on the page --bg, between the rails, exactly as on
+   digithings.ai. This used to live in product-chrome.css behind
+   :root:not([data-palette]) and [data-chrome-mode="app"], so every named
+   palette, and the OCC page in every palette, painted the footer
+   `bg-surface` as a tinted box around the welcome block. No palette gate:
+   palettes.css still owns --term-hair and every root token. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.digichat-thread__footer, .digichat-thread-list) {
+  --bg: transparent;
+  --surface: transparent;
+  --hair: var(--term-hair);
+  background: transparent;
+}
+
+/* The command palette and the composer (settings) menu are positioned inside
+   that footer, so they inherit its cleared --bg and --surface. Their own
+   background is var(--bg), which made both menus see-through on the
+   top-level /chat/occ page in every palette (the welcome painted through
+   them). Only app mode had a --term-bg override (chat-digichat.css), so
+   /chat looked right and OCC did not. --term-bg is not enough on OCC: the
+   composer menu carries its own data-thread-skin, so product-chrome.css
+   re-points --term-bg on the menu element to the embed default (#08090b in
+   dark). --site-menu-canvas and --site-menu-surface are resolved on
+   .digichat-thread and nothing below re-points them: hand both back to the
+   menu and everything inside it. */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"]))
+  [data-stock-product][data-thread-skin="digichat"]
+  :is(.aui-composer-trigger-popover, .dc-composer-menu) {
+  --bg: var(--site-menu-canvas);
+  --surface: var(--site-menu-surface);
+  --term-bg: var(--site-menu-canvas);
+  background: var(--site-menu-canvas);
+}
+
+/* The boot loader paints the page canvas, not --surface. On a site chat the
+   chat that replaces it sits straight on --bg, so a --surface overlay read as
+   a lighter (light) or lighter-grey (dark) frame that then jumped to the
+   chat's canvas. Wide embeds keep their transparent overlay (product-chrome.css). */
+:root:is([data-site-theme="1"], :has([data-chrome-mode="app"])):not([data-embed-wide="1"])
+  [data-stock-product]
+  > .dboot-overlay {
   background: var(--bg);
 }
 

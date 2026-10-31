@@ -54,6 +54,9 @@ export async function GET(req: Request): Promise<Response> {
           auth: DEFAULT_CLIENT_CONFIG.auth,
         };
   } catch {
+    // Fail closed: an unreadable config never serves the open default to a
+    // host a gated tenant claims (claims live outside the document).
+    if (isInviteOnlyDeployment(host, undefined)) return notFound();
     body = {
       slug: DEFAULT_CLIENT_CONFIG.slug,
       ...DEFAULT_CLIENT_CONFIG.chrome,

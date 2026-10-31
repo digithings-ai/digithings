@@ -42,6 +42,14 @@ const REMOVE = [
   "[data-slot='aui_user-branch-picker']",
   "[data-slot='aui_assistant-branch-picker']",
   ".aui-thread-scroll-to-bottom",
+  // The drawn scrollbar is positioned for the live viewport; the file scrolls
+  // natively.
+  ".aui-overlay-scroll",
+  // Skins without the aui class names mark their composer and message
+  // controls with this attribute instead.
+  "[data-export-chrome]",
+  // The code block keeps its language label; the copy button needs script.
+  ".aui-code-header-root button",
   "[data-memory-thread-list]",
   ".dc-thread-list",
   "script",
@@ -72,6 +80,42 @@ const CONTENT_LINK = [
 
 const USER_QUESTION = ".aui-user-message-content";
 
+/**
+ * A thread root: the aui class, or `data-export-thread` on skins that do not
+ * use the aui class names.
+ */
+const THREAD_ROOT = ".aui-thread-root, [data-export-thread]";
+
+/**
+ * The work shown around an answer: reasoning, tool calls and their groups,
+ * the work chain. Every skin draws these with the same slots. A per-message
+ * file holds the answer text only, like the Markdown export.
+ * `data-export-work` marks anything else a skin wants left out.
+ */
+const ANSWER_WORK = [
+  "[data-slot='aui_chain-of-thought']",
+  "[data-slot='aui_chain-tools']",
+  "[data-slot='aui_work-chain']",
+  "[data-slot='aui_work-chain-summary']",
+  "[data-slot='aui_private-work-step']",
+  "[data-slot='reasoning-root']",
+  "[data-slot='tool-group-root']",
+  "[data-slot='tool-fallback-root']",
+  "[data-export-work]",
+].join(", ");
+
+/**
+ * Keep the assistant answer only: drop the user messages, then the reasoning
+ * and tool output inside the answer, so the file holds what the Markdown
+ * export holds.
+ */
+export function keepAnswerOnly(root: ParentNode): void {
+  root.querySelectorAll("[data-role='user']").forEach((node) => node.remove());
+  root
+    .querySelectorAll("[data-role='assistant']")
+    .forEach((message) => message.querySelectorAll(ANSWER_WORK).forEach((node) => node.remove()));
+}
+
 const PANEL_STYLE_PROPS = [
   "height",
   "width",
@@ -99,7 +143,7 @@ export function deploymentText(root: ParentNode): string {
  * visible root.
  */
 export function activeThreadRoot(root: ParentNode): HTMLElement | null {
-  const threads = [...root.querySelectorAll<HTMLElement>(".aui-thread-root")].filter(isOpenThread);
+  const threads = [...root.querySelectorAll<HTMLElement>(THREAD_ROOT)].filter(isOpenThread);
   if (threads.length === 0) return null;
   const marked = threads.filter((el) => el.getAttribute("data-active") === "true");
   const pool = marked.length > 0 ? marked : threads;
@@ -146,7 +190,7 @@ function isMessageThread(thread: HTMLElement): boolean {
  * does not widen to the whole thread.
  */
 export function snapshotSource(doc: Document, anchor?: HTMLElement | null): HTMLElement | null {
-  const thread = anchor ? anchor.closest<HTMLElement>(".aui-thread-root") : activeThreadRoot(doc);
+  const thread = anchor ? anchor.closest<HTMLElement>(THREAD_ROOT) : activeThreadRoot(doc);
   if (!thread || (anchor && !isMessageThread(thread))) return null;
   if (anchor && !thread.contains(anchor)) return null;
   const html = doc.createElement("html");

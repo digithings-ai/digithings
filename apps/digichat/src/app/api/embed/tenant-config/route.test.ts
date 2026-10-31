@@ -50,6 +50,8 @@ describe("GET /api/embed/tenant-config", () => {
       thinking: "auto",
       skin: "base",
       accent: { color: "#b5562b", foreground: "#fff7f2" },
+      fonts: null,
+      colors: null,
       attribution: true,
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,

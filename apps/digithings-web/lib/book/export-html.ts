@@ -15,9 +15,11 @@
  *  - the fonts those stylesheets reference are inlined as data URLs, because a
  *    stylesheet that points at `/_next/static/media/...` is an external fetch
  *    the moment the file is opened somewhere else;
- *  - the figures are `<img>` elements over `blob:` URLs, which die with the
- *    page that made them, so each one is re-encoded into the file as a data
- *    URL.
+ *  - the figures are already `data:` URLs (the reader's recoloured drawings,
+ *    `lib/book/diagram-theme`), so they travel as they are; any other image is
+ *    fetched and re-encoded into the file as a data URL. A `data:` source is
+ *    never re-fetched: the site's CSP has no `data:` in `connect-src`, and the
+ *    refused fetch used to drop every figure from the file.
  *
  * The paged stylesheets (`PAGED_CSS`, `PRINT_CSS`) are appended by name rather
  * than trusted to appear in the captured set: they are the book's typography
@@ -92,6 +94,7 @@ function encoder(): (bytes: Uint8Array) => string {
 }
 
 async function toDataUrl(url: string): Promise<string | null> {
+  if (url.startsWith("data:")) return url;
   try {
     const response = await fetch(url);
     if (!response.ok) {

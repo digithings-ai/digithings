@@ -3,6 +3,7 @@
 import type { FC, ReactNode } from "react";
 import { formatJsonDump } from "../gallery-thread/format-json-dump";
 import { cn } from "@/lib/utils";
+import { stockRadius, useStockShape } from "./stock-shape";
 
 /**
  * Tool arguments and results as full, pretty-printed JSON (DIG-4459).
@@ -121,12 +122,15 @@ export const JsonView: FC<{
   slot?: string;
 }> = ({ value, className, slot = "tool-fallback-json" }) => {
   const text = formatJsonDump(value);
+  const stock = useStockShape();
   if (!text) return null;
   return (
     <pre
       data-slot={slot}
       className={cn(
-        "aui-json-view bg-surface-2/50 text-ink/90 max-h-72 overflow-auto overscroll-contain rounded-none p-2.5 font-mono text-xs whitespace-pre-wrap break-words",
+        "aui-json-view bg-surface-2/50 text-ink/90 max-h-72 overflow-auto overscroll-contain p-2.5 font-mono text-xs whitespace-pre-wrap break-words",
+        // assistant-ui's tool-fallback args/result <pre> is rounded-md.
+        stockRadius(stock, "rounded-md"),
         className,
       )}
     >

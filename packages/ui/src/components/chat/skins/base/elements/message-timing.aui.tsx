@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../../../stock/ui/tooltip";
+} from "../ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FC } from "react";
 
@@ -53,7 +53,7 @@ export const MessageTiming: FC<{
               data-slot="message-timing-trigger"
               aria-label="Message timing"
               className={cn(
-                "text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center rounded-md p-1 font-mono text-xs tabular-nums transition-colors",
+                "text-muted-foreground hover:bg-muted hover:text-foreground flex items-center rounded-md p-1 font-mono text-xs tabular-nums transition-colors",
                 className,
               )}
             />

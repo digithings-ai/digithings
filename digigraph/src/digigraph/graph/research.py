@@ -42,7 +42,13 @@ logger = logging.getLogger(__name__)
 # Session controls a client tenant must never drive (DIG-1210): the model,
 # MCP servers and tool toggles stay operator-configured.
 LOCKED_SESSION_TOOLS = frozenset(
-    {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
+    {
+        "session_set_model",
+        "session_upsert_mcp",
+        "session_remove_mcp",
+        "session_toggle_tool",
+        "session_set_search_engine",
+    }
 )
 
 
@@ -483,6 +489,22 @@ def _run_document_rag_path(
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
+    # Pinned tenant (corpus map webSearchDomains): its web_search definition says
+    # where it may search and carries the tenant's site graph. The pin itself is
+    # enforced in the handler; this only changes what the model reads.
+    from digigraph.orchestration.web_search_tools import (
+        WEB_SEARCH_TOOL_NAME,
+        web_search_tool_for_tenant,
+    )
+
+    _tenant_web_search = web_search_tool_for_tenant(
+        state.get("web_search_domains"), state.get("web_search_site")
+    )
+    if _tenant_web_search is not None:
+        tools_for_llm = [
+            _tenant_web_search if _tool_def_name(t) == WEB_SEARCH_TOOL_NAME else t
+            for t in tools_for_llm
+        ]
     # Dedicated per-index search tools (DIG-3269): when the tenant map names them,
     # the model picks which corpus to search by picking the tool. The generic
     # digisearch tools (which fan out over the tenant index) are hidden, and each

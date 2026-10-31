@@ -11,11 +11,12 @@ install a launchd job.
 | `digichat` | `digichat-vX.Y.Z` | `apps/digichat-cloudflare` | `digithings-digichat` |
 | `cron` | `cron-vX.Y.Z` | `apps/digithings-cron` | `digithings-cron` |
 | `runner` | `runner-vX.Y.Z` | `apps/digiquant-runner` | `digiquant-runner` |
-| `corpus-index` | `corpus-index-vX.Y.Z` | no source on `develop` | `corpus-index` |
+| `corpus-index` | `corpus-index-vX.Y.Z` | none (job disarmed; source is `apps/corpus-index`) | `corpus-index` |
 
-`corpus-index` has no source directory on `develop` (repo-split review G1).
-Its job still requires a signed tag, then refuses. It does not create a
-Worker or a Cloudflare setting.
+`corpus-index` source has been on `develop` since #5853 (`apps/corpus-index`),
+but its job row still names no app (repo-split review G1), so the job still
+requires a signed tag, then refuses. It does not create a Worker or a
+Cloudflare setting. Arming it is a separate change.
 
 ## Gate
 

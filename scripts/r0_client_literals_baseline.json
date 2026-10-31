@@ -290,7 +290,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-suggestion-pools.ts": {
-      "count": 6,
+      "count": 5,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.test.ts": {
@@ -298,7 +298,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.ts": {
-      "count": 5,
+      "count": 4,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-trial-messages.test.ts": {
@@ -637,10 +637,6 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "packages/ui/src/components/chat/skins/digichat.tsx": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "packages/ui/src/components/chat/skins/thread-skins.test.ts": {
       "count": 2,
       "ticket": "DIG-3689"
@@ -918,7 +914,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_integrity_check.py": {
-      "count": 12,
+      "count": 11,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_digichat_aca_secret_detector.py": {

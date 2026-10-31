@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Script from "next/script";
-import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
+import { Cabin, Geist_Mono, IBM_Plex_Mono, Inter, Mulish } from "next/font/google";
 import "./globals.css";
 import { faviconThemeScript, themeInitScript } from "@digithings/ui";
 import { p } from "@/lib/base-path";
+import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import {
@@ -28,6 +28,24 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
+/**
+ * Tenant fonts (src/lib/tenant-fonts.ts TENANT_FONTS). Self-hosted by
+ * next/font, so CSP `font-src 'self'` holds. preload: false — only a tenant
+ * page whose fonts name the face makes the browser fetch it.
+ */
+const brandCabin = Cabin({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-brand-cabin",
+  preload: false,
+});
+
+const brandMulish = Mulish({
+  subsets: ["latin"],
+  variable: "--font-brand-mulish",
+  preload: false,
+});
+
 const faviconInit = faviconThemeScript({
   dark: p("/icons/digi-app-dark.svg"),
   light: p("/icons/digi-app-light.svg"),
@@ -36,6 +54,8 @@ const faviconInit = faviconThemeScript({
 });
 
 export const metadata: Metadata = {
+  // Absolute og:image / twitter:image (see lib/public-origin.ts).
+  metadataBase: PUBLIC_ORIGIN,
   title: "digichat · digithings",
   description: "Production chat UI for the digigraph orchestrator.",
   icons: {
@@ -93,26 +113,28 @@ export default async function RootLayout({
       lang="en"
       data-theme={theme}
       suppressHydrationWarning
-      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
+      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${brandCabin.variable} ${brandMulish.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
     >
+      {/* Pre-paint theme: plain inline <head> scripts, like digithings.ai.
+          next/script "beforeInteractive" in the App Router does not run
+          inline: it queues the body into self.__next_s and the Next runtime
+          runs it only after its chunks load. Until then the page painted
+          the server default (data-theme="dark", no palette), and the boot
+          loader and the chat could each paint a different theme. These run
+          before <body> parses, so a saved dt-theme / dt-palette (shared with
+          digithings.ai, same origin) or the OS scheme holds from the first
+          frame. The embed route's own pin scripts run later, in <body>. */}
+      <head>
+        <script id="digichat-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script id="digichat-favicon-theme" dangerouslySetInnerHTML={{ __html: faviconInit }} />
+        <script
+          id="digichat-theme-class-sync"
+          dangerouslySetInnerHTML={{ __html: themeClassSyncScript }}
+        />
+      </head>
       <body
         className={`${inter.className} accent-digichat flex min-h-full flex-col bg-background text-foreground`}
       >
-        <Script
-          id="digichat-theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeInitScript }}
-        />
-        <Script
-          id="digichat-favicon-theme"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: faviconInit }}
-        />
-        <Script
-          id="digichat-theme-class-sync"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeClassSyncScript }}
-        />
         <Providers
           session={session}
           localBootstrapEnabled={localBootstrapEnabled}

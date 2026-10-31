@@ -58,3 +58,15 @@ def test_recency_days_is_omitted_when_unset(monkeypatch: pytest.MonkeyPatch) -> 
     captured = _capture_arguments(monkeypatch)
     web_search_tools.call_digisearch_web_search("news", context=_context())
     assert "recency_days" not in captured
+
+
+def test_page_corpus_reaches_the_hub_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_arguments(monkeypatch)
+    web_search_tools.call_digisearch_web_search("q", page_corpus="acme", context=_context())
+    assert captured["page_corpus"] == "acme"
+
+
+def test_page_corpus_is_omitted_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_arguments(monkeypatch)
+    web_search_tools.call_digisearch_web_search("q", context=_context())
+    assert "page_corpus" not in captured

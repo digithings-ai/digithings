@@ -77,6 +77,7 @@ from digisearch.tenant_index_scope import (
     parse_index_list,
     validate_index_name,
 )
+from digisearch.web_search.fenced_fetch import WebFetchData
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -952,6 +953,7 @@ class OrchestratorInvokeResponse(BaseModel):
         | WebsetItemsData
         | WebsetEventsData
         | WebsetExportData
+        | WebFetchData
         | None
     ) = None
     error: str | None = None
@@ -1401,6 +1403,24 @@ def api_orchestrator_invoke(
             data=ResearchTurnOutput.model_validate(body),
         )
 
+    if (
+        tool == TOOL_WEB_SEARCH
+        and args.get("url")
+        and isinstance(args.get("fence"), list)
+        and args["fence"]
+    ):
+        # Open-page mode of web_search, pinned tenants only: read one page inside
+        # the tenant's site fence (web_search/fenced_fetch.py), enforced on every
+        # redirect hop. Without a fence ``url`` is ignored, exactly as before.
+        from digisearch.web_search.fenced_fetch import invoke_web_fetch
+
+        env = invoke_web_fetch(args)
+        if env.get("ok") is not True:
+            return OrchestratorInvokeResponse(ok=False, error=str(env.get("error") or "failed"))
+        return OrchestratorInvokeResponse(
+            ok=True, service="digisearch", tool=tool, data=WebFetchData(**env["data"])
+        )
+
     if tool == TOOL_WEB_SEARCH:
         from digisearch.web_providers import (
             UnknownProviderError,
@@ -1440,6 +1460,12 @@ def api_orchestrator_invoke(
         # clean ok:False, never a silent fallback to another provider.
         if args.get("provider") is not None:
             web_kwargs["provider"] = str(args["provider"])
+        if args.get("page_corpus") is not None:
+            # Validated by the model (id pattern); only the in-house engine reads it.
+            web_kwargs["page_corpus"] = str(args["page_corpus"])
+        if isinstance(args.get("fence"), list):
+            # A pinned tenant's sites: enrichment refuses off-fence fetch hops.
+            web_kwargs["fence"] = [str(p) for p in args["fence"]]
         if args.get("purpose") is not None:
             web_kwargs["purpose"] = str(args["purpose"])
         if args.get("effort") is not None:

@@ -5,6 +5,7 @@ import { DotMatrix } from "../DotMatrix";
 // Relative, not `@/lib/utils`: host apps (digithings-web) import this file
 // through `@digithings/ui/chat/notice`, where `@/` is their own root.
 import { cn } from "../../../lib/utils";
+import { stockRadius, useStockShape } from "./stock-shape";
 
 /**
  * One boxed notice for everything the backend tells the reader outside the
@@ -24,6 +25,8 @@ const TONE_CLASS: Record<ChatNoticeTone, string> = {
 export function chatNoticeRootProps(
   tone: ChatNoticeTone,
   className?: string,
+  /** Inside the stock Thread (useStockShape): assistant-ui's rounded-md box. */
+  stock = false,
 ): {
   className: string;
   "data-slot": "chat-notice";
@@ -32,7 +35,8 @@ export function chatNoticeRootProps(
 } {
   return {
     className: cn(
-      "aui-chat-notice flex w-full items-start gap-2 rounded-none border px-3 py-2 text-xs leading-snug",
+      "aui-chat-notice flex w-full items-start gap-2 border px-3 py-2 text-xs leading-snug",
+      stockRadius(stock, "rounded-md"),
       TONE_CLASS[tone],
       className,
     ),
@@ -91,11 +95,14 @@ export const ChatStatusNotice: FC<{
   message: string;
   detail?: string;
   className?: string;
-}> = ({ message, detail, className }) => (
-  <div {...chatNoticeRootProps("status", cn("my-1", className))}>
-    <ChatNoticeContent tone="status" title={message} detail={detail} />
-  </div>
-);
+}> = ({ message, detail, className }) => {
+  const stock = useStockShape();
+  return (
+    <div {...chatNoticeRootProps("status", cn("my-1", className), stock)}>
+      <ChatNoticeContent tone="status" title={message} detail={detail} />
+    </div>
+  );
+};
 
 /**
  * A backend notice carried as a data part: `data-notice` with
@@ -123,12 +130,13 @@ export const BackendNotice: FC<{
   part: { readonly type: string; readonly name?: string; readonly data?: unknown };
 }> = ({ part }) => {
   const notice = backendNoticeOf(part);
+  const stock = useStockShape();
   if (!notice) return null;
   if (notice.tone === "status") {
     return <ChatStatusNotice message={notice.message} detail={notice.detail} />;
   }
   return (
-    <div {...chatNoticeRootProps("error", "my-1")}>
+    <div {...chatNoticeRootProps("error", "my-1", stock)}>
       <ChatNoticeContent tone="error" title={notice.message} detail={notice.detail} />
     </div>
   );

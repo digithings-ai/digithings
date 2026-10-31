@@ -51,8 +51,8 @@ export function sessionModelSeed(input: {
  * Model id whose context window the bar draws.
  *
  * A reported id with its own window is the model that served the turn.
- * A reported id with no window falls back to the session model, so OCC
- * keeps its bar. An empty session and no known report resolve to "".
+ * A reported id with no window falls back to the session model, so the gated
+ * tenant keeps its bar. An empty session and no known report resolve to "".
  * This id is never written into the session.
  */
 export function contextMeterModel(input: {

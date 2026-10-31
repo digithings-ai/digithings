@@ -144,7 +144,7 @@ The zone routes are declared, not enabled by hand: `wrangler.toml` carries all t
     "skin": "digichat",
     "activityDetail": "full",
     "title": "OCC help assistant",
-    "welcome": "Ask about Online Compliance Center policies, procedures, and help articles.",
+    "welcome": "Ask about OCC.",
     "attribution": true,
     "token": "unused-for-first-party",
     "backend": {
