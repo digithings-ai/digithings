@@ -409,7 +409,7 @@ describe("jobsForCron", () => {
       "twelve-x-digisearch-parity",
     ]);
     // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
-    // `0 9 * * MON` is enrich-gold-refresh, not this twelve-x row.
+    // `0 9 * * MON` is enrich-gold-refresh. This parity row stays at :08.
     expect(jobsForCron("0 9 * * MON").map((row) => row.id)).toEqual(["enrich-gold-refresh"]);
     expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
   });
