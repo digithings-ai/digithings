@@ -101,7 +101,6 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     "execution-cron-check.yml": {"probe"},
     "pipeline-checkpoint-archive.yml": {"archive"},
     "pipeline-continuous-improvement.yml": {"digest"},
-    "pipeline-digiquant-onchain.yml": {"bitview-ingest"},
     "pipeline-digiquant-prices.yml": {"fx-refresh", "fx-candles", "at-open", "eod-macro"},
     "pipeline-digiquant-tearsheets.yml": {"tearsheets"},
     "pipeline-digiquant.yml": {"run"},

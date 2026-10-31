@@ -154,11 +154,16 @@ function ow(
   return { id, cron, repo: MONOREPO, kind: "occ-recrawl", ref: DEVELOP, enabled: opts.enabled ?? true, occRecrawl };
 }
 
-/** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+/**
+ * Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch.
+ * `workflow` is undefined once the GHA fallback file is deleted (GHA exit
+ * ledger): the row keeps its live container clock, and an override naming
+ * the id fails loudly in dispatchGithub instead of dispatching a missing file.
+ */
 function cj(
   id: string,
   cron: string,
-  workflow: string,
+  workflow: string | undefined,
   command: string,
   concurrency: string,
   timeoutSeconds: number,
@@ -346,10 +351,11 @@ export const JOBS: readonly Job[] = [
     "digiquant-tearsheets",
     2700,
   ),
+  // No GHA fallback: pipeline-digiquant-onchain.yml was deleted (GHA exit ledger).
   cj(
     "onchain",
     "40 22 * * *",
-    "pipeline-digiquant-onchain.yml",
+    undefined,
     "onchain-bitview",
     "digiquant-onchain",
     900,

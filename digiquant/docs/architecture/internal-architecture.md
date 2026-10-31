@@ -214,7 +214,7 @@ upstream for cached price history.
 | `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve (legacy joint 0/0.5/1 grid). `optimize_stage_1_survivor_weights` searches survivors only on a `(0, 1]` grid (no 0 — turning an extra off cannot cheaply beat power law) and ranks by **OOS** vs-flat plus Stage B capital/drawdown feasibility. Searches every extra that has data (`search_names_with_data`). Rails are fit once per fold. |
 | `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
 | `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. BRK MIT; Coin Metrics community CC BY-NC is research-only (not fetched). |
-| `data/onchain/ingest.py` | Scheduled/CLI path (#1086): `ingest_bitview` → parquet under `data/onchain/bitview/` + optional `macro_series_observations` upsert (`source=bitview`). `frame_to_macro_rows` is HTTP-free. Workflow: `pipeline-digiquant-onchain.yml` (daily 22:40 UTC, persistent failure tracker). |
+| `data/onchain/ingest.py` | Scheduled/CLI path (#1086): `ingest_bitview` → parquet under `data/onchain/bitview/` + optional `macro_series_observations` upsert (`source=bitview`). `frame_to_macro_rows` is HTTP-free. Clock: digithings-cron container row `onchain` (daily 22:40 UTC). |
 | `sdca/stage_0.py` | Solo-indicator remaining-book books. Each catalog extra and power law (`valuation` code id; user-facing **power law**) gets a one-hot index (unused members omitted). Curve search via `run_stage_b_frozen` / `curve_simulator`. Keep extras that beat named baseline `power_law_solo` on the same walk-forward OOS folds (plus Stage B capital/drawdown feasibility); drop never-sell dumps. IS is diagnostic. `beats_flat_dca_oos` stays false on this sidecar. Operator: `python -m digiquant.strategies.sdca.stage_0` or `digiquant sdca-stage0`. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
@@ -240,7 +240,7 @@ upstream for cached price history.
   bands / %-from-MA style). Always available from cached OHLCV.
 - **Enhanced (BTC)** — Bitview/BRK on-chain z (`mvrv_z` computed locally from
   `mvrv`, plus `asopr` / `puell` / `rhodl`) via `OnChainValuationProvider`.
-  Scheduled ingest: `pipeline-digiquant-onchain.yml` → parquet +
+  Scheduled ingest: digithings-cron row `onchain` → parquet +
   `macro_series_observations` (`source=bitview`). Coverage map: BTC rich;
   ETH/SOL none → `resolve_sdca_valuation_tier` returns basic. Sources /
   licensing: see `docs/research/sdca-btc-onchain-valuation.md` (BRK MIT;
