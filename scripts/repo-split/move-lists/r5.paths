@@ -32,7 +32,6 @@ docs/ops/branch-hygiene-policy.md
 docs/ops/credential-ownership.md
 docs/ops/datatap-azure-az-guard.md
 docs/ops/digichat-aca-secret-fingerprints.json
-docs/ops/digichat-datatap-aca.md
 docs/ops/digifetch-post-deploy-verification.md
 docs/ops/digiquant-digikey-service-key.md
 docs/ops/digitrace-langfuse.md

@@ -682,7 +682,7 @@
       "ticket": "DIG-3895"
     },
     "scripts/repo-split/move-lists/r5.paths": {
-      "count": 10,
+      "count": 9,
       "ticket": "DIG-3895"
     },
     "scripts/repo-split/move-lists/r6.paths": {
