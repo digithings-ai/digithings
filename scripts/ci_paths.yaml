@@ -431,6 +431,10 @@ ruff_and_scripts:
   # repo-wide trigger. This subsumes the seven named workflow globs above; those are kept
   # because each records which test consumes that file and why `tests/**` is not enough —
   # rationale worth keeping next to the path it explains.
+  # tests/scripts/test_no_gha_schedules.py is the same shape: any `schedule:`
+  # under `.github/workflows` (a new file, a subfolder, a `.yaml`) must run
+  # this lane. The pytest step selects `tests/scripts/`, so this glob is what
+  # makes a workflow-only edit execute that guard.
   - .github/workflows/**
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the

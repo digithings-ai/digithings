@@ -51,6 +51,7 @@ turns "port, then disable" into one invariant.
 | `pipeline-market-data-refresh.yml` | `market-data-refresh-evening` | `30 21 * * *` |
 | `pipeline-digiquant.yml` | `house-run-09` | `17 9 * * MON` |
 | `project-enforce-assignment.yml` | `project-enforce-assignment` | `23 9 * * *` |
+| `enrich-gold-refresh.yml` | `enrich-gold-refresh` | `0 9 * * MON` |
 
 `pipeline-digiquant.yml` also owns `house-run-10`, `house-run-11` and
 `house-run-12`, all disabled. That is a deliberate cost decision from

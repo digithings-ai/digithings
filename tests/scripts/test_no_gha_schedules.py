@@ -21,6 +21,9 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 
 
+_WORKFLOW_SUFFIXES = {".yml", ".yaml"}
+
+
 def _on(doc: dict) -> object:
     if "on" in doc:
         return doc["on"]
@@ -29,21 +32,79 @@ def _on(doc: dict) -> object:
     raise AssertionError("workflow missing on:")
 
 
-def _schedule_offenders() -> list[str]:
+def _has_schedule(on: object) -> bool:
+    if isinstance(on, dict):
+        return "schedule" in on
+    if on == "schedule":
+        return True
+    return isinstance(on, list) and "schedule" in on
+
+
+def schedule_offenders(workflow_dir: Path) -> list[str]:
+    """Relative paths of workflow files that declare a ``schedule:`` trigger.
+
+    A file that cannot be parsed is an offender. Skipping it would let a
+    broken document hide a clock. The scan is recursive: a schedule under
+    ``.github/workflows/<subdir>/`` is the same trigger GitHub would read.
+    """
     offenders: list[str] = []
-    for path in sorted((*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml"))):
-        on = _on(yaml.safe_load(path.read_text(encoding="utf-8")))
-        if isinstance(on, dict) and "schedule" in on:
-            offenders.append(path.name)
-        elif on == "schedule":
-            offenders.append(path.name)
-        elif isinstance(on, list) and "schedule" in on:
-            offenders.append(path.name)
+    paths = sorted(
+        path
+        for path in workflow_dir.rglob("*")
+        if path.is_file() and path.suffix in _WORKFLOW_SUFFIXES
+    )
+    for path in paths:
+        rel = path.relative_to(workflow_dir).as_posix()
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, UnicodeError):
+            offenders.append(rel)
+            continue
+        if not isinstance(loaded, dict):
+            offenders.append(rel)
+            continue
+        try:
+            on = _on(loaded)
+        except AssertionError:
+            offenders.append(rel)
+            continue
+        if _has_schedule(on):
+            offenders.append(rel)
     return offenders
 
 
 def test_develop_workflows_have_no_gha_schedule() -> None:
-    assert _schedule_offenders() == []
+    assert schedule_offenders(WORKFLOW_DIR) == []
+
+
+def test_schedule_in_a_subfolder_is_an_offender(tmp_path: Path) -> None:
+    nested = tmp_path / "nested" / "clock.yml"
+    nested.parent.mkdir()
+    nested.write_text("on:\n  schedule:\n    - cron: '0 9 * * 1'\n", encoding="utf-8")
+    assert schedule_offenders(tmp_path) == ["nested/clock.yml"]
+
+
+def test_yaml_extension_schedule_is_an_offender(tmp_path: Path) -> None:
+    path = tmp_path / "clock.yaml"
+    path.write_text("on: [workflow_dispatch, schedule]\n", encoding="utf-8")
+    assert schedule_offenders(tmp_path) == ["clock.yaml"]
+
+
+def test_unparseable_workflow_is_an_offender(tmp_path: Path) -> None:
+    (tmp_path / "broken.yml").write_text("on: [\n  schedule: {", encoding="utf-8")
+    (tmp_path / "later.yaml").write_text(
+        "on:\n  schedule:\n    - cron: '0 0 * * 0'\n",
+        encoding="utf-8",
+    )
+    assert schedule_offenders(tmp_path) == ["broken.yml", "later.yaml"]
+
+
+def test_dispatch_only_workflow_is_clean(tmp_path: Path) -> None:
+    (tmp_path / "manual.yml").write_text(
+        "on:\n  workflow_dispatch: {}\njobs:\n  refresh:\n    steps:\n      - run: echo schedule\n",
+        encoding="utf-8",
+    )
+    assert schedule_offenders(tmp_path) == []
 
 
 def test_jobs_map_does_not_claim_a_digisearch_parity_clock() -> None:
