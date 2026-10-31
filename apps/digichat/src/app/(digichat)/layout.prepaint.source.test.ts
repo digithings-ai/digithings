@@ -53,13 +53,15 @@ describe("themeInitScript (what the head script paints)", () => {
     return document.documentElement;
   };
 
-  it("follows the OS scheme with no saved choice, default palette", () => {
+  // QUARANTINE: fails on develop 673104483 since 2bbbe3758 (#6630); Node >= 25's built-in localStorage global shadows happy-dom's, so localStorage.clear() is missing (passes on Node 22/24); ticket: DIG-6066
+  it.skip("follows the OS scheme with no saved choice, default palette", () => {
     expect(run(true).getAttribute("data-theme")).toBe("light");
     expect(document.documentElement.hasAttribute("data-palette")).toBe(false);
     expect(run(false).getAttribute("data-theme")).toBe("dark");
   });
 
-  it("applies a palette the site saved", () => {
+  // QUARANTINE: fails on develop 673104483 since 2bbbe3758 (#6630); Node >= 25's built-in localStorage global shadows happy-dom's, so localStorage.setItem/clear are missing (passes on Node 22/24); ticket: DIG-6066
+  it.skip("applies a palette the site saved", () => {
     localStorage.setItem("dt-palette", "nord");
     const e = run(false);
     expect(e.getAttribute("data-theme")).toBe("dark");

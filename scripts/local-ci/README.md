@@ -382,6 +382,41 @@ in full.
 This is the runner, not the agent: the launchd job is frozen per DIG-5157, so
 the gate reaches the host when the host copy is synced, not by reloading the job.
 
+## The npm workspace suites
+
+The vitest suites of the root npm workspaces (`apps/*`, `packages/*`) ran in
+`test-digichat.yml`, `test-dashboard.yml` and `test-web.yml`, which `ci.yml`
+calls. None of them has run on develop since 14 Oct, so develop's green came
+from this runner alone and three digichat tests went red unnoticed. The runner
+now runs `npm run test --workspace <name>` for every workspace a PR has to
+prove:
+
+- a file under a workspace directory selects that workspace, and every
+  workspace that depends on it (`dependencies`, `devDependencies`,
+  `peerDependencies`, `optionalDependencies`, transitively), so a
+  `packages/ui` edit runs digichat, dashboard, digithings-web and the rest of
+  its consumers;
+- a root install input (`package.json`, `package-lock.json`, `.npmrc`,
+  `.nvmrc`, `eslint.base.mjs`) selects every workspace;
+- any other path listed in the `digichat`, `dashboard` or `web` block of
+  `scripts/ci_paths.yaml` (a lane's workflow file, a Dockerfile a test
+  re-reads, a Python file a pin reads) selects every workspace that block
+  lists, which is what the retired lane ran;
+- a workspace whose `test` is `bun test` stays with the bun lane, and one with
+  no `test` script has nothing to run.
+
+If the mapping cannot be computed (an unreadable manifest, a missing lane
+block, no `workspaces` in the root manifest) every workspace runs: the gate
+fails closed. One `npm ci` serves every suite, and a tick whose worker build
+already installed reuses that install. Suites run one at a time (each vitest
+run already fills every core; two at once tripped 5s test timeouts) with every
+credential-looking variable removed and `CI=1` set, so no test can reach a paid
+inference API. The log names each selected workspace and why; the receipt
+names the suites (`npm 2/2: digichat, ui`) or says `npm: none`.
+
+Lint and build are not part of this lane yet; the retired lanes ran them and
+they stay a follow-up.
+
 ## Invariants this script is built around
 
 - **A skip is never silence.** A memory or disk guard that forces a skip posts
@@ -412,6 +447,7 @@ the gate reaches the host when the host copy is synced, not by reloading the job
 - **A skipped suite names itself.** The success receipt names every bun suite
   that ran, or says `bun: none` when no `bun_suites` path changed, so a PR that
   proves nothing about a client says so instead of reading green (DIG-5203).
+  The npm workspace suites do the same with `npm: none`.
 - **Fails closed on a missing input.** If the review record or the PR body cannot
   be read, the check fails; it does not assume the best.
 - **A stalled checkout is retried, not a verdict.** The checkout of the checks
@@ -441,7 +477,8 @@ the gate reaches the host when the host copy is synced, not by reloading the job
   `step=<name> seconds=<n> rc=<n>` to its log, so the next investigation reads
   the duration table instead of re-measuring by hand (2026-10-26).
 - **Static gates, plus three path-gated lanes.** The worker dry-run build, the
-  bun suites and the scoped pytest suites run only for the paths that need them.
+  bun suites, the scoped pytest suites and the npm workspace suites run only for
+  the paths that need them.
   Scoped pytest (DIG-3605) runs the suite of each Python module the PR touches:
   the module's `scripts/ci_paths.yaml` block decides the trigger and
   `PYTEST_SUITES` in `local_ci.py` holds the arguments, copied from the retired
