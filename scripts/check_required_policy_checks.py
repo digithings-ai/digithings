@@ -30,10 +30,11 @@ list disagree:
     hang. ``docs/BRANCH_PROTECTION.md`` warns about this in prose; here it is a
     test.
   * **ungated policy check** — a check that reports on PRs and is required
-    nowhere. It runs, it goes red, and merges continue. Four of these exist
-    right now (gitleaks, PR hygiene, PR title, and, on main,
-    review coverage); they are declared in the inventory so they are visible in
-    one place instead of inferred from 66 workflow files. (DCO sign-off was a
+    nowhere. It runs, it goes red, and merges continue. Three of these exist
+    right now (gitleaks, PR hygiene, and, on main, review coverage; the PR
+    title lint left with ci-pr-title.yml and runs in local-ci's ``pr-title``);
+    they are declared in the inventory so they are visible in one place instead
+    of inferred from 66 workflow files. (DCO sign-off was a
     fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)
   * **untracked producer** — ``tracked_workflows`` is a hand-maintained
     allowlist, and an allowlist with no completeness check is not an inventory.

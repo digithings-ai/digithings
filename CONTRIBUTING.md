@@ -45,7 +45,7 @@ For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WOR
 
 ## PR titles (into develop)
 
-Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope** from the module allow-list. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working.
+Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope**. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working. The local-ci `pr-title` gate checks the shape (`scripts/local-ci/local_ci.py`); it accepts any non-empty scope, so keep to the module scopes below by convention.
 
 Examples:
 
@@ -53,13 +53,12 @@ Examples:
 - `ci(root): conventional-commit PR title lint`
 - `fix(digiquant): correct fill timestamp timezone`
 
-Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digibot, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+Module scopes (the allow-list the deleted GitHub `ci-pr-title.yml` used to enforce: digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digibot, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
 
 Exempt patterns (not blocked):
 
 - `chore(*): release …` / `chore(release): …` (release-please)
 - `chore: promote develop to main`
-- PRs labeled `autorelease: pending`
 
 ## Testing
 

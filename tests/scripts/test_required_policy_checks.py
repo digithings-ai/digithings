@@ -189,18 +189,19 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
 
 
 def test_every_ungated_policy_check_is_reported() -> None:
-    """The four drift checks DIG-1952 names must all be visible. (DCO sign-off
-    was a fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)"""
+    """The drift checks DIG-1952 names must all be visible. (DCO sign-off
+    was a fifth until Chris dropped it entirely on 2026-10-15, DIG-3845; the
+    PR-title lint left with ci-pr-title.yml and runs in local-ci.)"""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     declared = {c.context: c for c in inventory}
     expected = {
         "gitleaks-scan",
         "All agent-task issues in TSV with real phase and valid model",
-        "Validate PR title",
         "Every commit reaching main was reviewed",
     }
     assert expected <= set(declared)
     assert "All commits signed off" not in declared
+    assert "Validate PR title" not in declared
     for context in expected:
         assert not declared[context].is_required, context
         assert declared[context].reason, f"{context} needs a reason"
@@ -297,12 +298,12 @@ def test_the_two_out_of_file_required_checks_are_genuinely_required() -> None:
 
 def test_a_renamed_check_is_detected() -> None:
     """The declared context must still be the name the workflow reports."""
-    facts = guard.read_workflow_facts(guard.WORKFLOWS_DIR / "ci-pr-title.yml", "develop")
-    assert facts.named_jobs["Validate PR title"] == "lint-pr-title"
+    facts = guard.read_workflow_facts(guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop")
+    assert facts.named_jobs["gitleaks-scan"] == "scan"
 
     inventory, tracked = guard.load_inventory(INVENTORY)
     mutated = [
-        dataclasses.replace(c, job="some-other-job") if c.context == "Validate PR title" else c
+        dataclasses.replace(c, job="some-other-job") if c.context == "gitleaks-scan" else c
         for c in inventory
     ]
 
@@ -432,20 +433,23 @@ def test_an_absent_types_filter_is_git_hubs_default_and_is_reachable(tmp_path: P
 
 
 def test_a_types_filter_narrowed_on_a_real_workflow_is_a_stall(tmp_path: Path) -> None:
-    """The brief's trap, on the file it names: drop `edited` from ci-pr-title.yml,
-    fix the title, push nothing. The check never re-runs."""
+    """The brief's trap: a `types:` filter without `synchronize` means a push
+    never re-runs the check. The brief named ci-pr-title.yml, which was deleted
+    with the GHA exit ledger (local-ci runs the title lint), so the trap is set
+    on security-gitleaks.yml instead."""
     root = _workflows_copy(tmp_path)
-    path = root / "ci-pr-title.yml"
+    path = root / "security-gitleaks.yml"
     path.write_text(
         path.read_text(encoding="utf-8").replace(
-            "    types: [opened, edited, synchronize, reopened]",
-            "    types: [opened, edited]",
+            "on:\n  pull_request:\n  push:",
+            "on:\n  pull_request:\n    types: [opened, edited]\n  push:",
         ),
         encoding="utf-8",
     )
+    assert "types: [opened, edited]" in path.read_text(encoding="utf-8")
     inventory, tracked = guard.load_inventory(INVENTORY)
     findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
-    assert "Validate PR title" in _subjects(findings, "policy.stall")
+    assert "gitleaks-scan" in _subjects(findings, "policy.stall")
 
 
 def test_a_branches_ignore_filter_that_excludes_the_branch_is_not_reachable(tmp_path: Path) -> None:
@@ -653,17 +657,18 @@ def test_reachability_is_checked_for_advisory_entries_not_just_live_ones(tmp_pat
     """The brief's false green: a workflow-level `paths-ignore` on a tracked
     advisory workflow. Nothing reports it, because nothing was waiting for it."""
     root = _workflows_copy(tmp_path)
-    path = root / "ci-pr-title.yml"
+    path = root / "security-gitleaks.yml"
     path.write_text(
         path.read_text(encoding="utf-8").replace(
-            "    types: [opened, edited, synchronize, reopened]",
-            "    paths-ignore: ['**.md']\n    types: [opened, edited, synchronize, reopened]",
+            "on:\n  pull_request:\n  push:",
+            "on:\n  pull_request:\n    paths-ignore: ['**.md']\n  push:",
         ),
         encoding="utf-8",
     )
+    assert "paths-ignore: ['**.md']" in path.read_text(encoding="utf-8")
     inventory, tracked = guard.load_inventory(INVENTORY)
     findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
-    assert "Validate PR title" in _subjects(findings, "policy.stall")
+    assert "gitleaks-scan" in _subjects(findings, "policy.stall")
 
 
 def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated() -> None:
@@ -706,7 +711,7 @@ def test_a_gated_by_that_is_not_in_the_live_gate_is_a_finding() -> None:
     assert _run(inventory, tracked, LIVE_CONTEXTS) == []
 
     swapped = [
-        dataclasses.replace(c, gated_by="Validate PR title") if c.context == "actionlint" else c
+        dataclasses.replace(c, gated_by="gitleaks-scan") if c.context == "actionlint" else c
         for c in inventory
     ]
     findings = _run(swapped, tracked, LIVE_CONTEXTS)
@@ -818,7 +823,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
             "coverage",
             "advisory",
         ),
-        ("Validate PR title", "ci-pr-title.yml", "lint-pr-title", "advisory"),
         (
             "Every commit reaching main was reviewed",
             "ci-review-coverage.yml",
@@ -856,7 +860,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
     assert sorted(tracked) == [
         "ci-docs.yml",
         "ci-pr-hygiene.yml",
-        "ci-pr-title.yml",
         "ci-review-coverage.yml",
         "ci-type-check.yml",
         "ci.yml",
@@ -1121,7 +1124,7 @@ def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> Non
 
 # ── DIG-2237 C-1: review horizons on the issue-alone advisories ───────────────
 
-#: The three advisory entries whose only support is `issue:` (DIG-2098 rev 8,
+#: The advisory entries whose only support is `issue:` (DIG-2098 rev 8,
 #: correction 1). The ci.yml lanes carry `gated_by:` and the PR reporter
 #: carries `known_gap:`, so neither class takes a date. `gitleaks-scan` used to
 #: carry a `known_gap:` too, and stopped when the workflow-level
@@ -1130,12 +1133,12 @@ def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> Non
 REVIEW_BY_CONTEXTS = [
     "gitleaks-scan",
     "All agent-task issues in TSV with real phase and valid model",
-    "Validate PR title",
 ]
 
 
-def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
-    """Correction 1 as a pin: the dates land on exactly these three entries."""
+def test_exactly_the_issue_alone_advisories_carry_review_by() -> None:
+    """Correction 1 as a pin: the dates land on exactly these entries.
+    (`Validate PR title` was one until ci-pr-title.yml was deleted.)"""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     dated = {c.context: c.review_by for c in inventory if c.review_by}
     assert sorted(dated) == sorted(REVIEW_BY_CONTEXTS), dated
@@ -1143,6 +1146,7 @@ def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
     by_context = {c.context: c for c in inventory}
     assert by_context["gitleaks-scan"].issue == "DIG-1952"
     assert by_context["gitleaks-scan"].known_gap is None
+    assert "Validate PR title" not in by_context
     assert by_context["Frontend canon guard"].review_by is None
     assert by_context["actionlint"].review_by is None
     assert by_context["Workflow secret references (PR reporter)"].review_by is None
@@ -1154,14 +1158,14 @@ def test_a_past_review_by_is_a_warning_not_a_finding() -> None:
     inventory, tracked = guard.load_inventory(INVENTORY)
     assert _run(inventory, tracked, LIVE_CONTEXTS) == []
     aged = [
-        dataclasses.replace(c, review_by="2000-01-01") if c.context == "Validate PR title" else c
+        dataclasses.replace(c, review_by="2000-01-01") if c.context == "gitleaks-scan" else c
         for c in inventory
     ]
     assert guard.stale_advisories(aged) != []
     assert _run(aged, tracked, LIVE_CONTEXTS) == []
     text = guard.report([], aged, LIVE_CONTEXTS)
     assert "::warning::[policy.stale-advisory]" in text, text
-    assert "Validate PR title" in text
+    assert "gitleaks-scan" in text
 
 
 def test_a_future_review_by_is_silent() -> None:

@@ -80,7 +80,6 @@
 tracked_workflows:
   - ci.yml
   - ci-pr-hygiene.yml
-  - ci-pr-title.yml
   - ci-review-coverage.yml
   - ci-docs.yml
   - ci-type-check.yml
@@ -153,18 +152,6 @@ checks:
       that used to live in this file was removed in docs/adr/0024 precisely
       because it was never a required check, so its failures never blocked a
       merge while still costing a CI run per PR and producing rework.
-
-  - context: Validate PR title
-    workflow: ci-pr-title.yml
-    job: lint-pr-title
-    enforcement: advisory
-    owner: DevOps
-    issue: DIG-1952
-    review_by: 2027-04-13
-    reason: >-
-      Conventional-commit title lint for PRs into develop. Squash merges use the
-      PR title as the commit subject, so this protects release-please, but it is
-      not a merge gate. Ungated since #4625.
 
   # ── gates main, not develop ────────────────────────────────────────────────
 
