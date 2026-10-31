@@ -81,7 +81,7 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
    API token in this environment. Point the self-hosted application (same Allow
    email policy) at **`digiquant.io/dashboard*`**:
    - Destination: `https://digiquant.io/dashboard*`
-   - If a separate app exists for FX Hub: `https://digiquant.io/dashboard/twelve-x*`
+   - If a separate app exists for FX Hub: `https://digiquant.io/dashboard/<client-slug>*`
    Alpaca / Supabase callback URLs are exact-match and are listed in steps 2–3;
    Access is the path gate in front of those URLs.
 5. Do **not** add custom cookie/session wiring in the app — session storage stays
@@ -216,80 +216,13 @@ VALUES ('fx_hub', '<hex>', 'desk', 'desk');
 Tier-only codes (no `product_key`) are not supported yet — `ClientProductKey`
 (`lib/access.ts`) only enumerates `fx_hub` today.
 
-### twelve-x is a SEPARATE Supabase project — the FX Hub gate above is UI-only
+### Client Supabase projects (moved out of R0, 2026-10-31)
 
-Everything in this file (RLS, `client_product_grants`, the invite system) is
-scoped to the CORE project. The FX Hub page's own data — every `fx_*` table —
-lives in a second, independent Supabase project (`twelve-x`, its own repo,
-its own migrations). That project has never had its own logins, and its
-`fx_*` tables used to carry `anon_read USING (true)`: the invite/
-`ClientProductGate` system controlled whether the *page* rendered, not whether
-the *data* was readable, so anyone holding `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY`
-(a `NEXT_PUBLIC_*` var, baked into the static bundle same as the core anon
-key) could read all FX research directly, invited or not.
+A client app may run on its own, separate Supabase project. The FX Hub gate above is
+UI-only: it does not protect data in a client project. Each client project's ref, RLS
+cutover notes, Edge Function setup, session minting and secrets are tracked in the
+private client repo `digithings-ai/<client-slug>` and the owner's Records, not in R0.
 
-**That gap is closed.** The RLS cutover was promoted on 2026-09-14 (twelve-x
-`supabase/migrations/028_fx_hub_rls_cutover.sql`, promoted from
-`supabase/migrations/cutover/fx_hub_rls_cutover.sql`, with
-`029_fx_hub_rls_access_fix.sql` replacing the inline subquery with a
-`SECURITY DEFINER` `fx_hub_has_access()` helper). Re-verified 2026-10-05
-(DIG-258): a bare anon key gets **HTTP 401 on all 20** FX tables, `POST
-/rest/v1/rpc/fx_hub_has_access` returns **401**, storage lists no buckets, and
-`GET /auth/v1/user` refuses to impersonate a user — held identically for the
-legacy `anon` JWT and for the publishable key that replaced it. So the control
-is **no read grants for the anon role**, which is the only durable design for a
-`NEXT_PUBLIC_*` key that cannot be kept secret in a JavaScript bundle; an invite
-is now a real access boundary.
-
-**Consequence for credential hygiene:** because the key is public by
-construction, rotating it is defence in depth, not the control. It was rotated
-on 2026-10-05 (legacy `anon` JWT → publishable key, DIG-258); the rotation is
-logged in [docs/ops/SECRETS_ROTATION.md](../../docs/ops/SECRETS_ROTATION.md)
-with the inventory row and risks in
-[docs/ops/SECRETS_INVENTORY.md](../../docs/ops/SECRETS_INVENTORY.md). Note two
-traps that file records: a `NEXT_PUBLIC_*` change only reaches users on the next
-production **build**, and this var falls back to the **core**
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` when unset (`lib/twelve-x/supabase.ts:23-26`) —
-so never rotate the core key as a twelve-x fix.
-
-**Correction**: an earlier draft of this section assumed Supabase's
-Third-Party Auth could trust core as a JWT issuer directly. It cannot —
-that feature (Authentication → Sign In / Providers → Third-Party Auth) only
-supports named identity providers (Firebase, Clerk, WorkOS, Auth0, Amazon
-Cognito), not "trust another Supabase project's JWTs". There is no dashboard
-step for this at all; twelve-x instead mints its own real session:
-
-1. `fx-hub-grant-sync` Edge Function (deployed to twelve-x) mirrors
-   `client_product_grants(product_key='fx_hub')` into a local `fx_hub_grants`
-   table there — twelve-x's RLS has no other way to know who core granted.
-   Called from `redeemProductInvite`'s `syncExternalGrant` (best-effort; see
-   `_shared/invite.ts` / `_shared/settings-handlers.ts`).
-2. `fx-hub-session` Edge Function (also deployed to twelve-x) mints a REAL
-   twelve-x-native session for a caller already confirmed granted — the
-   standard server-side `generateLink` (magiclink) + `verifyOtp` technique,
-   no email sent. Called from core's new `GET /access/twelvex-session`
-   (`getTwelvexSession` in `_shared/settings-handlers.ts`), which itself
-   re-checks `client_product_grants` before calling it.
-3. `FX_HUB_GRANT_SYNC_SECRET` — same value — set on BOTH projects (both
-   Edge Functions on the twelve-x side read it):
-   ```
-   supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref rwagjbkvxkdwqmouagad
-   supabase secrets set FX_HUB_GRANT_SYNC_SECRET=<value> --project-ref lfghjucjrsabiqwxerxv
-   ```
-   and `FX_HUB_GRANT_SYNC_URL=https://lfghjucjrsabiqwxerxv.functions.supabase.co/fx-hub-grant-sync`
-   on core only (`getTwelvexSession` derives the session-mint URL from this
-   one by replacing the function name — no third env var needed).
-4. `apps/dashboard/lib/twelve-x/supabase.ts` + new
-   `lib/twelve-x/session.ts` (`ensureTwelveXSession`, wired into
-   `ClientProductGate`) already call the bridge above once a product is
-   granted — ships independently of the rest, harmless pre-cutover (falls
-   back to the anon key when no session is minted yet).
-5. Once 1–4 are live, promote the staged migration (copy, don't move, per its
-   header) and verify: a bare anon key against any `fx_*` table returns **401**,
-   not an empty result — the policies are `GRANT`-less for `anon`, so the
-   correct anon-denied outcome is a permission error, and a probe that expects
-   `200 []` is testing the wrong thing — AND an actual granted user's FX Hub page
-   load succeeds end-to-end (not just the negative anon-denied case).
-   **Done 2026-09-14** (migration 028 promoted, 029 access fix); re-verified
-   2026-10-05 as 401 on 20/20 tables.
-
+One rule stays here because it protects every surface: never rotate the core
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` as a client fix. A client build that falls back to
+the core key when its own key is unset makes that a platform-wide action.
