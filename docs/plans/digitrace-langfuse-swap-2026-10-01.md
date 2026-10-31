@@ -2,7 +2,7 @@
 
 > **Historical — every step below is void (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The decision is recorded in [ADR-0036](../adr/0036-digitrace-cloudflare-native-tracing.md); the design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/` and the Langfuse runbook is acceptance criterion AC2 and AC3 of ADR-0036 §13, owned by DIG-5136. **Do not deploy from this memo.**
 
-> **Phase 1 implement (historical, void):** [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md) + `apps/digitrace-langfuse/` (retired; see [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md)) (#4930).
+> **Phase 1 implement (historical, void):** [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md) + [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/) (#4930).
 
 
 **Author:** Lab (for One → Chris Human Gate)  
