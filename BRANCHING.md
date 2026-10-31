@@ -16,9 +16,9 @@ branch protection**, which the rulesets endpoint does not report at all — see 
 table below, and query `…/branches/<name>/protection` before concluding a branch
 is unguarded.
 
-## Origin drafts
+## Forgejo changes (Origin drafts until 2026-10-29)
 
-Agent iterations use a local branch named `origin/<slug>` and `origin push local`. Those refs live only on the Origin `/local` endpoint and do not sync to GitHub. They are not part of the taxonomy below. Promoting a draft means copying its tip onto a `task/`, `module/`, or `release/` branch and pushing that branch. See [AGENTS.md](AGENTS.md#origin-iteration-github-promotion).
+Agent iterations happen on the local Forgejo (digiforge), `digithings-ai` org: `sctl change new` makes a `change/<id>` branch, and the change is reviewed in a forge PR. Those branches live only on Forgejo and are not part of the taxonomy below. `sctl publish --remote github --target develop` promotes a ready change as a GitHub PR. On a host without Forgejo, the GitHub flow below applies. The former Cursor Origin flow (`origin/<slug>` branches, `origin push local`) is retired. See [AGENTS.md](AGENTS.md#forgejo-iteration-github-promotion).
 
 ## Three-tier branching model
 
