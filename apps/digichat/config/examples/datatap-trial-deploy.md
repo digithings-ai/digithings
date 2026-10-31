@@ -234,7 +234,7 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
   inline Container App secret in cleartext that way (`docs/ops/credential-ownership.md`).
   `az containerapp show` and `az containerapp secret show` redact, so "write-only"
   is false for this pair (measured on the sibling ACAs of the same shape —
-  `docs/ops/digichat-datatap-aca.md`).
+  the per-client deployment runbook in the private client repo).
 - **Custody: the client's Azure only.** No copy is held in our repo or in our local
   host secret store, and none is needed: the value can be read back with the command
   above, so a rotation does not depend on anyone supplying it out of band (the same
@@ -247,7 +247,7 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
   trial lane's own rule is the one the runbook states at the top of its promotion
   steps: every command there is a write to a customer's Azure, and none of it runs
   without the approval named at the top of that step
-  (`docs/ops/digichat-datatap-aca.md`); DevOps owns the trial deploy lane and this
+  (per-client deployment runbook, private client repo); DevOps owns the trial deploy lane and this
   guide, and the client-facing handoff is Chris's act.
 - **This is not the OCC invite key.** The pair is the tenant's own credential and the
   two must not be confused. The client's own `datatap-dev` MCP `X-API-Key` stays
@@ -257,7 +257,7 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
   sibling ACA detector (`scripts/digichat_aca_secret_detector.py`, DIG-1344) has no
   binding for this app. Owner: Security & Risk Lead, 2026-10-22. Closing it needs a
   read of the client's Azure secrets, which the trial lane gates behind the named
-  approval (`docs/ops/digichat-datatap-aca.md`), so it rides with DevOps and Chris.
+  approval (per-client deployment runbook, private client repo), so it rides with DevOps and Chris.
 - **Why this file and not `docs/ops/SECRETS_INVENTORY.md`.** The R0 client-literals
   gate (DIG-3689) checks `docs/ops/SECRETS_INVENTORY.md` — it carries a grandfathered
   count of 4 there, and the allowance may only shrink (DIG-4577); the growth check's
@@ -267,11 +267,11 @@ The V1 sketch above does not set `embed-token`; the live app carries it (measure
   live here without touching that allowance. No credential value or fingerprint of
   this pair is written down here; the identifiers it names (the trial app, its
   resource group and its subscription) are the ones the sibling runbook
-  `docs/ops/digichat-datatap-aca.md` already carries.
+  (per-client, in the private client repo) already carries.
 - **Open: this path's R-class is contested in the repo's own artifacts.** The
   canonical split map (`scripts/split/manifest.py`, DIG-3690) assigns **R0 (public)**
   to this guide, to `docs/ops/SECRETS_INVENTORY.md` and to
-  `docs/ops/digichat-datatap-aca.md`; the older move lists
+  the ACA runbook (now in the private client repo); the older move lists
   (`scripts/repo-split/move-lists/r5.paths`) put the inventory and the ACA runbook in
   R5, and the DIG-3689 gate's prefix table treats this guide as private — while the
   gate's own docstring says the manifest supersedes that table. Raised with the R0

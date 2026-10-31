@@ -45,7 +45,7 @@ it can run in a workflow with no Azure credentials at all.
 
 Rotate with `az containerapp secret set` on **one** app at a time, then re-run this
 to record the new fingerprint. Never pass `--secrets` to `az containerapp update` --
-see `docs/ops/digichat-datatap-aca.md` section 4.
+see the per-client deployment runbook (private client repo), section 4.
 """
 
 from __future__ import annotations

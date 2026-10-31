@@ -41,7 +41,7 @@ Facts (``facts.json`` or stdin)
 Two caller traps this deliberately does not paper over: ``docker inspect``
 without ``--format`` emits a JSON *array* and is rejected as bad input, and
 ``a; b | checker`` pipes only ``b``. The full working recipe, with both traps
-explained, is in ``docs/ops/digichat-datatap-aca.md`` §2.
+explained, is in the per-client deployment runbook (private client repo), section 2.
 
 Fail closed on missing facts
 ----------------------------
@@ -57,7 +57,7 @@ Usage
     # offline, from a facts file
     python3 scripts/check_digichat_image_binding.py --facts facts.json
 
-    # from the real world (recipe in docs/ops/digichat-datatap-aca.md)
+    # from the real world (recipe in the per-client deployment runbook, private client repo)
     jq -n --arg tag "$TAG" ... '{...}' \
       | python3 scripts/check_digichat_image_binding.py --facts -
 

@@ -18,8 +18,8 @@
 | Install unit | **a built image** — not npm (`private: true`) |
 | Current app version | `2.7.0` (`apps/digichat/package.json` on `develop`) |
 
-Existing clients (DataTap and others) run digichat images already imported into
-their own Azure registry (`datatapchatregistry.azurecr.io`). Those copies are
+Existing clients run digichat images already imported into
+their own Azure registry. Those copies are
 unaffected by anything here.
 
 Prefer a digest pin. Do not use `:latest` in production.
@@ -33,7 +33,7 @@ Prefer a digest pin. Do not use `:latest` in production.
        `docker run --rm --entrypoint curl <image> -sf http://127.0.0.1:3000/api/health`  
    (or start with required Auth env + db and `curl` host-mapped `/api/health`)
 2b. [ ] Bind the image to the tag, per
-       [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md) §2.
+       the client deploy runbook (private client repo), §2; `scripts/check_digichat_image_binding.py` checks the binding.
 3. [ ] Embed smoke: Profile A tenant fixture (`backend.type: digigraph`) — tool rows + answer via digigraph (not direct OpenRouter from digichat)
 4. [ ] Optional: Foundry smoke only when Azure credentials are available (CI secrets or local MI) — skip if unavailable
 

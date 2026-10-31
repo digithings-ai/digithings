@@ -6,8 +6,8 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 ## Release artifacts
 
-- Install digichat from a built image, not npm. **Correction (2026-10-21): an image is published.** The build lane (`.github/workflows/publish-digichat-image.yml`, restored in DIG-1294) publishes on a `digichat-vX.Y.Z` tag, and `ghcr.io/digithings-ai/digichat:v2.6.4` and `:latest` were pushed on 2026-10-21 (private package, pull with a `ghcr.io` credential); the `v2.4.x`–`v2.6.3` tags have none. Without registry access, images are built locally from the repo root (`docker build -f apps/digichat/Dockerfile .`) — see [`docs/ops/digichat-datatap-aca.md`](../../docs/ops/digichat-datatap-aca.md).
-- Deploys and image→commit binding (DataTap ACA): [`docs/ops/digichat-datatap-aca.md`](../../docs/ops/digichat-datatap-aca.md). Binding is checked by `scripts/check_digichat_image_binding.py`.
+- Install digichat from a built image, not npm. **Correction (2026-10-21): an image is published.** The build lane (`.github/workflows/publish-digichat-image.yml`, restored in DIG-1294) publishes on a `digichat-vX.Y.Z` tag, and `ghcr.io/digithings-ai/digichat:v2.6.4` and `:latest` were pushed on 2026-10-21 (private package, pull with a `ghcr.io` credential); the `v2.4.x`–`v2.6.3` tags have none. Without registry access, images are built locally from the repo root (`docker build -f apps/digichat/Dockerfile .`).
+- Deploys and image→commit binding (client ACA): the client deploy runbook, kept in the private client repo. Binding is checked by `scripts/check_digichat_image_binding.py`.
 - Post-publish smoke: [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md)
 - Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md)
 

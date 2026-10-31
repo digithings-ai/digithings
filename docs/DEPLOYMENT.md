@@ -381,7 +381,7 @@ The caveats those files carried are now stale: both said `CLOUDFLARE_API_TOKEN` 
 Restoring either lane is a **production deploy path**, so it was not done unilaterally in a
 documentation change. The restore decision is recorded on DIG-2843 in the company board; if it
 is taken, follow the precedent set by
-[ops/digichat-datatap-aca.md](ops/digichat-datatap-aca.md): **re-derive the lane, do not
+the client deploy runbook (kept in the private client repo): **re-derive the lane, do not
 `git revert` it**, because the deleted digichat lane pinned no `wranglerVersion` for a
 documented reason (4.28.0 rejects `deploy --message`) and re-deriving it keeps that.
 
