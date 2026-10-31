@@ -31,10 +31,6 @@
           "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; export GITHUB_PERSONAL_ACCESS_TOKEN=\"$(gh auth token)\"; exec github-mcp-server stdio"
         ]
       },
-      "supabase-twelve-x": {
-        "type": "remote",
-        "url": "https://mcp.supabase.com/mcp?project_ref=lfghjucjrsabiqwxerxv"
-      },
       "supabase-core": {
         "type": "remote",
         "url": "https://mcp.supabase.com/mcp?project_ref=rwagjbkvxkdwqmouagad"
