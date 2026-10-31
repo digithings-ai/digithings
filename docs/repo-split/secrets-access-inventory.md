@@ -62,7 +62,7 @@ cutover; mono renamed private then archived):
 `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`,
 `DIGIKEY_PRIVATE_KEY_PEM`, `DIGIKEY_LITELLM_PROXY_KEY`,
 `LITELLM_MASTER_KEY`, `LITELLM_PROXY_API_KEY`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
+`<HELPDESK>_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
 `AUTH_SECRET`, `DIGICHAT_*_TOKEN` / `DIGICHAT_*_KEY` / `DIGICHAT_*_SECRET` /
 `DIGICHAT_*_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `AZURE_SEARCH_API_KEY`,
 `BYOK_API_KEY`, `EXA_API_KEY`, `EXA_MONITOR_WEBHOOK_SECRET`, `XAI_API_KEY`,
@@ -128,7 +128,7 @@ pipelines for R2+R7 at the move; GitHub Actions dispatch retires),
 (token-canary), provider-review keys, `DIGIKEY_ADMIN_TOKEN`,
 `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`, `DIGIKEY_PRIVATE_KEY_PEM`,
 `DIGIKEY_URL`, `DIGIGRAPH_INTERNAL_URL`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN` (stack-edge path; live Zammad uses `ZAMMAD_API_TOKEN` via
+`<HELPDESK>_API_TOKEN` (stack-edge path; the live helpdesk uses `<HELPDESK>_API_TOKEN` via
 `tokenEnv`, never committed), `AUTH_SECRET`, `DATABASE_URL`,
 `DIGICHAT_MONITOR_TOKENS`, `DIGICHAT_PLAN_PROOF_SECRET`,
 `DIGICHAT_EMBED_TENANTS` (runtime read; source of truth moves to KV via R6,
@@ -145,7 +145,7 @@ Tenant-data repo: schema + sources only, **no live keys in the repo**.
 `CLOUDFLARE_API_TOKEN` (KV + R2 write scoped, held on the Mac, used by the
 `kv-sync` script), `DIGICHAT_EMBED_TENANTS` content (pushed to KV namespace
 `TENANT_CONFIG`, never committed with live values), R2 seed objects (pushed,
-not stored as secrets), `<CLIENT_SLUG>_INVITE_KEY` (see below), `ZAMMAD_API_TOKEN`
+not stored as secrets), `<CLIENT_SLUG>_INVITE_KEY` (see below), `<HELPDESK>_API_TOKEN`
 (server-side only). `config/examples/<client-slug>-embed.yaml` keeps `tokenEnv` **names**
 only. `DIGI_TENANT_CORPUS_MAP` fallback is removed from the stack Worker at
 the move (D-T1); `seed/<client-slug>_help` + `seed/vault/clients/*` sources live here
@@ -165,7 +165,7 @@ gate/palette become pluggable (D-X1).
 Live human-held names (Keychain service names, values never touched):
 `digithings.<client-slug>-invite-key`,
 `digithings.mcp-edge-key`,
-`digithings.zammad-edge-key`, `digithings.tenant-token-digiquant-io`,
+`digithings.<helpdesk>-edge-key`, `digithings.tenant-token-digiquant-io`,
 `digithings.tenant-token-digithings-ai`.
 These stay in Keychain + Cloudflare Worker secrets + KV. They are **never
 committed** to any repo (R0/R5/R6 hold procedure and `tokenEnv` names only,

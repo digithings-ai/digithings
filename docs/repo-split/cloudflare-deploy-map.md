@@ -68,7 +68,7 @@ Modified times for the six Workers:
 ```
 git log --all --oneline -S'FORBIDDEN_KEY'
   cfd3811a3  feat(corpus-index): add the daily multilingual index worker
-  60ea0c773  fix(corpus-index): Zammad range query for the ticket cursor; mask names, mail headers and organisations
+  60ea0c773  fix(corpus-index): helpdesk range query for the ticket cursor; mask names, mail headers and organisations
 ```
 
 **Where it lives.**
